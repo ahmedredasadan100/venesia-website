@@ -6,41 +6,10 @@ import { usePathname } from "next/navigation";
 import { useMemo } from "react";
 import { usePublicNavigation } from "../PublicNavigationProvider";
 import PublicContentSearchInput from "../public/PublicContentSearchInput";
+import { SidebarFeedPanel } from "../sidebar-feeds/SidebarFeedPanel";
 import type { PublicContentSearchSuggestion } from "../../lib/content/public-content-read";
 import type { MediaSidebarItem } from "../../lib/media-center/types";
 import type { MediaSidebarModulesState, MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
-
-function SidebarPanel({
-  eyebrow,
-  title,
-  children,
-}: {
-  eyebrow?: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-[1.6rem] border border-white/10 bg-white/[0.03] p-5 backdrop-blur-sm">
-      {eyebrow ? (
-        <p className="text-xs uppercase tracking-[0.25em] text-[#D8B87A]/70">
-          {eyebrow}
-        </p>
-      ) : null}
-
-      <h3
-        className={
-          eyebrow
-            ? "mt-3 text-lg font-semibold text-white"
-            : "text-lg font-semibold text-white"
-        }
-      >
-        {title}
-      </h3>
-
-      <div className="mt-5">{children}</div>
-    </section>
-  );
-}
 
 function SidebarMediaList({
   items,
@@ -196,15 +165,15 @@ function renderWidgetPanel(
     }
     case "latest":
       return (
-        <SidebarPanel key={`latest-${widget.assignmentId}`} title="أحدث الأخبار">
+        <SidebarFeedPanel key={`latest-${widget.assignmentId}`} title="أحدث الأخبار">
           <SidebarMediaList items={widget.items ?? []} />
-        </SidebarPanel>
+        </SidebarFeedPanel>
       );
     case "popular":
       return (
-        <SidebarPanel key={`popular-${widget.assignmentId}`} title="الأكثر قراءة">
+        <SidebarFeedPanel key={`popular-${widget.assignmentId}`} title="الأكثر قراءة">
           <SidebarMediaList items={widget.items ?? []} showLabel />
-        </SidebarPanel>
+        </SidebarFeedPanel>
       );
     default:
       return null;
@@ -232,7 +201,7 @@ export default function MediaSidebar({
   return (
     <aside className="space-y-6 text-right" dir="rtl">
       {searchBasePath ? (
-        <SidebarPanel eyebrow="Search" title="ابحث في المركز الإعلامي">
+        <SidebarFeedPanel eyebrow="Search" title="ابحث في المركز الإعلامي">
           <PublicContentSearchInput
             basePath={searchBasePath}
             query={searchQuery}
@@ -242,7 +211,7 @@ export default function MediaSidebar({
             ariaLabel="ابحث داخل القسم الحالي من المركز الإعلامي"
             helpText="البحث يعمل داخل القسم الحالي فقط."
           />
-        </SidebarPanel>
+        </SidebarFeedPanel>
       ) : null}
 
       {visibleWidgets.map((widget) =>

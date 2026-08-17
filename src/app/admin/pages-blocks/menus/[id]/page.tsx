@@ -34,6 +34,7 @@ export default async function Page({
     ),
   ]);
 
+  if (menuResult.error) throw new Error(`Menu read failed: ${menuResult.error.message}`);
   if (!menuResult.data) notFound();
 
   const menu = menuResult.data;

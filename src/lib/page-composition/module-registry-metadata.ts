@@ -114,7 +114,7 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
       display: {
         navigationLabelAr: "العرض والربط",
         sectionHeadingAr: "إعدادات العرض والصفحات",
-        sectionDescriptionAr: "اضبط حالة الظهور والمصدر وراجع الصفحات المرتبطة بالهيرو.",
+        sectionDescriptionAr: "اضبط حالة الظهور وراجع الصفحات المرتبطة بالهيرو.",
         icon: "settings",
         operationalRole: "visibility",
       },
@@ -215,13 +215,13 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
   },
   "media-hub": {
     kind: "media-hub",
-    labelAr: "مركز إعلامي — Hub",
-    descriptionAr: "أقسام المركز الإعلامي داخل الصفحة الرئيسية للمركز.",
+    labelAr: "موديولات المركز الإعلامي",
+    descriptionAr: "محتوى مميز مستقل، وأقسام Hub، وإعدادات عرض القوائم باستخدام مالك الموديولات الحالي.",
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",
-        sectionHeadingAr: "إعدادات مركز الميديا",
-        sectionDescriptionAr: "حدّد نوع القسم ومصدر البيانات وحدود العناصر المعروضة.",
+        sectionHeadingAr: "إعدادات موديول المركز الإعلامي",
+        sectionDescriptionAr: "حدّد وظيفة الموديول ونوع المحتوى وإعدادات العرض التابعة له.",
         icon: "media",
       },
       settings: {

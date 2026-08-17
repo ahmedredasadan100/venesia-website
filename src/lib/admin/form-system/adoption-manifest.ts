@@ -340,6 +340,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/components/admin/content/TopicsListClient.tsx",
       "src/components/admin/content/UnifiedContentList.tsx",
       "src/components/admin/content/UnifiedContentRowActions.tsx",
+      "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
     ],
     surfaces: ["bulk-command", "row-command", "duplicate-command"],
     rationale:

@@ -23,7 +23,8 @@ export default async function BreadcrumbBlockEditPage({ params, searchParams }: 
     getModuleAssignmentContext("breadcrumb", id),
   ]);
 
-  if (error || !block) notFound();
+  if (error) throw new Error(`Breadcrumb template read failed: ${error.message}`);
+  if (!block) notFound();
 
   const config = asBreadcrumbConfig(block.config);
 

@@ -2,7 +2,10 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import BlockTemplateSummaryListClient from "../BlockTemplateSummaryListClient";
-import { toggleMediaHubModuleStatus } from "./actions";
+import {
+  bulkMediaHubModuleStatuses,
+  toggleMediaHubModuleStatus,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +31,7 @@ export default async function MediaHubModulesPage({ searchParams }: PageProps) {
       description="قوالب سكاشن Hub في /media-center — الظهور والترتيب يُدار من ربط الصفحة."
       detailLabel="القسم"
       toggleAction={toggleMediaHubModuleStatus}
+      bulkAction={bulkMediaHubModuleStatuses}
       rows={(templates ?? []).map((template) => ({
         id: Number(template.id),
         name: String(template.name),

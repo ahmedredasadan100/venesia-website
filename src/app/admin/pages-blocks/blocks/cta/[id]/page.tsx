@@ -23,7 +23,8 @@ export default async function CtaBlockEditPage({ params, searchParams }: PagePro
     getModuleAssignmentContext("cta", id),
   ]);
 
-  if (error || !block) notFound();
+  if (error) throw new Error(`CTA template read failed: ${error.message}`);
+  if (!block) notFound();
 
   return (
     <CtaModuleEditClient

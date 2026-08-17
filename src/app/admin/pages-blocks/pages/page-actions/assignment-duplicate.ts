@@ -10,7 +10,12 @@ import type { TablesInsert } from "../../../../../lib/database.types";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
 import type { PageModuleTemplateTable } from "../../../../../lib/page-blocks/block-module-registry";
 import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
-import { cleanText, moduleEditHref, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
+import {
+  cleanText,
+  moduleEditHref,
+  parseNumber,
+  withModuleEditorReturnPageId,
+} from "../../../../../lib/page-blocks/admin-utils";
 import type { PageModuleKind } from "../../../../../lib/page-blocks/types";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import {
@@ -30,9 +35,17 @@ function templateOwner(kind: PageModuleKind): PageModuleTemplateTable {
   return templateTable(kind);
 }
 
-function redirectFor(kind: PageModuleKind, templateId: number, warning: boolean) {
+function redirectFor(
+  kind: PageModuleKind,
+  templateId: number,
+  pageId: number,
+  warning: boolean,
+) {
   const href = moduleEditHref(kind, templateId);
-  return warning ? `${href}?notice=saved_with_media_sync_warning` : href;
+  return withModuleEditorReturnPageId(
+    warning ? `${href}?notice=saved_with_media_sync_warning` : href,
+    pageId,
+  );
 }
 
 export async function duplicateAssignedPageModule(formData: FormData): Promise<PageBlockActionResult> {
@@ -65,14 +78,14 @@ export async function duplicateAssignedPageModule(formData: FormData): Promise<P
             config: source.config,
             description: source.description,
             is_visible: false,
-            limit_count: source.limit_count,
+            limit_count: 1,
             name: `${source.name || "Hero"} — نسخة`,
             section_key: source.section_key,
             slug,
             sort_order: source.sort_order,
-            source_id: source.source_id,
-            source_slug: source.source_slug,
-            source_type: source.source_type,
+            source_id: null,
+            source_slug: null,
+            source_type: "manual",
             status: source.status,
             style_preset: source.style_preset,
             variant: source.variant,
@@ -116,7 +129,12 @@ export async function duplicateAssignedPageModule(formData: FormData): Promise<P
     await revalidatePageBlocksPath(pageId);
     return success({
       message: `${kind === "hero" ? "تم نسخ قالب Hero دون إنشاء ربط نشط ثانٍ." : "تم نسخ القالب والربط ذريًا."}${auditWarning ? " تعذر تسجيل حدث التدقيق؛ راجع السجل التشخيصي." : ""}`,
-      redirectTo: redirectFor(kind, coordinated.value.templateId, coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"),
+      redirectTo: redirectFor(
+        kind,
+        coordinated.value.templateId,
+        pageId,
+        coordinated.mediaSynchronization.status === "saved_with_media_sync_warning",
+      ),
     });
   } catch (caught) {
     return failure(caught instanceof Error ? caught.message : "تعذر إكمال النسخ.");

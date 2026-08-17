@@ -22,6 +22,7 @@ import {
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
   slugify,
+  withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
@@ -57,7 +58,8 @@ function buildCtaConfig(formData: FormData): CtaBlockConfig {
 async function ensureUniqueSlug(slug: string, id?: number) {
   let query = getSupabaseAdmin().from("cta_block_templates").select("id").eq("slug", slug).limit(1);
   if (id) query = query.neq("id", id);
-  const { data } = await query.maybeSingle();
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(`CTA slug lookup failed: ${error.message}`);
   return !data;
 }
 
@@ -227,7 +229,10 @@ export async function updateCtaBlock(formData: FormData) {
     metadata: { blockType: "cta", slug },
   }, actor);
   await revalidateBlockModulePaths("cta");
-  redirect(`/admin/pages-blocks/blocks/cta/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
+  redirect(withModuleEditorReturnContextFromForm(
+    `/admin/pages-blocks/blocks/cta/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    formData,
+  ));
 }
 
 export async function toggleCtaBlockStatus(formData: FormData) {

@@ -29,6 +29,13 @@ export default async function FooterSettingsPage({ searchParams }: PageProps) {
       .order("id", { ascending: true }),
   ]);
 
+  if (footerMenuResult.error) {
+    throw new Error(`Footer menu read failed: ${footerMenuResult.error.message}`);
+  }
+  if (menusResult.error) {
+    throw new Error(`Footer menu options read failed: ${menusResult.error.message}`);
+  }
+
   const footerMenuId = footerMenuResult.data?.id ?? null;
   let quickLinkItems: Array<{
     id: number;
@@ -39,13 +46,17 @@ export default async function FooterSettingsPage({ searchParams }: PageProps) {
   }> = [];
 
   if (footerMenuId) {
-    const { data: menuItems } = await getSupabaseAdmin()
+    const { data: menuItems, error: menuItemsError } = await getSupabaseAdmin()
       .from("menu_items")
       .select("id, label, href, sort_order, is_visible")
       .eq("menu_id", footerMenuId)
       .is("parent_id", null)
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true });
+
+    if (menuItemsError) {
+      throw new Error(`Footer quick-link read failed: ${menuItemsError.message}`);
+    }
 
     quickLinkItems = (menuItems ?? []).map((item) => ({
       id: item.id,

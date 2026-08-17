@@ -1,4 +1,3 @@
-import { ReactNode } from "react";
 import Link from "next/link";
 import Pagination from "../Pagination";
 import MediaContentCard from "./MediaContentCard";
@@ -26,7 +25,6 @@ type MediaListingContentProps = {
   columns: MediaListingColumns;
   paginationEnabled: boolean;
   cardVariant: MediaListingCardVariant;
-  children?: ReactNode;
 };
 
 const GRID_COLUMN_CLASSES: Record<MediaListingColumns, string> = {
@@ -51,7 +49,6 @@ export default function MediaListingContent({
   columns,
   paginationEnabled,
   cardVariant,
-  children,
 }: MediaListingContentProps) {
   const isSearching = searchQuery.length > 0;
   const hasItems = items.length > 0;
@@ -63,8 +60,6 @@ export default function MediaListingContent({
 
   return (
     <div className="space-y-10">
-      {!isSearching ? children : null}
-
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.5rem] border border-white/10 bg-white/[0.03] px-5 py-4">
         <p className="text-sm text-white/55">
           عرض {items.length} من {totalCount} {countLabel}

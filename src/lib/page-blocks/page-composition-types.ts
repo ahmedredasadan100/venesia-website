@@ -41,7 +41,7 @@ export type PageComposition = {
   mediaSidebarModules: MediaSidebarModulesState | null;
   /** Assignment rows exist before visibility/publication filters. */
   hasAnyAssignmentRows: boolean;
-  /** Visible and published modules that entered slots. */
+  /** Visible and published modules exposed by the canonical composition, including specialized Media modules. */
   hasRenderableModules: boolean;
   /** Any canonical composition query failed. */
   hasCompositionError: boolean;

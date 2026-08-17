@@ -630,6 +630,11 @@ for (const retiredPath of [
 
 assert.doesNotMatch(assignmentRow, /AdminStatusPill/u);
 assert.match(assignmentRow, /AdminDataGridRowActions[\s\S]*display="visibility"/u);
+assert.doesNotMatch(
+  assignmentRow,
+  /data-module-public-visibility|isVisible\s*\?\s*"ظاهر"\s*:\s*"مخفي"/u,
+  "Compact Page Composition status must adopt the shared icon-only visibility presentation without a local label",
+);
 assert.equal((assignmentRow.match(/const capability: AdminRowActionsCapability/gu) ?? []).length, 1);
 assert.match(
   assignmentRow,

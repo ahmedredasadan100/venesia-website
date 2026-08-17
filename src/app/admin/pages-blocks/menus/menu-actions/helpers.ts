@@ -155,7 +155,8 @@ export function parseImportedMenuItems(payload: Json): ImportedMenuItem[] {
 }
 
 export async function getMenuIdFromItem(itemId: number) {
-  const { data } = await getSupabaseAdmin().from("menu_items").select("menu_id").eq("id", itemId).maybeSingle();
+  const { data, error } = await getSupabaseAdmin().from("menu_items").select("menu_id").eq("id", itemId).maybeSingle();
+  if (error) throw new Error(`Menu item context read failed: ${error.message}`);
   return data?.menu_id ? Number(data.menu_id) : null;
 }
 

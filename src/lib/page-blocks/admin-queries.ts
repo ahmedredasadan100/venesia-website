@@ -8,6 +8,7 @@ import {
 } from "./admin-utils";
 import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageBlockAssignmentRow } from "./types";
+import { isRetiredContentBlockTemplateSlug } from "./deprecated-block-modules";
 
 export { blockModuleHref, blockModuleListHref };
 
@@ -26,24 +27,7 @@ type AssignmentQueryResult = {
 };
 
 export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<AssignmentQueryResult> {
-  const [
-    { data: contentRows },
-    { data: ctaRows },
-    { data: cardsRows },
-    { data: breadcrumbRows },
-    { data: feedRows },
-    { data: heroRows },
-    { data: mediaSidebarRows },
-    { data: mediaHubRows },
-    { data: contentTemplates },
-    { data: ctaTemplates },
-    { data: cardsTemplates },
-    { data: breadcrumbTemplates },
-    { data: feedTemplates },
-    { data: heroTemplates },
-    { data: mediaSidebarTemplates },
-    { data: mediaHubTemplates },
-  ] = await Promise.all([
+  const results = await Promise.all([
     getSupabaseAdmin()
       .from("page_content_block_assignments")
       .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at")
@@ -87,7 +71,34 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
     getSupabaseAdmin().from("media_hub_module_templates").select("id,name,slug,status,section_key").order("name"),
   ]);
 
-  const contentTemplateById = new Map((contentTemplates ?? []).map((template) => [template.id, template]));
+  const failedResult = results.find((result) => result.error);
+  if (failedResult?.error) {
+    throw new Error(`Page Composition assignment read failed: ${failedResult.error.message}`);
+  }
+
+  const [
+    { data: contentRows },
+    { data: ctaRows },
+    { data: cardsRows },
+    { data: breadcrumbRows },
+    { data: feedRows },
+    { data: heroRows },
+    { data: mediaSidebarRows },
+    { data: mediaHubRows },
+    { data: contentTemplates },
+    { data: ctaTemplates },
+    { data: cardsTemplates },
+    { data: breadcrumbTemplates },
+    { data: feedTemplates },
+    { data: heroTemplates },
+    { data: mediaSidebarTemplates },
+    { data: mediaHubTemplates },
+  ] = results;
+
+  const activeContentTemplates = (contentTemplates ?? []).filter(
+    (template) => !isRetiredContentBlockTemplateSlug(template.slug),
+  );
+  const contentTemplateById = new Map(activeContentTemplates.map((template) => [template.id, template]));
   const ctaTemplateById = new Map((ctaTemplates ?? []).map((template) => [template.id, template]));
   const cardsTemplateById = new Map((cardsTemplates ?? []).map((template) => [template.id, template]));
   const breadcrumbTemplateById = new Map((breadcrumbTemplates ?? []).map((template) => [template.id, template]));
@@ -124,6 +135,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of contentRows ?? []) {
     const template = contentTemplateById.get(row.template_id);
+    if (!template) continue;
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -265,7 +277,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_status: template?.status ?? "unpublished",
       template_variant: template?.section_key ?? "featured",
       manages_assignment_on_page: true,
-      assignment_note: "slot: main — يتحكم في ظهور وترتيب سكشن Hub على /media-center.",
+      assignment_note: "slot: main — يتحكم في ظهور وترتيب موديول المركز الإعلامي المرتبط بهذه الصفحة.",
     });
   }
 
@@ -280,7 +292,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   return {
     assignments,
     templates: {
-      content: contentTemplates ?? [],
+      content: activeContentTemplates,
       cta: ctaTemplates ?? [],
       cards: cardsTemplates ?? [],
       breadcrumb: breadcrumbTemplates ?? [],

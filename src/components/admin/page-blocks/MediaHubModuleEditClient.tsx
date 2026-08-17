@@ -171,8 +171,10 @@ export default function MediaHubModuleEditClient({
   const initialSectionKey = readInitialSectionKey(block.section_key);
   const parsedInitial = parseMediaHubModuleConfig(block.config ?? {}, initialSectionKey);
   const isListing = parsedInitial.placement === "listing" && Boolean(parsedInitial.listing && parsedInitial.type);
+  const isDedicatedFeatured = parsedInitial.placement === "featured";
 
   const [sectionKey, setSectionKey] = useState<MediaHubSectionKey>(initialSectionKey);
+  const [mediaType, setMediaType] = useState<MediaHubMediaType>(parsedInitial.type ?? "news");
   const [eyebrow, setEyebrow] = useState(parsedInitial.presentation.eyebrow);
   const [title, setTitle] = useState(parsedInitial.presentation.title);
   const [description, setDescription] = useState(parsedInitial.presentation.description);
@@ -182,17 +184,6 @@ export default function MediaHubModuleEditClient({
       ? parsedInitial.limit
       : MEDIA_HUB_SECTION_DEFAULTS[initialSectionKey].defaultLimit ?? "",
   );
-  const [sideLimit, setSideLimit] = useState<number | "">(
-    typeof parsedInitial.sideLimit === "number"
-      ? parsedInitial.sideLimit
-      : MEDIA_HUB_SECTION_DEFAULTS.featured.defaultSideLimit ?? "",
-  );
-  const [listLimit, setListLimit] = useState<number | "">(
-    typeof parsedInitial.listLimit === "number"
-      ? parsedInitial.listLimit
-      : MEDIA_HUB_SECTION_DEFAULTS.featured.defaultListLimit ?? "",
-  );
-
   function handleSectionChange(nextSectionKey: MediaHubSectionKey) {
     setSectionKey(nextSectionKey);
     const nextPresentation = MEDIA_HUB_SECTION_DEFAULTS[nextSectionKey].config.presentation;
@@ -202,15 +193,12 @@ export default function MediaHubModuleEditClient({
     setCtaText(nextPresentation.ctaText);
 
     if (nextSectionKey === "featured") {
-      setSideLimit(MEDIA_HUB_SECTION_DEFAULTS.featured.defaultSideLimit ?? 3);
-      setListLimit(MEDIA_HUB_SECTION_DEFAULTS.featured.defaultListLimit ?? 4);
-      setLimit("");
+      setMediaType("news");
+      setLimit(MEDIA_HUB_SECTION_DEFAULTS.featured.defaultLimit ?? 1);
       return;
     }
 
     setLimit(MEDIA_HUB_SECTION_DEFAULTS[nextSectionKey].defaultLimit ?? "");
-    setSideLimit("");
-    setListLimit("");
   }
 
   return (
@@ -227,7 +215,10 @@ export default function MediaHubModuleEditClient({
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
         <input type="hidden" name="data_source" value="topics" />
-        {isListing ? <input type="hidden" name="section_key" value={initialSectionKey} /> : null}
+        {!isListing ? <input type="hidden" name="placement" value={parsedInitial.placement} /> : null}
+        {isListing || isDedicatedFeatured ? (
+          <input type="hidden" name="section_key" value={initialSectionKey} />
+        ) : null}
 
         {isListing ? (
           <>
@@ -268,18 +259,29 @@ export default function MediaHubModuleEditClient({
                       />
                     ) : (
                       <>
-                        <ModuleEditorField nature="standard" span={4}>
-                          <AdminFormListboxSelect
-                            name="section_key"
-                            label="نوع السكشن"
-                            value={sectionKey}
-                            onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
-                            options={SECTION_KEYS.map((key) => ({
-                              value: key,
-                              label: MEDIA_HUB_SECTION_LABELS[key],
-                            }))}
-                          />
-                        </ModuleEditorField>
+                        {isDedicatedFeatured ? (
+                          <ModuleEditorField nature="standard" span={4}>
+                            <div className="space-y-2">
+                              <span className="block text-sm font-medium text-white/70">نوع الموديول</span>
+                              <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/60">
+                                {MEDIA_HUB_SECTION_LABELS.featured}
+                              </p>
+                            </div>
+                          </ModuleEditorField>
+                        ) : (
+                          <ModuleEditorField nature="standard" span={4}>
+                            <AdminFormListboxSelect
+                              name="section_key"
+                              label="نوع السكشن"
+                              value={sectionKey}
+                              onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
+                              options={SECTION_KEYS.map((key) => ({
+                                value: key,
+                                label: MEDIA_HUB_SECTION_LABELS[key],
+                              }))}
+                            />
+                          </ModuleEditorField>
+                        )}
 
                         <ModuleEditorField nature="standard" span={4}>
                           <div className="space-y-2">
@@ -339,41 +341,19 @@ export default function MediaHubModuleEditClient({
                         </ModuleEditorField>
 
                         {sectionKey === "featured" ? (
-                          <ModuleEditorField nature="standard" span={6}>
-                            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-                              <label className="block space-y-2">
-                                <span className="text-xs font-semibold text-white/55">عدد أخبار القائمة المميزة</span>
-                                <input
-                                  name="list_limit"
-                                  type="number"
-                                  min={1}
-                                  value={listLimit}
-                                  onChange={(event) => {
-                                    const next = Number(event.target.value);
-                                    setListLimit(Number.isFinite(next) && next > 0 ? next : "");
-                                  }}
-                                  required
-                                  className={fieldClassName()}
-                                  dir="ltr"
-                                />
-                              </label>
-                              <label className="block space-y-2">
-                                <span className="text-xs font-semibold text-white/55">عدد عناصر العرض الجانبي</span>
-                                <input
-                                  name="side_limit"
-                                  type="number"
-                                  min={1}
-                                  value={sideLimit}
-                                  onChange={(event) => {
-                                    const next = Number(event.target.value);
-                                    setSideLimit(Number.isFinite(next) && next > 0 ? next : "");
-                                  }}
-                                  required
-                                  className={fieldClassName()}
-                                  dir="ltr"
-                                />
-                              </label>
-                            </div>
+                          <ModuleEditorField nature="standard" span={4}>
+                            <AdminFormListboxSelect
+                              name="media_type"
+                              label="نوع المحتوى المميز"
+                              value={mediaType}
+                              onChange={(value) => setMediaType(value as MediaHubMediaType)}
+                              options={(Object.keys(MEDIA_TYPE_LABELS) as MediaHubMediaType[]).map((type) => ({
+                                value: type,
+                                label: MEDIA_TYPE_LABELS[type],
+                              }))}
+                              hint="يعرض الموديول محتوى منشورًا ومميزًا من النوع المختار فقط."
+                            />
+                            <input type="hidden" name="limit" value="1" />
                           </ModuleEditorField>
                         ) : (
                           <ModuleEditorField nature="standard" span={4}>

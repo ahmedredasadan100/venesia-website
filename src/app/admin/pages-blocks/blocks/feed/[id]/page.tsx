@@ -26,7 +26,8 @@ export default async function FeedModuleEditPage({ params, searchParams }: PageP
     loadTopicFilterOptionsForAdmin(),
   ]);
 
-  if (error || !block) notFound();
+  if (error) throw new Error(`Feed template read failed: ${error.message}`);
+  if (!block) notFound();
 
   const feedType = TOPICS_FEED_TYPES.includes(block.feed_type as TopicsFeedType)
     ? (block.feed_type as TopicsFeedType)

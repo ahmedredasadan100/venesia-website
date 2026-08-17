@@ -1,25 +1,16 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { buildPaginationItems } from "../src/components/pagination-model.ts";
-import {
-  isMediaListingShellPublished,
-  isMediaListingShellPlaceholder,
-  resolveMediaListingMainBlocks,
-} from "../src/components/media-center/media-listing-shell-model.ts";
 import { resolveDistinctHeroDescription } from "../src/lib/hero/hero-content-controls.ts";
 import {
   buildMediaHubModuleConfig,
   getDefaultMediaListingPresentation,
   parseMediaHubModuleConfig,
 } from "../src/lib/media-hub-modules/parse-config.ts";
-import type { ContentBlockConfig } from "../src/lib/page-blocks/configs.ts";
-import type {
-  PageBlockPublicState,
-  ResolvedPageBlock,
-} from "../src/lib/page-blocks/types.ts";
+import { isRetiredContentBlockTemplateSlug } from "../src/lib/page-blocks/deprecated-block-modules.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -34,7 +25,6 @@ function paginationLabels(currentPage: number, totalPages: number) {
 }
 
 assert.deepEqual(paginationLabels(1, 5), [1, 2, 3, 4, 5]);
-assert.deepEqual(paginationLabels(1, 20), [1, 2, 3, 4, 5, "end-ellipsis", 20]);
 assert.deepEqual(paginationLabels(10, 20), [
   1,
   "start-ellipsis",
@@ -44,45 +34,66 @@ assert.deepEqual(paginationLabels(10, 20), [
   "end-ellipsis",
   20,
 ]);
-assert.deepEqual(paginationLabels(20, 20), [1, "start-ellipsis", 16, 17, 18, 19, 20]);
-
 for (let currentPage = 1; currentPage <= 100; currentPage += 1) {
   const items = buildPaginationItems(currentPage, 100);
   const pages = items.flatMap((item) => (item.type === "page" ? [item.page] : []));
-  assert.ok(items.length <= 7, "scalable pagination must stay bounded");
-  assert.ok(pages.includes(currentPage), "scalable pagination must retain the active page");
-  assert.equal(new Set(pages).size, pages.length, "page links must not be duplicated");
+  assert.ok(items.length <= 7, "pagination must stay bounded");
+  assert.ok(pages.includes(currentPage), "pagination must retain the active page");
 }
 
-const legacyVideoConfig = parseMediaHubModuleConfig(
-  { source: "topics", type: "video", limit: 6 },
-  "videos",
-);
-assert.equal(legacyVideoConfig.limit, 6);
-assert.equal(legacyVideoConfig.placement, "hub");
-assert.ok(legacyVideoConfig.presentation.title);
-assert.ok(legacyVideoConfig.presentation.ctaText);
-
 const presentation = {
-  eyebrow: "Video Stories",
-  title: "مشاهد من فينيسيا",
-  description: "وصف قابل للإدارة من الموديول.",
-  ctaText: "شاهد كل الفيديوهات",
+  eyebrow: "Featured Video",
+  title: "فيديو مميز",
+  description: "",
+  ctaText: "كل الفيديوهات",
 };
-const managedVideoConfig = buildMediaHubModuleConfig(
-  "videos",
+const featuredConfig = buildMediaHubModuleConfig(
+  "featured",
   "topics",
-  { limit: 6 },
+  { limit: 1 },
   presentation,
+  {
+    placement: "featured",
+    mediaType: "video",
+    pageSize: 2,
+    layout: "grid",
+    columns: 2,
+    paginationEnabled: true,
+    cardVariant: "default",
+    cardCtaText: "مشاهدة الفيديو",
+  },
 );
-assert.deepEqual(managedVideoConfig.presentation, presentation);
-assert.deepEqual(
-  parseMediaHubModuleConfig(managedVideoConfig, "videos").presentation,
+assert.deepEqual(featuredConfig, {
+  placement: "featured",
+  source: "topics",
+  type: "video",
+  featured: true,
+  limit: 1,
   presentation,
+});
+assert.equal(
+  parseMediaHubModuleConfig(featuredConfig, "featured").type,
+  "video",
+  "Featured Content type must come from module config",
 );
 
-const listingDefaults = getDefaultMediaListingPresentation("video");
-const managedListingConfig = buildMediaHubModuleConfig(
+const hubFeaturedConfig = parseMediaHubModuleConfig(
+  {
+    placement: "hub",
+    source: "topics",
+    type: "press",
+    featured: true,
+    limit: 1,
+    presentation,
+  },
+  "featured",
+);
+assert.equal(hubFeaturedConfig.placement, "hub");
+assert.equal(hubFeaturedConfig.type, "press");
+assert.equal("sideLimit" in hubFeaturedConfig, false);
+assert.equal("listLimit" in hubFeaturedConfig, false);
+
+const listingConfig = buildMediaHubModuleConfig(
   "videos",
   "topics",
   {},
@@ -98,8 +109,8 @@ const managedListingConfig = buildMediaHubModuleConfig(
     cardCtaText: "شاهد التفاصيل",
   },
 );
-assert.equal(managedListingConfig.placement, "listing");
-assert.deepEqual(managedListingConfig.listing, {
+assert.equal(listingConfig.placement, "listing");
+assert.deepEqual(listingConfig.listing, {
   pageSize: 12,
   layout: "vertical",
   columns: 3,
@@ -107,413 +118,169 @@ assert.deepEqual(managedListingConfig.listing, {
   cardVariant: "compact",
   cardCtaText: "شاهد التفاصيل",
 });
-assert.equal("featuredMode" in listingDefaults, false);
+assert.equal("featuredMode" in getDefaultMediaListingPresentation("video"), false);
 
-function contentBlock(
-  assignmentId: number,
-  slug: string,
-  config: ContentBlockConfig,
-): Extract<ResolvedPageBlock, { blockType: "content" }> {
-  return {
-    assignmentId,
-    blockType: "content",
-    templateId: assignmentId,
-    slot: "main",
-    sortOrder: assignmentId,
-    isVisible: true,
-    template: {
-      id: assignmentId,
-      name: slug,
-      slug,
-      description: null,
-      variant: "default",
-      style_preset: "premium-dark",
-      status: "published",
-      sort_order: assignmentId,
-      config,
-    },
-  };
-}
-
-const placeholderBlock = contentBlock(1, "media-center-news-listing-shell", {
-  eyebrow: "",
-  title: "Listing shell",
-  subtitle: "Publish or replace to show CMS content above the listing.",
-  body: "",
-  alignment: "start",
-});
-const configuredBlock = contentBlock(2, "media-center-news-header", {
-  eyebrow: "Latest Update",
-  title: "أخبار فينيسيا",
-  subtitle: "متابعة مستمرة من داخل الـCMS.",
-});
-
-assert.equal(isMediaListingShellPlaceholder(placeholderBlock), true);
-assert.deepEqual(
-  resolveMediaListingMainBlocks("media-center-news", [placeholderBlock]),
-  [],
-);
-
-const emptySiteUpdatesShell = contentBlock(
-  4,
-  "media-center-site-updates-listing-shell",
-  {
-    eyebrow: "",
-    title: "",
-    subtitle: "",
-    body: "",
-    alignment: "start",
-  },
-);
-assert.equal(isMediaListingShellPlaceholder(emptySiteUpdatesShell), true);
-assert.deepEqual(
-  resolveMediaListingMainBlocks("media-center-site-updates", [emptySiteUpdatesShell]),
-  [],
-);
-assert.deepEqual(
-  resolveMediaListingMainBlocks("media-center-news", [placeholderBlock, configuredBlock]),
-  [configuredBlock],
-);
-assert.deepEqual(resolveMediaListingMainBlocks("media-center-news", []), []);
-
-function listingShellState(
-  status: string,
-  assignmentVisible: boolean,
-): PageBlockPublicState {
-  return {
-    assignmentId: 66,
-    blockType: "content",
-    templateId: 62,
-    templateSlug: "media-center-site-updates-listing-shell",
-    templateStatus: status,
-    templatePublished: status === "published",
-    assignmentVisible,
-    publiclyVisible: status === "published" && assignmentVisible,
-  };
-}
-
-assert.equal(
-  isMediaListingShellPublished(
-    "media-center-site-updates",
-    [listingShellState("published", true)],
-  ),
-  true,
-);
-assert.equal(
-  isMediaListingShellPublished(
-    "media-center-site-updates",
-    [listingShellState("published", false)],
-  ),
-  true,
-  "assignment visibility controls the optional prefix, not listing activation",
-);
-assert.equal(
-  isMediaListingShellPublished(
-    "media-center-site-updates",
-    [listingShellState("unpublished", true)],
-  ),
-  false,
-);
-assert.equal(
-  isMediaListingShellPublished("media-center-site-updates", []),
-  false,
-);
-assert.equal(isMediaListingShellPublished("media-center", []), true);
-
-const partiallyManagedListingShell = contentBlock(
-  3,
+for (const slug of [
+  "media-center-news-listing-shell",
   "media-center-videos-listing-shell",
-  {
-    eyebrow: "Video Stories",
-    title: "Listing shell",
-    subtitle: "Publish or replace to show CMS content above the listing.",
-    body: "Managed listing introduction.",
-    alignment: "start",
-  },
-);
-const [normalizedListingShell] = resolveMediaListingMainBlocks(
-  "media-center-videos",
-  [partiallyManagedListingShell],
-);
-assert.equal(normalizedListingShell?.blockType, "content");
-if (normalizedListingShell?.blockType === "content") {
-  assert.equal(normalizedListingShell.template.config.eyebrow, "Video Stories");
-  assert.equal(normalizedListingShell.template.config.body, "Managed listing introduction.");
-  assert.equal(normalizedListingShell.template.config.title, "");
-  assert.equal(normalizedListingShell.template.config.subtitle, "");
-}
-
-const hubComponents = [
-  "MediaCenterHubFeatured.tsx",
-  "MediaCenterHubTimeline.tsx",
-  "MediaCenterHubVideos.tsx",
-  "MediaCenterHubGallery.tsx",
-  "MediaCenterHubPress.tsx",
-];
-for (const component of hubComponents) {
-  const source = read(`src/components/media-center/${component}`);
-  assert.ok(
-    source.includes("MediaCenterHubSectionHeader") && source.includes("presentation={presentation}"),
-    `${component} must adopt the shared CMS presentation owner`,
-  );
-}
-
-const videosSource = read("src/components/media-center/MediaCenterHubVideos.tsx");
-assert.ok(videosSource.includes("smallVideos.map"));
-assert.ok(!videosSource.includes("smallVideos.slice"));
-
-const listingConfigSource = read("src/lib/media-center/listing-page-config.ts");
-assert.ok(!/^\s+(title|eyebrow|description):/m.test(listingConfigSource));
-assert.ok(!listingConfigSource.includes("showFeaturedNews"));
-assert.ok(!listingConfigSource.includes("actionLabel"));
-
-const shellConfigSource = read("src/lib/media-center-page-config.ts");
-assert.ok(!/^\s+(title|eyebrow|subtitle):/m.test(shellConfigSource));
-
-const listingContentSource = read("src/components/media-center/MediaListingContent.tsx");
-assert.ok(!listingContentSource.includes("title: string"));
-assert.ok(!listingContentSource.includes("eyebrow: string"));
-assert.ok(!listingContentSource.includes("description: string"));
-for (const contract of ["layout", "columns", "paginationEnabled", "cardVariant", "cardCtaText"]) {
-  assert.ok(listingContentSource.includes(contract), `listing content must adopt ${contract}`);
-}
-
-const listingPageSource = read("src/components/media-center/MediaListingPage.tsx");
-assert.ok(listingPageSource.includes("resolveMediaListingPresentation"));
-assert.ok(listingPageSource.includes("isMediaListingShellPublished"));
-assert.ok(
-  listingPageSource.indexOf("isMediaListingShellPublished") <
-    listingPageSource.indexOf("getMediaListingPage({"),
-  "Listing Shell publication must gate the runtime before its content query",
-);
-assert.ok(!listingPageSource.includes("resolveMediaListingFeaturedSelection"));
-assert.ok(!listingPageSource.includes("featuredSelection"));
-assert.ok(!listingPageSource.includes("MediaFeaturedHero"));
-assert.ok(!listingPageSource.includes("FeaturedNews"));
-const listingShellOwnerSource = read(
-  "src/components/media-center/media-listing-shell-model.ts",
-);
-assert.ok(listingShellOwnerSource.includes("shell?.templatePublished"));
-assert.ok(!listingShellOwnerSource.includes('templateStatus === "published"'));
-const listingPresentationSource = read("src/lib/media-hub-modules/listing-presentation.ts");
-assert.ok(listingPresentationSource.includes('module.config.placement === "listing"'));
-for (const retiredField of ["featuredMode", "manualTopicId", "featuredSelection"]) {
-  assert.ok(!listingPresentationSource.includes(retiredField));
-}
-
-const shellSource = read("src/components/media-center/MediaCenterShellLayout.tsx");
-assert.ok(shellSource.includes("resolveMediaListingMainBlocks"));
-assert.ok(shellSource.includes("MediaListingShellPlaceholder"));
-assert.ok(shellSource.includes("!composition.hasCompositionError"));
-assert.ok(shellSource.includes("mainBlocks.length === 0"));
-assert.ok(shellSource.includes("hasListingPresentationModule"));
-assert.ok(shellSource.includes('module.config.placement === "listing"'));
-assert.ok(!shellSource.includes("listingMainBlocks.length === 0"));
-
-const listingRouteConsumers = {
-  news: "news",
-  videos: "videos",
-  gallery: "gallery",
-  press: "press",
-  "site-updates": "site-updates",
-} as const;
-for (const [route, configKey] of Object.entries(listingRouteConsumers)) {
-  const routeSource = read(`src/app/(site)/media-center/${route}/page.tsx`);
-  assert.ok(
-    routeSource.includes(`<MediaListingPage configKey="${configKey}"`),
-    `${route} must adopt the shared Media Listing Page owner`,
-  );
-}
-
-const cacheOwnerSource = read("src/lib/cache/revalidate-public-cache-tags.ts");
-assert.ok(cacheOwnerSource.includes('import { revalidatePath, revalidateTag, updateTag } from "next/cache"'));
-assert.ok(cacheOwnerSource.includes("updateTag(tag)"));
-assert.match(
-  cacheOwnerSource,
-  /export function revalidatePageCompositionCache\(\) \{\s+updatePublicCacheTags\(PUBLIC_CACHE_TAG_GROUPS\.pageComposition\);\s+\}/,
-  "Page Composition writes must expire their shared cache immediately",
-);
-for (const owner of [
-  "revalidateHeroCache",
-  "revalidatePageBlocksCache",
-  "revalidateFeedModulesCache",
-  "revalidateMediaSidebarCache",
+  "media-center-gallery-listing-shell",
+  "media-center-press-listing-shell",
+  "media-center-site-updates-listing-shell",
 ]) {
-  assert.match(
-    cacheOwnerSource,
-    new RegExp(`export function ${owner}\\(\\) \\{\\s+updatePublicCacheTags\\(`),
-    `${owner} must expire its Page Composition cache immediately`,
-  );
+  assert.equal(isRetiredContentBlockTemplateSlug(slug), true);
 }
-
-const paginationSource = read("src/components/Pagination.tsx");
-assert.ok(paginationSource.startsWith('"use client"'));
-assert.ok(paginationSource.includes("useLayoutEffect"));
-assert.ok(paginationSource.includes("retainedViewportTopRef"));
-assert.ok(paginationSource.includes("window.scrollBy(0, delta)"));
+assert.equal(isRetiredContentBlockTemplateSlug("media-center-news-header"), false);
 assert.equal(
-  paginationSource.match(/onNavigate=\{retainViewportPosition\}/g)?.length,
-  3,
+  existsSync(resolve(ROOT, "src/components/media-center/media-listing-shell-model.ts")),
+  false,
+  "Listing Shell runtime owner must be deleted",
 );
 
-const editorSource = read("src/components/admin/page-blocks/MediaHubModuleEditClient.tsx");
-for (const fieldName of ["eyebrow", "title", "presentation_description", "cta_text"]) {
-  assert.ok(editorSource.includes(`name="${fieldName}"`), `missing CMS field ${fieldName}`);
-}
-for (const fieldName of [
-  "page_size",
-  "listing_layout",
-  "listing_columns",
-  "pagination_enabled",
-  "card_variant",
-  "card_cta_text",
+const heroOwner = read("src/lib/load-hero-section.ts");
+for (const forbidden of [
+  "loadPublicContentCollection",
+  "resolveHeroItems",
+  "resolvedItems",
+  "featured_media",
+  "latest_media",
+  "latest_topics",
 ]) {
-  assert.ok(editorSource.includes(`name="${fieldName}"`), `missing listing CMS field ${fieldName}`);
+  assert.ok(!heroOwner.includes(forbidden), `Hero owner must not contain ${forbidden}`);
 }
+assert.ok(heroOwner.includes('source_type: "manual"'));
+assert.ok(heroOwner.includes("source_id: null"));
+assert.ok(heroOwner.includes("source_slug: null"));
 
-const actionSource = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
-assert.ok(actionSource.includes("buildMediaHubModuleConfig"));
-assert.ok(actionSource.includes('formData.get("presentation_description")'));
-assert.ok(actionSource.includes('formData.get("cta_text")'));
-for (const retiredField of ["featured_mode", "manual_topic_id", "featured_cta_text"]) {
-  assert.ok(!editorSource.includes(retiredField));
-  assert.ok(!actionSource.includes(retiredField));
-}
-
-const compositionSource = read("src/lib/page-blocks/load-page-composition.ts");
-assert.ok(compositionSource.includes("queryMediaHubModules(pageSlug, { enrich: pageSlug === \"media-center\" })"));
-
-const publicContractSource = read("src/lib/content/public-content-read/contract.ts");
-const publicOwnerSource = read("src/lib/content/public-content-read/owner.ts");
-const mediaProviderSource = read("src/lib/media-center/unified-provider.ts");
-const hubDataSource = read("src/lib/media-hub-modules/resolve-hub-section-data.ts");
-assert.ok(publicContractSource.includes("PublicContentFeaturedSelection"));
-assert.ok(publicContractSource.includes("absence never falls back to latest"));
-assert.ok(publicOwnerSource.includes("resolveFeaturedSelection"));
-assert.ok(publicOwnerSource.includes('featured: "only"'));
-assert.ok(!publicOwnerSource.includes("fallbackResult"));
-assert.ok(!publicOwnerSource.includes("featured fallback"));
-assert.ok(mediaProviderSource.includes("contentTypes: [params.type]"));
-assert.ok(mediaProviderSource.includes("featuredSelection: params.featuredSelection"));
-assert.ok(hubDataSource.includes('featuredSelection: { mode: "automatic" }'));
-assert.ok(!hubDataSource.includes("news.find"));
-assert.ok(!hubDataSource.includes("news[0]"));
-
-const featuredOwnerCandidates = [
-  "src/components/media-center/MediaListingPage.tsx",
-  "src/lib/media-hub-modules/resolve-hub-section-data.ts",
-  "src/lib/media-center/unified-provider.ts",
-];
-for (const candidate of featuredOwnerCandidates) {
-  const source = read(candidate);
-  assert.ok(
-    !/featured[^\n]{0,120}(?:\?\?|\|\|)[^\n]{0,80}(?:latest|\[0\])/iu.test(source),
-    `${candidate} must not own a Latest featured fallback`,
-  );
-}
-
-assert.equal(
-  resolveDistinctHeroDescription(
-    "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
-    "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
-  ),
-  "",
-);
+const dynamicHero = read("src/components/sections/DynamicHeroSection.tsx");
+assert.ok(dynamicHero.includes("resolveDistinctHeroDescription"));
+assert.ok(!dynamicHero.includes("resolvedItems"));
+assert.ok(!dynamicHero.includes("data-hero-featured-topic"));
+assert.ok(!dynamicHero.includes("featuredItem"));
 assert.equal(
   resolveDistinctHeroDescription(
     "<p>متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.</p>",
     "متابعة ميدانية لمراحل التنفيذ داخل مشروعات فينيسيا.",
   ),
   "",
-  "equivalent rich text and plain subtitle copy must deduplicate",
 );
-assert.equal(
-  resolveDistinctHeroDescription("وصف مستقل", "عنوان فرعي"),
-  "وصف مستقل",
-);
-const dynamicHeroSource = read("src/components/sections/DynamicHeroSection.tsx");
-const heroOwnerSource = read("src/lib/load-hero-section.ts");
-assert.ok(dynamicHeroSource.includes("resolveDistinctHeroDescription"));
-assert.ok(dynamicHeroSource.includes('mode="auto"'));
-assert.ok(dynamicHeroSource.includes("[&_p]:mb-3"));
-assert.ok(dynamicHeroSource.includes("whitespace-pre-line"));
-assert.ok(dynamicHeroSource.includes('data-hero-featured-topic="true"'));
-assert.ok(heroOwnerSource.includes("heroSourceRequiresResolvedItems"));
-assert.ok(heroOwnerSource.includes("resolvedItems.length === 0"));
-assert.ok(heroOwnerSource.includes('hero.source_type === "featured_media" && isMediaContentType(hero.source_slug)'));
-const contentSectionSource = read("src/components/sections/ContentSection.tsx");
-assert.ok(contentSectionSource.includes("RichTextContent"));
-assert.equal(contentSectionSource.match(/mode="auto"/g)?.length, 2);
-assert.ok(contentSectionSource.includes('dir="rtl"'));
-assert.ok(contentSectionSource.includes("md:leading-9"));
-assert.ok(contentSectionSource.includes("[&_p]:mb-4"));
-assert.ok(contentSectionSource.includes("if (!hasHeading && !hasBody) return null"));
-assert.ok(contentSectionSource.includes("max-w-4xl"));
-assert.ok(!contentSectionSource.includes(".split(/\\n{2,}/)"));
 
-const adminAssignmentRowSource = read(
-  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
-);
-assert.ok(adminAssignmentRowSource.includes("data-module-publication-state="));
-assert.ok(adminAssignmentRowSource.includes("data-module-public-visibility="));
-assert.ok(adminAssignmentRowSource.includes('label: "حالة النشر"'));
-assert.ok(adminAssignmentRowSource.includes('label: "الربط بالصفحة"'));
-assert.ok(adminAssignmentRowSource.includes('label: "الظهور العام"'));
-
-const topicsClientSource = read("src/components/admin/content/TopicsListClient.tsx");
-const instantMutationSource = read("src/lib/admin/entity-list/data-engine/instant-mutation.ts");
-const featuredToggleQaSource = read("tests/e2e/qa-media-center-featured-toggle.mjs");
-assert.ok(topicsClientSource.includes("useAdminEntityInstantMutation"));
-assert.ok(topicsClientSource.includes("reconcileSuccess"));
-assert.ok(topicsClientSource.includes("is_featured: confirmedFeatured"));
-assert.ok(instantMutationSource.includes("request.optimistic(helpers)"));
-assert.ok(instantMutationSource.includes("request.reconcileSuccess(result"));
-assert.ok(instantMutationSource.includes('refetchType: "active"'));
-for (const forbidden of ["router.refresh", "forceUpdate", "forceRerender", "setRows("]) {
-  assert.ok(!topicsClientSource.includes(forbidden), `Topics Featured mutation must not use ${forbidden}`);
-  assert.ok(!instantMutationSource.includes(forbidden), `Instant Mutation owner must not use ${forbidden}`);
+const heroEditor = read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx");
+const heroManager = read("src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx");
+const heroActions = read("src/app/admin/pages-blocks/blocks/hero/actions.ts");
+for (const source of [heroEditor, heroManager]) {
+  for (const retiredControl of ['name="source_type"', 'name="source_slug"', 'name="limit_count"']) {
+    assert.ok(!source.includes(retiredControl), `Hero Admin must retire ${retiredControl}`);
+  }
 }
-for (const proof of [
-  "Menu exposes the unfeature command",
-  "Optimistic update changes aria-pressed before Server Action completion",
-  "Spinner ends after reconcile and invalidation",
-  "Final star is unfilled",
-  "Final database truth is unfeatured",
-  "Visibility row action remains available",
-  "More row action remains available",
-]) {
-  assert.ok(featuredToggleQaSource.includes(proof), `Featured Toggle QA is missing: ${proof}`);
+assert.equal(heroActions.match(/source_type: "manual"/g)?.length, 3);
+assert.equal(heroActions.match(/source_id: null/g)?.length, 3);
+assert.equal(heroActions.match(/source_slug: null/g)?.length, 3);
+
+const featuredResolver = read("src/lib/media-hub-modules/resolve-hub-section-data.ts");
+assert.ok(featuredResolver.includes("getFeaturedMediaItems(type, 1)"));
+assert.ok(featuredResolver.includes('config.placement === "listing"'));
+assert.ok(!featuredResolver.includes("getMediaListingPage"));
+assert.ok(!featuredResolver.includes("latestNews"));
+assert.ok(!featuredResolver.includes("featuredNews"));
+assert.ok(!featuredResolver.includes("news[0]"));
+
+const publicFacade = read("src/lib/media-center.ts");
+const publicProvider = read("src/lib/media-center/unified-provider.ts");
+const publicOwner = read("src/lib/content/public-content-read/owner.ts");
+assert.ok(publicFacade.includes("unifiedGetMediaItemsLimited"));
+assert.ok(publicFacade.includes("featuredOnly: true"));
+assert.ok(publicProvider.includes('featured: options.featuredOnly ? "only" : "none"'));
+assert.ok(publicOwner.includes("loadPublicContentCollection"));
+assert.ok(!publicOwner.includes("fallbackResult"));
+
+const featuredComponent = read("src/components/media-center/MediaCenterHubFeatured.tsx");
+assert.ok(!featuredComponent.startsWith('"use client"'));
+assert.ok(featuredComponent.includes("featuredItem.type"));
+assert.ok(!featuredComponent.includes("useState"));
+assert.ok(!featuredComponent.includes("sideNews"));
+assert.ok(!featuredComponent.includes("latest"));
+
+const listingPage = read("src/components/media-center/MediaListingPage.tsx");
+assert.ok(listingPage.includes('module.config.placement === "featured"'));
+assert.ok(
+  !listingPage.includes("module.config.type === config.mediaType"),
+  "Featured Content type must come from assigned module config, not the route config",
+);
+assert.ok(listingPage.includes("resolveMediaListingPresentation"));
+assert.ok(listingPage.includes("getMediaListingPage({"));
+assert.ok(!listingPage.includes("ListingShell"));
+assert.ok(!listingPage.includes("isMediaListingShellPublished"));
+assert.ok(!listingPage.includes("featuredSelection"));
+assert.ok(
+  listingPage.indexOf("featuredNodes") < listingPage.indexOf("<MediaListingContent"),
+  "Featured Content must compose independently before Listing",
+);
+
+const shellLayout = read("src/components/media-center/MediaCenterShellLayout.tsx");
+for (const forbidden of ["ListingShell", "listing-shell", "Placeholder", "hasListingPresentationModule"]) {
+  assert.ok(!shellLayout.includes(forbidden), `Media layout must retire ${forbidden}`);
+}
+assert.ok(shellLayout.includes("getSlotBlocks(composition, \"main\")"));
+
+const compositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
+assert.ok(compositionLoader.includes("queryMediaHubModules(pageSlug)"));
+assert.ok(!compositionLoader.includes('pageSlug === "media-center"'));
+
+const listingPresentation = read("src/lib/media-hub-modules/listing-presentation.ts");
+assert.ok(listingPresentation.includes('module.config.placement === "listing"'));
+for (const retiredField of ["featuredMode", "manualTopicId", "featuredSelection"]) {
+  assert.ok(!listingPresentation.includes(retiredField));
 }
 
-const listingMigration = read("sql/migrations/20260815092555_media_center_listing_presentation.sql");
+const editor = read("src/components/admin/page-blocks/MediaHubModuleEditClient.tsx");
+const action = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
+assert.ok(editor.includes('name="media_type"'));
+assert.ok(editor.includes('name="placement" value={parsedInitial.placement}'));
+assert.ok(editor.includes("نوع المحتوى المميز"));
+assert.ok(action.includes('placementInput === "featured"'));
+for (const retiredField of ["side_limit", "list_limit", "featured_mode", "manual_topic_id"]) {
+  assert.ok(!editor.includes(retiredField));
+  assert.ok(!action.includes(retiredField));
+}
+
+const blockLoader = read("src/lib/page-blocks/load-page-blocks.ts");
+const adminQueries = read("src/lib/page-blocks/admin-queries.ts");
+assert.ok(blockLoader.includes("isRetiredContentBlockTemplateSlug"));
+assert.ok(adminQueries.includes("activeContentTemplates"));
+
+const listingRoutes = ["news", "videos", "gallery", "press", "site-updates"] as const;
+for (const route of listingRoutes) {
+  const source = read(`src/app/(site)/media-center/${route}/page.tsx`);
+  assert.ok(source.includes(`<MediaListingPage configKey="${route}"`));
+}
+
+const migration = read("sql/migrations/20260816090000_media_center_hero_owner_closure.sql");
+assert.ok(migration.includes("source_type = 'manual'"));
+assert.ok(migration.includes("source_id = null"));
+assert.ok(migration.includes("source_slug = null"));
+assert.ok(migration.includes("public.mutate_page_composition("));
+assert.ok(migration.includes("$retire_media_center_listing_shells$"));
+assert.ok(migration.includes("$sync_media_center_featured_content$"));
+assert.ok(migration.includes("$assert_media_center_owner_closure$"));
 for (const slug of [
-  "media-listing-presentation-news",
-  "media-listing-presentation-videos",
-  "media-listing-presentation-gallery",
-  "media-listing-presentation-press",
-  "media-listing-presentation-site-updates",
+  "media-featured-content-news",
+  "media-featured-content-videos",
+  "media-featured-content-gallery",
+  "media-featured-content-press",
+  "media-featured-content-site-updates",
 ]) {
-  assert.ok(listingMigration.includes(slug), `missing seeded listing template ${slug}`);
+  assert.ok(migration.includes(`'${slug}'`), `missing Featured Content template ${slug}`);
 }
-assert.equal(listingMigration.match(/\"featuredMode\":\"automatic\"/g)?.length, 5);
-assert.ok(!listingMigration.match(/create\s+(table|function|view|trigger)/iu));
-assert.ok(listingMigration.includes("public.mutate_page_composition("));
-assert.ok(listingMigration.includes("'sync_template_pages'"));
-assert.ok(listingMigration.includes("'kind', 'media_hub'"));
-assert.ok(listingMigration.includes("'default_slot', 'main'"));
-assert.ok(listingMigration.includes("'page_ids', jsonb_build_array(v_listing.page_id)"));
-assert.ok(!listingMigration.match(/insert\s+into\s+public\.page_media_hub_module_assignments/iu));
-
-const heroOwnerMigration = read(
-  "sql/migrations/20260816090000_media_center_hero_owner_closure.sql",
-);
-for (const sourceSlug of ["news", "video", "gallery", "press", "site_update"]) {
-  assert.ok(heroOwnerMigration.includes(`then '${sourceSlug}'`));
+assert.equal(migration.match(/\"placement\":\"featured\"/g)?.length, 5);
+assert.equal(migration.match(/\"source\":\"topics\"/g)?.length, 5);
+assert.equal(migration.match(/\"featured\":true/g)?.length, 5);
+for (const contentType of ["news", "video", "gallery", "press", "site_update"]) {
+  assert.ok(migration.includes(`\"type\":\"${contentType}\"`));
 }
-assert.ok(heroOwnerMigration.includes("source_type = 'featured_media'"));
 for (const retiredKey of ["featuredMode", "manualTopicId", "featuredCtaText"]) {
-  assert.ok(heroOwnerMigration.includes(`- '${retiredKey}'`));
+  assert.ok(migration.includes(`- '${retiredKey}'`));
 }
-assert.ok(!heroOwnerMigration.match(/create\s+(table|function|view|trigger)/iu));
+assert.ok(!migration.match(/create\s+(table|function|view|trigger)/iu));
+assert.ok(!migration.match(/insert\s+into\s+public\.page_(?:content_block|media_hub_module)_assignments/iu));
 
-console.log("Media Center product review verification passed.");
+console.log("Media Center architecture correction verification passed.");

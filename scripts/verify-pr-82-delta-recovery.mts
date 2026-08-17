@@ -83,8 +83,9 @@ for (const loader of [mediaHubLoader, mediaSidebarLoader]) {
   assert.ok(loader.includes("getPublishedPageStateBySlug"));
   assert.equal(loader.includes('.from("pages")'), false);
 }
-assert.ok(mediaHubResolver.includes("requiredTypes"));
-assert.ok(mediaHubResolver.includes("module.isVisible"));
+assert.ok(mediaHubResolver.includes("const requirements = new Map<MediaContentType"));
+assert.ok(mediaHubResolver.includes("moduleState.isVisible"));
+assert.ok(mediaHubResolver.includes('moduleState.config.placement === "listing"'));
 
 assert.ok(feedResolver.includes('../content/public-content-read/owner'));
 assert.ok(feedResolver.includes('.eq("topics.status", "published")'));

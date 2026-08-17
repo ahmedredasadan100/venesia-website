@@ -23,7 +23,8 @@ export default async function MediaSidebarModuleEditPage({ params, searchParams 
     getMediaSidebarModuleAssignmentContext(id),
   ]);
 
-  if (error || !block) notFound();
+  if (error) throw new Error(`Media Sidebar template read failed: ${error.message}`);
+  if (!block) notFound();
 
   return (
     <MediaSidebarModuleEditClient

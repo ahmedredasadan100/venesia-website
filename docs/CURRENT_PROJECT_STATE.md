@@ -84,8 +84,8 @@ The 2026-08-16 authorized Production migration closure established the following
 | Proof | Reconciled state |
 |---|---:|
 | Repository migration files | 81 |
-| Production registry versions | 80 |
-| Registry SQL provenance | Exact repository SQL for all 80 deployed versions |
+| Production registry versions | 81 |
+| Registry SQL provenance | Exact repository SQL for all 81 deployed versions |
 | Public tables | 51 |
 | Public tables with RLS enabled | 51 |
 | Public catalog objects with repository provenance | 267 |
@@ -105,7 +105,7 @@ scripts/verify-database-reconciliation.mts
 scripts/reconcile-migration-registry.mts
 ```
 
-The structural guard is part of `ci:check`. The authorized closure applied `20260814174238_admin_users_active_invariant.sql` and `20260815092555_media_center_listing_presentation.sql` in repository order. The latter adopted the existing `mutate_page_composition` / `sync_template_pages` write owner. The canonical registry reconciler then restored exact repository SQL provenance without replaying either migration.
+The structural guard is part of `ci:check`. The authorized closures applied `20260814174238_admin_users_active_invariant.sql`, `20260815092555_media_center_listing_presentation.sql`, and `20260816090000_media_center_hero_owner_closure.sql` in repository order. The Media Center migrations adopt the existing `mutate_page_composition` / `sync_template_pages` write owner, retire Listing Shell, and establish independent Hero, Featured Content, and Listing contracts. The canonical registry reconciler then restored exact repository SQL provenance without replaying these migrations.
 
 ## Removed final-cleanup legacy
 

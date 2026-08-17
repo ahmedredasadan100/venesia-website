@@ -40,8 +40,12 @@ export function resolvePopularSidebarItems(
 export async function enrichMediaSidebarModules(
   state: MediaSidebarModulesState,
 ): Promise<MediaSidebarModulesState> {
-  const latestWidget = state.widgets.find((widget) => widget.widgetKey === "latest");
-  const popularWidget = state.widgets.find((widget) => widget.widgetKey === "popular");
+  const latestWidget = state.widgets.find(
+    (widget) => widget.isVisible && widget.widgetKey === "latest",
+  );
+  const popularWidget = state.widgets.find(
+    (widget) => widget.isVisible && widget.widgetKey === "popular",
+  );
 
   const latestLimit = latestWidget
     ? parseMediaSidebarModuleConfig(latestWidget.config, "latest").limit ?? 3

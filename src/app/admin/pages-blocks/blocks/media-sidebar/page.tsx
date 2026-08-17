@@ -2,7 +2,10 @@ import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import BlockTemplateSummaryListClient from "../BlockTemplateSummaryListClient";
-import { toggleMediaSidebarModuleStatus } from "./actions";
+import {
+  bulkMediaSidebarModuleStatuses,
+  toggleMediaSidebarModuleStatus,
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +31,7 @@ export default async function MediaSidebarModulesPage({ searchParams }: PageProp
       description="قوالب لوحات الشريط الجانبي للمركز الإعلامي — تُدار الربط من صفحات Pages Blocks."
       detailLabel="الودجت"
       toggleAction={toggleMediaSidebarModuleStatus}
+      bulkAction={bulkMediaSidebarModuleStatuses}
       rows={(templates ?? []).map((template) => ({
         id: Number(template.id),
         name: String(template.name),

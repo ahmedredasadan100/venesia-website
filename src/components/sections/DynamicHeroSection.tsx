@@ -88,23 +88,6 @@ function useIntentPrefetch() {
   };
 }
 
-function HeroIntentLink({
-  href,
-  className,
-  children,
-}: {
-  href: string;
-  className: string;
-  children: ReactNode;
-}) {
-  const prefetchProps = useIntentPrefetch();
-  return (
-    <Link href={href} {...prefetchProps} className={className}>
-      {children}
-    </Link>
-  );
-}
-
 type HeroSlideImageProps = {
   desktopSrc: string;
   mobileSrc?: string;
@@ -312,8 +295,8 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
       </div>
 
       <div className="relative z-10 flex min-h-screen items-center max-md:items-start max-md:pt-40">
-        <div className="mx-auto grid w-full max-w-7xl items-center gap-10 px-6 pt-28 pb-20 max-md:pt-0 max-md:pb-24 lg:grid-cols-[1.35fr_0.65fr]">
-          <div className="min-w-0 text-right lg:min-w-auto">
+        <div className="mx-auto flex w-full max-w-7xl items-center px-6 pt-28 pb-20 max-md:pt-0 max-md:pb-24">
+          <div className="min-w-0 max-w-4xl text-right lg:min-w-auto">
             <div className="lg:translate-y-[5em]">
               {config.eyebrow ? (
                 <div className="mb-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
@@ -368,39 +351,6 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
             ) : null}
           </div>
 
-          <div className="hidden min-w-0 lg:block">
-            {hero.resolvedItems && hero.resolvedItems.length > 0 ? (
-              <div className="rounded-[2.5rem] border border-white/[0.14] bg-white/[0.05] p-3 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-md">
-                <div className="space-y-3 rounded-[2rem] bg-black/20 p-4">
-                  {hero.resolvedItems.slice(0, 3).map((item) => (
-                    <HeroIntentLink
-                      key={item.id}
-                      href={item.href ?? "#"}
-                      className="group flex gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-3 transition hover:border-[#D8B87A]/35 hover:bg-white/[0.07]"
-                    >
-                      {item.image ? (
-                        <span className="relative block h-16 w-20 shrink-0 overflow-hidden rounded-xl">
-                          <Image
-                            src={item.image}
-                            alt=""
-                            fill
-                            sizes="80px"
-                            className="object-cover"
-                          />
-                        </span>
-                      ) : null}
-                      <span className="min-w-0 text-right">
-                        <span className="block text-xs text-[#D8B87A]/70">{item.category}</span>
-                        <span className="mt-1 line-clamp-2 block text-sm leading-6 text-white/82 group-hover:text-white">
-                          {item.title}
-                        </span>
-                      </span>
-                    </HeroIntentLink>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
         </div>
       </div>
 
@@ -534,8 +484,6 @@ function InternalDynamicHero({
     : "max-w-[14ch] text-[2rem] leading-[1.2] sm:text-4xl md:text-[2.5rem]";
 
   const hasBreadcrumb = Boolean(belowTitle);
-  const featuredItem = hero.resolvedItems?.[0] ?? null;
-
   const elements: Partial<Record<HeroElementKey, ReactNode>> = {
     eyebrow: (
       <HeroReservedSlot
@@ -667,9 +615,7 @@ function InternalDynamicHero({
       className={`relative isolate z-0 overflow-hidden bg-[#05070B] ${
         isCompactHero
           ? "h-[min(46vh,500px)] min-h-[400px]"
-          : featuredItem
-            ? "h-[min(74vh,680px)] min-h-[560px]"
-            : "h-[min(62vh,580px)] min-h-[440px]"
+          : "h-[min(62vh,580px)] min-h-[440px]"
       }`}
       dir="rtl"
       data-hero-reduced-motion={reducedMotion ? "true" : undefined}
@@ -697,7 +643,7 @@ function InternalDynamicHero({
 
       <div className="relative z-10 flex h-full min-h-0 flex-col">
         <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-end px-6 pb-10 pt-20 sm:pb-12 sm:pt-24 md:pb-14 md:pt-28 lg:px-6 lg:pb-16">
-          <div className="grid w-full items-end gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
+          <div className="w-full max-w-3xl">
             <div className="flex min-w-0 flex-col gap-3 text-right md:gap-3.5">
               {config.heroElementOrder.map((key) => {
                 const node = elements[key];
@@ -708,49 +654,6 @@ function InternalDynamicHero({
               })}
             </div>
 
-            {featuredItem ? (
-              <HeroIntentLink
-                href={featuredItem.href ?? "#"}
-                className="group min-w-0 rounded-[2rem] border border-white/[0.14] bg-black/30 p-3 shadow-[0_24px_70px_rgba(0,0,0,0.32)] backdrop-blur-md transition hover:border-[#D8B87A]/35 hover:bg-black/40"
-              >
-                <span
-                  className="flex min-w-0 items-center gap-4 lg:block"
-                  data-hero-featured-topic="true"
-                >
-                  {featuredItem.image ? (
-                    <span className="relative block h-24 w-28 shrink-0 overflow-hidden rounded-2xl lg:h-44 lg:w-full">
-                      <Image
-                        src={featuredItem.image}
-                        alt=""
-                        fill
-                        sizes="(min-width: 1024px) 420px, 112px"
-                        className="object-cover transition duration-700 group-hover:scale-105"
-                      />
-                    </span>
-                  ) : null}
-
-                  <span className="min-w-0 flex-1 px-1 py-1 text-right lg:px-3 lg:py-4">
-                    {featuredItem.category ? (
-                      <span className="block text-[11px] text-[#D8B87A]/75">
-                        {featuredItem.category}
-                      </span>
-                    ) : null}
-                    {featuredItem.title ? (
-                      <span className="mt-1 line-clamp-2 block text-base font-semibold leading-7 text-white/90 group-hover:text-white lg:text-xl lg:leading-8">
-                        {featuredItem.title}
-                      </span>
-                    ) : null}
-                    {featuredItem.excerpt ? (
-                      <span className="mt-2 hidden line-clamp-2 text-sm leading-7 text-white/58 lg:block">
-                        {featuredItem.excerpt}
-                      </span>
-                    ) : null}
-                  </span>
-                </span>
-              </HeroIntentLink>
-            ) : (
-              <div aria-hidden className="hidden min-w-0 lg:block" />
-            )}
           </div>
         </div>
       </div>

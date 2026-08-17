@@ -40,15 +40,11 @@ type HeroEditClientProps = {
     description: string | null;
     variant: string;
     style_preset: string | null;
-    source_type: string;
-    source_slug: string | null;
-    limit_count: number | null;
     status: "published" | "unpublished";
   };
   config: Record<string, unknown>;
   imagesText: string;
   mobileImagesText: string;
-  sourceOptions: [string, string][];
   variantOptions: [string, string][];
   saved?: boolean;
   mediaSynchronizationWarning?: boolean;
@@ -60,7 +56,6 @@ export default function HeroEditClient({
   config,
   imagesText,
   mobileImagesText,
-  sourceOptions,
   variantOptions,
   saved,
   mediaSynchronizationWarning = false,
@@ -405,34 +400,6 @@ export default function HeroEditClient({
                       options={variantOptions.map(([value, label]) => ({ value, label }))}
                     />
 
-                    <AdminFormListboxSelect
-                      name="source_type"
-                      label="المصدر"
-                      defaultValue={hero.source_type}
-                      options={sourceOptions.map(([value, label]) => ({ value, label }))}
-                    />
-
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">المعرّف التقني للمصدر</span>
-                      <input
-                        name="source_slug"
-                        defaultValue={hero.source_slug ?? ""}
-                        placeholder="category-slug"
-                        className={fieldClassName("h-11")}
-                      />
-                    </label>
-
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">عدد العناصر</span>
-                      <input
-                        name="limit_count"
-                        type="number"
-                        min={1}
-                        max={12}
-                        defaultValue={hero.limit_count ?? 1}
-                        className={fieldClassName("h-11")}
-                      />
-                    </label>
                     </ModuleEditorSection>
                   </ModuleEditorPagesTab>
                 </div>

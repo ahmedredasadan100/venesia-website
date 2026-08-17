@@ -5,7 +5,7 @@ import { unstable_cache } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
-import { getPublishedPageBySlug } from "../pages/get-published-page-by-slug";
+import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { resolveHomeModuleSlugFromTemplate, type HomeModuleSlug } from "./home-module-slugs";
 import { asBreadcrumbConfig, asCardsConfig, asCtaConfig, resolveContentBlockConfig } from "./configs";
 import {
@@ -23,6 +23,7 @@ import {
 import { sortPageBlocks } from "./page-block-layout";
 import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageBlockPublicState, PageBlockType, ResolvedPageBlock } from "./types";
+import { isRetiredContentBlockTemplateSlug } from "./deprecated-block-modules";
 
 function joinedTemplate<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
@@ -56,13 +57,13 @@ export type PageBlockLoadResult = {
   hiddenHomeModuleSlugs: HomeModuleSlug[];
 };
 
-function emptyPageBlockLoadResult(): PageBlockLoadResult {
+function emptyPageBlockLoadResult(hasCompositionError = false): PageBlockLoadResult {
   return {
     blocks: [],
     blockStates: [],
     hasAnyAssignmentRows: false,
     hasRenderableModules: false,
-    hasCompositionError: false,
+    hasCompositionError,
     hasAssignments: false,
     hiddenHomeModuleSlugs: [],
   };
@@ -108,8 +109,11 @@ export const loadPageBlockStateBySlug = cache(async function loadPageBlockStateB
 async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoadResult> {
   const supabase = getSupabaseAdmin();
 
-  const page = await getPublishedPageBySlug(pageSlug);
-  if (!page) return emptyPageBlockLoadResult();
+  const pageState = await getPublishedPageStateBySlug(pageSlug);
+  if (!pageState.page) {
+    return emptyPageBlockLoadResult(pageState.sourceStatus === "error");
+  }
+  const page = pageState.page;
 
   const blockPromises: Array<Promise<ResolvedPageBlock>> = [];
   const blockStates: PageBlockPublicState[] = [];
@@ -146,13 +150,14 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   if (cardsError) logError("loadPageBlockStateBySlug: cards assignments failed", cardsError, { pageSlug });
   if (breadcrumbError) logError("loadPageBlockStateBySlug: breadcrumb assignments failed", breadcrumbError, { pageSlug });
 
-  assignmentRowCount += contentAssignments?.length ?? 0;
   assignmentRowCount += ctaAssignments?.length ?? 0;
   assignmentRowCount += cardsAssignments?.length ?? 0;
   assignmentRowCount += breadcrumbAssignments?.length ?? 0;
 
   for (const row of contentAssignments ?? []) {
     const template = joinedTemplate(row.content_block_templates);
+    if (isRetiredContentBlockTemplateSlug(template?.slug)) continue;
+    assignmentRowCount += 1;
     appendBlockState(blockStates, "content", row, template);
     const homeModuleSlug = template
       ? resolveHomeModuleSlugFromTemplate(template.slug, template.variant)

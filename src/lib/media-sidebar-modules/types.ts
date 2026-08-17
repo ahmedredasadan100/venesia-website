@@ -17,4 +17,6 @@ export type MediaSidebarModulesState = {
   widgets: MediaSidebarWidgetState[];
   sourceStatus: "database" | "missing" | "error";
   sourceIssues: string[];
+  hasAnyAssignmentRows: boolean;
+  hasRenderableModules: boolean;
 };

@@ -21,7 +21,7 @@ export type MediaContentItem = {
   duration?: string;
   videoUrl?: string;
   content?: string[];
-  /** Used by hero media_category filter — not rendered in public media UI. */
+  /** Canonical category identity for public content filtering; not rendered directly. */
   categorySlug?: string;
   seriesSlug?: string;
   seoTitle?: string;

@@ -9,16 +9,6 @@ type PageProps = {
   searchParams?: Promise<{ saved?: string; notice?: string }> | { saved?: string; notice?: string };
 };
 
-const sourceOptions: [string, string][] = [
-  ["manual", "يدوي"],
-  ["latest_topics", "آخر مواضيع تهمك"],
-  ["featured_topics", "مواضيع مميزة"],
-  ["topic_category", "تصنيف من مواضيع تهمك"],
-  ["latest_media", "آخر عناصر المركز الإعلامي"],
-  ["featured_media", "عناصر إعلامية مميزة"],
-  ["media_category", "تصنيف من المركز الإعلامي"],
-];
-
 const variantOptions: [string, string][] = [
   ["home-cinematic", "سينمائي للصفحة الرئيسية"],
   ["internal-page", "صفحة داخلية"],
@@ -50,7 +40,8 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
     getHeroModuleAssignmentContext(heroId),
   ]);
 
-  if (error || !hero) notFound();
+  if (error) throw new Error(`Hero template read failed: ${error.message}`);
+  if (!hero) notFound();
 
   const config =
     hero.config && typeof hero.config === "object" && !Array.isArray(hero.config)
@@ -65,15 +56,11 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
         description: hero.description,
         variant: hero.variant,
         style_preset: hero.style_preset,
-        source_type: hero.source_type,
-        source_slug: hero.source_slug,
-        limit_count: hero.limit_count,
         status: getStatus(hero.status),
       }}
       config={config}
       imagesText={imagesToTextarea(config)}
       mobileImagesText={mobileImagesToTextarea(config)}
-      sourceOptions={sourceOptions}
       variantOptions={variantOptions}
       saved={Boolean(resolvedSearch.saved)}
       mediaSynchronizationWarning={

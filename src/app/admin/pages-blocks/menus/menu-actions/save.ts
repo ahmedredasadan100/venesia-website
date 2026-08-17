@@ -142,7 +142,8 @@ export async function updateMenu(formData: FormData) {
   if (!id || !name) backToMenus("بيانات القائمة غير مكتملة.");
   assertValidMenuSlug(slug);
 
-  const { data: existingMenu } = await getSupabaseAdmin().from("menus").select("id").eq("slug", slug).neq("id", id).maybeSingle();
+  const { data: existingMenu, error: lookupError } = await getSupabaseAdmin().from("menus").select("id").eq("slug", slug).neq("id", id).maybeSingle();
+  if (lookupError) backToMenus(lookupError.message);
   if (existingMenu?.id) backToMenus("الـ slug مستخدم بالفعل في قائمة أخرى. اختار slug مختلف.");
 
   const { error } = await getSupabaseAdmin()

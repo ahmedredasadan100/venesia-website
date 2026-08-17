@@ -4,18 +4,15 @@ import { cache } from "react";
 import { unstable_cache } from "next/cache";
 
 import { resolveHeroConfigLinks } from "./admin/links/hero-config";
-import { loadPublicContentCollection } from "./content/public-content-read/owner";
 import type { Json, Tables } from "./database.types";
-import { isMediaContentType, MEDIA_CONTENT_TYPES } from "./media-center/types";
 import { isPageModulePubliclyVisible } from "./page-blocks/admin-utils";
-import { getPublishedPageBySlug } from "./pages/get-published-page-by-slug";
+import { getPublishedPageStateBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { logError } from "./logging";
 import type {
   HeroSectionData,
   HeroSourceType,
   PageRecord,
-  PageSectionRecord,
 } from "./page-sections";
 
 type JsonObject = Record<string, Json | undefined>;
@@ -26,10 +23,6 @@ type HeroTemplateRecord = {
   slug: string;
   variant: string;
   style_preset: string;
-  source_type: HeroSourceType;
-  source_id: number | null;
-  source_slug: string | null;
-  limit_count: number;
   status: "published" | "unpublished";
   sort_order: number;
   config: JsonObject | null;
@@ -42,26 +35,10 @@ type HeroTemplateSelection = Pick<
   | "slug"
   | "variant"
   | "style_preset"
-  | "source_type"
-  | "source_id"
-  | "source_slug"
-  | "limit_count"
   | "status"
   | "sort_order"
   | "config"
 >;
-
-function isHeroSourceType(value: string): value is HeroSourceType {
-  return (
-    value === "manual" ||
-    value === "latest_topics" ||
-    value === "featured_topics" ||
-    value === "topic_category" ||
-    value === "latest_media" ||
-    value === "featured_media" ||
-    value === "media_category"
-  );
-}
 
 function isHeroTemplateStatus(
   value: string,
@@ -76,10 +53,7 @@ function isJsonObject(value: Json): value is JsonObject {
 function mapHeroTemplateSelection(
   template: HeroTemplateSelection,
 ): HeroTemplateRecord | null {
-  if (
-    !isHeroSourceType(template.source_type) ||
-    !isHeroTemplateStatus(template.status)
-  ) {
+  if (!isHeroTemplateStatus(template.status)) {
     return null;
   }
 
@@ -89,19 +63,10 @@ function mapHeroTemplateSelection(
     slug: template.slug,
     variant: template.variant,
     style_preset: template.style_preset,
-    source_type: template.source_type,
-    source_id: template.source_id,
-    source_slug: template.source_slug,
-    limit_count: template.limit_count,
     status: template.status,
     sort_order: template.sort_order,
     config: isJsonObject(template.config) ? template.config : null,
   };
-}
-
-async function getPageBySlug(slug: string): Promise<PageRecord | null> {
-  const page = await getPublishedPageBySlug(slug);
-  return page;
 }
 
 function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): HeroSectionData {
@@ -113,10 +78,10 @@ function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): 
     slot: "top",
     variant: template.variant,
     style_preset: template.style_preset,
-    source_type: template.source_type,
-    source_id: template.source_id,
-    source_slug: template.source_slug,
-    limit_count: template.limit_count,
+    source_type: "manual" satisfies HeroSourceType,
+    source_id: null,
+    source_slug: null,
+    limit_count: 1,
     is_visible: isPageModulePubliclyVisible(true, template.status),
     sort_order: template.sort_order,
     config: template.config,
@@ -135,10 +100,31 @@ async function templateToHeroSectionResolved(template: HeroTemplateRecord, page:
   return hero;
 }
 
-async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRecord | null> {
+type AssignedHeroTemplateResult =
+  | { status: "visible"; assignmentId: number; template: HeroTemplateRecord }
+  | { status: "hidden"; assignmentId: number }
+  | { status: "none" }
+  | { status: "error"; issue: string };
+
+function resolveAssignedHeroRow(
+  row: {
+    id: number;
+    hero_templates: HeroTemplateSelection | HeroTemplateSelection[] | null;
+  },
+): AssignedHeroTemplateResult {
+  const selectedTemplate = Array.isArray(row.hero_templates)
+    ? (row.hero_templates[0] ?? null)
+    : row.hero_templates;
+  const template = selectedTemplate ? mapHeroTemplateSelection(selectedTemplate) : null;
+  return isPageModulePubliclyVisible(true, template?.status) && template
+    ? { status: "visible", assignmentId: row.id, template }
+    : { status: "hidden", assignmentId: row.id };
+}
+
+async function getAssignedHeroTemplate(page: PageRecord): Promise<AssignedHeroTemplateResult> {
   const supabaseAdmin = getSupabaseAdmin();
   const baseSelect =
-    "hero_templates(id,name,slug,variant,style_preset,source_type,source_id,source_slug,limit_count,status,sort_order,config)";
+    "id,hero_templates(id,name,slug,variant,style_preset,status,sort_order,config)";
 
   const byId = await supabaseAdmin
     .from("hero_assignments")
@@ -152,9 +138,10 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
 
   if (byId.error) {
     logError("getAssignedHeroTemplate by id failed", byId.error, { pageId: page.id });
-  } else if (byId.data?.hero_templates) {
-    const template = mapHeroTemplateSelection(byId.data.hero_templates);
-    return isPageModulePubliclyVisible(true, template?.status) ? template : null;
+    return { status: "error", issue: byId.error.message };
+  }
+  if (byId.data) {
+    return resolveAssignedHeroRow(byId.data);
   }
 
   const byPath = await supabaseAdmin
@@ -169,86 +156,18 @@ async function getAssignedHeroTemplate(page: PageRecord): Promise<HeroTemplateRe
 
   if (byPath.error) {
     logError("getAssignedHeroTemplate by path failed", byPath.error, { path: page.path });
-  } else if (byPath.data?.hero_templates) {
-    const template = mapHeroTemplateSelection(byPath.data.hero_templates);
-    return isPageModulePubliclyVisible(true, template?.status) ? template : null;
+    return { status: "error", issue: byPath.error.message };
+  }
+  if (byPath.data) {
+    return resolveAssignedHeroRow(byPath.data);
   }
 
-  return null;
+  return { status: "none" };
 }
 
-async function resolveHeroItems(
-  hero: PageSectionRecord,
-): Promise<NonNullable<HeroSectionData["resolvedItems"]>> {
-  const limit = Math.max(1, Math.min(hero.limit_count ?? 1, 12));
-
-  if (hero.source_type === "manual") return [];
-
-  if (
-    hero.source_type === "latest_topics" ||
-    hero.source_type === "featured_topics" ||
-    hero.source_type === "topic_category"
-  ) {
-    const result = await loadPublicContentCollection({
-      contentTypes: ["article"],
-      page: 1,
-      pageSize: limit,
-      sort: "newest",
-      featured: hero.source_type === "featured_topics" ? "only" : "none",
-      categorySlugs: hero.source_type === "topic_category" && hero.source_slug
-        ? [hero.source_slug]
-        : [],
-    });
-
-    return result.items.map((item) => ({
-      id: item.id,
-      title: item.title,
-      excerpt: item.excerpt,
-      image: item.image,
-      href: item.href,
-      category: item.category,
-    }));
-  }
-
-  if (
-    hero.source_type === "latest_media" ||
-    hero.source_type === "featured_media" ||
-    hero.source_type === "media_category"
-  ) {
-    const contentTypes =
-      hero.source_type === "featured_media" && isMediaContentType(hero.source_slug)
-        ? [hero.source_slug]
-        : MEDIA_CONTENT_TYPES;
-    const result = await loadPublicContentCollection({
-      contentTypes,
-      page: 1,
-      pageSize: limit,
-      sort: "newest",
-      featured: hero.source_type === "featured_media" ? "only" : "none",
-      categorySlugs: hero.source_type === "media_category" && hero.source_slug
-        ? [hero.source_slug]
-        : [],
-    });
-
-    return result.items.map((item) => ({
-      id: item.id,
-      title: item.title,
-      excerpt: item.excerpt,
-      image: item.image,
-      href: item.href,
-      category: item.category,
-    }));
-  }
-
-  return [];
-}
-
-/** Dynamic Hero sources are renderable only when their authoritative source resolves content. */
-export function heroSourceRequiresResolvedItems(sourceType: HeroSourceType) {
-  return sourceType !== "manual";
-}
-
-async function pageHasHeroAssignment(page: PageRecord): Promise<boolean> {
+async function findHiddenHeroAssignment(
+  page: PageRecord,
+): Promise<{ status: "hidden"; assignmentId: number } | { status: "none" } | { status: "error"; issue: string }> {
   const supabaseAdmin = getSupabaseAdmin();
 
   const byId = await supabaseAdmin
@@ -259,7 +178,11 @@ async function pageHasHeroAssignment(page: PageRecord): Promise<boolean> {
     .limit(1)
     .maybeSingle();
 
-  if (byId.data) return true;
+  if (byId.error) {
+    logError("findHiddenHeroAssignment by id failed", byId.error, { pageId: page.id });
+    return { status: "error", issue: byId.error.message };
+  }
+  if (byId.data) return { status: "hidden", assignmentId: byId.data.id };
 
   const byPath = await supabaseAdmin
     .from("hero_assignments")
@@ -269,14 +192,23 @@ async function pageHasHeroAssignment(page: PageRecord): Promise<boolean> {
     .limit(1)
     .maybeSingle();
 
-  return Boolean(byPath.data);
+  if (byPath.error) {
+    logError("findHiddenHeroAssignment by path failed", byPath.error, { path: page.path });
+    return { status: "error", issue: byPath.error.message };
+  }
+  return byPath.data
+    ? { status: "hidden", assignmentId: byPath.data.id }
+    : { status: "none" };
 }
 
-export type HeroSectionVisibility = "visible" | "hidden" | "none";
+export type HeroSectionVisibility = "visible" | "hidden" | "none" | "error";
 
 export type HeroSectionState = {
   hero: HeroSectionData | null;
   visibility: HeroSectionVisibility;
+  assignmentId: number | null;
+  hasAnyAssignmentRows: boolean;
+  sourceIssue?: string;
 };
 
 /**
@@ -293,28 +225,77 @@ export const getHeroSectionState = cache(async function getHeroSectionState(
 });
 
 async function queryHeroSectionState(pageSlug: string): Promise<HeroSectionState> {
-  const page = await getPageBySlug(pageSlug);
-  if (!page) return { hero: null, visibility: "none" };
-
-  const assignedTemplate = await getAssignedHeroTemplate(page);
-  if (assignedTemplate) {
-    const hero = await templateToHeroSectionResolved(assignedTemplate, page);
-    const resolvedItems = await resolveHeroItems(hero);
-    hero.resolvedItems = resolvedItems;
-    if (
-      heroSourceRequiresResolvedItems(hero.source_type) &&
-      resolvedItems.length === 0
-    ) {
-      return { hero: null, visibility: "hidden" };
-    }
-    return { hero, visibility: "visible" };
+  const pageState = await getPublishedPageStateBySlug(pageSlug);
+  if (!pageState.page) {
+    return pageState.sourceStatus === "error"
+      ? {
+          hero: null,
+          visibility: "error",
+          assignmentId: null,
+          hasAnyAssignmentRows: false,
+          sourceIssue: pageState.sourceIssue,
+        }
+      : {
+          hero: null,
+          visibility: "none",
+          assignmentId: null,
+          hasAnyAssignmentRows: false,
+        };
   }
 
-  if (await pageHasHeroAssignment(page)) {
-    return { hero: null, visibility: "hidden" };
+  const assignedTemplate = await getAssignedHeroTemplate(pageState.page);
+  if (assignedTemplate.status === "error") {
+    return {
+      hero: null,
+      visibility: "error",
+      assignmentId: null,
+      hasAnyAssignmentRows: false,
+      sourceIssue: assignedTemplate.issue,
+    };
+  }
+  if (assignedTemplate.status === "visible") {
+    const hero = await templateToHeroSectionResolved(assignedTemplate.template, pageState.page);
+    return {
+      hero,
+      visibility: "visible",
+      assignmentId: assignedTemplate.assignmentId,
+      hasAnyAssignmentRows: true,
+    };
+  }
+  if (assignedTemplate.status === "hidden") {
+    return {
+      hero: null,
+      visibility: "hidden",
+      assignmentId: assignedTemplate.assignmentId,
+      hasAnyAssignmentRows: true,
+    };
   }
 
-  return { hero: null, visibility: "none" };
+  const hiddenAssignment = await findHiddenHeroAssignment(pageState.page);
+  if (hiddenAssignment.status === "error") {
+    return {
+      hero: null,
+      visibility: "error",
+      assignmentId: null,
+      hasAnyAssignmentRows: false,
+      sourceIssue: hiddenAssignment.issue,
+    };
+  }
+  if (hiddenAssignment.status === "hidden") {
+    return {
+      hero: null,
+      visibility: "hidden",
+      assignmentId: hiddenAssignment.assignmentId,
+      hasAnyAssignmentRows: true,
+    };
+  }
+
+  return {
+    hero: null,
+    visibility: "none",
+    assignmentId: null,
+    hasAnyAssignmentRows: false,
+  };
 }
 
 /**

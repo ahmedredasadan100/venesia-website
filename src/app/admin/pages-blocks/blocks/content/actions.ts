@@ -23,6 +23,7 @@ import {
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
   slugify,
+  withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
@@ -42,6 +43,7 @@ import type {
 } from "../../../../../lib/page-blocks/configs";
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
 import { isStructuralContentTemplateSlug } from "../../../../../lib/page-blocks/module-edit-registry";
+import { isRetiredContentBlockTemplateSlug } from "../../../../../lib/page-blocks/deprecated-block-modules";
 import {
   isAboutApproachTemplate,
   isAboutIntroSingleImageTemplate,
@@ -610,7 +612,8 @@ async function buildContentConfig(
 async function ensureUniqueSlug(slug: string, id?: number) {
   let query = getSupabaseAdmin().from("content_block_templates").select("id").eq("slug", slug).limit(1);
   if (id) query = query.neq("id", id);
-  const { data } = await query.maybeSingle();
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(`Content module slug lookup failed: ${error.message}`);
   return !data;
 }
 
@@ -811,7 +814,10 @@ export async function updateContentBlock(formData: FormData) {
     metadata: { slug, variant, projects_hub: isProjectsHubTemplate(slug, variant) },
   });
   await revalidateBlockModulePaths("content");
-  redirect(`/admin/pages-blocks/blocks/content/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`);
+  redirect(withModuleEditorReturnContextFromForm(
+    `/admin/pages-blocks/blocks/content/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    formData,
+  ));
 }
 
 export async function toggleContentBlockStatus(formData: FormData) {
@@ -975,5 +981,5 @@ export async function getContentBlockRows(): Promise<ContentBlockRow[]> {
     .order("id", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []).filter((row) => !isRetiredContentBlockTemplateSlug(row.slug));
 }

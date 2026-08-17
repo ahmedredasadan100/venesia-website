@@ -553,12 +553,20 @@ const loader = readFileSync("src/lib/feed-modules/load-feed-modules.ts", "utf8")
 const resolver = readFileSync("src/lib/feed-modules/resolve-topics-feed.ts", "utf8");
 const adminUtilsSource = readFileSync("src/lib/page-blocks/admin-utils.ts", "utf8");
 const blockLoader = readFileSync("src/lib/page-blocks/load-page-blocks.ts", "utf8");
+const compositionLoader = readFileSync("src/lib/page-blocks/load-page-composition.ts", "utf8");
+const heroLoader = readFileSync("src/lib/load-hero-section.ts", "utf8");
+const adminAssignmentLoader = readFileSync("src/lib/page-blocks/admin-queries.ts", "utf8");
+const moduleAssignmentLoader = readFileSync("src/lib/page-blocks/module-assignments-query.ts", "utf8");
 const mediaHubLoader = readFileSync(
   "src/lib/media-hub-modules/load-media-hub-modules.ts",
   "utf8",
 );
 const mediaSidebarLoader = readFileSync(
   "src/lib/media-sidebar-modules/load-media-sidebar-modules.ts",
+  "utf8",
+);
+const mediaSidebarResolver = readFileSync(
+  "src/lib/media-sidebar-modules/resolve-widget-items.ts",
   "utf8",
 );
 const section = readFileSync("src/components/feed-modules/FeedModuleSection.tsx", "utf8");
@@ -605,7 +613,7 @@ assert.ok(actions.includes("if (!feedType)"));
 assert.equal(actions.includes('? (feedType as TopicsFeedType) : "latest"'), false);
 assert.ok(
   actions.indexOf("isPersistedFeedModuleConfigEqual(coordinated.value.config, config)") <
-    actions.indexOf("redirect(`/admin/pages-blocks/blocks/feed/${id}?saved=1"),
+    actions.indexOf("redirect(withModuleEditorReturnContextFromForm("),
   "saved=1 must follow exact config readback",
 );
 
@@ -629,6 +637,52 @@ assert.ok(mediaHubLoader.includes("isPageModulePubliclyVisible(row.is_visible, t
 assert.equal(mediaHubLoader.includes("isPublishedPageBlockStatus"), false);
 assert.ok(mediaSidebarLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
 assert.equal(mediaSidebarLoader.includes("isPublishedPageBlockStatus"), false);
+assert.ok(
+  mediaSidebarResolver.includes('widget.isVisible && widget.widgetKey === "latest"') &&
+    mediaSidebarResolver.includes('widget.isVisible && widget.widgetKey === "popular"'),
+  "Hidden Media Sidebar assignments must not trigger public content reads",
+);
+for (const aggregateSource of [heroLoader, blockLoader, loader, mediaHubLoader, mediaSidebarLoader]) {
+  assert.ok(
+    aggregateSource.includes("sourceStatus === \"error\"") ||
+      aggregateSource.includes('sourceStatus: "error"') ||
+      aggregateSource.includes("hasCompositionError: true") ||
+      aggregateSource.includes('visibility: "error"'),
+    "Every Page Composition read family must preserve database failure as error truth",
+  );
+}
+for (const aggregateMember of [
+  "heroState.hasAnyAssignmentRows",
+  "blockState.hasAnyAssignmentRows",
+  "feedState.hasAnyAssignmentRows",
+  "mediaHubModules?.hasAnyAssignmentRows",
+  "mediaSidebarModules?.hasAnyAssignmentRows",
+]) {
+  assert.ok(
+    compositionLoader.includes(aggregateMember),
+    `Page Composition aggregate presence is missing ${aggregateMember}`,
+  );
+}
+for (const renderableMember of [
+  'heroState.visibility === "visible"',
+  "blockState.hasRenderableModules",
+  "feedState.modules.length > 0",
+  "mediaHubModules?.hasRenderableModules",
+  "mediaSidebarModules?.hasRenderableModules",
+]) {
+  assert.ok(
+    compositionLoader.includes(renderableMember),
+    `Page Composition renderable truth is missing ${renderableMember}`,
+  );
+}
+assert.ok(compositionLoader.includes("assignmentId: heroState.assignmentId"));
+assert.ok(compositionLoader.includes('heroState.visibility === "error"'));
+assert.ok(heroLoader.includes('HeroSectionVisibility = "visible" | "hidden" | "none" | "error"'));
+assert.ok(heroLoader.includes("assignmentId: assignedTemplate.assignmentId"));
+assert.ok(adminAssignmentLoader.includes("results.find((result) => result.error)"));
+assert.ok(adminAssignmentLoader.includes("Page Composition assignment read failed"));
+assert.ok(moduleAssignmentLoader.includes("Module assignment read failed"));
+assert.ok(moduleAssignmentLoader.includes("Hero assignment read failed"));
 assert.ok(section.includes("showImage={presentation.showImage}"));
 assert.ok(section.includes("showDate={presentation.showDate}"));
 assert.ok(section.includes("showExcerpt={presentation.showExcerpt}"));

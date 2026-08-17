@@ -39,7 +39,8 @@ async function collectAssignedPublicPaths() {
 
   await Promise.all(
     ALL_ASSIGNMENT_TABLES.map(async (table) => {
-      const { data } = await getSupabaseAdmin().from(table).select("page_id");
+      const { data, error } = await getSupabaseAdmin().from(table).select("page_id");
+      if (error) throw new Error(`Assignment path read failed for ${table}: ${error.message}`);
       for (const row of data ?? []) {
         pageIds.add(row.page_id);
       }
@@ -49,10 +50,12 @@ async function collectAssignedPublicPaths() {
   const paths = new Set<string>(BASE_PUBLIC_PATHS);
 
   if (pageIds.size) {
-    const { data: pages } = await getSupabaseAdmin()
+    const { data: pages, error } = await getSupabaseAdmin()
       .from("pages")
       .select("path,slug")
       .in("id", [...pageIds]);
+
+    if (error) throw new Error(`Assigned page path read failed: ${error.message}`);
 
     for (const page of pages ?? []) {
       addPagePaths(paths, page);
@@ -82,11 +85,13 @@ export async function revalidatePageBlocksPath(pageId: number) {
   revalidatePath("/admin/pages-blocks/pages", "layout");
   revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
 
-  const { data: page } = await getSupabaseAdmin()
+  const { data: page, error } = await getSupabaseAdmin()
     .from("pages")
     .select("path,slug")
     .eq("id", pageId)
     .maybeSingle();
+
+  if (error) throw new Error(`Page revalidation path read failed: ${error.message}`);
 
   const paths = new Set<string>(BASE_PUBLIC_PATHS);
   addPagePaths(paths, page);

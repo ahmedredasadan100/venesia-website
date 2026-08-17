@@ -55,11 +55,15 @@ export async function savePageSeoAction(formData: FormData) {
     redirect(appendSeoQuery(redirectTo, "seo_error", error.message));
   }
 
-  const { data: page } = await getSupabaseAdmin()
+  const { data: page, error: pageReadError } = await getSupabaseAdmin()
     .from("pages")
     .select("path")
     .eq("id", pageId)
     .maybeSingle();
+
+  if (pageReadError) {
+    redirect(appendSeoQuery(redirectTo, "seo_error", pageReadError.message));
+  }
 
   revalidatePublicCacheTags(["page-seo", "pages"]);
   if (page?.path) {

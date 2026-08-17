@@ -23,7 +23,8 @@ export default async function CardsBlockEditPage({ params, searchParams }: PageP
     getModuleAssignmentContext("cards", id),
   ]);
 
-  if (error || !block) notFound();
+  if (error) throw new Error(`Cards template read failed: ${error.message}`);
+  if (!block) notFound();
 
   return (
     <CardsModuleEditClient

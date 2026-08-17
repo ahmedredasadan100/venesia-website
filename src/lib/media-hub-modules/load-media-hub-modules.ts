@@ -27,6 +27,8 @@ export async function queryMediaHubModules(
       modules: [],
       sourceStatus: pageState.sourceStatus,
       sourceIssues: pageState.sourceIssue ? [pageState.sourceIssue] : [],
+      hasAnyAssignmentRows: false,
+      hasRenderableModules: false,
     };
   }
 
@@ -37,7 +39,15 @@ export async function queryMediaHubModules(
     .eq("slot", "main")
     .order("sort_order", { ascending: true });
 
-  if (error) return { modules: [], sourceStatus: "error", sourceIssues: [error.message] };
+  if (error) {
+    return {
+      modules: [],
+      sourceStatus: "error",
+      sourceIssues: [error.message],
+      hasAnyAssignmentRows: false,
+      hasRenderableModules: false,
+    };
+  }
 
   const modules: MediaHubModuleState[] = [];
   for (const row of rows ?? []) {
@@ -58,6 +68,12 @@ export async function queryMediaHubModules(
     });
   }
 
-  const state = { modules, sourceStatus: "database" as const, sourceIssues: [] };
+  const state = {
+    modules,
+    sourceStatus: "database" as const,
+    sourceIssues: [],
+    hasAnyAssignmentRows: (rows?.length ?? 0) > 0,
+    hasRenderableModules: modules.some((module) => module.isVisible),
+  };
   return options.enrich === false ? state : enrichMediaHubModules(state);
 }

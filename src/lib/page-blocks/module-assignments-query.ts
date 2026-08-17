@@ -32,7 +32,7 @@ async function loadModuleAssignmentContext(
   assignmentTable: PageModuleAssignmentTable,
   templateId: number,
 ): Promise<ModuleAssignmentContext> {
-  const [{ data: assignments }, { data: pages }] = await Promise.all([
+  const [assignmentsResult, pagesResult] = await Promise.all([
     getSupabaseAdmin()
       .from(assignmentTable)
       .select("id,page_id,template_id,slot,sort_order,is_visible")
@@ -43,6 +43,14 @@ async function loadModuleAssignmentContext(
       .select("id,title,slug,path")
       .order("sort_order", { ascending: true }),
   ]);
+  if (assignmentsResult.error) {
+    throw new Error(`Module assignment read failed: ${assignmentsResult.error.message}`);
+  }
+  if (pagesResult.error) {
+    throw new Error(`Module assignment page context read failed: ${pagesResult.error.message}`);
+  }
+  const assignments = assignmentsResult.data;
+  const pages = pagesResult.data;
 
   const pageById = new Map((pages ?? []).map((page) => [page.id, page]));
   const rows: ModuleAssignmentRow[] = [];
@@ -84,7 +92,7 @@ export async function getMediaSidebarModuleAssignmentContext(templateId: number)
 }
 
 export async function getHeroModuleAssignmentContext(templateId: number): Promise<ModuleAssignmentContext> {
-  const [{ data: assignments }, { data: pages }] = await Promise.all([
+  const [assignmentsResult, pagesResult] = await Promise.all([
     getSupabaseAdmin()
       .from("hero_assignments")
       .select("id,target_id,is_active,priority")
@@ -93,6 +101,14 @@ export async function getHeroModuleAssignmentContext(templateId: number): Promis
       .order("priority", { ascending: true }),
     getSupabaseAdmin().from("pages").select("id,title,slug,path").order("sort_order", { ascending: true }),
   ]);
+  if (assignmentsResult.error) {
+    throw new Error(`Hero assignment read failed: ${assignmentsResult.error.message}`);
+  }
+  if (pagesResult.error) {
+    throw new Error(`Hero assignment page context read failed: ${pagesResult.error.message}`);
+  }
+  const assignments = assignmentsResult.data;
+  const pages = pagesResult.data;
 
   const pageById = new Map((pages ?? []).map((page) => [page.id, page]));
   const rows: ModuleAssignmentRow[] = [];

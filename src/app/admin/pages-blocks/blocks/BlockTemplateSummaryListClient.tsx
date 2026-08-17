@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   AdminFeedbackRegion,
@@ -13,25 +13,33 @@ import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
   ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE,
+  AdminBulkActionBar,
   AdminColumnVisibilityMenu,
   AdminDataGrid,
   AdminDataGridCenterCell,
+  AdminDataGridCheckbox,
+  AdminDataGridCheckboxCell,
   AdminDataGridEmpty,
   AdminDataGridHeader,
   AdminDataGridPrimaryCell,
   AdminDataGridRow,
   AdminDataGridRowActions,
+  AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminPageExperience,
   AdminPageContextHeader,
   AdminTablePagination,
   type AdminRowActionsCapability,
+  useAdminGridSelection,
 } from "../../../../components/admin/ui";
+import { useAdminTable } from "../../../../components/admin/table-engine";
 import {
   adminCollectionSearchIncludes,
   useAdminBoundedClientPagination,
   type AdminBoundedClientQueryContract,
+  type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
+import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
 import { useAdminBoundedClientInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getPageCompositionColumnPreferenceConfig,
@@ -63,6 +71,7 @@ type BlockTemplateSummaryListClientProps = {
     id: number,
     nextStatus: "published" | "unpublished",
   ) => Promise<void>;
+  bulkAction: (formData: FormData) => Promise<void>;
   errorMessage?: string | null;
   mediaSynchronizationWarning?: boolean;
   initialVisibleColumns?: readonly string[] | null;
@@ -70,6 +79,7 @@ type BlockTemplateSummaryListClientProps = {
 };
 
 const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
+type BlockTemplateSummarySortKey = "name" | "slug" | "detail" | "status";
 const COLUMN_PREFERENCE_ID_BY_MODULE = {
   "media-hub": "mediaHubTemplates",
   "media-sidebar": "mediaSidebarTemplates",
@@ -85,6 +95,7 @@ export default function BlockTemplateSummaryListClient({
   detailLabel,
   rows,
   toggleAction,
+  bulkAction,
   errorMessage = null,
   mediaSynchronizationWarning = false,
   initialVisibleColumns = null,
@@ -113,6 +124,7 @@ export default function BlockTemplateSummaryListClient({
   const columns = useMemo(
     () =>
       [
+        ADMIN_DATA_GRID_COLUMNS.checkbox,
         ADMIN_DATA_GRID_COLUMNS.primaryStandard,
         visibleColumnSet.has("slug") ? ADMIN_DATA_GRID_COLUMNS.slug : null,
         visibleColumnSet.has("detail") ? "160px" : null,
@@ -123,29 +135,74 @@ export default function BlockTemplateSummaryListClient({
         .join(" "),
     [visibleColumnSet],
   );
+  const sortAccessors = useMemo(
+    () => ({
+      name: (row: BlockTemplateSummaryRow) => row.name,
+      slug: (row: BlockTemplateSummaryRow) => row.slug,
+      detail: (row: BlockTemplateSummaryRow) => row.detail,
+      status: (row: BlockTemplateSummaryRow) => statusMeta(row.status).label,
+    }),
+    [],
+  );
+  const table = useAdminTable<BlockTemplateSummaryRow, BlockTemplateSummarySortKey>({
+    initialRows: instant.rows,
+    getRowId: (row) => row.id,
+    sortAccessors,
+  });
+  const setTableRows = table.setRows;
+  useEffect(() => {
+    setTableRows(instant.rows);
+  }, [instant.rows, setTableRows]);
+  const filters = useMemo<readonly AdminEntityFilterDef[]>(
+    () => [
+      {
+        id: `${moduleKey}-template-status`,
+        paramKey: "status",
+        label: "الحالة",
+        type: "status",
+        allValue: "all",
+        placeholder: "الحالة",
+        options: [
+          { value: "published", label: "منشور" },
+          { value: "unpublished", label: "غير منشور" },
+        ],
+      },
+    ],
+    [moduleKey],
+  );
   const queryContract = useMemo<
     AdminBoundedClientQueryContract<BlockTemplateSummaryRow>
   >(
     () => ({
       mode: "bounded-client",
       search: { minLength: 1 },
-      matchesRow: (row, query) =>
-        adminCollectionSearchIncludes(
+      filters,
+      matchesRow: (row, query) => {
+        const matchesSearch = adminCollectionSearchIncludes(
           `${row.name} ${row.slug} ${row.detail} ${row.status}`,
           query.search,
-        ),
+        );
+        const status = query.filters.status;
+        return matchesSearch && (status === "all" || row.status === status);
+      },
       getRowId: (row) => row.id,
     }),
-    [],
+    [filters],
   );
   const pagination = useAdminBoundedClientPagination({
-    rows: instant.rows,
+    rows: table.rows,
     datasetKey: moduleKey,
     queryContract,
     defaultPageSize: PAGE_SIZE,
   });
   const search = pagination.search;
+  const statusFilter = pagination.filterValues.status;
   const paginatedRows = pagination.rows;
+  const visibleIds = useMemo(
+    () => paginatedRows.map((row) => row.id),
+    [paginatedRows],
+  );
+  const selection = useAdminGridSelection<number>(visibleIds);
   const basePath = `/admin/pages-blocks/blocks/${moduleKey}`;
 
   async function runVisibilityMutation(
@@ -190,6 +247,69 @@ export default function BlockTemplateSummaryListClient({
             error instanceof Error
               ? error.message
               : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline", reveal: true },
+      );
+    }
+  }
+
+  async function runBulkPublicationMutation(
+    action: "publish" | "hide",
+    ids: number[],
+  ) {
+    const nextStatus = action === "publish" ? "published" : "unpublished";
+    const selectedIds = new Set(ids);
+    const formData = new FormData();
+    formData.set("bulk_action", action);
+    ids.forEach((id) => formData.append("ids", String(id)));
+    clearFeedback(feedbackChannel);
+
+    try {
+      await instant.mutateAsync({
+        action: `bulk-${action}`,
+        bulk: true,
+        optimistic: (cache) =>
+          cache.patchRows((row) =>
+            selectedIds.has(row.id) ? { ...row, status: nextStatus } : row,
+          ),
+        execute: async () => {
+          await bulkAction(formData);
+          return {
+            ok: true as const,
+            message:
+              action === "publish"
+                ? "تم نشر الموديولات المحددة."
+                : "تم إخفاء الموديولات المحددة.",
+          };
+        },
+      });
+      selection.clearSelection();
+      publishFeedback(
+        {
+          variant: "success",
+          title: "تم تنفيذ الإجراء",
+          message:
+            action === "publish"
+              ? "تم نشر الموديولات المحددة."
+              : "تم إخفاء الموديولات المحددة.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
+        { channel: feedbackChannel, placement: "inline" },
+      );
+    } catch (error) {
+      publishFeedback(
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ الإجراء الجماعي. حاول مرة أخرى.",
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
@@ -251,8 +371,8 @@ export default function BlockTemplateSummaryListClient({
           placeholder: "ابحث باسم القالب أو الـslug أو التفاصيل…",
           minLength: 1,
         }}
-        filters={[]}
-        values={{}}
+        filters={filters}
+        values={{ status: statusFilter }}
         columnsControl={
           <AdminColumnVisibilityMenu
             columns={columnConfig.columns}
@@ -267,20 +387,95 @@ export default function BlockTemplateSummaryListClient({
             }
           />
         }
+        contextOverrideActive={selection.selectedIds.length > 0}
+        contextOverride={
+          <AdminBulkActionBar
+            selectedIds={selection.selectedIds}
+            entityLabel="موديول"
+            options={[
+              {
+                value: "publish",
+                label: ADMIN_BULK_ACTION_LABELS.showSelected,
+              },
+              {
+                value: "hide",
+                label: ADMIN_BULK_ACTION_LABELS.hideSelected,
+              },
+            ]}
+            onExecute={(action, ids) =>
+              runBulkPublicationMutation(action as "publish" | "hide", ids)
+            }
+            onClearSelection={selection.clearSelection}
+            isBusy={instant.bulkInteraction.isBlocked}
+          />
+        }
         onQueryPatch={pagination.applyQueryPatch}
       />
 
       <AdminDataGrid className="!rounded-t-none !border-t-0">
         <AdminDataGridHeader columns={columns}>
-          <AdminDataGridPrimaryCell>الاسم</AdminDataGridPrimaryCell>
+          <AdminDataGridCheckboxCell>
+            <AdminDataGridCheckbox
+              checked={selection.allSelected}
+              onChange={(event) => selection.toggleAll(event.target.checked)}
+              inputRef={selection.selectAllRef}
+              label="تحديد الكل"
+            />
+          </AdminDataGridCheckboxCell>
+          <AdminDataGridPrimaryCell>
+            <AdminDataGridSortLabel
+              active={table.sort.key === "name"}
+              direction={table.sort.direction}
+              onClick={() => {
+                pagination.resetPage();
+                table.toggleSort("name");
+              }}
+              className="justify-end"
+            >
+              الاسم
+            </AdminDataGridSortLabel>
+          </AdminDataGridPrimaryCell>
           {visibleColumnSet.has("slug") ? (
-            <AdminDataGridCenterCell>المعرّف</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
+              <AdminDataGridSortLabel
+                active={table.sort.key === "slug"}
+                direction={table.sort.direction}
+                onClick={() => {
+                  pagination.resetPage();
+                  table.toggleSort("slug");
+                }}
+              >
+                المعرّف
+              </AdminDataGridSortLabel>
+            </AdminDataGridCenterCell>
           ) : null}
           {visibleColumnSet.has("detail") ? (
-            <AdminDataGridCenterCell>{detailLabel}</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
+              <AdminDataGridSortLabel
+                active={table.sort.key === "detail"}
+                direction={table.sort.direction}
+                onClick={() => {
+                  pagination.resetPage();
+                  table.toggleSort("detail");
+                }}
+              >
+                {detailLabel}
+              </AdminDataGridSortLabel>
+            </AdminDataGridCenterCell>
           ) : null}
           {visibleColumnSet.has("status") ? (
-            <AdminDataGridCenterCell>الحالة</AdminDataGridCenterCell>
+            <AdminDataGridCenterCell>
+              <AdminDataGridSortLabel
+                active={table.sort.key === "status"}
+                direction={table.sort.direction}
+                onClick={() => {
+                  pagination.resetPage();
+                  table.toggleSort("status");
+                }}
+              >
+                الحالة
+              </AdminDataGridSortLabel>
+            </AdminDataGridCenterCell>
           ) : null}
           <div className="text-center">الإجراءات</div>
         </AdminDataGridHeader>
@@ -338,6 +533,15 @@ export default function BlockTemplateSummaryListClient({
 
           return (
             <AdminDataGridRow key={row.id} columns={columns}>
+              <AdminDataGridCheckboxCell>
+                <AdminDataGridCheckbox
+                  checked={selection.selectedSet.has(row.id)}
+                  onChange={(event) =>
+                    selection.toggleOne(row.id, event.target.checked)
+                  }
+                  label={`تحديد ${row.name}`}
+                />
+              </AdminDataGridCheckboxCell>
               <AdminDataGridPrimaryCell>
                 <Link
                   href={`${basePath}/${row.id}`}
