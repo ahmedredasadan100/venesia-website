@@ -419,16 +419,21 @@ check(
     schemaParityAudit.includes("20260805180000_global_truth_atomic_operations_closure.sql") &&
     schemaParityAudit.includes("20260814020742_projects_domain_hardening.sql") &&
     schemaParityAudit.includes("20260814020750_location_management_foundation.sql") &&
+    schemaParityAudit.includes("20260817100000_project_section_title_contract.sql") &&
     schemaParityAudit.includes('"set_project_featured_admin_entry"') &&
     schemaParityAudit.includes('"duplicate_project_admin_entry"') &&
-    schemaParityAudit.includes("columns: 122") &&
+    schemaParityAudit.includes("columns: 125") &&
+    schemaParityAudit.includes("constraints: 106") &&
     schemaParityAudit.includes("indexes: 53") &&
     schemaParityAudit.includes("project_domain_hardening_migration_sha256") &&
+    schemaParityAudit.includes("legacy_project_media_canonicalization_migration_sha256") &&
     schemaParityAudit.includes("dashboard_truth_migration_sha256") &&
     schemaParityAudit.includes("reports_analytics_migration_sha256") &&
+    schemaParityAudit.includes("system_publication_migration_sha256") &&
     schemaParityAudit.includes("functions: 9") &&
     schemaParityAudit.includes('"mutate_project_location"') &&
     schemaParityAudit.includes("location_management_migration_sha256") &&
+    schemaParityAudit.includes("project_section_title_migration_sha256") &&
     schemaParityAudit.includes('["projects.featured", "false"]'),
 );
 check(
@@ -541,9 +546,9 @@ check(
     schemaParityAudit.includes("data_integrity_pass") &&
     schemaParityAudit.includes("acl_pass") &&
     schemaParityAudit.includes("schema_drift_remaining") &&
-    schemaParityAudit.includes("exact_aggregate_row_counts") &&
-    schemaParityAudit.includes("reference_location_tree_matches_final_rebuild") &&
-    schemaParityAudit.includes("exact_sequence_state") &&
+    schemaParityAudit.includes("aggregate_row_counts_observed") &&
+    schemaParityAudit.includes("reference_location_tree_integrity") &&
+    schemaParityAudit.includes("sequence_state_consistent") &&
     schemaParityAudit.includes("no_qa_marker_residue"),
 );
 check(
@@ -574,10 +579,11 @@ check(
     !schemaParityAudit.includes("!paritySummary.expected_pre_fix_gate.passed"),
 );
 check(
-  "schema parity data gate proves the transferred catalog, stable sequence state, and no QA residue",
+  "schema parity data gate proves the live catalog without freezing mutable content counts",
   schemaParityAudit.includes("function buildDataIntegrityPass") &&
-    schemaParityAudit.includes("expectedPostClosureRowCounts") &&
-    schemaParityAudit.includes("summary.data_integrity_snapshot.project_ids.length === 13") &&
+    !schemaParityAudit.includes("expectedPostClosureRowCounts") &&
+    schemaParityAudit.includes('rowCounts.get("projects")') &&
+    schemaParityAudit.includes("Number.isSafeInteger(count) && count >= 0") &&
     schemaParityAudit.includes("Number(stats.null_count) === 0") &&
     schemaParityAudit.includes("Number(stats.distinct_count) === expectedRows") &&
     schemaParityAudit.includes("Number(stats.duplicate_value_count) === 0") &&
@@ -586,7 +592,7 @@ check(
     schemaParityAudit.includes("sequence.replace(/_id_seq$/u, \"\")") &&
     schemaParityAudit.includes("Number(state.last_value) >= expectedRows") &&
     schemaParityAudit.includes("state.is_called === true") &&
-    schemaParityAudit.includes("Number(state.last_value) === 1 && state.is_called === false") &&
+    schemaParityAudit.includes("Number(state.last_value) >= 1") &&
     schemaParityAudit.includes("function buildQaMarkerQuery") &&
     schemaParityAudit.includes("fixtureClientKeys") &&
     schemaParityAudit.includes("fixtureTextMarkerPattern") &&
@@ -965,10 +971,12 @@ check(
     !form.includes('title="بيانات الموقع الأساسية"') &&
     !form.includes('title="نظرة عامة عن المشروع"') &&
     ["بيانات الموقع الأساسية", "المساحات والمخططات", "مواصفات التنفيذ والتسليم", "الصور والفيديو"].every(
-      (heading) => form.match(new RegExp(heading, "g"))?.length === 1,
+      (heading) => form.includes(`sectionHeading: "${heading}"`),
     ) &&
-    form.match(/<SectionCard>/g)?.length === 4 &&
-    /<RepeaterSection>\s*<ProjectFloorPlansEditor/.test(form) &&
+    !/<SectionCard[^>]*title="(?:بيانات الموقع الأساسية|المساحات والمخططات|مواصفات التنفيذ والتسليم|الصور والفيديو)"/.test(form) &&
+    (form.match(/<SectionCard>/g)?.length ?? 0) >= 4 &&
+    form.includes("<ProjectFloorPlansEditor initialPlans={bundle.floor_plans} />") &&
+    ["location_title", "plans_title", "gallery_title"].every((field) => form.includes(`name="${field}"`)) &&
     form.includes("title?: string;") &&
     repeaters.includes("title?: string;") &&
     ["إعدادات الهيرو", "ما حول المشروع", "مميزات المشروع", "بنود المواصفات", "صور المواصفات والتسليم", "معرض الصور", "معرض الفيديو"].every(

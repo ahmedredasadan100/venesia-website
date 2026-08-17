@@ -6,10 +6,11 @@ import type { ProjectsHubRenderPlanModule } from "../../lib/projects/build-proje
 import {
   getFeaturedProjects,
   getProjectsByFilter,
+  sortProjectsByHomepageOrder,
 } from "../../lib/projects/public-helpers";
 import type { ProjectHubFilterId, PublicProject } from "../../lib/projects/public-types";
 import ProjectsFeaturedSection from "./ProjectsFeaturedSection";
-import ProjectsHubHero from "./ProjectsHubHero";
+import ProjectsHubCanonicalHero from "./ProjectsHubCanonicalHero";
 import ProjectsHubModulesRenderer from "./ProjectsHubModulesRenderer";
 import ProjectsListSection from "./ProjectsListSection";
 import ProjectsMapSection from "./ProjectsMapSection";
@@ -21,15 +22,18 @@ type ProjectsHubPageProps = {
 };
 
 export default function ProjectsHubPage({ projects, modulePlan }: ProjectsHubPageProps) {
-  /** Shared Listing + Map filter; always starts at `all` (not chosen from Admin). */
-  const [activeFilter, setActiveFilter] = useState<ProjectHubFilterId>("all");
+  const listingModule = modulePlan?.find((module) => module.slug === "projects-hub-listing");
+  const [activeFilter, setActiveFilter] = useState<ProjectHubFilterId>(
+    () => listingModule?.config.defaultFilter ?? "all",
+  );
+  const orderedProjects = useMemo(() => sortProjectsByHomepageOrder(projects), [projects]);
 
   const filteredProjects = useMemo(
-    () => getProjectsByFilter(projects, activeFilter),
-    [projects, activeFilter],
+    () => getProjectsByFilter(orderedProjects, activeFilter),
+    [orderedProjects, activeFilter],
   );
 
-  const featuredProjects = useMemo(() => getFeaturedProjects(projects), [projects]);
+  const featuredProjects = useMemo(() => getFeaturedProjects(orderedProjects), [orderedProjects]);
   const useCmsPlan = Boolean(modulePlan?.length);
 
   return (
@@ -44,7 +48,7 @@ export default function ProjectsHubPage({ projects, modulePlan }: ProjectsHubPag
 
       {useCmsPlan ? (
         <ProjectsHubModulesRenderer
-          projects={projects}
+          projects={orderedProjects}
           featuredProjects={featuredProjects}
           filteredProjects={filteredProjects}
           modules={modulePlan!}
@@ -53,13 +57,13 @@ export default function ProjectsHubPage({ projects, modulePlan }: ProjectsHubPag
         />
       ) : (
         <>
-          <ProjectsHubHero projects={projects} featuredProject={featuredProjects[0]} />
+          <ProjectsHubCanonicalHero projects={orderedProjects} />
 
           <ProjectsFeaturedSection projects={featuredProjects} />
 
           <ProjectsListSection
             projects={filteredProjects}
-            allProjects={projects}
+            allProjects={orderedProjects}
             activeFilter={activeFilter}
             onFilterChange={setActiveFilter}
           />

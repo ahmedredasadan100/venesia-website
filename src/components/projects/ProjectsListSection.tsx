@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
@@ -15,12 +14,14 @@ import {
   ProjectCodeBadge,
   ProjectImageBottomBadges,
 } from "./ProjectCardMobileOverlays";
+import PublicMediaImage from "../public/PublicMediaImage";
 
 type ViewMode = "list" | "cards";
 
 export type ProjectsListCardDisplay = {
   showProjectImage?: boolean;
   showProjectCode?: boolean;
+  showProjectName?: boolean;
   showProjectDescription?: boolean;
   showProjectType?: boolean;
   showProjectLocation?: boolean;
@@ -43,6 +44,7 @@ type ProjectsListSectionProps = {
   showViewToggle?: boolean;
   showPagination?: boolean;
   showProjectCount?: boolean;
+  visibleFilters?: ProjectHubFilterId[];
 } & ProjectsListCardDisplay;
 
 const DEFAULT_PAGE_SIZE = 6;
@@ -115,8 +117,10 @@ export default function ProjectsListSection({
   showViewToggle = true,
   showPagination = true,
   showProjectCount = true,
+  visibleFilters,
   showProjectImage = true,
   showProjectCode = true,
+  showProjectName = true,
   showProjectDescription = true,
   showProjectType = true,
   showProjectLocation = true,
@@ -138,6 +142,7 @@ export default function ProjectsListSection({
   const cardDisplay: Required<ProjectsListCardDisplay> = {
     showProjectImage,
     showProjectCode,
+    showProjectName,
     showProjectDescription,
     showProjectType,
     showProjectLocation,
@@ -234,6 +239,7 @@ export default function ProjectsListSection({
               activeFilter={activeFilter}
               onFilterChange={handleFilterChange}
               allProjects={allProjects}
+              visibleFilters={visibleFilters}
             />
           </div>
         ) : null}
@@ -312,7 +318,7 @@ function ProjectRow({
         {display.showProjectImage ? (
           <div className="relative w-full shrink-0 pb-3.5 md:min-h-[150px] md:pb-0">
             <div className="relative h-52 w-full overflow-hidden sm:h-56 md:absolute md:inset-0 md:h-auto">
-              <Image
+              <PublicMediaImage
                 src={project.cardImage.src}
                 alt={project.cardImage.alt}
                 fill
@@ -339,7 +345,7 @@ function ProjectRow({
 
         <div className="flex min-w-0 flex-col justify-between p-5 pt-4 sm:p-6 sm:pt-5 md:pt-6">
           <div className="min-w-0">
-            {display.showProjectCode ? (
+            {display.showProjectName ? (
               <ProjectListingEnglishName project={project} />
             ) : null}
 
@@ -390,7 +396,7 @@ function ProjectCard({
       {display.showProjectImage ? (
         <div className="relative shrink-0 pb-3.5 md:pb-0">
           <div className="relative h-52 overflow-hidden sm:h-60">
-            <Image
+            <PublicMediaImage
               src={project.cardImage.src}
               alt={project.cardImage.alt}
               fill
@@ -413,7 +419,7 @@ function ProjectCard({
       ) : null}
 
       <div className="min-w-0 px-5 pb-5 pt-4 sm:px-6 sm:pb-6 sm:pt-5 md:pt-4">
-        {display.showProjectCode ? (
+        {display.showProjectName ? (
           <ProjectListingEnglishName project={project} />
         ) : null}
 

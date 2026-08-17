@@ -1,11 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { statusMeta } from "../../../lib/page-blocks/admin-utils";
 import { AdminFeedbackRegion } from "../AdminFeedbackProvider";
-import { AdminPageContextHeader, AdminStatusPill } from "../ui";
+import { AdminActionButton, AdminPageContextHeader, AdminStatusPill } from "../ui";
 
 export type BlockEditorContextHeaderProps = {
   backHref: string;
@@ -35,15 +34,6 @@ export default function BlockEditorContextHeader({
       eyebrow={eyebrow}
       title={title}
       description={description}
-      breadcrumb={
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-2 transition hover:text-[#D8B87A]"
-        >
-          <span aria-hidden="true">→</span>
-          {backLabel}
-        </Link>
-      }
       meta={
         meta ?? (statusInfo ? (
           <AdminStatusPill
@@ -59,7 +49,15 @@ export default function BlockEditorContextHeader({
           </AdminStatusPill>
         ) : undefined)
       }
-      actions={actions}
+      actions={
+        <>
+          {actions}
+          <AdminActionButton href={backHref} variant="ghost">
+            <span aria-hidden="true">→</span>
+            {backLabel}
+          </AdminActionButton>
+        </>
+      }
     />
   );
 }

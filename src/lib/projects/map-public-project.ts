@@ -5,6 +5,10 @@ import type {
   PublicProjectLocationLevel,
 } from "./public-types";
 import type { Tables } from "../database.types";
+import { stripHtml } from "../rich-text/html-utils";
+
+const RETIRED_DELIVERY_PRESENTATION_COPY =
+  "نفس منهج فينيسيا في التنفيذ: تفاصيل واضحة، خامات مختارة، وتسليم يحترم قيمة السكن والاستثمار.";
 
 export type PublicProjectRootRow = Pick<
   Tables<"projects">,
@@ -38,6 +42,7 @@ export type PublicProjectRootRow = Pick<
   | "latitude"
   | "longitude"
   | "map_zoom"
+  | "location_title"
   | "overview_title"
   | "overview_body"
   | "overview_media_type"
@@ -45,6 +50,8 @@ export type PublicProjectRootRow = Pick<
   | "overview_main_image_alt"
   | "delivery_title"
   | "delivery_body"
+  | "plans_title"
+  | "gallery_title"
   | "seo_title"
   | "seo_description"
   | "focus_keyword"
@@ -137,6 +144,12 @@ function optionalString(value: unknown) {
   if (value === null || value === undefined) return null;
   const normalized = String(value).trim();
   return normalized || null;
+}
+
+function mapPublicDeliveryBody<Row extends object, Key extends keyof Row>(row: Row, field: Key) {
+  const body = requiredString(row, field);
+  const plainText = stripHtml(body).replace(/\s+/gu, " ");
+  return plainText === RETIRED_DELIVERY_PRESENTATION_COPY ? "" : body;
 }
 
 function requiredNumber<Row extends object, Key extends keyof Row>(row: Row, field: Key) {
@@ -250,6 +263,7 @@ export function mapProjectAggregateToPublicProject(
     heroImage: requireImage(project, "hero_image", "hero_image_alt"),
     heroBoxImage: requireImage(project, "small_box_image", "small_box_image_alt"),
     location: {
+      title: optionalString(project.location_title),
       label: requiredString(project, "location_label"),
       description: optionalString(project.location_description) ?? "",
       googleMapsUrl: requiredString(project, "google_maps_url"),
@@ -268,7 +282,7 @@ export function mapProjectAggregateToPublicProject(
       })),
     },
     overview: {
-      title: requiredString(project, "overview_title"),
+      title: optionalString(project.overview_title),
       body: requiredString(project, "overview_body"),
       mediaType: project.overview_media_type === "video" ? "video" : "image",
       mainImage: mapImage(project.overview_main_image, project.overview_main_image_alt),
@@ -279,6 +293,7 @@ export function mapProjectAggregateToPublicProject(
       images: mapMedia("overview"),
       videos: mapVideos("overview"),
     },
+    plansTitle: optionalString(project.plans_title),
     plans: rows(aggregate.floorPlans).map((plan) => ({
       id: String(plan.id),
       name: requiredString(plan, "name"),
@@ -295,8 +310,8 @@ export function mapProjectAggregateToPublicProject(
         })),
     })),
     delivery: {
-      title: requiredString(project, "delivery_title"),
-      body: requiredString(project, "delivery_body"),
+      title: optionalString(project.delivery_title),
+      body: mapPublicDeliveryBody(project, "delivery_body"),
       items: rows(aggregate.deliveryItems).map((item) => ({
         id: String(item.id),
         body: requiredString(item, "body"),
@@ -304,6 +319,7 @@ export function mapProjectAggregateToPublicProject(
       images: mapMedia("delivery"),
     },
     gallery: {
+      title: optionalString(project.gallery_title),
       images: mapMedia("gallery"),
       videos: mapVideos("gallery"),
     },

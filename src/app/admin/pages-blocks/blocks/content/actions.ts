@@ -42,6 +42,11 @@ import type {
   VisionGoalsModuleConfig,
 } from "../../../../../lib/page-blocks/configs";
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
+import {
+  normalizeHeroElementOrder,
+  parseHeroDescriptionAlignment,
+  parseHeroTextAlignment,
+} from "../../../../../lib/hero/hero-content-controls";
 import { isStructuralContentTemplateSlug } from "../../../../../lib/page-blocks/module-edit-registry";
 import { isRetiredContentBlockTemplateSlug } from "../../../../../lib/page-blocks/deprecated-block-modules";
 import {
@@ -56,8 +61,11 @@ import {
 import {
   PROJECTS_HUB_FEATURED_KEYS,
   PROJECTS_HUB_FEATURED_SELECTION_MODES,
+  PROJECTS_HUB_FILTER_IDS,
   PROJECTS_HUB_HERO_KEYS,
+  PROJECTS_HUB_HERO_PROJECT_TYPES,
   PROJECTS_HUB_HERO_SELECTION_MODES,
+  PROJECTS_HUB_HERO_VARIANTS,
   PROJECTS_HUB_LISTING_KEYS,
   PROJECTS_HUB_MAP_KEYS,
   PROJECTS_HUB_SORT_MODES,
@@ -390,10 +398,64 @@ function buildProjectsHubHeroTypedConfig(formData: FormData): ProjectsHubHeroMod
   if (!PROJECTS_HUB_HERO_SELECTION_MODES.includes(selectionMode)) {
     throw new Error("طريقة اختيار شرائح الهيرو غير مدعومة.");
   }
+  const projectType = cleanText(formData.get("project_type"));
+  if (!(PROJECTS_HUB_HERO_PROJECT_TYPES as readonly string[]).includes(projectType)) {
+    throw new Error("نوع مشروعات الهيرو غير مدعوم.");
+  }
+  const variant = cleanText(formData.get("hero_variant"));
+  if (!(PROJECTS_HUB_HERO_VARIANTS as readonly string[]).includes(variant)) {
+    throw new Error("نسخة عرض الهيرو غير مدعومة.");
+  }
+  const limit = Number(cleanText(formData.get("limit")) || 6);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 12) {
+    throw new Error("عدد شرائح الهيرو يجب أن يكون بين 1 و12.");
+  }
+  const readProjectIds = (name: string) =>
+    [...new Set(cleanText(formData.get(name))
+      .split(/[\s,]+/)
+      .map(Number)
+      .filter((id) => Number.isSafeInteger(id) && id > 0))];
+  const orderedProjectIds = readProjectIds("project_order");
+  const hiddenProjectIds = new Set(readProjectIds("hidden_project_ids"));
+  const referencedProjectIds = [...new Set([...orderedProjectIds, ...hiddenProjectIds])];
+  const projectReferences = referencedProjectIds.map((projectId) => ({
+    projectId,
+    order: Math.max(0, orderedProjectIds.indexOf(projectId)),
+    visible: !hiddenProjectIds.has(projectId),
+  }));
   const autoplayMs = assertAutoplayMs(Number(cleanText(formData.get("autoplay_ms")) || 6000));
   const emptyRaw = cleanText(formData.get("empty_state"));
   const emptyState = emptyRaw ? assertSafePlainText(emptyRaw, "نص الحالة الفارغة", 400) : null;
-  return { selectionMode, autoplayMs, emptyState };
+  return {
+    selectionMode,
+    projectType: projectType as ProjectsHubHeroModuleConfig["projectType"],
+    variant: variant as ProjectsHubHeroModuleConfig["variant"],
+    limit,
+    projectReferences,
+    autoplayMs,
+    emptyState,
+    showEyebrow: parseFormBoolean(formData, "show_eyebrow", false),
+    eyebrowBold: parseFormBoolean(formData, "eyebrow_bold", false),
+    eyebrowAlignment: parseHeroTextAlignment(formData.get("eyebrow_alignment"), "right"),
+    showTitle: parseFormBoolean(formData, "show_title", false),
+    titleBold: parseFormBoolean(formData, "title_bold", false),
+    titleAlignment: parseHeroTextAlignment(formData.get("title_alignment"), "right"),
+    showHighlight: parseFormBoolean(formData, "show_highlight", false),
+    highlightBold: parseFormBoolean(formData, "highlight_bold", false),
+    highlightAlignment: parseHeroTextAlignment(formData.get("highlight_alignment"), "right"),
+    showSubtitle: parseFormBoolean(formData, "show_subtitle", false),
+    subtitleBold: parseFormBoolean(formData, "subtitle_bold", false),
+    subtitleAlignment: parseHeroTextAlignment(formData.get("subtitle_alignment"), "right"),
+    showDescription: parseFormBoolean(formData, "show_description", false),
+    descriptionAlignment: parseHeroDescriptionAlignment(formData.get("description_alignment"), "right"),
+    showBreadcrumb: false,
+    breadcrumbBold: false,
+    breadcrumbAlignment: "right",
+    breadcrumbCurrentLabel: "",
+    showCta: parseFormBoolean(formData, "show_cta", false),
+    ctaAlignment: parseHeroTextAlignment(formData.get("cta_alignment"), "right"),
+    heroElementOrder: normalizeHeroElementOrder(formData.get("hero_element_order")),
+  };
 }
 
 function buildProjectsHubFeaturedTypedConfig(formData: FormData): ProjectsHubFeaturedModuleConfig {
@@ -430,9 +492,19 @@ function buildProjectsHubFeaturedTypedConfig(formData: FormData): ProjectsHubFea
 }
 
 function buildProjectsHubListingTypedConfig(formData: FormData): ProjectsHubListingModuleConfig {
-  // Public chips derive from loaded project types; CMS does not choose classifications.
-  const visibleFilters: ProjectsHubFilterId[] = ["all", "residential", "commercial"];
-  const defaultFilter: ProjectsHubFilterId = "all";
+  const visibleFilters = formData
+    .getAll("visible_filters")
+    .map((value) => cleanText(value))
+    .filter((value): value is ProjectsHubFilterId =>
+      (PROJECTS_HUB_FILTER_IDS as readonly string[]).includes(value),
+    );
+  if (!visibleFilters.length) {
+    throw new Error("اختر فلترًا واحدًا ظاهرًا على الأقل.");
+  }
+  const defaultFilter = cleanText(formData.get("default_filter")) as ProjectsHubFilterId;
+  if (!visibleFilters.includes(defaultFilter)) {
+    throw new Error("الفلتر الافتراضي يجب أن يكون ضمن الفلاتر الظاهرة.");
+  }
   const defaultView = cleanText(formData.get("default_view")) as ProjectsHubViewMode;
   if (!(PROJECTS_HUB_VIEW_MODES as readonly string[]).includes(defaultView)) {
     throw new Error("وضع العرض الافتراضي غير مدعوم.");
@@ -451,6 +523,7 @@ function buildProjectsHubListingTypedConfig(formData: FormData): ProjectsHubList
     showFilterBar: parseFormBoolean(formData, "show_filter_bar", false),
     showProjectImage: parseFormBoolean(formData, "show_project_image", false),
     showProjectCode: parseFormBoolean(formData, "show_project_code", false),
+    showProjectName: parseFormBoolean(formData, "show_project_name", false),
     showProjectDescription: parseFormBoolean(formData, "show_project_description", false),
     showProjectType: parseFormBoolean(formData, "show_project_type", false),
     showProjectLocation: parseFormBoolean(formData, "show_project_location", false),

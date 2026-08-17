@@ -2309,7 +2309,7 @@ export type Database = {
           code: string
           created_at: string
           delivery_body: string
-          delivery_title: string
+          delivery_title: string | null
           english_name: string
           featured: boolean
           focus_keyword: string
@@ -2325,6 +2325,7 @@ export type Database = {
           latitude: number
           location_description: string
           location_label: string
+          location_title: string | null
           longitude: number
           main_area_id: number
           map_zoom: number
@@ -2334,7 +2335,9 @@ export type Database = {
           overview_main_image: string | null
           overview_main_image_alt: string
           overview_media_type: string
-          overview_title: string
+          overview_title: string | null
+          plans_title: string | null
+          gallery_title: string | null
           publication_status: string
           published_at: string | null
           published_by: number | null
@@ -2360,7 +2363,7 @@ export type Database = {
           code: string
           created_at?: string
           delivery_body: string
-          delivery_title: string
+          delivery_title?: string | null
           english_name: string
           featured?: boolean
           focus_keyword?: string
@@ -2376,6 +2379,7 @@ export type Database = {
           latitude: number
           location_description?: string
           location_label: string
+          location_title?: string | null
           longitude: number
           main_area_id: number
           map_zoom: number
@@ -2385,7 +2389,9 @@ export type Database = {
           overview_main_image?: string | null
           overview_main_image_alt?: string
           overview_media_type?: string
-          overview_title: string
+          overview_title?: string | null
+          plans_title?: string | null
+          gallery_title?: string | null
           publication_status?: string
           published_at?: string | null
           published_by?: number | null
@@ -2411,7 +2417,7 @@ export type Database = {
           code?: string
           created_at?: string
           delivery_body?: string
-          delivery_title?: string
+          delivery_title?: string | null
           english_name?: string
           featured?: boolean
           focus_keyword?: string
@@ -2427,6 +2433,7 @@ export type Database = {
           latitude?: number
           location_description?: string
           location_label?: string
+          location_title?: string | null
           longitude?: number
           main_area_id?: number
           map_zoom?: number
@@ -2436,7 +2443,9 @@ export type Database = {
           overview_main_image?: string | null
           overview_main_image_alt?: string
           overview_media_type?: string
-          overview_title?: string
+          overview_title?: string | null
+          plans_title?: string | null
+          gallery_title?: string | null
           publication_status?: string
           published_at?: string | null
           published_by?: number | null

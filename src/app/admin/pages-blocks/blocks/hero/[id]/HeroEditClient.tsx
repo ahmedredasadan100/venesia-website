@@ -17,7 +17,6 @@ import {
   ModuleEditorTechnicalIdentity,
 } from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
 import {
-  AdminActionButton,
   AdminFormGrid,
   AdminFormListboxSelect,
   AdminFormSwitch,
@@ -25,7 +24,7 @@ import {
 } from "../../../../../../components/admin/ui";
 import { legacyHrefFromConfig } from "../../../../../../lib/admin/links/serialize";
 import { resolveHeroContentControls } from "../../../../../../lib/hero/hero-content-controls";
-import { fieldClassName, statusMeta } from "../../../../../../lib/page-blocks/admin-utils";
+import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
 import { updateHeroTemplateDetails } from "../actions";
 import HeroElementOrderEditor from "./HeroElementOrderEditor";
@@ -63,7 +62,6 @@ export default function HeroEditClient({
 }: HeroEditClientProps) {
   const primaryCtaLink = legacyHrefFromConfig(config, "primaryCtaLink", "primaryCtaHref");
   const secondaryCtaLink = legacyHrefFromConfig(config, "secondaryCtaLink", "secondaryCtaHref");
-  const statusInfo = statusMeta(hero.status);
   const controls = resolveHeroContentControls(config);
   const isHomeHero = hero.variant === "home-cinematic";
 
@@ -250,12 +248,8 @@ export default function HeroEditClient({
       <ModuleEditorHeader
         moduleKind="hero"
         entityName={hero.name}
-        meta={statusInfo.label}
-        actions={
-          <AdminActionButton href="/admin/pages-blocks/blocks/hero" variant="dark">
-            الرجوع لكل الهيروهات
-          </AdminActionButton>
-        }
+        backHref="/admin/pages-blocks/blocks/hero"
+        backLabel="الرجوع لكل الهيروهات"
       />
 
       <form action={updateHeroTemplateDetails}>

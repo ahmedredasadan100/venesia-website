@@ -1,7 +1,6 @@
-import Image from "next/image";
-
 import type { PublicProject } from "../../../lib/projects/public-types";
 import RichTextContent from "../../content/RichTextContent";
+import PublicMediaImage from "../../public/PublicMediaImage";
 
 type ProjectDistrictSectionProps = Pick<PublicProject, "location" | "cardImage" | "englishName">;
 
@@ -21,10 +20,15 @@ export default function ProjectDistrictSection({
     <section id="district" className="scroll-mt-24 border-b border-white/10 bg-[#05070B] px-6 py-16">
       <div className="mx-auto grid max-w-7xl items-center gap-8 lg:grid-cols-[1fr_0.9fr]">
         <div className="order-2 min-w-0 lg:order-1">
-          <p className="mb-3 text-sm font-medium tracking-[0.28em] text-[#D8B87A]/70">عن الموقع</p>
-          <h2 className="text-3xl font-semibold leading-tight text-[#D8B87A] md:text-4xl">
+          {location.title ? (
+            <h2 className="text-3xl font-semibold leading-tight text-[#D8B87A] md:text-4xl">
+              {location.title}
+            </h2>
+          ) : null}
+
+          <p className={`${location.title ? "mt-3" : ""} text-base font-medium text-white/80`}>
             {location.label}
-          </h2>
+          </p>
 
           {hierarchy.length ? (
             <div className="mt-4 flex flex-wrap gap-2">
@@ -63,7 +67,7 @@ export default function ProjectDistrictSection({
 
         <div className="order-1 lg:order-2">
           <div className="relative min-h-[360px] overflow-hidden rounded-[30px] border border-[#D8B87A]/20 bg-white/[0.025] shadow-[0_24px_90px_rgba(0,0,0,0.35)]">
-            <Image src={cardImage.src} alt={cardImage.alt} fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
+            <PublicMediaImage src={cardImage.src} alt={cardImage.alt} fill sizes="(max-width: 1024px) 100vw, 50vw" className="object-cover" />
             <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/80 via-[#05070B]/20 to-transparent" />
             <div className="absolute bottom-5 right-5 rounded-2xl border border-[#D8B87A]/25 bg-[#05070B]/75 px-5 py-4 backdrop-blur-md">
               <p className="text-xs tracking-[0.22em] text-[#D8B87A]/70">VENESIA DEVELOPMENTS</p>

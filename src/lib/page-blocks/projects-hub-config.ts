@@ -1,12 +1,25 @@
 /**
- * Typed config for Projects Hub content modules (admin editors only).
- * Public `/projects` does not consume these configs yet.
+ * Typed config shared by Projects Hub Admin editors and the public `/projects` renderer.
  */
 
 import type { Json } from "../database.types";
+import {
+  resolveHeroContentControls,
+  type HeroContentControls,
+} from "../hero/hero-content-controls";
 
-export const PROJECTS_HUB_HERO_SELECTION_MODES = ["auto_residential_with_media"] as const;
+export const PROJECTS_HUB_HERO_SELECTION_MODES = ["domain_projects"] as const;
 export type ProjectsHubHeroSelectionMode = (typeof PROJECTS_HUB_HERO_SELECTION_MODES)[number];
+export const PROJECTS_HUB_HERO_PROJECT_TYPES = ["residential", "commercial", "both"] as const;
+export type ProjectsHubHeroProjectType = (typeof PROJECTS_HUB_HERO_PROJECT_TYPES)[number];
+export const PROJECTS_HUB_HERO_VARIANTS = ["home-cinematic", "internal-page"] as const;
+export type ProjectsHubHeroVariant = (typeof PROJECTS_HUB_HERO_VARIANTS)[number];
+
+export type ProjectsHubHeroProjectReference = {
+  projectId: number;
+  order: number;
+  visible: boolean;
+};
 
 export const PROJECTS_HUB_FEATURED_SELECTION_MODES = ["featured_flag"] as const;
 export type ProjectsHubFeaturedSelectionMode = (typeof PROJECTS_HUB_FEATURED_SELECTION_MODES)[number];
@@ -31,9 +44,13 @@ export type ProjectsHubMapPinConfig = {
 
 export type ProjectsHubHeroModuleConfig = {
   selectionMode: ProjectsHubHeroSelectionMode;
+  projectType: ProjectsHubHeroProjectType;
+  variant: ProjectsHubHeroVariant;
+  limit: number;
+  projectReferences: ProjectsHubHeroProjectReference[];
   autoplayMs: number;
   emptyState: string | null;
-};
+} & HeroContentControls;
 
 export type ProjectsHubFeaturedModuleConfig = {
   selectionMode: ProjectsHubFeaturedSelectionMode;
@@ -64,6 +81,7 @@ export type ProjectsHubListingModuleConfig = {
   showFilterBar: boolean;
   showProjectImage: boolean;
   showProjectCode: boolean;
+  showProjectName: boolean;
   showProjectDescription: boolean;
   showProjectType: boolean;
   showProjectLocation: boolean;
@@ -83,7 +101,36 @@ export type ProjectsHubMapModuleConfig = {
   mapPins: ProjectsHubMapPinConfig[];
 };
 
-export const PROJECTS_HUB_HERO_KEYS = ["selectionMode", "autoplayMs", "emptyState"] as const;
+export const PROJECTS_HUB_HERO_KEYS = [
+  "selectionMode",
+  "projectType",
+  "variant",
+  "limit",
+  "projectReferences",
+  "autoplayMs",
+  "emptyState",
+  "showEyebrow",
+  "eyebrowBold",
+  "eyebrowAlignment",
+  "showTitle",
+  "titleBold",
+  "titleAlignment",
+  "showHighlight",
+  "highlightBold",
+  "highlightAlignment",
+  "showSubtitle",
+  "subtitleBold",
+  "subtitleAlignment",
+  "showDescription",
+  "descriptionAlignment",
+  "showBreadcrumb",
+  "breadcrumbBold",
+  "breadcrumbAlignment",
+  "breadcrumbCurrentLabel",
+  "showCta",
+  "ctaAlignment",
+  "heroElementOrder",
+] as const;
 export const PROJECTS_HUB_FEATURED_KEYS = [
   "selectionMode",
   "title",
@@ -111,6 +158,7 @@ export const PROJECTS_HUB_LISTING_KEYS = [
   "showFilterBar",
   "showProjectImage",
   "showProjectCode",
+  "showProjectName",
   "showProjectDescription",
   "showProjectType",
   "showProjectLocation",
@@ -191,12 +239,37 @@ function readShowFlag(value: unknown, fallback = true) {
 export function asProjectsHubHeroConfig(raw: unknown): ProjectsHubHeroModuleConfig {
   const config = asRecord(raw);
   const selectionMode = readText(config.selectionMode);
+  const projectTypeRaw = readText(config.projectType);
+  const variantRaw = readText(config.variant);
+  const referencesRaw = Array.isArray(config.projectReferences) ? config.projectReferences : [];
+  const projectReferences = referencesRaw
+    .map((item) => {
+      const reference = asRecord(item);
+      const projectId = Number(reference.projectId);
+      const order = Number(reference.order);
+      if (!Number.isSafeInteger(projectId) || projectId <= 0) return null;
+      return {
+        projectId,
+        order: Number.isSafeInteger(order) && order >= 0 ? order : 0,
+        visible: readShowFlag(reference.visible),
+      };
+    })
+    .filter((item): item is ProjectsHubHeroProjectReference => item !== null);
   return {
     selectionMode: PROJECTS_HUB_HERO_SELECTION_MODES.includes(selectionMode as ProjectsHubHeroSelectionMode)
       ? (selectionMode as ProjectsHubHeroSelectionMode)
-      : "auto_residential_with_media",
+      : "domain_projects",
+    projectType: PROJECTS_HUB_HERO_PROJECT_TYPES.includes(projectTypeRaw as ProjectsHubHeroProjectType)
+      ? (projectTypeRaw as ProjectsHubHeroProjectType)
+      : "residential",
+    variant: PROJECTS_HUB_HERO_VARIANTS.includes(variantRaw as ProjectsHubHeroVariant)
+      ? (variantRaw as ProjectsHubHeroVariant)
+      : "home-cinematic",
+    limit: Math.min(12, readPositiveInt(config.limit, 6)),
+    projectReferences,
     autoplayMs: readPositiveInt(config.autoplayMs, 6000),
     emptyState: config.emptyState == null || config.emptyState === "" ? null : readText(config.emptyState) || null,
+    ...resolveHeroContentControls(config),
   };
 }
 
@@ -242,11 +315,14 @@ export function asProjectsHubListingConfig(raw: unknown): ProjectsHubListingModu
     title: readText(config.title) || "جميع المشروعات",
     showEyebrow: readShowFlag(config.showEyebrow ?? config.show_eyebrow),
     showTitle: readShowFlag(config.showTitle ?? config.show_title),
-    defaultFilter: "all",
+    defaultFilter: isFilterId(readText(config.defaultFilter)) && filters.includes(readText(config.defaultFilter) as ProjectsHubFilterId)
+      ? (readText(config.defaultFilter) as ProjectsHubFilterId)
+      : filters[0],
     visibleFilters: filters.length ? filters : (["all", "residential", "commercial"] as ProjectsHubFilterId[]),
     showFilterBar: readShowFlag(config.showFilterBar ?? config.show_filter_bar),
     showProjectImage: readShowFlag(config.showProjectImage ?? config.show_project_image),
     showProjectCode: readShowFlag(config.showProjectCode ?? config.show_project_code),
+    showProjectName: readShowFlag(config.showProjectName ?? config.show_project_name),
     showProjectDescription: readShowFlag(config.showProjectDescription ?? config.show_project_description),
     showProjectType: readShowFlag(config.showProjectType ?? config.show_project_type),
     showProjectLocation: readShowFlag(config.showProjectLocation ?? config.show_project_location),
