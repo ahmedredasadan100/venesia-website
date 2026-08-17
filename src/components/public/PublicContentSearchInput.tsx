@@ -19,6 +19,7 @@ import {
   PUBLIC_CONTENT_SEARCH_MAX_LENGTH,
   type PublicContentSearchSuggestion,
 } from "../../lib/content/public-content-read";
+import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";
 
 type PublicContentSearchInputProps = {
   basePath: string;
@@ -269,7 +270,7 @@ export default function PublicContentSearchInput({
             maxHeight: floatingPosition.maxHeight,
             zIndex: 60,
           }}
-          className="overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#080B10]/98 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.48)] backdrop-blur-xl"
+          className={`overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#080B10]/98 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.48)] backdrop-blur-xl ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}
         >
           {suggestions.map((suggestion, index) => (
             <button

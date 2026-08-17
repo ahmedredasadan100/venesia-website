@@ -186,16 +186,6 @@ export default function PageBlocksAssignmentRow({
         >
           {row.template_name}
         </Link>
-        <span
-          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] ${
-            templatePublished
-              ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200/85"
-              : "border-amber-400/25 bg-amber-400/10 text-amber-200/85"
-          }`}
-          data-module-publication-state={templatePublished ? "published" : "unpublished"}
-        >
-          {templatePublished ? "منشور" : "غير منشور"}
-        </span>
       </AdminDataGridPrimaryCell>
 
       {showModule ? (

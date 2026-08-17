@@ -297,30 +297,6 @@ p {
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
-.admin-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(216, 184, 122, 0.42) rgba(255, 255, 255, 0.035);
-}
-
-.admin-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-.admin-scrollbar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.035);
-  border-radius: 999px;
-}
-
-.admin-scrollbar::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(216, 184, 122, 0.68), rgba(137, 100, 44, 0.52));
-  border-radius: 999px;
-}
-
-.admin-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(180deg, rgba(240, 212, 147, 0.9), rgba(216, 184, 122, 0.7));
-}
-
 /* ─── Venesia Admin Sidebar: real layout integration ─────────────
    The sidebar is not a framed panel anymore.
    No own height, no own scroll, no own background, no divider.
@@ -1467,6 +1443,4 @@ select.admin-select option {
     transition: none !important;
   }
 }
-
-
 

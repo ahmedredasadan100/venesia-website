@@ -755,6 +755,36 @@ export type AdminCollectionReorderOwner =
   | "not_applicable"
   | "domain_owned_atomic_reorder";
 
+export type AdminSemanticPresentationState =
+  | "publication"
+  | "visibility"
+  | "featured"
+  | "archived"
+  | "enabled";
+
+export type AdminSemanticPresentationSurfaceContract = {
+  state: AdminSemanticPresentationState;
+  sourceFile: string;
+  component: "AdminStatusPill";
+  surface: "dedicated_status_column";
+  rationale: string;
+};
+
+export type AdminCollectionSemanticPresentationContract = {
+  owner:
+    | "shared_admin_row_actions"
+    | "explicit_surface_contract"
+    | "not_applicable";
+  primaryCellContract:
+    | "identity_primary_content_only"
+    | "not_applicable";
+  governedStates: readonly AdminSemanticPresentationState[];
+  sourceFiles: readonly string[];
+  sourceObjectNames: readonly string[];
+  sourceFieldNames: readonly string[];
+  explicitSurfaceContracts: readonly AdminSemanticPresentationSurfaceContract[];
+};
+
 export type AdminCollectionConsumerAdoptionEvidence = {
   id: string;
   route: string;
@@ -825,6 +855,7 @@ export type AdminCollectionSurfaceInventoryEntry = {
   feedbackOwner: "AdminFeedbackProvider" | "not_applicable";
   confirmationOwner: "AdminConfirmDialog" | "not_applicable";
   reorderOwner: AdminCollectionReorderOwner;
+  semanticPresentation: AdminCollectionSemanticPresentationContract;
   /** Per-consumer proof for grouped surfaces whose routes have distinct adapters or capabilities. */
   consumerAdoptionEvidence: readonly AdminCollectionConsumerAdoptionEvidence[];
   genuineExceptions: readonly string[];
@@ -832,6 +863,22 @@ export type AdminCollectionSurfaceInventoryEntry = {
   exceptionRationale: string | null;
   rationale: string;
 };
+
+const ADMIN_NO_SEMANTIC_PRESENTATION = {
+  owner: "not_applicable",
+  primaryCellContract: "not_applicable",
+  governedStates: [],
+  sourceFiles: [],
+  sourceObjectNames: [],
+  sourceFieldNames: [],
+  explicitSurfaceContracts: [],
+} as const satisfies AdminCollectionSemanticPresentationContract;
+
+const ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS = {
+  owner: "shared_admin_row_actions",
+  primaryCellContract: "identity_primary_content_only",
+  explicitSurfaceContracts: [],
+} as const;
 
 const ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS = {
   pageChromeAdoption: "adopted",
@@ -841,6 +888,7 @@ const ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS = {
   gridOwner: "AdminEntityList",
   dataRegistryEntities: [],
   reorderOwner: "not_applicable",
+  semanticPresentation: ADMIN_NO_SEMANTIC_PRESENTATION,
   consumerAdoptionEvidence: [],
   genuineExceptions: [],
 } as const;
@@ -853,6 +901,7 @@ const ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS = {
   gridOwner: "not_applicable",
   dataRegistryEntities: [],
   reorderOwner: "not_applicable",
+  semanticPresentation: ADMIN_NO_SEMANTIC_PRESENTATION,
   consumerAdoptionEvidence: [],
   genuineExceptions: [],
 } as const;
@@ -865,6 +914,7 @@ const ADMIN_FIXED_SURFACE_DEFAULTS = {
   gridOwner: "not_applicable",
   dataRegistryEntities: [],
   reorderOwner: "not_applicable",
+  semanticPresentation: ADMIN_NO_SEMANTIC_PRESENTATION,
   consumerAdoptionEvidence: [],
   genuineExceptions: [
     "The surface is a bounded structural or navigation composition, not a growing record collection.",
@@ -879,6 +929,7 @@ const ADMIN_AUTH_SURFACE_DEFAULTS = {
   gridOwner: "not_applicable",
   dataRegistryEntities: [],
   reorderOwner: "not_applicable",
+  semanticPresentation: ADMIN_NO_SEMANTIC_PRESENTATION,
   consumerAdoptionEvidence: [],
   genuineExceptions: [
     "Authentication routes intentionally render outside authenticated Admin Chrome.",
@@ -946,6 +997,27 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["publication", "featured", "archived"],
+        sourceFiles: [
+          "src/components/admin/content/unified-content-columns.tsx",
+          "src/components/admin/content/UnifiedContentRowActions.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["status", "is_featured", "deleted_at"],
+        explicitSurfaceContracts: [
+          {
+            state: "archived",
+            sourceFile:
+              "src/components/admin/content/unified-content-columns.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "Trash rows use the declared Status column to distinguish archived membership; publication and featured presentation remain with Shared Row Actions.",
+          },
+        ],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: true,
       filtersOrToolbar: true,
@@ -976,6 +1048,15 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["publication", "archived"],
+        sourceFiles: [
+          "src/app/admin/content/categories/categories-columns.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["status", "deleted_at"],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: true,
       filtersOrToolbar: true,
@@ -1006,6 +1087,13 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["publication", "archived"],
+        sourceFiles: ["src/app/admin/content/series/series-columns.tsx"],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["status", "deleted_at"],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: true,
       filtersOrToolbar: true,
@@ -1036,6 +1124,15 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["publication"],
+        sourceFiles: [
+          "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["status"],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
@@ -1073,6 +1170,15 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["publication", "featured"],
+        sourceFiles: [
+          "src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["publication_status", "featured"],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: true,
       filtersOrToolbar: true,
@@ -1114,6 +1220,15 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["enabled"],
+        sourceFiles: [
+          "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["is_active"],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
@@ -1149,6 +1264,25 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["enabled"],
+        sourceFiles: [
+          "src/app/admin/seo/redirects/RedirectsClient.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["status"],
+        explicitSurfaceContracts: [
+          {
+            state: "enabled",
+            sourceFile: "src/app/admin/seo/redirects/RedirectsClient.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "The declared Redirect Status column remains a compact read contract; the shared capability still owns visibility action presentation and Information.",
+          },
+        ],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
@@ -1570,6 +1704,26 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["visibility"],
+        sourceFiles: [
+          "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+        ],
+        sourceObjectNames: ["menu"],
+        sourceFieldNames: ["is_active"],
+        explicitSurfaceContracts: [
+          {
+            state: "visibility",
+            sourceFile:
+              "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "The declared menu Status column is an explicit list-reading contract; Shared Row Actions remains the mutation and Information presentation owner.",
+          },
+        ],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
@@ -1630,6 +1784,26 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["visibility"],
+        sourceFiles: [
+          "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+        ],
+        sourceObjectNames: ["item"],
+        sourceFieldNames: ["is_visible"],
+        explicitSurfaceContracts: [
+          {
+            state: "visibility",
+            sourceFile:
+              "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "The declared item Status column is an explicit hierarchy-reading contract; Shared Row Actions remains the visibility mutation and Information presentation owner.",
+          },
+        ],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
@@ -1692,6 +1866,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["publication", "visibility"],
+        sourceFiles: [
+          "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: [
+          "template_status",
+          "is_visible",
+          "is_publicly_visible",
+        ],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
@@ -1784,6 +1971,26 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["visibility"],
+        sourceFiles: [
+          "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
+        ],
+        sourceObjectNames: ["item"],
+        sourceFieldNames: ["visible"],
+        explicitSurfaceContracts: [
+          {
+            state: "visibility",
+            sourceFile:
+              "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "The declared manual-link Status column is an explicit Footer form-reading contract; Shared Row Actions remains the visibility action and Information presentation owner.",
+          },
+        ],
+      },
       columnVisibility: "fixed_no_optional_columns",
       summaryCards: false,
       filtersOrToolbar: false,
@@ -1816,6 +2023,26 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["enabled"],
+        sourceFiles: [
+          "src/app/admin/users-roles/UsersManagementClient.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["is_active"],
+        explicitSurfaceContracts: [
+          {
+            state: "enabled",
+            sourceFile:
+              "src/app/admin/users-roles/UsersManagementClient.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "The declared account Status column remains an identity-management read contract; the shared capability owns enable/disable action presentation and Information.",
+          },
+        ],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,
@@ -2114,6 +2341,27 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "adopted",
       rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        owner: "explicit_surface_contract",
+        primaryCellContract: "identity_primary_content_only",
+        governedStates: ["publication"],
+        sourceFiles: [
+          "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: ["status"],
+        explicitSurfaceContracts: [
+          {
+            state: "publication",
+            sourceFile:
+              "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "The read-only report declares publication as a Status column and exposes no publication mutation capability.",
+          },
+        ],
+      },
       columnVisibility: "shared_optional_columns",
       summaryCards: false,
       filtersOrToolbar: true,

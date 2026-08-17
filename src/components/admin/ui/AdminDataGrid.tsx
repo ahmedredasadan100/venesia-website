@@ -593,7 +593,12 @@ export function AdminDataGridCheckboxCell({
   );
 }
 
-/** Primary column cell — content-heavy, right-aligned (RTL), truncate-safe. */
+/**
+ * Primary column cell — identity/primary content only, right-aligned (RTL),
+ * and truncate-safe. Semantic publication, visibility, featured, archived, or
+ * enabled state belongs to the shared Row Actions/Information presentation,
+ * unless the Adoption Manifest declares an explicit surface contract.
+ */
 export function AdminDataGridPrimaryCell({ children, className = "" }: BaseProps) {
   return <div className={`min-w-0 text-right ${className}`}>{children}</div>;
 }
