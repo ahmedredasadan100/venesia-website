@@ -67,6 +67,7 @@ const coreFiles = [
   "src/components/admin/ui/admin-floating-position.ts",
   "src/components/admin/ui/useAdminFloatingMenuPosition.ts",
   "src/components/admin/ui/admin-scrollbar-styles.ts",
+  "src/components/venesia-scrollbar-styles.ts",
 ];
 coreFiles.forEach((path) =>
   check(`Missing entity-list core file: ${path}`, existsSync(resolve(ROOT, path))),
@@ -100,6 +101,9 @@ const rowActions = read(
 );
 const scrollbarStyles = read(
   "src/components/admin/ui/admin-scrollbar-styles.ts",
+);
+const venesiaScrollbarStyles = read(
+  "src/components/venesia-scrollbar-styles.ts",
 );
 
 const topicsList = read("src/components/admin/content/UnifiedContentList.tsx");
@@ -349,8 +353,10 @@ check(
     dataGrid.includes('role="region"') &&
     dataGrid.includes("tabIndex={0}") &&
     !dataGrid.includes("[scrollbar-width:thin]") &&
-    scrollbarStyles.includes("[&::-webkit-scrollbar]:h-1.5") &&
-    scrollbarStyles.includes("[&::-webkit-scrollbar]:w-1.5") &&
+    scrollbarStyles.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES") &&
+    !scrollbarStyles.includes("[&::-webkit-scrollbar]:h-1.5") &&
+    venesiaScrollbarStyles.includes("[&::-webkit-scrollbar]:h-1.5") &&
+    venesiaScrollbarStyles.includes("[&::-webkit-scrollbar]:w-1.5") &&
     entityTable.includes("scrollLabel?: string") &&
     entityTable.includes("scrollLabel={scrollLabel}") &&
     !entityTable.includes("max-w-full overflow-hidden"),

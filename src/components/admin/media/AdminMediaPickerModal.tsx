@@ -1,5 +1,6 @@
 "use client";
 
+import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../../venesia-scrollbar-styles";
 import VenesiaModal from "../VenesiaModal";
 import MediaLibraryCore from "./MediaLibraryCore";
 
@@ -42,7 +43,7 @@ export default function AdminMediaPickerModal({
         onClose={onClose}
       >
         <div
-          className="admin-scrollbar min-h-0 min-w-0 max-w-full flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5"
+          className={`min-h-0 min-w-0 max-w-full flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5 ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}
           data-media-picker-scroll=""
         >
           <MediaLibraryCore

@@ -12,6 +12,11 @@ const publicEntry = read("src/lib/content/public-content-read/index.ts");
 const publicPaths = read("src/lib/content/public-content-path.ts");
 const contentTypes = read("src/lib/admin/content/content-types.ts");
 const input = read("src/components/public/PublicContentSearchInput.tsx");
+const scrollbarOwner = read("src/components/venesia-scrollbar-styles.ts");
+const adminScrollbarAlias = read(
+  "src/components/admin/ui/admin-scrollbar-styles.ts",
+);
+const globalStyles = read("src/app/globals.css");
 const topicsPage = read("src/app/(site)/topics/page.tsx");
 const topicsAdapter = read("src/lib/topics/load-public-topics.ts");
 const topicsListing = read("src/components/topics/TopicsListingContent.tsx");
@@ -140,6 +145,16 @@ assert.ok(input.includes("ArrowDown") && input.includes("ArrowUp") && input.incl
 assert.ok(input.includes('event.key === "Enter" && normalizedDraft !== committedQuery'));
 assert.ok(input.includes("window.clearTimeout(searchTimerRef.current)"));
 assert.ok(input.includes("navigateToSearch(normalizedDraft)"));
+assert.ok(input.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
+assert.ok(input.includes('from "../venesia-scrollbar-styles"'));
+assert.ok(!input.includes("admin-scrollbar"));
+assert.ok(scrollbarOwner.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
+assert.ok(scrollbarOwner.includes("[scrollbar-width:thin]"));
+assert.ok(scrollbarOwner.includes("[&::-webkit-scrollbar]:h-1.5"));
+assert.ok(scrollbarOwner.includes("[&::-webkit-scrollbar]:w-1.5"));
+assert.ok(adminScrollbarAlias.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
+assert.ok(!adminScrollbarAlias.includes("[scrollbar-width:thin]"));
+assert.ok(!globalStyles.includes(".admin-scrollbar"));
 for (const forbidden of ["router.refresh", "window.location.reload", "fetch("]) {
   assert.ok(!input.includes(forbidden), `Shared search input must not use ${forbidden}`);
 }

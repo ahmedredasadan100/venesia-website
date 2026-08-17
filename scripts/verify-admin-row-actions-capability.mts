@@ -26,6 +26,7 @@ import {
   ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,
   ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
   type AdminCollectionFullAdoptionClaim,
+  type AdminCollectionSemanticPresentationContract,
   type AdminCollectionSurfaceInventoryEntry,
   type AdminRowActionsGovernedAction,
 } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
@@ -203,6 +204,270 @@ function parseEvidenceSource(sourceFile: string, source: string) {
     true,
     sourceFile.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
   );
+}
+
+type SemanticPresentationOccurrence = {
+  component: string;
+  ancestors: readonly string[];
+  expression: string;
+};
+
+function rootIdentifierName(expression: ts.Expression): string | null {
+  let current = expression;
+  while (
+    ts.isPropertyAccessExpression(current) ||
+    ts.isElementAccessExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return ts.isIdentifier(current) ? current.text : null;
+}
+
+function collectSemanticPresentationOccurrences(
+  sourceFile: string,
+  source: string,
+  contract: Pick<
+    AdminCollectionSemanticPresentationContract,
+    "sourceObjectNames" | "sourceFieldNames"
+  >,
+) {
+  const parsed = parseEvidenceSource(sourceFile, source);
+  const sourceObjects = new Set(contract.sourceObjectNames);
+  const sourceFields = new Set(contract.sourceFieldNames);
+  const variableDeclarations = new Map<string, ts.VariableDeclaration[]>();
+  const collectDeclarations = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) {
+      const declarations = variableDeclarations.get(node.name.text) ?? [];
+      declarations.push(node);
+      variableDeclarations.set(node.name.text, declarations);
+    }
+    ts.forEachChild(node, collectDeclarations);
+  };
+  collectDeclarations(parsed);
+
+  const functionScopeChain = (node: ts.Node) => {
+    const scopes: ts.Node[] = [];
+    let current: ts.Node | undefined = node.parent;
+    while (current) {
+      if (ts.isFunctionLike(current)) scopes.push(current);
+      current = current.parent;
+    }
+    scopes.push(parsed);
+    return scopes;
+  };
+  const declarationScope = (declaration: ts.VariableDeclaration) => {
+    let current: ts.Node | undefined = declaration.parent;
+    while (current && !ts.isFunctionLike(current)) current = current.parent;
+    return current ?? parsed;
+  };
+  const resolveVariableDeclaration = (identifier: ts.Identifier) => {
+    const scopes = functionScopeChain(identifier);
+    return (variableDeclarations.get(identifier.text) ?? [])
+      .filter(
+        (declaration) =>
+          declaration.initializer &&
+          declaration.getStart(parsed) < identifier.getStart(parsed) &&
+          scopes.includes(declarationScope(declaration)),
+      )
+      .sort((left, right) => {
+        const scopeDifference =
+          scopes.indexOf(declarationScope(left)) -
+          scopes.indexOf(declarationScope(right));
+        return scopeDifference !== 0
+          ? scopeDifference
+          : right.getStart(parsed) - left.getStart(parsed);
+      })[0];
+  };
+
+  const referencesSemanticState = (
+    node: ts.Node,
+    resolvingDeclarations = new Set<number>(),
+  ) => {
+    let found = false;
+    const visit = (current: ts.Node) => {
+      if (found) return;
+      if (
+        current !== node &&
+        (ts.isFunctionLike(current) ||
+          ts.isJsxElement(current) ||
+          ts.isJsxSelfClosingElement(current) ||
+          ts.isJsxFragment(current))
+      ) {
+        return;
+      }
+      if (
+        ts.isPropertyAccessExpression(current) &&
+        sourceFields.has(current.name.text) &&
+        sourceObjects.has(rootIdentifierName(current.expression) ?? "")
+      ) {
+        found = true;
+        return;
+      }
+      if (ts.isElementAccessExpression(current)) {
+        const field = current.argumentExpression;
+        if (
+          field &&
+          ts.isStringLiteralLike(field) &&
+          sourceFields.has(field.text) &&
+          sourceObjects.has(rootIdentifierName(current.expression) ?? "")
+        ) {
+          found = true;
+          return;
+        }
+      }
+      if (ts.isIdentifier(current)) {
+        const declaration = resolveVariableDeclaration(current);
+        const declarationPosition = declaration?.getStart(parsed);
+        if (
+          declaration?.initializer &&
+          declarationPosition !== undefined &&
+          !resolvingDeclarations.has(declarationPosition)
+        ) {
+          const nestedResolution = new Set(resolvingDeclarations);
+          nestedResolution.add(declarationPosition);
+          if (
+            referencesSemanticState(declaration.initializer, nestedResolution)
+          ) {
+            found = true;
+            return;
+          }
+        }
+      }
+      ts.forEachChild(current, visit);
+    };
+    visit(node);
+    return found;
+  };
+
+  const occurrences: SemanticPresentationOccurrence[] = [];
+  const visitJsx = (node: ts.Node, ancestors: readonly string[]) => {
+    if (ts.isJsxElement(node)) {
+      const component = node.openingElement.tagName.getText(parsed);
+      const nested = [...ancestors, component];
+      node.openingElement.attributes.properties.forEach((attribute) =>
+        visitJsx(attribute, nested),
+      );
+      node.children.forEach((child) => visitJsx(child, nested));
+      return;
+    }
+    if (ts.isJsxSelfClosingElement(node)) {
+      const component = node.tagName.getText(parsed);
+      const nested = [...ancestors, component];
+      node.attributes.properties.forEach((attribute) =>
+        visitJsx(attribute, nested),
+      );
+      return;
+    }
+    if (
+      ts.isJsxExpression(node) &&
+      node.expression &&
+      referencesSemanticState(node.expression)
+    ) {
+      occurrences.push({
+        component: ancestors.at(-1) ?? "unknown",
+        ancestors,
+        expression: node.expression.getText(parsed).replaceAll(/\s+/g, " "),
+      });
+    }
+    ts.forEachChild(node, (child) => visitJsx(child, ancestors));
+  };
+  visitJsx(parsed, []);
+  return occurrences;
+}
+
+function collectSemanticPresentationContractFailures(
+  surface: AdminCollectionSurfaceInventoryEntry,
+  sourceOverrides?: CollectionSourceOverrides,
+) {
+  const contract = surface.semanticPresentation;
+  if (contract.owner === "not_applicable") {
+    const noEvidence = contract.governedStates.length === 0 &&
+      contract.sourceFiles.length === 0 &&
+      contract.sourceObjectNames.length === 0 &&
+      contract.sourceFieldNames.length === 0 &&
+      contract.explicitSurfaceContracts.length === 0;
+    if (!noEvidence) return ["not_applicable_contract_has_evidence"];
+    return surface.workflowClassification === "full_collection_adoption" &&
+      surface.rowActionsState === "adopted"
+      ? ["missing_full_adoption_contract"]
+      : [];
+  }
+
+  const failures: string[] = [];
+  if (
+    contract.primaryCellContract !== "identity_primary_content_only" ||
+    contract.governedStates.length === 0 ||
+    contract.sourceFiles.length === 0 ||
+    contract.sourceObjectNames.length === 0 ||
+    contract.sourceFieldNames.length === 0 ||
+    new Set(contract.sourceFiles).size !== contract.sourceFiles.length ||
+    new Set(contract.sourceObjectNames).size !== contract.sourceObjectNames.length ||
+    new Set(contract.sourceFieldNames).size !== contract.sourceFieldNames.length
+  ) {
+    failures.push("incomplete_contract");
+  }
+
+  for (const exception of contract.explicitSurfaceContracts) {
+    if (
+      !contract.governedStates.includes(exception.state) ||
+      !contract.sourceFiles.includes(exception.sourceFile) ||
+      exception.component !== "AdminStatusPill" ||
+      exception.surface !== "dedicated_status_column" ||
+      exception.rationale.trim().length === 0
+    ) {
+      failures.push(`invalid_exception:${exception.sourceFile}`);
+    }
+  }
+
+  const surfaceGraph = collectCollectionSourceGraph(surface, sourceOverrides);
+  if (
+    contract.owner === "shared_admin_row_actions" &&
+    ![...surfaceGraph.values()].some((source) =>
+      source.includes("<AdminDataGridRowActions"),
+    )
+  ) {
+    failures.push("missing_shared_owner");
+  }
+  for (const sourceFile of contract.sourceFiles) {
+    if (!sourceOverrides?.has(sourceFile) && !existsSync(join(ROOT, sourceFile))) {
+      failures.push(`missing_source:${sourceFile}`);
+      continue;
+    }
+    if (!surfaceGraph.has(sourceFile)) {
+      failures.push(`outside_surface_graph:${sourceFile}`);
+    }
+    const source = sourceTextForEvidence(sourceFile, sourceOverrides);
+    const allowedStatusPill = contract.explicitSurfaceContracts.some(
+      (exception) => exception.sourceFile === sourceFile,
+    );
+    const occurrences = collectSemanticPresentationOccurrences(
+      sourceFile,
+      source,
+      contract,
+    );
+    if (allowedStatusPill && !source.includes("<AdminStatusPill")) {
+      failures.push(`missing_explicit_surface:${sourceFile}`);
+    }
+    for (const occurrence of occurrences) {
+      if (occurrence.ancestors.includes("AdminDataGridPrimaryCell")) {
+        failures.push(
+          `primary_cell_parallel_presentation:${sourceFile}:${occurrence.expression}`,
+        );
+        continue;
+      }
+      if (occurrence.ancestors.includes("AdminDataGridRowActions")) continue;
+      if (
+        occurrence.ancestors.includes("AdminStatusPill") &&
+        allowedStatusPill
+      ) {
+        continue;
+      }
+      failures.push(
+        `undeclared_presenter:${sourceFile}:${occurrence.component}:${occurrence.expression}`,
+      );
+    }
+  }
+  return [...new Set(failures)];
 }
 
 function collectSourceGraph(
@@ -1450,6 +1715,7 @@ check(
       "feedbackOwner" in surface &&
       "confirmationOwner" in surface &&
       "reorderOwner" in surface &&
+      "semanticPresentation" in surface &&
       Array.isArray(surface.consumerAdoptionEvidence) &&
       "queryMode" in surface &&
       Array.isArray(surface.genuineExceptions) &&
@@ -1457,6 +1723,53 @@ check(
       (surface.exceptionRationale === null ||
         surface.exceptionRationale.trim().length > 0),
   ),
+);
+const semanticPresentationFailures = collectionSurfaces.flatMap((surface) =>
+  collectSemanticPresentationContractFailures(surface).map(
+    (failure) => `${surface.id}:${failure}`,
+  ),
+);
+check(
+  `semantic state presentation is owned by Shared Row Actions or an explicit dedicated Status column contract${semanticPresentationFailures.length > 0 ? `: ${semanticPresentationFailures.join(", ")}` : ""}`,
+  semanticPresentationFailures.length === 0,
+);
+const semanticPresentationFixtureContract = {
+  sourceObjectNames: ["row"],
+  sourceFieldNames: ["status", "is_visible"],
+} as const;
+const primaryCellFixtureOccurrences = collectSemanticPresentationOccurrences(
+  "fixtures/semantic-primary-cell.tsx",
+  `const Fixture = ({ row }) => {
+    const published = row.status === "published";
+    return <AdminDataGridPrimaryCell><span>{published ? "Published" : "Draft"}</span></AdminDataGridPrimaryCell>;
+  };`,
+  semanticPresentationFixtureContract,
+);
+const localBadgeFixtureOccurrences = collectSemanticPresentationOccurrences(
+  "fixtures/semantic-local-badge.tsx",
+  `const Fixture = ({ row }) => <LocalStatusBadge visible={row.is_visible} />;`,
+  semanticPresentationFixtureContract,
+);
+check(
+  "semantic presentation guard rejects primary-cell and undeclared local badge fixtures",
+  primaryCellFixtureOccurrences.some((occurrence) =>
+    occurrence.ancestors.includes("AdminDataGridPrimaryCell"),
+  ) &&
+    localBadgeFixtureOccurrences.some(
+      (occurrence) => occurrence.component === "LocalStatusBadge",
+    ),
+);
+const pageBlockAssignmentSurface = collectionSurfaces.find(
+  (surface) => surface.id === "page-block-assignments",
+);
+check(
+  "Page Block assignment identity cell is free of publication and visibility presentation",
+  pageBlockAssignmentSurface?.semanticPresentation.owner ===
+    "shared_admin_row_actions" &&
+    pageBlockAssignmentSurface.semanticPresentation.primaryCellContract ===
+      "identity_primary_content_only" &&
+    pageBlockAssignmentSurface.semanticPresentation.explicitSurfaceContracts
+      .length === 0,
 );
 check(
   "surface workflow classifications use only the approved six-value contract",
