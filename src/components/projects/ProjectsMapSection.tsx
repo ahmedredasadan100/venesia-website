@@ -1,4 +1,4 @@
-import Image from "next/image";
+import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 
 import { getProjectHref } from "../../lib/projects/public-helpers";
@@ -62,7 +62,7 @@ export default function ProjectsMapSection({
         </div>
 
         <div className="relative min-h-[500px] overflow-hidden rounded-2xl border border-white/10 bg-[#080B10]">
-          <Image
+          <PublicMediaImage
             src={mapImage}
             alt="خريطة بيت الوطن"
             fill

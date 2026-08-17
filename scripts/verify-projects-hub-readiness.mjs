@@ -59,8 +59,9 @@ assert(
 );
 assert(
   !filtersSrc.includes("إعادة تعيين الفلاتر") &&
-    (filtersSrc.match(/onFilterChange\("all"\)/g) ?? []).length === 1,
-  "projects filters must not render a parallel reset action",
+    filtersSrc.includes("visibleFilters") &&
+    filtersSrc.includes("options[0]?.id ?? \"all\""),
+  "projects filters must consume configured visibility without a parallel reset action",
 );
 
 if (failures.length) {

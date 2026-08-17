@@ -281,7 +281,7 @@ function OverviewTab({ bundle }: { bundle: ProjectEntryBundle }) {
     <div className="space-y-4">
       <SectionCard>
         <div className="space-y-4">
-          <Field name="overview_title" label="عنوان القسم" required>
+          <Field name="overview_title" label="عنوان القسم (اختياري)">
             <input id="overview_title" name="overview_title" defaultValue={project.overview_title} className={fieldClass} />
           </Field>
           <div id="overview_body" className="scroll-mt-28">
@@ -324,7 +324,7 @@ function DeliveryTab({ bundle }: { bundle: ProjectEntryBundle }) {
     <div className="space-y-4">
       <SectionCard>
         <div className="grid gap-4 lg:grid-cols-[minmax(260px,0.36fr)_minmax(0,1fr)]">
-          <Field name="delivery_title" label="عنوان القسم" required>
+          <Field name="delivery_title" label="عنوان القسم (اختياري)">
             <input id="delivery_title" name="delivery_title" defaultValue={project.delivery_title} className={fieldClass} />
           </Field>
           <div id="delivery_body" className="scroll-mt-28">
@@ -385,6 +385,11 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
       icon: "location" as const,
       content: (
         <div className="space-y-4">
+          <SectionCard>
+            <Field name="location_title" label="عنوان قسم الموقع (اختياري)">
+              <input id="location_title" name="location_title" defaultValue={bundle.project.location_title} className={fieldClass} />
+            </Field>
+          </SectionCard>
           <SectionCard><ProjectLocationEditor project={bundle.project} locations={bundle.locations} schemaReady={bundle.schemaReady} schemaMessage={bundle.schemaMessage} /></SectionCard>
           <RepeaterSection title="ما حول المشروع" description="وسائل النقل والمحاور والمعالم القريبة، مع ترتيب مستقل لكل مجموعة."><ProjectLocationPointsEditor initialItems={bundle.location_points} /></RepeaterSection>
         </div>
@@ -397,7 +402,16 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
       sectionHeading: "المساحات والمخططات",
       sectionDescription: "مخططات الوحدات والمساحات وصور المعماري والفرش المرتبطة بها.",
       icon: "plans" as const,
-      content: <RepeaterSection><ProjectFloorPlansEditor initialPlans={bundle.floor_plans} /></RepeaterSection>,
+      content: (
+        <div className="space-y-4">
+          <SectionCard>
+            <Field name="plans_title" label="عنوان قسم المساحات والمخططات (اختياري)">
+              <input id="plans_title" name="plans_title" defaultValue={bundle.project.plans_title} className={fieldClass} />
+            </Field>
+          </SectionCard>
+          <RepeaterSection><ProjectFloorPlansEditor initialPlans={bundle.floor_plans} /></RepeaterSection>
+        </div>
+      ),
     },
     { id: PROJECT_ENTRY_TAB_IDS.delivery, navigationLabel: "المواصفات", sectionHeading: "مواصفات التنفيذ والتسليم", sectionDescription: "تفاصيل التنفيذ وبنود التسليم والمواد والصور التوضيحية.", icon: "specifications" as const, content: <DeliveryTab bundle={bundle} /> },
     {
@@ -408,6 +422,11 @@ export default function ProjectEditForm({ bundle: initialBundle }: { bundle: Pro
       icon: "media" as const,
       content: (
         <div className="space-y-4">
+          <SectionCard>
+            <Field name="gallery_title" label="عنوان قسم المعرض (اختياري)">
+              <input id="gallery_title" name="gallery_title" defaultValue={bundle.project.gallery_title} className={fieldClass} />
+            </Field>
+          </SectionCard>
           <RepeaterSection title="معرض الصور"><ProjectImageCollectionEditor section="gallery" initialItems={bundle.media} addLabel="إضافة صورة للمعرض" /></RepeaterSection>
           <RepeaterSection title="معرض الفيديو"><ProjectVideoCollectionEditor section="gallery" initialItems={bundle.videos} /></RepeaterSection>
         </div>

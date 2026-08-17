@@ -1,11 +1,11 @@
-import Image from "next/image";
-
 import type { PublicProject } from "../../../lib/projects/public-types";
 import RichTextContent from "../../content/RichTextContent";
+import PublicMediaImage from "../../public/PublicMediaImage";
 import ProjectDeliverySpecsSection from "./ProjectDeliverySpecsSection";
 import ProjectDetailsHero from "./ProjectDetailsHero";
 import ProjectDistrictSection from "./ProjectDistrictSection";
 import ProjectPlansAndAreasSection from "./ProjectPlansAndAreasSection";
+import { ProjectMainGallery } from "./ProjectImageGalleries";
 
 type ResidentialProjectDetailsProps = { project: PublicProject };
 
@@ -16,7 +16,7 @@ export default function ResidentialProjectDetails({ project }: ResidentialProjec
     { id: "overview", label: "نظرة عامة", visible: true },
     { id: "plans", label: "المساحات والمخططات", visible: project.plans.length > 0 },
     { id: "delivery-specs", label: "مواصفات التنفيذ", visible: Boolean(project.delivery.body || project.delivery.items.length || project.delivery.images.length) },
-    { id: "gallery", label: "معرض المشروع", visible: Boolean(project.gallery.images.length || project.gallery.videos.length) },
+    { id: "gallery", label: "معرض المشروع", visible: project.gallery.images.length > 0 },
   ].filter((tab) => tab.visible);
 
   return (
@@ -38,9 +38,10 @@ export default function ResidentialProjectDetails({ project }: ResidentialProjec
       <section id="overview" className="scroll-mt-24 mx-auto max-w-7xl px-6 py-14">
         <div className={`grid gap-8 ${overviewImage ? "lg:grid-cols-[0.85fr_1.15fr]" : ""}`}>
           <div className="min-w-0 rounded-[26px] border border-white/10 bg-white/[0.025] p-8">
-            <p className="mb-3 text-sm font-medium tracking-[0.28em] text-[#D8B87A]/70">نظرة عامة</p>
-            <h2 className="text-2xl font-semibold text-[#D8B87A]">{project.overview.title}</h2>
-            <RichTextContent value={project.overview.body} mode="rich" className="mt-5 text-sm leading-8 text-white/62" />
+            {project.overview.title ? (
+              <h2 className="text-2xl font-semibold text-[#D8B87A]">{project.overview.title}</h2>
+            ) : null}
+            <RichTextContent value={project.overview.body} mode="rich" className={`${project.overview.title ? "mt-5" : ""} text-sm leading-8 text-white/62`} />
             {project.overview.features.length ? (
               <div className="mt-6 space-y-3">
                 {project.overview.features.map((feature) => (
@@ -55,7 +56,7 @@ export default function ResidentialProjectDetails({ project }: ResidentialProjec
 
           {overviewImage ? (
             <div className="relative min-h-[320px] overflow-hidden rounded-[26px] border border-[#D8B87A]/20">
-              <Image src={overviewImage.src} alt={overviewImage.alt} fill sizes="(max-width: 1024px) 100vw, 60vw" className="object-cover" />
+              <PublicMediaImage src={overviewImage.src} alt={overviewImage.alt} fill sizes="(max-width: 1024px) 100vw, 60vw" className="object-cover" />
               <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/75 via-[#05070B]/20 to-transparent" />
               <div className="absolute bottom-5 right-5 rounded-2xl border border-[#D8B87A]/25 bg-[#05070B]/70 px-5 py-4 backdrop-blur-md">
                 <p className="text-xs tracking-[0.22em] text-[#D8B87A]/70">VENESIA DEVELOPMENTS</p>
@@ -66,19 +67,17 @@ export default function ResidentialProjectDetails({ project }: ResidentialProjec
         </div>
       </section>
 
-      <ProjectPlansAndAreasSection areas={project.plans} />
+      <ProjectPlansAndAreasSection areas={project.plans} title={project.plansTitle} />
       <ProjectDeliverySpecsSection deliverySpecs={project.delivery} />
 
       {project.gallery.images.length ? (
         <section id="gallery" className="scroll-mt-24 border-t border-white/10 px-6 py-16">
           <div className="mx-auto max-w-7xl">
-            <h2 className="text-3xl font-semibold text-[#D8B87A]">معرض المشروع</h2>
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {project.gallery.images.map((image) => (
-                <div key={image.id} className="relative min-h-64 overflow-hidden rounded-[26px] border border-white/10">
-                  <Image src={image.src} alt={image.alt} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" className="object-cover" />
-                </div>
-              ))}
+            {project.gallery.title ? (
+              <h2 className="text-3xl font-semibold text-[#D8B87A]">{project.gallery.title}</h2>
+            ) : null}
+            <div className={project.gallery.title ? "mt-8" : ""}>
+              <ProjectMainGallery images={project.gallery.images} />
             </div>
           </div>
         </section>

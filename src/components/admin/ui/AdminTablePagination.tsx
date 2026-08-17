@@ -117,9 +117,7 @@ export default function AdminTablePagination({
   const floating = useAdminFloatingLayer();
   const [uncontrolledLimitOpen, setUncontrolledLimitOpen] = useState(false);
   const [activeLimit, setActiveLimit] = useState(pageSize);
-  const pageSizeOptions = requestedPageSizeOptions.includes("100")
-    ? [...ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS, "100"]
-    : ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS;
+  const pageSizeOptions = requestedPageSizeOptions;
   const isLimitOpen = floating
     ? floating.openLayerId === layerId
     : uncontrolledLimitOpen;

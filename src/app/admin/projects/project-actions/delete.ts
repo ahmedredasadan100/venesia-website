@@ -19,7 +19,7 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     return {
       ok: false as const,
       code: "confirm_required",
-      message: "الحذف النهائي يتطلب تأكيدًا صريحًا — استخدم الأرشفة للإخفاء الآمن.",
+      message: "الحذف النهائي يتطلب تأكيدًا صريحًا — استخدم إلغاء النشر لإخفاء المشروع عن الموقع العام.",
     };
   }
 

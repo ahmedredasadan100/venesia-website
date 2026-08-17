@@ -4,13 +4,12 @@ import type { ProjectsHubRenderPlanModule } from "../../lib/projects/build-proje
 import {
   applyFeaturedLimit,
   mapProjectsHubFeaturedProps,
-  mapProjectsHubHeroProps,
   mapProjectsHubListingProps,
   mapProjectsHubMapProps,
 } from "../../lib/projects/map-projects-hub-module-props";
 import type { ProjectHubFilterId, PublicProject } from "../../lib/projects/public-types";
 import ProjectsFeaturedSection from "./ProjectsFeaturedSection";
-import ProjectsHubHero from "./ProjectsHubHero";
+import ProjectsHubCanonicalHero from "./ProjectsHubCanonicalHero";
 import ProjectsListSection from "./ProjectsListSection";
 import ProjectsMapSection from "./ProjectsMapSection";
 
@@ -39,14 +38,11 @@ export default function ProjectsHubModulesRenderer({
     <>
       {modules.map((module) => {
         if (module.slug === "projects-hub-hero") {
-          const props = mapProjectsHubHeroProps(module);
           return (
-            <ProjectsHubHero
+            <ProjectsHubCanonicalHero
               key={`hub-${module.assignmentId}`}
               projects={projects}
-              featuredProject={featuredProjects[0]}
-              autoplayMs={props.autoplayMs}
-              emptyState={props.emptyState}
+              module={module}
             />
           );
         }
@@ -93,8 +89,10 @@ export default function ProjectsHubModulesRenderer({
               showViewToggle={props.showViewToggle}
               showPagination={props.showPagination}
               showProjectCount={props.showProjectCount}
+              visibleFilters={props.visibleFilters}
               showProjectImage={props.showProjectImage}
               showProjectCode={props.showProjectCode}
+              showProjectName={props.showProjectName}
               showProjectDescription={props.showProjectDescription}
               showProjectType={props.showProjectType}
               showProjectLocation={props.showProjectLocation}

@@ -479,19 +479,12 @@ export default function ContentModuleEditClient({
           moduleKind="content"
           moduleSlug={presentationSlug}
           entityName={block.name}
-          meta={hubStatus.label}
+          backHref={projectsHubNavigation.backHref}
+          backLabel={projectsHubNavigation.backLabel}
           actions={
-            <>
-              <AdminActionButton href="/admin/projects" variant="dark">
-                إدارة بيانات المشروعات
-              </AdminActionButton>
-              <AdminActionButton href="/projects" variant="dark">
-                معاينة صفحة المشروعات
-              </AdminActionButton>
-              <AdminActionButton href={projectsHubNavigation.backHref} variant="ghost">
-                {projectsHubNavigation.backLabel}
-              </AdminActionButton>
-            </>
+            <AdminActionButton href="/projects" variant="dark">
+              معاينة صفحة المشروعات
+            </AdminActionButton>
           }
         />
       ) : (

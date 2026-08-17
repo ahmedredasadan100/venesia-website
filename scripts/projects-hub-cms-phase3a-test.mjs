@@ -67,7 +67,15 @@ const baseComposition = {
       assignmentId: 120,
       sortOrder: 10,
       templateSlug: "projects-hub-hero",
-      config: { selectionMode: "auto_residential_with_media", autoplayMs: 6000, emptyState: null },
+      config: {
+        selectionMode: "domain_projects",
+        projectType: "both",
+        variant: "home-cinematic",
+        limit: 6,
+        projectReferences: [],
+        autoplayMs: 6000,
+        emptyState: null,
+      },
     }),
     assignment({
       assignmentId: 121,
@@ -275,6 +283,7 @@ const baseComposition = {
   assert.equal(props.showFilterBar, true);
   assert.equal(props.showProjectImage, true);
   assert.equal(props.showProjectCode, true);
+  assert.equal(props.showProjectName, true);
   assert.equal(props.showProjectDescription, true);
   assert.equal(props.showProjectType, true);
   assert.equal(props.showProjectLocation, true);

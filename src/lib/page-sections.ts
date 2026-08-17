@@ -6,8 +6,8 @@ import type {
 } from "./hero/hero-content-controls";
 import { resolveHeroContentControls } from "./hero/hero-content-controls";
 
-/** Hero owns authored presentation only; public content belongs to page modules. */
-export type HeroSourceType = "manual";
+/** Hero owns presentation; domain-backed content is supplied only through typed adapters. */
+export type HeroSourceType = "manual" | "domain-backed";
 
 export type PageRecord = {
   id: number;

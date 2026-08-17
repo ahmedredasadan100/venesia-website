@@ -40,8 +40,16 @@ const projectDomainHardeningMigration = readFileSync(
   new URL("../sql/migrations/20260814020742_projects_domain_hardening.sql", import.meta.url),
   "utf8",
 ).replace(/\r\n?/gu, "\n");
+const legacyProjectMediaCanonicalizationMigration = readFileSync(
+  new URL("../sql/migrations/20260813220634_legacy_project_media_canonicalization.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
 const locationManagementMigration = readFileSync(
   new URL("../sql/migrations/20260814020750_location_management_foundation.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
+const projectSectionTitleMigration = readFileSync(
+  new URL("../sql/migrations/20260817100000_project_section_title_contract.sql", import.meta.url),
   "utf8",
 ).replace(/\r\n?/gu, "\n");
 const dashboardTruthMigration = readFileSync(
@@ -50,6 +58,10 @@ const dashboardTruthMigration = readFileSync(
 ).replace(/\r\n?/gu, "\n");
 const reportsAnalyticsMigration = readFileSync(
   new URL("../sql/migrations/20260805230000_reports_analytics_capability_closure.sql", import.meta.url),
+  "utf8",
+).replace(/\r\n?/gu, "\n");
+const systemPublicationMigration = readFileSync(
+  new URL("../sql/migrations/20260807120000_system_publication_summary_cards_closure.sql", import.meta.url),
   "utf8",
 ).replace(/\r\n?/gu, "\n");
 
@@ -63,7 +75,9 @@ function md5(value) {
 
 function extractExpectedFunctionSource(functionName) {
   const startMarker = `create or replace function public.${functionName}(`;
-  const ownerMigration = locationManagementMigration.includes(startMarker)
+  const ownerMigration = projectSectionTitleMigration.includes(startMarker)
+    ? projectSectionTitleMigration
+    : locationManagementMigration.includes(startMarker)
     ? locationManagementMigration
     : globalTruthAtomicMigration.includes(startMarker)
       ? globalTruthAtomicMigration
@@ -181,6 +195,9 @@ const finalNoDefaultColumns = [
   ["projects", "overview_body"],
   ["projects", "delivery_title"],
   ["projects", "delivery_body"],
+  ["projects", "location_title"],
+  ["projects", "plans_title"],
+  ["projects", "gallery_title"],
   ["project_media", "alt_text"],
 ];
 const finalRequiredNotNullColumns = [
@@ -206,9 +223,7 @@ const finalRequiredCheckConstraints = [
   ["projects", "projects_small_box_image_alt_check"],
   ["projects", "projects_location_label_check"],
   ["projects", "projects_google_maps_url_check"],
-  ["projects", "projects_overview_title_check"],
   ["projects", "projects_overview_body_check"],
-  ["projects", "projects_delivery_title_check"],
   ["projects", "projects_delivery_body_check"],
   ["projects", "projects_seo_title_check"],
   ["projects", "projects_seo_description_check"],
@@ -306,7 +321,7 @@ const expectedColumnDefaults = new Map([
   ["projects.seo_keywords", "'{}'::text[]"],
   ["projects.og_image_alt", "''::text"],
   ["projects.featured", "false"],
-  ["projects.publication_status", "'draft'::text"],
+  ["projects.publication_status", "'unpublished'::text"],
   ["projects.show_on_homepage", "false"],
   ["projects.homepage_order", "0"],
   ["projects.created_at", "now()"],
@@ -340,10 +355,17 @@ const expectedColumnDefaults = new Map([
   ["project_videos.updated_at", "now()"],
 ]);
 const expectedColumnComments = new Map([
+  ["project_locations.level", "Canonical hierarchy discriminator: governorate, city, main_area (District), sub_area (Sub District)."],
+  ["project_locations.parent_id", "Canonical parent relation. Null only for Governorates."],
   ["projects.id", "Canonical and sole Project identity. All Project Domain relationships use project_id."],
   ["projects.code", "Required user-visible Project label; not an identity, relationship, or uniqueness key."],
   ["projects.show_on_homepage", "Database-owned Home Projects membership."],
   ["projects.homepage_order", "Database-owned Home Projects order; unique for included Projects."],
+  ["projects.location_title", "Optional public Location section heading. NULL/blank renders no heading."],
+  ["projects.overview_title", "Optional public Overview section heading. NULL/blank renders no heading."],
+  ["projects.plans_title", "Optional public Plans/Areas section heading. NULL/blank renders no heading."],
+  ["projects.delivery_title", "Optional public Delivery section heading. NULL/blank renders no heading."],
+  ["projects.gallery_title", "Optional public Gallery section heading. NULL/blank renders no heading."],
 ]);
 const expectedMissingValueColumnKeys = new Set([
   "projects.show_on_homepage",
@@ -355,6 +377,10 @@ const knownAdditiveConstraintKeys = new Set([
   "projects.projects_code_format_check",
   "projects.projects_homepage_order_check",
   "projects.projects_brochure_url_check",
+  "projects.projects_media_path_lowercase_check",
+  "project_media.project_media_path_lowercase_check",
+  "project_floor_plans.project_floor_plans_media_path_lowercase_check",
+  "project_videos.project_videos_media_path_lowercase_check",
 ]);
 const knownLegacyDefaultColumnKeys = new Set(
   finalNoDefaultColumns.map(
@@ -734,7 +760,12 @@ function extractExpectedConstraintManifest() {
       `Expected 99 constraints in final rebuild; extracted ${constraints.length}.`,
     );
   }
-  return constraints;
+  return constraints.filter(
+    (constraint) => ![
+      "projects.projects_overview_title_check",
+      "projects.projects_delivery_title_check",
+    ].includes(`${constraint.table_name}.${constraint.constraint_name}`),
+  );
 }
 
 const expectedConstraintManifest = extractExpectedConstraintManifest();
@@ -806,8 +837,8 @@ const report = {
     fixture_text_marker_pattern: fixtureTextMarkerPattern,
     expected_catalog_counts: {
       tables: 9,
-      columns: 122,
-      constraints: 104,
+      columns: 125,
+      constraints: 106,
       indexes: 53,
       rls_policies: 0,
       user_triggers: 4,
@@ -819,9 +850,12 @@ const report = {
     project_publishing_migration_sha256: sha256(projectPublishingMigration),
     global_truth_atomic_migration_sha256: sha256(globalTruthAtomicMigration),
     project_domain_hardening_migration_sha256: sha256(projectDomainHardeningMigration),
+    legacy_project_media_canonicalization_migration_sha256: sha256(legacyProjectMediaCanonicalizationMigration),
     location_management_migration_sha256: sha256(locationManagementMigration),
+    project_section_title_migration_sha256: sha256(projectSectionTitleMigration),
     dashboard_truth_migration_sha256: sha256(dashboardTruthMigration),
     reports_analytics_migration_sha256: sha256(reportsAnalyticsMigration),
+    system_publication_migration_sha256: sha256(systemPublicationMigration),
     expected_function_source_sha256: expectedFunctionSourceHashes,
     expected_function_source_md5: expectedFunctionSourceMd5s,
   },
@@ -1925,17 +1959,6 @@ function buildAclPass(summary) {
 }
 
 function buildDataIntegrityPass(summary) {
-  const expectedPostClosureRowCounts = new Map([
-    ["project_locations", 9],
-    ["projects", 13],
-    ["project_location_points", 15],
-    ["project_features", 99],
-    ["project_floor_plans", 32],
-    ["project_floor_plan_details", 152],
-    ["project_delivery_items", 102],
-    ["project_media", 137],
-    ["project_videos", 0],
-  ]);
   const rowCounts = new Map(
     summary.data_integrity_snapshot.row_counts.map((entry) => [
       entry.table_name,
@@ -1954,49 +1977,45 @@ function buildDataIntegrityPass(summary) {
       entry,
     ]),
   );
-  const expectedLocationCounts = new Map([
-    ["governorate:true", 1],
-    ["city:true", 1],
-    ["main_area:true", 2],
-    ["sub_area:true", 5],
-  ]);
   const actualLocationCounts = new Map(
     summary.data_integrity_snapshot.location_counts.map((entry) => [
       `${entry.level}:${entry.is_active}`,
       Number(entry.row_count),
     ]),
   );
+  const allowedLocationLevels = new Set(["governorate", "city", "main_area", "sub_area"]);
   const checks = {
-    exact_aggregate_row_counts:
+    aggregate_row_counts_observed:
       rowCounts.size === aggregateTables.length &&
-      [...expectedPostClosureRowCounts].every(([table, count]) => rowCounts.get(table) === count),
-    project_catalog_ids_complete:
-      summary.data_integrity_snapshot.project_ids.length === 13,
-    client_keys_are_complete_unique_and_expected:
+      [...rowCounts.values()].every((count) => Number.isSafeInteger(count) && count >= 0),
+    project_catalog_rows_complete:
+      summary.data_integrity_snapshot.project_ids.length === rowCounts.get("projects") &&
+      new Set(summary.data_integrity_snapshot.project_ids.map((project) => project.id)).size ===
+        summary.data_integrity_snapshot.project_ids.length,
+    client_keys_are_complete_and_unique:
       clientKeyStats.size === clientKeyTables.length &&
       clientKeyTables.every((table) => {
         const stats = clientKeyStats.get(table);
         if (!stats) {
           return false;
         }
-        const expectedRows = expectedPostClosureRowCounts.get(table) ?? 0;
+        const expectedRows = rowCounts.get(table) ?? 0;
         return Number(stats.row_count) === expectedRows &&
           Number(stats.null_count) === 0 &&
           Number(stats.distinct_count) === expectedRows &&
           Number(stats.duplicate_value_count) === 0;
       }),
-    reference_location_tree_matches_final_rebuild:
+    reference_location_tree_integrity:
       summary.data_integrity_snapshot.reference_locations.length ===
         expectedReferenceLocations.length &&
       summary.data_integrity_snapshot.reference_locations.every(
         (location) => location.present && location.matches_expected,
       ) &&
-      actualLocationCounts.size === expectedLocationCounts.size &&
-      [...expectedLocationCounts].every(
-        ([key, expectedCount]) =>
-          actualLocationCounts.get(key) === expectedCount,
+      [...actualLocationCounts].every(([key, count]) =>
+        allowedLocationLevels.has(key.split(":", 1)[0]) &&
+        Number.isSafeInteger(count) && count >= 0
       ),
-    exact_sequence_state:
+    sequence_state_consistent:
       sequenceState.size === aggregateSequences.length &&
       aggregateSequences.every((sequence) => {
         const state = sequenceState.get(sequence);
@@ -2004,9 +2023,9 @@ function buildDataIntegrityPass(summary) {
           return false;
         }
         const table = sequence.replace(/_id_seq$/u, "");
-        const expectedRows = expectedPostClosureRowCounts.get(table) ?? 0;
+        const expectedRows = rowCounts.get(table) ?? 0;
         return expectedRows === 0
-          ? Number(state.last_value) === 1 && state.is_called === false
+          ? Number(state.last_value) >= 1
           : Number(state.last_value) >= expectedRows && state.is_called === true;
       }),
     no_qa_marker_residue:

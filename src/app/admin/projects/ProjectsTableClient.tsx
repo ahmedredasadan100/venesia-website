@@ -496,7 +496,7 @@ export default function ProjectsTableClient({
           basePath={basePath}
           totalCount={controller.result.pagination.totalRows}
           pageSize={String(controller.result.pagination.pageSize)}
-          pageSizeOptions={["10", "20", "30", "50"]}
+          pageSizeOptions={["10", "20", "30"]}
           currentPage={controller.result.pagination.page}
           totalPages={controller.result.pagination.totalPages}
           emptySummaryText="لا توجد مشروعات"

@@ -50,6 +50,7 @@ export type ProjectEntryRoot = {
   latitude: string;
   longitude: string;
   map_zoom: string;
+  location_title: string;
   overview_title: string;
   overview_body: string;
   overview_media_type: "image" | "video";
@@ -57,6 +58,8 @@ export type ProjectEntryRoot = {
   overview_main_image_alt: string;
   delivery_title: string;
   delivery_body: string;
+  plans_title: string;
+  gallery_title: string;
   seo_title: string;
   seo_description: string;
   focus_keyword: string;
@@ -190,16 +193,19 @@ export const PROJECT_ENTRY_VALIDATION_FIELDS = [
   "map_zoom",
   "location_point_label",
   "feature_body",
+  "location_title",
   "overview_title",
   "overview_body",
   "overview_video_url",
   "floor_plan_name",
+  "plans_title",
   "floor_plan_architectural_image_alt",
   "floor_plan_furnishing_image_alt",
   "floor_plan_detail_label",
   "delivery_item_body",
   "delivery_title",
   "delivery_body",
+  "gallery_title",
   "overview_media_image",
   "overview_media_alt_text",
   "delivery_media_image",
@@ -299,6 +305,7 @@ export const PROJECT_ENTRY_FIELD_TABS: Record<string, string> = {
   longitude: PROJECT_ENTRY_TAB_IDS.location,
   map_zoom: PROJECT_ENTRY_TAB_IDS.location,
   location_point_label: PROJECT_ENTRY_TAB_IDS.location,
+  location_title: PROJECT_ENTRY_TAB_IDS.location,
   overview_title: PROJECT_ENTRY_TAB_IDS.overview,
   overview_body: PROJECT_ENTRY_TAB_IDS.overview,
   overview_media_type: PROJECT_ENTRY_TAB_IDS.overview,
@@ -310,6 +317,7 @@ export const PROJECT_ENTRY_FIELD_TABS: Record<string, string> = {
   overview_video_url: PROJECT_ENTRY_TAB_IDS.overview,
   overview_video_poster_alt: PROJECT_ENTRY_TAB_IDS.overview,
   floor_plan_name: PROJECT_ENTRY_TAB_IDS.plans,
+  plans_title: PROJECT_ENTRY_TAB_IDS.plans,
   floor_plan_detail_label: PROJECT_ENTRY_TAB_IDS.plans,
   floor_plan_detail_value: PROJECT_ENTRY_TAB_IDS.plans,
   floor_plan_architectural_image_alt: PROJECT_ENTRY_TAB_IDS.plans,
@@ -323,6 +331,7 @@ export const PROJECT_ENTRY_FIELD_TABS: Record<string, string> = {
   gallery_media_alt_text: PROJECT_ENTRY_TAB_IDS.media,
   gallery_video_url: PROJECT_ENTRY_TAB_IDS.media,
   gallery_video_poster_alt: PROJECT_ENTRY_TAB_IDS.media,
+  gallery_title: PROJECT_ENTRY_TAB_IDS.media,
   seo_title: PROJECT_ENTRY_TAB_IDS.seo,
   seo_description: PROJECT_ENTRY_TAB_IDS.seo,
   focus_keyword: PROJECT_ENTRY_TAB_IDS.seo,
@@ -365,6 +374,7 @@ export function createEmptyProjectEntry(
       latitude: "",
       longitude: "",
       map_zoom: "16",
+      location_title: "",
       overview_title: "",
       overview_body: "",
       overview_media_type: "image",
@@ -372,6 +382,8 @@ export function createEmptyProjectEntry(
       overview_main_image_alt: "",
       delivery_title: "",
       delivery_body: "",
+      plans_title: "",
+      gallery_title: "",
       seo_title: "",
       seo_description: "",
       focus_keyword: "",
@@ -606,6 +618,7 @@ export function projectEntryPayloadFromFormData(
       latitude: readString(formData, "latitude"),
       longitude: readString(formData, "longitude"),
       map_zoom: readString(formData, "map_zoom"),
+      location_title: readString(formData, "location_title"),
       overview_title: readString(formData, "overview_title"),
       overview_body: readString(formData, "overview_body"),
       overview_media_type:
@@ -614,6 +627,8 @@ export function projectEntryPayloadFromFormData(
       overview_main_image_alt: readString(formData, "overview_main_image_alt"),
       delivery_title: readString(formData, "delivery_title"),
       delivery_body: readString(formData, "delivery_body"),
+      plans_title: readString(formData, "plans_title"),
+      gallery_title: readString(formData, "gallery_title"),
       seo_title: seo.seoTitle,
       seo_description: seo.seoDescription,
       focus_keyword: seo.focusKeyword,
@@ -790,9 +805,6 @@ function collectProjectEntryFieldErrors(
     addError(errors, "feature_body", "لا تترك ميزة فارغة.");
   }
 
-  if (!project.overview_title) {
-    addError(errors, "overview_title", "عنوان قسم النظرة العامة مطلوب.");
-  }
   if (!stripHtml(project.overview_body)) {
     addError(errors, "overview_body", "النص التعريفي للنظرة العامة مطلوب.");
   }
@@ -827,9 +839,6 @@ function collectProjectEntryFieldErrors(
   validateClientKeys(errors, "delivery_item_body", payload.delivery_items.map((item) => item.client_key));
   if (payload.delivery_items.some((item) => !item.body)) {
     addError(errors, "delivery_item_body", "لا تترك بند تسليم فارغًا.");
-  }
-  if (!project.delivery_title) {
-    addError(errors, "delivery_title", "عنوان قسم المواصفات والتسليم مطلوب.");
   }
   if (!stripHtml(project.delivery_body)) {
     addError(errors, "delivery_body", "النص التعريفي للمواصفات والتسليم مطلوب.");

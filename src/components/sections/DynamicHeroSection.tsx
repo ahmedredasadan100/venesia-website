@@ -1,6 +1,6 @@
 "use client";
 
-import Image, { getImageProps } from "next/image";
+import { getImageProps } from "next/image";
 import Link from "next/link";
 import {
   useCallback,
@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import type { HeroSectionData } from "../../lib/page-sections";
+import type { HeroDomainSlide } from "../../lib/hero/domain-backed-slides";
 import { getHeroConfig } from "../../lib/page-sections";
 import {
   heroFlexJustifyClass,
@@ -23,6 +24,7 @@ import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
 import { usePrefersReducedMotion } from "../../hooks/use-prefers-reduced-motion";
 import RichTextContent from "../content/RichTextContent";
+import PublicMediaImage, { PUBLIC_MEDIA_IMAGE_FALLBACK } from "../public/PublicMediaImage";
 
 type DynamicHeroSectionProps = {
   hero: HeroSectionData;
@@ -31,6 +33,9 @@ type DynamicHeroSectionProps = {
   fallbackSubtitle?: string;
   fallbackImage?: string;
   belowTitle?: React.ReactNode;
+  domainSlides?: readonly HeroDomainSlide[];
+  autoplayMs?: number;
+  emptyState?: string | null;
 };
 
 export default function DynamicHeroSection({
@@ -40,21 +45,52 @@ export default function DynamicHeroSection({
   fallbackSubtitle,
   fallbackImage,
   belowTitle,
+  domainSlides,
+  autoplayMs,
+  emptyState,
 }: DynamicHeroSectionProps) {
   const variant = hero.variant || "internal-page";
 
   if (variant === "home-cinematic") {
-    return <HomeDynamicHero hero={hero} />;
+    return <HomeDynamicHero hero={hero} domainSlides={domainSlides} autoplayMs={autoplayMs} emptyState={emptyState} />;
   }
+
+  if (domainSlides && !domainSlides.length) {
+    return emptyState ? (
+      <section className="border-b border-[#D8B87A]/15 bg-[#05070B] px-6 py-16 text-center text-white/55">
+        <p>{emptyState}</p>
+      </section>
+    ) : null;
+  }
+
+  const domainSlide = domainSlides?.[0];
+  const resolvedHero = domainSlide ? {
+    ...hero,
+    config: {
+      ...(hero.config ?? {}),
+      eyebrow: domainSlide.eyebrow,
+      title: domainSlide.title,
+      highlight: domainSlide.highlight,
+      subtitle: domainSlide.subtitle,
+      description: domainSlide.description,
+      images: [domainSlide.desktopImage],
+      mobileImages: domainSlide.mobileImage ? [domainSlide.mobileImage] : [],
+      primaryCtaLabel: domainSlide.primaryCtaLabel,
+      primaryCtaHref: domainSlide.primaryCtaHref,
+      secondaryCtaLabel: domainSlide.secondaryCtaLabel,
+      secondaryCtaHref: domainSlide.secondaryCtaHref,
+    },
+  } : hero;
 
   return (
     <InternalDynamicHero
-      hero={hero}
+      hero={resolvedHero}
       fallbackTitle={fallbackTitle}
       fallbackEyebrow={fallbackEyebrow}
       fallbackSubtitle={fallbackSubtitle}
       fallbackImage={fallbackImage}
       belowTitle={belowTitle}
+      collapseHiddenContent={Boolean(domainSlides)}
     />
   );
 }
@@ -112,11 +148,27 @@ function HeroArtDirectedImage({
 }: HeroSlideImageProps) {
   const className = `hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none object-cover ${imagePositionClassName}`;
   const style = { filter: brightnessFilter };
+  const sourceKey = `${desktopSrc}\n${mobileSrc ?? ""}`;
+  const [failedSourceKey, setFailedSourceKey] = useState<string | null>(null);
 
   if (!mobileSrc || mobileSrc === desktopSrc) {
     return (
-      <Image
+      <PublicMediaImage
         src={desktopSrc}
+        alt=""
+        fill
+        priority={priority}
+        sizes="100vw"
+        className={className}
+        style={style}
+      />
+    );
+  }
+
+  if (failedSourceKey === sourceKey) {
+    return (
+      <PublicMediaImage
+        src={PUBLIC_MEDIA_IMAGE_FALLBACK}
         alt=""
         fill
         priority={priority}
@@ -152,12 +204,13 @@ function HeroArtDirectedImage({
         alt=""
         className={className}
         style={{ ...mobileRest.style, ...style }}
+        onError={() => setFailedSourceKey(sourceKey)}
       />
     </picture>
   );
 }
 
-function buildHomeHeroSlides(desktopImages: string[], mobileImages: string[]) {
+function buildHomeHeroSlides(desktopImages: string[], mobileImages: string[]): HeroDomainSlide[] {
   const hasMobileSet = mobileImages.length > 0;
   const count = hasMobileSet
     ? Math.max(desktopImages.length, mobileImages.length)
@@ -166,15 +219,26 @@ function buildHomeHeroSlides(desktopImages: string[], mobileImages: string[]) {
   return Array.from({ length: count }, (_, index) => {
     const desktop = desktopImages[index] ?? mobileImages[index] ?? "";
     const mobile = mobileImages[index] ?? desktop;
-    return { desktop, mobile: mobile !== desktop ? mobile : undefined };
-  }).filter((slide) => Boolean(slide.desktop));
+    return { id: `manual-${index}`, desktopImage: desktop, mobileImage: mobile !== desktop ? mobile : undefined };
+  }).filter((slide) => Boolean(slide.desktopImage));
 }
 
-function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
+function HomeDynamicHero({
+  hero,
+  domainSlides,
+  autoplayMs = 7500,
+  emptyState,
+}: {
+  hero: HeroSectionData;
+  domainSlides?: readonly HeroDomainSlide[];
+  autoplayMs?: number;
+  emptyState?: string | null;
+}) {
   const config = getHeroConfig(hero);
   const images = config.images ?? [];
   const mobileImages = config.mobileImages ?? [];
-  const slides = buildHomeHeroSlides(images, mobileImages);
+  const isDomainBacked = domainSlides !== undefined;
+  const slides = domainSlides ? [...domainSlides] : buildHomeHeroSlides(images, mobileImages);
   const [activeIndex, setActiveIndex] = useState(0);
   const [preparedSlideIndexes, setPreparedSlideIndexes] = useState<ReadonlySet<number>>(
     () => new Set([0]),
@@ -191,8 +255,8 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
 
     timerRef.current = setInterval(() => {
       setActiveIndex((current) => (current + 1) % slideCount);
-    }, 7500);
-  }, [canSwipe, reducedMotion, slideCount]);
+    }, autoplayMs);
+  }, [autoplayMs, canSwipe, reducedMotion, slideCount]);
 
   useEffect(() => {
     startAutoplay();
@@ -206,10 +270,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
 
     const nextIndex = (safeIndex + 1) % slideCount;
     const preparationTimer = setTimeout(() => {
-      setPreparedSlideIndexes((current) => {
-        if (current.has(nextIndex)) return current;
-        return new Set([...current, nextIndex]);
-      });
+      setPreparedSlideIndexes(new Set([safeIndex, nextIndex]));
     }, 2500);
 
     return () => clearTimeout(preparationTimer);
@@ -241,24 +302,73 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
     onSwipeRight: goToPrev,
   });
 
-  const title = config.title ?? "";
-  const highlight = config.highlight ?? "";
-  const subtitle = config.subtitle ?? "";
+  const activeSlide = slides[safeIndex];
+  const title = activeSlide?.title ?? config.title ?? "";
+  const highlight = activeSlide?.highlight ?? config.highlight ?? "";
+  const subtitle = activeSlide?.subtitle ?? config.subtitle ?? "";
   const description = resolveDistinctHeroDescription(
-    config.description,
+    activeSlide?.description ?? config.description,
     subtitle,
   );
+  const activeConfig = {
+    ...config,
+    eyebrow: activeSlide?.eyebrow ?? config.eyebrow,
+    title,
+    highlight,
+    subtitle,
+    description,
+    primaryCtaLabel: activeSlide?.primaryCtaLabel ?? config.primaryCtaLabel,
+    primaryCtaHref: activeSlide?.primaryCtaHref ?? config.primaryCtaHref,
+    secondaryCtaLabel: activeSlide?.secondaryCtaLabel ?? config.secondaryCtaLabel,
+    secondaryCtaHref: activeSlide?.secondaryCtaHref ?? config.secondaryCtaHref,
+  };
 
   const hasHeroContent = Boolean(
-    images.length ||
-      mobileImages.length ||
+    slides.length ||
       title ||
       highlight ||
       subtitle ||
       description ||
       config.eyebrow,
   );
-  if (!hasHeroContent) return null;
+  if (!hasHeroContent) {
+    return emptyState ? (
+      <section className="border-b border-[#D8B87A]/15 bg-[#05070B] px-6 py-16 text-center text-white/55">
+        <p>{emptyState}</p>
+      </section>
+    ) : null;
+  }
+
+  const contentElements: Partial<Record<HeroElementKey, ReactNode>> = {
+    eyebrow: activeConfig.eyebrow && activeConfig.showEyebrow ? (
+      <div className={`inline-flex max-w-full rounded-full border border-white/10 bg-[#0B1220]/32 px-4 py-3 text-sm tracking-wide text-[#D8B87A] backdrop-blur-md ${heroTextAlignClass(activeConfig.eyebrowAlignment)} ${activeConfig.eyebrowBold ? "font-bold" : "font-normal"}`}>
+        {activeConfig.eyebrow}
+      </div>
+    ) : null,
+    title: title && activeConfig.showTitle ? (
+      <h1 className={`max-w-none text-4xl leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:text-6xl lg:text-7xl ${heroTextAlignClass(activeConfig.titleAlignment)} ${activeConfig.titleBold ? "font-bold" : "font-normal"}`}>
+        {title}
+      </h1>
+    ) : null,
+    highlight: highlight && activeConfig.showHighlight ? (
+      <p className={`bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-2xl text-transparent ${heroTextAlignClass(activeConfig.highlightAlignment)} ${activeConfig.highlightBold ? "font-bold" : "font-medium"}`}>
+        {highlight}
+      </p>
+    ) : null,
+    subtitle: subtitle && activeConfig.showSubtitle ? (
+      <p className={`text-2xl leading-tight text-[#E8D5A8] md:text-4xl ${heroTextAlignClass(activeConfig.subtitleAlignment)} ${activeConfig.subtitleBold ? "font-bold" : "font-semibold"}`}>
+        {subtitle}
+      </p>
+    ) : null,
+    description: description && activeConfig.showDescription ? (
+      <RichTextContent
+        value={description}
+        mode="auto"
+        className={`max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9 ${heroTextAlignClass(activeConfig.descriptionAlignment)}`}
+      />
+    ) : null,
+    cta: activeConfig.showCta ? <HeroCtaButtons config={activeConfig} alignment={activeConfig.ctaAlignment} /> : null,
+  };
 
   return (
     <section
@@ -271,7 +381,7 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
       <div className="absolute inset-0 z-0 overflow-hidden" aria-hidden>
         {slides.map((slide, index) => (
           <div
-            key={`${slide.desktop}-${slide.mobile ?? "d"}-${index}`}
+            key={`${slide.id}-${index}`}
             className={`hero-slide-fade absolute inset-0 transition-opacity ease-in-out ${
               index === safeIndex ? "opacity-100" : "opacity-0"
             } ${reducedMotion ? "duration-150" : "duration-[2400ms]"}`}
@@ -279,8 +389,8 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
             {/* Mount the active slide immediately, then prepare the next slide ahead of autoplay. */}
             {index === safeIndex || preparedSlideIndexes.has(index) ? (
               <HeroArtDirectedImage
-                desktopSrc={slide.desktop}
-                mobileSrc={slide.mobile}
+                desktopSrc={slide.desktopImage}
+                mobileSrc={slide.mobileImage}
                 priority={index === 0}
                 imagePositionClassName={config.imagePositionClassName ?? "object-center"}
               />
@@ -296,59 +406,48 @@ function HomeDynamicHero({ hero }: { hero: HeroSectionData }) {
 
       <div className="relative z-10 flex min-h-screen items-center max-md:items-start max-md:pt-40">
         <div className="mx-auto flex w-full max-w-7xl items-center px-6 pt-28 pb-20 max-md:pt-0 max-md:pb-24">
-          <div className="min-w-0 max-w-4xl text-right lg:min-w-auto">
-            <div className="lg:translate-y-[5em]">
-              {config.eyebrow ? (
-                <div className="mb-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
-                  {config.eyebrow}
+          <div className="min-w-0 max-w-4xl lg:min-w-auto">
+            {isDomainBacked ? (
+              <div className="flex flex-col gap-4">
+                {activeConfig.heroElementOrder.map((key) => {
+                  const node = contentElements[key];
+                  return node == null ? null : <Fragment key={key}>{node}</Fragment>;
+                })}
+              </div>
+            ) : (
+              <div className="text-right">
+                <div className="lg:translate-y-[5em]">
+                  {config.eyebrow ? (
+                    <div className="mb-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
+                      {config.eyebrow}
+                    </div>
+                  ) : null}
+                  <h1 className="max-w-none text-4xl font-bold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:max-w-[12ch] md:text-6xl lg:w-max lg:max-w-none lg:pb-[1.06em] lg:text-7xl">
+                    <span className="max-md:block max-md:whitespace-nowrap lg:block lg:whitespace-nowrap">{title}</span>
+                    {highlight ? (
+                      <span className="mt-2 block bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-transparent md:mt-3 lg:whitespace-nowrap">
+                        {highlight}
+                      </span>
+                    ) : null}
+                  </h1>
                 </div>
-              ) : null}
-
-              <h1 className="max-w-none md:max-w-[12ch] lg:max-w-none lg:w-max lg:pb-[1.06em] text-4xl font-bold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:text-6xl lg:text-7xl">
-                <span className="max-md:block max-md:whitespace-nowrap lg:block lg:whitespace-nowrap">{title}</span>
-                {highlight ? (
-                  <span className="mt-2 block bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-transparent md:mt-3 lg:whitespace-nowrap">
-                    {highlight}
-                  </span>
+                {subtitle ? (
+                  <div className="mt-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-[#D8B87A]/22 bg-[rgba(216,184,122,0.10)] px-3 py-3 text-xs tracking-normal text-[#E8D5A8] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide md:text-base">
+                    {subtitle}
+                  </div>
                 ) : null}
-              </h1>
-            </div>
-
-            {subtitle ? (
-              <div className="mt-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-[#D8B87A]/22 bg-[rgba(216,184,122,0.10)] px-3 py-3 text-xs tracking-normal text-[#E8D5A8] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide md:text-base">
-                {subtitle}
-              </div>
-            ) : null}
-
-            {description ? (
-              <p
-                className={`${subtitle ? "mt-4" : "mt-6"} max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9`}
-              >
-                {description}
-              </p>
-            ) : null}
-
-            {config.showCta !== false && (config.primaryCtaLabel || config.secondaryCtaLabel) ? (
-              <div className="mt-8 flex flex-wrap gap-3 md:gap-4">
-                {config.primaryCtaLabel && config.primaryCtaHref ? (
-                  <HeroPressableLink
-                    href={config.primaryCtaHref}
-                    className="home-pressable--hero-primary inline-flex h-11 items-center rounded-full bg-white px-6 font-medium text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7"
-                  >
-                    {config.primaryCtaLabel}
-                  </HeroPressableLink>
+                {description ? (
+                  <p className={`${subtitle ? "mt-4" : "mt-6"} max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9`}>
+                    {description}
+                  </p>
                 ) : null}
-
-                {config.secondaryCtaLabel && config.secondaryCtaHref ? (
-                  <HeroPressableLink
-                    href={config.secondaryCtaHref}
-                    className="home-pressable--hero-secondary inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 font-medium text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7"
-                  >
-                    {config.secondaryCtaLabel}
-                  </HeroPressableLink>
+                {config.showCta !== false && (config.primaryCtaLabel || config.secondaryCtaLabel) ? (
+                  <div className="mt-8">
+                    <HeroCtaButtons config={config} alignment={config.ctaAlignment} />
+                  </div>
                 ) : null}
               </div>
-            ) : null}
+            )}
           </div>
 
         </div>
@@ -383,14 +482,16 @@ function HeroReservedSlot({
   hasContent,
   visible,
   className,
+  reserveWhenHidden = true,
   children,
 }: {
   hasContent: boolean;
   visible: boolean;
   className?: string;
+  reserveWhenHidden?: boolean;
   children: ReactNode;
 }) {
-  if (!hasContent) return null;
+  if (!hasContent || (!visible && !reserveWhenHidden)) return null;
 
   return (
     <div
@@ -454,7 +555,8 @@ function InternalDynamicHero({
   fallbackSubtitle,
   fallbackImage,
   belowTitle,
-}: DynamicHeroSectionProps) {
+  collapseHiddenContent = false,
+}: DynamicHeroSectionProps & { collapseHiddenContent?: boolean }) {
   const config = getHeroConfig(hero);
   const isAboutPage = hero.page?.slug === "about";
   const isCompactHero = isAboutPage || config.heroLayout === "compact";
@@ -489,6 +591,7 @@ function InternalDynamicHero({
       <HeroReservedSlot
         hasContent={Boolean(eyebrow)}
         visible={config.showEyebrow}
+        reserveWhenHidden={!collapseHiddenContent}
         className={`${heroTextAlignClass(config.eyebrowAlignment)} ${
           config.eyebrowAlignment === "center"
             ? "flex justify-center"
@@ -517,6 +620,8 @@ function InternalDynamicHero({
         return <h1 className={titleClass}>{title}</h1>;
       }
 
+      if (collapseHiddenContent) return null;
+
       // Hidden title: non-semantic spacer preserving typography (avoid hidden h1).
       return (
         <div
@@ -534,6 +639,7 @@ function InternalDynamicHero({
       <HeroReservedSlot
         hasContent={Boolean(highlight)}
         visible={config.showHighlight}
+        reserveWhenHidden={!collapseHiddenContent}
         className={heroTextAlignClass(config.highlightAlignment)}
       >
         {isAboutPage ? (
@@ -559,6 +665,7 @@ function InternalDynamicHero({
       <HeroReservedSlot
         hasContent={Boolean(subtitle)}
         visible={config.showSubtitle}
+        reserveWhenHidden={!collapseHiddenContent}
         className={`max-w-2xl ${heroTextAlignClass(config.subtitleAlignment)} ${
           config.subtitleAlignment === "center"
             ? "mx-auto"
@@ -580,6 +687,7 @@ function InternalDynamicHero({
       <HeroReservedSlot
         hasContent={Boolean(description)}
         visible={config.showDescription}
+        reserveWhenHidden={!collapseHiddenContent}
         className={`max-w-2xl ${heroTextAlignClass(config.descriptionAlignment)} ${
           config.descriptionAlignment === "center"
             ? "mx-auto"
@@ -596,7 +704,7 @@ function InternalDynamicHero({
       </HeroReservedSlot>
     ),
     breadcrumb: hasBreadcrumb ? (
-      <HeroReservedSlot hasContent visible={config.showBreadcrumb}>
+      <HeroReservedSlot hasContent visible={config.showBreadcrumb} reserveWhenHidden={!collapseHiddenContent}>
         {belowTitle}
       </HeroReservedSlot>
     ) : null,
@@ -605,7 +713,7 @@ function InternalDynamicHero({
         config={config}
         alignment={config.ctaAlignment}
         visible={config.showCta !== false}
-        reserveWhenHidden
+        reserveWhenHidden={!collapseHiddenContent}
       />
     ),
   };

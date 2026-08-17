@@ -1,11 +1,11 @@
 "use client";
 
-import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 
 import { getProjectHref } from "../../lib/projects/public-helpers";
 import type { PublicProject } from "../../lib/projects/public-types";
+import PublicMediaImage from "../public/PublicMediaImage";
 import PlainTextContent from "../content/PlainTextContent";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import {
@@ -229,7 +229,7 @@ function MainFeaturedCard({
         {display.showProjectImage ? (
           <div className="relative w-full shrink-0 pb-3.5 lg:min-h-[320px] lg:pb-0">
             <div className="relative h-56 w-full overflow-hidden sm:h-64 lg:absolute lg:inset-0 lg:h-auto">
-              <Image
+              <PublicMediaImage
                 src={project.cardImage.src}
                 alt={project.cardImage.alt}
                 fill
@@ -309,7 +309,7 @@ function SideFeaturedCard({
     >
       {display.showProjectImage ? (
         <div className="relative h-[175px] overflow-hidden">
-          <Image
+          <PublicMediaImage
             src={project.cardImage.src}
             alt={project.cardImage.alt}
             fill

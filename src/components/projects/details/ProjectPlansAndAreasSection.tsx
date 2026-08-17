@@ -1,17 +1,18 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import Image from "next/image";
-
 import { useSwipeSlider } from "../../../hooks/use-swipe-slider";
 import type { PublicProjectImage, PublicProjectPlan } from "../../../lib/projects/public-types";
+import PublicMediaImage from "../../public/PublicMediaImage";
 
 type ProjectPlansAndAreasSectionProps = {
   areas: PublicProjectPlan[];
+  title: string | null;
 };
 
 export default function ProjectPlansAndAreasSection({
   areas,
+  title,
 }: ProjectPlansAndAreasSectionProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedImage, setSelectedImage] = useState<PublicProjectImage | null>(null);
@@ -50,21 +51,13 @@ export default function ProjectPlansAndAreasSection({
       className="scroll-mt-24 border-y border-white/10 bg-white/[0.025] px-6 py-16"
     >
       <div className="mx-auto max-w-7xl">
-        <div className="mb-9 flex flex-col gap-5 text-center lg:flex-row lg:items-end lg:justify-between lg:text-right">
-          <div>
-            <p className="mb-3 text-sm font-medium tracking-[0.28em] text-[#D8B87A]/70">
-              المساحات والمخططات
-            </p>
-
-            <h2 className="text-3xl font-semibold text-[#D8B87A] md:text-4xl">
-              اختيارات واضحة لمساحات مدروسة
-            </h2>
-
-            <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-white/55 lg:mx-0">
-              كل مساحة هنا لها توزيع عملي يخدم الحياة اليومية، من أول المدخل حتى
-              آخر تفصيلة داخل الوحدة.
-            </p>
-          </div>
+        {(title || isSlider) ? (
+          <div className="mb-9 flex flex-col gap-5 text-center lg:flex-row lg:items-end lg:justify-between lg:text-right">
+            {title ? (
+              <h2 className="text-3xl font-semibold text-[#D8B87A] md:text-4xl">
+                {title}
+              </h2>
+            ) : null}
 
           {isSlider ? (
             <div className="flex justify-center gap-3 lg:justify-end">
@@ -87,7 +80,8 @@ export default function ProjectPlansAndAreasSection({
               </button>
             </div>
           ) : null}
-        </div>
+          </div>
+        ) : null}
 
         <div
           ref={containerRef}
@@ -119,7 +113,7 @@ export default function ProjectPlansAndAreasSection({
             ×
           </button>
 
-          <Image
+          <PublicMediaImage
             src={selectedImage.src}
             alt={selectedImage.alt}
             width={1200}
@@ -155,7 +149,7 @@ function AreaCard({
           onClick={() => onOpenImage(primaryImage)}
           className="group relative block h-56 w-full overflow-hidden rounded-2xl border border-[#D8B87A]/15 bg-black/25 text-right"
         >
-          <Image
+          <PublicMediaImage
             src={primaryImage.src}
             alt={primaryImage.alt}
             fill

@@ -11,6 +11,7 @@ import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../../ui
 
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
+  PROJECTS_HUB_FILTER_IDS,
   PROJECTS_HUB_VIEW_MODES,
   type ProjectsHubListingModuleConfig,
 } from "../../../../lib/page-blocks/projects-hub-config";
@@ -35,11 +36,6 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
   return (
     <div className="space-y-6">
       <input type="hidden" name="config_schema" value="projects-hub-listing" />
-      {/* Filters are derived from loaded project types on the public page — not Admin-selected. */}
-      <input type="hidden" name="default_filter" value="all" />
-      <input type="hidden" name="visible_filters" value="all" />
-      <input type="hidden" name="visible_filters" value="residential" />
-      <input type="hidden" name="visible_filters" value="commercial" />
       <input type="hidden" name="sort" value={config.sort || "homepage_order"} />
 
       <ModuleEditorSection>
@@ -73,9 +69,36 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
       <ModuleEditorSection>
         <ModuleEditorSectionHeading intent="domain">فلاتر المشروعات</ModuleEditorSectionHeading>
         <p className="text-xs leading-6 text-white/45">
-          خيارات الفلاتر (الكل / سكني / تجاري وأي نوع مدعوم مستقبلاً) تُشتق تلقائياً من أنواع المشروعات
-          المحمّلة في صفحة المشروعات.
+          لا تظهر شريحة لنوع لا توجد له مشروعات منشورة، حتى لو كانت مفعلة هنا.
         </p>
+
+        <ModuleEditorFieldGrid>
+          <ModuleEditorField nature="standard" span={4}>
+            <AdminFormListboxSelect
+              name="default_filter"
+              label="الفلتر الافتراضي"
+              defaultValue={config.defaultFilter}
+              options={PROJECTS_HUB_FILTER_IDS.map((filter) => ({
+                value: filter,
+                label: filter === "all" ? "كل المشروعات" : filter === "residential" ? "سكني" : "تجاري",
+              }))}
+            />
+          </ModuleEditorField>
+          <ModuleEditorField nature="standard" span={8}>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {PROJECTS_HUB_FILTER_IDS.map((filter) => (
+                <AdminFormSwitch
+                  key={filter}
+                  name="visible_filters"
+                  label={filter === "all" ? "كل المشروعات" : filter === "residential" ? "سكني" : "تجاري"}
+                  value={filter}
+                  defaultChecked={config.visibleFilters.includes(filter)}
+                  surface
+                />
+              ))}
+            </div>
+          </ModuleEditorField>
+        </ModuleEditorFieldGrid>
 
         <VisibilityToggle
           name="show_filter_bar"
@@ -100,6 +123,11 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
             name="show_project_code"
             label="إظهار كود المشروع"
             defaultChecked={config.showProjectCode !== false}
+          />
+          <VisibilityToggle
+            name="show_project_name"
+            label="إظهار اسم المشروع"
+            defaultChecked={config.showProjectName !== false}
           />
           <VisibilityToggle
             name="show_project_description"

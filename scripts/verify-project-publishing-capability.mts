@@ -170,10 +170,12 @@ check(
     !publicLoader.includes("loadFeaturedProjects"),
 );
 check(
-  "Track uses its explicit non-Marketing loader",
+  "Track uses its explicit loader under the same canonical published truth",
   publicLoader.includes("loadTrackProjectBySlug") &&
     trackDetail.includes("loadTrackProjectBySlug") &&
-    !trackDetail.includes("loadProjectBySlugResult"),
+    !trackDetail.includes("loadProjectBySlugResult") &&
+    publicLoader.includes('.eq("slug", slug)') &&
+    !publicLoader.includes('if (source === "marketing")'),
 );
 check(
   "Admin Preview authenticates, is noindex/nofollow, and reuses public renderers",

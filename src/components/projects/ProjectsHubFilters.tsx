@@ -12,6 +12,7 @@ type ProjectsHubFiltersProps = {
   onFilterChange: (filter: ProjectHubFilterId) => void;
   /** Full loaded projects array — filter chips are derived from present categories. */
   allProjects: PublicProject[];
+  visibleFilters?: ProjectHubFilterId[];
 };
 
 function countForFilter(option: HubFilterOption, stats: ReturnType<typeof getProjectStats>) {
@@ -25,15 +26,20 @@ export default function ProjectsHubFilters({
   activeFilter,
   onFilterChange,
   allProjects,
+  visibleFilters,
 }: ProjectsHubFiltersProps) {
   const stats = getProjectStats(allProjects);
-  const filters = getHubFilterOptionsFromProjects(allProjects);
+  const filters = getHubFilterOptionsFromProjects(allProjects).filter(
+    (filter) => !visibleFilters || visibleFilters.includes(filter.id),
+  );
 
   useEffect(() => {
-    const options = getHubFilterOptionsFromProjects(allProjects);
+    const options = getHubFilterOptionsFromProjects(allProjects).filter(
+      (filter) => !visibleFilters || visibleFilters.includes(filter.id),
+    );
     if (options.some((filter) => filter.id === activeFilter)) return;
-    onFilterChange("all");
-  }, [activeFilter, allProjects, onFilterChange]);
+    onFilterChange(options[0]?.id ?? "all");
+  }, [activeFilter, allProjects, onFilterChange, visibleFilters]);
 
   return (
     <section className="relative mt-0">

@@ -5,12 +5,6 @@ import {
   type ProjectsHubMapPinConfig,
 } from "../page-blocks/projects-hub-config";
 
-export type ProjectsHubHeroPresentationProps = {
-  autoplayMs: number;
-  emptyState: string | null;
-  selectionMode: "auto_residential_with_media";
-};
-
 export type ProjectsHubFeaturedPresentationProps = {
   title: string;
   subtitle: string;
@@ -39,6 +33,7 @@ export type ProjectsHubListingPresentationProps = {
   showFilterBar: boolean;
   showProjectImage: boolean;
   showProjectCode: boolean;
+  showProjectName: boolean;
   showProjectDescription: boolean;
   showProjectType: boolean;
   showProjectLocation: boolean;
@@ -59,12 +54,6 @@ export type ProjectsHubMapPresentationProps = {
 };
 
 /** Presentation-only defaults. Project identities and map pins are database-owned. */
-export const PROJECTS_HUB_HERO_DEFAULTS: ProjectsHubHeroPresentationProps = {
-  autoplayMs: 6000,
-  emptyState: null,
-  selectionMode: "auto_residential_with_media",
-};
-
 export const PROJECTS_HUB_FEATURED_DEFAULTS: ProjectsHubFeaturedPresentationProps = {
   title: "مشروع مميز",
   subtitle: "اختيار يعكس مسار التنفيذ على الأرض",
@@ -93,6 +82,7 @@ export const PROJECTS_HUB_LISTING_DEFAULTS: ProjectsHubListingPresentationProps 
   showFilterBar: true,
   showProjectImage: true,
   showProjectCode: true,
+  showProjectName: true,
   showProjectDescription: true,
   showProjectType: true,
   showProjectLocation: true,
@@ -111,16 +101,6 @@ export const PROJECTS_HUB_MAP_DEFAULTS: ProjectsHubMapPresentationProps = {
   exploreButtonLabel: "استكشف على الخريطة",
   mapPins: [],
 };
-
-export function mapProjectsHubHeroProps(
-  module: Extract<ProjectsHubRenderPlanModule, { slug: "projects-hub-hero" }>,
-): ProjectsHubHeroPresentationProps {
-  return {
-    selectionMode: module.config.selectionMode,
-    autoplayMs: module.config.autoplayMs || PROJECTS_HUB_HERO_DEFAULTS.autoplayMs,
-    emptyState: module.config.emptyState ?? null,
-  };
-}
 
 export function mapProjectsHubFeaturedProps(
   module: Extract<ProjectsHubRenderPlanModule, { slug: "projects-hub-featured" }>,
@@ -159,6 +139,7 @@ export function mapProjectsHubListingProps(
     showFilterBar: module.config.showFilterBar !== false,
     showProjectImage: module.config.showProjectImage !== false,
     showProjectCode: module.config.showProjectCode !== false,
+    showProjectName: module.config.showProjectName !== false,
     showProjectDescription: module.config.showProjectDescription !== false,
     showProjectType: module.config.showProjectType !== false,
     showProjectLocation: module.config.showProjectLocation !== false,

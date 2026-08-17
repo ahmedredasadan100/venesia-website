@@ -16,9 +16,10 @@ import {
 } from "./map-public-project";
 import type { PublicProject } from "./public-types";
 
-const PUBLIC_PROJECT_COLUMNS = "id,type,arabic_name,english_name,slug,code,featured,show_on_homepage,homepage_order,brochure_url,publication_status,published_at,general_description,short_description,image,image_alt,hero_image,hero_image_alt,small_box_image,small_box_image_alt,governorate_id,city_id,main_area_id,sub_area_id,location_label,location_description,google_maps_url,latitude,longitude,map_zoom,overview_title,overview_body,overview_media_type,overview_main_image,overview_main_image_alt,delivery_title,delivery_body,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,created_at,updated_at";
+const PUBLIC_PROJECT_COLUMNS = "id,type,arabic_name,english_name,slug,code,featured,show_on_homepage,homepage_order,brochure_url,publication_status,published_at,general_description,short_description,image,image_alt,hero_image,hero_image_alt,small_box_image,small_box_image_alt,governorate_id,city_id,main_area_id,sub_area_id,location_label,location_description,google_maps_url,latitude,longitude,map_zoom,location_title,overview_title,overview_body,overview_media_type,overview_main_image,overview_main_image_alt,plans_title,delivery_title,delivery_body,gallery_title,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,created_at,updated_at";
 
 const PUBLIC_PROJECT_AGGREGATE_COLUMNS = `${PUBLIC_PROJECT_COLUMNS},governorate:project_locations!projects_governorate_id_fkey(id,level,parent_id,name_ar,name_en),city:project_locations!projects_city_id_fkey(id,level,parent_id,name_ar,name_en),main_area:project_locations!projects_main_area_id_fkey(id,level,parent_id,name_ar,name_en),sub_area:project_locations!projects_sub_area_id_fkey(id,level,parent_id,name_ar,name_en),location_points:project_location_points(id,kind,label,distance_text,sort_order),features:project_features(id,body,sort_order),floor_plans:project_floor_plans(id,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order,details:project_floor_plan_details(id,floor_plan_id,label,value,sort_order)),delivery_items:project_delivery_items(id,body,sort_order),media:project_media(id,section,image,alt_text,sort_order),videos:project_videos(id,section,video_url,poster_image,poster_alt,sort_order)` as const;
+const PUBLIC_PROJECT_MODEL_CACHE_VERSION = "section-title-contract-v2";
 
 function selectPublicProjectAggregate() {
   return getSupabaseAdmin()
@@ -111,7 +112,7 @@ async function queryPublicProjects() {
 async function queryPublicProjectsCached() {
   return unstable_cache(
     () => queryPublicProjects(),
-    ["public-projects-clean-aggregate"],
+    ["public-projects-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION],
     { revalidate: 300, tags: ["projects"] },
   )();
 }
@@ -211,10 +212,9 @@ async function queryProjectBySlug(
 ): Promise<LoadProjectBySlugResult> {
   if (!PROJECT_SLUG_PATTERN.test(slug)) return { status: "invalid_slug", project: null };
 
-  let request = selectPublicProjectAggregate().eq("slug", slug);
-  if (source === "marketing") {
-    request = request.eq("publication_status", "published");
-  }
+  const request = selectPublicProjectAggregate()
+    .eq("slug", slug)
+    .eq("publication_status", "published");
   const rootResult = await request.maybeSingle();
 
   if (rootResult.error) {
@@ -236,18 +236,18 @@ export const loadProjectBySlugResult = cache(async function loadProjectBySlugRes
 ): Promise<LoadProjectBySlugResult> {
   return unstable_cache(
     () => queryProjectBySlug(slug, "marketing"),
-    ["public-project-clean-aggregate", slug],
+    ["public-project-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION, slug],
     { revalidate: 300, tags: ["projects", "project"] },
   )();
 });
 
-/** Track keeps its pre-capability slug lookup semantics and is not Marketing visibility. */
+/** Tracking uses the same canonical public visibility truth as every public Project route. */
 export const loadTrackProjectBySlug = cache(async function loadTrackProjectBySlug(
   slug: string,
 ): Promise<PublicProject | null> {
   return unstable_cache(
     () => queryProjectBySlug(slug, "track"),
-    ["track-project-clean-aggregate", slug],
+    ["track-project-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION, slug],
     { revalidate: 300, tags: ["projects", "project"] },
   )().then((result) => result.project);
 });

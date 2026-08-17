@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Image from "next/image";
+import PublicMediaImage from "../../public/PublicMediaImage";
 
 import { getProjectTrackHref } from "../../../lib/projects/public-helpers";
 import { type PublicProject } from "../../../lib/projects/public-types";
@@ -12,7 +12,7 @@ type ProjectDetailsHeroProps = {
 export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps) {
   return (
     <section className="relative isolate min-h-[620px] overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]">
-      <Image
+      <PublicMediaImage
         src={project.heroImage.src}
         alt={project.heroImage.alt}
         fill
@@ -58,7 +58,7 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
           <div className="hidden lg:row-span-2 lg:flex lg:justify-end">
             <div className="w-[420px] rounded-[28px] border border-[#D8B87A]/20 bg-black/24 p-5 shadow-[0_30px_90px_rgba(0,0,0,0.35)] backdrop-blur-md">
               <div className="relative h-[280px] overflow-hidden rounded-[22px]">
-                <Image
+                <PublicMediaImage
                   src={project.heroBoxImage.src}
                   alt={project.heroBoxImage.alt}
                   fill

@@ -53,6 +53,18 @@ export function preservePublicProjectOrder(projects: PublicProject[]) {
   return [...projects];
 }
 
+/** CMS-owned Homepage order; zero/unset values remain after explicitly ordered rows. */
+export function sortProjectsByHomepageOrder(projects: PublicProject[]) {
+  return projects
+    .map((project, sourceIndex) => ({ project, sourceIndex }))
+    .sort((left, right) => {
+      const leftOrder = left.project.homepageOrder > 0 ? left.project.homepageOrder : Number.MAX_SAFE_INTEGER;
+      const rightOrder = right.project.homepageOrder > 0 ? right.project.homepageOrder : Number.MAX_SAFE_INTEGER;
+      return leftOrder - rightOrder || left.sourceIndex - right.sourceIndex;
+    })
+    .map(({ project }) => project);
+}
+
 export function getProjectsByFilter(projects: PublicProject[], filterId: ProjectHubFilterId) {
   const sorted = preservePublicProjectOrder(projects);
   if (filterId === "all") return sorted;
