@@ -6,6 +6,7 @@ import {
   AdminEntityListQueryValidationError,
   isSameAdminEntityListScope,
   normalizeAdminEntityListQuery,
+  normalizeAdminEntityListQueryWithRouteParams,
   parseAdminEntityListRequestQuery,
   serializeAdminEntityListQuery,
   writeAdminEntityListQuery,
@@ -79,6 +80,41 @@ const contract: AdminEntityListQueryContract<Filters, SortField> = {
     params.delete("category");
     if (filters.status !== "all") params.set("status", filters.status);
     if (filters.category) params.set("category", String(filters.category));
+  },
+};
+
+const routeOwnedContract: AdminEntityListQueryContract<
+  { projectId: number; visibility: "all" | "visible" | "hidden" },
+  "sort_order"
+> = {
+  mode: "bounded-client",
+  filtersSchema: z.strictObject({
+    projectId: z.number().int().positive(),
+    visibility: z.enum(["all", "visible", "hidden"]),
+  }),
+  sortFields: ["sort_order"],
+  defaultSort: { field: "sort_order", direction: "asc" },
+  defaultPageSize: 10,
+  pageSizeOptions: [10],
+  maxPageSize: 10,
+  searchMinLength: 1,
+  rawFilterSchemas: {},
+  parseFilters(params) {
+    return {
+      projectId: Number(params.get("project_id")),
+      visibility:
+        params.get("visibility") === "visible" ||
+        params.get("visibility") === "hidden"
+          ? params.get("visibility") as "visible" | "hidden"
+          : "all",
+    };
+  },
+  writeFilters(filters, params) {
+    params.set("project_id", String(filters.projectId));
+    params.delete("visibility");
+    if (filters.visibility !== "all") {
+      params.set("visibility", filters.visibility);
+    }
   },
 };
 
@@ -161,6 +197,25 @@ assert.deepEqual(
 );
 // Canonical defaults do not pollute the URL.
 assert.equal(writeAdminEntityListQuery(contract, normalized).toString(), "");
+
+const routeRestoredTrackingQuery = normalizeAdminEntityListQueryWithRouteParams(
+  routeOwnedContract,
+  "visibility=hidden",
+  { project_id: "2" },
+);
+assert.deepEqual(routeRestoredTrackingQuery.filters, {
+  projectId: 2,
+  visibility: "hidden",
+});
+const routeOwnedTrackingQuery = normalizeAdminEntityListQueryWithRouteParams(
+  routeOwnedContract,
+  "project_id=999&visibility=visible",
+  { project_id: "2" },
+);
+assert.deepEqual(routeOwnedTrackingQuery.filters, {
+  projectId: 2,
+  visibility: "visible",
+});
 
 for (const field of [
   "title",

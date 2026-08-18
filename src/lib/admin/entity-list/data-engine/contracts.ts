@@ -205,6 +205,23 @@ export function normalizeAdminEntityListQuery<
   };
 }
 
+export function normalizeAdminEntityListQueryWithRouteParams<
+  Filters extends Record<string, unknown>,
+  SortField extends string,
+>(
+  contract: AdminEntityListQueryContract<Filters, SortField>,
+  source: URLSearchParams | string,
+  routeOwnedParams: Readonly<Record<string, string>>,
+): AdminEntityListQuery<Filters, SortField> {
+  const params = new URLSearchParams(
+    typeof source === "string" ? source : source.toString(),
+  );
+  for (const [key, value] of Object.entries(routeOwnedParams)) {
+    params.set(key, value);
+  }
+  return normalizeAdminEntityListQuery(contract, params);
+}
+
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
   if (value && typeof value === "object") {

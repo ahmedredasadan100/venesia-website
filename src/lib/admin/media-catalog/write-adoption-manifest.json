@@ -3,35 +3,118 @@
   "capability": "media_reference_write_coordination",
   "projectMediaPathConvention": "lowercase-paths",
   "globalClosure": true,
-  "classifications": [
-    "adopted",
-    "neutral",
-    "explicit_exception"
-  ],
+  "classifications": ["adopted", "neutral", "explicit_exception"],
   "providerRegistry": [
-    { "domainKey": "topics", "table": "topics", "mediaFields": ["image", "excerpt", "content", "media_payload", "og_image"] },
-    { "domainKey": "topic_categories", "table": "topic_categories", "mediaFields": ["image"] },
-    { "domainKey": "projects", "table": "projects", "mediaFields": ["image", "hero_image", "small_box_image", "overview_main_image", "og_image"] },
-    { "domainKey": "project_media", "table": "project_media", "mediaFields": ["image"] },
-    { "domainKey": "project_floor_plans", "table": "project_floor_plans", "mediaFields": ["architectural_image", "furnishing_image"] },
-    { "domainKey": "project_videos", "table": "project_videos", "mediaFields": ["poster_image"] },
-    { "domainKey": "hero_templates", "table": "hero_templates", "mediaFields": ["config"] },
-    { "domainKey": "content_block_templates", "table": "content_block_templates", "mediaFields": ["config"] },
-    { "domainKey": "cta_block_templates", "table": "cta_block_templates", "mediaFields": ["config"] },
-    { "domainKey": "cards_block_templates", "table": "cards_block_templates", "mediaFields": ["config"] },
-    { "domainKey": "breadcrumb_block_templates", "table": "breadcrumb_block_templates", "mediaFields": ["config"] },
-    { "domainKey": "feed_module_templates", "table": "feed_module_templates", "mediaFields": ["config"] },
-    { "domainKey": "media_sidebar_module_templates", "table": "media_sidebar_module_templates", "mediaFields": ["config"] },
-    { "domainKey": "media_hub_module_templates", "table": "media_hub_module_templates", "mediaFields": ["config"] },
-    { "domainKey": "menu_items", "table": "menu_items", "mediaFields": ["href"] },
-    { "domainKey": "site_settings", "table": "site_settings", "mediaFields": ["value"] }
+    {
+      "domainKey": "topics",
+      "table": "topics",
+      "mediaFields": [
+        "image",
+        "excerpt",
+        "content",
+        "media_payload",
+        "og_image"
+      ]
+    },
+    {
+      "domainKey": "topic_categories",
+      "table": "topic_categories",
+      "mediaFields": ["image"]
+    },
+    {
+      "domainKey": "projects",
+      "table": "projects",
+      "mediaFields": [
+        "image",
+        "hero_image",
+        "small_box_image",
+        "overview_main_image",
+        "og_image"
+      ]
+    },
+    {
+      "domainKey": "project_media",
+      "table": "project_media",
+      "mediaFields": ["image"]
+    },
+    {
+      "domainKey": "project_floor_plans",
+      "table": "project_floor_plans",
+      "mediaFields": ["architectural_image", "furnishing_image"]
+    },
+    {
+      "domainKey": "project_videos",
+      "table": "project_videos",
+      "mediaFields": ["poster_image"]
+    },
+    {
+      "domainKey": "project_tracking_update_media",
+      "table": "project_tracking_update_media",
+      "mediaFields": ["public_url", "poster_url"]
+    },
+    {
+      "domainKey": "hero_templates",
+      "table": "hero_templates",
+      "mediaFields": ["config"]
+    },
+    {
+      "domainKey": "content_block_templates",
+      "table": "content_block_templates",
+      "mediaFields": ["config"]
+    },
+    {
+      "domainKey": "cta_block_templates",
+      "table": "cta_block_templates",
+      "mediaFields": ["config"]
+    },
+    {
+      "domainKey": "cards_block_templates",
+      "table": "cards_block_templates",
+      "mediaFields": ["config"]
+    },
+    {
+      "domainKey": "breadcrumb_block_templates",
+      "table": "breadcrumb_block_templates",
+      "mediaFields": ["config"]
+    },
+    {
+      "domainKey": "feed_module_templates",
+      "table": "feed_module_templates",
+      "mediaFields": ["config"]
+    },
+    {
+      "domainKey": "media_sidebar_module_templates",
+      "table": "media_sidebar_module_templates",
+      "mediaFields": ["config"]
+    },
+    {
+      "domainKey": "media_hub_module_templates",
+      "table": "media_hub_module_templates",
+      "mediaFields": ["config"]
+    },
+    {
+      "domainKey": "menu_items",
+      "table": "menu_items",
+      "mediaFields": ["href"]
+    },
+    {
+      "domainKey": "site_settings",
+      "table": "site_settings",
+      "mediaFields": ["value"]
+    }
   ],
   "owners": [
     {
       "id": "topic-domain-writes",
       "classification": "adopted",
       "tables": ["topics"],
-      "mediaFields": ["topics.image", "topics.excerpt", "topics.content", "topics.media_payload", "topics.og_image"],
+      "mediaFields": [
+        "topics.image",
+        "topics.excerpt",
+        "topics.content",
+        "topics.media_payload",
+        "topics.og_image"
+      ],
       "acquiresWriteLease": true,
       "completesReferenceSync": true,
       "structuredWarning": true,
@@ -73,8 +156,23 @@
     {
       "id": "project-domain-writes",
       "classification": "adopted",
-      "tables": ["projects", "project_media", "project_floor_plans", "project_videos"],
-      "mediaFields": ["projects.image", "projects.hero_image", "projects.small_box_image", "projects.overview_main_image", "projects.og_image", "project_media.image", "project_floor_plans.architectural_image", "project_floor_plans.furnishing_image", "project_videos.poster_image"],
+      "tables": [
+        "projects",
+        "project_media",
+        "project_floor_plans",
+        "project_videos"
+      ],
+      "mediaFields": [
+        "projects.image",
+        "projects.hero_image",
+        "projects.small_box_image",
+        "projects.overview_main_image",
+        "projects.og_image",
+        "project_media.image",
+        "project_floor_plans.architectural_image",
+        "project_floor_plans.furnishing_image",
+        "project_videos.poster_image"
+      ],
       "acquiresWriteLease": true,
       "completesReferenceSync": true,
       "structuredWarning": true,
@@ -96,6 +194,41 @@
       "rationale": "Domain deletion is removal-only; it captures parent and child identities before deletion and then proves explicit-empty entity synchronization for each removed provider row."
     },
     {
+      "id": "project-tracking-update-media-writes",
+      "classification": "adopted",
+      "tables": ["project_tracking_update_media"],
+      "mediaFields": [
+        "project_tracking_update_media.public_url",
+        "project_tracking_update_media.poster_url"
+      ],
+      "acquiresWriteLease": true,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "sourceFiles": [
+        "src/app/admin/projects/tracking-actions.ts",
+        "src/lib/admin/projects/tracking-media-coordination.ts"
+      ],
+      "rationale": "Tracking Update aggregate saves acquire target-local leases for every intended Media association, map client keys to persisted association identities, and synchronize those identities through the existing Media coordination owner."
+    },
+    {
+      "id": "project-tracking-update-media-removal",
+      "classification": "explicit_exception",
+      "tables": ["project_tracking_update_media"],
+      "mediaFields": [
+        "project_tracking_update_media.public_url",
+        "project_tracking_update_media.poster_url"
+      ],
+      "acquiresWriteLease": false,
+      "completesReferenceSync": true,
+      "structuredWarning": true,
+      "requiresExplicitEmptyCleanup": true,
+      "sourceFiles": [
+        "src/app/admin/projects/tracking-actions.ts",
+        "src/lib/admin/projects/tracking-media-coordination.ts"
+      ],
+      "rationale": "Removed Tracking associations are synchronized as explicit-empty after the committed aggregate mutation. Update deletion removes association rows only and never deletes physical Media assets; any cleanup uncertainty is returned as a structured warning."
+    },
+    {
       "id": "block-template-domain-writes",
       "classification": "adopted",
       "tables": [
@@ -106,7 +239,14 @@
         "breadcrumb_block_templates",
         "feed_module_templates"
       ],
-      "mediaFields": ["hero_templates.config", "content_block_templates.config", "cta_block_templates.config", "cards_block_templates.config", "breadcrumb_block_templates.config", "feed_module_templates.config"],
+      "mediaFields": [
+        "hero_templates.config",
+        "content_block_templates.config",
+        "cta_block_templates.config",
+        "cards_block_templates.config",
+        "breadcrumb_block_templates.config",
+        "feed_module_templates.config"
+      ],
       "acquiresWriteLease": true,
       "completesReferenceSync": true,
       "structuredWarning": true,
@@ -145,26 +285,92 @@
         "src/app/admin/pages-blocks/blocks/feed/actions.ts"
       ],
       "mutationPaths": [
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/hero/actions.ts", "exportName": "deleteHeroTemplate", "domainKey": "hero_templates", "contract": "explicit_empty_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/hero/actions.ts", "exportName": "bulkHeroTemplates", "domainKey": "hero_templates", "contract": "explicit_empty_bulk_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/content/actions.ts", "exportName": "deleteContentBlock", "domainKey": "content_block_templates", "contract": "explicit_empty_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/content/actions.ts", "exportName": "bulkContentBlocks", "domainKey": "content_block_templates", "contract": "explicit_empty_bulk_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/cta/actions.ts", "exportName": "deleteCtaBlock", "domainKey": "cta_block_templates", "contract": "explicit_empty_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/cta/actions.ts", "exportName": "bulkCtaBlocks", "domainKey": "cta_block_templates", "contract": "explicit_empty_bulk_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/cards/actions.ts", "exportName": "deleteCardsBlock", "domainKey": "cards_block_templates", "contract": "explicit_empty_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/cards/actions.ts", "exportName": "bulkCardsBlocks", "domainKey": "cards_block_templates", "contract": "explicit_empty_bulk_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts", "exportName": "deleteBreadcrumbBlock", "domainKey": "breadcrumb_block_templates", "contract": "explicit_empty_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts", "exportName": "bulkBreadcrumbBlocks", "domainKey": "breadcrumb_block_templates", "contract": "explicit_empty_bulk_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/feed/actions.ts", "exportName": "deleteFeedModule", "domainKey": "feed_module_templates", "contract": "explicit_empty_delete" },
-        { "sourceFile": "src/app/admin/pages-blocks/blocks/feed/actions.ts", "exportName": "bulkFeedModules", "domainKey": "feed_module_templates", "contract": "explicit_empty_bulk_delete" }
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/hero/actions.ts",
+          "exportName": "deleteHeroTemplate",
+          "domainKey": "hero_templates",
+          "contract": "explicit_empty_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/hero/actions.ts",
+          "exportName": "bulkHeroTemplates",
+          "domainKey": "hero_templates",
+          "contract": "explicit_empty_bulk_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/content/actions.ts",
+          "exportName": "deleteContentBlock",
+          "domainKey": "content_block_templates",
+          "contract": "explicit_empty_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/content/actions.ts",
+          "exportName": "bulkContentBlocks",
+          "domainKey": "content_block_templates",
+          "contract": "explicit_empty_bulk_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/cta/actions.ts",
+          "exportName": "deleteCtaBlock",
+          "domainKey": "cta_block_templates",
+          "contract": "explicit_empty_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/cta/actions.ts",
+          "exportName": "bulkCtaBlocks",
+          "domainKey": "cta_block_templates",
+          "contract": "explicit_empty_bulk_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/cards/actions.ts",
+          "exportName": "deleteCardsBlock",
+          "domainKey": "cards_block_templates",
+          "contract": "explicit_empty_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/cards/actions.ts",
+          "exportName": "bulkCardsBlocks",
+          "domainKey": "cards_block_templates",
+          "contract": "explicit_empty_bulk_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
+          "exportName": "deleteBreadcrumbBlock",
+          "domainKey": "breadcrumb_block_templates",
+          "contract": "explicit_empty_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
+          "exportName": "bulkBreadcrumbBlocks",
+          "domainKey": "breadcrumb_block_templates",
+          "contract": "explicit_empty_bulk_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/feed/actions.ts",
+          "exportName": "deleteFeedModule",
+          "domainKey": "feed_module_templates",
+          "contract": "explicit_empty_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/feed/actions.ts",
+          "exportName": "bulkFeedModules",
+          "domainKey": "feed_module_templates",
+          "contract": "explicit_empty_bulk_delete"
+        }
       ],
       "rationale": "Single and bulk removal commands capture provider identities before one atomic Domain delete, then perform retry-safe entity-scoped explicit-empty cleanup for every requested identity without a write lease; the shared cleanup owner marks non-empty or failed proof uncertain and each action surfaces a structured post-commit warning."
     },
     {
       "id": "media-module-template-writes",
       "classification": "adopted",
-      "tables": ["media_sidebar_module_templates", "media_hub_module_templates"],
-      "mediaFields": ["media_sidebar_module_templates.config", "media_hub_module_templates.config"],
+      "tables": [
+        "media_sidebar_module_templates",
+        "media_hub_module_templates"
+      ],
+      "mediaFields": [
+        "media_sidebar_module_templates.config",
+        "media_hub_module_templates.config"
+      ],
       "acquiresWriteLease": true,
       "completesReferenceSync": true,
       "structuredWarning": true,
@@ -200,7 +406,9 @@
       "acquiresWriteLease": true,
       "completesReferenceSync": true,
       "structuredWarning": true,
-      "sourceFiles": ["src/app/admin/pages-blocks/pages/page-actions/assignment-duplicate.ts"],
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/pages/page-actions/assignment-duplicate.ts"
+      ],
       "rationale": "Duplicating any assigned media-capable template coordinates its complete copied config before insertion, then synchronizes the final template identity."
     },
     {
@@ -271,7 +479,9 @@
       "acquiresWriteLease": false,
       "completesReferenceSync": true,
       "structuredWarning": true,
-      "sourceFiles": ["src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts"],
+      "sourceFiles": [
+        "src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts"
+      ],
       "rationale": "The canonical defaults restored by this command contain no managed media assets."
     },
     {

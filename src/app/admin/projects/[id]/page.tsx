@@ -61,6 +61,7 @@ export default async function ProjectEditPage({
         actions={
           <>
             <AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>
+            <AdminActionButton href={`/admin/projects/${project.id}/tracking`} variant="dark">متابعة التنفيذ</AdminActionButton>
             <AdminEntityPreviewActions
               capability={getProjectPreviewCapability({
                 id: project.id!,

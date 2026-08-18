@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { demoteArticleHeadingHierarchy } from "../src/lib/rich-text/article-heading-semantics.ts";
 import { sanitizeLogContext } from "../src/lib/logging/sanitize-context.ts";
+import { serializeOperationalError } from "../src/lib/logging/serialize-error.ts";
 import { resolveSitemapRouteOutput } from "../src/lib/seo/sitemap-output-contract.ts";
 import type { SitemapGenerationResult } from "../src/lib/seo/sitemap-monitor-types.ts";
 
@@ -61,11 +62,26 @@ assert.deepEqual(sanitizeLogContext({
   circular: { route: "/topics", token: "[REDACTED]", self: "[CIRCULAR]" },
 });
 
+const postgrestError = {
+  code: "PGRST202",
+  message: "Could not find the function public.example(p_slug) in the schema cache",
+  details: "Searched for public.example with parameter p_slug.",
+  hint: "Apply the pending migration.",
+};
+assert.deepEqual(serializeOperationalError(postgrestError), {
+  name: "PostgrestError",
+  message: "Could not find the function public.example(p_slug) in the schema cache",
+  code: "PGRST202",
+  details: "Searched for public.example with parameter p_slug.",
+  hint: "Apply the pending migration.",
+});
+
 const packageSource = readFileSync(resolve(ROOT, "package.json"), "utf8");
 const workflowSource = readFileSync(resolve(ROOT, ".github/workflows/quality-gate.yml"), "utf8");
 const sitemapRouteSource = readFileSync(resolve(ROOT, "src/app/sitemap.ts"), "utf8");
 const instrumentationSource = readFileSync(resolve(ROOT, "src/instrumentation.ts"), "utf8");
 const adminErrorBoundarySource = readFileSync(resolve(ROOT, "src/app/admin/error.tsx"), "utf8");
+const loggerSource = readFileSync(resolve(ROOT, "src/lib/logging/logger.ts"), "utf8");
 assert.match(packageSource, /"test:e2e:public"/u);
 assert.match(packageSource, /npm run test:e2e:public/u);
 assert.match(workflowSource, /playwright install --with-deps chromium/u);
@@ -74,5 +90,9 @@ assert.doesNotMatch(sitemapRouteSource, /throw new Error/u);
 assert.match(instrumentationSource, /Instrumentation\.onRequestError/u);
 assert.match(instrumentationSource, /logError\("Unhandled server request failed"/u);
 assert.doesNotMatch(adminErrorBoundarySource, /description=\{error\.message/u);
+assert.match(loggerSource, /JSON\.stringify\(payload\)/u);
+assert.match(loggerSource, /console\.error\(entry\)/u);
+assert.match(loggerSource, /console\.warn\(entry\)/u);
+assert.match(loggerSource, /serializeOperationalError\(error\)/u);
 
 console.log("verify-medium-hardening: behavioral contracts and infrastructure passed");

@@ -1,5 +1,6 @@
 import { classifyPublicDataError, isAbortOrTimeoutError } from "../supabase/classify-error";
 import { sanitizeLogContext } from "./sanitize-context";
+import { serializeOperationalError } from "./serialize-error";
 
 type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -8,29 +9,6 @@ type LogContext = Record<string, unknown>;
 /** Once-per-process keys for expected timeout/network fallback warnings. */
 const seenFallbackWarnings = new Set<string>();
 
-function serializeError(error: unknown) {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      code: typeof (error as unknown as { code?: unknown }).code === "string" ? (error as unknown as { code: string }).code : undefined,
-      stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
-    };
-  }
-
-  if (error && typeof error === "object") {
-    const record = error as Record<string, unknown>;
-    return {
-      name: typeof record.name === "string" ? record.name : undefined,
-      message: typeof record.message === "string" ? record.message : undefined,
-      code: typeof record.code === "string" ? record.code : undefined,
-      hint: typeof record.hint === "string" ? record.hint : undefined,
-    };
-  }
-
-  return error;
-}
-
 function writeLog(level: LogLevel, message: string, context?: LogContext) {
   const payload = {
     level,
@@ -38,20 +16,21 @@ function writeLog(level: LogLevel, message: string, context?: LogContext) {
     timestamp: new Date().toISOString(),
     ...sanitizeLogContext(context),
   };
+  const entry = `[venesia] ${JSON.stringify(payload)}`;
 
   if (level === "error") {
-    console.error("[venesia]", payload);
+    console.error(entry);
     return;
   }
 
   if (level === "warn") {
-    console.warn("[venesia]", payload);
+    console.warn(entry);
     return;
   }
 
   if (process.env.NODE_ENV === "development") {
     const writer = level === "debug" ? console.debug : console.info;
-    writer("[venesia]", payload);
+    writer(entry);
   }
 }
 
@@ -86,19 +65,31 @@ export function logError(message: string, error?: unknown, context?: LogContext)
       ...context,
       kind: classified.kind,
       reason: classified.summary,
-      error: serializeError(error),
+      error: serializeOperationalError(error),
     });
     return;
   }
 
   writeLog("error", message, {
     ...context,
-    error: serializeError(error),
+    error: serializeOperationalError(error),
   });
 }
 
 export function logWarn(message: string, context?: LogContext) {
   writeLog("warn", message, context);
+}
+
+/** Expected operational failures retain the same structured error contract without error severity. */
+export function logWarnWithError(
+  message: string,
+  error?: unknown,
+  context?: LogContext,
+) {
+  writeLog("warn", message, {
+    ...context,
+    error: serializeOperationalError(error),
+  });
 }
 
 export function logInfo(message: string, context?: LogContext) {

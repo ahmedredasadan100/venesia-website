@@ -75,7 +75,7 @@ assert.deepEqual(
 );
 check("replacement rewrites exact stored values inside structured fields", true);
 const registry = providerModule.validateMediaReferenceProviderRegistry();
-check("typed provider registry is unique and covers the 16 live declared domains", registry.providerCount === 16, String(registry.providerCount));
+check("typed provider registry is unique and covers the 17 live declared domains", registry.providerCount === 17, String(registry.providerCount));
 const legacyDocument = "/files/projects/document-1782017403551.pdf";
 assert.equal(providerModule.extractMediaCandidateValues(`download ${legacyDocument} now`).includes(legacyDocument), true);
 check("reference candidate extraction includes embedded legacy /images and /files paths", true);

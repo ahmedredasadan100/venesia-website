@@ -133,6 +133,18 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "All four Project Location levels delegate modal form lifecycle, pending state, validation focus, dirty confirmation, feedback, and close behavior to AdminFormRuntime while hierarchy validation remains owned by the Location Domain.",
   },
   {
+    id: "project-tracking-create-edit",
+    label: "Project Tracking profile, stages, items, and updates",
+    classification: "shared_adopter",
+    sourceFiles: [
+      "src/components/admin/projects/tracking/TrackingForms.tsx",
+      "src/components/admin/projects/tracking/TrackingVideoFields.tsx",
+    ],
+    surfaces: ["tracking-profile", "stage-create", "stage-edit", "item-create", "item-edit", "update-create", "update-edit"],
+    rationale:
+      "Tracking forms delegate pending state, structured validation feedback, dirty-close confirmation, and success handoff to AdminFormRuntime while Domain RPCs and Media coordination remain server-owned.",
+  },
+  {
     id: "pages-quick-create",
     label: "Page quick create",
     classification: "shared_adopter",
