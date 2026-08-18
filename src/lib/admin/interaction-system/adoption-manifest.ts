@@ -200,13 +200,10 @@ export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
 ] as const satisfies readonly AdminEntityPreviewCapabilityAdoption[];
 
 export type AdminRowActionsGovernedAction =
-  | Exclude<AdminRowActionPrimaryKind, "more">
-  | AdminRowActionMoreKind;
+  Exclude<AdminRowActionPrimaryKind, "more"> | AdminRowActionMoreKind;
 
 export type AdminRowActionsAdoptionActionState =
-  | "adopted"
-  | "hidden"
-  | "specialized_adapter";
+  "adopted" | "hidden" | "specialized_adapter";
 
 export type AdminRowActionsExistingOwners = {
   presentation: "shared_capabilities";
@@ -336,8 +333,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       },
       {
         entity: "topic_series",
-        consumerSourceFile:
-          "src/app/admin/content/series/series-columns.tsx",
+        consumerSourceFile: "src/app/admin/content/series/series-columns.tsx",
         dataMode: "server-page",
         publicationField: "status",
       },
@@ -563,45 +559,87 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       rationale:
         "Residential and Commercial share one Project action declaration; the Project Domain owns authoritative publication, featured writes, and atomic duplication while the shared renderer owns presentation.",
     },
-    ...([
-      "project_locations_governorate",
-      "project_locations_city",
-      "project_locations_main_area",
-      "project_locations_sub_area",
-    ] as const).map((entity) => ({
-      entity,
-      status: "adopted",
-      consumerSourceFile:
-        "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
-      sourceFiles: [
-        "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
-        "src/app/admin/projects/locations/actions.ts",
-        "src/lib/admin/projects/location-management-adapter.ts",
-        "sql/migrations/20260814020750_location_management_foundation.sql",
-      ],
-      manualOrder: false,
-      actions: {
-        edit: "adopted",
-        preview: "hidden",
-        information: "adopted",
-        copyPublicLink: "hidden",
-        visibility: "adopted",
-        featured: "hidden",
-        duplicate: "hidden",
-        archive: "hidden",
-        delete: "adopted",
-      },
-      owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
-      confirmationActions: ["delete"],
-      auditedActions: ["visibility", "delete"],
-      rationale:
-        "All four Location levels share one Row Actions contract; the Location Domain owns guarded CRUD and hierarchy integrity while the shared renderer owns presentation.",
-    }) as const),
+    ...(
+      [
+        "project_locations_governorate",
+        "project_locations_city",
+        "project_locations_main_area",
+        "project_locations_sub_area",
+      ] as const
+    ).map(
+      (entity) =>
+        ({
+          entity,
+          status: "adopted",
+          consumerSourceFile:
+            "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
+          sourceFiles: [
+            "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx",
+            "src/app/admin/projects/locations/actions.ts",
+            "src/lib/admin/projects/location-management-adapter.ts",
+            "sql/migrations/20260814020750_location_management_foundation.sql",
+          ],
+          manualOrder: false,
+          actions: {
+            edit: "adopted",
+            preview: "hidden",
+            information: "adopted",
+            copyPublicLink: "hidden",
+            visibility: "adopted",
+            featured: "hidden",
+            duplicate: "hidden",
+            archive: "hidden",
+            delete: "adopted",
+          },
+          owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
+          confirmationActions: ["delete"],
+          auditedActions: ["visibility", "delete"],
+          rationale:
+            "All four Location levels share one Row Actions contract; the Location Domain owns guarded CRUD and hierarchy integrity while the shared renderer owns presentation.",
+        }) as const,
+    ),
+    ...(
+      [
+        "project_tracking_stages",
+        "project_tracking_items",
+        "project_tracking_updates",
+      ] as const
+    ).map(
+      (entity) =>
+        ({
+          entity,
+          status: "adopted",
+          consumerSourceFile:
+            "src/components/admin/projects/tracking/TrackingCollections.tsx",
+          sourceFiles: [
+            "src/components/admin/projects/tracking/TrackingCollections.tsx",
+            "src/app/admin/projects/tracking-actions.ts",
+            "src/lib/admin/projects/tracking-adapter.ts",
+            "sql/migrations/20260817170332_project_construction_tracking_detail.sql",
+          ],
+          manualOrder: false,
+          actions: {
+            edit: "adopted",
+            preview: "adopted",
+            information: "adopted",
+            copyPublicLink: "hidden",
+            visibility: "hidden",
+            featured: "hidden",
+            duplicate: "hidden",
+            archive: "hidden",
+            delete: "adopted",
+          },
+          owners: ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
+          confirmationActions: ["delete"],
+          auditedActions: ["delete"],
+          rationale:
+            "Tracking hierarchy rows delegate edit/navigation/information/delete presentation and confirmation to Shared Row Actions; guarded Domain RPCs own child safety, audit, and mutation.",
+        }) as const,
+    ),
     {
       entity: "redirects",
       status: "adopted",
-      consumerSourceFile:
-        "src/app/admin/seo/redirects/RedirectsClient.tsx",
+      consumerSourceFile: "src/app/admin/seo/redirects/RedirectsClient.tsx",
       sourceFiles: [
         "src/app/admin/seo/redirects/RedirectsClient.tsx",
         "src/app/admin/seo/redirects/actions.ts",
@@ -628,8 +666,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
     {
       entity: "admin_users",
       status: "adopted",
-      consumerSourceFile:
-        "src/app/admin/users-roles/UsersManagementClient.tsx",
+      consumerSourceFile: "src/app/admin/users-roles/UsersManagementClient.tsx",
       sourceFiles: [
         "src/app/admin/users-roles/UsersManagementClient.tsx",
         "src/app/admin/users-roles/actions.ts",
@@ -735,29 +772,22 @@ export type AdminCollectionSurfaceWorkflowClassification =
 export type AdminCollectionHeaderState = "adopted" | "auth_out_of_scope";
 
 export type AdminCollectionRowActionsState =
-  | "adopted"
-  | "read_only_no_row_commands"
-  | "not_applicable";
+  "adopted" | "read_only_no_row_commands" | "not_applicable";
 
-export type AdminCollectionPaginationState =
-  | "adopted"
-  | "not_required";
+export type AdminCollectionPaginationState = "adopted" | "not_required";
 
 export type AdminCollectionQueryMode =
-  | "server-page"
-  | "bounded-client"
-  | "small-fixed"
-  | "specialized";
+  "server-page" | "bounded-client" | "small-fixed" | "specialized";
 
 export type AdminCollectionAdoptionState = "adopted" | "not_applicable";
 
 export type AdminCollectionReorderOwner =
-  | "not_applicable"
-  | "domain_owned_atomic_reorder";
+  "not_applicable" | "domain_owned_atomic_reorder";
 
 export type AdminSemanticPresentationState =
   | "publication"
   | "visibility"
+  | "progress"
   | "featured"
   | "archived"
   | "enabled";
@@ -772,12 +802,8 @@ export type AdminSemanticPresentationSurfaceContract = {
 
 export type AdminCollectionSemanticPresentationContract = {
   owner:
-    | "shared_admin_row_actions"
-    | "explicit_surface_contract"
-    | "not_applicable";
-  primaryCellContract:
-    | "identity_primary_content_only"
-    | "not_applicable";
+    "shared_admin_row_actions" | "explicit_surface_contract" | "not_applicable";
+  primaryCellContract: "identity_primary_content_only" | "not_applicable";
   governedStates: readonly AdminSemanticPresentationState[];
   sourceFiles: readonly string[];
   sourceObjectNames: readonly string[];
@@ -829,28 +855,19 @@ export type AdminCollectionSurfaceInventoryEntry = {
   headerState: AdminCollectionHeaderState;
   rowActionsState: AdminCollectionRowActionsState;
   rowActionsOwner:
-    | "shared_admin_row_actions"
-    | "specialized_surface"
-    | "not_applicable";
+    "shared_admin_row_actions" | "specialized_surface" | "not_applicable";
   columnVisibility:
-    | "shared_optional_columns"
-    | "fixed_no_optional_columns"
-    | "not_applicable";
+    "shared_optional_columns" | "fixed_no_optional_columns" | "not_applicable";
   summaryCards: boolean;
   filtersOrToolbar: boolean;
   paginationState: AdminCollectionPaginationState;
   paginationOwner:
-    | "AdminTablePagination"
-    | "specialized_surface"
-    | "not_applicable";
+    "AdminTablePagination" | "specialized_surface" | "not_applicable";
   queryMode: AdminCollectionQueryMode;
   /** Exact Data Runtime registry keys represented by this surface. */
   dataRegistryEntities: readonly AdminEntityListEntityKey[];
   gridOwner:
-    | "AdminEntityList"
-    | "AdminDataGrid"
-    | "MediaCatalog"
-    | "not_applicable";
+    "AdminEntityList" | "AdminDataGrid" | "MediaCatalog" | "not_applicable";
   layoutOwner: string;
   feedbackOwner: "AdminFeedbackProvider" | "not_applicable";
   confirmationOwner: "AdminConfirmDialog" | "not_applicable";
@@ -967,11 +984,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   canonicalTableFooterGap: "gap-4",
   ownerSourceFiles: {
     header: "src/components/admin/ui/AdminPageContextHeader.tsx",
-    rowActions:
-      "src/components/admin/ui/AdminDataGridRowActions.tsx",
+    rowActions: "src/components/admin/ui/AdminDataGridRowActions.tsx",
     columns: "src/components/admin/entity-list/AdminEntityList.tsx",
-    layout:
-      "src/components/admin/entity-list/AdminEntityListSurface.tsx",
+    layout: "src/components/admin/entity-list/AdminEntityListSurface.tsx",
     pagination: "src/components/admin/ui/AdminTablePagination.tsx",
     query: [
       "src/lib/admin/entity-list/data-engine/client-controller.ts",
@@ -1127,9 +1142,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       semanticPresentation: {
         ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
         governedStates: ["publication"],
-        sourceFiles: [
-          "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
-        ],
+        sourceFiles: ["src/app/admin/pages-blocks/pages/PagesTableClient.tsx"],
         sourceObjectNames: ["row"],
         sourceFieldNames: ["status"],
       },
@@ -1152,10 +1165,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       genuineExceptions: [],
       workflowClassification: "full_collection_adoption",
       generic: true,
-      routes: [
-        "/admin/projects/residential",
-        "/admin/projects/commercial",
-      ],
+      routes: ["/admin/projects/residential", "/admin/projects/commercial"],
       pageSourceFiles: [
         "src/app/admin/projects/residential/page.tsx",
         "src/app/admin/projects/commercial/page.tsx",
@@ -1267,9 +1277,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       semanticPresentation: {
         ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
         governedStates: ["enabled"],
-        sourceFiles: [
-          "src/app/admin/seo/redirects/RedirectsClient.tsx",
-        ],
+        sourceFiles: ["src/app/admin/seo/redirects/RedirectsClient.tsx"],
         sourceObjectNames: ["row"],
         sourceFieldNames: ["status"],
         explicitSurfaceContracts: [
@@ -1360,9 +1368,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       generic: false,
       routes: ["/admin/pages-blocks/blocks"],
       pageSourceFiles: ["src/app/admin/pages-blocks/blocks/page.tsx"],
-      presentationSourceFiles: [
-        "src/app/admin/pages-blocks/blocks/page.tsx",
-      ],
+      presentationSourceFiles: ["src/app/admin/pages-blocks/blocks/page.tsx"],
       sourceOwner: "src/app/admin/pages-blocks/blocks/page.tsx#modules",
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
@@ -1508,36 +1514,93 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "The bounded recovery queue retains its specialized confirmation, audit, verification, and fail-closed command lifecycle.",
     },
     {
-      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
-      id: "construction-updates",
-      workflowClassification: "page_system_only",
-      generic: false,
-      routes: ["/admin/projects/construction-updates"],
+      ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
+      id: "project-construction-tracking",
+      workflowClassification: "full_collection_adoption",
+      generic: true,
+      routes: [
+        "/admin/projects/construction-updates",
+        "/admin/projects/[id]/tracking",
+        "/admin/projects/[id]/tracking/stages/[stageId]",
+        "/admin/projects/[id]/tracking/items/[itemId]",
+      ],
       pageSourceFiles: [
         "src/app/admin/projects/construction-updates/page.tsx",
+        "src/app/admin/projects/[id]/tracking/page.tsx",
+        "src/app/admin/projects/[id]/tracking/stages/[stageId]/page.tsx",
+        "src/app/admin/projects/[id]/tracking/items/[itemId]/page.tsx",
       ],
       presentationSourceFiles: [
         "src/app/admin/projects/construction-updates/ConstructionUpdatesClient.tsx",
+        "src/components/admin/projects/tracking/TrackingCollections.tsx",
       ],
       sourceOwner:
-        "src/lib/admin/projects/construction-updates-query.ts",
+        "src/lib/admin/projects/tracking-adapter.ts#trackingStagesEntityListAdapter+trackingItemsEntityListAdapter+trackingUpdatesEntityListAdapter",
       headerOwner: "AdminPageContextHeader",
-      engineLabel: null,
+      engineLabel: "PROJECT TRACKING DOMAIN",
       headerState: "adopted",
-      rowActionsState: "not_applicable",
-      rowActionsOwner: "not_applicable",
-      columnVisibility: "not_applicable",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
+      semanticPresentation: {
+        ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
+        governedStates: ["publication", "visibility", "progress"],
+        sourceFiles: [
+          "src/components/admin/projects/tracking/TrackingCollections.tsx",
+        ],
+        sourceObjectNames: ["row"],
+        sourceFieldNames: [
+          "publication_status",
+          "is_visible",
+          "status",
+          "derived_status",
+        ],
+        explicitSurfaceContracts: [
+          {
+            state: "progress",
+            sourceFile:
+              "src/components/admin/projects/tracking/TrackingCollections.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "Stage-derived and Item-owned progress are explicit read columns; no percentage or parallel mutation owner is introduced.",
+          },
+          {
+            state: "visibility",
+            sourceFile:
+              "src/components/admin/projects/tracking/TrackingCollections.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "Stage visibility is an explicit Tracking collection read column while visibility mutation remains Form Runtime-owned.",
+          },
+          {
+            state: "publication",
+            sourceFile:
+              "src/components/admin/projects/tracking/TrackingCollections.tsx",
+            component: "AdminStatusPill",
+            surface: "dedicated_status_column",
+            rationale:
+              "Update publication is an explicit Tracking history read column while publication mutation remains Form Runtime-owned.",
+          },
+        ],
+      },
+      columnVisibility: "shared_optional_columns",
       summaryCards: true,
-      filtersOrToolbar: false,
-      paginationState: "not_required",
-      paginationOwner: "not_applicable",
-      queryMode: "specialized",
-      layoutOwner: "Construction planning workspace",
+      filtersOrToolbar: true,
+      paginationState: "adopted",
+      paginationOwner: "AdminTablePagination",
+      queryMode: "server-page",
+      dataRegistryEntities: [
+        "project_tracking_stages",
+        "project_tracking_items",
+        "project_tracking_updates",
+      ],
+      reorderOwner: "domain_owned_atomic_reorder",
+      layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
-      exceptionRationale:
-        "The project, phase, update, and media aggregate is not a single generic collection.",
+      exceptionRationale: null,
       rationale:
-        "Project, phase, update, and media planning is an aggregate workflow rather than a single entity list.",
+        "The Project-scoped Stage, Item, and Update hierarchy exposes one shared Collection/Data owner per route while profile facts remain a singleton Form Runtime adopter and Media associations retain the existing Media Catalog coordination owner.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
@@ -1590,7 +1653,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           id: "content-template-library",
           route: "/admin/pages-blocks/blocks/content",
           pageSourceFile: "src/app/admin/pages-blocks/blocks/content/page.tsx",
-          presentationOwner: "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+          presentationOwner:
+            "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
           contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
           genuineExceptions: [],
           requiredAdoption: [],
@@ -1599,25 +1663,30 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           id: "hero-template-library",
           route: "/admin/pages-blocks/blocks/hero",
           pageSourceFile: "src/app/admin/pages-blocks/blocks/hero/page.tsx",
-          presentationOwner: "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+          presentationOwner:
+            "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
           contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
           genuineExceptions: [],
           requiredAdoption: [],
         },
-        ...(["breadcrumb", "cards", "cta", "feed"] as const).map((moduleKind) => ({
-          id: `${moduleKind}-template-library`,
-          route: `/admin/pages-blocks/blocks/${moduleKind}`,
-          pageSourceFile: `src/app/admin/pages-blocks/blocks/${moduleKind}/page.tsx`,
-          presentationOwner: "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
-          contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
-          genuineExceptions: [],
-          requiredAdoption: [],
-        })),
+        ...(["breadcrumb", "cards", "cta", "feed"] as const).map(
+          (moduleKind) => ({
+            id: `${moduleKind}-template-library`,
+            route: `/admin/pages-blocks/blocks/${moduleKind}`,
+            pageSourceFile: `src/app/admin/pages-blocks/blocks/${moduleKind}/page.tsx`,
+            presentationOwner:
+              "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+            contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
+            genuineExceptions: [],
+            requiredAdoption: [],
+          }),
+        ),
         ...(["media-hub", "media-sidebar"] as const).map((moduleKind) => ({
           id: `${moduleKind}-template-library`,
           route: `/admin/pages-blocks/blocks/${moduleKind}`,
           pageSourceFile: `src/app/admin/pages-blocks/blocks/${moduleKind}/page.tsx`,
-          presentationOwner: "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+          presentationOwner:
+            "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
           contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
           genuineExceptions: [
             "Create, duplicate, and delete are not supported by the current Media module domain action contract.",
@@ -1680,7 +1749,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "not_required",
       paginationOwner: "not_applicable",
       queryMode: "specialized",
-      layoutOwner: "AdminShell + AdminPageExperience + Form Runtime where applicable",
+      layoutOwner:
+        "AdminShell + AdminPageExperience + Form Runtime where applicable",
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
@@ -1707,16 +1777,13 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       semanticPresentation: {
         ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
         governedStates: ["visibility"],
-        sourceFiles: [
-          "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
-        ],
+        sourceFiles: ["src/app/admin/pages-blocks/menus/MenusTableClient.tsx"],
         sourceObjectNames: ["menu"],
         sourceFieldNames: ["is_active"],
         explicitSurfaceContracts: [
           {
             state: "visibility",
-            sourceFile:
-              "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+            sourceFile: "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
             component: "AdminStatusPill",
             surface: "dedicated_status_column",
             rationale:
@@ -2026,16 +2093,13 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       semanticPresentation: {
         ...ADMIN_SHARED_SEMANTIC_PRESENTATION_DEFAULTS,
         governedStates: ["enabled"],
-        sourceFiles: [
-          "src/app/admin/users-roles/UsersManagementClient.tsx",
-        ],
+        sourceFiles: ["src/app/admin/users-roles/UsersManagementClient.tsx"],
         sourceObjectNames: ["row"],
         sourceFieldNames: ["is_active"],
         explicitSurfaceContracts: [
           {
             state: "enabled",
-            sourceFile:
-              "src/app/admin/users-roles/UsersManagementClient.tsx",
+            sourceFile: "src/app/admin/users-roles/UsersManagementClient.tsx",
             component: "AdminStatusPill",
             surface: "dedicated_status_column",
             rationale:
@@ -2142,9 +2206,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/projects/new/page.tsx",
         "src/app/admin/projects/[id]/page.tsx",
       ],
-      presentationSourceFiles: [
-        "src/app/admin/projects/ProjectEditForm.tsx",
-      ],
+      presentationSourceFiles: ["src/app/admin/projects/ProjectEditForm.tsx"],
       sourceOwner: "Project form and domain actions",
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
@@ -2328,9 +2390,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/reports/topics-without-image"],
-      pageSourceFiles: [
-        "src/app/admin/reports/topics-without-image/page.tsx",
-      ],
+      pageSourceFiles: ["src/app/admin/reports/topics-without-image/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
       ],
@@ -2415,8 +2475,7 @@ export type AdminCollectionFullAdoptionContract =
   (typeof ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS)[number];
 
 export type AdminCollectionFullAdoptionContractState =
-  | "adopted"
-  | "not_required";
+  "adopted" | "not_required";
 
 export type AdminCollectionFullAdoptionClaim = {
   surfaceId: string;
@@ -2481,6 +2540,10 @@ export const ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS = [
   },
   {
     surfaceId: "project-locations",
+    contracts: ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
+  },
+  {
+    surfaceId: "project-construction-tracking",
     contracts: ADMIN_COLLECTION_FULL_ADOPTION_BASE_CONTRACTS,
   },
   {

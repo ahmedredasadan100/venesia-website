@@ -295,6 +295,7 @@ const expectedClassifications: Record<
     "redirects-create-edit",
     "projects-create-edit",
     "project-locations-create-edit",
+    "project-tracking-create-edit",
     "topic-media-create-edit",
     "pages-quick-create",
     "block-template-create-modals",

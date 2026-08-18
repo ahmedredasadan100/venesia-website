@@ -83,18 +83,18 @@ The 2026-08-16 authorized Production migration closure established the following
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 83 |
-| Production registry versions | 83 |
-| Registry SQL provenance | Exact repository SQL for all 83 deployed versions |
-| Public tables | 51 |
-| Public tables with RLS enabled | 51 |
-| Public catalog objects with repository provenance | 269 |
+| Repository migration files | 84 |
+| Production registry versions | 84 |
+| Registry SQL provenance | Exact repository SQL for all 84 deployed versions |
+| Public tables | 56 |
+| Public tables with RLS enabled | 56 |
+| Public catalog objects with repository provenance | 291 |
 | Invalid, unready, or non-live indexes | 0 |
 | Unvalidated public constraints | 0 |
 | Parallel public function overload names | 0 |
 | Public RLS policies | 3 |
 | Anonymous-callable application data functions | 0 |
-| Registry reconciliation audit records | 10 |
+| Registry reconciliation audit records | 11 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
@@ -108,6 +108,8 @@ scripts/reconcile-migration-registry.mts
 The structural guard is part of `ci:check`. The authorized closures applied `20260814174238_admin_users_active_invariant.sql`, `20260815092555_media_center_listing_presentation.sql`, and `20260816090000_media_center_hero_owner_closure.sql` in repository order. The Media Center migrations adopt the existing `mutate_page_composition` / `sync_template_pages` write owner, retire Listing Shell, and establish independent Hero, Featured Content, and Listing contracts. The canonical registry reconciler then restored exact repository SQL provenance without replaying these migrations.
 
 The authorized Projects Vertical Slice closure then applied `20260817100000_project_section_title_contract.sql` followed by `20260817101000_media_ordinary_attachment_scope.sql`. The registry now records both migrations with exact repository SQL provenance: Project section headings are explicit nullable fields with the approved three-value backfill, and ordinary media attachment uses target-local safety while global reconciliation readiness remains required by safe delete/reservation flows.
+
+The authorized Construction Tracking closure then applied `20260817170332_project_construction_tracking_detail.sql` as migration 84 with exact repository SQL provenance. It adds the independent Tracking profile/stage/item/update/media-reference graph only: `projects` remains unchanged, no project facts are duplicated, and every Tracking write RPC remains service-role-only behind RLS.
 
 ## Removed final-cleanup legacy
 

@@ -461,6 +461,16 @@ const PROVIDER_CONFIGS = [
     supportsRebind: false,
   },
   {
+    domainKey: "project_tracking_update_media",
+    table: "project_tracking_update_media",
+    entityType: "project_tracking_update_media",
+    labelField: "title",
+    fields: ["public_url", "poster_url"],
+    extraFields: ["update_id", "media_kind"],
+    editHref: (row) => `/admin/projects/construction-updates?update=${row.update_id}`,
+    supportsRebind: false,
+  },
+  {
     domainKey: "hero_templates",
     table: "hero_templates",
     entityType: "hero_template",
@@ -566,7 +576,7 @@ const PROVIDER_CONFIGS = [
 ] satisfies ProviderConfig[];
 
 export const MEDIA_REFERENCE_PROVIDER_REGISTRY = PROVIDER_CONFIGS.map(createProvider);
-export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v4-lowercase-project-media";
+export const MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION = "media-reference-providers-v5-project-tracking";
 
 export function getMediaReferenceProvider(domainKey: string) {
   return MEDIA_REFERENCE_PROVIDER_REGISTRY.find((provider) => provider.domainKey === domainKey) ?? null;

@@ -12,6 +12,11 @@ import {
   projectLocationSubDistrictsEntityListAdapter,
 } from "../../projects/location-management-adapter";
 import { redirectsEntityListAdapter } from "../../redirects/entity-list-adapter";
+import {
+  trackingItemsEntityListAdapter,
+  trackingStagesEntityListAdapter,
+  trackingUpdatesEntityListAdapter,
+} from "../../projects/tracking-adapter";
 import { activityLogEntityListAdapter } from "../../audit/entity-list-adapter";
 import { topicsWithoutImageEntityListAdapter } from "../../media-catalog/topics-without-image-entity-list-adapter";
 import { adminUsersEntityListAdapter } from "../../users/entity-list-adapter";
@@ -32,6 +37,9 @@ export const adminEntityListAdapterRegistry = {
   project_locations_city: projectLocationCitiesEntityListAdapter,
   project_locations_main_area: projectLocationDistrictsEntityListAdapter,
   project_locations_sub_area: projectLocationSubDistrictsEntityListAdapter,
+  project_tracking_stages: trackingStagesEntityListAdapter,
+  project_tracking_items: trackingItemsEntityListAdapter,
+  project_tracking_updates: trackingUpdatesEntityListAdapter,
   redirects: redirectsEntityListAdapter,
   activity_log: activityLogEntityListAdapter,
   topics_without_image: topicsWithoutImageEntityListAdapter,

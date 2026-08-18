@@ -1,9 +1,11 @@
-import { getConstructionUpdatesPlanningData } from "../../../../lib/admin/projects/construction-updates-query";
+import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { loadProjectTrackingHub } from "../../../../lib/admin/projects/tracking-hub";
 import ConstructionUpdatesClient from "./ConstructionUpdatesClient";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConstructionUpdatesPage() {
-  const data = await getConstructionUpdatesPlanningData();
-  return <ConstructionUpdatesClient projects={data.projects} siteUpdates={data.siteUpdates} />;
+  await requireAdminSession();
+  const data = await loadProjectTrackingHub();
+  return <ConstructionUpdatesClient projects={data.projects} schemaAvailable={data.schemaAvailable} />;
 }

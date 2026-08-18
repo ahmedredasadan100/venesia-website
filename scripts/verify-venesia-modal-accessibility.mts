@@ -281,6 +281,7 @@ const expectedConsumers = [
   "src/components/admin/entity-list/AdminEntityListFilters.tsx",
   "src/components/admin/media/AdminMediaPickerModal.tsx",
   "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+  "src/components/admin/projects/tracking/TrackingForms.tsx",
   "src/components/admin/ui/AdminDuplicateResourceModal.tsx",
   "src/components/admin/ui/AdminLinkPicker.tsx",
 ].sort();

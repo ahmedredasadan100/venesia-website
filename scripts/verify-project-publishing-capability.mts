@@ -67,6 +67,10 @@ const publicDetail = read("src/app/(site)/projects/[slug]/page.tsx");
 const trackDetail = read(
   "src/app/(site)/track-your-project/[slug]/page.tsx",
 );
+const trackingRead = read("src/lib/projects/tracking/public-read.ts");
+const trackingMigration = read(
+  "sql/migrations/20260817170332_project_construction_tracking_detail.sql",
+);
 const adminPreview = read("src/app/admin/projects/[id]/preview/page.tsx");
 const sitemap = read("src/lib/seo/generate-sitemap-entries.ts");
 const revalidation = read(
@@ -170,12 +174,23 @@ check(
     !publicLoader.includes("loadFeaturedProjects"),
 );
 check(
-  "Track uses its explicit loader under the same canonical published truth",
-  publicLoader.includes("loadTrackProjectBySlug") &&
-    trackDetail.includes("loadTrackProjectBySlug") &&
-    !trackDetail.includes("loadProjectBySlugResult") &&
-    publicLoader.includes('.eq("slug", slug)') &&
-    !publicLoader.includes('if (source === "marketing")'),
+  "Track happy path uses one aggregate whose SQL enforces canonical Project published truth",
+  trackDetail.includes("loadProjectTrackingDetail") &&
+    trackingRead.includes("getSupabaseAdmin().rpc(\n    TRACKING_PUBLIC_RPC") &&
+    trackingMigration.includes("project.publication_status = 'published'") &&
+    trackingMigration.includes("when not exists (select 1 from project_row) then null") &&
+    !trackDetail.includes("loadProjectBySlugResult"),
+);
+check(
+  "Track consults the Project owner only inside the exact pending-schema fallback",
+  trackingRead.includes('code === "PGRST202"') &&
+    trackingRead.includes("isPendingTrackingSchemaDependency(error)") &&
+    trackingRead.includes("throw new PendingTrackingSchemaDependencyError(error)") &&
+    trackingRead.includes("error instanceof PendingTrackingSchemaDependencyError") &&
+    trackingRead.includes("return resolvePendingSchemaResult(slug, error.dependencyError)") &&
+    trackingRead.includes("loadProjectBySlugResult(slug)") &&
+    trackingRead.includes('projectResult.status !== "ok"') &&
+    trackingRead.includes('classification: "known_pending_schema_dependency"'),
 );
 check(
   "Admin Preview authenticates, is noindex/nofollow, and reuses public renderers",

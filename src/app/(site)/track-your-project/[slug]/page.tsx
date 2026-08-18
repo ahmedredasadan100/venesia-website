@@ -1,11 +1,10 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
-import ProjectTrackSkeleton from "../../../../components/track/ProjectTrackSkeleton";
-import {
-  getProjectHref,
-} from "../../../../lib/projects/public-helpers";
-import { loadTrackProjectBySlug } from "../../../../lib/projects/load-published-projects";
+import ProjectTrackingExperience, {
+  ProjectTrackingUnavailableState,
+} from "../../../../components/track/ProjectTrackingExperience";
+import { loadProjectTrackingDetail } from "../../../../lib/projects/tracking/public-read";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { generatePublicMetadata } from "../../../../lib/seo/generate-public-metadata";
 
@@ -21,41 +20,47 @@ export async function generateMetadata({
   params,
 }: ProjectTrackPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const project = await loadTrackProjectBySlug(slug);
+  const result = await loadProjectTrackingDetail(slug);
 
-  if (!project) {
+  if (result.status !== "ready") {
     return generatePublicMetadata({
       path: "/track-your-project",
-      title: "متابعة المشروع غير متاحة | فينيسيا للتطوير العقاري",
-      description: "صفحة متابعة المشروع غير متاحة حاليًا.",
+      title:
+        result.status === "unavailable"
+          ? `متابعة ${result.project.arabicName} غير متاحة مؤقتًا | فينيسيا للتطوير العقاري`
+          : "متابعة المشروع غير متاحة | فينيسيا للتطوير العقاري",
+      description:
+        result.status === "unavailable"
+          ? "بيانات متابعة التنفيذ غير متاحة مؤقتًا."
+          : "صفحة متابعة المشروع غير متاحة حاليًا.",
       robots: NO_INDEX_ROBOTS,
     });
   }
 
   return generatePublicMetadata({
-    path: `/track-your-project/${project.slug}`,
-    title: `متابعة ${project.arabicName} | فينيسيا للتطوير العقاري`,
-    description: "جاري تحديث بيانات متابعة مراحل التنفيذ لهذا المشروع.",
+    path: `/track-your-project/${result.detail.project.slug}`,
+    title: `متابعة ${result.detail.project.arabicName} | فينيسيا للتطوير العقاري`,
+    description: result.detail.latestUpdate?.body ?? `تابع مراحل تنفيذ ${result.detail.project.arabicName} وآخر تحديثات المشروع الموثقة.`,
     robots: NO_INDEX_ROBOTS,
   });
 }
 
 export default async function ProjectTrackPage({ params }: ProjectTrackPageProps) {
   const { slug } = await params;
-  const project = await loadTrackProjectBySlug(slug);
+  const result = await loadProjectTrackingDetail(slug);
 
-  if (!project) {
+  if (result.status === "not_found") {
     notFound();
   }
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white">
       <div aria-hidden className="venesia-grain pointer-events-none fixed inset-0 z-[4]" />
-      <ProjectTrackSkeleton
-        projectCode={project.code}
-        projectName={project.arabicName}
-        projectHref={getProjectHref(project)}
-      />
+      {result.status === "unavailable" ? (
+        <ProjectTrackingUnavailableState projectName={result.project.arabicName} />
+      ) : (
+        <ProjectTrackingExperience detail={result.detail} />
+      )}
     </div>
   );
 }

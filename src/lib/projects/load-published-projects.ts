@@ -161,7 +161,7 @@ function bySortOrder<Row extends { sort_order: number }>(left: Row, right: Row) 
 
 function mapLoadedProjectAggregate(
   project: PublicProjectAggregateRow,
-  context: { identity: string; source: "marketing" | "track" | "admin-preview" },
+  context: { identity: string; source: "marketing" | "admin-preview" },
 ): PublicProject {
   const projectId = Number(project.id);
   const locations = [
@@ -208,7 +208,7 @@ function mapLoadedProjectAggregate(
 
 async function queryProjectBySlug(
   slug: string,
-  source: "marketing" | "track",
+  source: "marketing",
 ): Promise<LoadProjectBySlugResult> {
   if (!PROJECT_SLUG_PATTERN.test(slug)) return { status: "invalid_slug", project: null };
 
@@ -239,17 +239,6 @@ export const loadProjectBySlugResult = cache(async function loadProjectBySlugRes
     ["public-project-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION, slug],
     { revalidate: 300, tags: ["projects", "project"] },
   )();
-});
-
-/** Tracking uses the same canonical public visibility truth as every public Project route. */
-export const loadTrackProjectBySlug = cache(async function loadTrackProjectBySlug(
-  slug: string,
-): Promise<PublicProject | null> {
-  return unstable_cache(
-    () => queryProjectBySlug(slug, "track"),
-    ["track-project-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION, slug],
-    { revalidate: 300, tags: ["projects", "project"] },
-  )().then((result) => result.project);
 });
 
 export const loadProjectForAdminPreviewResult = cache(

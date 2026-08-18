@@ -2300,6 +2300,249 @@ export type Database = {
           },
         ]
       }
+      project_tracking_profiles: {
+        Row: {
+          contractor_name: string | null
+          created_at: string
+          created_by: number | null
+          license_receipt_date: string | null
+          project_id: number
+          project_receipt_date: string | null
+          updated_at: string
+          updated_by: number | null
+        }
+        Insert: {
+          contractor_name?: string | null
+          created_at?: string
+          created_by?: number | null
+          license_receipt_date?: string | null
+          project_id: number
+          project_receipt_date?: string | null
+          updated_at?: string
+          updated_by?: number | null
+        }
+        Update: {
+          contractor_name?: string | null
+          created_at?: string
+          created_by?: number | null
+          license_receipt_date?: string | null
+          project_id?: number
+          project_receipt_date?: string | null
+          updated_at?: string
+          updated_by?: number | null
+        }
+        Relationships: [{
+          foreignKeyName: "project_tracking_profiles_project_id_fkey"
+          columns: ["project_id"]
+          isOneToOne: true
+          referencedRelation: "projects"
+          referencedColumns: ["id"]
+        }]
+      }
+      project_tracking_stages: {
+        Row: {
+          created_at: string
+          created_by: number | null
+          description: string | null
+          id: number
+          is_visible: boolean
+          name: string
+          planned_duration_unit: string | null
+          planned_duration_value: number | null
+          project_id: number
+          sort_order: number
+          start_date: string | null
+          updated_at: string
+          updated_by: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: number | null
+          description?: string | null
+          id?: number
+          is_visible?: boolean
+          name: string
+          planned_duration_unit?: string | null
+          planned_duration_value?: number | null
+          project_id: number
+          sort_order: number
+          start_date?: string | null
+          updated_at?: string
+          updated_by?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: number | null
+          description?: string | null
+          id?: number
+          is_visible?: boolean
+          name?: string
+          planned_duration_unit?: string | null
+          planned_duration_value?: number | null
+          project_id?: number
+          sort_order?: number
+          start_date?: string | null
+          updated_at?: string
+          updated_by?: number | null
+        }
+        Relationships: [{
+          foreignKeyName: "project_tracking_stages_project_id_fkey"
+          columns: ["project_id"]
+          isOneToOne: false
+          referencedRelation: "projects"
+          referencedColumns: ["id"]
+        }]
+      }
+      project_tracking_items: {
+        Row: {
+          completion_date: string | null
+          created_at: string
+          created_by: number | null
+          description: string | null
+          id: number
+          is_visible: boolean
+          name: string
+          sort_order: number
+          stage_id: number
+          start_date: string | null
+          status: string
+          updated_at: string
+          updated_by: number | null
+        }
+        Insert: {
+          completion_date?: string | null
+          created_at?: string
+          created_by?: number | null
+          description?: string | null
+          id?: number
+          is_visible?: boolean
+          name: string
+          sort_order: number
+          stage_id: number
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+          updated_by?: number | null
+        }
+        Update: {
+          completion_date?: string | null
+          created_at?: string
+          created_by?: number | null
+          description?: string | null
+          id?: number
+          is_visible?: boolean
+          name?: string
+          sort_order?: number
+          stage_id?: number
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+          updated_by?: number | null
+        }
+        Relationships: [{
+          foreignKeyName: "project_tracking_items_stage_id_fkey"
+          columns: ["stage_id"]
+          isOneToOne: false
+          referencedRelation: "project_tracking_stages"
+          referencedColumns: ["id"]
+        }]
+      }
+      project_tracking_updates: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: number | null
+          id: number
+          item_id: number
+          occurred_at: string
+          publication_status: string
+          published_at: string | null
+          published_by: number | null
+          title: string
+          updated_at: string
+          updated_by: number | null
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: number | null
+          id?: number
+          item_id: number
+          occurred_at: string
+          publication_status?: string
+          published_at?: string | null
+          published_by?: number | null
+          title: string
+          updated_at?: string
+          updated_by?: number | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: number | null
+          id?: number
+          item_id?: number
+          occurred_at?: string
+          publication_status?: string
+          published_at?: string | null
+          published_by?: number | null
+          title?: string
+          updated_at?: string
+          updated_by?: number | null
+        }
+        Relationships: [{
+          foreignKeyName: "project_tracking_updates_item_id_fkey"
+          columns: ["item_id"]
+          isOneToOne: false
+          referencedRelation: "project_tracking_items"
+          referencedColumns: ["id"]
+        }]
+      }
+      project_tracking_update_media: {
+        Row: {
+          client_key: string
+          created_at: string
+          id: number
+          media_kind: string
+          poster_url: string | null
+          public_url: string
+          sort_order: number
+          title: string | null
+          update_id: number
+          updated_at: string
+        }
+        Insert: {
+          client_key?: string
+          created_at?: string
+          id?: number
+          media_kind: string
+          poster_url?: string | null
+          public_url: string
+          sort_order: number
+          title?: string | null
+          update_id: number
+          updated_at?: string
+        }
+        Update: {
+          client_key?: string
+          created_at?: string
+          id?: number
+          media_kind?: string
+          poster_url?: string | null
+          public_url?: string
+          sort_order?: number
+          title?: string | null
+          update_id?: number
+          updated_at?: string
+        }
+        Relationships: [{
+          foreignKeyName: "project_tracking_update_media_update_id_fkey"
+          columns: ["update_id"]
+          isOneToOne: false
+          referencedRelation: "project_tracking_updates"
+          referencedColumns: ["id"]
+        }]
+      }
       projects: {
         Row: {
           arabic_name: string
@@ -3078,6 +3321,31 @@ export type Database = {
       }
     }
     Functions: {
+      mutate_project_tracking_item: {
+        Args: { p_action: string; p_actor_id: number; p_item_id?: number | null; p_payload?: Json; p_project_id: number; p_stage_id: number }
+        Returns: Json
+      }
+      mutate_project_tracking_stage: {
+        Args: { p_action: string; p_actor_id: number; p_payload?: Json; p_project_id: number; p_stage_id?: number | null }
+        Returns: Json
+      }
+      mutate_project_tracking_update: {
+        Args: { p_action: string; p_actor_id: number; p_item_id: number; p_payload?: Json; p_project_id: number; p_update_id?: number | null }
+        Returns: Json
+      }
+      project_tracking_public_detail_v1: { Args: { p_slug: string }; Returns: Json }
+      reorder_project_tracking_items: {
+        Args: { p_actor_id: number; p_item_ids: number[]; p_project_id: number; p_stage_id: number }
+        Returns: number
+      }
+      reorder_project_tracking_stages: {
+        Args: { p_actor_id: number; p_project_id: number; p_stage_ids: number[] }
+        Returns: number
+      }
+      save_project_tracking_profile: {
+        Args: { p_actor_id: number; p_payload: Json; p_project_id: number }
+        Returns: Json
+      }
       acquire_media_reference_write_lease: {
         Args: {
           p_actor_id?: number

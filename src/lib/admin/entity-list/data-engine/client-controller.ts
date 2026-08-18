@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   normalizeAdminEntityListQuery,
+  normalizeAdminEntityListQueryWithRouteParams,
   writeAdminEntityListQuery,
   type AdminEntityListQuery,
   type AdminEntityListQueryContract,
@@ -56,6 +57,8 @@ export type AdminEntityListControllerOptions<
   constrainQuery?: (
     query: AdminEntityListQuery<Filters, SortField>,
   ) => AdminEntityListQuery<Filters, SortField>;
+  /** Supplies route-owned filter identities before browser URL parsing. */
+  routeOwnedParams?: Readonly<Record<string, string>>;
 };
 
 export function useAdminEntityListInvalidation(entity: string) {
@@ -83,6 +86,7 @@ export function useAdminEntityListController<
   initialResult,
   staleTimeMs,
   constrainQuery,
+  routeOwnedParams,
 }: AdminEntityListControllerOptions<
   Entity,
   Filters,
@@ -96,6 +100,17 @@ export function useAdminEntityListController<
     (candidate: AdminEntityListQuery<Filters, SortField>) =>
       constrainQuery ? constrainQuery(candidate) : candidate,
     [constrainQuery],
+  );
+  const normalizeBrowserQuery = useCallback(
+    (params: URLSearchParams) =>
+      routeOwnedParams
+        ? normalizeAdminEntityListQueryWithRouteParams(
+            contract,
+            params,
+            routeOwnedParams,
+          )
+        : normalizeAdminEntityListQuery(contract, params),
+    [contract, routeOwnedParams],
   );
   const [bootstrap] = useState(() => {
     const normalizedInitial =
@@ -145,7 +160,7 @@ export function useAdminEntityListController<
 
   useEffect(() => {
     const currentParams = new URLSearchParams(window.location.search);
-    const restored = normalizeAdminEntityListQuery(contract, currentParams);
+    const restored = normalizeBrowserQuery(currentParams);
     const constrainedRestored = applyQueryConstraint(restored);
     const constraintChangedQuery =
       JSON.stringify(restored) !== JSON.stringify(constrainedRestored);
@@ -163,15 +178,12 @@ export function useAdminEntityListController<
     const search = params.toString();
     const href = `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`;
     window.history.replaceState(window.history.state, "", href);
-  }, [applyQueryConstraint, bootstrap.query, contract, initialQuery.page]);
+  }, [applyQueryConstraint, bootstrap.query, contract, initialQuery.page, normalizeBrowserQuery]);
 
   useEffect(() => {
     function handlePopState() {
       const currentParams = new URLSearchParams(window.location.search);
-      const normalized = normalizeAdminEntityListQuery(
-        contract,
-        currentParams,
-      );
+      const normalized = normalizeBrowserQuery(currentParams);
       const restored = applyQueryConstraint(normalized);
       if (JSON.stringify(normalized) !== JSON.stringify(restored)) {
         const params = writeAdminEntityListQuery(
@@ -188,7 +200,7 @@ export function useAdminEntityListController<
     }
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [applyQueryConstraint, contract]);
+  }, [applyQueryConstraint, contract, normalizeBrowserQuery]);
 
   const queryKey = adminEntityListQueryKeys.query(
     entity,
