@@ -83,9 +83,9 @@ The 2026-08-19 authorized Production migration closure established the following
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 85 |
-| Production registry versions | 85 |
-| Registry SQL provenance | Exact repository SQL for all 85 deployed versions |
+| Repository migration files | 86 |
+| Production registry versions | 86 |
+| Registry SQL provenance | Exact repository SQL for all 86 deployed versions |
 | Public tables | 56 |
 | Public tables with RLS enabled | 56 |
 | Public catalog objects with repository provenance | 291 |
@@ -112,6 +112,8 @@ The authorized Projects Vertical Slice closure then applied `20260817100000_proj
 The authorized Construction Tracking closure then applied `20260817170332_project_construction_tracking_detail.sql` as migration 84 with exact repository SQL provenance. It adds the independent Tracking profile/stage/item/update/media-reference graph only: `projects` remains unchanged, no project facts are duplicated, and every Tracking write RPC remains service-role-only behind RLS.
 
 The authorized Tracking and Governance completion then applied `20260818010000_project_tracking_public_pagination.sql` as migration 85 with exact repository SQL provenance. It replaces the existing public Tracking detail function in place so child Stages, Items, Updates, Media, and history remain bounded by the canonical application Read Model; it creates no table, view, Runtime, or second read owner, and the function remains service-role-only.
+
+The authorized security hardening applied `20260819041808_harden_rls_auto_enable_execute_acl.sql` as migration 86 with exact repository SQL provenance. It only revokes `EXECUTE` on the Supabase platform-owned `public.rls_auto_enable()` event-trigger function from `PUBLIC`, `anon`, and `authenticated`; the function body, owner, search path, event trigger, `service_role`, and `postgres` owner access remain unchanged.
 
 ## Removed final-cleanup legacy
 
