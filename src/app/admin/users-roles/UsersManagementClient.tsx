@@ -139,6 +139,7 @@ function createAdminUserColumns(input: {
       ...ADMIN_USERS_LIST_COLUMN_META.role,
       minWidth: 100,
       width: 110,
+      flexible: true,
       renderCell: ({ row }) => (
         <span className="text-sm text-white/65">{roleLabel(row.role)}</span>
       ),
@@ -479,6 +480,7 @@ export default function UsersManagementClient({
               number
             >
               listId="admin-users-table"
+              sizingStrategy={{ mode: "flexible", columnKey: "role" }}
               toolbar={{
                 basePath: "/admin/users-roles",
                 preserveParams: ["sort", "limit"],

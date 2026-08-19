@@ -110,6 +110,7 @@ const ACTIVITY_LOG_COLUMNS: readonly AdminEntityColumnDef<
     align: "center",
     minWidth: 150,
     width: 150,
+    flexible: true,
     renderCell: ({ row }) => (
       <span className="block truncate font-semibold text-white" title={row.actor_username}>
         {row.actor_username}
@@ -315,6 +316,7 @@ export default function ActivityLogClient({
             number
           >
             listId="activity-log-table"
+            sizingStrategy={{ mode: "flexible", columnKey: "actor" }}
             toolbar={{
               basePath: "/admin/activity-log",
               search: {

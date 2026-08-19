@@ -493,7 +493,7 @@ assert.doesNotMatch(pageColumn, /flexible:\s*true/u);
 assert.match(pageColumn, /minWidth:\s*ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS\.textOnly \+ 40/u);
 assert.match(
   pathColumn,
-  /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("path"\)[\s\S]*sortKey:\s*"path"[\s\S]*minWidth:\s*PAGE_PATH_COLUMN_WIDTH[\s\S]*width:\s*PAGE_PATH_COLUMN_WIDTH/u,
+  /defaultVisible:\s*true[\s\S]*sortable:\s*supportedSortFields\.has\("path"\)[\s\S]*sortKey:\s*"path"[\s\S]*minWidth:\s*PAGE_PATH_COLUMN_WIDTH[\s\S]*width:\s*PAGE_PATH_COLUMN_WIDTH[\s\S]*flexible:\s*true/u,
 );
 assert.match(
   slugColumn,
@@ -532,24 +532,39 @@ assert.match(
 assert.match(client, /PAGE_PATH_COLUMN_WIDTH\s*=\s*200/u);
 assert.match(client, /PAGE_SEO_COLUMN_WIDTH\s*=\s*96/u);
 assert.match(client, /PAGE_UPDATED_AT_COLUMN_WIDTH\s*=\s*176/u);
-assert.doesNotMatch(client, /implicitFlexibleColumn=\{false\}/u);
 assert.doesNotMatch(client, /fillAvailableWidth/u);
-assert.match(entityList, /implicitFlexibleColumn=\{implicitFlexibleColumn\}/u);
+assert.match(
+  client,
+  /sizingStrategy=\{\{[\s\S]*mode:\s*"flexible"[\s\S]*columnKey:\s*"path"[\s\S]*\}\}/u,
+);
+assert.doesNotMatch(entityList, /implicitFlexibleColumn/u);
 assert.match(entityList, /fillAvailableWidth\?: boolean/u);
 assert.match(entityList, /fillAvailableWidth=\{fillAvailableWidth\}/u);
-assert.match(entityListTable, /implicitFlexibleColumn\?: boolean/u);
-assert.match(entityListTable, /implicitFlexibleColumn = true/u);
+assert.match(
+  entityListTable,
+  /sizingStrategy:\s*AdminEntityListSizingStrategy<TKey>/u,
+);
+assert.doesNotMatch(entityListTable, /implicitFlexibleColumn/u);
 assert.match(entityListTable, /fillAvailableWidth\?: boolean/u);
 assert.match(entityListTable, /fillAvailableWidth = false/u);
 assert.match(entityListTable, /column\.sticky === "end-adjacent"/u);
-assert.match(entityListTable, /insetInlineEnd:\s*actionsColumnWidth/u);
+assert.match(entityListTable, /const stickyEndOffsets = new Map/u);
+assert.match(
+  entityListTable,
+  /nextStickyEndOffset \+= allocatedColumnWidths\.get\(column\.key\) \?\? 0/u,
+);
+assert.match(
+  entityListTable,
+  /insetInlineEnd:\s*stickyEndOffsets\.get\(column\.key\) \?\? 0/u,
+);
+assert.doesNotMatch(entityListTable, /insetInlineEnd:\s*actionsColumnWidth/u);
 assert.match(
   entityListTable,
   /data-admin-grid-sticky="inline-end-adjacent"/u,
 );
 assert.match(
   entityListTable,
-  /explicitFlexibleColumnKey \?\?[\s\S]*\(implicitFlexibleColumn[\s\S]*!column\.primary[\s\S]*: undefined\)/u,
+  /sizingStrategy\.mode === "flexible"[\s\S]*\? sizingStrategy\.columnKey[\s\S]*: undefined/u,
 );
 assert.match(
   entityListTable,
@@ -557,8 +572,10 @@ assert.match(
 );
 assert.match(
   entityListTable,
-  /flexibleColumnKey === undefined && !showFillSpacer[\s\S]*\? tableMinWidth[\s\S]*: "100%"/u,
+  /const constrainedMinimumWidths = new Map[\s\S]*minimumTableWidth - availableTableWidth[\s\S]*const allocatedColumnWidths = new Map/u,
 );
+assert.match(entityListTable, /const observer = new ResizeObserver/u);
+assert.match(entityListTable, /data-admin-table-width-budget/u);
 assert.equal(
   (entityListTable.match(/data-admin-table-fill-spacer/gu) ?? []).length,
   6,

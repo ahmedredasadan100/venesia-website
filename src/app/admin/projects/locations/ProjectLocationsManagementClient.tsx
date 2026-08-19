@@ -244,6 +244,7 @@ function createColumns(input: {
       hideable: optionalColumns.has("parent"),
       minWidth: 210,
       width: 230,
+      flexible: input.level !== "governorate",
       renderCell: ({ row }) => (
         <span className="block truncate text-right text-sm text-white/68">
           {row.parent_name_ar
@@ -270,6 +271,7 @@ function createColumns(input: {
       hideable: optionalColumns.has("relations"),
       minWidth: 170,
       width: 180,
+      flexible: input.level === "governorate",
       renderCell: ({ row }) => (
         <span className="text-sm text-white/62">
           {row.project_count} مشروع / {row.child_count} فرعي
@@ -336,6 +338,8 @@ export default function ProjectLocationsManagementClient({
 }: ProjectLocationsManagementClientProps) {
   const config = PROJECT_LOCATION_LEVEL_CONFIG[level];
   const entityKey = PROJECT_LOCATION_ENTITY_KEYS[level];
+  const flexibleColumnKey: ProjectLocationManagementColumnKey =
+    level === "governorate" ? "relations" : "parent";
   const controller = useAdminEntityListController({
     entity: entityKey,
     contract: projectLocationsQueryContract,
@@ -489,6 +493,10 @@ export default function ProjectLocationsManagementClient({
           <AdminEntityListTableRegion data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}>
             <AdminEntityList<ProjectLocationManagementRow, ProjectLocationManagementColumnKey, ProjectLocationSortField, number>
               listId={`${entityKey}-table`}
+              sizingStrategy={{
+                mode: "flexible",
+                columnKey: flexibleColumnKey,
+              }}
               toolbar={{
                 basePath,
                 preserveParams: ["sort", "limit"],

@@ -1,6 +1,12 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import type { AdminEntityColumnDef } from "../../../lib/admin/entity-list";
 import {
   AdminDataGrid,
@@ -18,6 +24,8 @@ import {
   getAdminDataGridFixedColumnStyle,
 } from "../ui/AdminDataGrid";
 import type { AdminGridId } from "../ui/useAdminGridSelection";
+
+const ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH = 72;
 
 export type AdminEntitySortState<TSortKey extends string = string> = {
   key: TSortKey;
@@ -42,6 +50,15 @@ type SortMode<TSortKey extends string> =
       onToggle: (sortKey: TSortKey) => void;
     };
 
+export type AdminEntityListSizingStrategy<TKey extends string> =
+  | {
+      mode: "flexible";
+      columnKey: TKey;
+    }
+  | {
+      mode: "fixed";
+    };
+
 export type AdminEntityListTableProps<
   TRow,
   TKey extends string,
@@ -60,11 +77,7 @@ export type AdminEntityListTableProps<
   actionsColumnWidth: number;
   empty: ReactNode;
   className?: string;
-  /**
-   * Keeps the historical automatic flexible-track fallback by default.
-   * Set to false when every column in a consumer has an intentional fixed width.
-   */
-  implicitFlexibleColumn?: boolean;
+  sizingStrategy: AdminEntityListSizingStrategy<TKey>;
   /**
    * Fills the available table surface without allowing a data column to absorb
    * the remaining width. A presentation-only spacer track owns the remainder.
@@ -100,7 +113,7 @@ export default function AdminEntityListTable<
   actionsColumnWidth,
   empty,
   className = "",
-  implicitFlexibleColumn = true,
+  sizingStrategy,
   fillAvailableWidth = false,
   getRowDepth,
   rowClassName,
@@ -108,57 +121,180 @@ export default function AdminEntityListTable<
 }: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>) {
   const selectionColumnWidth = 46;
   const showSelection = Boolean(selection);
-  const explicitFlexibleColumnKey = columns.find(
-    (column) => column.flexible,
-  )?.key;
   const flexibleColumnKey =
-    explicitFlexibleColumnKey ??
-    (implicitFlexibleColumn
-      ? columns.find(
-          (column) =>
-            !column.primary &&
-            !column.sticky,
-        )?.key
-      : undefined);
+    sizingStrategy.mode === "flexible"
+      ? sizingStrategy.columnKey
+      : undefined;
   const fillSpacerBeforeColumnKey = columns.find(
     (column) => column.sticky === "end",
   )?.key;
   const showFillSpacer = fillAvailableWidth && flexibleColumnKey === undefined;
   const showTrailingFillSpacer =
     showFillSpacer && fillSpacerBeforeColumnKey === undefined;
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [availableTableWidth, setAvailableTableWidth] = useState<number | null>(
+    null,
+  );
 
-  function getColumnBaseWidth(
+  useLayoutEffect(() => {
+    const scrollport = tableRef.current?.parentElement;
+    if (!scrollport) return;
+
+    const updateAvailableWidth = () => {
+      const nextWidth = scrollport.clientWidth;
+      setAvailableTableWidth((currentWidth) =>
+        currentWidth === nextWidth ? currentWidth : nextWidth,
+      );
+    };
+
+    updateAvailableWidth();
+    const observer = new ResizeObserver(updateAvailableWidth);
+    observer.observe(scrollport);
+    return () => observer.disconnect();
+  }, []);
+
+  function getColumnMinimumWidth(
     column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
   ) {
     if (column.sticky === "end") {
       return actionsColumnWidth;
     }
 
-    // A flexible track may prefer a wider desktop width, but that preference
-    // must not become the table's hard minimum. Otherwise the shared sticky
-    // actions track can cover the final data columns inside narrower shells.
-    return column.flexible
-      ? column.minWidth
-      : Math.max(column.minWidth, column.width ?? column.minWidth);
+    return column.minWidth;
   }
 
-  const tableMinWidth =
-    (showSelection ? selectionColumnWidth : 0) +
-    columns.reduce(
-      (total, column) => total + getColumnBaseWidth(column),
-      0,
+  function getColumnPreferredWidth(
+    column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
+  ) {
+    if (column.sticky === "end") {
+      return actionsColumnWidth;
+    }
+
+    return Math.max(column.minWidth, column.width ?? column.minWidth);
+  }
+
+  const minimumColumnsWidth = columns.reduce(
+    (total, column) => total + getColumnMinimumWidth(column),
+    0,
+  );
+  const preferredColumnsWidth = columns.reduce(
+    (total, column) => total + getColumnPreferredWidth(column),
+    0,
+  );
+  const selectionWidth = showSelection ? selectionColumnWidth : 0;
+  const minimumTableWidth = selectionWidth + minimumColumnsWidth;
+  const preferredTableWidth = selectionWidth + preferredColumnsWidth;
+  const fillsAvailableWidth =
+    flexibleColumnKey !== undefined || showFillSpacer;
+  const constrainedMinimumWidths = new Map<TKey, number>(
+    columns.map((column) => [
+      column.key,
+      getColumnMinimumWidth(column),
+    ]),
+  );
+  let constrainedWidthDeficit =
+    fillsAvailableWidth && availableTableWidth !== null
+      ? Math.max(0, minimumTableWidth - availableTableWidth)
+      : 0;
+  const constrainedPressureColumns = [
+    ...columns.filter((column) => column.key === flexibleColumnKey),
+    ...columns.filter(
+      (column) => column.primary && column.key !== flexibleColumnKey,
+    ),
+  ];
+
+  for (const column of constrainedPressureColumns) {
+    if (constrainedWidthDeficit <= 0) break;
+    const currentWidth = constrainedMinimumWidths.get(column.key) ?? 0;
+    const safeFloor =
+      column.key === flexibleColumnKey
+        ? Math.min(
+            currentWidth,
+            ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH,
+          )
+        : Math.min(
+            currentWidth,
+            ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textBudgetPx +
+              ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.cellInlinePaddingPx * 2,
+          );
+    const reduction = Math.min(
+      constrainedWidthDeficit,
+      currentWidth - safeFloor,
     );
+    constrainedMinimumWidths.set(column.key, currentWidth - reduction);
+    constrainedWidthDeficit -= reduction;
+  }
+
+  const constrainedMinimumColumnsWidth = columns.reduce(
+    (total, column) =>
+      total +
+      (constrainedMinimumWidths.get(column.key) ??
+        getColumnMinimumWidth(column)),
+    0,
+  );
+  const constrainedMinimumTableWidth =
+    selectionWidth + constrainedMinimumColumnsWidth;
+  const tableWidth = fillsAvailableWidth
+    ? Math.max(
+        constrainedMinimumTableWidth,
+        availableTableWidth ?? preferredTableWidth,
+      )
+    : preferredTableWidth;
+  const availableColumnsWidth = tableWidth - selectionWidth;
+  const preferredGrowthBudget = Math.min(
+    preferredColumnsWidth - constrainedMinimumColumnsWidth,
+    Math.max(0, availableColumnsWidth - constrainedMinimumColumnsWidth),
+  );
+  const preferredHeadroom = columns.reduce(
+    (total, column) =>
+      total +
+      (getColumnPreferredWidth(column) - getColumnMinimumWidth(column)),
+    0,
+  );
+  const allocatedColumnWidths = new Map<TKey, number>();
+
+  for (const column of columns) {
+    const minimumWidth =
+      constrainedMinimumWidths.get(column.key) ??
+      getColumnMinimumWidth(column);
+    const columnHeadroom = getColumnPreferredWidth(column) - minimumWidth;
+    const preferredGrowth =
+      preferredHeadroom > 0
+        ? (preferredGrowthBudget * columnHeadroom) / preferredHeadroom
+        : 0;
+    allocatedColumnWidths.set(column.key, minimumWidth + preferredGrowth);
+  }
+
+  const flexibleGrowth =
+    availableColumnsWidth -
+    constrainedMinimumColumnsWidth -
+    preferredGrowthBudget;
+  if (flexibleColumnKey !== undefined && flexibleGrowth > 0) {
+    allocatedColumnWidths.set(
+      flexibleColumnKey,
+      (allocatedColumnWidths.get(flexibleColumnKey) ?? 0) + flexibleGrowth,
+    );
+  }
+
+  const stickyEndOffsets = new Map<TKey, number>();
+  let nextStickyEndOffset = 0;
+  for (let index = columns.length - 1; index >= 0; index -= 1) {
+    const column = columns[index];
+    if (column.sticky !== "end" && column.sticky !== "end-adjacent") {
+      continue;
+    }
+
+    stickyEndOffsets.set(column.key, nextStickyEndOffset);
+    nextStickyEndOffset += allocatedColumnWidths.get(column.key) ?? 0;
+  }
 
   function getColumnTrackStyle(
     column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
   ) {
-    if (column.sticky === "end") {
-      return getAdminDataGridFixedColumnStyle(actionsColumnWidth);
-    }
-
-    return column.key === flexibleColumnKey
-      ? undefined
-      : getAdminDataGridFixedColumnStyle(getColumnBaseWidth(column));
+    return getAdminDataGridFixedColumnStyle(
+      allocatedColumnWidths.get(column.key) ??
+        getColumnMinimumWidth(column),
+    );
   }
 
   function getColumnPresentationStyle(
@@ -230,12 +366,14 @@ export default function AdminEntityListTable<
       className={`max-w-full ${className}`.trim()}
     >
       <table
+        ref={tableRef}
+        data-admin-table-min-width={minimumTableWidth}
+        data-admin-table-constrained-min-width={constrainedMinimumTableWidth}
+        data-admin-table-preferred-width={preferredTableWidth}
+        data-admin-table-width-budget={availableTableWidth ?? undefined}
         style={{
-          width:
-            flexibleColumnKey === undefined && !showFillSpacer
-              ? tableMinWidth
-              : "100%",
-          minWidth: tableMinWidth,
+          width: tableWidth,
+          minWidth: constrainedMinimumTableWidth,
         }}
         className="w-full table-fixed border-separate border-spacing-0 text-right"
       >
@@ -323,7 +461,7 @@ export default function AdminEntityListTable<
                       data-admin-column-key={column.key}
                       style={{
                         ...getColumnTrackStyle(column),
-                        insetInlineEnd: actionsColumnWidth,
+                        insetInlineEnd: stickyEndOffsets.get(column.key) ?? 0,
                       }}
                       className="sticky z-30 whitespace-nowrap bg-[#10151C] text-center"
                     >
@@ -334,7 +472,7 @@ export default function AdminEntityListTable<
               }
 
               const stickyPrimary =
-                column.primary || column.sticky === "start"
+                column.sticky === "start"
                   ? showSelection
                     ? "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-[46px] min-[641px]:z-40 bg-[#10151C] text-right"
                     : "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-0 min-[641px]:z-40 bg-[#10151C] text-right"
@@ -436,7 +574,8 @@ export default function AdminEntityListTable<
                           data-admin-column-key={column.key}
                           style={{
                             ...getColumnTrackStyle(column),
-                            insetInlineEnd: actionsColumnWidth,
+                            insetInlineEnd:
+                              stickyEndOffsets.get(column.key) ?? 0,
                           }}
                           className="sticky z-20 min-w-0 overflow-hidden border-b border-white/8 bg-[#080B10] text-center text-sm text-white/68 transition group-last:border-b-0 group-hover:bg-[#0D1117]"
                         >
@@ -447,7 +586,7 @@ export default function AdminEntityListTable<
                   }
 
                   const stickyPrimary =
-                    column.primary || column.sticky === "start"
+                    column.sticky === "start"
                       ? showSelection
                         ? "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-[46px] min-[641px]:z-30 bg-[#080B10] text-right transition group-hover:bg-[#0D1117]"
                         : "max-[640px]:static max-[640px]:z-auto min-[641px]:sticky min-[641px]:start-0 min-[641px]:z-30 bg-[#080B10] text-right transition group-hover:bg-[#0D1117]"

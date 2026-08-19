@@ -2124,35 +2124,42 @@ check(
   dataGridSource.includes("getAdminDataGridFixedColumnStyle") &&
     dataGridSource.includes("minWidth: width") &&
     dataGridSource.includes("maxWidth: width") &&
-    entityListTableSource.includes(
-      "getAdminDataGridFixedColumnStyle(actionsColumnWidth)",
-    ) &&
+    entityListTableSource.includes('if (column.sticky === "end")') &&
+    entityListTableSource.includes("return actionsColumnWidth") &&
+    entityListTableSource.includes("allocatedColumnWidths.get(column.key)") &&
     entityListTableSource.includes("<AdminDataGridStickyActionsHeaderCell") &&
     entityListTableSource.includes("<AdminDataGridStickyActionsCell"),
 );
 check(
-  "fixed data tracks stay fixed while opt-in presentation spacers can fill the remaining viewport width",
+  "shared sizing allocates minimum, preferred, and constrained widths from the live viewport budget",
   entityListTableSource.includes("const flexibleColumnKey =") &&
-    entityListTableSource.includes("const explicitFlexibleColumnKey =") &&
-    entityListTableSource.includes("implicitFlexibleColumn?: boolean") &&
-    entityListTableSource.includes("implicitFlexibleColumn = true") &&
-    entityListTableSource.includes("explicitFlexibleColumnKey ??") &&
-    entityListTableSource.includes("(implicitFlexibleColumn") &&
-    entityListTableSource.includes("!column.primary") &&
-    entityListTableSource.includes(": undefined);") &&
-    entityListTableSource.includes("function getColumnBaseWidth") &&
-    entityListTableSource.includes("const tableMinWidth =") &&
-    entityListTableSource.includes('className="w-full table-fixed') &&
+    entityListTableSource.includes(
+      "sizingStrategy: AdminEntityListSizingStrategy<TKey>",
+    ) &&
+    entityListTableSource.includes('sizingStrategy.mode === "flexible"') &&
+    entityListTableSource.includes("sizingStrategy.columnKey") &&
+    !entityListTableSource.includes("implicitFlexibleColumn") &&
+    entityListTableSource.includes(": undefined;") &&
+    entityListTableSource.includes("function getColumnMinimumWidth") &&
+    entityListTableSource.includes("function getColumnPreferredWidth") &&
+    entityListTableSource.includes("const minimumTableWidth =") &&
+    entityListTableSource.includes("const preferredTableWidth =") &&
+    entityListTableSource.includes("const constrainedMinimumWidths = new Map") &&
+    entityListTableSource.includes("minimumTableWidth - availableTableWidth") &&
+    entityListTableSource.includes("const allocatedColumnWidths = new Map") &&
     entityListTableSource.includes("column.key === flexibleColumnKey") &&
+    entityListTableSource.includes(
+      "ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH",
+    ) &&
+    entityListTableSource.includes("const observer = new ResizeObserver") &&
+    entityListTableSource.includes('className="w-full table-fixed') &&
     entityListTableSource.includes("fillAvailableWidth?: boolean") &&
     entityListTableSource.includes("fillAvailableWidth = false") &&
     entityListTableSource.includes(
       "const showFillSpacer = fillAvailableWidth && flexibleColumnKey === undefined",
     ) &&
     entityListTableSource.includes("data-admin-table-fill-spacer") &&
-    entityListTableSource.includes(
-      "flexibleColumnKey === undefined && !showFillSpacer",
-    ) &&
+    entityListTableSource.includes("data-admin-table-width-budget") &&
     !entityListTableSource.includes("w-max min-w-full table-fixed"),
 );
 check(
@@ -2200,7 +2207,11 @@ check(
     pagesSource.includes('sticky: "end-adjacent"') &&
     pagesSource.includes("ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH") &&
     entityListTableSource.includes('column.sticky === "end-adjacent"') &&
-    entityListTableSource.includes("insetInlineEnd: actionsColumnWidth") &&
+    entityListTableSource.includes("const stickyEndOffsets = new Map") &&
+    entityListTableSource.includes(
+      "nextStickyEndOffset += allocatedColumnWidths.get(column.key) ?? 0",
+    ) &&
+    entityListTableSource.includes("stickyEndOffsets.get(column.key) ?? 0") &&
     entityListTableSource.includes(
       'data-admin-grid-sticky="inline-end-adjacent"',
     ) &&

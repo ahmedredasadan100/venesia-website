@@ -203,6 +203,7 @@ function createReportColumns(): AdminEntityColumnDef<
       align: "center",
       minWidth: 138,
       width: 138,
+      flexible: true,
       renderCell: ({ row }) => (
         <span className="text-sm text-white/70">
           {getContentTypeLabel(row.contentType)}
@@ -325,6 +326,7 @@ export default function TopicsWithoutImageReportClient({
           number
         >
           listId="topics-without-image-table"
+          sizingStrategy={{ mode: "flexible", columnKey: "content_type" }}
           toolbar={{
             basePath: "/admin/reports/topics-without-image",
             preserveParams: ["sort", "limit"],

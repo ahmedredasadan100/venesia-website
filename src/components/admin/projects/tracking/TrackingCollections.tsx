@@ -384,6 +384,7 @@ export function TrackingStagesCollection({
         sticky: "start",
         minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
         width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+        flexible: true,
         renderCell: ({ row }) => (
           <Link
             href={trackingStagePath(projectId, row.id)}
@@ -441,6 +442,7 @@ export function TrackingStagesCollection({
         label: "الظهور",
         defaultVisible: true,
         hideable: true,
+        sticky: "end-adjacent",
         minWidth: 100,
         width: 110,
         renderCell: ({ row, onMutationResult }) => {
@@ -469,6 +471,7 @@ export function TrackingStagesCollection({
         label: "الترتيب",
         defaultVisible: true,
         hideable: true,
+        sticky: "end-adjacent",
         minWidth: 110,
         width: 120,
         renderCell: ({ row, onMutationResult }) => (
@@ -683,6 +686,7 @@ export function TrackingStagesCollection({
           <AdminEntityListTableRegion>
             <AdminEntityList
               listId="project-tracking-stages"
+              sizingStrategy={{ mode: "flexible", columnKey: "name" }}
               rows={rows}
               columns={columns}
               getRowId={(row) => row.id}
@@ -894,6 +898,7 @@ export function TrackingItemsCollection({
         sticky: "start",
         minWidth: 380,
         width: 440,
+        flexible: true,
         renderCell: ({ row }) => (
           <Link
             href={trackingItemPath(projectId, row.id)}
@@ -961,6 +966,7 @@ export function TrackingItemsCollection({
         label: "الظهور",
         defaultVisible: true,
         hideable: true,
+        sticky: "end-adjacent",
         minWidth: 82,
         width: 90,
         renderCell: ({ row, onMutationResult }) => {
@@ -989,6 +995,7 @@ export function TrackingItemsCollection({
         label: "الترتيب",
         defaultVisible: true,
         hideable: true,
+        sticky: "end-adjacent",
         minWidth: 92,
         width: 100,
         renderCell: ({ row, onMutationResult }) => (
@@ -1168,6 +1175,7 @@ export function TrackingItemsCollection({
           <AdminEntityListTableRegion>
             <AdminEntityList
               listId="project-tracking-items"
+              sizingStrategy={{ mode: "flexible", columnKey: "name" }}
               rows={rows}
               columns={columns}
               getRowId={(row) => row.id}
@@ -1573,6 +1581,7 @@ export function TrackingUpdatesCollection({
           <AdminEntityListTableRegion>
             <AdminEntityList
               listId="project-tracking-updates"
+              sizingStrategy={{ mode: "flexible", columnKey: "title" }}
               rows={controller.result.rows}
               columns={columns}
               getRowId={(row) => row.id}

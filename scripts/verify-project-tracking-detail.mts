@@ -41,6 +41,9 @@ const formManifest = read("src/lib/admin/form-system/adoption-manifest.ts");
 const instantMutation = read(
   "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
 );
+const entityListTable = read(
+  "src/components/admin/entity-list/AdminEntityListTable.tsx",
+);
 const publicPagination = read("src/components/Pagination.tsx");
 const registry = read("src/lib/admin/entity-list/data-engine/registry.ts");
 const actions = read("src/app/admin/projects/tracking-actions.ts");
@@ -153,6 +156,35 @@ check(
     !/reorderTracking(?:Stages|Items)Action[\s\S]{0,180}controller\.invalidate/u.test(
       adminCollections,
     ),
+);
+check(
+  "Stage and Item sizing is explicit and their sticky-end tracks remain cumulative before Actions",
+  (adminCollections.match(
+    /key: "name"[\s\S]{0,260}primary: true[\s\S]{0,180}flexible: true/g,
+  )?.length ?? 0) === 2 &&
+    (adminCollections.match(
+      /listId="project-tracking-(?:stages|items)"[\s\S]{0,140}sizingStrategy=\{\{ mode: "flexible", columnKey: "name" \}\}/g,
+    )?.length ?? 0) === 2 &&
+  (adminCollections.match(
+    /key: "visibility"[\s\S]{0,180}sticky: "end-adjacent"/g,
+  )?.length ?? 0) === 2 &&
+    (adminCollections.match(
+      /key: "order"[\s\S]{0,180}sticky: "end-adjacent"/g,
+    )?.length ?? 0) === 2 &&
+    entityListTable.includes('column.sticky === "end-adjacent"') &&
+    entityListTable.includes("const stickyEndOffsets = new Map") &&
+    entityListTable.includes(
+      "nextStickyEndOffset += allocatedColumnWidths.get(column.key) ?? 0",
+    ) &&
+    entityListTable.includes("const constrainedMinimumWidths = new Map") &&
+    entityListTable.includes("minimumTableWidth - availableTableWidth") &&
+    entityListTable.includes("column.key === flexibleColumnKey") &&
+    entityListTable.includes(
+      "ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH",
+    ) &&
+    entityListTable.includes("data-admin-table-width-budget") &&
+    entityListTable.includes("stickyEndOffsets.get(column.key) ?? 0") &&
+    !entityListTable.includes("insetInlineEnd: actionsColumnWidth"),
 );
 check(
   "Construction Updates Hub is Specialized and excluded from the Full Collection claim",

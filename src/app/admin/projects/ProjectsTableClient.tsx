@@ -417,6 +417,10 @@ export default function ProjectsTableClient({
           number
         >
           listId={`${type}-projects-table`}
+          sizingStrategy={{
+            mode: "flexible",
+            columnKey: "publication_status",
+          }}
           toolbar={{
             basePath,
             search: {

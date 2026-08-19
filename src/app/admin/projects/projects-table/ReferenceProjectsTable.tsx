@@ -259,6 +259,7 @@ export function createProjectColumns(
       align: "center",
       minWidth: 118,
       width: 124,
+      flexible: true,
       renderCell: ({ row, onMutationResult }) => (
         <ProjectRowActions
           row={row}

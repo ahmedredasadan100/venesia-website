@@ -95,6 +95,7 @@ function createRedirectColumns(input: {
       ...REDIRECTS_LIST_COLUMN_META.destination,
       minWidth: 220,
       width: 220,
+      flexible: true,
       renderCell: ({ row }) => (
         <span className="block break-all text-right font-en text-sm text-white/88">
           {row.destination_path}
@@ -410,6 +411,7 @@ export default function RedirectsClient({
               number
             >
               listId="redirects-table"
+              sizingStrategy={{ mode: "flexible", columnKey: "destination" }}
               toolbar={createRedirectsCollectionToolbar({
                 search: controller.query.search,
                 status: controller.query.filters.status,
