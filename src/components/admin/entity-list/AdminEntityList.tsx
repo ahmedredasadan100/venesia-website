@@ -24,6 +24,7 @@ import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "../ui/admin-scrollbar-styles";
 import { useAdminGridSelection, type AdminGridId } from "../ui/useAdminGridSelection";
 import AdminEntityListTable, {
   type AdminEntityListTableProps,
+  type AdminEntityListSizingStrategy,
   type AdminEntitySortState,
 } from "./AdminEntityListTable";
 import AdminEntityListFilters, {
@@ -76,7 +77,7 @@ export type AdminEntityListProps<
   enableSelection?: boolean;
   selectionLabel?: string;
   scrollLabel?: string;
-  implicitFlexibleColumn?: boolean;
+  sizingStrategy: AdminEntityListSizingStrategy<TKey>;
   fillAvailableWidth?: boolean;
   bulkOptions?: readonly AdminEntityBulkOption[];
   bulkEntityLabel?: string;
@@ -124,6 +125,106 @@ function isAttentionFeedback(feedback: AdminActionFeedback | null) {
   );
 }
 
+function assertAdminEntityListContracts<
+  TRow,
+  TKey extends string,
+  TSortKey extends string,
+>(input: {
+  listId: string;
+  columns: readonly AdminEntityColumnDef<TRow, TKey, TSortKey>[];
+  sizingStrategy: AdminEntityListSizingStrategy<TKey>;
+  sortMode: AdminEntityListTableProps<TRow, TKey, TSortKey>["sortMode"];
+}) {
+  const columnKeys = new Set(input.columns.map((column) => column.key));
+  if (columnKeys.size !== input.columns.length) {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] column keys must be unique.`,
+    );
+  }
+
+  const invalidWidthColumn = input.columns.find(
+    (column) =>
+      !Number.isFinite(column.minWidth) ||
+      column.minWidth <= 0 ||
+      (column.width !== undefined &&
+        (!Number.isFinite(column.width) || column.width < column.minWidth)),
+  );
+  if (invalidWidthColumn) {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] column ${invalidWidthColumn.key} must declare a positive minimum width and a preferred width that is not smaller.`,
+    );
+  }
+
+  const primaryColumns = input.columns.filter(
+    (column) => column.primary === true,
+  );
+  if (primaryColumns.length !== 1) {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] exactly one primary column is required.`,
+    );
+  }
+  if (primaryColumns[0]?.sticky !== "start") {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] the primary column must explicitly declare sticky: "start".`,
+    );
+  }
+
+  const stickyEndColumns = input.columns.filter(
+    (column) => column.sticky === "end",
+  );
+  if (stickyEndColumns.length > 1) {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] at most one sticky end column is allowed.`,
+    );
+  }
+  const firstStickyEndTrack = input.columns.findIndex(
+    (column) =>
+      column.sticky === "end" || column.sticky === "end-adjacent",
+  );
+  if (firstStickyEndTrack >= 0) {
+    const stickyTail = input.columns.slice(firstStickyEndTrack);
+    if (
+      stickyTail.some(
+        (column) =>
+          column.sticky !== "end" && column.sticky !== "end-adjacent",
+      ) ||
+      stickyTail.at(-1)?.sticky !== "end"
+    ) {
+      throw new Error(
+        `[AdminEntityList:${input.listId}] sticky end-adjacent columns must form one contiguous tail ending in sticky: "end".`,
+      );
+    }
+  }
+
+  const flexibleColumns = input.columns.filter(
+    (column) => column.flexible === true,
+  );
+
+  if (input.sizingStrategy.mode === "flexible") {
+    if (
+      flexibleColumns.length !== 1 ||
+      flexibleColumns[0]?.key !== input.sizingStrategy.columnKey
+    ) {
+      throw new Error(
+        `[AdminEntityList:${input.listId}] flexible sizing requires exactly one matching column with flexible: true.`,
+      );
+    }
+  } else if (flexibleColumns.length !== 0) {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] fixed sizing cannot declare a flexible column.`,
+    );
+  }
+
+  const hasSortableColumn = input.columns.some(
+    (column) => column.sortable === true && column.sortKey,
+  );
+  if (hasSortableColumn && !input.sortMode) {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] sortable columns require an explicit sort mode.`,
+    );
+  }
+}
+
 function AdminEntityListInner<
   TRow,
   TKey extends string,
@@ -143,7 +244,7 @@ function AdminEntityListInner<
     enableSelection = Boolean(props.bulkOptions?.length),
     selectionLabel,
     scrollLabel,
-    implicitFlexibleColumn,
+    sizingStrategy,
     fillAvailableWidth,
     bulkOptions = [],
     bulkEntityLabel = "عنصر",
@@ -171,6 +272,12 @@ function AdminEntityListInner<
   const sortCorrectionRef = useRef(false);
   const feedbackChannel = `entity-list:${listId}`;
   const selection = useAdminGridSelection(rows.map(getRowId));
+  assertAdminEntityListContracts({
+    listId,
+    columns,
+    sizingStrategy,
+    sortMode,
+  });
   const resolvedDefaultVisibleColumns = sanitizeVisibleColumnKeys(
     columns,
     defaultVisibleColumns ?? getDefaultVisibleColumnKeys(columns),
@@ -193,6 +300,13 @@ function AdminEntityListInner<
   const visibleColumnDefs = columns.filter((column) =>
     visibleColumns.includes(column.key),
   );
+  const visibleSizingStrategy: AdminEntityListSizingStrategy<TKey> =
+    sizingStrategy.mode === "flexible" &&
+    visibleColumnDefs.some(
+      (column) => column.key === sizingStrategy.columnKey,
+    )
+      ? sizingStrategy
+      : { mode: "fixed" };
 
   useEffect(() => {
     sortCorrectionRef.current = false;
@@ -391,7 +505,7 @@ function AdminEntityListInner<
           selection={enableSelection ? selection : null}
           selectionLabel={selectionLabel}
           scrollLabel={scrollLabel}
-          implicitFlexibleColumn={implicitFlexibleColumn}
+          sizingStrategy={visibleSizingStrategy}
           fillAvailableWidth={fillAvailableWidth}
           actionsColumnWidth={actionsColumnWidth}
           empty={resolveAdminEntityListEmptyState(emptyState)}

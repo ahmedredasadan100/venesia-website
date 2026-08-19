@@ -677,8 +677,14 @@ check(
 );
 check(
   "Comfortable Topics geometry must preserve the shared horizontal-scroll and sticky-actions boundary",
-  entityListTable.includes("column.flexible") &&
-    entityListTable.includes("? column.minWidth") &&
+  entityListTable.includes(
+    "sizingStrategy: AdminEntityListSizingStrategy<TKey>",
+  ) &&
+    entityListTable.includes('sizingStrategy.mode === "flexible"') &&
+    entityListTable.includes("column.key === flexibleColumnKey") &&
+    entityListTable.includes("function getColumnMinimumWidth") &&
+    entityListTable.includes("return column.minWidth") &&
+    entityListTable.includes("const constrainedMinimumWidths = new Map") &&
     46 +
       topicsTitleMinWidth +
       compactColumnWidths.status +

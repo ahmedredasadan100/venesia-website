@@ -1,7 +1,7 @@
 /**
  * Architecture acceptance gates for Admin Entity List System v1.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -25,6 +25,111 @@ function appearsInOrder(source, tokens) {
 function check(label, condition) {
   assertionCount += 1;
   if (!condition) failures.push(label);
+}
+
+function findAdminEntityListConsumers(directory = resolve(ROOT, "src")) {
+  const consumers = [];
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      consumers.push(...findAdminEntityListConsumers(path));
+      continue;
+    }
+    if (!entry.name.endsWith(".tsx")) continue;
+
+    const source = readFileSync(path, "utf8");
+    const sourceFile = ts.createSourceFile(
+      path,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    const localEntityListNames = new Set(["AdminEntityList"]);
+    for (const statement of sourceFile.statements) {
+      if (
+        !ts.isImportDeclaration(statement) ||
+        !statement.importClause?.namedBindings ||
+        !ts.isNamedImports(statement.importClause.namedBindings)
+      ) {
+        continue;
+      }
+      for (const specifier of statement.importClause.namedBindings.elements) {
+        if ((specifier.propertyName ?? specifier.name).text === "AdminEntityList") {
+          localEntityListNames.add(specifier.name.text);
+        }
+      }
+    }
+
+    function visit(node) {
+      const openingElement = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      if (
+        openingElement &&
+        localEntityListNames.has(openingElement.tagName.getText(sourceFile))
+      ) {
+        const sizingAttribute = openingElement.attributes.properties.find(
+          (property) =>
+            ts.isJsxAttribute(property) &&
+            property.name.getText(sourceFile) === "sizingStrategy",
+        );
+        const position = sourceFile.getLineAndCharacterOfPosition(
+          openingElement.getStart(sourceFile),
+        );
+        consumers.push({
+          path,
+          line: position.line + 1,
+          sizingSource:
+            sizingAttribute && ts.isJsxAttribute(sizingAttribute)
+              ? sizingAttribute.initializer?.getText(sourceFile) ?? ""
+              : "",
+        });
+      }
+      ts.forEachChild(node, visit);
+    }
+
+    visit(sourceFile);
+  }
+
+  return consumers;
+}
+
+function findJsxUsages(componentName, directory = resolve(ROOT, "src")) {
+  const usages = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      usages.push(...findJsxUsages(componentName, path));
+      continue;
+    }
+    if (!entry.name.endsWith(".tsx")) continue;
+    const source = readFileSync(path, "utf8");
+    const sourceFile = ts.createSourceFile(
+      path,
+      source,
+      ts.ScriptTarget.Latest,
+      true,
+      ts.ScriptKind.TSX,
+    );
+    function visit(node) {
+      const openingElement = ts.isJsxElement(node)
+        ? node.openingElement
+        : ts.isJsxSelfClosingElement(node)
+          ? node
+          : null;
+      const tagName = openingElement?.tagName.getText(sourceFile);
+      if (tagName === componentName || tagName?.endsWith(`.${componentName}`)) {
+        usages.push(path);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(sourceFile);
+  }
+  return usages;
 }
 
 function loadPureTypeScriptModule(path, dependencies = {}) {
@@ -239,15 +344,59 @@ check(
     entityTable.includes("<tbody"),
 );
 
+const adminEntityListConsumers = findAdminEntityListConsumers();
+const directEntityListTableUsages = findJsxUsages("AdminEntityListTable");
 check(
-  "Entity List preserves implicit flexible tracks by default and exposes an explicit consumer opt-out",
-  entityTable.includes("implicitFlexibleColumn?: boolean") &&
-    entityTable.includes("implicitFlexibleColumn = true") &&
-    entityTable.includes("explicitFlexibleColumnKey ??") &&
-    entityTable.includes("(implicitFlexibleColumn") &&
-    entityList.includes("implicitFlexibleColumn?: boolean") &&
+  "Every AdminEntityList consumer declares a fail-closed sizing strategy",
+  adminEntityListConsumers.length > 0 &&
+    adminEntityListConsumers.every(({ sizingSource }) =>
+      /mode:\s*"(?:flexible|fixed)"/.test(sizingSource),
+    ) &&
+    adminEntityListConsumers.every(({ sizingSource }) =>
+      sizingSource.includes('mode: "fixed"')
+        ? !sizingSource.includes("columnKey")
+        : /mode:\s*"flexible"[\s\S]*columnKey:\s*(?:"[^"]+"|[A-Za-z_$][\w$]*)/.test(
+            sizingSource,
+          ),
+    ) &&
+    entityList.includes("assertAdminEntityListContracts") &&
+    entityList.includes("flexibleColumns.length !== 1") &&
     entityList.includes(
-      "implicitFlexibleColumn={implicitFlexibleColumn}",
+      "flexibleColumns[0]?.key !== input.sizingStrategy.columnKey",
+    ) &&
+    entityList.includes("fixed sizing cannot declare a flexible column") &&
+    entityList.includes("const visibleSizingStrategy:") &&
+    entityList.includes(': { mode: "fixed" }') &&
+    entityTable.includes("sizingStrategy: AdminEntityListSizingStrategy<TKey>") &&
+    entityTable.includes('sizingStrategy.mode === "flexible"') &&
+    !entityList.includes("implicitFlexibleColumn") &&
+    !entityTable.includes("implicitFlexibleColumn"),
+);
+
+check(
+  "AdminEntityListTable cannot be adopted outside the shared AdminEntityList owner",
+  directEntityListTableUsages.length === 1 &&
+    directEntityListTableUsages[0] ===
+      resolve(ROOT, "src/components/admin/entity-list/AdminEntityList.tsx"),
+);
+
+check(
+  "Entity List declarations execute without implicit Primary or width precedence",
+  entityList.includes("exactly one primary column is required") &&
+    entityList.includes('must explicitly declare sticky: "start"') &&
+    entityList.includes("column keys must be unique") &&
+    entityList.includes("sticky end-adjacent columns must form one contiguous tail") &&
+    entityTable.indexOf("column.key === flexibleColumnKey") <
+      entityTable.indexOf("column.primary && column.key !== flexibleColumnKey") &&
+    !entityTable.includes('column.primary || column.sticky === "start"'),
+);
+
+check(
+  "Sortable Entity List columns fail closed without sort state and behavior",
+  entityList.includes("const hasSortableColumn =") &&
+    entityList.includes("hasSortableColumn && !input.sortMode") &&
+    entityList.includes(
+      "sortable columns require an explicit sort mode",
     ),
 );
 
@@ -259,7 +408,8 @@ check(
       "const showFillSpacer = fillAvailableWidth && flexibleColumnKey === undefined",
     ) &&
     entityTable.includes("data-admin-table-fill-spacer") &&
-    entityTable.includes("flexibleColumnKey === undefined && !showFillSpacer") &&
+    entityTable.includes("const fillsAvailableWidth =") &&
+    entityTable.includes("availableTableWidth ?? preferredTableWidth") &&
     entityList.includes("fillAvailableWidth?: boolean") &&
     entityList.includes("fillAvailableWidth={fillAvailableWidth}"),
 );

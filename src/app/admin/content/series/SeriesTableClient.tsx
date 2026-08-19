@@ -446,6 +446,7 @@ export default function SeriesTableClient({
       >
         <AdminEntityList<SeriesListRow, SeriesColumnKey, SeriesSortKey, number>
           listId="content-series-table"
+          sizingStrategy={{ mode: "flexible", columnKey: "name" }}
           toolbar={{
             basePath: BASE_PATH,
             search: {

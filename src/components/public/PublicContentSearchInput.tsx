@@ -154,7 +154,7 @@ export default function PublicContentSearchInput({
     [basePath, router],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const hasNewerDraft =
       normalizePublicContentSearchQuery(draftQueryRef.current) !==
       requestedQueryRef.current;

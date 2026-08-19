@@ -243,6 +243,7 @@ function createPageColumns(
       sortKey: "path",
       minWidth: PAGE_PATH_COLUMN_WIDTH,
       width: PAGE_PATH_COLUMN_WIDTH,
+      flexible: true,
       align: "center",
       renderCell: ({ row }) => (
         <span className="block truncate font-mono text-xs text-white/62" dir="ltr">
@@ -610,6 +611,7 @@ export default function PagesTableClient({
             number
           >
             listId="pages-table"
+            sizingStrategy={{ mode: "flexible", columnKey: "path" }}
             toolbar={{
               basePath: "/admin/pages-blocks/pages",
               search: {

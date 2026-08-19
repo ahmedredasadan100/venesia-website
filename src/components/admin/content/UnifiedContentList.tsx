@@ -144,6 +144,7 @@ export default function UnifiedContentList({
       number
     >
       listId={UNIFIED_CONTENT_LIST_ID}
+      sizingStrategy={{ mode: "flexible", columnKey: "title" }}
       rows={rows}
       columns={columns}
       getRowId={(row) => row.id}
