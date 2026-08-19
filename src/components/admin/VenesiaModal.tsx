@@ -14,6 +14,7 @@ import {
 } from "../../lib/admin/admin-ui-styles";
 import { AdminModalCancelButton, AdminModalDangerButton, AdminModalPrimaryButton } from "./ui/AdminModalButtons";
 import { useClientMounted } from "../../hooks/use-client-mounted";
+import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";
 
 export type VenesiaModalSize = keyof typeof ADMIN_MODAL_SIZES;
 
@@ -454,7 +455,11 @@ export default function VenesiaModal({
           </button>
         </header>
 
-        <div className={`${ADMIN_MODAL.body} min-h-0 flex-1 overflow-y-auto ${bodyClassName}`.trim()}>{children}</div>
+        <div
+          className={`${ADMIN_MODAL.body} min-h-0 flex-1 overflow-y-auto ${VENESIA_SCROLLBAR_VISUAL_CLASSES} ${bodyClassName}`.trim()}
+        >
+          {children}
+        </div>
 
         {footer ? <footer className={`${ADMIN_MODAL.footer} shrink-0`}>{footer}</footer> : null}
       </section>

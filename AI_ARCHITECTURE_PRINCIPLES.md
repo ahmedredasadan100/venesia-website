@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.1.0
-> **Effective date:** 2026-08-12
+> **Version:** 3.2.0
+> **Effective date:** 2026-08-18
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** *Venesia CMS — Official Architecture Principle (Version 1.0)* and every shorter or conflicting architecture summary
@@ -2676,6 +2676,24 @@ Only after this search may the agent propose a new owner.
 
 ## 19.2 Adoption Workflow
 
+Every new or materially extended Admin consumer MUST pass the following gates
+in this order:
+
+```text
+Discover
+-> Consumer Capability Adoption Audit (Capability Applicability)
+-> Architecture
+-> Implementation
+-> Source Proof
+-> Verification
+-> CI
+-> Product Review
+```
+
+Capability Applicability classifies every current shared-capability axis before
+implementation; Source Proof verifies canonical ownership before Verification,
+CI, and Product Review.
+
 ### Step 1 — Inventory the consumer
 
 Record:
@@ -4775,6 +4793,13 @@ The following ADRs are part of this constitution.
 **Consequences:** A completed gate reports its evidence and stops unless the next gate was explicitly authorized.
 **Evidence:** PR #84 required a focused architecture correction before Ready, while PR #85 required a separate GitHub protection correction before its independently authorized merge.
 
+## ADR-026 — Consumer Capability Adoption Is a Mandatory Dynamic Gate
+
+**Status:** Accepted
+**Context:** New consumers repeatedly reached Product Review before adopting existing shared owners such as Visibility, Date Picker, Switch, Scrollbar, and Collection behavior. Capability-specific guards and a fixed audit list would repeat the same governance gap as the platform evolves.
+**Decision:** The existing adoption manifest owns one Current Shared Capability Set. Capability Applicability runs before Architecture/Implementation, Source Proof runs after implementation, and both derive every axis dynamically from that set. The existing Admin Runtime CI path enforces the all-inventoried-consumer projection before Product Review.
+**Consequences:** Adding a shared capability automatically expands every inventoried consumer audit without a copied capability list or fixed count. Product Review focuses on product and UX quality instead of discovering missing shared-owner adoption. No new Runtime, Capability, manifest, registry, engine, or source of truth is introduced.
+
 ---
 
 # 31. Current State Is External
@@ -5360,6 +5385,11 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.2.0 — 2026-08-18
+
+- Added ADR-026: the existing manifest's Current Shared Capability Set drives mandatory Capability Applicability and Source Proof without a fixed capability list or count.
+- Required the workflow from Discover through Product Review before delivery gates.
 
 ## 3.1.0 — 2026-08-12
 

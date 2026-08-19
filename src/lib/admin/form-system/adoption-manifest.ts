@@ -7,6 +7,11 @@
  * declaration that every Admin interaction has adopted AdminFormRuntime.
  */
 
+import {
+  adminConsumerCapabilityAudit,
+  type AdminConsumerCapabilityAuditDeclaration,
+} from "../interaction-system/adoption-manifest.ts";
+
 export type AdminFormAdoptionClassification =
   | "shared_reference"
   | "shared_adopter"
@@ -20,6 +25,7 @@ export type AdminFormAdoptionEntry = {
   classification: AdminFormAdoptionClassification;
   sourceFiles: readonly string[];
   surfaces: readonly string[];
+  capabilityAudit: AdminConsumerCapabilityAuditDeclaration;
   rationale: string;
 };
 
@@ -45,6 +51,7 @@ export const ADMIN_FORM_SYSTEM_CLOSURE = {
 export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "topic-article-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Topic Article create and edit",
     classification: "shared_reference",
     sourceFiles: [
@@ -57,6 +64,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "topic-category-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Topic Category create and edit",
     classification: "shared_reference",
     sourceFiles: ["src/app/admin/content/categories/CategoryForm.tsx"],
@@ -66,6 +74,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "topic-series-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Topic Series create and edit",
     classification: "shared_reference",
     sourceFiles: ["src/app/admin/content/series/SeriesForm.tsx"],
@@ -75,6 +84,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "topic-media-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Media Topic create and edit",
     classification: "shared_adopter",
     sourceFiles: [
@@ -97,6 +107,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "projects-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Project create and edit",
     classification: "shared_adopter",
     sourceFiles: [
@@ -114,6 +125,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "project-locations-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Project Location create and edit",
     classification: "shared_adopter",
     sourceFiles: [
@@ -134,6 +146,27 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "project-tracking-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit({
+      date_picker: {
+        state: "owner_extension_required",
+        rationale:
+          "Tracking dates are applicable, but the current platform has no shared Date or Calendar owner that can be adopted without a prohibited owner extension.",
+      },
+      switch: {
+        state: "adopted",
+        rationale:
+          "Tracking visibility and publication inputs use AdminFormSwitch.",
+      },
+      modal: {
+        state: "adopted",
+        rationale: "Tracking create/edit surfaces use VenesiaModal.",
+      },
+      media: {
+        state: "adopted",
+        rationale:
+          "Tracking Updates use the existing Admin Media picker and gallery owner.",
+      },
+    }),
     label: "Project Tracking profile, stages, items, and updates",
     classification: "shared_adopter",
     sourceFiles: [
@@ -146,6 +179,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "pages-quick-create",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Page quick create",
     classification: "shared_adopter",
     sourceFiles: ["src/app/admin/pages-blocks/pages/CreatePageModal.tsx"],
@@ -155,6 +189,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "redirects-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "SEO Redirect create and edit",
     classification: "shared_adopter",
     sourceFiles: ["src/app/admin/seo/redirects/RedirectFormModal.tsx"],
@@ -164,6 +199,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "page-composition-and-seo",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Page composition and per-page SEO",
     classification: "specialized_exception",
     sourceFiles: [
@@ -177,6 +213,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "block-template-create-modals",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Block template create modals",
     classification: "shared_adopter",
     sourceFiles: [
@@ -197,6 +234,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "block-template-builders-and-editors",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Block template builders and editors",
     classification: "specialized_exception",
     sourceFiles: [
@@ -215,6 +253,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "menu-quick-create",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Menu quick create",
     classification: "shared_adopter",
     sourceFiles: [
@@ -226,6 +265,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "menu-builder",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Menu builder",
     classification: "specialized_exception",
     sourceFiles: [
@@ -240,6 +280,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "footer-builder",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Footer builder",
     classification: "specialized_exception",
     sourceFiles: [
@@ -252,6 +293,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "global-seo-settings",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Global SEO settings",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/seo/meta-manager/MetaManagerClient.tsx"],
@@ -261,6 +303,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "company-identity-settings",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Company identity settings",
     classification: "shared_adopter",
     sourceFiles: ["src/app/admin/settings/general/CompanyIdentityPanel.tsx"],
@@ -270,6 +313,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "media-library-settings",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Media Library settings",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/settings/media/MediaSettingsPanel.tsx"],
@@ -279,6 +323,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "security-settings",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Security settings",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/settings/security/SecuritySettingsClient.tsx"],
@@ -288,6 +333,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "integrations-server-configuration",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Integrations server configuration",
     classification: "specialized_exception",
     sourceFiles: [
@@ -299,6 +345,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "users-create-edit",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Admin users create and edit",
     classification: "shared_adopter",
     sourceFiles: [
@@ -310,6 +357,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "users-and-roles",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Users and roles management",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/users-roles/UsersManagementClient.tsx"],
@@ -319,6 +367,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "maintenance-immediate-setting",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Maintenance mode immediate setting",
     classification: "explicit_exception",
     sourceFiles: ["src/app/admin/settings/general/MaintenanceModePanel.tsx"],
@@ -328,6 +377,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "authentication-login",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Authentication login forms",
     classification: "explicit_exception",
     sourceFiles: [
@@ -340,6 +390,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "list-bulk-row-one-shot-actions",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "List, bulk, row, and one-shot actions",
     classification: "explicit_exception",
     sourceFiles: [
@@ -360,6 +411,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "activity-sitemap-media-commands",
+    capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Activity, sitemap, and media commands",
     classification: "explicit_exception",
     sourceFiles: [

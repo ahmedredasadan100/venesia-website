@@ -68,6 +68,7 @@ export type AdminEntityMutationRequest<Row> = {
 
 export type AdminInstantMutationPatch<Row> = {
   patchRows: (updater: (row: Row) => Row) => void;
+  transformActiveRows: (updater: (rows: Row[]) => Row[]) => void;
   removeRows: (ids: ReadonlySet<number | string>) => void;
   upsertRows: (rows: Row[], getId: (row: Row) => number | string) => void;
 };
@@ -92,6 +93,11 @@ export function useAdminEntityInstantMutation<
       scopeQuery,
       (data) => ({ ...data, rows: data.rows.map(updater) }),
     ),
+    transformActiveRows: (updater) =>
+      queryClient.setQueryData<AdminEntityListResult<Row, Metrics>>(
+        adminEntityListQueryKeys.query(entity, scopeQuery),
+        (data) => (data ? { ...data, rows: updater(data.rows) } : data),
+      ),
     removeRows: (ids) => setAdminEntityListCachesInScope<Row, Metrics>(
       queryClient,
       entity,

@@ -18,6 +18,7 @@ import {
   resolveAdminInstantMutationInteraction,
 } from "../src/lib/admin/entity-list/data-engine/interaction-state.ts";
 import {
+  ADMIN_CURRENT_SHARED_CAPABILITY_SET,
   ADMIN_INTERACTION_MODULES,
   ADMIN_INTERACTION_SYSTEM,
   ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS,
@@ -25,11 +26,20 @@ import {
   ADMIN_COLLECTION_SURFACE_ADOPTION,
   ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,
   ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
+  adminSharedCapabilityKeys,
   type AdminCollectionFullAdoptionClaim,
   type AdminCollectionSemanticPresentationContract,
   type AdminCollectionSurfaceInventoryEntry,
+  type AdminConsumerCapabilityAdoptionState,
+  type AdminConsumerCapabilityAuditDeclaration,
+  type AdminConsumerCapabilityKey,
+  type AdminSharedConsumerCapabilityDefinition,
   type AdminRowActionsGovernedAction,
 } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
+import {
+  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,
+  type AdminFormAdoptionEntry,
+} from "../src/lib/admin/form-system/adoption-manifest.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (sourceFile: string) =>
@@ -140,10 +150,554 @@ function relativeSourceFile(sourceFile: string) {
 function readCollectionSurfaceEvidence(
   surface: AdminCollectionSurfaceInventoryEntry,
 ) {
-  return [...new Set([...surface.pageSourceFiles, ...surface.presentationSourceFiles])]
+  return [
+    ...new Set([
+      ...surface.pageSourceFiles,
+      ...surface.presentationSourceFiles,
+    ]),
+  ]
     .map(read)
     .join("\n");
 }
+
+type ConsumerCapabilityAuditBoundary = "collection" | "form";
+
+type ConsumerCapabilityAuditRecord = {
+  id: string;
+  boundary: ConsumerCapabilityAuditBoundary;
+  sourceFiles: readonly string[];
+  declaration: AdminConsumerCapabilityAuditDeclaration;
+  collectionSurface?: AdminCollectionSurfaceInventoryEntry;
+  formEntry?: AdminFormAdoptionEntry;
+};
+
+type ResolvedConsumerCapabilityDecision = {
+  capability: AdminConsumerCapabilityKey;
+  state: AdminConsumerCapabilityAdoptionState;
+  owner: string;
+  rationale: string;
+  approvedException?: {
+    scope: string;
+    approvingOwner: string;
+    evidence: readonly string[];
+    rationale: string;
+  };
+};
+
+const currentSharedCapabilityKeys = adminSharedCapabilityKeys(
+  ADMIN_CURRENT_SHARED_CAPABILITY_SET,
+);
+
+function projectSharedCapabilitySet<
+  const TCapabilitySet extends Readonly<
+    Record<string, AdminSharedConsumerCapabilityDefinition>
+  >,
+  TValue,
+>(
+  capabilitySet: TCapabilitySet,
+  project: (capability: keyof TCapabilitySet & string) => TValue,
+) {
+  return Object.fromEntries(
+    adminSharedCapabilityKeys(capabilitySet).map((capability) => [
+      capability,
+      project(capability),
+    ]),
+  ) as Record<keyof TCapabilitySet & string, TValue>;
+}
+
+function collectionBaseCapabilities(
+  surface: AdminCollectionSurfaceInventoryEntry,
+) {
+  const capabilities = new Set<AdminConsumerCapabilityKey>();
+  if (surface.collectionAdoption === "adopted") capabilities.add("collection");
+  if (surface.gridOwner !== "not_applicable") {
+    capabilities.add("table");
+    capabilities.add("scrollbar");
+  }
+  if (surface.filtersOrToolbar) {
+    capabilities.add("toolbar");
+    capabilities.add("search");
+  }
+  if (surface.paginationState === "adopted") capabilities.add("pagination");
+  if (surface.columnVisibility === "shared_optional_columns") {
+    capabilities.add("column_visibility");
+  }
+  if (surface.rowActionsState === "adopted") capabilities.add("row_actions");
+  if (surface.feedbackOwner === "AdminFeedbackProvider")
+    capabilities.add("feedback");
+  if (surface.confirmationOwner === "AdminConfirmDialog") {
+    capabilities.add("confirmation");
+  }
+  if (surface.collectionAdoption === "adopted") capabilities.add("busy_state");
+
+  const visibilityAdopted = surface.dataRegistryEntities.some((entity) =>
+    ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.entities.some(
+      (entry) =>
+        entry.entity === entity && entry.actions.visibility === "adopted",
+    ),
+  );
+  if (visibilityAdopted) capabilities.add("visibility");
+  return capabilities;
+}
+
+function formBaseCapabilities(entry: AdminFormAdoptionEntry) {
+  const capabilities = new Set<AdminConsumerCapabilityKey>();
+  if (
+    entry.classification === "shared_reference" ||
+    entry.classification === "shared_adopter"
+  ) {
+    capabilities.add("form_runtime");
+    capabilities.add("feedback");
+    capabilities.add("confirmation");
+    capabilities.add("busy_state");
+  }
+  return capabilities;
+}
+
+function resolveConsumerCapabilityAudit(
+  consumer: ConsumerCapabilityAuditRecord,
+) {
+  const source = consumerCapabilitySource(consumer);
+  const baseCapabilities = consumer.collectionSurface
+    ? collectionBaseCapabilities(consumer.collectionSurface)
+    : formBaseCapabilities(consumer.formEntry!);
+  const detectedCapabilities = directlyDetectedCapabilities(
+    source,
+  );
+  const applicableCapabilities = directlyApplicableCapabilities(
+    source,
+  );
+  const decisions = projectSharedCapabilitySet(
+    ADMIN_CURRENT_SHARED_CAPABILITY_SET,
+    (capability): ResolvedConsumerCapabilityDecision => {
+      const definition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
+      const supportsBoundary = (
+        definition.consumerBoundaries as readonly ConsumerCapabilityAuditBoundary[]
+      ).includes(consumer.boundary);
+      const applicable =
+        supportsBoundary &&
+        (baseCapabilities.has(capability) ||
+          applicableCapabilities.has(capability));
+      const adopted =
+        supportsBoundary &&
+        (baseCapabilities.has(capability) ||
+          detectedCapabilities.has(capability));
+      const existingException = resolveExistingConsumerException(
+        consumer,
+        capability,
+      );
+      const localImplementation =
+        localImplementationMatches(capability, source).length > 0;
+      const state: AdminConsumerCapabilityAdoptionState =
+        supportsBoundary &&
+        existingException &&
+        localImplementation &&
+        !baseCapabilities.has(capability)
+          ? "approved_exception"
+          : !applicable
+        ? "not_applicable"
+        : definition.ownerAvailability === "owner_extension_required"
+          ? "owner_extension_required"
+          : adopted
+            ? "adopted"
+            : "missing_adoption";
+      return {
+        capability,
+        state,
+        owner: definition.owner,
+        approvedException:
+          existingException && state === "approved_exception"
+            ? existingException
+            : undefined,
+        rationale: !applicable
+          ? definition.absenceMeansNotApplicable
+            ? `The capability applicability contract found no ${capability} behavior in this consumer.`
+            : "Capability applicability is unresolved."
+          : definition.ownerAvailability === "owner_extension_required"
+            ? "The behavior is applicable, but the current platform has no canonical owner that can be adopted without an owner extension."
+            : adopted
+              ? "The existing contract and canonical source proof establish adoption."
+              : "The behavior is applicable, but canonical owner adoption is missing.",
+      };
+    },
+  );
+
+  for (const capability of currentSharedCapabilityKeys) {
+    const override = consumer.declaration.overrides[capability];
+    if (!override) continue;
+    decisions[capability] = {
+      capability,
+      state: override.state,
+      owner: ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].owner,
+      rationale: override.rationale,
+      approvedException:
+        override.state === "approved_exception"
+          ? {
+              scope: override.scope,
+              approvingOwner: override.approvingOwner,
+              evidence: override.evidence,
+              rationale: override.rationale,
+            }
+          : undefined,
+    };
+  }
+
+  return decisions;
+}
+
+function resolveExistingConsumerException(
+  consumer: ConsumerCapabilityAuditRecord,
+  capability: AdminConsumerCapabilityKey,
+) {
+  if (
+    consumer.formEntry &&
+    ["specialized_exception", "explicit_exception"].includes(
+      consumer.formEntry.classification,
+    )
+  ) {
+    return {
+      scope: `${consumer.id}:${capability}`,
+      approvingOwner: "Admin Form System adoption manifest",
+      evidence: consumer.formEntry.sourceFiles,
+      rationale: consumer.formEntry.rationale,
+    };
+  }
+  const surface = consumer.collectionSurface;
+  if (
+    surface &&
+    (surface.collectionAdoption === "not_applicable" ||
+      surface.workflowClassification ===
+        "specialized_data_owner_shared_collection_presentation")
+  ) {
+    return {
+      scope: `${consumer.id}:${capability}`,
+      approvingOwner: "Admin Collection adoption manifest",
+      evidence: [...surface.pageSourceFiles, ...surface.presentationSourceFiles],
+      rationale: surface.exceptionRationale ?? surface.rationale,
+    };
+  }
+  return undefined;
+}
+
+function consumerCapabilitySource(consumer: ConsumerCapabilityAuditRecord) {
+  return [...new Set(consumer.sourceFiles)].map(read).join("\n");
+}
+
+function directlyDetectedCapabilities(source: string) {
+  const compactSource = source.replace(/\s+/gu, "");
+  return new Set(
+    currentSharedCapabilityKeys.filter((capability) =>
+      ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].sourceProofTokens.some(
+        (token) =>
+          source.includes(token) ||
+          compactSource.includes(token.replace(/\s+/gu, "")),
+      ),
+    ),
+  );
+}
+
+function directlyApplicableCapabilities(source: string) {
+  const compactSource = source.replace(/\s+/gu, "");
+  return new Set(
+    currentSharedCapabilityKeys.filter((capability) =>
+      ADMIN_CURRENT_SHARED_CAPABILITY_SET[
+        capability
+      ].applicabilitySourceTokens.some(
+        (token) =>
+          source.includes(token) ||
+          compactSource.includes(token.replace(/\s+/gu, "")),
+      ),
+    ),
+  );
+}
+
+function localImplementationMatches(
+  capability: AdminConsumerCapabilityKey,
+  source: string,
+) {
+  return ADMIN_CURRENT_SHARED_CAPABILITY_SET[
+    capability
+  ].localImplementationPatterns.filter((pattern) =>
+    new RegExp(pattern, "u").test(source),
+  );
+}
+
+function hasCapabilitySourceProof(
+  consumer: ConsumerCapabilityAuditRecord,
+  capability: AdminConsumerCapabilityKey,
+  source: string,
+) {
+  const detected = directlyDetectedCapabilities(source);
+  if (detected.has(capability)) return true;
+  if (consumer.collectionSurface) {
+    return collectionBaseCapabilities(consumer.collectionSurface).has(
+      capability,
+    );
+  }
+  return formBaseCapabilities(consumer.formEntry!).has(capability);
+}
+
+function collectConsumerCapabilityAuditFailures(
+  consumer: ConsumerCapabilityAuditRecord,
+  phase: "applicability" | "source_proof",
+  sourceOverride?: string,
+) {
+  const failures: string[] = [];
+  const decisions = resolveConsumerCapabilityAudit(consumer);
+  const source = sourceOverride ?? consumerCapabilitySource(consumer);
+
+  if (consumer.declaration.phase !== "capability_applicability") {
+    failures.push("missing_applicability_phase");
+  }
+  if (
+    Object.keys(decisions).length !== currentSharedCapabilityKeys.length ||
+    !currentSharedCapabilityKeys.every((capability) => decisions[capability])
+  ) {
+    failures.push("unclassified_capability_axis");
+  }
+  for (const capability of currentSharedCapabilityKeys) {
+    const decision = decisions[capability];
+    if (!decision.owner.trim() || !decision.rationale.trim()) {
+      failures.push(`${capability}:missing_owner_or_rationale`);
+    }
+    if (
+      !ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability]
+        .absenceMeansNotApplicable &&
+      decision.state === "not_applicable"
+    ) {
+      failures.push(`${capability}:unresolved_applicability`);
+    }
+    const override = consumer.declaration.overrides[capability];
+    if (override?.state === "approved_exception") {
+      if (
+        !override.scope?.trim() ||
+        !override.approvingOwner?.trim() ||
+        !Array.isArray(override.evidence) ||
+        override.evidence.length === 0 ||
+        override.evidence.some((item) => !item.trim()) ||
+        !override.rationale?.trim()
+      ) {
+        failures.push(`${capability}:invalid_approved_exception_contract`);
+      }
+    }
+    if (decision.state === "approved_exception") {
+      const exception = decision.approvedException;
+      if (
+        !exception?.scope.trim() ||
+        !exception.approvingOwner.trim() ||
+        exception.evidence.length === 0 ||
+        exception.evidence.some((item) => !item.trim()) ||
+        !exception.rationale.trim()
+      ) {
+        failures.push(`${capability}:invalid_approved_exception_contract`);
+      }
+    }
+    if (
+      override?.state === "adopted" &&
+      ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].ownerAvailability ===
+        "owner_extension_required"
+    ) {
+      failures.push(`${capability}:unavailable_owner_claimed_adopted`);
+    }
+    if (
+      !ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].sourceFiles.every(
+        (sourceFile) => existsSync(join(ROOT, sourceFile)),
+      )
+    ) {
+      failures.push(`${capability}:missing_owner_source`);
+    }
+  }
+
+  if (phase === "applicability") return [...new Set(failures)];
+
+  for (const capability of currentSharedCapabilityKeys) {
+    const decision = decisions[capability];
+    const localMatches = localImplementationMatches(capability, source);
+    const locallyApprovedPresentation =
+      consumer.collectionSurface?.semanticPresentation.explicitSurfaceContracts.some(
+        (contract) => contract.state === capability,
+      ) ?? false;
+    if (
+      !(
+        ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability]
+          .consumerBoundaries as readonly ConsumerCapabilityAuditBoundary[]
+      ).includes(consumer.boundary)
+    ) {
+      continue;
+    }
+    if (
+      decision.state === "adopted" &&
+      !hasCapabilitySourceProof(consumer, capability, source)
+    ) {
+      failures.push(`${capability}:missing_source_proof`);
+    }
+    if (decision.state === "missing_adoption") {
+      failures.push(`${capability}:missing_adoption`);
+    }
+    if (
+      localMatches.length > 0 &&
+      !locallyApprovedPresentation &&
+      decision.state !== "approved_exception" &&
+      decision.state !== "owner_extension_required"
+    ) {
+      failures.push(
+        `${capability}:${hasCapabilitySourceProof(consumer, capability, source) ? "parallel" : "local"}_implementation`,
+      );
+    }
+  }
+  return [...new Set(failures)];
+}
+
+const consumerCapabilityAuditRecords: ConsumerCapabilityAuditRecord[] = [
+  ...ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.map((surface) => ({
+    id: surface.id,
+    boundary: "collection" as const,
+    sourceFiles: [
+      ...surface.pageSourceFiles,
+      ...surface.presentationSourceFiles,
+    ],
+    declaration: surface.capabilityAudit,
+    collectionSurface: surface,
+  })),
+  ...ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.map((entry) => ({
+    id: entry.id,
+    boundary: "form" as const,
+    sourceFiles: entry.sourceFiles,
+    declaration: entry.capabilityAudit,
+    formEntry: entry,
+  })),
+];
+
+const FUTURE_SHARED_CAPABILITY_FIXTURE = "future_capability_fixture" as const;
+const futureSharedCapabilitySetFixture = {
+  ...ADMIN_CURRENT_SHARED_CAPABILITY_SET,
+  [FUTURE_SHARED_CAPABILITY_FIXTURE]: {
+    owner: "Future shared owner fixture",
+    sourceFiles: ["src/lib/admin/interaction-system/adoption-manifest.ts"],
+    sourceProofTokens: ["FutureSharedOwnerFixture"],
+    applicabilitySourceTokens: ["FutureSharedOwnerFixture"],
+    localImplementationPatterns: [],
+    ownerAvailability: "available",
+    absenceMeansNotApplicable: false,
+    consumerBoundaries: ["collection", "form"],
+  },
+} as const satisfies Readonly<
+  Record<string, AdminSharedConsumerCapabilityDefinition>
+>;
+const futureSharedCapabilityKeysFixture = adminSharedCapabilityKeys(
+  futureSharedCapabilitySetFixture,
+);
+const futureConsumerAuditProjectionFixtures = [
+  ...consumerCapabilityAuditRecords.map(
+    (consumer) => `${consumer.boundary}:${consumer.id}`,
+  ),
+  "future_consumer_fixture",
+].map((consumer) => ({
+  consumer,
+  decisions: projectSharedCapabilitySet(
+    futureSharedCapabilitySetFixture,
+    () => "not_applicable" as const,
+  ),
+}));
+
+function readCliOption(option: string) {
+  const optionIndex = process.argv.indexOf(option);
+  return optionIndex >= 0 ? process.argv[optionIndex + 1] : undefined;
+}
+
+function runConsumerCapabilityAuditPreflight() {
+  if (!process.argv.includes("--consumer-capability-audit")) return;
+
+  const consumerId = readCliOption("--consumer");
+  const requestedAllConsumers = process.argv.includes("--all");
+  const auditAllConsumers = requestedAllConsumers || !consumerId;
+  const requestedBoundary = readCliOption("--boundary");
+  const requestedPhase =
+    readCliOption("--phase") ??
+    (auditAllConsumers ? "source_proof" : "applicability");
+  assert.ok(
+    consumerId || auditAllConsumers,
+    "Consumer Capability Adoption Audit requires --consumer <manifest-id> or --all.",
+  );
+  assert.ok(
+    !(consumerId && requestedAllConsumers),
+    "Use either --consumer <manifest-id> or --all, not both.",
+  );
+  assert.ok(
+    requestedBoundary === undefined ||
+      requestedBoundary === "collection" ||
+      requestedBoundary === "form",
+    "--boundary must be collection or form when supplied.",
+  );
+  assert.ok(
+    requestedPhase === "applicability" || requestedPhase === "source_proof",
+    "--phase must be applicability or source_proof.",
+  );
+
+  if (auditAllConsumers) {
+    assert.equal(
+      requestedBoundary,
+      undefined,
+      "--boundary is only valid with --consumer <manifest-id>.",
+    );
+    const failures = consumerCapabilityAuditRecords.flatMap((consumer) =>
+      collectConsumerCapabilityAuditFailures(consumer, requestedPhase).map(
+        (failure) => `${consumer.boundary}:${consumer.id}:${failure}`,
+      ),
+    );
+    console.log("Consumer Capability Adoption Audit: all consumers");
+    console.log(`Phase: ${requestedPhase}`);
+    console.log(
+      `Current Shared Capability Set: ${currentSharedCapabilityKeys.length} derived axes`,
+    );
+    console.log(`Consumers: ${consumerCapabilityAuditRecords.length}`);
+    assert.deepEqual(
+      failures,
+      [],
+      `Consumer Capability Adoption Audit failed: ${failures.join(", ")}`,
+    );
+    console.log("Consumer Capability Adoption Audit passed.");
+    process.exit(0);
+  }
+
+  const matches = consumerCapabilityAuditRecords.filter(
+    (consumer) =>
+      consumer.id === consumerId &&
+      (requestedBoundary === undefined ||
+        consumer.boundary === requestedBoundary),
+  );
+  assert.equal(
+    matches.length,
+    1,
+    `Expected one manifest consumer for ${requestedBoundary ? `${requestedBoundary}:` : ""}${consumerId}; found ${matches.length}.`,
+  );
+
+  const consumer = matches[0];
+  const failures = collectConsumerCapabilityAuditFailures(
+    consumer,
+    requestedPhase,
+  );
+  const decisions = resolveConsumerCapabilityAudit(consumer);
+  console.log(
+    `Consumer Capability Adoption Audit: ${consumer.boundary}:${consumer.id}`,
+  );
+  console.log(`Phase: ${requestedPhase}`);
+  for (const capability of currentSharedCapabilityKeys) {
+    const decision = decisions[capability];
+    console.log(
+      `${capability.padEnd(20)} ${decision.state.padEnd(24)} ${decision.owner}`,
+    );
+  }
+  assert.deepEqual(
+    failures,
+    [],
+    `Consumer Capability Adoption Audit failed: ${failures.join(", ")}`,
+  );
+  console.log("Consumer Capability Adoption Audit passed.");
+  process.exit(0);
+}
+
+runConsumerCapabilityAuditPreflight();
 
 type CollectionSourceOverrides = ReadonlyMap<string, string>;
 
@@ -929,9 +1483,7 @@ const declaredDataRegistryEntities = collectionSurfaces
   .filter((surface) => surface.generic)
   .flatMap((surface) => surface.dataRegistryEntities);
 const expectedRowActionEntities = collectionSurfaces
-  .filter(
-    (surface) => surface.generic && surface.rowActionsState === "adopted",
-  )
+  .filter((surface) => surface.generic && surface.rowActionsState === "adopted")
   .flatMap((surface) => surface.dataRegistryEntities);
 const expectedPrimaryOrder = ["edit", "preview", "more"] as const;
 const expectedMoreOrder = [
@@ -1054,6 +1606,135 @@ const paths = {
   usersActions: "src/app/admin/users-roles/actions.ts",
 } as const;
 
+const capabilityManifestSource = read(
+  "src/lib/admin/interaction-system/adoption-manifest.ts",
+);
+const capabilitySetDefinitionFailures = currentSharedCapabilityKeys.filter(
+  (capability) => {
+    const definition: AdminSharedConsumerCapabilityDefinition =
+      ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
+    return (
+      !definition.owner.trim() ||
+      definition.applicabilitySourceTokens.length === 0 ||
+      definition.consumerBoundaries.length === 0 ||
+      typeof definition.absenceMeansNotApplicable !== "boolean" ||
+      (definition.ownerAvailability === "available" &&
+        (definition.sourceFiles.length === 0 ||
+          definition.sourceProofTokens.length === 0))
+    );
+  },
+);
+
+const capabilityApplicabilityFailures = consumerCapabilityAuditRecords.flatMap(
+  (consumer) =>
+    collectConsumerCapabilityAuditFailures(consumer, "applicability").map(
+      (failure) => `${consumer.boundary}:${consumer.id}:${failure}`,
+    ),
+);
+const capabilitySourceProofFailures = consumerCapabilityAuditRecords.flatMap(
+  (consumer) =>
+    collectConsumerCapabilityAuditFailures(consumer, "source_proof").map(
+      (failure) => `${consumer.boundary}:${consumer.id}:${failure}`,
+    ),
+);
+
+if (capabilityApplicabilityFailures.length > 0) {
+  console.error(
+    `Consumer Capability Applicability failures:\n${capabilityApplicabilityFailures.join("\n")}`,
+  );
+}
+if (capabilitySourceProofFailures.length > 0) {
+  console.error(
+    `Consumer Capability Source Proof failures:\n${capabilitySourceProofFailures.join("\n")}`,
+  );
+}
+
+const capabilityFixtureConsumer = consumerCapabilityAuditRecords[0];
+assert.ok(capabilityFixtureConsumer);
+const invalidApprovedExceptionConsumer = {
+  ...capabilityFixtureConsumer,
+  declaration: {
+    phase: "capability_applicability",
+    overrides: {
+      confirmation: {
+        state: "approved_exception",
+        scope: "",
+        approvingOwner: "",
+        evidence: [],
+        rationale: "",
+      },
+    },
+  },
+} as ConsumerCapabilityAuditRecord;
+const missingAdoptionConsumer = {
+  ...capabilityFixtureConsumer,
+  declaration: {
+    phase: "capability_applicability",
+    overrides: {
+      confirmation: {
+        state: "missing_adoption",
+        rationale: "Negative fixture: applicable behavior has no adoption.",
+      },
+    },
+  },
+} as ConsumerCapabilityAuditRecord;
+const genericLocalImplementationSource = `${consumerCapabilitySource(capabilityFixtureConsumer)}\nwindow.confirm("fixture");`;
+
+check(
+  "Current Shared Capability Set is the single dynamic source for audit axes, owners, and source proof",
+  currentSharedCapabilityKeys.length > 0 &&
+    capabilitySetDefinitionFailures.length === 0 &&
+    capabilityManifestSource.includes(
+      "keyof typeof ADMIN_CURRENT_SHARED_CAPABILITY_SET",
+    ) &&
+    !capabilityManifestSource.includes("ADMIN_CONSUMER_CAPABILITY_KEYS"),
+);
+check(
+  "a future shared capability automatically enters every consumer audit without a fixed count or audit branch",
+  futureSharedCapabilityKeysFixture.length ===
+    currentSharedCapabilityKeys.length + 1 &&
+    futureSharedCapabilityKeysFixture.includes(
+      FUTURE_SHARED_CAPABILITY_FIXTURE,
+    ) &&
+    futureConsumerAuditProjectionFixtures.every(
+      ({ decisions }) =>
+        Object.hasOwn(decisions, FUTURE_SHARED_CAPABILITY_FIXTURE) &&
+        Object.keys(decisions).length ===
+          futureSharedCapabilityKeysFixture.length,
+    ),
+);
+check(
+  "Approved Exception verification fails closed unless Scope, Approving Owner, Evidence, and Rationale are present",
+  collectConsumerCapabilityAuditFailures(
+    invalidApprovedExceptionConsumer,
+    "applicability",
+  ).includes("confirmation:invalid_approved_exception_contract"),
+);
+check(
+  "applicable behavior without canonical adoption cannot disappear inside not_applicable",
+  collectConsumerCapabilityAuditFailures(
+    missingAdoptionConsumer,
+    "source_proof",
+  ).includes("confirmation:missing_adoption"),
+);
+check(
+  "local and parallel implementation detection is projected generically from capability metadata",
+  localImplementationMatches(
+    "confirmation",
+    genericLocalImplementationSource,
+  ).length === 1,
+);
+
+check(
+  "every registered Admin consumer completes Capability Applicability across the canonical capability axes",
+  consumerCapabilityAuditRecords.length > 0 &&
+    capabilityApplicabilityFailures.length === 0,
+);
+check(
+  "every adopted Admin consumer capability has canonical Source Proof with no local or parallel rendering",
+  capabilitySourceProofFailures.length === 0,
+);
+
 for (const [id, sourceFile] of Object.entries(paths)) {
   check(`${id} canonical source exists`, existsSync(join(ROOT, sourceFile)));
 }
@@ -1163,7 +1844,9 @@ check(
   "More focuses its requested enabled item during layout without a cancellable frame race",
   rendererSource.includes("type PanelFocusIntent") &&
     rendererSource.includes("useLayoutEffect(() => {") &&
-    rendererSource.includes("const focusIntent = panelFocusIntentRef.current") &&
+    rendererSource.includes(
+      "const focusIntent = panelFocusIntentRef.current",
+    ) &&
     rendererSource.includes("document.activeElement === focusTarget") &&
     rendererSource.includes("panelFocusIntentRef.current = null") &&
     !rendererSource.includes("focusMenuOnOpenRef"),
@@ -1179,11 +1862,15 @@ check(
       rendererSource,
     ) &&
     rendererSource.includes("window.cancelAnimationFrame") &&
-    rendererSource.includes("const pendingRestore = focusRestoreHandleRef.current") &&
+    rendererSource.includes(
+      "const pendingRestore = focusRestoreHandleRef.current",
+    ) &&
     rendererSource.includes("pendingRestore?.isPending()") &&
     rendererSource.includes("pendingRestore?.cancel()") &&
     rendererSource.includes("activeElement !== document.body") &&
-    rendererSource.includes("const immediateFocusTarget = resolveReturnFocus()"),
+    rendererSource.includes(
+      "const immediateFocusTarget = resolveReturnFocus()",
+    ),
 );
 check(
   "Information focus and return use explicit targets with a visible title fallback",
@@ -1201,7 +1888,9 @@ check(
   "Escape, outside close, and removed-row cleanup share a visible non-body focus resolver",
   rendererSource.includes("const createReturnFocusResolver = useCallback") &&
     rendererSource.includes("closeAndReturnFocus();") &&
-    rendererSource.includes("const immediateFocusTarget = resolveReturnFocus()") &&
+    rendererSource.includes(
+      "const immediateFocusTarget = resolveReturnFocus()",
+    ) &&
     rendererSource.includes("restoreResolvedFocus(resolveReturnFocus)") &&
     rendererSource.includes("firstVisibleMore") &&
     rendererSource.includes("isVisibleFocusTarget(surface)") &&
@@ -1213,7 +1902,7 @@ check(
   "shared presentation exposes disabled and pending semantics",
   rendererSource.includes("aria-disabled={!enabled}") &&
     rendererSource.includes("aria-busy={target.pending || undefined}") &&
-    rendererSource.includes('data-admin-row-action-state') &&
+    rendererSource.includes("data-admin-row-action-state") &&
     rendererSource.includes("disabled={!enabled}"),
 );
 check(
@@ -1438,9 +2127,7 @@ check(
     entityListTableSource.includes(
       "getAdminDataGridFixedColumnStyle(actionsColumnWidth)",
     ) &&
-    entityListTableSource.includes(
-      "<AdminDataGridStickyActionsHeaderCell",
-    ) &&
+    entityListTableSource.includes("<AdminDataGridStickyActionsHeaderCell") &&
     entityListTableSource.includes("<AdminDataGridStickyActionsCell"),
 );
 check(
@@ -1576,7 +2263,9 @@ check(
 check(
   "shared list parents attach Toolbar to Grid while preserving outer 28px and table-footer 16px cadence",
   entityListSurfaceSource.includes("AdminEntityListPrimarySection") &&
-    entityListSurfaceSource.includes('SURFACE_LAYOUT_CLASSES = "flex flex-col gap-7"') &&
+    entityListSurfaceSource.includes(
+      'SURFACE_LAYOUT_CLASSES = "flex flex-col gap-7"',
+    ) &&
     entityListSurfaceSource.includes("AdminEntityListTableRegion") &&
     entityListSurfaceSource.includes(
       'TABLE_REGION_LAYOUT_CLASSES = "flex flex-col gap-4"',
@@ -1590,9 +2279,11 @@ check(
     entityListSource.includes("AdminEntityListPrimarySection") &&
     entityListSource.includes('toolbar ? "gap-0" : "gap-7"') &&
     entityListSource.includes("<AdminEntityListFilters") &&
-    entityListSource.includes('toolbar ? "!rounded-t-none !border-t-0" : undefined') &&
+    entityListSource.includes(
+      'toolbar ? "!rounded-t-none !border-t-0" : undefined',
+    ) &&
     !entityListSource.includes("primary-section]:mt-") &&
-    !read(paths.pagination).includes('className={`mt-4') &&
+    !read(paths.pagination).includes("className={`mt-4") &&
     read(paths.pagination).includes('data-admin-table-pagination=""') &&
     read(paths.pageExperience).includes("flex flex-col gap-7") &&
     listConsumerSources.every(
@@ -1692,6 +2383,39 @@ check(
     ),
   ),
 );
+const activeCollectionSurfaces = collectionSurfaces.filter(
+  (surface) => surface.lifecycle !== "deprecated",
+);
+const deprecatedCollectionSurfaces = collectionSurfaces.filter(
+  (surface) => surface.lifecycle === "deprecated",
+);
+const unreachableActiveConsumerSources = activeCollectionSurfaces.flatMap(
+  (surface) => {
+    const pageGraphs = surface.pageSourceFiles.map((pageSourceFile) =>
+      collectSourceGraph([pageSourceFile]),
+    );
+    return surface.presentationSourceFiles
+      .filter(
+        (presentationSourceFile) =>
+          !pageGraphs.some((graph) => graph.has(presentationSourceFile)),
+      )
+      .map(
+        (presentationSourceFile) =>
+          `${surface.id}:${presentationSourceFile}`,
+      );
+  },
+);
+check(
+  "every active Collection consumer is reachable from an inventoried route and deprecated consumers carry explicit evidence",
+  unreachableActiveConsumerSources.length === 0 &&
+    deprecatedCollectionSurfaces.every(
+      (surface) =>
+        surface.deprecationEvidence !== undefined &&
+        surface.deprecationEvidence.owner.trim().length > 0 &&
+        surface.deprecationEvidence.evidence.length > 0 &&
+        surface.deprecationEvidence.evidence.every((item) => item.trim()),
+    ),
+);
 check(
   "every Collection entry declares the requested ownership and adoption axes",
   collectionSurfaces.every(
@@ -1702,12 +2426,8 @@ check(
           surface.headerState === "auth_out_of_scope"
         : surface.headerOwner === "AdminPageContextHeader" &&
           surface.headerState === "adopted") &&
-      ["adopted", "auth_out_of_scope"].includes(
-        surface.pageChromeAdoption,
-      ) &&
-      ["adopted", "not_applicable"].includes(
-        surface.collectionAdoption,
-      ) &&
+      ["adopted", "auth_out_of_scope"].includes(surface.pageChromeAdoption) &&
+      ["adopted", "not_applicable"].includes(surface.collectionAdoption) &&
       "rowActionsState" in surface &&
       "paginationState" in surface &&
       "paginationOwner" in surface &&
@@ -1822,6 +2542,71 @@ check(
 const blockTemplateLibraries = collectionSurfaces.find(
   (surface) => surface.id === "block-template-libraries",
 );
+const groupedConsumerEvidenceFailures = collectionSurfaces.flatMap(
+  (surface) => {
+    if (surface.consumerAdoptionEvidence.length === 0) return [];
+    const failures: string[] = [];
+    if (
+      !sameValueSet(
+        surface.consumerAdoptionEvidence.map((consumer) => consumer.route),
+        surface.routes,
+      )
+    ) {
+      failures.push(`${surface.id}:route_coverage`);
+    }
+    for (const consumer of surface.consumerAdoptionEvidence) {
+      const graph = collectSourceGraph([consumer.pageSourceFile]);
+      const source = [...graph.values()].join("\n");
+      if (
+        !surface.pageSourceFiles.includes(consumer.pageSourceFile) ||
+        !surface.presentationSourceFiles.includes(
+          consumer.presentationOwner,
+        ) ||
+        !graph.has(consumer.presentationOwner)
+      ) {
+        failures.push(`${surface.id}:${consumer.id}:reachability`);
+      }
+      if (
+        consumer.applicability.phase !== "capability_applicability" ||
+        consumer.sourceProofTokens.length === 0
+      ) {
+        failures.push(`${surface.id}:${consumer.id}:applicability`);
+      }
+      for (const token of consumer.sourceProofTokens) {
+        if (!source.includes(token)) {
+          failures.push(
+            `${surface.id}:${consumer.id}:source_proof:${token}`,
+          );
+        }
+      }
+      if (
+        consumer.dataRegistryEntities.some(
+          (entity) => !surface.dataRegistryEntities.includes(entity),
+        )
+      ) {
+        failures.push(`${surface.id}:${consumer.id}:data_registry`);
+      }
+      if (consumer.requiredAdoption.length > 0) {
+        failures.push(`${surface.id}:${consumer.id}:missing_adoption`);
+      }
+    }
+    if (
+      !sameValueSet(
+        surface.consumerAdoptionEvidence.flatMap(
+          (consumer) => consumer.dataRegistryEntities,
+        ),
+        surface.dataRegistryEntities,
+      )
+    ) {
+      failures.push(`${surface.id}:aggregated_data_registry_claim`);
+    }
+    return failures;
+  },
+);
+check(
+  "each grouped Collection consumer owns independent applicability, adoption, reachability, and Source Proof",
+  groupedConsumerEvidenceFailures.length === 0,
+);
 const blockTemplateConsumerContracts = [
   "collection",
   "table",
@@ -1858,7 +2643,9 @@ const blockTemplateConsumerFailures = blockTemplateLibraries?.consumerAdoptionEv
     const failures: string[] = [];
     if (
       !blockTemplateLibraries.routes.includes(consumer.route) ||
-      !blockTemplateLibraries.pageSourceFiles.includes(consumer.pageSourceFile) ||
+      !blockTemplateLibraries.pageSourceFiles.includes(
+        consumer.pageSourceFile,
+      ) ||
       !existsSync(join(ROOT, consumer.pageSourceFile)) ||
       !existsSync(join(ROOT, consumer.presentationOwner))
     ) {
@@ -1884,13 +2671,14 @@ const blockTemplateConsumerFailures = blockTemplateLibraries?.consumerAdoptionEv
       failures.push(`${consumer.id}:partial_adoption`);
     }
     return failures;
-  },
-) ?? ["block-template-libraries:missing_surface"];
+  }) ?? ["block-template-libraries:missing_surface"];
 check(
   "each Block Template library proves its own Collection capabilities instead of inheriting a grouped claim",
   blockTemplateLibraries?.consumerAdoptionEvidence.length === 8 &&
     sameValueSet(
-      blockTemplateLibraries.consumerAdoptionEvidence.map((consumer) => consumer.route),
+      blockTemplateLibraries.consumerAdoptionEvidence.map(
+        (consumer) => consumer.route,
+      ),
       blockTemplateLibraries.routes,
     ) &&
     blockTemplateConsumerFailures.length === 0,
@@ -1915,7 +2703,10 @@ check(
   collectionSurfaces
     .filter((surface) => surface.generic)
     .every((surface) => {
-      const source = [...surface.pageSourceFiles, ...surface.presentationSourceFiles]
+      const source = [
+        ...surface.pageSourceFiles,
+        ...surface.presentationSourceFiles,
+      ]
         .map(read)
         .join("\n");
       return source.includes(`eyebrow="${surface.engineLabel}"`);
@@ -2075,9 +2866,7 @@ function collectFullAdoptionContractFailures(
     claim.contracts.row_actions !== "not_required" ||
     surface.rowActionsState !== "read_only_no_row_commands" ||
     surface.rowActionsOwner !== "not_applicable" ||
-    surface.dataRegistryEntities.some((entity) =>
-      manifestEntitySet.has(entity),
-    )
+    surface.dataRegistryEntities.some((entity) => manifestEntitySet.has(entity))
   ) {
     failures.push("row_actions");
   }
@@ -2182,9 +2971,7 @@ check(
     read(CANONICAL_COLLECTION_OWNER).includes(
       "bulkInteraction: AdminInstantMutationBulkInteraction",
     ) &&
-    read(CANONICAL_COLLECTION_OWNER).includes(
-      "bulkInteraction.isBlocked",
-    ),
+    read(CANONICAL_COLLECTION_OWNER).includes("bulkInteraction.isBlocked"),
 );
 const specializedBulkConsumerSources = collectTsxFiles(join(ROOT, "src"))
   .map(relativeSourceFile)
@@ -2426,8 +3213,9 @@ const specializedClassificationFailureFixture = collectionSurfaces.find(
     surface.rowActionsState === "adopted",
 );
 assert.ok(specializedClassificationFailureFixture);
-const specializedClassificationFailureSource =
-  readCollectionSurfaceEvidence(specializedClassificationFailureFixture);
+const specializedClassificationFailureSource = readCollectionSurfaceEvidence(
+  specializedClassificationFailureFixture,
+);
 check(
   "failure path rejects Specialized Adoption without shared Grid evidence",
   collectCollectionSurfaceComplianceFailures(
@@ -2504,18 +3292,23 @@ check(
 );
 check(
   "dashboard, card catalog, report, and recovery inventory states match their concrete commands",
-  collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
-    ?.sourceOwner ===
-      "src/lib/admin/dashboard/load-admin-dashboard.ts#loadAdminDashboard" &&
-    collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
+  collectionSurfaces.find(
+    (surface) => surface.id === "dashboard-recent-content",
+  )?.sourceOwner ===
+    "src/lib/admin/dashboard/load-admin-dashboard.ts#loadAdminDashboard" &&
+    collectionSurfaces
+      .find((surface) => surface.id === "dashboard-recent-content")
       ?.presentationSourceFiles.includes(
         "src/components/admin/dashboard/AdminDashboardView.tsx",
       ) &&
-    collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
-      ?.workflowClassification === "fixed_structure_not_paginated" &&
-    collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
-      ?.rowActionsState === "not_applicable" &&
-    collectionSurfaces.find((surface) => surface.id === "blocks-library-hub")
+    collectionSurfaces.find(
+      (surface) => surface.id === "dashboard-recent-content",
+    )?.workflowClassification === "fixed_structure_not_paginated" &&
+    collectionSurfaces.find(
+      (surface) => surface.id === "dashboard-recent-content",
+    )?.rowActionsState === "not_applicable" &&
+    collectionSurfaces
+      .find((surface) => surface.id === "blocks-library-hub")
       ?.presentationSourceFiles.includes(
         "src/app/admin/pages-blocks/blocks/page.tsx",
       ) &&
@@ -2547,13 +3340,13 @@ check(
 );
 check(
   "Project Residential and Commercial routes share one consumer and action declaration",
-  collectionSurfaces.find(
-    (surface) => surface.id === "projects-residential-commercial",
-  )?.routes.join("|") ===
+  collectionSurfaces
+    .find((surface) => surface.id === "projects-residential-commercial")
+    ?.routes.join("|") ===
     "/admin/projects/residential|/admin/projects/commercial" &&
-    collectionSurfaces.find(
-      (surface) => surface.id === "projects-residential-commercial",
-    )?.presentationSourceFiles.join("|") === paths.projectsList &&
+    collectionSurfaces
+      .find((surface) => surface.id === "projects-residential-commercial")
+      ?.presentationSourceFiles.join("|") === paths.projectsList &&
     projectsColumnsSource.includes("copyPublicLink:") &&
     projectsColumnsSource.includes("visibility:") &&
     projectsColumnsSource.includes("onVisibility") &&
@@ -2571,7 +3364,9 @@ check(
 check(
   "checkbox and actions remain logical-edge sticky while primary de-sticks",
   entityListTableSource.includes("sticky start-0") &&
-    dataGridSource.includes('data-admin-grid-sticky={sticky ? "inline-start"') &&
+    dataGridSource.includes(
+      'data-admin-grid-sticky={sticky ? "inline-start"',
+    ) &&
     dataGridSource.includes('data-admin-grid-sticky="inline-end"') &&
     dataGridSource.includes("sticky end-0"),
 );
@@ -2597,8 +3392,9 @@ check(
       ?.queryMode === "specialized" &&
     collectionSurfaces.find((surface) => surface.id === "projects-hub")
       ?.queryMode === "small-fixed" &&
-    collectionSurfaces.find((surface) => surface.id === "dashboard-recent-content")
-      ?.paginationState === "not_required" &&
+    collectionSurfaces.find(
+      (surface) => surface.id === "dashboard-recent-content",
+    )?.paginationState === "not_required" &&
     collectionSurfaces.find(
       (surface) => surface.id === "topics-without-image-report",
     )?.paginationOwner === "AdminTablePagination",
@@ -2718,8 +3514,12 @@ check(
     !pageAssignmentsSource.includes("table.rows.slice(") &&
     read(paths.boundedPagination).includes("useSearchParams") &&
     read(paths.boundedPagination).includes("queryContract.matchesRow") &&
-    read(paths.boundedPagination).includes("const applyQueryPatch = useCallback") &&
-    read(paths.boundedPagination).includes('behavior === "replace" ? "replaceState" : "pushState"') &&
+    read(paths.boundedPagination).includes(
+      "const applyQueryPatch = useCallback",
+    ) &&
+    read(paths.boundedPagination).includes(
+      'behavior === "replace" ? "replaceState" : "pushState"',
+    ) &&
     read(paths.boundedPagination).includes("previousDatasetKey"),
 );
 
@@ -2831,7 +3631,9 @@ check(
   "shared Pagination delegates range and URL math without owning Busy state",
   read(paths.pagination).includes("computePageRange") &&
     read(paths.pagination).includes("buildAdminEntityListHref") &&
-    read(paths.pagination).includes('data-admin-table-pagination-busy="false"') &&
+    read(paths.pagination).includes(
+      'data-admin-table-pagination-busy="false"',
+    ) &&
     !read(paths.pagination).includes("pending?: boolean") &&
     !read(paths.pagination).includes("disabled={pending") &&
     !read(paths.pagination).includes("aria-busy={pending}"),
@@ -2935,12 +3737,8 @@ check(
 );
 check(
   "server-page search consumers delegate escaping to their authoritative query owners",
-  [
-    paths.redirectsAdapter,
-    paths.activityLoader,
-    paths.reportQuery,
-  ].every((sourceFile) =>
-    read(sourceFile).includes("buildAdminListSearchOrFilter"),
+  [paths.redirectsAdapter, paths.activityLoader, paths.reportQuery].every(
+    (sourceFile) => read(sourceFile).includes("buildAdminListSearchOrFilter"),
   ) &&
     read(paths.projectsAdapter).includes("p_search: query.search") &&
     read(paths.projectPublishing).includes("v_search_pattern") &&
@@ -3013,7 +3811,9 @@ check(
   rendererSource.includes("ADMIN_SCROLLBAR_VISUAL_CLASSES") &&
     rendererSource.includes("overscroll-contain") &&
     rendererSource.includes('document.body.style.overflow = "hidden"') &&
-    rendererSource.includes("document.body.style.overflow = previousOverflow") &&
+    rendererSource.includes(
+      "document.body.style.overflow = previousOverflow",
+    ) &&
     !rendererSource.includes("max-h-[min(340px"),
 );
 
@@ -3022,7 +3822,9 @@ check(
   floatingLayerSource.includes("AdminEntityListConfirmationSnapshot") &&
     floatingLayerSource.includes("openConfirmation") &&
     floatingLayerSource.includes("<AdminConfirmDialog") &&
-    rendererSource.includes("const snapshot: AdminEntityListConfirmationSnapshot") &&
+    rendererSource.includes(
+      "const snapshot: AdminEntityListConfirmationSnapshot",
+    ) &&
     rendererSource.includes("onConfirm: target.onSelect") &&
     rendererSource.includes("floating.openConfirmation(snapshot)") &&
     !rendererSource.includes("confirmingTarget") &&
@@ -3041,7 +3843,9 @@ check(
 check(
   "shared confirmation closes only after success and remains retryable after failure",
   floatingLayerSource.includes("await activeConfirmation.onConfirm()") &&
-    floatingLayerSource.includes("current === activeConfirmation ? null : current") &&
+    floatingLayerSource.includes(
+      "current === activeConfirmation ? null : current",
+    ) &&
     confirmationSource.includes("invokingRef.current") &&
     confirmationSource.includes("if (failed)") &&
     confirmationSource.includes("data-admin-confirm-submit") &&
@@ -3061,7 +3865,9 @@ const usersFormSource = read(paths.usersForm);
 check(
   "Users collection and edit status changes adopt shared confirmation with pending, retry, and focus return",
   usersRolesSource.includes("<AdminEntityList<") &&
-    usersRolesSource.includes("await setAdminUserActiveAction(row.id, nextActive)") &&
+    usersRolesSource.includes(
+      "await setAdminUserActiveAction(row.id, nextActive)",
+    ) &&
     usersRolesSource.includes("await deleteAdminUserAction(row.id)") &&
     /confirmation\s*:\s*\{[\s\S]{0,240}?mode\s*:\s*["']shared["']/.test(
       usersRolesSource,
@@ -3166,12 +3972,12 @@ check(
     directInstantConsumers.every((sourceFile) => {
       const source = read(sourceFile);
       return (
-        source.includes("useAdminEntityInstantMutation") ||
-        source.includes("useAdminBoundedClientInstantMutation")
-      ) &&
+        (source.includes("useAdminEntityInstantMutation") ||
+          source.includes("useAdminBoundedClientInstantMutation")) &&
         source.includes("getRowInteraction") &&
         !source.includes("pendingRowId") &&
-        !source.includes("setPendingRowId");
+        !source.includes("setPendingRowId")
+      );
     }),
 );
 check(
@@ -3217,9 +4023,9 @@ check(
     );
   }) &&
     !read("src/lib/admin/entity-list/types.ts").includes("pending?: boolean") &&
-    !read("src/components/admin/entity-list/AdminEntityListFilters.tsx").includes(
-      "pending={search.pending}",
-    ),
+    !read(
+      "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+    ).includes("pending={search.pending}"),
 );
 check(
   "legacy ambiguous mutation and query state contracts are removed",
@@ -3262,4 +4068,6 @@ printManagementCollectionsConsistencyMatrix({
   globalClosed: ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed,
 });
 
-console.log(`Admin Row Actions capability verification passed (${passed} checks).`);
+console.log(
+  `Admin Row Actions capability verification passed (${passed} checks).`,
+);

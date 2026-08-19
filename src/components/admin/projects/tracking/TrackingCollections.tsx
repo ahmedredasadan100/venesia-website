@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
 
 import {
@@ -12,12 +13,14 @@ import {
 import {
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+  ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS,
   AdminActionButton,
   AdminCard,
   AdminDataGridRowActions,
   AdminPageContextHeader,
   AdminStatusPill,
   AdminTablePagination,
+  type AdminRowActionVisibility,
   type AdminRowActionsCapability,
 } from "../../ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
@@ -61,6 +64,9 @@ import {
   deleteTrackingUpdateAction,
   reorderTrackingItemsAction,
   reorderTrackingStagesAction,
+  setTrackingItemVisibilityAction,
+  setTrackingStageVisibilityAction,
+  setTrackingUpdatePublicationVisibilityAction,
 } from "../../../../app/admin/projects/tracking-actions";
 import {
   restoreProjectTrackingColumnPreferences,
@@ -68,12 +74,11 @@ import {
 } from "../../../../app/admin/projects/tracking-column-preference-actions";
 import {
   TrackingItemFormModal,
-  TrackingProfileForm,
+  TrackingProfileFormModal,
   TrackingStageFormModal,
   TrackingUpdateFormModal,
 } from "./TrackingForms";
 
-const PAGE_SIZES = ["10", "20", "50"];
 const visibilityFilter: AdminEntityFilterDef = {
   id: "tracking-visibility",
   paramKey: "visibility",
@@ -110,17 +115,65 @@ const publicationFilter: AdminEntityFilterDef = {
     { value: "archived", label: "مؤرشف" },
   ],
 };
+const HIDDEN_ROW_ACTION_TARGET = { access: "hidden" } as const;
 
 function hiddenTargets(): Pick<
   AdminRowActionsCapability["actions"],
-  "copyPublicLink" | "visibility" | "featured" | "duplicate" | "archive"
+  "copyPublicLink" | "featured" | "duplicate" | "archive"
 > {
   return {
     copyPublicLink: { access: "hidden" },
-    visibility: { access: "hidden" },
     featured: { access: "hidden" },
     duplicate: { access: "hidden" },
     archive: { access: "hidden" },
+  };
+}
+
+function trackingVisibilityTarget({
+  isVisible,
+  isPending,
+  onSelect,
+}: {
+  isVisible: boolean;
+  isPending: boolean;
+  onSelect: () => Promise<void>;
+}): AdminRowActionVisibility {
+  return isPending
+    ? {
+        access: "disabled",
+        isVisible,
+        pending: true,
+        disabledReason: "انتظر انتهاء الإجراء الحالي.",
+      }
+    : { access: "allowed", isVisible, onSelect };
+}
+
+function visibilityOnlyCapability({
+  entityType,
+  entityId,
+  entityLabel,
+  visibility,
+}: {
+  entityType: string;
+  entityId: number;
+  entityLabel: string;
+  visibility: AdminRowActionVisibility;
+}): AdminRowActionsCapability {
+  return {
+    entityType,
+    entityId,
+    entityLabel,
+    actions: {
+      edit: HIDDEN_ROW_ACTION_TARGET,
+      preview: HIDDEN_ROW_ACTION_TARGET,
+      information: HIDDEN_ROW_ACTION_TARGET,
+      copyPublicLink: HIDDEN_ROW_ACTION_TARGET,
+      visibility,
+      featured: HIDDEN_ROW_ACTION_TARGET,
+      duplicate: HIDDEN_ROW_ACTION_TARGET,
+      archive: HIDDEN_ROW_ACTION_TARGET,
+      delete: HIDDEN_ROW_ACTION_TARGET,
+    },
   };
 }
 
@@ -140,6 +193,22 @@ function toInstantMutationResult(result: AdminActionResult) {
         ? ("warning" as const)
         : ("success" as const),
   };
+}
+
+function reorderOptimisticRows<
+  Row extends { id: number; sort_order: number },
+>(rows: Row[], orderedIds: readonly number[]) {
+  const rank = new Map(orderedIds.map((id, index) => [id, index]));
+  return [...rows]
+    .sort(
+      (left, right) =>
+        (rank.get(left.id) ?? Number.MAX_SAFE_INTEGER) -
+        (rank.get(right.id) ?? Number.MAX_SAFE_INTEGER),
+    )
+    .map((row) => ({
+      ...row,
+      sort_order: (rank.get(row.id) ?? row.sort_order - 1) + 1,
+    }));
 }
 
 function TrackingOrderButtons({
@@ -203,7 +272,7 @@ function TrackingPagination({
       basePath={basePath}
       totalCount={result.pagination.totalRows}
       pageSize={String(result.pagination.pageSize)}
-      pageSizeOptions={PAGE_SIZES}
+      pageSizeOptions={ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE_OPTIONS}
       currentPage={result.pagination.page}
       totalPages={result.pagination.totalPages}
       emptySummaryText="لا توجد عناصر"
@@ -246,7 +315,52 @@ export function TrackingStagesCollection({
     TrackingStageMetrics
   >(PROJECT_TRACKING_ENTITY_KEYS.stages, controller.query);
   const [createOpen, setCreateOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const [editing, setEditing] = useState<TrackingStageRow | null>(null);
+  const toggleVisibility = useCallback(
+    async (
+      row: TrackingStageRow,
+      onMutationResult?: (result: AdminActionResult) => void,
+    ) => {
+      const nextVisible = !row.is_visible;
+      let actionResult: AdminActionResult | null = null;
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "visibility",
+          optimistic: (cache) => {
+            const leavesFilteredScope =
+              (controller.query.filters.visibility === "visible" &&
+                !nextVisible) ||
+              (controller.query.filters.visibility === "hidden" && nextVisible);
+            if (leavesFilteredScope) {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((candidate) =>
+              candidate.id === row.id
+                ? { ...candidate, is_visible: nextVisible }
+                : candidate,
+            );
+          },
+          execute: async () => {
+            actionResult = await setTrackingStageVisibilityAction(
+              projectId,
+              row.id,
+              nextVisible,
+              row.name,
+            );
+            return toInstantMutationResult(actionResult);
+          },
+        });
+        if (actionResult) onMutationResult?.(actionResult);
+      } catch (error) {
+        if (actionResult) onMutationResult?.(actionResult);
+        throw error;
+      }
+    },
+    [controller.query.filters.visibility, instant, projectId],
+  );
   const rows = controller.result.rows;
   const canonicalReorder =
     controller.query.search === "" &&
@@ -271,12 +385,20 @@ export function TrackingStagesCollection({
         minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
         width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
         renderCell: ({ row }) => (
-          <div>
+          <Link
+            href={trackingStagePath(projectId, row.id)}
+            data-tracking-stage-items-link=""
+            className="group block min-w-0 rounded-xl px-1 py-1 text-right transition hover:bg-white/[0.035] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+            title={`إدارة بنود ${row.name}`}
+          >
             <b className="text-white">{row.name}</b>
             <p className="mt-1 line-clamp-1 text-xs text-white/40">
               {row.description ?? "بلا وصف"}
             </p>
-          </div>
+            <span className="mt-2 inline-flex text-xs font-semibold text-[#D8B87A]/75 transition group-hover:text-[#D8B87A]">
+              إدارة البنود ({row.item_count})
+            </span>
+          </Link>
         ),
       },
       {
@@ -321,11 +443,26 @@ export function TrackingStagesCollection({
         hideable: true,
         minWidth: 100,
         width: 110,
-        renderCell: ({ row }) => (
-          <AdminStatusPill tone={row.is_visible ? "green" : "muted"}>
-            {row.is_visible ? "مرئي" : "مخفي"}
-          </AdminStatusPill>
-        ),
+        renderCell: ({ row, onMutationResult }) => {
+          const interaction = instant.getRowInteraction(row.id);
+          const visibility = trackingVisibilityTarget({
+            isVisible: row.is_visible,
+            isPending: interaction.isPending,
+            onSelect: () => toggleVisibility(row, onMutationResult),
+          });
+          return (
+            <AdminDataGridRowActions
+              capability={visibilityOnlyCapability({
+                entityType: "project_tracking_stage",
+                entityId: row.id,
+                entityLabel: row.name,
+                visibility,
+              })}
+              display="visibility"
+              size="compact"
+            />
+          );
+        },
       },
       {
         key: "order",
@@ -338,15 +475,31 @@ export function TrackingStagesCollection({
           <TrackingOrderButtons
             rowId={row.id}
             ids={ids}
-            disabled={!canonicalReorder}
-            onReorder={(next) =>
-              reorderTrackingStagesAction(projectId, next).then(
-                async (result) => {
-                  if (result.ok) await controller.invalidate();
-                  return result;
-                },
-              )
-            }
+            disabled={!canonicalReorder || instant.bulkInteraction.isBlocked}
+            onReorder={async (next) => {
+              let actionResult: AdminActionResult | null = null;
+              try {
+                await instant.mutateAsync({
+                  action: "reorder",
+                  bulk: true,
+                  optimistic: (cache) =>
+                    cache.transformActiveRows((current) =>
+                      reorderOptimisticRows(current, next),
+                    ),
+                  execute: async () => {
+                    actionResult = await reorderTrackingStagesAction(
+                      projectId,
+                      next,
+                    );
+                    return toInstantMutationResult(actionResult);
+                  },
+                });
+              } catch (error) {
+                if (actionResult) return actionResult;
+                throw error;
+              }
+              return actionResult!;
+            }}
             onResult={onMutationResult}
           />
         ),
@@ -372,6 +525,7 @@ export function TrackingStagesCollection({
                   preview: {
                     access: "allowed",
                     href: trackingStagePath(projectId, row.id),
+                    target: "_self",
                     label: "إدارة البنود",
                   },
                   information: {
@@ -384,6 +538,11 @@ export function TrackingStagesCollection({
                     ],
                   },
                   ...hiddenTargets(),
+                  visibility: trackingVisibilityTarget({
+                    isVisible: row.is_visible,
+                    isPending: interaction.isPending,
+                    onSelect: () => toggleVisibility(row, onMutationResult),
+                  }),
                   delete:
                     interaction.pendingAction === "delete"
                       ? {
@@ -441,7 +600,7 @@ export function TrackingStagesCollection({
         },
       },
     ],
-    [canonicalReorder, controller, ids, instant, projectId],
+    [canonicalReorder, ids, instant, projectId, toggleVisibility],
   );
   const project = controller.result.metrics!.project;
   const basePath = trackingProjectPath(projectId);
@@ -476,19 +635,48 @@ export function TrackingStagesCollection({
           }
         />
         <AdminEntityListPrimarySection>
-          <AdminCard className="p-5">
-            <h2 className="text-lg font-semibold text-white">
-              بيانات ملف المتابعة
-            </h2>
-            <p className="mt-1 text-sm text-white/45">
-              هذه حقائق Tracking مستقلة؛ لا تُنسخ إلى جدول projects.
-            </p>
-            <div className="mt-5">
-              <TrackingProfileForm
-                projectId={projectId}
-                profile={controller.result.metrics!.profile}
-              />
+          <AdminCard className="p-5" data-tracking-profile-summary="">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">
+                  بيانات ملف المتابعة
+                </h2>
+                <p className="mt-1 text-sm text-white/45">
+                  هذه حقائق Tracking مستقلة؛ لا تُنسخ إلى جدول projects.
+                </p>
+              </div>
+              <AdminActionButton
+                onClick={() => setProfileOpen(true)}
+                variant="dark"
+              >
+                تعديل بيانات الملف
+              </AdminActionButton>
             </div>
+            <dl className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <dt className="text-xs text-white/45">تاريخ استلام المشروع</dt>
+                <dd className="mt-2 text-sm font-semibold text-white/85">
+                  {formatAdminDateOnly(
+                    controller.result.metrics!.profile?.project_receipt_date,
+                  )}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <dt className="text-xs text-white/45">تاريخ استلام الرخصة</dt>
+                <dd className="mt-2 text-sm font-semibold text-white/85">
+                  {formatAdminDateOnly(
+                    controller.result.metrics!.profile?.license_receipt_date,
+                  )}
+                </dd>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <dt className="text-xs text-white/45">المقاول المنفذ</dt>
+                <dd className="mt-2 text-sm font-semibold text-white/85">
+                  {controller.result.metrics!.profile?.contractor_name ??
+                    "غير محدد"}
+                </dd>
+              </div>
+            </dl>
           </AdminCard>
         </AdminEntityListPrimarySection>
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.stages}>
@@ -534,6 +722,9 @@ export function TrackingStagesCollection({
                         : "asc",
                   }),
               }}
+              onSortColumnHidden={() =>
+                controller.setSort({ ...trackingStagesQueryContract.defaultSort })
+              }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               toolbar={{
                 basePath,
@@ -574,6 +765,13 @@ export function TrackingStagesCollection({
           </AdminEntityListTableRegion>
         </AdminEntityListSurface>
       </AdminEntityListPageLayout>
+      <TrackingProfileFormModal
+        open={profileOpen}
+        projectId={projectId}
+        profile={controller.result.metrics!.profile}
+        onClose={() => setProfileOpen(false)}
+        onSaved={() => void controller.invalidate()}
+      />
       <TrackingStageFormModal
         open={createOpen}
         projectId={projectId}
@@ -627,6 +825,51 @@ export function TrackingItemsCollection({
   >(PROJECT_TRACKING_ENTITY_KEYS.items, controller.query);
   const [createOpen, setCreateOpen] = useState(false),
     [editing, setEditing] = useState<TrackingItemRow | null>(null);
+  const toggleVisibility = useCallback(
+    async (
+      row: TrackingItemRow,
+      onMutationResult?: (result: AdminActionResult) => void,
+    ) => {
+      const nextVisible = !row.is_visible;
+      let actionResult: AdminActionResult | null = null;
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "visibility",
+          optimistic: (cache) => {
+            const leavesFilteredScope =
+              (controller.query.filters.visibility === "visible" &&
+                !nextVisible) ||
+              (controller.query.filters.visibility === "hidden" && nextVisible);
+            if (leavesFilteredScope) {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((candidate) =>
+              candidate.id === row.id
+                ? { ...candidate, is_visible: nextVisible }
+                : candidate,
+            );
+          },
+          execute: async () => {
+            actionResult = await setTrackingItemVisibilityAction(
+              projectId,
+              stageId,
+              row.id,
+              nextVisible,
+              row.name,
+            );
+            return toInstantMutationResult(actionResult);
+          },
+        });
+        if (actionResult) onMutationResult?.(actionResult);
+      } catch (error) {
+        if (actionResult) onMutationResult?.(actionResult);
+        throw error;
+      }
+    },
+    [controller.query.filters.visibility, instant, projectId, stageId],
+  );
   const rows = controller.result.rows,
     ids = rows.map((row) => row.id);
   const canonicalReorder =
@@ -649,15 +892,23 @@ export function TrackingItemsCollection({
         sortKey: "name",
         primary: true,
         sticky: "start",
-        minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
-        width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+        minWidth: 380,
+        width: 440,
         renderCell: ({ row }) => (
-          <div>
-            <b>{row.name}</b>
+          <Link
+            href={trackingItemPath(projectId, row.id)}
+            data-tracking-item-updates-link=""
+            className="group block min-w-0 rounded-xl px-1 py-1 text-right transition hover:bg-white/[0.035] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
+            title={`إدارة تحديثات ${row.name}`}
+          >
+            <b className="text-white">{row.name}</b>
             <p className="mt-1 line-clamp-1 text-xs text-white/40">
               {row.description ?? "بلا وصف"}
             </p>
-          </div>
+            <span className="mt-2 inline-flex text-xs font-semibold text-[#D8B87A]/75 transition group-hover:text-[#D8B87A]">
+              إدارة التحديثات ({row.update_count})
+            </span>
+          </Link>
         ),
       },
       {
@@ -667,8 +918,8 @@ export function TrackingItemsCollection({
         hideable: true,
         sortable: true,
         sortKey: "status",
-        minWidth: 135,
-        width: 145,
+        minWidth: 110,
+        width: 120,
         renderCell: ({ row }) => (
           <AdminStatusPill
             tone={
@@ -688,8 +939,8 @@ export function TrackingItemsCollection({
         label: "التواريخ",
         defaultVisible: true,
         hideable: true,
-        minWidth: 190,
-        width: 210,
+        minWidth: 175,
+        width: 185,
         renderCell: ({ row }) => (
           <span className="text-xs text-white/55">
             {formatAdminDateOnly(row.start_date)} ← {formatAdminDateOnly(row.completion_date)}
@@ -701,30 +952,75 @@ export function TrackingItemsCollection({
         label: "التحديثات",
         defaultVisible: true,
         hideable: true,
-        minWidth: 100,
-        width: 115,
+        minWidth: 78,
+        width: 88,
         renderCell: ({ row }) => <span>{row.update_count}</span>,
+      },
+      {
+        key: "visibility",
+        label: "الظهور",
+        defaultVisible: true,
+        hideable: true,
+        minWidth: 82,
+        width: 90,
+        renderCell: ({ row, onMutationResult }) => {
+          const interaction = instant.getRowInteraction(row.id);
+          const visibility = trackingVisibilityTarget({
+            isVisible: row.is_visible,
+            isPending: interaction.isPending,
+            onSelect: () => toggleVisibility(row, onMutationResult),
+          });
+          return (
+            <AdminDataGridRowActions
+              capability={visibilityOnlyCapability({
+                entityType: "project_tracking_item",
+                entityId: row.id,
+                entityLabel: row.name,
+                visibility,
+              })}
+              display="visibility"
+              size="compact"
+            />
+          );
+        },
       },
       {
         key: "order",
         label: "الترتيب",
         defaultVisible: true,
         hideable: true,
-        minWidth: 110,
-        width: 120,
+        minWidth: 92,
+        width: 100,
         renderCell: ({ row, onMutationResult }) => (
           <TrackingOrderButtons
             rowId={row.id}
             ids={ids}
-            disabled={!canonicalReorder}
-            onReorder={(next) =>
-              reorderTrackingItemsAction(projectId, stageId, next).then(
-                async (result) => {
-                  if (result.ok) await controller.invalidate();
-                  return result;
-                },
-              )
-            }
+            disabled={!canonicalReorder || instant.bulkInteraction.isBlocked}
+            onReorder={async (next) => {
+              let actionResult: AdminActionResult | null = null;
+              try {
+                await instant.mutateAsync({
+                  action: "reorder",
+                  bulk: true,
+                  optimistic: (cache) =>
+                    cache.transformActiveRows((current) =>
+                      reorderOptimisticRows(current, next),
+                    ),
+                  execute: async () => {
+                    actionResult = await reorderTrackingItemsAction(
+                      projectId,
+                      stageId,
+                      next,
+                    );
+                    return toInstantMutationResult(actionResult);
+                  },
+                });
+              } catch (error) {
+                if (actionResult) return actionResult;
+                throw error;
+              }
+              return actionResult!;
+            }}
             onResult={onMutationResult}
           />
         ),
@@ -750,6 +1046,7 @@ export function TrackingItemsCollection({
                   preview: {
                     access: "allowed",
                     href: trackingItemPath(projectId, row.id),
+                    target: "_self",
                     label: "إدارة التحديثات",
                   },
                   information: {
@@ -768,6 +1065,11 @@ export function TrackingItemsCollection({
                     ],
                   },
                   ...hiddenTargets(),
+                  visibility: trackingVisibilityTarget({
+                    isVisible: row.is_visible,
+                    isPending: interaction.isPending,
+                    onSelect: () => toggleVisibility(row, onMutationResult),
+                  }),
                   delete:
                     interaction.pendingAction === "delete"
                       ? {
@@ -827,7 +1129,14 @@ export function TrackingItemsCollection({
         },
       },
     ],
-    [canonicalReorder, controller, ids, instant, projectId, stageId],
+    [
+      canonicalReorder,
+      ids,
+      instant,
+      projectId,
+      stageId,
+      toggleVisibility,
+    ],
   );
   const metrics = controller.result.metrics!,
     basePath = trackingStagePath(projectId, stageId);
@@ -869,6 +1178,7 @@ export function TrackingItemsCollection({
                 "status",
                 "dates",
                 "updates",
+                "visibility",
                 "order",
                 "actions",
               ]}
@@ -898,6 +1208,9 @@ export function TrackingItemsCollection({
                         : "asc",
                   }),
               }}
+              onSortColumnHidden={() =>
+                controller.setSort({ ...trackingItemsQueryContract.defaultSort })
+              }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               toolbar={{
                 basePath,
@@ -995,6 +1308,52 @@ export function TrackingUpdatesCollection({
   >(PROJECT_TRACKING_ENTITY_KEYS.updates, controller.query);
   const [createOpen, setCreateOpen] = useState(false),
     [editing, setEditing] = useState<TrackingUpdateRow | null>(null);
+  const togglePublicationVisibility = useCallback(
+    async (
+      row: TrackingUpdateRow,
+      onMutationResult?: (result: AdminActionResult) => void,
+    ) => {
+      const nextPublished = row.publication_status !== "published";
+      const nextStatus = nextPublished ? "published" : "draft";
+      let actionResult: AdminActionResult | null = null;
+      try {
+        await instant.mutateAsync({
+          rowId: row.id,
+          action: "visibility",
+          optimistic: (cache) => {
+            const publicationFilter = controller.query.filters.publication;
+            if (
+              publicationFilter !== "all" &&
+              publicationFilter !== nextStatus
+            ) {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((candidate) =>
+              candidate.id === row.id
+                ? { ...candidate, publication_status: nextStatus }
+                : candidate,
+            );
+          },
+          execute: async () => {
+            actionResult = await setTrackingUpdatePublicationVisibilityAction(
+              projectId,
+              itemId,
+              row.id,
+              nextPublished,
+              row.title,
+            );
+            return toInstantMutationResult(actionResult);
+          },
+        });
+        if (actionResult) onMutationResult?.(actionResult);
+      } catch (error) {
+        if (actionResult) onMutationResult?.(actionResult);
+        throw error;
+      }
+    },
+    [controller.query.filters.publication, instant, itemId, projectId],
+  );
   const columns = useMemo<
     AdminEntityColumnDef<TrackingUpdateRow, string, TrackingUpdateSort>[]
   >(
@@ -1010,6 +1369,7 @@ export function TrackingUpdatesCollection({
         sticky: "start",
         minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
         width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+        flexible: true,
         renderCell: ({ row }) => (
           <div>
             <b>{row.title}</b>
@@ -1026,10 +1386,12 @@ export function TrackingUpdatesCollection({
         hideable: true,
         sortable: true,
         sortKey: "occurred_at",
-        minWidth: 145,
-        width: 155,
+        minWidth: 118,
+        width: 128,
         renderCell: ({ row }) => (
-          <span className="text-sm">{formatAdminDateOnly(row.occurred_at)}</span>
+          <span className="text-sm">
+            {formatAdminDateOnly(row.occurred_at.slice(0, 10))}
+          </span>
         ),
       },
       {
@@ -1039,27 +1401,28 @@ export function TrackingUpdatesCollection({
         hideable: true,
         sortable: true,
         sortKey: "publication_status",
-        minWidth: 125,
-        width: 135,
-        renderCell: ({ row }) => (
-          <AdminStatusPill
-            tone={
-              row.publication_status === "published"
-                ? "green"
-                : row.publication_status === "draft"
-                  ? "gold"
-                  : "muted"
-            }
-          >
-            {row.publication_status === "published"
-              ? "منشور"
-              : row.publication_status === "draft"
-                ? "مسودة"
-                : row.publication_status === "archived"
-                  ? "مؤرشف"
-                  : "غير منشور"}
-          </AdminStatusPill>
-        ),
+        minWidth: 82,
+        width: 90,
+        renderCell: ({ row, onMutationResult }) => {
+          const interaction = instant.getRowInteraction(row.id);
+          const visibility = trackingVisibilityTarget({
+            isVisible: row.publication_status === "published",
+            isPending: interaction.isPending,
+            onSelect: () => togglePublicationVisibility(row, onMutationResult),
+          });
+          return (
+            <AdminDataGridRowActions
+              capability={visibilityOnlyCapability({
+                entityType: "project_tracking_update",
+                entityId: row.id,
+                entityLabel: row.title,
+                visibility,
+              })}
+              display="visibility"
+              size="compact"
+            />
+          );
+        },
       },
       {
         key: "media",
@@ -1106,12 +1469,21 @@ export function TrackingUpdatesCollection({
                     access: "allowed",
                     title: `معلومات ${row.title}`,
                     items: [
-                      { label: "التاريخ", value: formatAdminDateOnly(row.occurred_at) },
+                      {
+                        label: "التاريخ",
+                        value: formatAdminDateOnly(row.occurred_at.slice(0, 10)),
+                      },
                       { label: "الحالة", value: row.publication_status },
                       { label: "الوسائط", value: String(row.media.length) },
                     ],
                   },
                   ...hiddenTargets(),
+                  visibility: trackingVisibilityTarget({
+                    isVisible: row.publication_status === "published",
+                    isPending: interaction.isPending,
+                    onSelect: () =>
+                      togglePublicationVisibility(row, onMutationResult),
+                  }),
                   delete:
                     interaction.pendingAction === "delete"
                       ? {
@@ -1163,7 +1535,13 @@ export function TrackingUpdatesCollection({
         },
       },
     ],
-    [controller, instant, itemId, projectId],
+    [
+      controller,
+      instant,
+      itemId,
+      projectId,
+      togglePublicationVisibility,
+    ],
   );
   const metrics = controller.result.metrics!,
     basePath = trackingItemPath(projectId, itemId);
@@ -1233,6 +1611,9 @@ export function TrackingUpdatesCollection({
                         : "asc",
                   }),
               }}
+              onSortColumnHidden={() =>
+                controller.setSort({ ...trackingUpdatesQueryContract.defaultSort })
+              }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               toolbar={{
                 basePath,

@@ -69,7 +69,7 @@ const trackDetail = read(
 );
 const trackingRead = read("src/lib/projects/tracking/public-read.ts");
 const trackingMigration = read(
-  "sql/migrations/20260817170332_project_construction_tracking_detail.sql",
+  "sql/migrations/20260818010000_project_tracking_public_pagination.sql",
 );
 const adminPreview = read("src/app/admin/projects/[id]/preview/page.tsx");
 const sitemap = read("src/lib/seo/generate-sitemap-entries.ts");
@@ -176,7 +176,8 @@ check(
 check(
   "Track happy path uses one aggregate whose SQL enforces canonical Project published truth",
   trackDetail.includes("loadProjectTrackingDetail") &&
-    trackingRead.includes("getSupabaseAdmin().rpc(\n    TRACKING_PUBLIC_RPC") &&
+    trackingRead.includes("const supabase = getSupabaseAdmin()") &&
+    trackingRead.includes("supabase.rpc(TRACKING_PUBLIC_RPC") &&
     trackingMigration.includes("project.publication_status = 'published'") &&
     trackingMigration.includes("when not exists (select 1 from project_row) then null") &&
     !trackDetail.includes("loadProjectBySlugResult"),

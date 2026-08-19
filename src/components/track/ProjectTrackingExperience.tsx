@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 
 import PublicMediaImage from "../public/PublicMediaImage";
+import Pagination from "../Pagination";
 import {
   projectTrackingStatusLabel,
   type ProjectTrackingMedia,
@@ -20,6 +21,12 @@ const statusClasses = {
   completed: "border-emerald-400/25 bg-emerald-500/10 text-emerald-300",
   in_progress: "border-amber-400/35 bg-amber-400/10 text-amber-300",
   not_started: "border-white/15 bg-white/[0.04] text-white/55",
+} as const;
+
+const statusTextClasses = {
+  completed: "text-emerald-300",
+  in_progress: "text-[#E2B45C]",
+  not_started: "text-white/45",
 } as const;
 
 function formatDate(value: string | null | undefined) {
@@ -39,6 +46,13 @@ function durationLabel(stage: ProjectTrackingStage) {
 
 function statusDot(status: ProjectTrackingStage["status"]) {
   return status === "completed" ? "✓" : status === "in_progress" ? "◉" : "○";
+}
+
+function stagePresentationLabel(stage: ProjectTrackingStage, index: number) {
+  const name = stage.name.trim();
+  return /^(?:ال)?مرحلة\s+[٠-٩0-9]+(?:\s*[—-]|$)/u.test(name)
+    ? name
+    : `المرحلة ${index + 1} — ${name}`;
 }
 
 function playableVideo(media: ProjectTrackingMedia) {
@@ -258,52 +272,32 @@ export function ProjectTrackingUnavailableState({
 export default function ProjectTrackingExperience({
   detail,
 }: ProjectTrackingExperienceProps) {
-  const initialStageId = detail.currentStageId ?? detail.stages[0]?.id ?? null;
-  const [stageId, setStageId] = useState(initialStageId);
+  const currentStage = detail.currentStage;
   const activeStage =
-    detail.stages.find((stage) => stage.id === stageId) ??
+    detail.stages.find((stage) => stage.id === detail.selectedStageId) ??
     detail.stages[0] ??
     null;
-  const initialItemId =
-    activeStage?.items.find((item) => item.status === "in_progress")?.id ??
-    activeStage?.items[0]?.id ??
-    null;
-  const [itemId, setItemId] = useState(initialItemId);
   const activeItem =
-    activeStage?.items.find((item) => item.id === itemId) ??
+    activeStage?.items.find((item) => item.id === detail.selectedItemId) ??
     activeStage?.items[0] ??
     null;
-  const [updateId, setUpdateId] = useState<number | null>(null);
   const activeUpdate =
-    activeItem?.updates.find((update) => update.id === updateId) ??
+    activeItem?.updates.find(
+      (update) => update.id === detail.selectedUpdateId,
+    ) ??
     activeItem?.updates[0] ??
     null;
-  const allUpdates = useMemo(
-    () =>
-      detail.stages
-        .flatMap((stage) => stage.items.flatMap((item) => item.updates))
-        .sort(
-          (a, b) =>
-            new Date(b.occurredAt).getTime() - new Date(a.occurredAt).getTime(),
-        ),
-    [detail.stages],
-  );
-
-  function selectStage(stage: ProjectTrackingStage) {
-    setStageId(stage.id);
-    const nextItem =
-      stage.items.find((item) => item.status === "in_progress") ??
-      stage.items[0] ??
-      null;
-    setItemId(nextItem?.id ?? null);
-    setUpdateId(nextItem?.updates[0]?.id ?? null);
-  }
-
-  function selectItem(id: number) {
-    setItemId(id);
-    const item = activeStage?.items.find((candidate) => candidate.id === id);
-    setUpdateId(item?.updates[0]?.id ?? null);
-  }
+  const basePath = `/track-your-project/${detail.project.slug}`;
+  const selectionQuery = {
+    stage: detail.selectedStageId ?? undefined,
+    item: detail.selectedItemId ?? undefined,
+    update: detail.selectedUpdateId ?? undefined,
+    stagePage: detail.pagination.stages.page,
+    itemPage: detail.pagination.items.page,
+    updatePage: detail.pagination.updates.page,
+    mediaPage: detail.pagination.media.page,
+    historyPage: detail.pagination.history.page,
+  };
 
   const heroImage = detail.latestVisual ?? detail.project.heroImage;
   const latestDate = detail.latestUpdate?.occurredAt;
@@ -343,17 +337,17 @@ export default function ProjectTrackingExperience({
               </p>
             ) : null}
             <div className="mt-6 flex flex-wrap gap-3 text-sm">
-              {activeStage ? (
+              {currentStage ? (
                 <span
-                  className={`rounded-lg border px-4 py-2 ${statusClasses[activeStage.status]}`}
+                  className={`rounded-lg border px-4 py-2 ${statusClasses[currentStage.status]}`}
                 >
-                  {projectTrackingStatusLabel(activeStage.status)}
+                  {projectTrackingStatusLabel(currentStage.status)}
                 </span>
               ) : null}
-              {activeStage ? (
+              {currentStage ? (
                 <span className="rounded-lg border border-white/10 bg-black/45 px-4 py-2 text-white/70">
                   المرحلة الحالية:{" "}
-                  <b className="text-[#E2B45C]">{activeStage.name}</b>
+                  <b className="text-[#E2B45C]">{currentStage.name}</b>
                 </span>
               ) : null}
               {latestDate ? (
@@ -415,120 +409,235 @@ export default function ProjectTrackingExperience({
         <TrackingEmptyState projectName={detail.project.arabicName} />
       ) : (
         <>
-          <section
-            className="border-b border-white/10 px-4 py-10 md:px-8"
-            aria-labelledby="journey-title"
-          >
-            <div className="mx-auto max-w-7xl">
-              <SectionTitle>رحلة التنفيذ</SectionTitle>
-              <div
-                id="journey-title"
-                className="relative grid gap-4 md:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]"
-              >
-                <span
-                  className="absolute left-[8%] right-[8%] top-7 hidden h-px bg-gradient-to-l from-transparent via-[#D8A84E]/70 to-transparent md:block"
-                  aria-hidden
-                />
-                {detail.stages.map((stage) => (
-                  <button
-                    key={stage.id}
-                    type="button"
-                    onClick={() => selectStage(stage)}
-                    aria-pressed={activeStage?.id === stage.id}
-                    className="relative z-10 flex items-center gap-3 rounded-2xl border border-white/10 bg-[#0B0E11] p-3 text-right transition hover:border-[#D8A84E]/45 md:flex-col md:text-center"
-                  >
-                    <span
-                      className={`grid size-14 shrink-0 place-items-center rounded-full border-2 text-xl ${activeStage?.id === stage.id ? "border-[#D8A84E] bg-[#D8A84E]/15 text-[#E2B45C] shadow-[0_0_24px_rgba(216,168,78,.28)]" : statusClasses[stage.status]}`}
-                    >
-                      {statusDot(stage.status)}
-                    </span>
-                    <span>
-                      <b
-                        className={
-                          activeStage?.id === stage.id
-                            ? "text-[#E2B45C]"
-                            : "text-white"
-                        }
-                      >
-                        {stage.name}
-                      </b>
-                      <small className="mt-1 block text-xs text-white/45">
-                        {projectTrackingStatusLabel(stage.status)}
-                      </small>
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </section>
-
           {activeStage ? (
             <section
-              className="mx-auto max-w-7xl px-4 py-10 md:px-8"
-              aria-labelledby="active-stage-heading"
+              className="border-b border-white/10 px-4 py-10 md:px-8"
+              aria-labelledby="journey-title"
+              data-project-tracking-stage-workspace=""
             >
-              <div className="rounded-[24px] border border-[#D8A84E]/35 bg-white/[0.025] p-5 md:p-7">
-                <div className="grid gap-7 lg:grid-cols-[1fr_1.15fr]">
-                  <div>
-                    <div className="flex items-center justify-between gap-4">
+              <div
+                className="relative mx-auto grid max-w-7xl items-stretch gap-4 lg:grid-cols-2 lg:gap-14"
+                dir="ltr"
+              >
+                <section
+                  className="relative flex h-full min-w-0 flex-col overflow-hidden rounded-[24px] border border-white/10 bg-white/[0.025]"
+                  dir="rtl"
+                  aria-labelledby="journey-title"
+                  data-project-tracking-stage-map=""
+                >
+                  <header className="flex min-h-16 items-center border-b border-white/10 px-5 md:px-6">
+                    <h2
+                      id="journey-title"
+                      className="text-xl font-semibold text-white"
+                    >
+                      رحلة التنفيذ
+                    </h2>
+                  </header>
+                  <nav
+                    className="relative flex flex-1 flex-col divide-y divide-white/10"
+                    aria-label="اختيار مرحلة التنفيذ"
+                    data-project-tracking-timeline=""
+                  >
+                    <span
+                      className="absolute inset-y-0 left-6 w-px bg-gradient-to-b from-transparent via-[#D8A84E]/75 to-transparent shadow-[0_0_14px_rgba(216,168,78,.6)] lg:hidden"
+                      aria-hidden
+                    />
+                    {detail.stages.map((stage, index) => {
+                      const active = activeStage.id === stage.id;
+                      return (
+                        <Link
+                          key={stage.id}
+                          href={{
+                            pathname: basePath,
+                            query: {
+                              historyPage: detail.pagination.history.page,
+                              stage: stage.id,
+                            },
+                          }}
+                          scroll={false}
+                          aria-current={active ? "step" : undefined}
+                          className={`group relative flex min-h-16 flex-1 items-center justify-between gap-4 py-4 pe-5 ps-12 text-right transition md:pe-6 ${
+                            active
+                              ? "bg-[linear-gradient(90deg,rgba(216,168,78,.02),rgba(216,168,78,.13))]"
+                              : "bg-transparent hover:bg-white/[0.025]"
+                          }`}
+                          data-project-tracking-timeline-node=""
+                        >
+                          <span
+                            className={`absolute left-[17px] z-10 grid size-[15px] place-items-center rounded-full border-2 bg-[#0B0E11] lg:hidden ${
+                              active
+                                ? "border-[#D8A84E] shadow-[0_0_16px_rgba(216,168,78,.65)]"
+                                : "border-white/45"
+                            }`}
+                            aria-hidden
+                          />
+                          <span className="min-w-0">
+                            <b
+                              className={`block truncate text-sm md:text-base ${
+                                active ? "text-[#E2B45C]" : "text-white/88"
+                              }`}
+                            >
+                              {stagePresentationLabel(stage, index)}
+                            </b>
+                          </span>
+                          <small
+                            className={`shrink-0 text-xs ${
+                              active ? "text-[#E2B45C]" : "text-white/38"
+                            }`}
+                          >
+                            {projectTrackingStatusLabel(stage.status)}
+                          </small>
+                        </Link>
+                      );
+                    })}
+                  </nav>
+                  <Pagination
+                    currentPage={detail.pagination.stages.page}
+                    totalPages={detail.pagination.stages.totalPages}
+                    basePath={basePath}
+                    pageParam="stagePage"
+                    query={{
+                      historyPage: detail.pagination.history.page,
+                    }}
+                    ariaLabel="ترقيم مراحل التنفيذ"
+                  />
+                </section>
+
+                <div
+                  className="pointer-events-none absolute inset-y-0 left-1/2 z-10 hidden w-14 -translate-x-1/2 flex-col pt-16 lg:flex"
+                  aria-hidden
+                  data-project-tracking-timeline-rail=""
+                >
+                  <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-[#D8A84E] to-transparent shadow-[0_0_18px_rgba(216,168,78,.75)]" />
+                  <div className="relative z-10 flex flex-1 flex-col">
+                    {detail.stages.map((stage) => {
+                      const active = activeStage.id === stage.id;
+                      return (
+                        <span
+                          key={stage.id}
+                          className="flex min-h-16 flex-1 items-center justify-center"
+                        >
+                          <span
+                            className={`grid size-7 place-items-center rounded-full border-2 bg-[#0B0E11] text-[10px] ${
+                              active
+                                ? "border-[#D8A84E] text-[#E2B45C] shadow-[0_0_22px_rgba(216,168,78,.65)]"
+                                : statusClasses[stage.status]
+                            }`}
+                          >
+                            {statusDot(stage.status)}
+                          </span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <section
+                  className="flex h-full min-w-0 flex-col overflow-hidden rounded-[24px] border border-[#D8A84E]/28 bg-white/[0.025]"
+                  dir="rtl"
+                  aria-labelledby="active-stage-heading"
+                  data-project-tracking-stage-detail=""
+                >
+                  <header className="border-b border-white/10 px-5 py-5 md:px-6">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                       <h2
                         id="active-stage-heading"
-                        className="text-2xl font-semibold text-[#E2B45C]"
+                        className="text-xl font-semibold text-white md:text-2xl"
                       >
-                        {activeStage.name}
+                        {stagePresentationLabel(
+                          activeStage,
+                          detail.stages.indexOf(activeStage),
+                        )}
                       </h2>
                       <span
-                        className={`rounded-full border px-3 py-1 text-xs ${statusClasses[activeStage.status]}`}
+                        className={`text-xs font-semibold ${
+                          activeStage.status === "completed"
+                            ? "text-emerald-300"
+                            : activeStage.status === "in_progress"
+                              ? "text-[#E2B45C]"
+                              : "text-white/45"
+                        }`}
                       >
                         {projectTrackingStatusLabel(activeStage.status)}
                       </span>
                     </div>
                     {activeStage.description ? (
-                      <p className="mt-4 leading-8 text-white/65">
+                      <p className="mt-3 line-clamp-2 text-sm leading-7 text-white/58">
                         {activeStage.description}
                       </p>
                     ) : null}
-                    <dl className="mt-6 grid grid-cols-2 gap-3 text-sm">
-                      <div className="rounded-xl border border-white/10 p-3">
-                        <dt className="text-white/40">تاريخ البداية</dt>
-                        <dd className="mt-1">
+                    <dl className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+                      <div className="flex min-w-0 items-baseline gap-2">
+                        <dt className="shrink-0 text-white/40">تاريخ البداية :</dt>
+                        <dd className="min-w-0 whitespace-nowrap">
                           {formatDate(activeStage.startDate)}
                         </dd>
                       </div>
-                      <div className="rounded-xl border border-white/10 p-3">
-                        <dt className="text-white/40">المدة المخططة</dt>
-                        <dd className="mt-1">{durationLabel(activeStage)}</dd>
+                      <div className="flex min-w-0 items-baseline gap-2">
+                        <dt className="shrink-0 text-white/40">المدة المخططة :</dt>
+                        <dd className="min-w-0 whitespace-nowrap">
+                          {durationLabel(activeStage)}
+                        </dd>
                       </div>
                     </dl>
-                  </div>
-                  <div>
+                  </header>
+
+                  <div className="flex flex-1 flex-col px-5 py-4 md:px-6">
                     <h3 className="mb-3 text-sm font-semibold text-[#E2B45C]">
                       بنود المرحلة
                     </h3>
                     {activeStage.items.length ? (
-                      <div className="space-y-2">
-                        {activeStage.items.map((item) => (
-                          <button
+                      <div className="overflow-hidden rounded-xl border border-white/10 bg-black/15">
+                        {activeStage.items.map((item, index) => (
+                          <Link
                             key={item.id}
-                            type="button"
-                            onClick={() => selectItem(item.id)}
-                            aria-pressed={activeItem?.id === item.id}
-                            className={`flex w-full items-center justify-between gap-4 rounded-xl border px-4 py-3 text-right ${activeItem?.id === item.id ? "border-[#D8A84E]/55 bg-[#D8A84E]/10" : "border-white/10 bg-black/20 hover:border-white/20"}`}
+                            href={{
+                              pathname: basePath,
+                              query: {
+                                stage: activeStage.id,
+                                stagePage: detail.pagination.stages.page,
+                                item: item.id,
+                                itemPage: detail.pagination.items.page,
+                                historyPage: detail.pagination.history.page,
+                              },
+                            }}
+                            scroll={false}
+                            aria-current={
+                              activeItem?.id === item.id ? "true" : undefined
+                            }
+                            className={`flex min-h-14 w-full items-center justify-between gap-3 border-b border-white/10 px-3 py-3 text-right transition last:border-b-0 md:px-4 ${
+                              activeItem?.id === item.id
+                                ? "bg-[#D8A84E]/10"
+                                : "bg-transparent hover:bg-white/[0.025]"
+                            }`}
                           >
-                            <span>
-                              <b className="block text-sm">{item.name}</b>
-                              {item.description ? (
-                                <small className="mt-1 block line-clamp-1 text-white/45">
-                                  {item.description}
-                                </small>
-                              ) : null}
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span className="grid size-7 shrink-0 place-items-center rounded-full border border-white/12 text-xs text-white/45">
+                                {index + 1}
+                              </span>
+                              <span className="min-w-0">
+                                <b className="block truncate text-sm text-white/88">
+                                  {item.name}
+                                </b>
+                                {item.description ? (
+                                  <small className="mt-1 block truncate text-white/38">
+                                    {item.description}
+                                  </small>
+                                ) : null}
+                              </span>
                             </span>
-                            <span
-                              className={`shrink-0 rounded-lg border px-2 py-1 text-xs ${statusClasses[item.status]}`}
-                            >
-                              {projectTrackingStatusLabel(item.status)}
+                            <span className="flex shrink-0 items-center gap-2 text-[11px] sm:gap-3 sm:text-xs">
+                              <span className={statusTextClasses[item.status]}>
+                                {projectTrackingStatusLabel(item.status)}
+                              </span>
+                              <span className="text-white/42">
+                                {item.updateCount} تحديث
+                              </span>
+                              <span className="text-base text-[#E2B45C]" aria-hidden>
+                                ‹
+                              </span>
                             </span>
-                          </button>
+                          </Link>
                         ))}
                       </div>
                     ) : (
@@ -536,14 +645,27 @@ export default function ProjectTrackingExperience({
                         لا توجد بنود مرئية في هذه المرحلة.
                       </p>
                     )}
+                    <Pagination
+                      currentPage={detail.pagination.items.page}
+                      totalPages={detail.pagination.items.totalPages}
+                      basePath={basePath}
+                      pageParam="itemPage"
+                      query={{
+                        stage: activeStage.id,
+                        stagePage: detail.pagination.stages.page,
+                        historyPage: detail.pagination.history.page,
+                      }}
+                      ariaLabel="ترقيم بنود المرحلة"
+                    />
                   </div>
-                </div>
+                </section>
               </div>
             </section>
           ) : null}
 
           <section
-            className="mx-auto max-w-7xl px-4 pb-10 md:px-8"
+            id="tracking-item-documentation"
+            className="mx-auto max-w-7xl scroll-mt-24 px-4 pb-10 md:px-8"
             aria-labelledby="documentation-heading"
           >
             <SectionTitle>توثيق بنود المرحلة</SectionTitle>
@@ -577,37 +699,70 @@ export default function ProjectTrackingExperience({
                     aria-label="اختيار تحديث البند"
                   >
                     {activeItem.updates.map((update) => (
-                      <button
+                      <Link
                         key={update.id}
-                        type="button"
-                        onClick={() => setUpdateId(update.id)}
-                        aria-pressed={activeUpdate?.id === update.id}
+                        href={{
+                          pathname: basePath,
+                          query: {
+                            ...selectionQuery,
+                            update: update.id,
+                            mediaPage: undefined,
+                          },
+                        }}
+                        scroll={false}
+                        aria-current={
+                          activeUpdate?.id === update.id ? "true" : undefined
+                        }
                         className={`rounded-lg border px-3 py-2 text-xs ${activeUpdate?.id === update.id ? "border-[#D8A84E] text-[#E2B45C]" : "border-white/10 text-white/55"}`}
                       >
                         {formatDate(update.occurredAt)}
-                      </button>
+                      </Link>
                     ))}
                   </div>
                 ) : null}
+                <Pagination
+                  currentPage={detail.pagination.updates.page}
+                  totalPages={detail.pagination.updates.totalPages}
+                  basePath={basePath}
+                  pageParam="updatePage"
+                  query={{
+                    stage: detail.selectedStageId ?? undefined,
+                    item: detail.selectedItemId ?? undefined,
+                    stagePage: detail.pagination.stages.page,
+                    itemPage: detail.pagination.items.page,
+                    historyPage: detail.pagination.history.page,
+                  }}
+                  ariaLabel="ترقيم تحديثات البند"
+                />
               </div>
-              <MediaViewer
-                key={activeUpdate?.id ?? "empty"}
-                media={activeUpdate?.media ?? []}
-              />
+              <div>
+                <MediaViewer
+                  key={`${activeUpdate?.id ?? "empty"}:${detail.pagination.media.page}`}
+                  media={activeUpdate?.media ?? []}
+                />
+                <Pagination
+                  currentPage={detail.pagination.media.page}
+                  totalPages={detail.pagination.media.totalPages}
+                  basePath={basePath}
+                  pageParam="mediaPage"
+                  query={selectionQuery}
+                  ariaLabel="ترقيم وسائط التحديث"
+                />
+              </div>
             </div>
           </section>
 
           <section
             id="updates"
-            className="mx-auto grid max-w-7xl gap-6 px-4 pb-14 md:px-8 lg:grid-cols-[1.15fr_.85fr]"
+            className="mx-auto grid max-w-7xl items-stretch gap-6 px-4 pb-14 md:px-8 lg:grid-cols-[1.15fr_.85fr]"
           >
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.025] p-5 md:p-7">
+            <div className="flex h-full flex-col rounded-[22px] border border-white/10 bg-white/[0.025] p-5 md:p-7">
               <h2 className="text-xl font-semibold text-[#E2B45C]">
                 سجل التحديثات
               </h2>
-              {allUpdates.length ? (
-                <ol className="mt-5 divide-y divide-white/10">
-                  {allUpdates.map((update: ProjectTrackingUpdate) => (
+              {detail.history.length ? (
+                <ol className="mt-5 flex-1 divide-y divide-white/10">
+                  {detail.history.map((update: ProjectTrackingUpdate) => (
                     <li
                       key={update.id}
                       className="grid gap-2 py-4 sm:grid-cols-[110px_1fr]"
@@ -629,8 +784,18 @@ export default function ProjectTrackingExperience({
                   لا توجد تحديثات منشورة بعد.
                 </p>
               )}
+              <Pagination
+                currentPage={detail.pagination.history.page}
+                totalPages={detail.pagination.history.totalPages}
+                basePath={basePath}
+                pageParam="historyPage"
+                query={selectionQuery}
+                previousLabel="السابق"
+                nextLabel="عرض المزيد من السجل"
+                ariaLabel="ترقيم سجل التحديثات"
+              />
             </div>
-            <aside className="rounded-[22px] border border-[#D8A84E]/25 bg-white/[0.025] p-5 md:p-7">
+            <aside className="h-full rounded-[22px] border border-[#D8A84E]/25 bg-white/[0.025] p-5 md:p-7">
               <h2 className="text-xl font-semibold text-[#E2B45C]">
                 لمحة سريعة عن المشروع
               </h2>

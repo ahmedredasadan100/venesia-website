@@ -79,13 +79,13 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The 2026-08-16 authorized Production migration closure established the following facts against the configured Supabase Production project.
+The 2026-08-19 authorized Production migration closure established the following facts against the configured Supabase Production project.
 
 | Proof | Reconciled state |
 |---|---:|
-| Repository migration files | 84 |
-| Production registry versions | 84 |
-| Registry SQL provenance | Exact repository SQL for all 84 deployed versions |
+| Repository migration files | 85 |
+| Production registry versions | 85 |
+| Registry SQL provenance | Exact repository SQL for all 85 deployed versions |
 | Public tables | 56 |
 | Public tables with RLS enabled | 56 |
 | Public catalog objects with repository provenance | 291 |
@@ -94,7 +94,7 @@ The 2026-08-16 authorized Production migration closure established the following
 | Parallel public function overload names | 0 |
 | Public RLS policies | 3 |
 | Anonymous-callable application data functions | 0 |
-| Registry reconciliation audit records | 11 |
+| Registry reconciliation audit records | 12 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
@@ -110,6 +110,8 @@ The structural guard is part of `ci:check`. The authorized closures applied `202
 The authorized Projects Vertical Slice closure then applied `20260817100000_project_section_title_contract.sql` followed by `20260817101000_media_ordinary_attachment_scope.sql`. The registry now records both migrations with exact repository SQL provenance: Project section headings are explicit nullable fields with the approved three-value backfill, and ordinary media attachment uses target-local safety while global reconciliation readiness remains required by safe delete/reservation flows.
 
 The authorized Construction Tracking closure then applied `20260817170332_project_construction_tracking_detail.sql` as migration 84 with exact repository SQL provenance. It adds the independent Tracking profile/stage/item/update/media-reference graph only: `projects` remains unchanged, no project facts are duplicated, and every Tracking write RPC remains service-role-only behind RLS.
+
+The authorized Tracking and Governance completion then applied `20260818010000_project_tracking_public_pagination.sql` as migration 85 with exact repository SQL provenance. It replaces the existing public Tracking detail function in place so child Stages, Items, Updates, Media, and history remain bounded by the canonical application Read Model; it creates no table, view, Runtime, or second read owner, and the function remains service-role-only.
 
 ## Removed final-cleanup legacy
 

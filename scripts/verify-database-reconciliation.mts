@@ -18,7 +18,6 @@ const FRAMEWORK_ENTRYPOINTS = new Set(["instrumentation.ts"]);
 const GOVERNANCE_MANIFEST_ENTRYPOINTS = new Set([
   "lib/admin/content/content-editor-adoption-manifest.ts",
   "lib/admin/form-system/adoption-manifest.ts",
-  "lib/admin/interaction-system/adoption-manifest.ts",
   "lib/admin/seo/entity-seo-adoption-manifest.ts",
 ]);
 const RETIRED_LEGACY_PATHS = [

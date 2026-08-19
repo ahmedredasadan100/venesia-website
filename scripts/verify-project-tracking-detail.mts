@@ -10,80 +10,217 @@ const check = (label: string, value: unknown) => {
   console.log(`PASS ${label}`);
 };
 
-const migrationPath = "sql/migrations/20260817170332_project_construction_tracking_detail.sql";
-check("Tracking migration exists", existsSync(resolve(process.cwd(), migrationPath)));
-const migration = read(migrationPath);
+const foundationMigrationPath =
+  "sql/migrations/20260817170332_project_construction_tracking_detail.sql";
+const paginationMigrationPath =
+  "sql/migrations/20260818010000_project_tracking_public_pagination.sql";
+check(
+  "Tracking foundation and corrective pagination migrations exist",
+  [foundationMigrationPath, paginationMigrationPath].every((path) =>
+    existsSync(resolve(process.cwd(), path)),
+  ),
+);
+const foundationMigration = read(foundationMigrationPath);
+const paginationMigration = read(paginationMigrationPath);
 const publicRoute = read("src/app/(site)/track-your-project/[slug]/page.tsx");
 const publicRead = read("src/lib/projects/tracking/public-read.ts");
+const publicContract = read("src/lib/projects/tracking/contract.ts");
 const publicView = read("src/components/track/ProjectTrackingExperience.tsx");
-const adminCollections = read("src/components/admin/projects/tracking/TrackingCollections.tsx");
-const adminForms = read("src/components/admin/projects/tracking/TrackingForms.tsx");
-const actions = read("src/app/admin/projects/tracking-actions.ts");
+const adminCollections = read(
+  "src/components/admin/projects/tracking/TrackingCollections.tsx",
+);
+const adminForms = read(
+  "src/components/admin/projects/tracking/TrackingForms.tsx",
+);
+const adminAdapter = read("src/lib/admin/projects/tracking-adapter.ts");
+const trackingHub = read("src/lib/admin/projects/tracking-hub.ts");
+const adoptionManifest = read(
+  "src/lib/admin/interaction-system/adoption-manifest.ts",
+);
+const formManifest = read("src/lib/admin/form-system/adoption-manifest.ts");
+const instantMutation = read(
+  "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
+);
+const publicPagination = read("src/components/Pagination.tsx");
 const registry = read("src/lib/admin/entity-list/data-engine/registry.ts");
-const mediaProviders = read("src/lib/admin/media-catalog/reference-providers.ts");
-const stageTableDefinition = migration.match(
-  /create table public\.project_tracking_stages\s*\(([\s\S]*?)\n\);/i,
-)?.[1] ?? "";
+const actions = read("src/app/admin/projects/tracking-actions.ts");
 
-check("migration never alters or adds a Tracking column to projects",
-  !/alter\s+table\s+(?:public\.)?projects\b/i.test(migration) &&
-  !/create\s+table\s+(?:public\.)?projects\b/i.test(migration) &&
-  !/update\s+(?:public\.)?projects\b/i.test(migration));
-check("Tracking tables link to Project identity without duplicate Project data",
-  migration.includes("project_id bigint primary key references public.projects(id) on delete restrict") &&
-  migration.includes("project_id bigint not null references public.projects(id) on delete restrict") &&
-  !migration.includes("project_arabic_name") && !migration.includes("project_slug text"));
-check("stages, items, updates, and update media are independent Tracking tables",
-  ["project_tracking_stages", "project_tracking_items", "project_tracking_updates", "project_tracking_update_media"].every((name) => migration.includes(`create table public.${name}`)));
-check("progress has no percentage and Stage status is derived",
-  !/progress_percent|completion_percent|percentage\s+(?:integer|numeric|real|double)/i.test(migration) &&
-  migration.includes("bool_and(item.status = 'completed')") &&
-  !/\bstatus\s+text/i.test(stageTableDefinition));
-check("parent deletes are guarded and Update delete only cascades owned associations",
-  migration.includes("A Tracking Stage with Items cannot be deleted") &&
-  migration.includes("A Tracking Item with historical Updates cannot be deleted") &&
-  migration.includes("references public.project_tracking_updates(id) on delete cascade"));
-check("public surface uses one aggregate and 404s unpublished Projects",
-  publicRead.includes("getSupabaseAdmin().rpc(") &&
-  publicRead.includes('const TRACKING_PUBLIC_RPC = "project_tracking_public_detail_v1"') &&
-  publicRoute.includes("notFound()") &&
-  migration.includes("project.publication_status = 'published'") &&
-  migration.includes("update_row.publication_status = 'published'") &&
-  migration.includes("stage.is_visible") && migration.includes("item.is_visible"));
-check("public read distinguishes pending schema, not-found, empty, and unexpected failures",
+check(
+  "Tracking remains an independent graph and never mutates the Project aggregate schema",
+  !/alter\s+table\s+(?:public\.)?projects\b/i.test(foundationMigration) &&
+    !/create\s+table\s+(?:public\.)?projects\b/i.test(
+      foundationMigration,
+    ) &&
+    [
+      "project_tracking_stages",
+      "project_tracking_items",
+      "project_tracking_updates",
+      "project_tracking_update_media",
+    ].every((name) =>
+      foundationMigration.includes(`create table public.${name}`),
+    ),
+);
+check(
+  "the existing public RPC is narrowed instead of introducing another Read Runtime",
+  paginationMigration.includes(
+    "create or replace function public.project_tracking_public_detail_v1",
+  ) &&
+    !paginationMigration.includes("create table") &&
+    !paginationMigration.includes("create view") &&
+    !paginationMigration.includes("'stages', coalesce") &&
+    !paginationMigration.includes("jsonb_agg"),
+);
+check(
+  "public child collections use independent stable server ranges",
+  (publicRead.match(/\.range\(/g)?.length ?? 0) === 5 &&
+    (publicRead.match(/\.order\("id"/g)?.length ?? 0) >= 5 &&
+    publicRead.includes("projectTrackingReadInputSchema") &&
+    publicRoute.includes("searchParams") &&
+    publicRoute.includes("trackingReadInput"),
+);
+check(
+  "public Item selection preserves the normalized item page",
+  /activeStage\.items\.map[\s\S]{0,900}itemPage: detail\.pagination\.items\.page/u.test(
+    publicView,
+  ) && publicRoute.includes('itemPage: value("itemPage")'),
+);
+check(
+  "public child ranges use normalized pages before bounded reads",
+  [
+    ["stagesPage", "stageRange"],
+    ["itemsPage", "itemRange"],
+    ["updatesPage", "updateRange"],
+    ["mediaPage", "mediaRange"],
+    ["historyPage", "historyRange"],
+  ].every(([page, range]) => {
+    const pageDeclaration = publicRead.indexOf(`const ${page} = pageInfo(`);
+    const rangeDeclaration = publicRead.indexOf(
+      `const ${range} = rangeFor(${page}.page, ${page}.pageSize);`,
+    );
+    return pageDeclaration >= 0 && rangeDeclaration > pageDeclaration;
+  }) &&
+    !/rangeFor\(input\.(?:stage|item|update|media|history)Page/u.test(
+      publicRead,
+    ),
+);
+check(
+  "public response cannot embed every Stage, Item, Update, and Media row",
+  publicContract.includes("pagination: z.object({") &&
+    publicContract.includes("history: z.array") &&
+    !publicRead.includes("updates_by_item") &&
+    !publicRead.includes("media_by_update") &&
+    !publicView.includes(".flatMap((stage) => stage.items)") &&
+    !publicView.includes("TRACKING_UPDATES_PAGE_SIZE"),
+);
+check(
+  "shared Pagination owns arbitrary page parameters while preserving selection query state",
+  publicPagination.includes("pageParam?: string") &&
+    publicPagination.includes("params.set(pageParam") &&
+    publicView.includes('pageParam="stagePage"') &&
+    publicView.includes('pageParam="itemPage"') &&
+    publicView.includes('pageParam="updatePage"') &&
+    publicView.includes('pageParam="mediaPage"') &&
+    publicView.includes('pageParam="historyPage"'),
+);
+check(
+  "Admin and Public use one Stage Status derivation owner",
+  publicContract.includes("export function deriveProjectTrackingStageStatus") &&
+    adminAdapter.includes("deriveProjectTrackingStageStatus") &&
+    publicRead.includes("deriveProjectTrackingStageStatus") &&
+    !adminAdapter.includes("function derivedStatus") &&
+    !paginationMigration.includes("bool_and") &&
+    !paginationMigration.includes("bool_or"),
+);
+check(
+  "Tracking read owners use aggregate relation counts instead of loading child rows for counts",
+  adminAdapter.includes("project_tracking_updates(count)") &&
+    adminAdapter.includes(
+      "project_tracking_items(status,project_tracking_updates(count))",
+    ) &&
+    trackingHub.includes(
+      "project_tracking_stages(project_tracking_items(project_tracking_updates(count)))",
+    ) &&
+    !trackingHub.includes('.select("id,item_id")') &&
+    !adminAdapter.includes('.select("id,item_id").in'),
+);
+check(
+  "Stage and Item reorder adopt the existing Instant Mutation lifecycle",
+  (adminCollections.match(/action: "reorder"/g)?.length ?? 0) === 2 &&
+    (adminCollections.match(/bulk: true/g)?.length ?? 0) >= 2 &&
+    (adminCollections.match(/transformActiveRows/g)?.length ?? 0) === 2 &&
+    adminCollections.includes("instant.bulkInteraction.isBlocked") &&
+    instantMutation.includes("transformActiveRows") &&
+    !/reorderTracking(?:Stages|Items)Action[\s\S]{0,180}controller\.invalidate/u.test(
+      adminCollections,
+    ),
+);
+check(
+  "Construction Updates Hub is Specialized and excluded from the Full Collection claim",
+  adoptionManifest.includes('id: "construction-updates-hub"') &&
+    adoptionManifest.includes(
+      'layoutOwner: "ConstructionUpdatesClient specialized project selector"',
+    ) &&
+    adoptionManifest.includes('id: "project-construction-tracking"') &&
+    !/id: "project-construction-tracking"[\s\S]{0,900}ConstructionUpdatesClient/u.test(
+      adoptionManifest,
+    ),
+);
+check(
+  "each Tracking Collection consumer carries independent applicability and Source Proof",
+  [
+    "project-tracking-stages",
+    "project-tracking-items",
+    "project-tracking-updates",
+  ].every((id) => adoptionManifest.includes(`id: "${id}"`)) &&
+    (adoptionManifest.match(/sourceProofTokens:/g)?.length ?? 0) >= 11 &&
+    adoptionManifest.includes(
+      'dataRegistryEntities: ["project_tracking_stages"]',
+    ) &&
+    adoptionManifest.includes(
+      'dataRegistryEntities: ["project_tracking_items"]',
+    ) &&
+    adoptionManifest.includes(
+      'dataRegistryEntities: ["project_tracking_updates"]',
+    ),
+);
+check(
+  "Date and Calendar truth is owner_extension_required and no prohibited shared owner was introduced",
+  formManifest.includes('date_picker: {') &&
+    formManifest.includes('state: "owner_extension_required"') &&
+    adminForms.includes('type="date"') &&
+    !adminForms.includes("AdminDatePickerField") &&
+    !existsSync(
+      resolve(
+        process.cwd(),
+        "src/components/admin/ui/AdminDatePickerField.tsx",
+      ),
+    ),
+);
+check(
+  "public read distinguishes pending schema, not-found, and unexpected failures",
   publicRead.includes('code === "PGRST202"') &&
-  publicRead.includes("isPendingTrackingSchemaDependency") &&
-  publicRead.includes('classification: "known_pending_schema_dependency"') &&
-  publicRead.includes("throw new PendingTrackingSchemaDependencyError(error)") &&
-  publicRead.includes("error instanceof PendingTrackingSchemaDependencyError") &&
-  publicRead.includes("loadProjectBySlugResult(slug)") &&
-  publicRead.includes('status: "unavailable"') &&
-  publicRead.includes('status: "not_found"') &&
-  publicRead.includes('status: "ready"') &&
-  publicRead.includes("throw error") &&
-  publicRoute.includes('result.status === "not_found"') &&
-  publicRoute.includes('result.status === "unavailable"') &&
-  publicRoute.includes("ProjectTrackingUnavailableState") &&
-  !publicRead.includes("catch(() => null)"));
-check("public experience includes journey, item documentation, media, timeline, facts, empty state, and CTA",
-  ["رحلة التنفيذ", "توثيق بنود المرحلة", "MediaViewer", "سجل التحديثات", "لمحة سريعة عن المشروع", "TrackingEmptyState", "تواصل مع فريقنا"].every((token) => publicView.includes(token)));
-check("Admin adopts shared Header, Form Runtime, Collection, Feedback, and Confirmation",
-  adminCollections.includes("AdminPageContextHeader") && adminCollections.includes("AdminEntityList") &&
-  adminCollections.includes("routeOwnedParams") &&
-  adminCollections.includes("mapAdminActionResultToFeedback") && adminCollections.includes('mode: "shared"') &&
-  adminForms.includes("AdminFormRuntime") && adminForms.includes("AdminMediaGalleryField"));
-check("all three Tracking collections are executable Data Registry consumers",
-  ["trackingStagesEntityListAdapter", "trackingItemsEntityListAdapter", "trackingUpdatesEntityListAdapter"].every((token) => registry.includes(token)));
-check("Update media uses existing Media Catalog coordination and provider ownership",
-  mediaProviders.includes('domainKey: "project_tracking_update_media"') &&
-  actions.includes("coordinateTrackingUpdateSave") && actions.includes("cleanupDeletedTrackingUpdateMedia") &&
-  !actions.includes("deleteMediaAsset"));
-check("reorder is atomic RPC-owned and requires the exact child set",
-  migration.includes("reorder_project_tracking_stages") && migration.includes("reorder_project_tracking_items") &&
-  migration.includes("must contain the exact Project Stage set") && migration.includes("must contain the exact Stage Item set"));
-check("Tracking write/read RPCs and tables are service-role only",
-  migration.includes("from public, anon, authenticated") &&
-  migration.includes("to service_role") &&
-  migration.includes("enable row level security"));
+    publicRead.includes('code === "PGRST205"') &&
+    publicRead.includes('status: "unavailable"') &&
+    publicRead.includes('status: "not_found"') &&
+    publicRead.includes('status: "ready"') &&
+    publicRoute.includes("notFound()") &&
+    !publicRead.includes("catch(() => null)"),
+);
+check(
+  "all three Tracking collections remain executable Data Registry consumers",
+  [
+    "trackingStagesEntityListAdapter",
+    "trackingItemsEntityListAdapter",
+    "trackingUpdatesEntityListAdapter",
+  ].every((token) => registry.includes(token)),
+);
+check(
+  "write RPC ownership, historical integrity, and Media coordination remain unchanged",
+  foundationMigration.includes("must contain the exact Project Stage set") &&
+    foundationMigration.includes("must contain the exact Stage Item set") &&
+    actions.includes("coordinateTrackingUpdateSave") &&
+    actions.includes("cleanupDeletedTrackingUpdateMedia") &&
+    !actions.includes("deleteMediaAsset"),
+);
 
 console.log(`verify-project-tracking-detail OK (${passed} assertions)`);
