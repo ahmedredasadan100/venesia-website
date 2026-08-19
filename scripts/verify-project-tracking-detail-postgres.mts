@@ -4,9 +4,17 @@ import { resolve } from "node:path";
 
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
+import { deriveProjectTrackingStageStatus } from "../src/lib/projects/tracking/contract.ts";
 
 const migration = readFileSync(
   resolve(process.cwd(), "sql/migrations/20260817170332_project_construction_tracking_detail.sql"),
+  "utf8",
+);
+const paginationMigration = readFileSync(
+  resolve(
+    process.cwd(),
+    "sql/migrations/20260818010000_project_tracking_public_pagination.sql",
+  ),
   "utf8",
 );
 const db = new PGlite({ extensions: { pgcrypto } });
@@ -51,6 +59,7 @@ await db.exec(`
 `);
 
 await db.exec(migration);
+await db.exec(paginationMigration);
 
 const tableCount = await db.query<{ count: number }>(`
   select count(*)::integer as count
@@ -127,17 +136,32 @@ const publishedUpdate = await db.query<{ mutate_project_tracking_update: { id: n
 check("Update aggregate accepts reusable Media associations", publishedUpdate.rows[0]!.mutate_project_tracking_update.media.length === 2);
 
 const aggregate = await db.query<{ project_tracking_public_detail_v1: {
-  stages: Array<{ id: number; status: string; items: Array<{ updates: Array<{ title: string }> }> }>;
-  currentStageId: number;
   latestVisual: string;
-  counts: { updates: number; images: number; videos: number; stages: number; completedStages: number };
+  counts: { updates: number; images: number; videos: number; stages: number };
   profile: { contractorName: string };
 } }>(`select public.project_tracking_public_detail_v1('published-project')`);
 const detail = aggregate.rows[0]!.project_tracking_public_detail_v1;
-check("public read model hides draft Updates and hidden Stages", detail.stages.length === 2 && detail.counts.updates === 1);
-check("Stage status and current Stage are derived", detail.stages.some((stage) => stage.status === "in_progress") && detail.currentStageId === stageTwoId);
+check("public core hides draft Updates and counts only visible Stages", detail.counts.stages === 2 && detail.counts.updates === 1);
+check("public core excludes unbounded child arrays", !("stages" in detail) && !("history" in detail));
+check(
+  "Stage status is derived by the single shared application owner",
+  deriveProjectTrackingStageStatus(["completed"]) === "completed" &&
+    deriveProjectTrackingStageStatus(["not_started", "in_progress"]) ===
+      "in_progress" &&
+    deriveProjectTrackingStageStatus([]) === "not_started",
+);
 check("counts and latest visual are derived in the aggregate", detail.counts.images === 1 && detail.counts.videos === 1 && detail.latestVisual === "https://example.com/update.webp");
 check("Tracking profile remains one-to-one Project detail", detail.profile.contractorName === "شركة فينيسيا للمقاولات");
+
+const publicFunction = await db.query<{ definition: string }>(`
+  select pg_get_functiondef('public.project_tracking_public_detail_v1(text)'::regprocedure) as definition
+`);
+check(
+  "corrective migration keeps the existing RPC and removes nested aggregation and SQL status derivation",
+  !publicFunction.rows[0]!.definition.includes("jsonb_agg") &&
+    !publicFunction.rows[0]!.definition.includes("bool_and") &&
+    !publicFunction.rows[0]!.definition.includes("bool_or"),
+);
 
 const unpublished = await db.query<{ project_tracking_public_detail_v1: unknown }>(`select public.project_tracking_public_detail_v1('draft-project')`);
 check("unpublished Project returns no public aggregate", unpublished.rows[0]?.project_tracking_public_detail_v1 === null);

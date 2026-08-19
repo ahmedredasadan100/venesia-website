@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { AdminEntityListQueryContract } from "../entity-list/data-engine/contracts";
 import { ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS } from "../entity-list/pagination";
+import { projectTrackingMediaReferenceSchema } from "../../projects/tracking/contract";
 
 export const PROJECT_TRACKING_ENTITY_KEYS = {
   stages: "project_tracking_stages",
@@ -53,8 +54,8 @@ export const trackingMediaAdminSchema = z.object({
   client_key: z.string().uuid(),
   update_id: positiveId,
   media_kind: z.enum(["image", "video"]),
-  public_url: z.string().url(),
-  poster_url: z.string().url().nullable(),
+  public_url: projectTrackingMediaReferenceSchema,
+  poster_url: projectTrackingMediaReferenceSchema.nullable(),
   title: z.string().nullable(),
   sort_order: z.coerce.number().int().nonnegative(),
 });

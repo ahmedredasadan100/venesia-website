@@ -30,6 +30,7 @@ type AdminMediaGalleryFieldProps = {
   helperText?: string;
   dimensionHint?: ImageDimensionHint;
   browseFolder?: string;
+  density?: "default" | "compact";
 };
 
 export default function AdminMediaGalleryField({
@@ -40,6 +41,7 @@ export default function AdminMediaGalleryField({
   helperText,
   dimensionHint = "hero",
   browseFolder = "images",
+  density = "default",
 }: AdminMediaGalleryFieldProps) {
   const defaultKey = `${defaultValue ?? ""}|${defaultPaths?.join("\n") ?? ""}`;
   const [paths, setPaths] = useState<string[]>(() => resolveGalleryPaths(defaultPaths, defaultValue));
@@ -102,7 +104,14 @@ export default function AdminMediaGalleryField({
       {helperText ? <p className="text-xs leading-6 text-white/42">{helperText}</p> : null}
 
       {paths.length ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div
+          className={`grid gap-3 ${
+            density === "compact"
+              ? "grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+              : "sm:grid-cols-2"
+          }`}
+          data-admin-media-gallery-density={density}
+        >
           {paths.map((path, index) => (
             <div key={`${path}-${index}`} className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/25">
               <div className="absolute left-2 top-2 z-10 flex flex-col gap-1">
@@ -135,7 +144,7 @@ export default function AdminMediaGalleryField({
                 ×
               </button>
 
-              <div className="relative h-28">
+              <div className={`relative ${density === "compact" ? "h-24" : "h-28"}`}>
                 <Image src={path} alt="" fill className="object-cover" sizes="200px" />
               </div>
 

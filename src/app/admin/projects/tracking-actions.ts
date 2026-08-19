@@ -17,6 +17,7 @@ import {
   coordinateTrackingUpdateSave,
   type IntendedTrackingMedia,
 } from "../../../lib/admin/projects/tracking-media-coordination";
+import { projectTrackingMediaReferenceSchema } from "../../../lib/projects/tracking/contract";
 
 type SavedIdentity = { id: number };
 export type TrackingFormActionState = AdminFormActionState<SavedIdentity>;
@@ -47,7 +48,7 @@ const profileSchema = z.object({
 const videoInputSchema = z.array(z.object({
   client_key: z.string().uuid().optional(),
   url: z.string().url(),
-  poster_url: z.string().url().or(z.literal("")).optional(),
+  poster_url: projectTrackingMediaReferenceSchema.or(z.literal("")).optional(),
   title: z.string().trim().max(180).optional(),
 }));
 const updateSchema = z.object({
@@ -55,12 +56,17 @@ const updateSchema = z.object({
   title: z.string().trim().min(1, "عنوان التحديث مطلوب.").max(180),
   body: z.string().trim().min(1, "تفاصيل التحديث مطلوبة.").max(5000),
   publication_status: z.enum(["draft", "published", "unpublished", "archived"]),
-  image_urls: z.array(z.string().url()),
+  image_urls: z.array(projectTrackingMediaReferenceSchema),
   videos: videoInputSchema,
 });
 
 function text(formData: FormData, key: string) {
   const value = formData.get(key);
+  return typeof value === "string" ? value.trim() : "";
+}
+function lastText(formData: FormData, key: string) {
+  const values = formData.getAll(key);
+  const value = values.at(-1);
   return typeof value === "string" ? value.trim() : "";
 }
 function positiveId(formData: FormData, key: string) {
@@ -123,7 +129,25 @@ async function saveStage(mode: "create" | "edit", previous: TrackingFormActionSt
     const id = Number((data as { id?: number } | null)?.id);
     await audit(actor, mode === "create" ? "create" : "update", "project_tracking_stage", id, parsed.data.name, { project_id: project.data });
     revalidateTracking(project.data, identity.slug);
-    return { status: "success", mode, revision, title: "تم حفظ المرحلة", message: mode === "create" ? "أُضيفت المرحلة إلى رحلة التنفيذ." : "تم تحديث بيانات المرحلة.", code: mode === "create" ? "created" : "saved", entityId: id, savedRevision: `${id}:${Date.now()}`, result: { id } };
+    return {
+      status: "success",
+      mode,
+      revision,
+      title: "تم حفظ المرحلة",
+      message:
+        mode === "create"
+          ? "أُضيفت المرحلة إلى رحلة التنفيذ."
+          : "تم تحديث بيانات المرحلة.",
+      code: mode === "create" ? "created" : "saved",
+      entityId: id,
+      savedRevision: `${id}:${Date.now()}`,
+      result: { id },
+      ...(mode === "create"
+        ? {
+            editHref: `/admin/projects/${project.data}/tracking/stages/${id}`,
+          }
+        : {}),
+    };
   } catch (error) { return failure(mode, revision, "تعذر حفظ المرحلة", errorMessage(error)); }
 }
 export async function createTrackingStageAction(previous: TrackingFormActionState, formData: FormData) { return saveStage("create", previous, formData); }
@@ -144,7 +168,25 @@ async function saveItem(mode: "create" | "edit", previous: TrackingFormActionSta
     const id = Number((data as { id?: number } | null)?.id);
     await audit(actor, mode === "create" ? "create" : "update", "project_tracking_item", id, parsed.data.name, { project_id: project.data, stage_id: stage.data, status: parsed.data.status });
     revalidateTracking(project.data, identity.slug);
-    return { status: "success", mode, revision, title: "تم حفظ البند", message: mode === "create" ? "أُضيف البند إلى المرحلة." : "تم تحديث حالة وبيانات البند.", code: mode === "create" ? "created" : "saved", entityId: id, savedRevision: `${id}:${Date.now()}`, result: { id } };
+    return {
+      status: "success",
+      mode,
+      revision,
+      title: "تم حفظ البند",
+      message:
+        mode === "create"
+          ? "أُضيف البند إلى المرحلة."
+          : "تم تحديث حالة وبيانات البند.",
+      code: mode === "create" ? "created" : "saved",
+      entityId: id,
+      savedRevision: `${id}:${Date.now()}`,
+      result: { id },
+      ...(mode === "create"
+        ? {
+            editHref: `/admin/projects/${project.data}/tracking/items/${id}`,
+          }
+        : {}),
+    };
   } catch (error) { return failure(mode, revision, "تعذر حفظ البند", errorMessage(error)); }
 }
 export async function createTrackingItemAction(previous: TrackingFormActionState, formData: FormData) { return saveItem("create", previous, formData); }
@@ -176,7 +218,7 @@ async function saveUpdate(mode: "create" | "edit", previous: TrackingFormActionS
   const update = mode === "edit" ? positiveId(formData, "update_id") : null;
   let videos: unknown = [];
   try { videos = JSON.parse(text(formData, "videos_json") || "[]"); } catch { return failure(mode, revision, "تعذر حفظ التحديث", "بيانات الفيديو غير صالحة.", { videos_json: ["بيانات الفيديو غير صالحة."] }); }
-  const parsed = updateSchema.safeParse({ occurred_on: text(formData, "occurred_on"), title: text(formData, "title"), body: text(formData, "body"), publication_status: text(formData, "publication_status"), image_urls: text(formData, "image_urls").split("\n").map((value) => value.trim()).filter(Boolean), videos });
+  const parsed = updateSchema.safeParse({ occurred_on: text(formData, "occurred_on"), title: text(formData, "title"), body: text(formData, "body"), publication_status: lastText(formData, "publication_status"), image_urls: text(formData, "image_urls").split("\n").map((value) => value.trim()).filter(Boolean), videos });
   if (!project.success || !item.success || (update && !update.success) || !parsed.success) return failure(mode, revision, "تعذر حفظ التحديث", "راجع بيانات التحديث والوسائط.", parsed.success ? undefined : fieldErrors(parsed.error));
   const actor = await requireAdminSession();
   try {
@@ -197,6 +239,159 @@ async function saveUpdate(mode: "create" | "edit", previous: TrackingFormActionS
 }
 export async function createTrackingUpdateAction(previous: TrackingFormActionState, formData: FormData) { return saveUpdate("create", previous, formData); }
 export async function updateTrackingUpdateAction(previous: TrackingFormActionState, formData: FormData) { return saveUpdate("edit", previous, formData); }
+
+export async function setTrackingStageVisibilityAction(
+  projectId: number,
+  stageId: number,
+  visible: boolean,
+  label: string,
+): Promise<AdminActionResult> {
+  const actor = await requireAdminSession();
+  try {
+    const identity = await projectSlug(projectId);
+    const { data: stage, error: readError } = await getSupabaseAdmin()
+      .from("project_tracking_stages")
+      .select("name,description,start_date,planned_duration_value,planned_duration_unit,is_visible")
+      .eq("project_id", projectId)
+      .eq("id", stageId)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!stage) throw new Error("المرحلة غير موجودة.");
+    const { error } = await getSupabaseAdmin().rpc("mutate_project_tracking_stage", {
+      p_project_id: projectId,
+      p_actor_id: actor.id,
+      p_action: "update",
+      p_stage_id: stageId,
+      p_payload: { ...stage, is_visible: visible } as Json,
+    });
+    if (error) throw error;
+    await audit(actor, "update", "project_tracking_stage", stageId, label, {
+      project_id: projectId,
+      is_visible: visible,
+    });
+    revalidateTracking(projectId, identity.slug);
+    return adminActionSuccess(
+      visible ? "تم إظهار المرحلة" : "تم إخفاء المرحلة",
+      visible
+        ? "أصبحت المرحلة مرئية في صفحة المتابعة العامة."
+        : "أصبحت المرحلة مخفية من صفحة المتابعة العامة.",
+      { code: "saved", entityId: stageId },
+    );
+  } catch (error) {
+    return adminActionFailure("تعذر تحديث ظهور المرحلة", errorMessage(error), {
+      entityId: stageId,
+    });
+  }
+}
+
+export async function setTrackingItemVisibilityAction(
+  projectId: number,
+  stageId: number,
+  itemId: number,
+  visible: boolean,
+  label: string,
+): Promise<AdminActionResult> {
+  const actor = await requireAdminSession();
+  try {
+    const identity = await projectSlug(projectId);
+    const { data: item, error: readError } = await getSupabaseAdmin()
+      .from("project_tracking_items")
+      .select("name,description,status,start_date,completion_date,is_visible")
+      .eq("stage_id", stageId)
+      .eq("id", itemId)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!item) throw new Error("البند غير موجود.");
+    const { error } = await getSupabaseAdmin().rpc("mutate_project_tracking_item", {
+      p_project_id: projectId,
+      p_stage_id: stageId,
+      p_actor_id: actor.id,
+      p_action: "update",
+      p_item_id: itemId,
+      p_payload: { ...item, is_visible: visible } as Json,
+    });
+    if (error) throw error;
+    await audit(actor, "update", "project_tracking_item", itemId, label, {
+      project_id: projectId,
+      stage_id: stageId,
+      is_visible: visible,
+    });
+    revalidateTracking(projectId, identity.slug);
+    return adminActionSuccess(
+      visible ? "تم إظهار البند" : "تم إخفاء البند",
+      visible
+        ? "أصبح البند مرئيًا في صفحة المتابعة العامة."
+        : "أصبح البند مخفيًا من صفحة المتابعة العامة.",
+      { code: "saved", entityId: itemId },
+    );
+  } catch (error) {
+    return adminActionFailure("تعذر تحديث ظهور البند", errorMessage(error), {
+      entityId: itemId,
+    });
+  }
+}
+
+export async function setTrackingUpdatePublicationVisibilityAction(
+  projectId: number,
+  itemId: number,
+  updateId: number,
+  published: boolean,
+  label: string,
+): Promise<AdminActionResult> {
+  const actor = await requireAdminSession();
+  try {
+    const identity = await projectSlug(projectId);
+    const { data: update, error: readError } = await getSupabaseAdmin()
+      .from("project_tracking_updates")
+      .select("title,body,occurred_at,publication_status")
+      .eq("item_id", itemId)
+      .eq("id", updateId)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!update) throw new Error("التحديث غير موجود.");
+    const media = (await existingMedia(updateId)).map((entry) => ({
+      client_key: entry.client_key,
+      media_kind: entry.media_kind,
+      public_url: entry.public_url,
+      poster_url: entry.poster_url,
+      title: entry.title,
+      sort_order: entry.sort_order,
+    }));
+    const publicationStatus = published ? "published" : "draft";
+    const { error } = await getSupabaseAdmin().rpc("mutate_project_tracking_update", {
+      p_project_id: projectId,
+      p_item_id: itemId,
+      p_actor_id: actor.id,
+      p_action: "update",
+      p_update_id: updateId,
+      p_payload: {
+        occurred_at: update.occurred_at,
+        title: update.title,
+        body: update.body,
+        publication_status: publicationStatus,
+        media,
+      } as Json,
+    });
+    if (error) throw error;
+    await audit(actor, "update", "project_tracking_update", updateId, label, {
+      project_id: projectId,
+      item_id: itemId,
+      publication_status: publicationStatus,
+    });
+    revalidateTracking(projectId, identity.slug);
+    return adminActionSuccess(
+      published ? "تم نشر التحديث" : "تم إخفاء التحديث",
+      published
+        ? "أصبح التحديث ظاهرًا في صفحة المتابعة العامة."
+        : "عاد التحديث إلى المسودة واختفى من الصفحة العامة.",
+      { code: "saved", entityId: updateId },
+    );
+  } catch (error) {
+    return adminActionFailure("تعذر تحديث نشر التحديث", errorMessage(error), {
+      entityId: updateId,
+    });
+  }
+}
 
 async function deleteCommand(input: { kind: "stage" | "item" | "update"; projectId: number; parentId?: number; id: number; label: string }): Promise<AdminActionResult> {
   const actor = await requireAdminSession();

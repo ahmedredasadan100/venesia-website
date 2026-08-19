@@ -7,6 +7,7 @@ import ProjectTrackingExperience, {
 import { loadProjectTrackingDetail } from "../../../../lib/projects/tracking/public-read";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { generatePublicMetadata } from "../../../../lib/seo/generate-public-metadata";
+import type { ProjectTrackingReadInput } from "../../../../lib/projects/tracking/contract";
 
 export const revalidate = 300;
 
@@ -14,7 +15,27 @@ type ProjectTrackPageProps = {
   params: Promise<{
     slug: string;
   }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
+
+function trackingReadInput(
+  searchParams: Record<string, string | string[] | undefined>,
+): ProjectTrackingReadInput {
+  const value = (key: string) => {
+    const candidate = searchParams[key];
+    return typeof candidate === "string" ? candidate : undefined;
+  };
+  return {
+    stagePage: value("stagePage"),
+    itemPage: value("itemPage"),
+    updatePage: value("updatePage"),
+    mediaPage: value("mediaPage"),
+    historyPage: value("historyPage"),
+    stageId: value("stage"),
+    itemId: value("item"),
+    updateId: value("update"),
+  };
+}
 
 export async function generateMetadata({
   params,
@@ -45,9 +66,12 @@ export async function generateMetadata({
   });
 }
 
-export default async function ProjectTrackPage({ params }: ProjectTrackPageProps) {
-  const { slug } = await params;
-  const result = await loadProjectTrackingDetail(slug);
+export default async function ProjectTrackPage({ params, searchParams }: ProjectTrackPageProps) {
+  const [{ slug }, rawSearchParams] = await Promise.all([params, searchParams]);
+  const result = await loadProjectTrackingDetail(
+    slug,
+    trackingReadInput(rawSearchParams),
+  );
 
   if (result.status === "not_found") {
     notFound();

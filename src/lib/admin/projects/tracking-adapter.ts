@@ -7,6 +7,9 @@ import { buildAdminListSearchOrFilter } from "../admin-list-search";
 import { loadNormalizedAdminEntityListPage, type AdminEntityListAdapter } from "../entity-list/data-engine/adapter";
 import { createAdminEntityListResultSchema, type AdminEntityListQuery } from "../entity-list/data-engine/contracts";
 import {
+  deriveProjectTrackingStageStatus,
+} from "../../projects/tracking/contract";
+import {
   PROJECT_TRACKING_ENTITY_KEYS,
   trackingItemMetricsSchema,
   trackingItemRowSchema,
@@ -31,6 +34,20 @@ import {
 const stageBaseSchema = trackingStageRowSchema.omit({ item_count: true, update_count: true, derived_status: true });
 const itemBaseSchema = trackingItemRowSchema.omit({ update_count: true });
 const updateBaseSchema = trackingUpdateRowSchema.omit({ media: true });
+const relationCountSchema = z.array(
+  z.object({ count: z.coerce.number().int().nonnegative() }),
+);
+const stageWithAggregatesSchema = stageBaseSchema.extend({
+  project_tracking_items: z.array(
+    z.object({
+      status: z.enum(["not_started", "in_progress", "completed"]),
+      project_tracking_updates: relationCountSchema,
+    }),
+  ),
+});
+const itemWithAggregateSchema = itemBaseSchema.extend({
+  project_tracking_updates: relationCountSchema,
+});
 export const trackingStagesResultSchema = createAdminEntityListResultSchema(trackingStageRowSchema, trackingStageMetricsSchema);
 export const trackingItemsResultSchema = createAdminEntityListResultSchema(trackingItemRowSchema, trackingItemMetricsSchema);
 export const trackingUpdatesResultSchema = createAdminEntityListResultSchema(trackingUpdateRowSchema, trackingUpdateMetricsSchema);
@@ -48,13 +65,6 @@ function fail(error: { message: string; code?: string } | null, fallback: string
   throw new ProjectTrackingAdminReadError(error?.message ?? fallback, error?.code);
 }
 
-function derivedStatus(statuses: string[]) {
-  if (!statuses.length) return "not_started" as const;
-  if (statuses.every((status) => status === "completed")) return "completed" as const;
-  if (statuses.some((status) => status !== "not_started")) return "in_progress" as const;
-  return "not_started" as const;
-}
-
 function resultMeta(query: { mode: "server-page" | "bounded-client" }) {
   return { generatedAt: new Date().toISOString(), mode: query.mode };
 }
@@ -69,31 +79,23 @@ async function projectSummary(projectId: number) {
 async function loadStagePage(query: AdminEntityListQuery<TrackingStageFilters, TrackingStageSort>, page: number) {
   const from = (page - 1) * query.pageSize;
   const searchFilter = buildAdminListSearchOrFilter(["name", "description"], query.search);
-  let request = getSupabaseAdmin().from("project_tracking_stages").select("id,project_id,name,description,sort_order,start_date,planned_duration_value,planned_duration_unit,is_visible,created_at,updated_at", { count: "exact" }).eq("project_id", query.filters.projectId);
+  let request = getSupabaseAdmin().from("project_tracking_stages").select("id,project_id,name,description,sort_order,start_date,planned_duration_value,planned_duration_unit,is_visible,created_at,updated_at,project_tracking_items(status,project_tracking_updates(count))", { count: "exact" }).eq("project_id", query.filters.projectId);
   if (query.filters.visibility !== "all") request = request.eq("is_visible", query.filters.visibility === "visible");
   if (searchFilter) request = request.or(searchFilter);
   const { data, error, count } = await request.order(query.sort.field, { ascending: query.sort.direction === "asc" }).order("id", { ascending: true }).range(from, from + query.pageSize - 1);
   if (error) fail(error, "تعذر تحميل المراحل.");
-  const stages = z.array(stageBaseSchema).parse(data ?? []);
-  const stageIds = stages.map((stage) => stage.id);
-  const itemsResult = stageIds.length
-    ? await getSupabaseAdmin().from("project_tracking_items").select("id,stage_id,status").in("stage_id", stageIds)
-    : { data: [], error: null };
-  if (itemsResult.error) fail(itemsResult.error, "تعذر تحميل بنود المراحل.");
-  const itemIds = (itemsResult.data ?? []).map((item) => item.id);
-  const updatesResult = itemIds.length
-    ? await getSupabaseAdmin().from("project_tracking_updates").select("id,item_id").in("item_id", itemIds)
-    : { data: [], error: null };
-  if (updatesResult.error) fail(updatesResult.error, "تعذر تحميل أعداد التحديثات.");
-  const itemToStage = new Map((itemsResult.data ?? []).map((item) => [item.id, item.stage_id]));
+  const stages = z.array(stageWithAggregatesSchema).parse(data ?? []);
   return {
     rows: stages.map((stage) => {
-      const children = (itemsResult.data ?? []).filter((item) => item.stage_id === stage.id);
+      const { project_tracking_items: children, ...stageRow } = stage;
       return trackingStageRowSchema.parse({
-        ...stage,
+        ...stageRow,
         item_count: children.length,
-        update_count: (updatesResult.data ?? []).filter((update) => itemToStage.get(update.item_id) === stage.id).length,
-        derived_status: derivedStatus(children.map((item) => item.status)),
+        update_count: children.reduce(
+          (sum, item) => sum + (item.project_tracking_updates[0]?.count ?? 0),
+          0,
+        ),
+        derived_status: deriveProjectTrackingStageStatus(children.map((item) => item.status)),
       });
     }),
     totalRows: count ?? 0,
@@ -113,29 +115,42 @@ export async function loadTrackingStagesResult(query: AdminEntityListQuery<Track
 async function loadItemPage(query: AdminEntityListQuery<TrackingItemFilters, TrackingItemSort>, page: number) {
   const from = (page - 1) * query.pageSize;
   const searchFilter = buildAdminListSearchOrFilter(["name", "description"], query.search);
-  let request = getSupabaseAdmin().from("project_tracking_items").select("id,stage_id,name,description,sort_order,status,start_date,completion_date,is_visible,created_at,updated_at", { count: "exact" }).eq("stage_id", query.filters.stageId);
+  let request = getSupabaseAdmin().from("project_tracking_items").select("id,stage_id,name,description,sort_order,status,start_date,completion_date,is_visible,created_at,updated_at,project_tracking_updates(count)", { count: "exact" }).eq("stage_id", query.filters.stageId);
   if (query.filters.visibility !== "all") request = request.eq("is_visible", query.filters.visibility === "visible");
   if (query.filters.status !== "all") request = request.eq("status", query.filters.status);
   if (searchFilter) request = request.or(searchFilter);
   const { data, error, count } = await request.order(query.sort.field, { ascending: query.sort.direction === "asc" }).order("id", { ascending: true }).range(from, from + query.pageSize - 1);
   if (error) fail(error, "تعذر تحميل بنود المرحلة.");
-  const items = z.array(itemBaseSchema).parse(data ?? []);
-  const ids = items.map((item) => item.id);
-  const updates = ids.length ? await getSupabaseAdmin().from("project_tracking_updates").select("id,item_id").in("item_id", ids) : { data: [], error: null };
-  if (updates.error) fail(updates.error, "تعذر تحميل أعداد التحديثات.");
-  return { rows: items.map((item) => trackingItemRowSchema.parse({ ...item, update_count: (updates.data ?? []).filter((update) => update.item_id === item.id).length })), totalRows: count ?? 0 };
+  const items = z.array(itemWithAggregateSchema).parse(data ?? []);
+  return {
+    rows: items.map((item) => {
+      const { project_tracking_updates: updates, ...itemRow } = item;
+      return trackingItemRowSchema.parse({
+        ...itemRow,
+        update_count: updates[0]?.count ?? 0,
+      });
+    }),
+    totalRows: count ?? 0,
+  };
 }
 
 async function stageSummary(projectId: number, stageId: number) {
-  const { data, error } = await getSupabaseAdmin().from("project_tracking_stages").select("id,project_id,name,description,sort_order,start_date,planned_duration_value,planned_duration_unit,is_visible,created_at,updated_at").eq("id", stageId).eq("project_id", projectId).maybeSingle();
+  const { data, error } = await getSupabaseAdmin().from("project_tracking_stages").select("id,project_id,name,description,sort_order,start_date,planned_duration_value,planned_duration_unit,is_visible,created_at,updated_at,project_tracking_items(status,project_tracking_updates(count))").eq("id", stageId).eq("project_id", projectId).maybeSingle();
   if (error) fail(error, "تعذر تحميل المرحلة.");
   if (!data) throw new ProjectTrackingAdminReadError("المرحلة لا تتبع هذا المشروع.", "stage_not_found");
-  const { data: items, error: itemError } = await getSupabaseAdmin().from("project_tracking_items").select("id,status").eq("stage_id", stageId);
-  if (itemError) fail(itemError, "تعذر تحميل ملخص المرحلة.");
-  const ids = (items ?? []).map((item) => item.id);
-  const updates = ids.length ? await getSupabaseAdmin().from("project_tracking_updates").select("id").in("item_id", ids) : { data: [], error: null };
-  if (updates.error) fail(updates.error, "تعذر تحميل ملخص التحديثات.");
-  return trackingStageRowSchema.parse({ ...data, item_count: ids.length, update_count: updates.data?.length ?? 0, derived_status: derivedStatus((items ?? []).map((item) => item.status)) });
+  const stage = stageWithAggregatesSchema.parse(data);
+  const { project_tracking_items: items, ...stageRow } = stage;
+  return trackingStageRowSchema.parse({
+    ...stageRow,
+    item_count: items.length,
+    update_count: items.reduce(
+      (sum, item) => sum + (item.project_tracking_updates[0]?.count ?? 0),
+      0,
+    ),
+    derived_status: deriveProjectTrackingStageStatus(
+      items.map((item) => item.status),
+    ),
+  });
 }
 
 export async function loadTrackingItemsResult(query: AdminEntityListQuery<TrackingItemFilters, TrackingItemSort>) {

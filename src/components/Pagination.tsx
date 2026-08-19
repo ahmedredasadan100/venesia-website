@@ -9,12 +9,17 @@ type PaginationProps = {
   totalPages: number;
   basePath: string;
   query?: Record<string, string | number | undefined>;
+  pageParam?: string;
+  previousLabel?: string;
+  nextLabel?: string;
+  ariaLabel?: string;
 };
 
 function buildHref(
   basePath: string,
   page: number,
-  query?: Record<string, string | number | undefined>
+  query?: Record<string, string | number | undefined>,
+  pageParam = "page",
 ) {
   const params = new URLSearchParams();
 
@@ -27,9 +32,9 @@ function buildHref(
   }
 
   if (page > 1) {
-    params.set("page", String(page));
+    params.set(pageParam, String(page));
   } else {
-    params.delete("page");
+    params.delete(pageParam);
   }
 
   const queryString = params.toString();
@@ -42,6 +47,10 @@ export default function Pagination({
   totalPages,
   basePath,
   query,
+  pageParam = "page",
+  previousLabel = "السابق",
+  nextLabel = "التالي",
+  ariaLabel = "Pagination",
 }: PaginationProps) {
   const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
 
@@ -78,25 +87,34 @@ export default function Pagination({
 
   const paginationItems = buildPaginationItems(safeCurrentPage, totalPages);
 
+  const navigationClassName =
+    "rounded-full border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]";
+  const pageClassName = (isActive: boolean) =>
+    `flex h-10 w-10 items-center justify-center rounded-full border text-sm transition ${
+      isActive
+        ? "border-[#D8B87A]/50 bg-[#D8B87A]/10 text-[#D8B87A]"
+        : "border-white/10 text-white/55 hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
+    }`;
+
   return (
     <nav
       ref={navigationRef}
-      aria-label="Pagination"
+      aria-label={ariaLabel}
       dir="rtl"
       className="mt-10 flex flex-wrap items-center justify-center gap-2"
     >
       {safeCurrentPage === 1 ? (
         <span className="rounded-full border border-white/5 px-4 py-2 text-sm text-white/25">
-          السابق
+          {previousLabel}
         </span>
       ) : (
         <Link
-          href={buildHref(basePath, previousPage, query)}
+          href={buildHref(basePath, previousPage, query, pageParam)}
           scroll={false}
           onNavigate={retainViewportPosition}
-          className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
+          className={navigationClassName}
         >
-          السابق
+          {previousLabel}
         </Link>
       )}
 
@@ -119,15 +137,11 @@ export default function Pagination({
         return (
           <Link
             key={page}
-            href={buildHref(basePath, page, query)}
+            href={buildHref(basePath, page, query, pageParam)}
             scroll={false}
             onNavigate={retainViewportPosition}
             aria-current={isActive ? "page" : undefined}
-            className={`flex h-10 w-10 items-center justify-center rounded-full border text-sm transition ${
-              isActive
-                ? "border-[#D8B87A]/50 bg-[#D8B87A]/10 text-[#D8B87A]"
-                : "border-white/10 text-white/55 hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
-            }`}
+            className={pageClassName(isActive)}
           >
             {page}
           </Link>
@@ -136,16 +150,16 @@ export default function Pagination({
 
       {safeCurrentPage === totalPages ? (
         <span className="rounded-full border border-white/5 px-4 py-2 text-sm text-white/25">
-          التالي
+          {nextLabel}
         </span>
       ) : (
         <Link
-          href={buildHref(basePath, nextPage, query)}
+          href={buildHref(basePath, nextPage, query, pageParam)}
           scroll={false}
           onNavigate={retainViewportPosition}
-          className="rounded-full border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
+          className={navigationClassName}
         >
-          التالي
+          {nextLabel}
         </Link>
       )}
     </nav>

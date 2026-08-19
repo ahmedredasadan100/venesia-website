@@ -759,7 +759,7 @@ export default function AdminDataGridRowActions({
   ) {
     if (target.access === "hidden") return null;
     const enabled = target.access === "allowed" && !target.pending;
-    const label = kind === "edit" ? "تعديل" : "معاينة";
+    const label = target.label ?? (kind === "edit" ? "تعديل" : "معاينة");
     const title = target.disabledReason ?? label;
     return (
       <span

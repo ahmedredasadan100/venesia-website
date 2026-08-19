@@ -469,14 +469,13 @@ Ready لا تعني Merge. Preview لا تعني Production Closure.
 ## 18. السلسلة الرسمية
 
 > Discover
-> → Classify
-> → Map Ownership
-> → Identify Duplication
-> → Implement Real Delta
-> → Targeted Tests
-> → Failure Paths
-> → Focused Correction
-> → Final Gate
+> → Consumer Capability Adoption Audit (Capability Applicability)
+> → Architecture
+> → Implementation
+> → Source Proof
+> → Verification
+> → CI
+> → Product Review
 > → Commit/Push
 > → Report
 > → Review

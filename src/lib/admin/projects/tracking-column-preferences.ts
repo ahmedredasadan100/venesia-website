@@ -1,8 +1,16 @@
-export const PROJECT_TRACKING_COLUMN_CONTRACT_VERSION = 1;
+export const PROJECT_TRACKING_COLUMN_CONTRACT_VERSION = 2;
 
 export const PROJECT_TRACKING_COLUMN_KEYS = {
   stages: ["name", "status", "relations", "visibility", "order", "actions"],
-  items: ["name", "status", "dates", "updates", "order", "actions"],
+  items: [
+    "name",
+    "status",
+    "dates",
+    "updates",
+    "visibility",
+    "order",
+    "actions",
+  ],
   updates: ["title", "date", "publication", "media", "actions"],
 } as const;
 
