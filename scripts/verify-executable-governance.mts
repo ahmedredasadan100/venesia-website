@@ -12,6 +12,9 @@ import {
   adminSharedCapabilityKeys,
 } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 import { PUBLIC_PAGE_ROUTE_REGISTRY } from "../src/lib/admin/links/static-routes.ts";
+import { CONTENT_EDITOR_ADOPTION_MANIFEST } from "../src/lib/admin/content/content-editor-adoption-manifest.ts";
+import { GLOBAL_SEO_PUBLIC_CONSUMERS } from "../src/lib/admin/seo/global-seo-adoption-manifest.ts";
+import { PAGE_COMPOSITION_COLUMN_PREFERENCES } from "../src/lib/page-blocks/admin-collection-columns.ts";
 import { parseTypeScriptSource } from "./lib/typescript-executable-graph.mts";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -19,9 +22,26 @@ const CAPABILITY_GUARD = "scripts/verify-admin-row-actions-capability.mts";
 const GOVERNANCE_SOURCES = [
   "src/lib/admin/interaction-system/adoption-manifest.ts",
   "src/lib/admin/form-system/adoption-manifest.ts",
+  "src/lib/admin/content/content-editor-adoption-manifest.ts",
+  "src/lib/admin/seo/global-seo-adoption-manifest.ts",
+  "src/lib/page-blocks/admin-collection-columns.ts",
   "src/lib/admin/links/static-routes.ts",
   "scripts/verify-platform.mts",
   "scripts/lib/typescript-executable-graph.mts",
+  "scripts/verify-media-write-adoption.mts",
+  "scripts/verify-global-seo-adoption.mts",
+  "scripts/verify-global-seo-public-consumers.mts",
+  "scripts/verify-unified-content-editors-adoption.mts",
+  "scripts/verify-shared-legacy-adoption.mts",
+  "scripts/verify-platform-performance-contracts.mts",
+] as const;
+const EXECUTABLE_PROOF_SOURCES = [
+  "scripts/verify-media-write-adoption.mts",
+  "scripts/verify-global-seo-adoption.mts",
+  "scripts/verify-global-seo-public-consumers.mts",
+  "scripts/verify-unified-content-editors-adoption.mts",
+  "scripts/verify-shared-legacy-adoption.mts",
+  "scripts/verify-platform-performance-contracts.mts",
 ] as const;
 const FORBIDDEN_PROOF_PROPERTIES = new Set([
   "sourceProofTokens",
@@ -131,6 +151,64 @@ function functionUsesTextualSourceInference(
   return failed;
 }
 
+function collectTextualSourceInference(parsed: ts.SourceFile) {
+  const failures: string[] = [];
+  const sourceTextVariables = new Set<string>();
+  const collectSourceVariables = (node: ts.Node) => {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer &&
+      ts.isCallExpression(node.initializer) &&
+      ts.isIdentifier(node.initializer.expression) &&
+      ["read", "readFileSync"].includes(node.initializer.expression.text)
+    ) {
+      sourceTextVariables.add(node.name.text);
+    }
+    ts.forEachChild(node, collectSourceVariables);
+  };
+  collectSourceVariables(parsed);
+
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isRegularExpressionLiteral(node) ||
+      (ts.isNewExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "RegExp")
+    ) {
+      failures.push(
+        `${parsed.fileName}:${parsed.getLineAndCharacterOfPosition(node.getStart(parsed)).line + 1}:regex`,
+      );
+    }
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ["includes", "match", "matchAll", "search", "indexOf", "slice"].includes(
+        node.expression.name.text,
+      )
+    ) {
+      const receiver = node.expression.expression;
+      const textualReceiver =
+        (ts.isIdentifier(receiver) &&
+          (["source", "sourceText", "text", "content", "body"].includes(
+            receiver.text,
+          ) ||
+            sourceTextVariables.has(receiver.text))) ||
+        (ts.isCallExpression(receiver) &&
+          ts.isIdentifier(receiver.expression) &&
+          ["read", "readFileSync"].includes(receiver.expression.text));
+      if (textualReceiver) {
+        failures.push(
+          `${parsed.fileName}:${parsed.getLineAndCharacterOfPosition(node.getStart(parsed)).line + 1}:${node.expression.name.text}`,
+        );
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+  return failures;
+}
+
 const parsedGovernanceSources = GOVERNANCE_SOURCES.map(parse);
 const forbiddenProofProperties = parsedGovernanceSources.flatMap(
   collectForbiddenProofProperties,
@@ -159,6 +237,15 @@ assert.deepEqual(
   textualCapabilityInference,
   [],
   "Capability applicability and Source Proof cannot use textual source inference.",
+);
+
+const textualDomainAdoptionInference = EXECUTABLE_PROOF_SOURCES.flatMap(
+  (sourceFile) => collectTextualSourceInference(parse(sourceFile)),
+);
+assert.deepEqual(
+  textualDomainAdoptionInference,
+  [],
+  "Executable Adoption guards cannot infer proof from raw source strings or regex.",
 );
 
 const capabilityKeys = adminSharedCapabilityKeys(
@@ -204,6 +291,15 @@ console.log(
 );
 console.log(
   `Public routes .................... ${PUBLIC_PAGE_ROUTE_REGISTRY.length} registered`,
+);
+console.log(
+  `Global SEO consumers ............. ${GLOBAL_SEO_PUBLIC_CONSUMERS.length} executable`,
+);
+console.log(
+  `Content contracts ................ ${CONTENT_EDITOR_ADOPTION_MANIFEST.length} executable`,
+);
+console.log(
+  `Page Composition columns ......... ${Object.keys(PAGE_COMPOSITION_COLUMN_PREFERENCES).length} executable`,
 );
 console.log("String/token/regex source proof .. ABSENT");
 console.log("Hidden capability defaults ....... ABSENT");

@@ -8,6 +8,11 @@ export type ContentEditorAdoptionEntry = {
   typedDifferences: readonly string[];
 };
 
+export type ContentEditorExecutableConsumer = {
+  id: "article_create" | "article_edit" | "media_create_edit";
+  sourceFile: string;
+};
+
 export const CONTENT_EDITOR_ARCHITECTURE = {
   id: "unified_content_editors_adoption",
   shellOwner: "src/components/admin/content/editors/ContentEditorShell.tsx",
@@ -27,6 +32,54 @@ export const CONTENT_EDITOR_ARCHITECTURE = {
   globalClosed: true,
   globalClosureBlockers: [],
 } as const;
+
+export const CONTENT_EDITOR_EXECUTABLE_CONSUMERS = [
+  {
+    id: "article_create",
+    sourceFile:
+      "src/components/admin/content/editors/ArticleCreateEditor.tsx",
+  },
+  {
+    id: "article_edit",
+    sourceFile: "src/components/admin/content/editors/ArticleEditor.tsx",
+  },
+  {
+    id: "media_create_edit",
+    sourceFile:
+      "src/components/admin/content/editors/media/MediaContentForm.tsx",
+  },
+] as const satisfies readonly ContentEditorExecutableConsumer[];
+
+export const CONTENT_EDITOR_EXECUTABLE_BINDINGS = [
+  {
+    sourceFile: CONTENT_EDITOR_ARCHITECTURE.shellOwner,
+    exportNames: ["default"],
+  },
+  {
+    sourceFile: CONTENT_EDITOR_ARCHITECTURE.formRuntimeOwner,
+    exportNames: ["default", "AdminFormRuntime"],
+  },
+  {
+    sourceFile: CONTENT_EDITOR_ARCHITECTURE.basicDataOwner,
+    exportNames: ["default"],
+  },
+  {
+    sourceFile: CONTENT_EDITOR_ARCHITECTURE.publishingOwner,
+    exportNames: ["default"],
+  },
+  {
+    sourceFile: CONTENT_EDITOR_ARCHITECTURE.displaySettingsOwner,
+    exportNames: ["default"],
+  },
+  {
+    sourceFile: CONTENT_EDITOR_ARCHITECTURE.seoOwner,
+    exportNames: ["default"],
+  },
+  {
+    sourceFile: CONTENT_EDITOR_ARCHITECTURE.saveOwner,
+    exportNames: ["saveContentForm"],
+  },
+] as const;
 
 export const CONTENT_EDITOR_ADOPTION_MANIFEST = [
   {

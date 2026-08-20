@@ -16,32 +16,78 @@ export const GLOBAL_SEO_SPECIALIZED_OWNERS = [
 ] as const;
 
 export const GLOBAL_SEO_PUBLIC_CONSUMERS = [
-  "src/app/(site)/page.tsx",
-  "src/app/(site)/about/page.tsx",
-  "src/app/(site)/contact/page.tsx",
-  "src/app/(site)/projects/page.tsx",
-  "src/app/(site)/projects/[slug]/page.tsx",
-  "src/app/(site)/topics/page.tsx",
-  "src/app/(site)/topics/[slug]/page.tsx",
-  "src/app/(site)/track-your-project/page.tsx",
-  "src/app/(site)/track-your-project/[slug]/page.tsx",
-  "src/app/(site)/media-center/page.tsx",
-  "src/app/(site)/media-center/news/page.tsx",
-  "src/app/(site)/media-center/news/[slug]/page.tsx",
-  "src/app/(site)/media-center/press/page.tsx",
-  "src/app/(site)/media-center/press/[slug]/page.tsx",
-  "src/app/(site)/media-center/site-updates/page.tsx",
-  "src/app/(site)/media-center/site-updates/[slug]/page.tsx",
-  "src/app/(site)/media-center/videos/page.tsx",
-  "src/app/(site)/media-center/videos/[slug]/page.tsx",
-  "src/app/(site)/media-center/gallery/page.tsx",
-  "src/app/(site)/media-center/gallery/[slug]/page.tsx",
-  "src/app/(site)/[...slug]/page.tsx",
+  { route: "/", sourceFile: "src/app/(site)/page.tsx" },
+  { route: "/about", sourceFile: "src/app/(site)/about/page.tsx" },
+  { route: "/contact", sourceFile: "src/app/(site)/contact/page.tsx" },
+  { route: "/projects", sourceFile: "src/app/(site)/projects/page.tsx" },
+  {
+    route: "/projects/[slug]",
+    sourceFile: "src/app/(site)/projects/[slug]/page.tsx",
+  },
+  { route: "/topics", sourceFile: "src/app/(site)/topics/page.tsx" },
+  {
+    route: "/topics/[slug]",
+    sourceFile: "src/app/(site)/topics/[slug]/page.tsx",
+  },
+  {
+    route: "/track-your-project",
+    sourceFile: "src/app/(site)/track-your-project/page.tsx",
+  },
+  {
+    route: "/track-your-project/[slug]",
+    sourceFile: "src/app/(site)/track-your-project/[slug]/page.tsx",
+  },
+  {
+    route: "/media-center",
+    sourceFile: "src/app/(site)/media-center/page.tsx",
+  },
+  {
+    route: "/media-center/news",
+    sourceFile: "src/app/(site)/media-center/news/page.tsx",
+  },
+  {
+    route: "/media-center/news/[slug]",
+    sourceFile: "src/app/(site)/media-center/news/[slug]/page.tsx",
+  },
+  {
+    route: "/media-center/press",
+    sourceFile: "src/app/(site)/media-center/press/page.tsx",
+  },
+  {
+    route: "/media-center/press/[slug]",
+    sourceFile: "src/app/(site)/media-center/press/[slug]/page.tsx",
+  },
+  {
+    route: "/media-center/site-updates",
+    sourceFile: "src/app/(site)/media-center/site-updates/page.tsx",
+  },
+  {
+    route: "/media-center/site-updates/[slug]",
+    sourceFile:
+      "src/app/(site)/media-center/site-updates/[slug]/page.tsx",
+  },
+  {
+    route: "/media-center/videos",
+    sourceFile: "src/app/(site)/media-center/videos/page.tsx",
+  },
+  {
+    route: "/media-center/videos/[slug]",
+    sourceFile: "src/app/(site)/media-center/videos/[slug]/page.tsx",
+  },
+  {
+    route: "/media-center/gallery",
+    sourceFile: "src/app/(site)/media-center/gallery/page.tsx",
+  },
+  {
+    route: "/media-center/gallery/[slug]",
+    sourceFile: "src/app/(site)/media-center/gallery/[slug]/page.tsx",
+  },
+  { route: "/[...slug]", sourceFile: "src/app/(site)/[...slug]/page.tsx" },
 ] as const;
 
 export const GLOBAL_SEO_CONSUMER_ADOPTION = {
   scope: "all_public_metadata_routes_and_global_seo_infrastructure",
-  expectedPublicConsumerCount: 21,
+  globalClosed: true,
   entitySeoDependency: {
     mode: "reuse_only",
     owner: "src/lib/seo/entity-seo-types.ts",
