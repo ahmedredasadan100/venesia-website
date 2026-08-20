@@ -3134,8 +3134,8 @@ export const ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS =
  *
  * It answers what lifecycle the user entered the surface to perform. It does
  * not infer identity from Collection/Form adoption, capability applicability,
- * or `workflowClassification`. Those ledgers remain independent and are linked
- * only through explicit adoption bindings for cross-ledger coverage.
+ * or `workflowClassification`. Those ledgers remain independently governed;
+ * Product Identity does not carry their declarations or registration ids.
  */
 export const PRODUCT_SURFACE_TYPE_DEFINITIONS = {
   management_collection: {
@@ -3317,8 +3317,6 @@ export type ProductSurfaceRuntimeOwner =
   Exclude<AdminInteractionModuleId, "shared_capabilities"> | "not_applicable";
 
 export type ProductSurfaceWorkflowOwner =
-  | "admin_dashboard"
-  | "admin_page_system"
   | "audit_domain"
   | "authentication_domain"
   | "block_template_domain"
@@ -3349,12 +3347,6 @@ export type ProductSurfaceWorkflowOwner =
   | "settings_domain"
   | "taxonomy_domain";
 
-export type ProductSurfaceAdoptionBindings = {
-  collectionSurfaceIds: readonly string[];
-  collectionConsumerIds?: readonly string[];
-  formSurfaceIds: readonly string[];
-};
-
 export type ProductSurfaceIdentity = {
   id: string;
   scope: ProductSurfaceScope;
@@ -3370,7 +3362,6 @@ export type ProductSurfaceIdentity = {
   ];
   nestedParent: string | null;
   nestedChildren: readonly string[];
-  adoptionBindings: ProductSurfaceAdoptionBindings;
 };
 
 type ProductSurfaceIdentityDeclaration = Omit<
@@ -3390,11 +3381,6 @@ function defineProductSurfaceIdentity<
   };
 }
 
-const NO_PRODUCT_ADOPTION_BINDINGS = {
-  collectionSurfaceIds: [],
-  formSurfaceIds: [],
-} as const satisfies ProductSurfaceAdoptionBindings;
-
 export const PRODUCT_SURFACE_IDENTITIES = [
   // Admin route surfaces: authentication, dashboard, content, and media.
   defineProductSurfaceIdentity({
@@ -3407,10 +3393,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["admin-auth-pages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-login-authentication",
@@ -3422,10 +3404,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["admin-auth-pages"],
-      formSurfaceIds: ["authentication-login"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-dashboard",
@@ -3437,7 +3415,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: ["admin-dashboard-recent-content"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "admin-activity-log-report",
@@ -3449,10 +3426,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["collection_runtime", "data_runtime"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["activity-log"],
-      formSurfaceIds: ["activity-sitemap-media-commands"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-categories-collection",
@@ -3472,10 +3445,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-content-category-create-form",
       "admin-content-category-edit-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-categories"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-category-create-form",
@@ -3487,10 +3456,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-content-categories-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-editor-pages"],
-      formSurfaceIds: ["topic-category-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-category-edit-form",
@@ -3502,10 +3467,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-content-categories-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-editor-pages"],
-      formSurfaceIds: ["topic-category-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-series-collection",
@@ -3525,10 +3486,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-content-series-create-form",
       "admin-content-series-edit-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-series"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-series-create-form",
@@ -3540,10 +3497,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-content-series-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-editor-pages"],
-      formSurfaceIds: ["topic-series-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-series-edit-form",
@@ -3555,10 +3508,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-content-series-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-editor-pages"],
-      formSurfaceIds: ["topic-series-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-topics-collection",
@@ -3578,10 +3527,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-content-topic-create-editor",
       "admin-content-topic-edit-editor",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-topics"],
-      formSurfaceIds: ["list-bulk-row-one-shot-actions"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-topic-create-editor",
@@ -3593,10 +3538,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-content-topics-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-editor-pages"],
-      formSurfaceIds: ["topic-article-create-edit", "topic-media-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-topic-edit-editor",
@@ -3608,10 +3549,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-content-topics-collection",
     nestedChildren: ["admin-content-topic-preview"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-editor-pages"],
-      formSurfaceIds: ["topic-article-create-edit", "topic-media-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-topic-preview",
@@ -3623,10 +3560,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "admin-content-topic-edit-editor",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["content-editor-pages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-library",
@@ -3638,10 +3571,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: null,
     nestedChildren: ["admin-media-usage-panel"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["media-library"],
-      formSurfaceIds: ["activity-sitemap-media-commands"],
-    },
   }),
   // Admin route surfaces: page definitions, block templates, menus, and footer.
   defineProductSurfaceIdentity({
@@ -3663,10 +3592,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-media-hub-blocks-collection",
       "admin-media-sidebar-blocks-collection",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["blocks-library-hub"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-breadcrumb-blocks-collection",
@@ -3685,11 +3610,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-breadcrumb-block-builder",
       "admin-breadcrumb-block-create-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-libraries"],
-      collectionConsumerIds: ["breadcrumb-template-library"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-breadcrumb-block-builder",
@@ -3701,10 +3621,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-breadcrumb-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-editors"],
-      formSurfaceIds: ["block-template-builders-and-editors"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-cards-blocks-collection",
@@ -3723,11 +3639,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-cards-block-builder",
       "admin-cards-block-create-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-libraries"],
-      collectionConsumerIds: ["cards-template-library"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-cards-block-builder",
@@ -3739,10 +3650,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-cards-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-editors"],
-      formSurfaceIds: ["block-template-builders-and-editors"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-blocks-collection",
@@ -3761,11 +3668,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-content-block-builder",
       "admin-content-block-create-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-libraries"],
-      collectionConsumerIds: ["content-template-library"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-block-builder",
@@ -3777,10 +3679,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-content-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-editors"],
-      formSurfaceIds: ["block-template-builders-and-editors"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-cta-blocks-collection",
@@ -3796,11 +3694,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-blocks-library-hub",
     nestedChildren: ["admin-cta-block-builder", "admin-cta-block-create-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-libraries"],
-      collectionConsumerIds: ["cta-template-library"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-cta-block-builder",
@@ -3812,10 +3705,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-cta-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-editors"],
-      formSurfaceIds: ["block-template-builders-and-editors"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-feed-blocks-collection",
@@ -3834,11 +3723,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-feed-block-builder",
       "admin-feed-block-create-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-libraries"],
-      collectionConsumerIds: ["feed-template-library"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-feed-block-builder",
@@ -3850,10 +3734,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-feed-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-editors"],
-      formSurfaceIds: ["block-template-builders-and-editors"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-hero-blocks-collection",
@@ -3872,11 +3752,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-hero-block-builder",
       "admin-hero-block-create-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-libraries"],
-      collectionConsumerIds: ["hero-template-library"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-hero-block-builder",
@@ -3888,10 +3763,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-hero-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-editors"],
-      formSurfaceIds: ["block-template-builders-and-editors"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-hub-blocks-collection",
@@ -3907,11 +3778,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-blocks-library-hub",
     nestedChildren: ["admin-media-hub-block-builder"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-libraries"],
-      collectionConsumerIds: ["media-hub-template-library"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-hub-block-builder",
@@ -3923,10 +3789,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-media-hub-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-editors"],
-      formSurfaceIds: ["block-template-builders-and-editors"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-sidebar-blocks-collection",
@@ -3942,11 +3804,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-blocks-library-hub",
     nestedChildren: ["admin-media-sidebar-block-builder"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-libraries"],
-      collectionConsumerIds: ["media-sidebar-template-library"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-sidebar-block-builder",
@@ -3960,10 +3817,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-media-sidebar-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["block-template-editors"],
-      formSurfaceIds: ["block-template-builders-and-editors"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-menus-collection",
@@ -3979,10 +3832,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: null,
     nestedChildren: ["admin-menu-builder", "admin-menu-quick-create-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["menus-list"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-menu-builder",
@@ -3994,10 +3843,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-menus-collection",
     nestedChildren: ["admin-menu-items-collection", "admin-menu-item-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["menu-editor-shell"],
-      formSurfaceIds: ["menu-builder"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-page-definitions-collection",
@@ -4017,10 +3862,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-page-composition-workspace",
       "admin-page-quick-create-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["pages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-page-composition-workspace",
@@ -4037,10 +3878,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-page-block-assignment-form",
       "admin-page-seo-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["page-composition-shell"],
-      formSurfaceIds: ["page-composition-and-seo"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-footer-builder",
@@ -4056,10 +3893,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-footer-manual-links-collection",
       "admin-footer-link-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["footer-builder-shell"],
-      formSurfaceIds: ["footer-builder"],
-    },
   }),
   // Admin route surfaces: projects and construction tracking.
   defineProductSurfaceIdentity({
@@ -4079,10 +3912,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-project-create-editor",
       "admin-project-edit-editor",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["projects-hub"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-residential-projects-collection",
@@ -4099,10 +3928,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-projects-hub",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["projects-residential-commercial"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-commercial-projects-collection",
@@ -4119,10 +3944,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-projects-hub",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["projects-residential-commercial"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-construction-updates-hub",
@@ -4134,10 +3955,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "admin-projects-hub",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["construction-updates-hub"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-locations-hub",
@@ -4154,10 +3971,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-districts-collection",
       "admin-sub-districts-collection",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-locations-hub"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-governorates-collection",
@@ -4174,10 +3987,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-project-locations-hub",
     nestedChildren: ["admin-governorate-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-locations"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-cities-collection",
@@ -4194,10 +4003,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-project-locations-hub",
     nestedChildren: ["admin-city-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-locations"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-districts-collection",
@@ -4214,10 +4019,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-project-locations-hub",
     nestedChildren: ["admin-district-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-locations"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-sub-districts-collection",
@@ -4234,10 +4035,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-project-locations-hub",
     nestedChildren: ["admin-sub-district-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-locations"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-create-editor",
@@ -4249,10 +4046,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-projects-hub",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-editor-pages"],
-      formSurfaceIds: ["projects-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-edit-editor",
@@ -4267,10 +4060,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-project-preview",
       "admin-project-tracking-workspace",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-editor-pages"],
-      formSurfaceIds: ["projects-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-preview",
@@ -4282,7 +4071,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "admin-project-edit-editor",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-workspace",
@@ -4299,10 +4087,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-project-tracking-profile-form",
       "admin-project-tracking-stage-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-construction-tracking"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-stage-workspace",
@@ -4320,10 +4104,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-project-tracking-items-collection",
       "admin-project-tracking-item-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-construction-tracking"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-item-workspace",
@@ -4340,10 +4120,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-project-tracking-updates-collection",
       "admin-project-tracking-update-form",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-construction-tracking"],
-      formSurfaceIds: [],
-    },
   }),
   // Admin route surfaces: reports, SEO, settings, integrations, and identity.
   defineProductSurfaceIdentity({
@@ -4359,10 +4135,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-report-detail",
       "admin-topics-without-image-report",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["reports-hub"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-report-detail",
@@ -4374,10 +4146,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "admin-reports-hub",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["reports-hub"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-topics-without-image-report",
@@ -4389,10 +4157,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["collection_runtime", "data_runtime"],
     nestedParent: "admin-reports-hub",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["topics-without-image-report"],
-      formSurfaceIds: ["activity-sitemap-media-commands"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-seo-meta-form",
@@ -4404,10 +4168,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["seo-meta-manager"],
-      formSurfaceIds: ["global-seo-settings"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-seo-redirects-collection",
@@ -4424,10 +4184,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: null,
     nestedChildren: ["admin-seo-redirect-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["seo-redirects"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-sitemap-console",
@@ -4439,10 +4195,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["sitemap-monitor"],
-      formSurfaceIds: ["activity-sitemap-media-commands"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-appearance-placeholder",
@@ -4450,14 +4202,10 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     route: "/admin/settings/appearance",
     sourceFiles: ["src/app/admin/settings/appearance/page.tsx"],
     productSurfaceKind: "placeholder",
-    workflowOwner: "admin_page_system",
+    workflowOwner: "settings_domain",
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["settings-pages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-general-settings-workspace",
@@ -4472,10 +4220,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-company-identity-form",
       "admin-maintenance-mode-console",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["settings-pages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-integrations-hub",
@@ -4490,10 +4234,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-integration-console",
       "admin-integrations-server-console",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["settings-pages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-integration-console",
@@ -4505,7 +4245,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-integrations-hub",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "admin-integrations-server-console",
@@ -4519,10 +4258,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-integrations-hub",
     nestedChildren: ["admin-integrations-server-credentials-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["integrations-server-configuration"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-settings-workspace",
@@ -4537,10 +4272,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-media-settings-form",
       "admin-media-recovery-console",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["settings-pages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-security-console",
@@ -4556,10 +4287,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-security-account-form",
       "admin-security-sessions-console",
     ],
-    adoptionBindings: {
-      collectionSurfaceIds: ["settings-pages"],
-      formSurfaceIds: ["security-settings"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-theme-placeholder",
@@ -4567,14 +4294,10 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     route: "/admin/settings/theme",
     sourceFiles: ["src/app/admin/settings/theme/page.tsx"],
     productSurfaceKind: "placeholder",
-    workflowOwner: "admin_page_system",
+    workflowOwner: "settings_domain",
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["settings-pages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-users-roles-collection",
@@ -4591,10 +4314,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: null,
     nestedChildren: ["admin-user-form"],
-    adoptionBindings: {
-      collectionSurfaceIds: ["users-and-roles"],
-      formSurfaceIds: ["users-and-roles"],
-    },
   }),
   // Public route surfaces.
   defineProductSurfaceIdentity({
@@ -4607,7 +4326,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-about-content",
@@ -4619,7 +4337,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-contact-content",
@@ -4631,7 +4348,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-dynamic-cms-content",
@@ -4643,7 +4359,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-media-center-hub",
@@ -4661,7 +4376,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "public-site-updates-discovery",
       "public-videos-discovery",
     ],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-gallery-discovery",
@@ -4673,7 +4387,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-media-center-hub",
     nestedChildren: ["public-gallery-detail"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-gallery-detail",
@@ -4685,7 +4398,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-gallery-discovery",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-news-discovery",
@@ -4697,7 +4409,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-media-center-hub",
     nestedChildren: ["public-news-detail"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-news-detail",
@@ -4709,7 +4420,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-news-discovery",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-press-discovery",
@@ -4721,7 +4431,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-media-center-hub",
     nestedChildren: ["public-press-detail"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-press-detail",
@@ -4733,7 +4442,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-press-discovery",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-site-updates-discovery",
@@ -4745,7 +4453,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-media-center-hub",
     nestedChildren: ["public-site-updates-detail"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-site-updates-detail",
@@ -4757,7 +4464,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-site-updates-discovery",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-videos-discovery",
@@ -4769,7 +4475,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-media-center-hub",
     nestedChildren: ["public-videos-detail"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-videos-detail",
@@ -4781,7 +4486,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-videos-discovery",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-projects-discovery",
@@ -4793,7 +4497,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: ["public-project-detail"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-project-detail",
@@ -4805,7 +4508,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-projects-discovery",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-topics-discovery",
@@ -4817,7 +4519,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: ["public-topic-detail"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-topic-detail",
@@ -4829,7 +4530,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-topics-discovery",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-project-tracking-entry",
@@ -4841,7 +4541,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: ["public-project-tracking-detail"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-project-tracking-detail",
@@ -4853,7 +4552,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-project-tracking-entry",
     nestedChildren: [],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   defineProductSurfaceIdentity({
     id: "public-maintenance-gateway",
@@ -4865,7 +4563,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: null,
     nestedChildren: ["public-maintenance-authentication"],
-    adoptionBindings: NO_PRODUCT_ADOPTION_BINDINGS,
   }),
   // Nested product surfaces owned by existing route surfaces.
   defineProductSurfaceIdentity({
@@ -4874,14 +4571,10 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     route: null,
     sourceFiles: ["src/components/admin/dashboard/AdminDashboardView.tsx"],
     productSurfaceKind: "dashboard",
-    workflowOwner: "admin_dashboard",
+    workflowOwner: "dashboard_domain",
     runtimeOwners: ["not_applicable"],
     nestedParent: "admin-dashboard",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["dashboard-recent-content"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-usage-panel",
@@ -4895,10 +4588,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime"],
     nestedParent: "admin-media-library",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["activity-sitemap-media-commands"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-breadcrumb-block-create-form",
@@ -4912,10 +4601,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-breadcrumb-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["block-template-create-modals"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-cards-block-create-form",
@@ -4929,10 +4614,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-cards-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["block-template-create-modals"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-content-block-create-form",
@@ -4946,10 +4627,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-content-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["block-template-create-modals"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-cta-block-create-form",
@@ -4963,10 +4640,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-cta-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["block-template-create-modals"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-feed-block-create-form",
@@ -4980,10 +4653,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-feed-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["block-template-create-modals"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-hero-block-create-form",
@@ -4997,10 +4666,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-hero-blocks-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["block-template-create-modals"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-menu-quick-create-form",
@@ -5012,10 +4677,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-menus-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["menu-quick-create"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-menu-items-collection",
@@ -5031,10 +4692,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-menu-builder",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["menu-items"],
-      formSurfaceIds: ["menu-builder"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-menu-item-form",
@@ -5046,10 +4703,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-menu-builder",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["menu-builder"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-page-quick-create-form",
@@ -5061,10 +4714,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-page-definitions-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["pages-quick-create"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-page-composition-builder",
@@ -5076,10 +4725,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-page-composition-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["page-composition-and-seo"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-page-block-assignments-collection",
@@ -5097,10 +4742,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     ],
     nestedParent: "admin-page-composition-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["page-block-assignments"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-page-block-assignment-form",
@@ -5114,10 +4755,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-page-composition-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["page-composition-and-seo"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-page-seo-form",
@@ -5129,10 +4766,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-page-composition-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["page-composition-and-seo"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-footer-fixed-slots-builder",
@@ -5144,10 +4777,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-footer-builder",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["footer-fixed-slots"],
-      formSurfaceIds: ["footer-builder"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-footer-manual-links-collection",
@@ -5159,10 +4788,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-footer-builder",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["footer-manual-links"],
-      formSurfaceIds: ["footer-builder"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-footer-link-form",
@@ -5174,10 +4799,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-footer-builder",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["footer-builder"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-governorate-form",
@@ -5191,10 +4812,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-governorates-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["project-locations-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-city-form",
@@ -5208,10 +4825,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-cities-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["project-locations-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-district-form",
@@ -5225,10 +4838,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-districts-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["project-locations-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-sub-district-form",
@@ -5242,10 +4851,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-sub-districts-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["project-locations-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-stages-collection",
@@ -5259,11 +4864,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["collection_runtime", "data_runtime", "feedback_runtime"],
     nestedParent: "admin-project-tracking-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-construction-tracking"],
-      collectionConsumerIds: ["project-tracking-stages"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-profile-form",
@@ -5275,10 +4875,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-project-tracking-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["project-tracking-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-stage-form",
@@ -5290,10 +4886,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-project-tracking-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["project-tracking-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-items-collection",
@@ -5307,11 +4899,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["collection_runtime", "data_runtime", "feedback_runtime"],
     nestedParent: "admin-project-tracking-stage-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-construction-tracking"],
-      collectionConsumerIds: ["project-tracking-items"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-item-form",
@@ -5323,10 +4910,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-project-tracking-stage-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["project-tracking-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-updates-collection",
@@ -5340,11 +4923,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["collection_runtime", "data_runtime", "feedback_runtime"],
     nestedParent: "admin-project-tracking-item-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["project-construction-tracking"],
-      collectionConsumerIds: ["project-tracking-updates"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-project-tracking-update-form",
@@ -5359,10 +4937,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-project-tracking-item-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["project-tracking-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-seo-redirect-form",
@@ -5374,10 +4948,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-seo-redirects-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["redirects-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-company-identity-form",
@@ -5389,10 +4959,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-general-settings-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["company-identity-settings"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-maintenance-mode-console",
@@ -5404,10 +4970,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-general-settings-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["maintenance-immediate-setting"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-integrations-server-credentials-form",
@@ -5421,10 +4983,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-integrations-server-console",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["integrations-server-configuration"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-settings-form",
@@ -5436,10 +4994,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-media-settings-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["media-library-settings"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-media-recovery-console",
@@ -5451,10 +5005,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-media-settings-workspace",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: ["media-recovery-queue"],
-      formSurfaceIds: [],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-security-password-form",
@@ -5466,10 +5016,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-security-console",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["security-settings"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-security-account-form",
@@ -5481,10 +5027,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-security-console",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["security-settings"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-security-sessions-console",
@@ -5496,10 +5038,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-security-console",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["security-settings"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "admin-user-form",
@@ -5511,10 +5049,6 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-users-roles-collection",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["users-create-edit"],
-    },
   }),
   defineProductSurfaceIdentity({
     id: "public-maintenance-authentication",
@@ -5526,9 +5060,5 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     runtimeOwners: ["not_applicable"],
     nestedParent: "public-maintenance-gateway",
     nestedChildren: [],
-    adoptionBindings: {
-      collectionSurfaceIds: [],
-      formSurfaceIds: ["authentication-login"],
-    },
   }),
 ] as const satisfies readonly ProductSurfaceIdentity[];

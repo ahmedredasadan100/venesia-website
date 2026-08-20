@@ -2,10 +2,9 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
-import { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } from "../src/lib/admin/form-system/adoption-manifest.ts";
 import {
-  ADMIN_COLLECTION_SURFACE_ADOPTION,
   ADMIN_INTERACTION_MODULES,
   PRODUCT_SURFACE_IDENTITIES,
   PRODUCT_SURFACE_TYPE_DEFINITIONS,
@@ -14,11 +13,19 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const APP_ROOT = resolve(ROOT, "src/app");
+const TSCONFIG = resolve(ROOT, "tsconfig.json");
 const BUILD_ROUTE_MANIFEST = resolve(
   ROOT,
   ".next/app-path-routes-manifest.json",
 );
 const VERIFY_BUILD = process.argv.includes("--build");
+const tsconfig = ts.readConfigFile(TSCONFIG, ts.sys.readFile);
+assert.equal(tsconfig.error, undefined, "tsconfig.json must be readable");
+const compilerOptions = ts.parseJsonConfigFileContent(
+  tsconfig.config,
+  ts.sys,
+  ROOT,
+).options;
 
 type DiscoveredRoute = {
   route: string;
@@ -61,6 +68,56 @@ function discoverRoutes(): DiscoveredRoute[] {
       return { route: routeFromPageSource(sourceFile), sourceFile };
     })
     .sort((left, right) => left.route.localeCompare(right.route));
+}
+
+function normalizedAbsolutePath(sourceFile: string) {
+  return resolve(ROOT, sourceFile).replaceAll("\\", "/").toLowerCase();
+}
+
+const dependencyCache = new Map<string, readonly string[]>();
+
+function localSourceDependencies(sourceFile: string) {
+  const absolutePath = resolve(ROOT, sourceFile);
+  const cached = dependencyCache.get(absolutePath);
+  if (cached) return cached;
+
+  const dependencies: string[] = [];
+  dependencyCache.set(absolutePath, dependencies);
+  if (!existsSync(absolutePath) || absolutePath.includes("node_modules")) {
+    return dependencies;
+  }
+
+  const source = readFileSync(absolutePath, "utf8");
+  for (const importedFile of ts.preProcessFile(source, true, true)
+    .importedFiles) {
+    const resolvedModule = ts.resolveModuleName(
+      importedFile.fileName,
+      absolutePath,
+      compilerOptions,
+      ts.sys,
+    ).resolvedModule?.resolvedFileName;
+    if (
+      resolvedModule &&
+      !resolvedModule.includes("node_modules") &&
+      !resolvedModule.endsWith(".d.ts")
+    ) {
+      dependencies.push(resolvedModule);
+    }
+  }
+  return dependencies;
+}
+
+function reachableSources(sourceFiles: readonly string[]) {
+  const reachable = new Set<string>();
+  const pending = sourceFiles.map((sourceFile) => resolve(ROOT, sourceFile));
+  while (pending.length > 0) {
+    const sourceFile = pending.pop()!;
+    const normalized = normalizedAbsolutePath(sourceFile);
+    if (reachable.has(normalized)) continue;
+    reachable.add(normalized);
+    pending.push(...localSourceDependencies(sourceFile));
+  }
+  return reachable;
 }
 
 function routeCoverageFailures(
@@ -112,6 +169,7 @@ const identityIds = identities.map((surface) => surface.id);
 const identitiesById = new Map(
   identities.map((surface) => [surface.id, surface]),
 );
+const reachableSourcesByIdentity = new Map<string, ReadonlySet<string>>();
 const discoveredRoutes = discoverRoutes();
 const adminRoutes = discoveredRoutes.filter(
   (surface) =>
@@ -201,10 +259,13 @@ for (const surface of identities) {
   const independentIdentity = surface as ProductSurfaceIdentity &
     Record<string, unknown>;
   for (const forbiddenAxis of [
+    "runtimeClassification",
     "workflowClassification",
+    "capability",
     "collectionAdoption",
     "capabilityAudit",
     "formClassification",
+    "adoptionBindings",
   ]) {
     assert.ok(
       !(forbiddenAxis in independentIdentity),
@@ -248,6 +309,19 @@ for (const surface of identities) {
       parent.nestedChildren.includes(surface.id),
       `${surface.id} parent does not declare the reciprocal child`,
     );
+    if (surface.scope === "nested_surface") {
+      let reachable = reachableSourcesByIdentity.get(parent.id);
+      if (!reachable) {
+        reachable = reachableSources(parent.sourceFiles);
+        reachableSourcesByIdentity.set(parent.id, reachable);
+      }
+      for (const sourceFile of surface.sourceFiles) {
+        assert.ok(
+          reachable.has(normalizedAbsolutePath(sourceFile)),
+          `${surface.id} source ${sourceFile} is not executable from parent ${parent.id}`,
+        );
+      }
+    }
   }
   for (const childId of surface.nestedChildren) {
     const child = identitiesById.get(childId);
@@ -276,73 +350,6 @@ for (const runtimeOwner of unique(
     `Unknown or non-Runtime Product Surface owner: ${runtimeOwner}`,
   );
 }
-
-const collectionSurfaceIds = new Set<string>(
-  ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.map((surface) => surface.id),
-);
-const collectionConsumerIds = new Set<string>(
-  ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.flatMap((surface) =>
-    surface.consumerAdoptionEvidence.map((consumer) => consumer.id),
-  ),
-);
-const formSurfaceIds = new Set<string>(
-  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.map((surface) => surface.id),
-);
-const boundCollectionSurfaceIds = new Set(
-  identities.flatMap(
-    (surface) => surface.adoptionBindings.collectionSurfaceIds,
-  ),
-);
-const boundCollectionConsumerIds = new Set(
-  identities.flatMap(
-    (surface) => surface.adoptionBindings.collectionConsumerIds ?? [],
-  ),
-);
-const boundFormSurfaceIds = new Set(
-  identities.flatMap((surface) => surface.adoptionBindings.formSurfaceIds),
-);
-
-for (const boundId of boundCollectionSurfaceIds) {
-  assert.ok(
-    collectionSurfaceIds.has(boundId),
-    `Unknown Collection adoption binding ${boundId}`,
-  );
-}
-for (const boundId of boundCollectionConsumerIds) {
-  assert.ok(
-    collectionConsumerIds.has(boundId),
-    `Unknown Collection consumer binding ${boundId}`,
-  );
-}
-for (const boundId of boundFormSurfaceIds) {
-  assert.ok(
-    formSurfaceIds.has(boundId),
-    `Unknown Form adoption binding ${boundId}`,
-  );
-}
-assert.deepEqual(
-  sorted(
-    [...collectionSurfaceIds].filter(
-      (id) => !boundCollectionSurfaceIds.has(id),
-    ),
-  ),
-  [],
-  "Every Collection adoption surface must map to an explicit Product Identity",
-);
-assert.deepEqual(
-  sorted(
-    [...collectionConsumerIds].filter(
-      (id) => !boundCollectionConsumerIds.has(id),
-    ),
-  ),
-  [],
-  "Every nested Collection consumer must map to an explicit Product Identity",
-);
-assert.deepEqual(
-  sorted([...formSurfaceIds].filter((id) => !boundFormSurfaceIds.has(id))),
-  [],
-  "Every Form adoption surface must map to an explicit Product Identity",
-);
 
 if (VERIFY_BUILD) {
   assert.ok(
@@ -380,6 +387,27 @@ const countsByKind = Object.fromEntries(
         .length,
     ]),
 );
+assert.ok(
+  Object.values(countsByKind).every((count) => count > 0),
+  "Every declared Product Surface Type must own at least one executable identity",
+);
+
+const productIntents = Object.values(PRODUCT_SURFACE_TYPE_DEFINITIONS).map(
+  (definition) => definition.productIntent,
+);
+const lifecycleSignatures = Object.values(PRODUCT_SURFACE_TYPE_DEFINITIONS).map(
+  (definition) => JSON.stringify(definition.userLifecycle),
+);
+assert.equal(
+  productIntents.length,
+  new Set(productIntents).size,
+  "Product Surface Types cannot duplicate Product Intent",
+);
+assert.equal(
+  lifecycleSignatures.length,
+  new Set(lifecycleSignatures).size,
+  "Product Surface Types cannot duplicate User Lifecycle",
+);
 
 console.log("Product Surface Identity\n");
 console.log(
@@ -392,11 +420,12 @@ console.log(
 );
 console.log(`Total identities ......... ${identities.length} PASS`);
 console.log(`Parent/child graph ........ PASS`);
+console.log(`Nested source reachability . PASS`);
+console.log(`Type usage/minimality ..... PASS`);
 console.log(`Runtime ownership ......... PASS`);
 console.log(`Workflow ownership ........ PASS`);
-console.log(`Collection adoption links . ${collectionSurfaceIds.size} PASS`);
-console.log(`Nested consumer links ..... ${collectionConsumerIds.size} PASS`);
-console.log(`Form adoption links ....... ${formSurfaceIds.size} PASS`);
+console.log(`Capability separation ..... PASS`);
+console.log(`Adoption independence ..... PASS`);
 console.log(`Fail-closed route probe ... PASS`);
 console.log(
   `Build reachability ........ ${VERIFY_BUILD ? "PASS" : "SKIPPED (use --build)"}`,

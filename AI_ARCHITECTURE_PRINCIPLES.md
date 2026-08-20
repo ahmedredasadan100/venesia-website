@@ -3,7 +3,7 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.3.0
+> **Version:** 3.3.1
 > **Effective date:** 2026-08-20
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
@@ -722,6 +722,8 @@ Product Identity, Runtime, Capability, and Adoption are independent governance a
 - Adoption answers how a consumer binds to an existing owner.
 
 No axis may be inferred from another. In particular, Collection/Form adoption or a technical workflow classification MUST NOT be used as proof that a surface is a Hub, Dashboard, Builder, Form, Editor, or another Product Type.
+
+Product Identity records MUST NOT carry Adoption or Capability registrations. Cross-axis ledgers keep their own owners and guards; explicit Runtime and Workflow ownership records current execution responsibility but never determines Product Kind.
 
 ## 5.21 Generic Gap
 
@@ -2840,8 +2842,10 @@ The existing interaction adoption manifest also owns the Product Surface Identit
 - register independently governed nested surfaces;
 - declare one Product Surface Kind, Product Intent, User Lifecycle, Workflow Owner, and explicit Runtime Owners for every surface;
 - declare parent and child relationships bidirectionally;
+- prove every nested identity source is reachable from its declared parent through the executable import graph;
 - fail closed when a route or governed nested consumer is added without identity;
 - remain independent from Runtime classification, Capability applicability, and Adoption state;
+- contain no Adoption or Capability registration ids;
 - preserve Collection, Form, and specialized owners without creating a Product Runtime or parallel registry.
 
 ## 19.6 No Screen-by-Screen Rebuild
@@ -5410,6 +5414,12 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.3.1 — 2026-08-20
+
+- Removed cross-axis Adoption registration ids from Product Identity records and verification.
+- Required executable nested-source reachability and non-empty, lifecycle-distinct Product Types.
+- Normalized Dashboard and Settings placeholder Workflow ownership to their existing domain owners.
 
 ## 3.3.0 — 2026-08-20
 
