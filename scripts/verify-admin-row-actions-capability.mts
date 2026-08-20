@@ -17,6 +17,7 @@ import {
   resolveAdminEntityListInteractionState,
   resolveAdminInstantMutationInteraction,
 } from "../src/lib/admin/entity-list/data-engine/interaction-state.ts";
+import { ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS } from "../src/lib/admin/entity-list/types.ts";
 import {
   ADMIN_CURRENT_SHARED_CAPABILITY_SET,
   ADMIN_INTERACTION_MODULES,
@@ -711,6 +712,9 @@ const CANONICAL_COLUMN_PREFERENCES_OWNER =
   "src/lib/admin/preferences/admin-column-preferences.ts";
 const CANONICAL_PRIMARY_COLUMN_OWNER =
   "src/components/admin/ui/AdminDataGrid.tsx";
+const PRIMARY_COLUMN_PRESENTATIONS: ReadonlySet<string> = new Set(
+  ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS,
+);
 
 function normalizeSourcePath(sourceFile: string) {
   return sourceFile.replaceAll("\\", "/");
@@ -1141,38 +1145,69 @@ function evidenceGraphCallsCanonicalImport(
   });
 }
 
-function evidenceGraphUsesPrimaryColumnPreset(
+type PrimaryColumnPresentationDeclaration = {
+  sourceFile: string;
+  line: number;
+  declaresPrimary: boolean;
+  presentation: string | null;
+};
+
+function collectPrimaryColumnPresentationDeclarations(
   graph: ReadonlyMap<string, string>,
 ) {
-  return [...graph].some(([sourceFile, source]) => {
-    if (sourceFile === CANONICAL_PRIMARY_COLUMN_OWNER) return false;
+  return [...graph].flatMap(([sourceFile, source]) => {
+    if (sourceFile === CANONICAL_PRIMARY_COLUMN_OWNER) return [];
     const parsed = parseEvidenceSource(sourceFile, source);
-    let used = false;
+    const declarations: PrimaryColumnPresentationDeclaration[] = [];
+    const propertyAssignment = (node: ts.ObjectLiteralExpression, name: string) =>
+      node.properties.find(
+        (property): property is ts.PropertyAssignment =>
+          ts.isPropertyAssignment(property) &&
+          property.name.getText(parsed) === name,
+      );
     const visit = (node: ts.Node) => {
-      if (
-        ts.isPropertyAccessExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS"
-      ) {
-        used = true;
-        return;
+      if (ts.isObjectLiteralExpression(node)) {
+        const primary = propertyAssignment(node, "primary");
+        const presentation = propertyAssignment(
+          node,
+          "primaryPresentation",
+        );
+        const declaresPrimary =
+          primary?.initializer.kind === ts.SyntaxKind.TrueKeyword;
+        if (declaresPrimary || presentation) {
+          const position = parsed.getLineAndCharacterOfPosition(
+            node.getStart(parsed),
+          );
+          declarations.push({
+            sourceFile,
+            line: position.line + 1,
+            declaresPrimary,
+            presentation:
+              presentation && ts.isStringLiteral(presentation.initializer)
+                ? presentation.initializer.text
+                : null,
+          });
+        }
       }
-      if (
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        [
-          "getAdminDataGridPrimaryColumnWidth",
-          "getAdminDataGridHierarchyPrimaryColumnWidth",
-        ].includes(node.expression.text)
-      ) {
-        used = true;
-        return;
-      }
-      if (!used) ts.forEachChild(node, visit);
+      ts.forEachChild(node, visit);
     };
     visit(parsed);
-    return used;
+    return declarations;
   });
+}
+
+function evidenceGraphAdoptsPrimaryColumnPresentationContract(
+  graph: ReadonlyMap<string, string>,
+) {
+  const declarations = collectPrimaryColumnPresentationDeclarations(graph);
+  return (
+    declarations.some((declaration) => declaration.declaresPrimary) &&
+    declarations.every(
+      (declaration) =>
+        declaration.declaresPrimary &&
+        PRIMARY_COLUMN_PRESENTATIONS.has(declaration.presentation ?? ""),
+    )
+  );
 }
 
 function evidenceGraphUsesBulkMutationLifecycle(
@@ -2107,6 +2142,14 @@ const categoriesListSource = read(paths.categoriesList);
 const categoriesColumnsSource = read(paths.categoriesColumns);
 const seriesColumnsSource = read(paths.series);
 const projectsColumnsSource = read(paths.projects);
+const primaryColumnPresentationGraph = new Map(
+  collectTsxFiles(join(ROOT, "src")).map((sourceFile) => [
+    relativeSourceFile(sourceFile),
+    readFileSync(sourceFile, "utf8"),
+  ]),
+);
+const primaryColumnPresentationDeclarations =
+  collectPrimaryColumnPresentationDeclarations(primaryColumnPresentationGraph);
 
 check(
   "shared Row Actions geometry fixes three compact buttons at 144px",
@@ -2223,22 +2266,67 @@ check(
   "shared primary-column contract budgets 200px before ellipsis",
   dataGridSource.includes("textBudgetPx: 200") &&
     dataGridSource.includes("ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS") &&
+    dataGridSource.includes("ADMIN_DATA_GRID_PRIMARY_PRESENTATION_CONTRACT") &&
+    dataGridSource.includes("getAdminDataGridPrimaryPresentationStyle") &&
     dataGridSource.includes("textOnly:") &&
     dataGridSource.includes("compactIcon:") &&
     dataGridSource.includes("standardIcon:"),
 );
 check(
-  "Topics, Series, Projects, and Pages consume shared primary presets",
+  "Topics, Series, Projects, and Pages consume explicit primary presentations and shared sizing presets",
   topicsColumnsSource.includes(
     "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.compactIcon",
   ) &&
+    topicsColumnsSource.includes('primaryPresentation: "compact-icon"') &&
     seriesColumnsSource.includes(
       "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon",
     ) &&
+    seriesColumnsSource.includes('primaryPresentation: "standard-icon"') &&
     projectsColumnsSource.includes(
       "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon",
     ) &&
-    pagesSource.includes("ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly"),
+    projectsColumnsSource.includes('primaryPresentation: "standard-icon"') &&
+    pagesSource.includes("ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly") &&
+    pagesSource.includes('primaryPresentation: "text-only"'),
+);
+check(
+  "every primary-column declaration adopts exactly one supported presentation",
+  primaryColumnPresentationDeclarations.length > 0 &&
+    primaryColumnPresentationDeclarations.every(
+      (declaration) =>
+        declaration.declaresPrimary &&
+        PRIMARY_COLUMN_PRESENTATIONS.has(declaration.presentation ?? ""),
+    ),
+);
+check(
+  "primary presentation proof fails when one declaration is missing even if a sibling is valid",
+  !evidenceGraphAdoptsPrimaryColumnPresentationContract(
+    new Map([
+      [
+        "primary-presentation-mixed-fixture.tsx",
+        'const columns = [{ primary: true, primaryPresentation: "text-only" }, { primary: true }];',
+      ],
+    ]),
+  ),
+);
+check(
+  "primary presentation proof uses explicit semantics instead of numeric width equality",
+  evidenceGraphAdoptsPrimaryColumnPresentationContract(
+    new Map([
+      [
+        "primary-presentation-numeric-fixture.tsx",
+        'const columns = [{ primary: true, primaryPresentation: "text-only", minWidth: 380, width: 440 }];',
+      ],
+    ]),
+  ) &&
+    !evidenceGraphAdoptsPrimaryColumnPresentationContract(
+      new Map([
+        [
+          "primary-presentation-invalid-fixture.tsx",
+          'const columns = [{ primary: true, primaryPresentation: "wide", minWidth: 240, width: 240 }];',
+        ],
+      ]),
+    ),
 );
 check(
   "Categories derives one hierarchy-aware width from maximum visible depth",
@@ -2846,7 +2934,7 @@ function collectFullAdoptionContractFailures(
       "saveAdminColumnPreferences",
       CANONICAL_COLUMN_PREFERENCES_OWNER,
     ) ||
-    !evidenceGraphUsesPrimaryColumnPreset(sourceGraph)
+    !evidenceGraphAdoptsPrimaryColumnPresentationContract(sourceGraph)
   ) {
     failures.push("columns");
   }

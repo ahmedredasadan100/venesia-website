@@ -85,6 +85,7 @@ function createRedirectColumns(input: {
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
       sticky: "start",
       primary: true,
+      primaryPresentation: "text-only",
       renderCell: ({ row }) => (
         <span className="block break-all text-right font-en text-sm text-white">
           {row.source_path}

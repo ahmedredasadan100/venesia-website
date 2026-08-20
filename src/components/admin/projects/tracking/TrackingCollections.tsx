@@ -381,6 +381,7 @@ export function TrackingStagesCollection({
         sortable: true,
         sortKey: "name",
         primary: true,
+        primaryPresentation: "text-only",
         sticky: "start",
         minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
         width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
@@ -895,9 +896,10 @@ export function TrackingItemsCollection({
         sortable: true,
         sortKey: "name",
         primary: true,
+        primaryPresentation: "text-only",
         sticky: "start",
-        minWidth: 380,
-        width: 440,
+        minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
+        width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
         flexible: true,
         renderCell: ({ row }) => (
           <Link
@@ -1374,6 +1376,7 @@ export function TrackingUpdatesCollection({
         sortable: true,
         sortKey: "title",
         primary: true,
+        primaryPresentation: "text-only",
         sticky: "start",
         minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
         width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
