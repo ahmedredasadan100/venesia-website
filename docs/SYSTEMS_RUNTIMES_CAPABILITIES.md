@@ -15,6 +15,22 @@ This document is an operational map. It does not override the architecture const
 > Shared Components render and collect intent.
 > Systems organize contracts, adoption, tests, and closure.
 
+Product Surface Identity is a separate classification axis. It records what
+the user entered a route or nested surface to do; it does not own execution.
+Runtime, Capability, and Adoption remain independent axes and cannot be used to
+infer Product Identity.
+
+The executable Product Surface Identity ledger lives inside the existing
+`src/lib/admin/interaction-system/adoption-manifest.ts` owner. It registers
+Admin routes, public routes, governed nested surfaces, Workflow Owners, Runtime
+Owners, and reciprocal parent/child relationships. No Product Runtime, second
+manifest, or parallel registry exists.
+
+Identity records contain no Collection/Form Adoption ids and no Capability
+registrations. Those axes retain their own ledgers and guards. Runtime Owners
+are recorded only as current execution ownership and cannot determine Product
+Kind.
+
 ## 2. Top-level system map
 
 | System / bounded area           | Purpose                                                                                        | Primary owners                                            | Must not become                                               |

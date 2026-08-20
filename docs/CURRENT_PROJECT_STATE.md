@@ -9,34 +9,34 @@ This file records the minimum current facts needed to begin work safely. Archite
 
 ## Current official baseline
 
-The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified entering baseline for Platform Governance & Consistency Closure is:
+The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
 
 ```text
-30995731dc10a82216f170ffe33000cbcda807f3
+84d8356b7544f40d362a1674c4670930759c4e8d
 ```
 
-Verified before the implementation branch was created on 2026-08-20:
+Verified before the final Product Surface Identity re-alignment on 2026-08-21:
 
-| Surface                                                  | SHA / state                                                                                                     |
-| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| Platform Governance & Consistency entering baseline      | `30995731dc10a82216f170ffe33000cbcda807f3`                                                                      |
-| Phase-start local `main` / `origin/main` / GitHub `main` | `30995731dc10a82216f170ffe33000cbcda807f3`                                                                      |
-| Delivery state                                           | Independent implementation phase; merge and Production closure remain unclaimed until their separate gates pass |
+| Surface                       | SHA / state                                                                                                                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current official baseline     | `84d8356b7544f40d362a1674c4670930759c4e8d`                                                                                                                              |
+| `origin/main` / GitHub `main` | `84d8356b7544f40d362a1674c4670930759c4e8d`                                                                                                                              |
+| Delivery state                | Platform Governance, Presentation, and Executable Governance are merged; Product Surface Identity remains a PR #118 candidate until its merge and Production gates pass |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-Current `main` remains the only official entering baseline. The Platform Governance & Consistency implementation is a candidate delta from that exact baseline; its branch or PR is not architecture authority unless merged. This snapshot does not reopen closed Architecture, historical Technical Debt, or completed phases.
+Current `main` remains the only official entering baseline. Product Surface Identity is a candidate delta from that exact baseline; its branch or PR is not architecture authority unless merged. This snapshot does not reopen closed Architecture, historical Technical Debt, or completed phases.
 
 ## Active phase
 
-- **Title:** Platform Governance & Consistency Closure
-- **Baseline:** `30995731dc10a82216f170ffe33000cbcda807f3`, verified as local `main`, `origin/main`, and GitHub `main` at phase start.
-- **Status:** Implementation closure candidate. Source Proof covers every registered consumer; final CI, Product Review, PR checks, merge, deployment, and Production remain separate claims until actually proven.
-- **Scope:** close Consumer inventory, capability-exception governance, shared Listbox/Switch adoption, column-preference rollback/runtime consistency, shared behavior ownership, and executable governance/runtime/capability guards.
-- **Boundaries:** no new Runtime, Capability, System, Source of Truth, Product rule, Auth rule, schema, migration, or Production mutation is introduced.
-- **Delivery:** the phase remains independent from Entity List Platform Hardening and every previous closed phase.
+- **Title:** Product Surface Identity
+- **Baseline:** live GitHub `main` at `84d8356b7544f40d362a1674c4670930759c4e8d`
+- **Status:** implementation, final consistency correction, and local verification are complete on PR #118; Ready for Review, not merged, and not production authority.
+- **Scope:** classify every Admin/public route and governed nested surface without changing Runtime, Capability, Adoption, Product Behavior, or domain rules.
+- **Boundaries:** do not reopen Architecture, historical PRs, or old Technical Debt without current-`main` regression evidence and an explicit scoped request.
+- **Delivery:** every future phase must independently prove local `main` = `origin/main` = GitHub `main` before implementation.
 
 ## Current architecture truth
 
@@ -51,6 +51,7 @@ Current `main` remains the only official entering baseline. The Platform Governa
 - The official Pages Collection read model is the only Pages list path and exposes its existing assignment aggregate as `moduleCount` through the shared output contract.
 - Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
+- Product Identity, Runtime, Capability, and Adoption are four independent governance axes. The existing interaction adoption manifest contains the typed Product Surface Identity ledger; its records contain no Adoption or Capability registration ids, and Product Kind is never inferred from Runtime ownership, `workflowClassification`, Collection/Form adoption, or capability applicability.
 - Generic Bulk selection, presentation, intent, and confirmation requests remain with the Collection owner. Bulk pending, blocking, optimistic state, snapshot, rollback, reconciliation, and invalidation are owned only by the existing Data Runtime; domain actions retain business operation, eligibility, atomicity, and persistence.
 - Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. The current matrix has 11 Full Adoption claims and 0 Partial Adoption entries; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
 - The Consumer Capability Adoption Audit derives 18 axes from the Current Shared Capability Set and covers 61 registered Collection/Form consumer records. Every `src/app/admin/**/page.tsx` source has executable inventory coverage; nested consumer graphs stop at separately registered presentation boundaries.
