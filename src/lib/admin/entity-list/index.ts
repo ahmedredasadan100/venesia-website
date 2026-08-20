@@ -4,6 +4,7 @@ export type {
   AdminEntityColumnDef,
   AdminEntityColumnPreferencePayload,
   AdminEntityColumnSticky,
+  AdminEntityPrimaryColumnPresentation,
   AdminEntityFeedbackMapper,
   AdminEntityFilterDef,
   AdminEntityFilterGroup,
@@ -16,6 +17,11 @@ export type {
   AdminEntitySearchConfig,
   AdminEntitySearchSuggestion,
   AdminEntitySearchSuggestionsConfig,
+} from "./types";
+
+export {
+  ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS,
+  isAdminEntityPrimaryColumnPresentation,
 } from "./types";
 
 export {

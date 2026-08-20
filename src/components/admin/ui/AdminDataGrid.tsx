@@ -7,6 +7,7 @@ import type {
   Ref,
   RefObject,
 } from "react";
+import type { AdminEntityPrimaryColumnPresentation } from "../../../lib/admin/entity-list";
 import AdminCheckbox from "./AdminCheckbox";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 
@@ -235,6 +236,39 @@ export const ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS = {
   compactIcon: getAdminDataGridPrimaryColumnWidth({ iconPx: 28 }),
   standardIcon: getAdminDataGridPrimaryColumnWidth({ iconPx: 40 }),
 } as const;
+
+export const ADMIN_DATA_GRID_PRIMARY_PRESENTATION_CONTRACT = {
+  "text-only": {
+    cellInlinePaddingPx:
+      ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textOnlyCellInlinePaddingPx,
+  },
+  "compact-icon": {
+    cellInlinePaddingPx:
+      ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.cellInlinePaddingPx,
+  },
+  "standard-icon": {
+    cellInlinePaddingPx:
+      ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.cellInlinePaddingPx,
+  },
+  hierarchy: {
+    cellInlinePaddingPx:
+      ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.cellInlinePaddingPx,
+  },
+} as const satisfies Record<
+  AdminEntityPrimaryColumnPresentation,
+  { cellInlinePaddingPx: number }
+>;
+
+export function getAdminDataGridPrimaryPresentationStyle(
+  presentation: AdminEntityPrimaryColumnPresentation,
+) {
+  const { cellInlinePaddingPx } =
+    ADMIN_DATA_GRID_PRIMARY_PRESENTATION_CONTRACT[presentation];
+  return {
+    paddingInlineStart: cellInlinePaddingPx,
+    paddingInlineEnd: cellInlinePaddingPx,
+  };
+}
 
 export const ADMIN_DATA_GRID_RULES = {
   actionOrder: ["edit", "preview", "more"],

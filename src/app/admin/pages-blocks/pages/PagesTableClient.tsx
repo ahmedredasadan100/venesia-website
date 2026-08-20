@@ -224,6 +224,7 @@ function createPageColumns(
       minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly + 40,
       sticky: "start",
       primary: true,
+      primaryPresentation: "text-only",
       renderCell: ({ row }) => (
         <Link
           href={`/admin/pages-blocks/pages/${row.id}`}

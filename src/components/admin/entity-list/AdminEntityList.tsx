@@ -7,6 +7,7 @@ import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminInstantMutationBulkInteraction } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
   getDefaultVisibleColumnKeys,
+  isAdminEntityPrimaryColumnPresentation,
   resolveAdminEntityListEmptyState,
   resolveActiveSortColumnKey,
   sanitizeVisibleColumnKeys,
@@ -158,6 +159,24 @@ function assertAdminEntityListContracts<
   if (primaryColumns.length !== 1) {
     throw new Error(
       `[AdminEntityList:${input.listId}] exactly one primary column is required.`,
+    );
+  }
+  if (
+    !isAdminEntityPrimaryColumnPresentation(
+      primaryColumns[0]?.primaryPresentation,
+    )
+  ) {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] the primary column must explicitly declare a supported primaryPresentation.`,
+    );
+  }
+  const nonPrimaryPresentationColumn = input.columns.find(
+    (column) =>
+      column.primary !== true && "primaryPresentation" in column,
+  );
+  if (nonPrimaryPresentationColumn) {
+    throw new Error(
+      `[AdminEntityList:${input.listId}] only the primary column may declare primaryPresentation.`,
     );
   }
   if (primaryColumns[0]?.sticky !== "start") {

@@ -171,6 +171,7 @@ function createReportColumns(): AdminEntityColumnDef<
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
       sticky: "start",
       primary: true,
+      primaryPresentation: "standard-icon",
       renderCell: ({ row }) => (
         <div className="flex min-w-0 items-center gap-3">
           <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl">

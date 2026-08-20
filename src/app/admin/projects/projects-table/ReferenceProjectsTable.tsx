@@ -230,6 +230,7 @@ export function createProjectColumns(
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon,
       sticky: "start",
       primary: true,
+      primaryPresentation: "standard-icon",
       renderCell: ({ row }) => (
         <Link
           href={`/admin/projects/${row.id}`}

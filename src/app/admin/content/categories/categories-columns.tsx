@@ -141,6 +141,7 @@ export function createCategoryColumns(
       flexible: true,
       sticky: "start",
       primary: true,
+      primaryPresentation: "hierarchy",
       renderCell: ({ row }) => {
         const expanded = tree.isExpanded(row.id);
         return (

@@ -108,6 +108,7 @@ function createAdminUserColumns(input: {
       minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
       primary: true,
+      primaryPresentation: "text-only",
       sticky: "start",
       renderCell: ({ row }) => (
         <span className="block text-right font-semibold text-white">

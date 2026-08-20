@@ -308,6 +308,7 @@ export function createSeriesColumns(
       flexible: true,
       sticky: "start",
       primary: true,
+      primaryPresentation: "standard-icon",
       renderCell: ({ row }) => {
         const content = (
           <>

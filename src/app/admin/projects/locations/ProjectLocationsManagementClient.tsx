@@ -231,6 +231,7 @@ function createColumns(input: {
       width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly,
       sticky: "start",
       primary: true,
+      primaryPresentation: "text-only",
       renderCell: ({ row }) => (
         <span className="block truncate text-right font-semibold text-white">
           {displayName(row.name_ar, row.name_en)}

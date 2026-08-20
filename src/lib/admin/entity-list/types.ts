@@ -8,7 +8,24 @@ import type { AdminActionFeedbackKind } from "../admin-action-feedback";
 export type AdminEntityColumnSticky = "start" | "end-adjacent" | "end";
 export type AdminEntityColumnAlignment = "start" | "center" | "end";
 
-export type AdminEntityColumnDef<
+export const ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS = [
+  "text-only",
+  "compact-icon",
+  "standard-icon",
+  "hierarchy",
+] as const;
+export type AdminEntityPrimaryColumnPresentation =
+  (typeof ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS)[number];
+
+export function isAdminEntityPrimaryColumnPresentation(
+  value: unknown,
+): value is AdminEntityPrimaryColumnPresentation {
+  return ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS.some(
+    (presentation) => presentation === value,
+  );
+}
+
+type AdminEntityColumnBase<
   TRow,
   TKey extends string = string,
   TSortKey extends string = string,
@@ -26,10 +43,25 @@ export type AdminEntityColumnDef<
   /** Logical alignment; defaults to start for the primary column and center otherwise. */
   align?: AdminEntityColumnAlignment;
   sticky?: AdminEntityColumnSticky;
-  /** When true, cell is treated as the primary identity cell (sticky start after selection). */
-  primary?: boolean;
   renderCell: (ctx: AdminEntityCellContext<TRow>) => ReactNode;
 };
+
+export type AdminEntityColumnDef<
+  TRow,
+  TKey extends string = string,
+  TSortKey extends string = string,
+> = AdminEntityColumnBase<TRow, TKey, TSortKey> &
+  (
+    | {
+        /** The primary identity cell is sticky start and adopts one explicit shared presentation. */
+        primary: true;
+        primaryPresentation: AdminEntityPrimaryColumnPresentation;
+      }
+    | {
+        primary?: false;
+        primaryPresentation?: never;
+      }
+  );
 
 export type AdminEntityCellContext<TRow> = {
   row: TRow;

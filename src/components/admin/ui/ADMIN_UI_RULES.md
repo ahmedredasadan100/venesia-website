@@ -83,7 +83,15 @@ const columns = `${ADMIN_DATA_GRID_COLUMNS.checkbox} ${ADMIN_DATA_GRID_COLUMNS.p
 
 النطاق المعتمد لـ V1: `Pages` · `Menus` · `PageBlocks` فقط. أي توسيع لاحق يتم عبر جلسة `Admin Data Grid Contract Rollout — Batch 1`.
 
-### 1.e) Admin Data Grid Bulk Actions Rule
+### 1.e) Entity List Primary Presentation Contract
+
+Every `AdminEntityList` primary column must declare all three identity properties: `primary: true`, `sticky: "start"`, and one explicit `primaryPresentation` value.
+
+The supported shared variants are `text-only`, `compact-icon`, `standard-icon`, and `hierarchy`. Column `minWidth` and `width` values control track sizing only; they must never be used to infer padding, icon, hierarchy, or any other presentation behavior. Consumers may select a shared variant, but must not recreate its cell inset with local CSS or wrappers.
+
+The executable presentation guards inspect every `primary: true` declaration. A valid sibling declaration in the same source file cannot mask a missing or invalid declaration.
+
+### 1.f) Admin Data Grid Bulk Actions Rule
 
 - لا يتم استخدام checkbox كديكور فقط داخل أي Data Grid.
 - أي جدول يحتوي checkbox يجب أن يملك selection behavior واضحًا (عبر `useAdminGridSelection` أو `useAdminTable`).

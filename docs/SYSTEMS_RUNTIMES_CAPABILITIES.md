@@ -46,12 +46,13 @@ Owns:
 - search, filter, sort, pagination, and page-size intent;
 - selection;
 - visible-column interaction;
+- explicit primary-column identity and adoption of one shared presentation variant;
 - row/bulk action presentation;
 - URL-state integration;
 - empty/loading/error presentation contract;
 - floating-layer behavior for list controls.
 
-Does not own SQL, cache implementation, domain eligibility, storage, or form state.
+Does not own SQL, cache implementation, domain eligibility, storage, or form state. Numeric column widths own track geometry only; they never select presentation behavior. `AdminEntityColumnDef` declares the primary presentation, `AdminDataGrid` owns the variant-to-visual mapping, and `AdminEntityListTable` applies that mapping for every consumer.
 
 ### Data Runtime
 

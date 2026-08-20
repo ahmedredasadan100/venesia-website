@@ -98,6 +98,82 @@ function findAdminEntityListConsumers(directory = resolve(ROOT, "src")) {
   return consumers;
 }
 
+function collectPrimaryColumnPresentationDeclarations(
+  source,
+  sourcePath = "primary-column-presentation-fixture.tsx",
+) {
+  const sourceFile = ts.createSourceFile(
+    sourcePath,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    sourcePath.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
+  );
+  const declarations = [];
+
+  function propertyAssignment(node, name) {
+    return node.properties.find(
+      (property) =>
+        ts.isPropertyAssignment(property) &&
+        property.name.getText(sourceFile) === name,
+    );
+  }
+
+  function visit(node) {
+    if (ts.isObjectLiteralExpression(node)) {
+      const primary = propertyAssignment(node, "primary");
+      const presentation = propertyAssignment(node, "primaryPresentation");
+      const declaresPrimary =
+        primary?.initializer.kind === ts.SyntaxKind.TrueKeyword;
+      if (declaresPrimary || presentation) {
+        const position = sourceFile.getLineAndCharacterOfPosition(
+          node.getStart(sourceFile),
+        );
+        declarations.push({
+          sourcePath,
+          line: position.line + 1,
+          declaresPrimary,
+          presentation:
+            presentation && ts.isStringLiteral(presentation.initializer)
+              ? presentation.initializer.text
+              : null,
+        });
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return declarations;
+}
+
+function findPrimaryColumnPresentationDeclarations(
+  directory = resolve(ROOT, "src"),
+) {
+  const declarations = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = resolve(directory, entry.name);
+    if (entry.isDirectory()) {
+      declarations.push(...findPrimaryColumnPresentationDeclarations(path));
+      continue;
+    }
+    if (
+      !entry.isFile() ||
+      (!entry.name.endsWith(".ts") && !entry.name.endsWith(".tsx")) ||
+      entry.name.endsWith(".d.ts")
+    ) {
+      continue;
+    }
+    declarations.push(
+      ...collectPrimaryColumnPresentationDeclarations(
+        readFileSync(path, "utf8"),
+        path,
+      ),
+    );
+  }
+  return declarations;
+}
+
 function findJsxUsages(componentName, directory = resolve(ROOT, "src")) {
   const usages = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -180,6 +256,15 @@ coreFiles.forEach((path) =>
 
 const entityList = read("src/components/admin/entity-list/AdminEntityList.tsx");
 const entityTable = read("src/components/admin/entity-list/AdminEntityListTable.tsx");
+const entityTypes = read("src/lib/admin/entity-list/types.ts");
+const primaryPresentationContractSource = entityTypes.match(
+  /ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS\s*=\s*\[([\s\S]*?)\]\s*as const/u,
+)?.[1] ?? "";
+const PRIMARY_COLUMN_PRESENTATIONS = new Set(
+  [...primaryPresentationContractSource.matchAll(/"([^"]+)"/gu)].map(
+    (match) => match[1],
+  ),
+);
 const entityFilters = read("src/components/admin/entity-list/AdminEntityListFilters.tsx");
 const entitySurface = read("src/components/admin/entity-list/AdminEntityListSurface.tsx");
 const metricCardsGrid = read("src/components/admin/ui/AdminMetricCardsGrid.tsx");
@@ -201,6 +286,8 @@ const activity = read("src/components/admin/ui/AdminActivityPopover.tsx");
 const emptyStateCore = read("src/lib/admin/entity-list/empty-state.ts");
 const listEmptyState = read("src/components/admin/ui/AdminListEmptyState.tsx");
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const primaryColumnPresentationDeclarations =
+  findPrimaryColumnPresentationDeclarations();
 const rowActions = read(
   "src/components/admin/ui/AdminDataGridRowActions.tsx",
 );
@@ -383,6 +470,12 @@ check(
 check(
   "Entity List declarations execute without implicit Primary or width precedence",
   entityList.includes("exactly one primary column is required") &&
+    entityList.includes(
+      "the primary column must explicitly declare a supported primaryPresentation",
+    ) &&
+    entityList.includes(
+      "only the primary column may declare primaryPresentation",
+    ) &&
     entityList.includes('must explicitly declare sticky: "start"') &&
     entityList.includes("column keys must be unique") &&
     entityList.includes("sticky end-adjacent columns must form one contiguous tail") &&
@@ -530,20 +623,66 @@ check(
 );
 
 check(
-  "Shared text-only primary preset owns its balanced logical inset once",
-  dataGrid.includes("textOnlyCellInlinePaddingPx: 20") &&
+  "Shared primary presentation contract owns logical inset independently from numeric width",
+  entityTypes.includes("ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS") &&
+    entityTypes.includes('"text-only"') &&
+    entityTypes.includes('"compact-icon"') &&
+    entityTypes.includes('"standard-icon"') &&
+    entityTypes.includes('"hierarchy"') &&
+    entityTypes.includes(
+      "primaryPresentation: AdminEntityPrimaryColumnPresentation",
+    ) &&
+    dataGrid.includes("textOnlyCellInlinePaddingPx: 20") &&
     dataGrid.includes(
       "ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textOnlyCellInlinePaddingPx * 2",
     ) &&
-    entityTable.includes("usesTextOnlyPrimaryPreset") &&
-    entityTable.includes(
-      "column.minWidth === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly",
+    dataGrid.includes("ADMIN_DATA_GRID_PRIMARY_PRESENTATION_CONTRACT") &&
+    dataGrid.includes("getAdminDataGridPrimaryPresentationStyle") &&
+    entityTable.includes("column.primaryPresentation") &&
+    entityTable.includes("getAdminDataGridPrimaryPresentationStyle") &&
+    entityTable.includes("if (!column.primary) return trackStyle") &&
+    !entityTable.includes("usesTextOnlyPrimaryPreset") &&
+    !entityTable.includes(
+      "column.minWidth === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS",
     ) &&
-    entityTable.includes(
-      "column.width === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly",
+    !entityTable.includes(
+      "column.width === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS",
+    ),
+);
+
+check(
+  "Every primary-column consumer explicitly adopts one supported presentation",
+  primaryColumnPresentationDeclarations.length > 0 &&
+    primaryColumnPresentationDeclarations.every(
+      (declaration) =>
+        declaration.declaresPrimary &&
+        PRIMARY_COLUMN_PRESENTATIONS.has(declaration.presentation),
+    ),
+);
+
+const missingPrimaryPresentationFixture =
+  collectPrimaryColumnPresentationDeclarations(
+    'const columns = [{ primary: true, minWidth: 240, renderCell: () => null }];',
+  );
+const invalidPrimaryPresentationFixture =
+  collectPrimaryColumnPresentationDeclarations(
+    'const columns = [{ primary: true, primaryPresentation: "wide", minWidth: 240, renderCell: () => null }];',
+  );
+const nonPrimaryPresentationFixture =
+  collectPrimaryColumnPresentationDeclarations(
+    'const columns = [{ primaryPresentation: "text-only", minWidth: 240, renderCell: () => null }];',
+  );
+
+check(
+  "Primary presentation guard rejects missing, invalid, and non-primary declarations",
+  missingPrimaryPresentationFixture.length === 1 &&
+    missingPrimaryPresentationFixture[0].presentation === null &&
+    invalidPrimaryPresentationFixture.length === 1 &&
+    !PRIMARY_COLUMN_PRESENTATIONS.has(
+      invalidPrimaryPresentationFixture[0].presentation,
     ) &&
-    entityTable.includes("paddingInlineStart:") &&
-    entityTable.includes("paddingInlineEnd:"),
+    nonPrimaryPresentationFixture.length === 1 &&
+    !nonPrimaryPresentationFixture[0].declaresPrimary,
 );
 
 check(
