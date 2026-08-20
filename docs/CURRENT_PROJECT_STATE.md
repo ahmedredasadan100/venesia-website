@@ -17,11 +17,11 @@ e7a041982c0a816f14a264181f17ce41af7652c9
 
 Verified after PR #100 merged on 2026-08-15:
 
-| Surface | SHA / state |
-|---|---|
-| Platform Performance Optimization merge | `e7a041982c0a816f14a264181f17ce41af7652c9` |
-| Post-merge local `main` / `origin/main` / GitHub `main` | `e7a041982c0a816f14a264181f17ce41af7652c9` |
-| Delivery state | PR #100 merged; the implementation branch is no longer an active authority |
+| Surface                                                 | SHA / state                                                                |
+| ------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Platform Performance Optimization merge                 | `e7a041982c0a816f14a264181f17ce41af7652c9`                                 |
+| Post-merge local `main` / `origin/main` / GitHub `main` | `e7a041982c0a816f14a264181f17ce41af7652c9`                                 |
+| Delivery state                                          | PR #100 merged; the implementation branch is no longer an active authority |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
@@ -52,26 +52,27 @@ The Platform Health implementation and `DEBT-TYPE-01` closure were delivered thr
 - Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
 - Generic Bulk selection, presentation, intent, and confirmation requests remain with the Collection owner. Bulk pending, blocking, optimistic state, snapshot, rollback, reconciliation, and invalidation are owned only by the existing Data Runtime; domain actions retain business operation, eligibility, atomicity, and persistence.
-- Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. The current matrix has 10 Full Adoption claims and 0 Partial Adoption entries; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
+- Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. The current matrix has 11 Full Adoption claims and 0 Partial Adoption entries; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
 - Governorates, Cities, Districts, and Sub-districts share the Location Collection/Data contracts. Their optional columns, preferences, primary Name preset, sorting, pagination, and Row Actions are shared; Bulk is explicitly `not_required`, and delete eligibility is projected by the Location contract/adapter while the guarded RPC remains final enforcement.
 - Existing `/images/**` and `/files/**` values are an explicit read-compatibility boundary for live content, not a write owner and not permission for filesystem uploads in Production.
 - Public navigation API/layout consumers share the current public navigation owner, which applies active-menu and published linked-target truth. Redirect resolution uses the current exact capped lookup; neither path may restore the superseded PR #82 read owners.
 - The existing Sitemap capability preserves valid entries when one source fails, reports the source failure through the current logging owner, and exposes one route output contract.
 - Public Topic pages have one page-level `h1`; Article Markdown headings are rendered under that page heading without changing stored Markdown or approved visual typography.
-- Browser verification uses the existing Playwright dependency through one formal configuration on port 3000. `verify:platform` derives route/page health from Next build manifests plus the existing public-route and Admin-navigation registries; authenticated state is supplied externally and absent state is reported as `SKIPPED / UNPROVEN`.
+- Browser verification uses the existing Playwright dependency through one formal configuration on port 3000. `verify:platform-contracts` compares all 22 Public and 67 Admin compiled page routes bidirectionally with the existing Public Route and Admin consumer registries; new unregistered routes and registrations without a compiled owner fail closed. `verify:platform` adds HTTP/auth-boundary evidence; authenticated state is supplied externally and absent state is reported as `SKIPPED / UNPROVEN`.
+- Consumer Capability Governance derives all 17 current axes from the existing Current Shared Capability Set across 61 registered Collection/Form consumers. Applicability is typed, every decision/override argument is explicit, and Source Proof resolves canonical executable bindings through an AST runtime import graph. Proof tokens, regex discovery, unused imports, filenames, comment markers, and absence-based applicability are not accepted by the governance gate.
 - Operational failures use the existing structured logger with context redaction, the Next.js server `onRequestError` hook, and public/Admin error boundaries. Vercel remains the current server-log sink; no external monitoring vendor has been selected.
 - GitHub CI uses PostgreSQL 17 for the Media Coordination, Dashboard Truth, and Reports Analytics service jobs. This alignment changes CI infrastructure only and does not change application behavior, schema, Supabase, or Vercel.
 - Existing Supabase admin clients adopt the generated `Database` contract. Compiler-visible table, relation, RPC, and JSON-boundary guards prevent consumers from restoring local result generics or broad database-result assertions; this is contract adoption, not a new Runtime or source of truth.
 
 ## Closed architecture phases since the previous state snapshot
 
-| Phase | Durable outcome |
-|---|---|
-| PRs #74–#81 | Medium hardening and Pages/Page Block shell, editor, assignment, feed-module, and presentation contracts merged on current owners. |
-| PR #83 | Unified public content search adopted the current entity-neutral public content read owner. |
-| PR #84 | The remaining valid PR #82 delta was reimplemented on the then-current `main` inside current owners and guarded by `verify:pr-82-delta-recovery`. |
-| PR #82 | Closed unmerged as superseded by PR #84; its old baseline, owners, contracts, and superseded implementations are not architecture authority. |
-| PR #85 | GitHub Actions PostgreSQL service jobs aligned with Production PostgreSQL 17; no product or schema change. |
+| Phase       | Durable outcome                                                                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PRs #74–#81 | Medium hardening and Pages/Page Block shell, editor, assignment, feed-module, and presentation contracts merged on current owners.                |
+| PR #83      | Unified public content search adopted the current entity-neutral public content read owner.                                                       |
+| PR #84      | The remaining valid PR #82 delta was reimplemented on the then-current `main` inside current owners and guarded by `verify:pr-82-delta-recovery`. |
+| PR #82      | Closed unmerged as superseded by PR #84; its old baseline, owners, contracts, and superseded implementations are not architecture authority.      |
+| PR #85      | GitHub Actions PostgreSQL service jobs aligned with Production PostgreSQL 17; no product or schema change.                                        |
 
 ## Closed Platform Health phase
 

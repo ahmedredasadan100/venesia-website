@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8").replace(/\r\n?/g, "\n");
+import { ADMIN_COLLECTION_SURFACE_ADOPTION } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
+
+const read = (path: string) =>
+  readFileSync(resolve(process.cwd(), path), "utf8").replace(/\r\n?/g, "\n");
 let passed = 0;
 const check = (label: string, value: unknown) => {
   assert.ok(value, label);
@@ -51,9 +54,7 @@ const actions = read("src/app/admin/projects/tracking-actions.ts");
 check(
   "Tracking remains an independent graph and never mutates the Project aggregate schema",
   !/alter\s+table\s+(?:public\.)?projects\b/i.test(foundationMigration) &&
-    !/create\s+table\s+(?:public\.)?projects\b/i.test(
-      foundationMigration,
-    ) &&
+    !/create\s+table\s+(?:public\.)?projects\b/i.test(foundationMigration) &&
     [
       "project_tracking_stages",
       "project_tracking_items",
@@ -165,12 +166,11 @@ check(
     (adminCollections.match(
       /listId="project-tracking-(?:stages|items)"[\s\S]{0,140}sizingStrategy=\{\{ mode: "flexible", columnKey: "name" \}\}/g,
     )?.length ?? 0) === 2 &&
-  (adminCollections.match(
-    /key: "visibility"[\s\S]{0,180}sticky: "end-adjacent"/g,
-  )?.length ?? 0) === 2 &&
     (adminCollections.match(
-      /key: "order"[\s\S]{0,180}sticky: "end-adjacent"/g,
+      /key: "visibility"[\s\S]{0,180}sticky: "end-adjacent"/g,
     )?.length ?? 0) === 2 &&
+    (adminCollections.match(/key: "order"[\s\S]{0,180}sticky: "end-adjacent"/g)
+      ?.length ?? 0) === 2 &&
     entityListTable.includes('column.sticky === "end-adjacent"') &&
     entityListTable.includes("const stickyEndOffsets = new Map") &&
     entityListTable.includes(
@@ -199,25 +199,30 @@ check(
 );
 check(
   "each Tracking Collection consumer carries independent applicability and Source Proof",
-  [
-    "project-tracking-stages",
-    "project-tracking-items",
-    "project-tracking-updates",
-  ].every((id) => adoptionManifest.includes(`id: "${id}"`)) &&
-    (adoptionManifest.match(/sourceProofTokens:/g)?.length ?? 0) >= 11 &&
-    adoptionManifest.includes(
-      'dataRegistryEntities: ["project_tracking_stages"]',
-    ) &&
-    adoptionManifest.includes(
-      'dataRegistryEntities: ["project_tracking_items"]',
-    ) &&
-    adoptionManifest.includes(
-      'dataRegistryEntities: ["project_tracking_updates"]',
-    ),
+  (() => {
+    const tracking = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.find(
+      (surface) => surface.id === "project-construction-tracking",
+    );
+    const expected = new Map([
+      ["project-tracking-stages", "project_tracking_stages"],
+      ["project-tracking-items", "project_tracking_items"],
+      ["project-tracking-updates", "project_tracking_updates"],
+    ]);
+    return (
+      tracking?.consumerAdoptionEvidence.length === expected.size &&
+      tracking.consumerAdoptionEvidence.every(
+        (consumer) =>
+          consumer.applicability.phase === "capability_applicability" &&
+          consumer.executableBindings.length > 0 &&
+          consumer.dataRegistryEntities.length === 1 &&
+          expected.get(consumer.id) === consumer.dataRegistryEntities[0],
+      )
+    );
+  })(),
 );
 check(
   "Date and Calendar truth is owner_extension_required and no prohibited shared owner was introduced",
-  formManifest.includes('date_picker: {') &&
+  formManifest.includes("date_picker: {") &&
     formManifest.includes('state: "owner_extension_required"') &&
     adminForms.includes('type="date"') &&
     !adminForms.includes("AdminDatePickerField") &&
