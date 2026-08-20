@@ -243,7 +243,27 @@ check("SEO counter counts every typed character while standards ignore edge padd
 check("publish validation enforces the final 60 and 160 ceilings through the shared contract", !contentReviewCapability.includes("> 70") && !contentReviewCapability.includes("> 170") && contentReviewCapability.includes("ENTITY_SEO_LIMITS.title.max") && contentReviewCapability.includes("ENTITY_SEO_LIMITS.description.max") && saveAction.includes("getPublishBlockingChecks(payload)") && saveAction.includes("getDraftBlockingChecks(payload)") && helpers.includes("readEntitySeoFormData(formData)"));
 
 check("topic switches are a thin adapter over the one shared switch DOM contract", formSwitch.match(/<AdminFormSwitch\b/g)?.length === 1 && !formSwitch.includes("<input") && !formSwitch.includes('role="switch"') && !formSwitch.includes("uncheckedValue") && ["id={id}", "name={name}", "label={label}", "defaultChecked={defaultChecked}", "surface={surface}", "disabled={disabled}"].every((marker) => formSwitch.includes(marker)) && formSwitch.includes("ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME"));
-check("the shared switch alone owns checkbox and controlled or uncontrolled semantics", sharedFormSwitch.match(/type="checkbox"/g)?.length === 1 && sharedFormSwitch.includes("{uncheckedValue !== undefined ? (") && sharedFormSwitch.includes('<input type="hidden" name={name} value={uncheckedValue} />') && ["id={id}", 'type="checkbox"', 'role="switch"', "name={name}", "defaultChecked={checked === undefined ? defaultChecked : undefined}", "checked={checked}", "onChange={onChange}", "disabled={disabled}", "value={value}", "aria-describedby={describedBy}"].every((marker) => sharedFormSwitch.includes(marker)));
+check(
+  "the shared switch alone owns checkbox and controlled or uncontrolled semantics",
+  sharedFormSwitch.match(/type="checkbox"/g)?.length === 1 &&
+    sharedFormSwitch.includes("name?: string") &&
+    sharedFormSwitch.includes("{name && uncheckedValue !== undefined ? (") &&
+    sharedFormSwitch.includes(
+      '<input type="hidden" name={name} value={uncheckedValue} />',
+    ) &&
+    [
+      "id={id}",
+      'type="checkbox"',
+      'role="switch"',
+      "name={name}",
+      "defaultChecked={checked === undefined ? defaultChecked : undefined}",
+      "checked={checked}",
+      "onChange={onChange}",
+      "disabled={disabled}",
+      "value={value}",
+      "aria-describedby={describedBy}",
+    ].every((marker) => sharedFormSwitch.includes(marker)),
+);
 check("publishing and display controls preserve field parity through shared owners", publishingOptions.match(/<AdminFormSwitch\b/g)?.length === 1 && !/<AdminFormSwitch\b/.test(displaySettings) && ["is_featured", "is_popular"].every((name) => publishingOptions.includes(`name="${name}"`)) && publishingOptions.includes('name="status"') && ["show_title_on_page", "show_image_on_page", "show_excerpt_on_page"].every((name) => displaySettings.includes(`name="${name}"`)));
 check("publishing decisions form two grouped cards inside the four-unit responsive dashboard", ["publication-schedule", "featured-popular"].every((id) => publishingOptions.includes(`id="${id}"`)) && sharedReview.includes("md:grid-cols-2") && sharedReview.includes("lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1.15fr)_minmax(0,0.85fr)_minmax(0,1fr)]") && publishingOptions.includes('name="status"') && publishingOptions.includes('name="is_featured"') && publishingOptions.includes('name="is_popular"') && publishingOptions.includes("TopicDateLabelField"));
 const dateLabelTrigger = publishingDateField.match(/<button\b(?=[^>]*data-topic-date-picker-trigger="label")[\s\S]*?<\/button>/)?.[0] ?? "";

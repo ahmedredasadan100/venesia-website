@@ -28,6 +28,7 @@ import {
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminFormError,
+  AdminFormListboxSelect,
   AdminFormRuntime,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
@@ -108,8 +109,10 @@ export default function ContentBlocksTableClient({
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const createRuntimeRef = useRef<AdminFormRuntimeHandle>(null);
-  const columnConfig = getPageCompositionColumnPreferenceConfig("contentTemplates");
-  const defaultColumns = getPageCompositionDefaultColumnKeys("contentTemplates");
+  const columnConfig =
+    getPageCompositionColumnPreferenceConfig("contentTemplates");
+  const defaultColumns =
+    getPageCompositionDefaultColumnKeys("contentTemplates");
   const [visibleColumns, setVisibleColumns] = useState(() =>
     normalizePageCompositionVisibleColumnKeys(
       "contentTemplates",
@@ -125,9 +128,13 @@ export default function ContentBlocksTableClient({
       [
         ADMIN_DATA_GRID_COLUMNS.checkbox,
         ADMIN_DATA_GRID_COLUMNS.primaryCompact,
-        visibleColumnSet.has("slug") ? ADMIN_DATA_GRID_COLUMNS.slugCompact : null,
+        visibleColumnSet.has("slug")
+          ? ADMIN_DATA_GRID_COLUMNS.slugCompact
+          : null,
         visibleColumnSet.has("variant") ? "96px" : null,
-        visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusStandard : null,
+        visibleColumnSet.has("status")
+          ? ADMIN_DATA_GRID_COLUMNS.statusStandard
+          : null,
         visibleColumnSet.has("updatedAt") ? "120px" : null,
         ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
       ]
@@ -160,46 +167,52 @@ export default function ContentBlocksTableClient({
   useEffect(() => {
     setTableRows(instant.rows);
   }, [instant.rows, setTableRows]);
-  const filters = useMemo<readonly AdminEntityFilterDef[]>(() => [
-    {
-      id: "content-blocks-status",
-      paramKey: "status",
-      label: "الحالة",
-      type: "status",
-      allValue: "all",
-      placeholder: "الحالة",
-      options: [...new Set(rows.map((row) => row.status))].map((value) => ({
-        value,
-        label: statusMeta(value).label,
-      })),
-    },
-    {
-      id: "content-blocks-variant",
-      paramKey: "variant",
-      label: "النمط",
-      type: "single_select",
-      allValue: "all",
-      placeholder: "النمط",
-      options: VARIANT_OPTIONS.map(([value, label]) => ({ value, label })),
-    },
-  ], [rows]);
-  const queryContract = useMemo<AdminBoundedClientQueryContract<ContentBlockRow>>(
+  const filters = useMemo<readonly AdminEntityFilterDef[]>(
+    () => [
+      {
+        id: "content-blocks-status",
+        paramKey: "status",
+        label: "الحالة",
+        type: "status",
+        allValue: "all",
+        placeholder: "الحالة",
+        options: [...new Set(rows.map((row) => row.status))].map((value) => ({
+          value,
+          label: statusMeta(value).label,
+        })),
+      },
+      {
+        id: "content-blocks-variant",
+        paramKey: "variant",
+        label: "النمط",
+        type: "single_select",
+        allValue: "all",
+        placeholder: "النمط",
+        options: VARIANT_OPTIONS.map(([value, label]) => ({ value, label })),
+      },
+    ],
+    [rows],
+  );
+  const queryContract = useMemo<
+    AdminBoundedClientQueryContract<ContentBlockRow>
+  >(
     () => ({
       mode: "bounded-client",
       search: { minLength: 1 },
       filters,
       matchesRow: (row, query) => {
-      const status = query.filters.status;
-      const variant = query.filters.variant;
-      if (
-        query.search &&
-        !adminCollectionSearchIncludes(
-          `${row.name} ${row.slug} ${row.description ?? ""}`,
-          query.search,
+        const status = query.filters.status;
+        const variant = query.filters.variant;
+        if (
+          query.search &&
+          !adminCollectionSearchIncludes(
+            `${row.name} ${row.slug} ${row.description ?? ""}`,
+            query.search,
+          )
         )
-      ) return false;
-      if (status !== "all" && row.status !== status) return false;
-      return variant === "all" || row.variant === variant;
+          return false;
+        if (status !== "all" && row.status !== status) return false;
+        return variant === "all" || row.variant === variant;
       },
       getRowId: (row) => row.id,
     }),
@@ -215,7 +228,10 @@ export default function ContentBlocksTableClient({
   const status = pagination.filterValues.status;
   const variant = pagination.filterValues.variant;
   const paginatedRows = pagination.rows;
-  const visibleIds = useMemo(() => paginatedRows.map((row) => row.id), [paginatedRows]);
+  const visibleIds = useMemo(
+    () => paginatedRows.map((row) => row.id),
+    [paginatedRows],
+  );
   const selection = useAdminGridSelection<number>(visibleIds);
   const loadFeedback = useMemo(
     () =>
@@ -232,7 +248,11 @@ export default function ContentBlocksTableClient({
     [loadError],
   );
   const mediaWarningNotice = useMemo(
-    () => <MediaSynchronizationWarningNotice visible={mediaSynchronizationWarning} />,
+    () => (
+      <MediaSynchronizationWarningNotice
+        visible={mediaSynchronizationWarning}
+      />
+    ),
     [mediaSynchronizationWarning],
   );
 
@@ -256,12 +276,29 @@ export default function ContentBlocksTableClient({
         },
       });
       publishFeedback(
-        { variant: "success", title: "تم تنفيذ الإجراء", message: successMessage, layout: "inline", dismissible: true, lifecycle: "manual" },
+        {
+          variant: "success",
+          title: "تم تنفيذ الإجراء",
+          message: successMessage,
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
         { channel: feedbackChannel, placement: "inline" },
       );
     } catch (error) {
       publishFeedback(
-        { variant: "danger", title: "تعذر تنفيذ الإجراء", message: error instanceof Error ? error.message : "تعذر تنفيذ العملية. حاول مرة أخرى.", layout: "inline", dismissible: true, lifecycle: "manual" },
+        {
+          variant: "danger",
+          title: "تعذر تنفيذ الإجراء",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          layout: "inline",
+          dismissible: true,
+          lifecycle: "manual",
+        },
         { channel: feedbackChannel, placement: "inline", reveal: true },
       );
     }
@@ -339,7 +376,7 @@ export default function ContentBlocksTableClient({
         eyebrow="إدارة الموديولات"
         title="إدارة بلوكات المحتوى"
         description="قوالب المحتوى النصي القابلة لإعادة الاستخدام والربط بالصفحات."
-        actions={(
+        actions={
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
@@ -349,7 +386,7 @@ export default function ContentBlocksTableClient({
             <PlusIcon />
             إضافة بلوك
           </button>
-        )}
+        }
       />
 
       <div className="space-y-4">
@@ -381,7 +418,11 @@ export default function ContentBlocksTableClient({
 
         <AdminEntityListFilters
           basePath={MODULE_PATH}
-          search={{ value: search, placeholder: "ابحث باسم البلوك أو المعرّف الداخلي…", minLength: 1 }}
+          search={{
+            value: search,
+            placeholder: "ابحث باسم البلوك أو المعرّف الداخلي…",
+            minLength: 1,
+          }}
           filters={filters}
           values={{ status, variant }}
           columnsControl={
@@ -391,10 +432,7 @@ export default function ContentBlocksTableClient({
               defaultColumns={defaultColumns}
               onChange={setVisibleColumns}
               onPersist={(next) =>
-                savePageCompositionColumnPreferences(
-                  "contentTemplates",
-                  next,
-                )
+                savePageCompositionColumnPreferences("contentTemplates", next)
               }
               onRestore={() =>
                 restorePageCompositionColumnPreferences("contentTemplates")
@@ -436,7 +474,13 @@ export default function ContentBlocksTableClient({
                       }
                       cache.patchRows((candidate) =>
                         idSet.has(candidate.id)
-                          ? { ...candidate, status: action === "publish" ? "published" : "unpublished" }
+                          ? {
+                              ...candidate,
+                              status:
+                                action === "publish"
+                                  ? "published"
+                                  : "unpublished",
+                            }
                           : candidate,
                       );
                     },
@@ -445,18 +489,42 @@ export default function ContentBlocksTableClient({
                       formData.set("bulk_action", action);
                       ids.forEach((id) => formData.append("ids", String(id)));
                       await bulkContentBlocks(formData);
-                      return { ok: true as const, message: "تم تنفيذ العملية الجماعية بنجاح." };
+                      return {
+                        ok: true as const,
+                        message: "تم تنفيذ العملية الجماعية بنجاح.",
+                      };
                     },
                   });
                   publishFeedback(
-                    { variant: "success", title: "تم تنفيذ الإجراء", message: "تم تنفيذ العملية الجماعية بنجاح.", layout: "inline", dismissible: true, lifecycle: "manual" },
+                    {
+                      variant: "success",
+                      title: "تم تنفيذ الإجراء",
+                      message: "تم تنفيذ العملية الجماعية بنجاح.",
+                      layout: "inline",
+                      dismissible: true,
+                      lifecycle: "manual",
+                    },
                     { channel: feedbackChannel, placement: "inline" },
                   );
                   selection.clearSelection();
                 } catch (error) {
                   publishFeedback(
-                    { variant: "danger", title: "تعذر تنفيذ الإجراء", message: error instanceof Error ? error.message : "تعذر تنفيذ العملية.", layout: "inline", dismissible: true, lifecycle: "manual" },
-                    { channel: feedbackChannel, placement: "inline", reveal: true },
+                    {
+                      variant: "danger",
+                      title: "تعذر تنفيذ الإجراء",
+                      message:
+                        error instanceof Error
+                          ? error.message
+                          : "تعذر تنفيذ العملية.",
+                      layout: "inline",
+                      dismissible: true,
+                      lifecycle: "manual",
+                    },
+                    {
+                      channel: feedbackChannel,
+                      placement: "inline",
+                      reveal: true,
+                    },
                   );
                   if (action === "delete") throw error;
                 }
@@ -472,39 +540,56 @@ export default function ContentBlocksTableClient({
               <AdminDataGridCheckbox
                 inputRef={selection.selectAllRef}
                 checked={selection.allSelected}
-                onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
+                onChange={(event) =>
+                  selection.toggleAll(event.currentTarget.checked)
+                }
                 label="تحديد الكل"
               />
             </AdminDataGridCheckboxCell>
             <AdminDataGridPrimaryCell>
-              <AdminDataGridSortLabel {...sortProps("name")} className="justify-end">
+              <AdminDataGridSortLabel
+                {...sortProps("name")}
+                className="justify-end"
+              >
                 الاسم
               </AdminDataGridSortLabel>
             </AdminDataGridPrimaryCell>
             {visibleColumnSet.has("slug") ? (
               <AdminDataGridCenterCell>
-                <AdminDataGridSortLabel {...sortProps("slug")} className="justify-center">
+                <AdminDataGridSortLabel
+                  {...sortProps("slug")}
+                  className="justify-center"
+                >
                   المعرّف
                 </AdminDataGridSortLabel>
               </AdminDataGridCenterCell>
             ) : null}
             {visibleColumnSet.has("variant") ? (
               <AdminDataGridCenterCell>
-                <AdminDataGridSortLabel {...sortProps("variant")} className="justify-center">
+                <AdminDataGridSortLabel
+                  {...sortProps("variant")}
+                  className="justify-center"
+                >
                   النمط
                 </AdminDataGridSortLabel>
               </AdminDataGridCenterCell>
             ) : null}
             {visibleColumnSet.has("status") ? (
               <AdminDataGridCenterCell>
-                <AdminDataGridSortLabel {...sortProps("status")} className="justify-center">
+                <AdminDataGridSortLabel
+                  {...sortProps("status")}
+                  className="justify-center"
+                >
                   الحالة
                 </AdminDataGridSortLabel>
               </AdminDataGridCenterCell>
             ) : null}
             {visibleColumnSet.has("updatedAt") ? (
               <AdminDataGridCenterCell>
-                <AdminDataGridSortLabel {...sortProps("updated_at")} className="justify-center">
+                <AdminDataGridSortLabel
+                  {...sortProps("updated_at")}
+                  className="justify-center"
+                >
                   التحديث
                 </AdminDataGridSortLabel>
               </AdminDataGridCenterCell>
@@ -515,7 +600,8 @@ export default function ContentBlocksTableClient({
           {paginatedRows.length ? (
             paginatedRows.map((row) => {
               const status = statusMeta(row.status);
-              const nextStatus = row.status === "published" ? "unpublished" : "published";
+              const nextStatus =
+                row.status === "published" ? "unpublished" : "published";
               const isPublished = row.status === "published";
               const hidden = { access: "hidden" as const };
               const interaction = instant.getRowInteraction(row.id);
@@ -529,7 +615,8 @@ export default function ContentBlocksTableClient({
                   edit: { access: "allowed", href: `${MODULE_PATH}/${row.id}` },
                   preview: {
                     access: "disabled",
-                    disabledReason: "المعاينة العامة تتطلب ربط القالب بصفحة عامة.",
+                    disabledReason:
+                      "المعاينة العامة تتطلب ربط القالب بصفحة عامة.",
                   },
                   information: {
                     access: "allowed",
@@ -538,7 +625,10 @@ export default function ContentBlocksTableClient({
                       { label: "المعرّف", value: row.slug },
                       { label: "النمط", value: variantLabel(row.variant) },
                       { label: "الحالة", value: status.label },
-                      { label: "آخر تحديث", value: formatAdminDateTime(row.updated_at) },
+                      {
+                        label: "آخر تحديث",
+                        value: formatAdminDateTime(row.updated_at),
+                      },
                     ],
                   },
                   copyPublicLink: hidden,
@@ -552,30 +642,39 @@ export default function ContentBlocksTableClient({
                     : {
                         access: "allowed",
                         isVisible: isPublished,
-                        onSelect: () =>
-                          runVisibilityMutation(row, nextStatus),
+                        onSelect: () => runVisibilityMutation(row, nextStatus),
                       },
                   featured: hidden,
                   duplicate: {
                     access: "allowed",
                     pending: pendingAction === "duplicate",
                     onSelect: () =>
-                      runRowMutation(row, "duplicate", async () => {
-                        const formData = new FormData();
-                        formData.set("id", String(row.id));
-                        await duplicateContentBlock(formData);
-                      }, "تم إنشاء نسخة من البلوك."),
+                      runRowMutation(
+                        row,
+                        "duplicate",
+                        async () => {
+                          const formData = new FormData();
+                          formData.set("id", String(row.id));
+                          await duplicateContentBlock(formData);
+                        },
+                        "تم إنشاء نسخة من البلوك.",
+                      ),
                   },
                   archive: hidden,
                   delete: {
                     access: "allowed",
                     pending: pendingAction === "delete",
                     onSelect: () =>
-                      runRowMutation(row, "delete", async () => {
-                        const formData = new FormData();
-                        formData.set("id", String(row.id));
-                        await deleteContentBlock(formData);
-                      }, "تم حذف البلوك."),
+                      runRowMutation(
+                        row,
+                        "delete",
+                        async () => {
+                          const formData = new FormData();
+                          formData.set("id", String(row.id));
+                          await deleteContentBlock(formData);
+                        },
+                        "تم حذف البلوك.",
+                      ),
                     confirmation: {
                       mode: "shared",
                       title: "تأكيد حذف البلوك",
@@ -591,7 +690,9 @@ export default function ContentBlocksTableClient({
                   <AdminDataGridCheckboxCell>
                     <AdminDataGridCheckbox
                       checked={selection.selectedSet.has(row.id)}
-                      onChange={(event) => selection.toggleOne(row.id, event.currentTarget.checked)}
+                      onChange={(event) =>
+                        selection.toggleOne(row.id, event.currentTarget.checked)
+                      }
                       label={`تحديد ${row.name}`}
                     />
                   </AdminDataGridCheckboxCell>
@@ -604,18 +705,24 @@ export default function ContentBlocksTableClient({
                       {row.name}
                     </Link>
                     {row.description ? (
-                      <p className="mt-1 truncate text-xs text-white/36">{row.description}</p>
+                      <p className="mt-1 truncate text-xs text-white/36">
+                        {row.description}
+                      </p>
                     ) : null}
                   </AdminDataGridPrimaryCell>
 
                   {visibleColumnSet.has("slug") ? (
                     <AdminDataGridCenterCell>
-                      <span className="font-en block truncate text-xs text-white/42">{row.slug}</span>
+                      <span className="font-en block truncate text-xs text-white/42">
+                        {row.slug}
+                      </span>
                     </AdminDataGridCenterCell>
                   ) : null}
 
                   {visibleColumnSet.has("variant") ? (
-                    <AdminDataGridCenterCell className="truncate text-sm text-white/55">{variantLabel(row.variant)}</AdminDataGridCenterCell>
+                    <AdminDataGridCenterCell className="truncate text-sm text-white/55">
+                      {variantLabel(row.variant)}
+                    </AdminDataGridCenterCell>
                   ) : null}
 
                   {visibleColumnSet.has("status") ? (
@@ -634,7 +741,10 @@ export default function ContentBlocksTableClient({
                     </AdminDataGridCenterCell>
                   ) : null}
 
-                  <AdminDataGridRowActions capability={capability} size="compact" />
+                  <AdminDataGridRowActions
+                    capability={capability}
+                    size="compact"
+                  />
                 </AdminDataGridRow>
               );
             })
@@ -683,7 +793,9 @@ export default function ContentBlocksTableClient({
                     fieldErrors.name?.length ? "border-red-400/40" : "",
                   )}
                   aria-invalid={Boolean(fieldErrors.name?.length)}
-                  aria-describedby={fieldErrors.name?.length ? "name-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.name?.length ? "name-error" : undefined
+                  }
                 />
                 <AdminFormError name="name" />
               </label>
@@ -697,24 +809,28 @@ export default function ContentBlocksTableClient({
                     `text-left font-en ${fieldErrors.slug?.length ? "border-red-400/40" : ""}`,
                   )}
                   aria-invalid={Boolean(fieldErrors.slug?.length)}
-                  aria-describedby={fieldErrors.slug?.length ? "slug-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.slug?.length ? "slug-error" : undefined
+                  }
                 />
                 <AdminFormError name="slug" />
               </label>
-              <label className={adminFormLabelClassName()}>
-                النمط
-                <select name="variant" defaultValue="default" className={adminFormFieldClassName()}>
-                  {VARIANT_OPTIONS.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <AdminFormListboxSelect
+                name="variant"
+                label="النمط"
+                defaultValue="default"
+                options={VARIANT_OPTIONS.map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+              />
               <input type="hidden" name="status" value="unpublished" />
               <input type="hidden" name="style_preset" value="premium-dark" />
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
-                <AdminModalCancelButton onClick={requestClose} disabled={pending}>
+                <AdminModalCancelButton
+                  onClick={requestClose}
+                  disabled={pending}
+                >
                   إلغاء
                 </AdminModalCancelButton>
                 <AdminModalPrimaryButton type="submit" disabled={pending}>

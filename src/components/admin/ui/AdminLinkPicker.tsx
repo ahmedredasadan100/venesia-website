@@ -13,8 +13,16 @@ import {
 } from "../../../lib/admin/links/actions";
 import { menuItemToAdminLink } from "../../../lib/admin/links/menu-bridge";
 import { adminLinkFromSearchResult } from "../../../lib/admin/links/serialize";
-import { pushRecentAdminLink, readRecentAdminLinks } from "../../../lib/admin/links/recent";
-import type { AdminLinkDisplay, AdminLinkValue, LinkSearchResult, LinkedResourceType } from "../../../lib/admin/links/types";
+import {
+  pushRecentAdminLink,
+  readRecentAdminLinks,
+} from "../../../lib/admin/links/recent";
+import type {
+  AdminLinkDisplay,
+  AdminLinkValue,
+  LinkSearchResult,
+  LinkedResourceType,
+} from "../../../lib/admin/links/types";
 import { AdminMediaPickerModal } from "../media";
 import {
   AdminModalCancelButton,
@@ -24,13 +32,10 @@ import {
   adminFormLabelClassName,
 } from "../VenesiaModal";
 import VenesiaModal from "../VenesiaModal";
+import AdminFormSwitch from "./AdminFormSwitch";
 
 type ExplorerResourceId =
-  | LinkedResourceType
-  | "menus"
-  | "external"
-  | "anchor"
-  | "download";
+  LinkedResourceType | "menus" | "external" | "anchor" | "download";
 
 type AdminLinkPickerProps = {
   open: boolean;
@@ -69,18 +74,28 @@ const BROWSEABLE_TYPES = new Set<LinkedResourceType>([
   "static_routes",
 ]);
 
-function defaultResourceForValue(value: AdminLinkValue | undefined): ExplorerResourceId {
+function defaultResourceForValue(
+  value: AdminLinkValue | undefined,
+): ExplorerResourceId {
   if (!value || value.link_kind === "none") return "pages";
   if (value.link_kind === "anchor") return "anchor";
   if (value.link_kind === "download") return "download";
-  if (value.link_kind === "external" || value.link_kind === "email" || value.link_kind === "phone") return "external";
+  if (
+    value.link_kind === "external" ||
+    value.link_kind === "email" ||
+    value.link_kind === "phone"
+  )
+    return "external";
   if (value.link_kind === "static_route") return "static_routes";
-  if (value.link_kind === "internal" && value.linked_type) return value.linked_type;
+  if (value.link_kind === "internal" && value.linked_type)
+    return value.linked_type;
   return "pages";
 }
 
 function isFormResource(resource: ExplorerResourceId) {
-  return resource === "external" || resource === "anchor" || resource === "download";
+  return (
+    resource === "external" || resource === "anchor" || resource === "download"
+  );
 }
 
 function menuItemIsSelectable(item: PickerMenuItemRow) {
@@ -98,7 +113,9 @@ function buildExternalLinkFromValues(
   if (!trimmed) return null;
 
   if (mode === "mailto") {
-    const normalized = trimmed.startsWith("mailto:") ? trimmed : `mailto:${trimmed}`;
+    const normalized = trimmed.startsWith("mailto:")
+      ? trimmed
+      : `mailto:${trimmed}`;
     return { link_kind: "email", href: normalized, target: "_self" };
   }
 
@@ -114,8 +131,15 @@ function buildExternalLinkFromValues(
   return { link_kind: "external", href: normalized, target };
 }
 
-export default function AdminLinkPicker({ open, onClose, onSelect, initialValue }: AdminLinkPickerProps) {
-  const [resource, setResource] = useState<ExplorerResourceId>(() => defaultResourceForValue(initialValue));
+export default function AdminLinkPicker({
+  open,
+  onClose,
+  onSelect,
+  initialValue,
+}: AdminLinkPickerProps) {
+  const [resource, setResource] = useState<ExplorerResourceId>(() =>
+    defaultResourceForValue(initialValue),
+  );
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<LinkSearchResult[]>([]);
   const [menus, setMenus] = useState<PickerMenuSummary[]>([]);
@@ -125,7 +149,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
   const [error, setError] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<AdminLinkValue | null>(null);
   const [preview, setPreview] = useState<AdminLinkDisplay | null>(null);
-  const [recentLinks] = useState<AdminLinkValue[]>(() => readRecentAdminLinks());
+  const [recentLinks] = useState<AdminLinkValue[]>(() =>
+    readRecentAdminLinks(),
+  );
 
   const [externalHref, setExternalHref] = useState(() => {
     if (
@@ -140,7 +166,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
   const [externalTarget, setExternalTarget] = useState<"_self" | "_blank">(
     initialValue?.target === "_blank" ? "_blank" : "_blank",
   );
-  const [externalMode, setExternalMode] = useState<"https" | "http" | "mailto" | "tel">(() => {
+  const [externalMode, setExternalMode] = useState<
+    "https" | "http" | "mailto" | "tel"
+  >(() => {
     if (initialValue?.link_kind === "email") return "mailto";
     if (initialValue?.link_kind === "phone") return "tel";
     if (initialValue?.href?.startsWith("http://")) return "http";
@@ -150,8 +178,8 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
   const [anchorValue, setAnchorValue] = useState(
     () => initialValue?.anchor ?? initialValue?.href?.replace(/^#/, "") ?? "",
   );
-  const [downloadHref, setDownloadHref] = useState(
-    () => (initialValue?.link_kind === "download" ? initialValue.href ?? "" : ""),
+  const [downloadHref, setDownloadHref] = useState(() =>
+    initialValue?.link_kind === "download" ? (initialValue.href ?? "") : "",
   );
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
 
@@ -164,7 +192,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
     const normalized = query.trim().toLowerCase();
     if (!normalized) return menus;
     return menus.filter((menu) =>
-      [menu.name, menu.location].some((part) => part.toLowerCase().includes(normalized)),
+      [menu.name, menu.location].some((part) =>
+        part.toLowerCase().includes(normalized),
+      ),
     );
   }, [menus, query]);
 
@@ -205,7 +235,10 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
         return;
       }
 
-      const response = await browseMenuItemsPickerAjax({ menuId: selectedMenuId, query });
+      const response = await browseMenuItemsPickerAjax({
+        menuId: selectedMenuId,
+        query,
+      });
       setLoading(false);
       if (!response.ok) {
         setError(response.message);
@@ -229,7 +262,11 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
     }
 
     if (BROWSEABLE_TYPES.has(resource)) {
-      const response = await browseAdminLinksAjax({ type: resource, query, limit: 100 });
+      const response = await browseAdminLinksAjax({
+        type: resource,
+        query,
+        limit: 100,
+      });
       setLoading(false);
       if (!response.ok) {
         setError(response.message);
@@ -252,7 +289,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
     return () => window.clearTimeout(timer);
   }, [open, resource, selectedMenuId, query, loadBrowseItems]);
 
-  const resetKey = open ? `open:${JSON.stringify(initialValue ?? null)}` : "closed";
+  const resetKey = open
+    ? `open:${JSON.stringify(initialValue ?? null)}`
+    : "closed";
   const [lastResetKey, setLastResetKey] = useState(resetKey);
   if (resetKey !== lastResetKey) {
     setLastResetKey(resetKey);
@@ -262,7 +301,11 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
       setResource(nextResource);
       setPendingLink(null);
       setPreview(null);
-      if (initialValue && initialValue.link_kind !== "none" && isFormResource(nextResource)) {
+      if (
+        initialValue &&
+        initialValue.link_kind !== "none" &&
+        isFormResource(nextResource)
+      ) {
         void updatePreview(initialValue);
       }
     }
@@ -280,19 +323,25 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
     setError(null);
 
     if (next === "external") {
-      void updatePreview(buildExternalLinkFromValues(externalHref, externalMode, externalTarget));
+      void updatePreview(
+        buildExternalLinkFromValues(externalHref, externalMode, externalTarget),
+      );
       return;
     }
     if (next === "anchor") {
       const anchor = anchorValue.trim().replace(/^#/, "");
       void updatePreview(
-        anchor ? { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" } : null,
+        anchor
+          ? { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" }
+          : null,
       );
       return;
     }
     if (next === "download") {
       const href = downloadHref.trim();
-      void updatePreview(href ? { link_kind: "download", href, target: "_blank" } : null);
+      void updatePreview(
+        href ? { link_kind: "download", href, target: "_blank" } : null,
+      );
     }
   }
 
@@ -310,7 +359,11 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
   }
 
   function buildExternalLink(): AdminLinkValue | null {
-    return buildExternalLinkFromValues(externalHref, externalMode, externalTarget);
+    return buildExternalLinkFromValues(
+      externalHref,
+      externalMode,
+      externalTarget,
+    );
   }
 
   function resolvePendingLink(): AdminLinkValue | null {
@@ -319,7 +372,12 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
       if (resource === "anchor") {
         const anchor = anchorValue.trim().replace(/^#/, "");
         if (!anchor) return null;
-        return { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" };
+        return {
+          link_kind: "anchor",
+          href: `#${anchor}`,
+          anchor,
+          target: "_self",
+        };
       }
       if (resource === "download") {
         const href = downloadHref.trim();
@@ -368,14 +426,22 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <p className="truncate text-sm font-semibold text-white">{result.title}</p>
-            {result.subtitle ? <p className="mt-0.5 text-xs text-white/45">{result.subtitle}</p> : null}
-            <p className="mt-1 truncate font-en text-[11px] text-[#D8B87A]/75" dir="ltr">
+            <p className="truncate text-sm font-semibold text-white">
+              {result.title}
+            </p>
+            {result.subtitle ? (
+              <p className="mt-0.5 text-xs text-white/45">{result.subtitle}</p>
+            ) : null}
+            <p
+              className="mt-1 truncate font-en text-[11px] text-[#D8B87A]/75"
+              dir="ltr"
+            >
               {result.publicPath}
             </p>
           </div>
           <span className="shrink-0 rounded-full bg-white/6 px-2 py-0.5 text-[10px] font-semibold text-white/55">
-            {RESOURCE_LABELS[result.resourceType as LinkedResourceType] ?? result.resourceType}
+            {RESOURCE_LABELS[result.resourceType as LinkedResourceType] ??
+              result.resourceType}
           </span>
         </div>
       </button>
@@ -399,10 +465,18 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                     else nextHref = `${mode}://`;
                     setExternalMode(mode);
                     setExternalHref(nextHref);
-                    void updatePreview(buildExternalLinkFromValues(nextHref, mode, externalTarget));
+                    void updatePreview(
+                      buildExternalLinkFromValues(
+                        nextHref,
+                        mode,
+                        externalTarget,
+                      ),
+                    );
                   }}
                   className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                    externalMode === mode ? "bg-[#D8B87A]/15 text-[#D8B87A]" : "bg-white/5 text-white/50"
+                    externalMode === mode
+                      ? "bg-[#D8B87A]/15 text-[#D8B87A]"
+                      : "bg-white/5 text-white/50"
                   }`}
                 >
                   {mode}
@@ -416,25 +490,35 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                 onChange={(event) => {
                   const nextHref = event.target.value;
                   setExternalHref(nextHref);
-                  void updatePreview(buildExternalLinkFromValues(nextHref, externalMode, externalTarget));
+                  void updatePreview(
+                    buildExternalLinkFromValues(
+                      nextHref,
+                      externalMode,
+                      externalTarget,
+                    ),
+                  );
                 }}
                 dir="ltr"
                 className={adminFormFieldClassName("text-left font-en")}
               />
             </label>
             {externalMode === "https" || externalMode === "http" ? (
-              <label className="flex items-center justify-between rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/70">
-                <span>فتح في تبويب جديد</span>
-                <input
-                  type="checkbox"
-                  checked={externalTarget === "_blank"}
-                  onChange={(event) => {
-                    const nextTarget = event.target.checked ? "_blank" : "_self";
-                    setExternalTarget(nextTarget);
-                    void updatePreview(buildExternalLinkFromValues(externalHref, externalMode, nextTarget));
-                  }}
-                />
-              </label>
+              <AdminFormSwitch
+                label="فتح في تبويب جديد"
+                checked={externalTarget === "_blank"}
+                onChange={(event) => {
+                  const nextTarget = event.target.checked ? "_blank" : "_self";
+                  setExternalTarget(nextTarget);
+                  void updatePreview(
+                    buildExternalLinkFromValues(
+                      externalHref,
+                      externalMode,
+                      nextTarget,
+                    ),
+                  );
+                }}
+                surface
+              />
             ) : null}
           </div>
         );
@@ -451,14 +535,23 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                 setAnchorValue(next);
                 const anchor = next.trim().replace(/^#/, "");
                 void updatePreview(
-                  anchor ? { link_kind: "anchor", href: `#${anchor}`, anchor, target: "_self" } : null,
+                  anchor
+                    ? {
+                        link_kind: "anchor",
+                        href: `#${anchor}`,
+                        anchor,
+                        target: "_self",
+                      }
+                    : null,
                 );
               }}
               placeholder="section-id"
               dir="ltr"
               className={adminFormFieldClassName("text-left font-en")}
             />
-            <span className={adminFormHintClassName()}>يُستخدم للانتقال إلى عنصر داخل نفس الصفحة.</span>
+            <span className={adminFormHintClassName()}>
+              يُستخدم للانتقال إلى عنصر داخل نفس الصفحة.
+            </span>
           </label>
         );
       }
@@ -473,7 +566,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                 readOnly
                 placeholder="/files/projects/brochure.pdf"
                 dir="ltr"
-                className={adminFormFieldClassName("min-w-0 flex-1 text-left font-en")}
+                className={adminFormFieldClassName(
+                  "min-w-0 flex-1 text-left font-en",
+                )}
               />
               <button
                 type="button"
@@ -490,7 +585,11 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
             onSelect={(path) => {
               setDownloadHref(path);
               setMediaPickerOpen(false);
-              void updatePreview({ link_kind: "download", href: path, target: "_blank" });
+              void updatePreview({
+                link_kind: "download",
+                href: path,
+                target: "_blank",
+              });
             }}
             initialFolder="files"
             mode="pdf"
@@ -515,13 +614,17 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                 className="flex w-full items-center justify-between rounded-xl border border-white/8 bg-[#05070B] px-4 py-3 text-right transition hover:border-[#D8B87A]/25 hover:bg-[#D8B87A]/5"
               >
                 <div>
-                  <p className="text-sm font-semibold text-white">{menu.name}</p>
+                  <p className="text-sm font-semibold text-white">
+                    {menu.name}
+                  </p>
                   <p className="mt-1 text-xs text-white/45">{menu.location}</p>
                 </div>
                 <span className="text-xs text-[#D8B87A]/70">→</span>
               </button>
             ))}
-            {!loading && !filteredMenus.length ? <p className="text-sm text-white/45">لا توجد قوائم.</p> : null}
+            {!loading && !filteredMenus.length ? (
+              <p className="text-sm text-white/45">لا توجد قوائم.</p>
+            ) : null}
           </div>
         );
       }
@@ -553,8 +656,13 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-semibold text-white">{item.label}</p>
-                    <p className="mt-1 truncate font-en text-[11px] text-white/45" dir="ltr">
+                    <p className="truncate text-sm font-semibold text-white">
+                      {item.label}
+                    </p>
+                    <p
+                      className="mt-1 truncate font-en text-[11px] text-white/45"
+                      dir="ltr"
+                    >
                       {item.href ?? (selectable ? "—" : "عنصر أب بدون رابط")}
                     </p>
                   </div>
@@ -565,7 +673,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
               </button>
             );
           })}
-          {!loading && !menuItems.length ? <p className="text-sm text-white/45">لا توجد عناصر مطابقة.</p> : null}
+          {!loading && !menuItems.length ? (
+            <p className="text-sm text-white/45">لا توجد عناصر مطابقة.</p>
+          ) : null}
         </div>
       );
     }
@@ -573,7 +683,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
     return (
       <div className="space-y-2">
         {items.map((item) => renderBrowseItem(item))}
-        {!loading && !items.length ? <p className="text-sm text-white/45">لا توجد عناصر في هذا المورد.</p> : null}
+        {!loading && !items.length ? (
+          <p className="text-sm text-white/45">لا توجد عناصر في هذا المورد.</p>
+        ) : null}
       </div>
     );
   }
@@ -597,21 +709,34 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
       footer={
         <div className="flex w-full flex-col gap-4">
           <section className="rounded-2xl border border-[#D8B87A]/20 bg-[#D8B87A]/5 px-4 py-3 text-right">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#D8B87A]/70">معاينة</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#D8B87A]/70">
+              معاينة
+            </p>
             {preview ? (
               <>
-                <p className="mt-2 text-sm font-semibold text-white">{preview.title}</p>
-                <p className="mt-1 text-xs text-white/50">{preview.kindLabel}</p>
-                <p className="mt-2 truncate font-en text-xs text-white/70" dir="ltr">
+                <p className="mt-2 text-sm font-semibold text-white">
+                  {preview.title}
+                </p>
+                <p className="mt-1 text-xs text-white/50">
+                  {preview.kindLabel}
+                </p>
+                <p
+                  className="mt-2 truncate font-en text-xs text-white/70"
+                  dir="ltr"
+                >
                   {preview.publicPath}
                 </p>
               </>
             ) : (
-              <p className="mt-2 text-sm text-white/45">اختر عنصرًا لعرض المعاينة.</p>
+              <p className="mt-2 text-sm text-white/45">
+                اختر عنصرًا لعرض المعاينة.
+              </p>
             )}
           </section>
           <div className="flex flex-wrap justify-end gap-3">
-            <AdminModalCancelButton onClick={onClose}>إلغاء</AdminModalCancelButton>
+            <AdminModalCancelButton onClick={onClose}>
+              إلغاء
+            </AdminModalCancelButton>
             <AdminModalPrimaryButton type="button" onClick={confirmSelection}>
               اعتماد الرابط
             </AdminModalPrimaryButton>
@@ -628,7 +753,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
 
         <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[190px_minmax(0,1fr)]">
           <aside className="min-h-0 overflow-y-auto rounded-2xl border border-white/8 bg-[#05070B]/80 p-2">
-            <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">Resource Types</p>
+            <p className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+              Resource Types
+            </p>
             <div className="space-y-1">
               {RESOURCE_SIDEBAR.map((item) => (
                 <button
@@ -665,7 +792,9 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                     >
                       ← كل القوائم
                     </button>
-                    <p className="truncate text-xs text-white/50">{selectedMenu.name}</p>
+                    <p className="truncate text-xs text-white/50">
+                      {selectedMenu.name}
+                    </p>
                   </div>
                 ) : null}
                 <input
@@ -680,19 +809,26 @@ export default function AdminLinkPicker({ open, onClose, onSelect, initialValue 
                     ? selectedMenu
                       ? `عناصر «${selectedMenu.name}»`
                       : "القوائم"
-                    : RESOURCE_SIDEBAR.find((item) => item.id === resource)?.label}{" "}
+                    : RESOURCE_SIDEBAR.find((item) => item.id === resource)
+                        ?.label}{" "}
                   فقط.
                 </p>
               </div>
             ) : null}
 
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {loading ? <p className="text-sm text-white/45">جاري التحميل...</p> : renderItemsPanel()}
+              {loading ? (
+                <p className="text-sm text-white/45">جاري التحميل...</p>
+              ) : (
+                renderItemsPanel()
+              )}
             </div>
 
             {recentLinks.length && !isFormResource(resource) ? (
               <div className="shrink-0 border-t border-white/8 p-3">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">روابط حديثة</p>
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+                  روابط حديثة
+                </p>
                 <div className="flex flex-wrap gap-2">
                   {recentLinks.slice(0, 4).map((link) => (
                     <button

@@ -69,46 +69,90 @@ export const PAGE_COMPOSITION_COLUMN_PREFERENCES = {
   contentTemplates: {
     viewKey: "page-composition:content-templates",
     columns: contentTemplateColumns,
+    consumerSourceFiles: [
+      "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   heroTemplates: {
     viewKey: "page-composition:hero-templates",
     columns: heroTemplateColumns,
+    consumerSourceFiles: [
+      "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   breadcrumbTemplates: {
     viewKey: "page-composition:breadcrumb-templates",
     columns: blockTemplateColumns,
+    consumerSourceFiles: [
+      "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   cardsTemplates: {
     viewKey: "page-composition:cards-templates",
     columns: blockTemplateColumns,
+    consumerSourceFiles: [
+      "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   ctaTemplates: {
     viewKey: "page-composition:cta-templates",
     columns: blockTemplateColumns,
+    consumerSourceFiles: [
+      "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   feedTemplates: {
     viewKey: "page-composition:feed-templates",
     columns: blockTemplateColumns,
+    consumerSourceFiles: [
+      "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   mediaHubTemplates: {
     viewKey: "page-composition:media-hub-templates",
     columns: blockSummaryColumns,
+    consumerSourceFiles: [
+      "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   mediaSidebarTemplates: {
     viewKey: "page-composition:media-sidebar-templates",
     columns: blockSummaryColumns,
+    consumerSourceFiles: [
+      "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   menus: {
     viewKey: "page-composition:menus",
     columns: menuColumns,
+    consumerSourceFiles: [
+      "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   menuItems: {
     viewKey: "page-composition:menu-items",
     columns: menuItemColumns,
+    consumerSourceFiles: [
+      "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
   pageAssignments: {
     viewKey: "page-composition:page-assignments",
     columns: pageAssignmentColumns,
+    consumerSourceFiles: [
+      "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+    ],
+    boundedClientPagination: true,
   },
 } as const;
 

@@ -17,6 +17,8 @@ export type AdminFormListboxSelectProps = {
   defaultValue?: string;
   onChange?: (value: string) => void;
   placeholder?: string;
+  showPlaceholderForEmptyValue?: boolean;
+  allowEmptySelection?: boolean;
   required?: boolean;
   disabled?: boolean;
   searchable?: boolean;
@@ -42,6 +44,8 @@ export default function AdminFormListboxSelect({
   defaultValue = "",
   onChange,
   placeholder = "اختر",
+  showPlaceholderForEmptyValue = false,
+  allowEmptySelection = false,
   required = false,
   disabled = false,
   searchable = false,
@@ -59,13 +63,13 @@ export default function AdminFormListboxSelect({
   const generatedId = useId();
   const controlId = id ?? `admin-form-listbox-${generatedId}`;
   const nativeSelectRef = useRef<HTMLSelectElement>(null);
-  const dispatchChangeRef = useRef(false);
   const [internalValue, setInternalValue] = useState(defaultValue);
   const selectedValue = controlledValue ?? internalValue;
+  const previousValueRef = useRef(selectedValue);
 
   useEffect(() => {
-    if (!dispatchChangeRef.current) return;
-    dispatchChangeRef.current = false;
+    if (previousValueRef.current === selectedValue) return;
+    previousValueRef.current = selectedValue;
     nativeSelectRef.current?.dispatchEvent(
       new Event("change", { bubbles: true }),
     );
@@ -73,7 +77,6 @@ export default function AdminFormListboxSelect({
 
   function updateValue(next: string) {
     if (next === selectedValue) return;
-    dispatchChangeRef.current = true;
     if (controlledValue === undefined) setInternalValue(next);
     onChange?.(next);
   }
@@ -81,7 +84,8 @@ export default function AdminFormListboxSelect({
   const unavailable = options.length === 0;
   const statusId = `${controlId}-status`;
   const labelId = `${controlId}-label`;
-  const describedBy = loading || error || unavailable || hint ? statusId : undefined;
+  const describedBy =
+    loading || error || unavailable || hint ? statusId : undefined;
   const labelText = typeof label === "string" ? label : placeholder;
 
   return (
@@ -117,7 +121,11 @@ export default function AdminFormListboxSelect({
           <option value="">{placeholder}</option>
         )}
         {options.map((option) => (
-          <option key={option.value} value={option.value}>
+          <option
+            key={option.value}
+            value={option.value}
+            disabled={option.disabled}
+          >
             {option.label}
           </option>
         ))}
@@ -131,6 +139,8 @@ export default function AdminFormListboxSelect({
         onChange={updateValue}
         disabled={disabled || loading}
         placeholder={placeholder}
+        showPlaceholderForEmptyValue={showPlaceholderForEmptyValue}
+        allowEmptySelection={allowEmptySelection}
         ariaLabel={label ? undefined : labelText}
         ariaLabelledBy={label ? labelId : undefined}
         ariaDescribedBy={describedBy}
@@ -149,7 +159,11 @@ export default function AdminFormListboxSelect({
           {loadingMessage}
         </p>
       ) : error ? (
-        <p id={statusId} role="alert" className="text-xs font-semibold text-red-300">
+        <p
+          id={statusId}
+          role="alert"
+          className="text-xs font-semibold text-red-300"
+        >
           {error}
         </p>
       ) : unavailable ? (
@@ -157,7 +171,9 @@ export default function AdminFormListboxSelect({
           {emptyMessage}
         </p>
       ) : hint ? (
-        <p id={statusId} className="text-xs leading-5 text-white/40">{hint}</p>
+        <p id={statusId} className="text-xs leading-5 text-white/40">
+          {hint}
+        </p>
       ) : null}
     </div>
   );

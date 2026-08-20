@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useClientMounted } from "../../../hooks/use-client-mounted";
+import { settleAdminColumnPreferenceSave } from "../../../lib/admin/entity-list/column-preferences";
 import { useAdminFloatingLayer } from "../entity-list/AdminFloatingLayerContext";
 import AdminCheckbox from "./AdminCheckbox";
 import { useAdminFloatingMenuPosition } from "./useAdminFloatingMenuPosition";
@@ -25,7 +26,6 @@ type AdminColumnVisibilityMenuProps<Key extends string> = {
   onChange: (columns: Key[]) => void;
   onPersist: (columns: Key[]) => Promise<PersistResult>;
   onRestore?: () => Promise<PersistResult>;
-  onPersisted?: (columns: Key[]) => void;
   label?: string;
   scrollAreaClassName?: string;
 };
@@ -37,7 +37,6 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   onChange,
   onPersist,
   onRestore,
-  onPersisted,
   label = "الأعمدة",
   scrollAreaClassName = "",
 }: AdminColumnVisibilityMenuProps<Key>) {
@@ -49,9 +48,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   const layerId = `entity-columns:${menuId}`;
   const floating = useAdminFloatingLayer();
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
-  const isOpen = floating
-    ? floating.openLayerId === layerId
-    : uncontrolledOpen;
+  const isOpen = floating ? floating.openLayerId === layerId : uncontrolledOpen;
 
   function setIsOpen(next: boolean) {
     if (floating) {
@@ -62,15 +59,15 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   }
 
   const [error, setError] = useState("");
-  // Manual pending counter instead of useTransition: persist success triggers
-  // onPersisted (router.refresh). React entangles concurrently pending
-  // transitions, so if that refresh transition is superseded/aborted (e.g. by
-  // router prefetch churn) and never commits, a useTransition-based isPending
-  // would stay true forever and strand the trigger spinner.
+  // The serial queue owns persistence ordering. The counter stays independent
+  // of React transitions, so UI busy state always settles with the write.
   const [pendingSaves, setPendingSaves] = useState(0);
   const isPending = pendingSaves > 0;
-  const saveQueueRef = useRef<Promise<PersistResult>>(Promise.resolve({ ok: true }));
+  const saveQueueRef = useRef<Promise<PersistResult>>(
+    Promise.resolve({ ok: true }),
+  );
   const latestColumnsRef = useRef<Key[]>([...visibleColumns]);
+  const committedColumnsRef = useRef<Key[]>([...visibleColumns]);
   const isMounted = useClientMounted();
   const menuPosition = useAdminFloatingMenuPosition(isOpen, triggerRef, {
     minWidth: 280,
@@ -83,11 +80,16 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   });
 
   useEffect(() => {
+    if (pendingSaves > 0) return;
+    latestColumnsRef.current = [...visibleColumns];
+    committedColumnsRef.current = [...visibleColumns];
+  }, [pendingSaves, visibleColumns]);
+
+  useEffect(() => {
     if (!isOpen) return;
     function close(event: MouseEvent) {
       const target = event.target as Node;
-      const element =
-        target instanceof Element ? target : target.parentElement;
+      const element = target instanceof Element ? target : target.parentElement;
       if (
         rootRef.current?.contains(target) ||
         panelRef.current?.contains(target) ||
@@ -112,17 +114,13 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
   }, [isOpen, layerId, floating]);
 
   useEffect(() => {
-    if (
-      !isOpen ||
-      !menuPosition ||
-      !focusMenuOnOpenRef.current
-    ) {
+    if (!isOpen || !menuPosition || !focusMenuOnOpenRef.current) {
       return;
     }
     focusMenuOnOpenRef.current = false;
     const frame = window.requestAnimationFrame(() => {
       panelRef.current
-        ?.querySelector<HTMLInputElement>('input:not([disabled])')
+        ?.querySelector<HTMLInputElement>("input:not([disabled])")
         ?.focus();
     });
     return () => window.cancelAnimationFrame(frame);
@@ -145,22 +143,27 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
           ok: false,
           message: "تعذر حفظ تفضيلات الأعمدة.",
         }));
-    // Every save — including Restore Defaults — chains on the same serial
-    // queue. Writes therefore commit in user-action order and an older
-    // in-flight save can never land in the database after a newer one
-    // (latestColumnsRef only gates onPersisted, not the write itself).
+    // Every save, including Restore Defaults, chains on the same serial queue.
+    // Writes therefore commit in user-action order.
     const resultPromise = saveQueueRef.current.then(invokePersist);
     saveQueueRef.current = resultPromise;
     setPendingSaves((count) => count + 1);
     void resultPromise.then((result) => {
       setPendingSaves((count) => count - 1);
+      const settlement = settleAdminColumnPreferenceSave({
+        committedColumns: committedColumnsRef.current,
+        requestedColumns: next,
+        latestColumns: latestColumnsRef.current,
+        ok: result.ok,
+      });
+      committedColumnsRef.current = settlement.committedColumns;
       if (!result.ok) {
         setError(result.message || "تعذر حفظ تفضيلات الأعمدة.");
-      } else if (
-        latestColumnsRef.current.length === next.length &&
-        latestColumnsRef.current.every((key, index) => key === next[index])
-      ) {
-        onPersisted?.(next);
+        const rollbackColumns = settlement.rollbackColumns;
+        if (rollbackColumns) {
+          latestColumnsRef.current = rollbackColumns;
+          flushSync(() => onChange(rollbackColumns));
+        }
       }
     });
     return resultPromise;
@@ -254,10 +257,7 @@ export default function AdminColumnVisibilityMenu<Key extends string>({
         aria-controls={menuId}
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={(event) => {
-          if (
-            event.key !== "ArrowDown" &&
-            event.key !== "ArrowUp"
-          ) {
+          if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
             return;
           }
           event.preventDefault();

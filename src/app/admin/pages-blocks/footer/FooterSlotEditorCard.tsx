@@ -1,16 +1,38 @@
 "use client";
 
-import { AdminActionButton, AdminCard, AdminStatusPill } from "../../../../components/admin/ui";
+import {
+  AdminActionButton,
+  AdminCard,
+  AdminFormSwitch,
+  AdminStatusPill,
+} from "../../../../components/admin/ui";
 import FooterBlockHeader from "../../../../components/footer/FooterBlockHeader";
-import { ADMIN_FORM, adminFormFieldClassName, adminFormHintClassName, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
-import type { FooterBlockType, FooterSlot, FooterSlotIndex } from "../../../../lib/footer/footer-slot-types";
+import {
+  ADMIN_FORM,
+  adminFormFieldClassName,
+  adminFormHintClassName,
+  adminFormLabelClassName,
+} from "../../../../lib/admin/admin-ui-styles";
+import type {
+  FooterBlockType,
+  FooterSlot,
+  FooterSlotIndex,
+} from "../../../../lib/footer/footer-slot-types";
 import { FOOTER_SLOT_INDICES } from "../../../../lib/footer/footer-slot-types";
 
 import type { FooterMenuOption, FooterQuickLinkInput } from "./actions";
-import { FOOTER_BLOCK_TYPE_LABELS, FOOTER_COLUMN_LABELS } from "./footer-builder-labels";
-import { getFooterSlotBlockTitle, getFooterSlotBrandIcon } from "./footer-block-header-utils";
+import {
+  FOOTER_BLOCK_TYPE_LABELS,
+  FOOTER_COLUMN_LABELS,
+} from "./footer-builder-labels";
+import {
+  getFooterSlotBlockTitle,
+  getFooterSlotBrandIcon,
+} from "./footer-block-header-utils";
 import { changeSlotType, duplicateSlotConfig } from "./footer-builder-utils";
-import FooterSlotConfigFields, { BlockTypeSelect } from "./FooterSlotConfigFields";
+import FooterSlotConfigFields, {
+  BlockTypeSelect,
+} from "./FooterSlotConfigFields";
 
 type FooterSlotEditorCardProps = {
   slot: FooterSlot;
@@ -43,7 +65,9 @@ export default function FooterSlotEditorCard({
   function updateHeading(value: string) {
     onSlotsChange(
       slots.map((item) =>
-        item.index === index ? { ...item, heading: value.length ? value : null } : item,
+        item.index === index
+          ? { ...item, heading: value.length ? value : null }
+          : item,
       ),
     );
   }
@@ -69,26 +93,29 @@ export default function FooterSlotEditorCard({
             <AdminStatusPill tone={slot.enabled ? "green" : "muted"}>
               {slot.enabled ? "Active" : "Disabled"}
             </AdminStatusPill>
-            <AdminStatusPill tone="gold">{FOOTER_BLOCK_TYPE_LABELS[slot.type]}</AdminStatusPill>
+            <AdminStatusPill tone="gold">
+              {FOOTER_BLOCK_TYPE_LABELS[slot.type]}
+            </AdminStatusPill>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.02] px-3 py-2 text-xs text-white/70">
-            <span>تفعيل العمود</span>
-            <input
-              type="checkbox"
-              checked={slot.enabled}
-              onChange={(event) => updateSlot({ ...slot, enabled: event.target.checked })}
-              className="h-4 w-4 accent-[#D8B87A]"
-            />
-          </label>
+          <AdminFormSwitch
+            label="تفعيل العمود"
+            checked={slot.enabled}
+            onChange={(event) =>
+              updateSlot({ ...slot, enabled: event.target.checked })
+            }
+            surface
+          />
         </div>
       </div>
 
       <div className="space-y-4">
         <div className="rounded-[22px] border border-white/10 bg-black/20 p-4">
-          <p className={adminFormHintClassName()}>معاينة رأس العمود (النص التمهيدي + العنوان)</p>
+          <p className={adminFormHintClassName()}>
+            معاينة رأس العمود (النص التمهيدي + العنوان)
+          </p>
           <FooterBlockHeader
             variant="admin"
             eyebrow={slot.heading}
@@ -97,7 +124,9 @@ export default function FooterSlotEditorCard({
             className="mt-3"
           />
           {!slot.heading?.trim() && !blockTitle && !showBrandIcon ? (
-            <p className="mt-3 text-sm text-white/40">لا يوجد عنوان معروض — أضف تسمية قسم أو عنوان رئيسي حسب نوع البلوك.</p>
+            <p className="mt-3 text-sm text-white/40">
+              لا يوجد عنوان معروض — أضف تسمية قسم أو عنوان رئيسي حسب نوع البلوك.
+            </p>
           ) : null}
         </div>
 
@@ -141,7 +170,9 @@ export default function FooterSlotEditorCard({
           <AdminActionButton
             variant="dark"
             className="!min-h-9 !px-3 !py-2 text-xs"
-            disabled={position === -1 || position >= FOOTER_SLOT_INDICES.length - 1}
+            disabled={
+              position === -1 || position >= FOOTER_SLOT_INDICES.length - 1
+            }
             onClick={() => onMoveSlot(index, "later")}
           >
             تحريك للخلف

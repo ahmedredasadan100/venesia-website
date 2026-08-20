@@ -87,9 +87,21 @@ check("legacy content tab remains absent", !createEditor.includes('id: "content"
 check("article adapters mount every article-specific capability once", [createEditor, editEditor].every((source) => ["ContentBasicDataPanel", "TopicMarkdownEditor", "FaqEditor", "SeoPanel", "ContentPublishingOptions", "ContentReviewPanel"].every((owner) => source.match(new RegExp(`<${owner}\\b`, "g"))?.length === 1)));
 check("shared basic owner keeps title, excerpt, slug, image, category, series and injected body", basicPanel.includes('name="title"') && basicPanel.includes('name="excerpt"') && basicPanel.includes("<TopicSlugInput") && basicPanel.includes("<TopicImageField") && basicPanel.includes("<ContentCategorySelect") && basicPanel.includes("<TopicSeriesFields") && basicPanel.match(/\{contentEditor\}/g)?.length === 1);
 check("content type remains display-only inside the common identity", basicPanel.includes("<TopicContentTypeControl") && !typeControl.includes("name="));
-check("category submits a single stable category_id control", categorySelect.match(/<select\b/g)?.length === 1 && categorySelect.includes('name="category_id"') && categorySelect.includes('triggerId="content-category-listbox"'));
+check(
+  "category submits one stable category_id control through the shared form listbox",
+  categorySelect.match(/<AdminFormListboxSelect\b/g)?.length === 1 &&
+    categorySelect.includes('name="category_id"') &&
+    categorySelect.includes('focusTargetId="content-category-listbox"') &&
+    !categorySelect.includes("<select"),
+);
 check("inactive current category remains selectable only for its record", categorySelect.includes("category.is_active === false") && categorySelect.includes("String(category.id) !== initialValue"));
-check("series retains a single series_id input owner and stable target", seriesFields.match(/<input\b[^>]*name="series_id"/g)?.length === 1 && seriesFields.includes('triggerId="content-series-listbox"'));
+check(
+  "series retains one series_id owner and stable target through the shared form listbox",
+  seriesFields.match(/<AdminFormListboxSelect\b/g)?.length === 1 &&
+    seriesFields.includes('name="series_id"') &&
+    seriesFields.includes('focusTargetId="content-series-listbox"') &&
+    !seriesFields.includes('<input type="hidden" name="series_id"'),
+);
 check("slug keeps automatic and manual modes", slugInput.includes("setIsManual(false)") && slugInput.includes("setIsManual(true)") && slugInput.includes("slugify(titleInput?.value"));
 check("image owner preserves one image and alt submission contract", imageField.match(/<AdminMediaImageField/g)?.length === 1 && imageField.match(/<textarea\b[^>]*name="image_alt"/g)?.length === 1);
 check("Markdown adapter is the sole article content field owner", markdownEditor.match(/<AdminRichTextEditor\b/g)?.length === 1 && markdownEditor.includes('name="content"') && markdownEditor.includes('storageFormat="markdown"') && !/<textarea[^>]*name="content"/.test(markdownEditor));

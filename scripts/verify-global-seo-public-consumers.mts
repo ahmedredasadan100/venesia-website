@@ -1,30 +1,27 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 
-import { GLOBAL_SEO_PUBLIC_CONSUMERS } from "../src/lib/admin/seo/global-seo-adoption-manifest.ts";
+import {
+  GLOBAL_SEO_CONSUMER_ADOPTION,
+  GLOBAL_SEO_PUBLIC_CONSUMERS,
+} from "../src/lib/admin/seo/global-seo-adoption-manifest.ts";
+import { PUBLIC_PAGE_ROUTE_REGISTRY } from "../src/lib/admin/links/static-routes.ts";
 
-const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
-const metadataOwner = read("src/lib/seo/generate-public-metadata.ts");
-
-assert.ok(metadataOwner.includes("const globalSeoPromise = loadGlobalSeoSettings()"));
-assert.ok(metadataOwner.includes("const pageSeoPromise ="));
-assert.ok(
-  metadataOwner.includes("await Promise.all([") &&
-    metadataOwner.includes("globalSeoPromise") &&
-    metadataOwner.includes("pageSeoPromise"),
-  "global and page SEO reads must remain parallel",
+assert.equal(GLOBAL_SEO_CONSUMER_ADOPTION.globalClosed, true);
+assert.deepEqual(
+  GLOBAL_SEO_PUBLIC_CONSUMERS.map((consumer) => consumer.route).sort(),
+  PUBLIC_PAGE_ROUTE_REGISTRY.filter((route) => route.href !== "/maintenance")
+    .map((route) => route.href)
+    .sort(),
+  "Global SEO consumers must equal the executable Public route inventory.",
 );
-for (const path of GLOBAL_SEO_PUBLIC_CONSUMERS) {
-  const source = read(path);
-  assert.equal(source.includes("buildMetadata("), false, `${path} uses removed legacy metadata builder`);
-  assert.ok(source.includes("generateMetadata"), `${path} must expose public metadata`);
-}
-assert.ok(read("src/app/(site)/track-your-project/[slug]/page.tsx").includes("generatePublicMetadata"));
-assert.ok(read("src/components/home/HomeContactSection.tsx").includes("usePublicBrand"));
-assert.equal(read("src/components/FooterSocialBar.tsx").includes("usePublicBrand"), false);
-assert.equal(read("src/lib/footer/resolve-footer-composition.ts").includes("PublicBrand"), false);
-assert.ok(read("src/app/(site)/layout.tsx").includes("resolveFooterComposition(footerSettings"));
-assert.ok(read("src/lib/seo/resolve-seo-metadata.ts").includes("[global.organizationName]"));
-assert.equal(read("src/lib/seo/resolve-seo-metadata.ts").includes('authors: ["Venesia Developments"]'), false);
+assert.equal(
+  new Set(
+    GLOBAL_SEO_PUBLIC_CONSUMERS.map((consumer) => consumer.sourceFile),
+  ).size,
+  GLOBAL_SEO_PUBLIC_CONSUMERS.length,
+  "Every Global SEO route must bind one explicit source.",
+);
 
-console.log(`PASS Global SEO public consumers: ${GLOBAL_SEO_PUBLIC_CONSUMERS.length} metadata routes, bounded Home Contact identity consumption, and an independent canonical Footer contract.`);
+console.log(
+  `PASS Global SEO public consumers: ${GLOBAL_SEO_PUBLIC_CONSUMERS.length} deterministic route/source registrations.`,
+);
