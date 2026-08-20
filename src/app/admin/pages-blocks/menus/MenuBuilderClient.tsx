@@ -2,7 +2,11 @@
 
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
-import { AdminCard } from "../../../../components/admin/ui";
+import {
+  AdminCard,
+  AdminFormListboxSelect,
+  AdminFormSwitch,
+} from "../../../../components/admin/ui";
 
 import { createMenuItem, updateMenu } from "./actions";
 import MenuItemForm from "./MenuItemForm";
@@ -34,7 +38,8 @@ export default function MenuBuilderClient({
       id: "items",
       navigationLabel: "العناصر",
       sectionHeading: "عناصر القائمة",
-      sectionDescription: "أدر الروابط والعناصر الفرعية وترتيب ظهورها داخل هذه القائمة.",
+      sectionDescription:
+        "أدر الروابط والعناصر الفرعية وترتيب ظهورها داخل هذه القائمة.",
       icon: "content" as const,
       content: (
         <AdminCard className="p-5 md:p-6">
@@ -51,7 +56,8 @@ export default function MenuBuilderClient({
       id: "menu-settings",
       navigationLabel: "بيانات القائمة",
       sectionHeading: "بيانات القائمة",
-      sectionDescription: "حدّث الاسم والمسار والموقع وحالة التفعيل لهذه القائمة.",
+      sectionDescription:
+        "حدّث الاسم والمسار والموقع وحالة التفعيل لهذه القائمة.",
       icon: "settings" as const,
       content: (
         <AdminCard className="p-5 md:p-6">
@@ -59,25 +65,37 @@ export default function MenuBuilderClient({
             <input type="hidden" name="id" value={menu.id} />
             <label className={menuLabelClassName()}>
               الاسم
-              <input name="name" defaultValue={menu.name} className={menuFieldClassName("w-full")} />
+              <input
+                name="name"
+                defaultValue={menu.name}
+                className={menuFieldClassName("w-full")}
+              />
             </label>
             <label className={menuLabelClassName()}>
               Slug
-              <input name="slug" defaultValue={menu.slug} className={menuFieldClassName("w-full text-left dir-ltr")} />
+              <input
+                name="slug"
+                defaultValue={menu.slug}
+                className={menuFieldClassName("w-full text-left dir-ltr")}
+              />
             </label>
-            <label className={menuLabelClassName()}>
-              Location
-              <select name="location" defaultValue={menu.location} className={menuFieldClassName("w-full")}>
-                <option value="main">Header / Main</option>
-                <option value="mobile">Mobile</option>
-                <option value="footer">Footer</option>
-                <option value="custom">Custom</option>
-              </select>
-            </label>
-            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm text-white/62">
-              <input type="checkbox" name="is_active" defaultChecked={menu.is_active} className="size-4 accent-[#D8B87A]" />
-              نشطة
-            </label>
+            <AdminFormListboxSelect
+              name="location"
+              label="Location"
+              defaultValue={menu.location}
+              options={[
+                { value: "main", label: "Header / Main" },
+                { value: "mobile", label: "Mobile" },
+                { value: "footer", label: "Footer" },
+                { value: "custom", label: "Custom" },
+              ]}
+            />
+            <AdminFormSwitch
+              name="is_active"
+              label="نشطة"
+              defaultChecked={menu.is_active}
+              surface
+            />
             <button className="min-h-11 w-fit rounded-2xl bg-[#D8B87A] px-5 text-sm font-semibold text-[#05070B] transition hover:bg-[#E6C985]">
               حفظ بيانات القائمة
             </button>
@@ -89,7 +107,8 @@ export default function MenuBuilderClient({
       id: "add-item",
       navigationLabel: "إضافة عنصر",
       sectionHeading: "إضافة عنصر جديد",
-      sectionDescription: "أضف عنصرًا داخل هذه القائمة واربطه بالوجهة المناسبة.",
+      sectionDescription:
+        "أضف عنصرًا داخل هذه القائمة واربطه بالوجهة المناسبة.",
       icon: "section" as const,
       content: (
         <AdminCard className="p-5 md:p-6">

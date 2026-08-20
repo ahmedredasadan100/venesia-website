@@ -27,6 +27,7 @@ import {
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminFormError,
+  AdminFormListboxSelect,
   AdminFormRuntime,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
@@ -142,8 +143,10 @@ export default function BlockModuleManagerClient({
     [variantOptions],
   );
   const columnPreferenceId = COLUMN_PREFERENCE_ID_BY_MODULE[moduleKey];
-  const columnConfig = getPageCompositionColumnPreferenceConfig(columnPreferenceId);
-  const defaultColumns = getPageCompositionDefaultColumnKeys(columnPreferenceId);
+  const columnConfig =
+    getPageCompositionColumnPreferenceConfig(columnPreferenceId);
+  const defaultColumns =
+    getPageCompositionDefaultColumnKeys(columnPreferenceId);
   const [visibleColumns, setVisibleColumns] = useState(() =>
     normalizePageCompositionVisibleColumnKeys(
       columnPreferenceId,
@@ -161,7 +164,9 @@ export default function BlockModuleManagerClient({
         ADMIN_DATA_GRID_COLUMNS.primaryStandard,
         visibleColumnSet.has("slug") ? "minmax(180px,1fr)" : null,
         visibleColumnSet.has("variant") ? "120px" : null,
-        visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusStandard : null,
+        visibleColumnSet.has("status")
+          ? ADMIN_DATA_GRID_COLUMNS.statusStandard
+          : null,
         ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
       ]
         .filter((column) => column !== null)
@@ -172,7 +177,8 @@ export default function BlockModuleManagerClient({
     () => ({
       name: (row: BlockModuleRow) => row.name,
       slug: (row: BlockModuleRow) => row.slug,
-      variant: (row: BlockModuleRow) => variantLabelByValue.get(row.variant) ?? row.variant,
+      variant: (row: BlockModuleRow) =>
+        variantLabelByValue.get(row.variant) ?? row.variant,
       status: (row: BlockModuleRow) => statusMeta(row.status).label,
     }),
     [variantLabelByValue],
@@ -186,7 +192,9 @@ export default function BlockModuleManagerClient({
   useEffect(() => {
     setTableRows(instant.rows);
   }, [instant.rows, setTableRows]);
-  const queryContract = useMemo<AdminBoundedClientQueryContract<BlockModuleRow>>(
+  const queryContract = useMemo<
+    AdminBoundedClientQueryContract<BlockModuleRow>
+  >(
     () => ({
       mode: "bounded-client",
       search: { minLength: 1 },
@@ -227,7 +235,11 @@ export default function BlockModuleManagerClient({
     [loadError],
   );
   const mediaWarningNotice = useMemo(
-    () => <MediaSynchronizationWarningNotice visible={mediaSynchronizationWarning} />,
+    () => (
+      <MediaSynchronizationWarningNotice
+        visible={mediaSynchronizationWarning}
+      />
+    ),
     [mediaSynchronizationWarning],
   );
 
@@ -270,7 +282,10 @@ export default function BlockModuleManagerClient({
         {
           variant: "danger",
           title: "تعذر تنفيذ الإجراء",
-          message: error instanceof Error ? error.message : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
@@ -344,7 +359,7 @@ export default function BlockModuleManagerClient({
         eyebrow="إدارة الموديولات"
         title={moduleTitle}
         description={moduleDescription}
-        actions={(
+        actions={
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
@@ -354,7 +369,7 @@ export default function BlockModuleManagerClient({
             <PlusIcon />
             إضافة بلوك
           </button>
-        )}
+        }
       />
 
       <AdminFeedbackRegion
@@ -431,9 +446,15 @@ export default function BlockModuleManagerClient({
               const formData = new FormData();
               formData.set("bulk_action", action);
               ids.forEach((id) => formData.append("ids", String(id)));
-              const succeeded = await runMutation(null, "bulk", () => bulkAction(formData), "تم تنفيذ الإجراء الجماعي على البلوكات المحددة.");
+              const succeeded = await runMutation(
+                null,
+                "bulk",
+                () => bulkAction(formData),
+                "تم تنفيذ الإجراء الجماعي على البلوكات المحددة.",
+              );
               if (!succeeded) {
-                if (action === "delete") throw new Error("bulk block delete failed");
+                if (action === "delete")
+                  throw new Error("bulk block delete failed");
                 return;
               }
               selection.clearSelection();
@@ -513,7 +534,8 @@ export default function BlockModuleManagerClient({
 
         {paginatedRows.map((row) => {
           const status = statusMeta(row.status);
-          const nextStatus = row.status === "published" ? "unpublished" : "published";
+          const nextStatus =
+            row.status === "published" ? "unpublished" : "published";
           const hidden = { access: "hidden" as const };
           const interaction = instant.getRowInteraction(row.id);
           const pendingAction = interaction.pendingAction;
@@ -536,7 +558,10 @@ export default function BlockModuleManagerClient({
                 title: `معلومات ${row.name}`,
                 items: [
                   { label: "المعرّف", value: row.slug },
-                  { label: "النمط", value: variantLabelByValue.get(row.variant) ?? row.variant },
+                  {
+                    label: "النمط",
+                    value: variantLabelByValue.get(row.variant) ?? row.variant,
+                  },
                   { label: "الحالة", value: status.label },
                 ],
               },
@@ -561,10 +586,7 @@ export default function BlockModuleManagerClient({
                   await runMutation(
                     row.id,
                     "duplicate",
-                    () =>
-                      duplicateAction(
-                        mutationFormData({ id: row.id }),
-                      ),
+                    () => duplicateAction(mutationFormData({ id: row.id })),
                     "تم إنشاء نسخة من البلوك.",
                   );
                 },
@@ -577,8 +599,7 @@ export default function BlockModuleManagerClient({
                   const succeeded = await runMutation(
                     row.id,
                     "delete",
-                    () =>
-                      deleteAction(mutationFormData({ id: row.id })),
+                    () => deleteAction(mutationFormData({ id: row.id })),
                     "تم حذف البلوك.",
                   );
                   if (!succeeded) throw new Error("block delete failed");
@@ -594,11 +615,17 @@ export default function BlockModuleManagerClient({
           };
 
           return (
-            <AdminDataGridRow key={row.id} columns={gridColumns} className="border-b border-white/8 last:border-b-0">
+            <AdminDataGridRow
+              key={row.id}
+              columns={gridColumns}
+              className="border-b border-white/8 last:border-b-0"
+            >
               <AdminDataGridCheckboxCell>
                 <AdminDataGridCheckbox
                   checked={selection.selectedSet.has(row.id)}
-                  onChange={(event) => selection.toggleOne(row.id, event.target.checked)}
+                  onChange={(event) =>
+                    selection.toggleOne(row.id, event.target.checked)
+                  }
                   label={`تحديد ${row.name}`}
                 />
               </AdminDataGridCheckboxCell>
@@ -610,7 +637,11 @@ export default function BlockModuleManagerClient({
                 >
                   {row.name}
                 </Link>
-                {row.description ? <p className="mt-1 line-clamp-1 text-xs text-white/36">{row.description}</p> : null}
+                {row.description ? (
+                  <p className="mt-1 line-clamp-1 text-xs text-white/36">
+                    {row.description}
+                  </p>
+                ) : null}
               </AdminDataGridPrimaryCell>
 
               {visibleColumnSet.has("slug") ? (
@@ -645,7 +676,9 @@ export default function BlockModuleManagerClient({
           );
         })}
 
-        {!pagination.totalCount ? <AdminDataGridEmpty>لا توجد بلوكات مطابقة.</AdminDataGridEmpty> : null}
+        {!pagination.totalCount ? (
+          <AdminDataGridEmpty>لا توجد بلوكات مطابقة.</AdminDataGridEmpty>
+        ) : null}
       </AdminDataGrid>
 
       <AdminTablePagination
@@ -687,7 +720,9 @@ export default function BlockModuleManagerClient({
                     fieldErrors.name?.length ? "border-red-400/40" : "",
                   )}
                   aria-invalid={Boolean(fieldErrors.name?.length)}
-                  aria-describedby={fieldErrors.name?.length ? "name-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.name?.length ? "name-error" : undefined
+                  }
                 />
                 <AdminFormError name="name" />
               </label>
@@ -701,22 +736,21 @@ export default function BlockModuleManagerClient({
                     `text-left font-en ${fieldErrors.slug?.length ? "border-red-400/40" : ""}`,
                   )}
                   aria-invalid={Boolean(fieldErrors.slug?.length)}
-                  aria-describedby={fieldErrors.slug?.length ? "slug-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.slug?.length ? "slug-error" : undefined
+                  }
                 />
                 <AdminFormError name="slug" />
               </label>
-              <label className={adminFormLabelClassName()}>
-                {moduleKey === "feed" ? "نوع موديول المحتوى" : "النمط"}
-                <select
-                  name={moduleKey === "feed" ? "feed_type" : "variant"}
-                  defaultValue={defaultVariant}
-                  className={adminFormFieldClassName()}
-                >
-                  {variantOptions.map(([value, label]) => (
-                    <option key={value} value={value}>{label}</option>
-                  ))}
-                </select>
-              </label>
+              <AdminFormListboxSelect
+                name={moduleKey === "feed" ? "feed_type" : "variant"}
+                label={moduleKey === "feed" ? "نوع موديول المحتوى" : "النمط"}
+                defaultValue={defaultVariant}
+                options={variantOptions.map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+              />
               {moduleKey === "feed" ? (
                 <>
                   <label className={adminFormLabelClassName()}>
@@ -726,10 +760,16 @@ export default function BlockModuleManagerClient({
                       required
                       placeholder="أحدث الموضوعات"
                       className={adminFormFieldClassName(
-                        fieldErrors.widget_title?.length ? "border-red-400/40" : "",
+                        fieldErrors.widget_title?.length
+                          ? "border-red-400/40"
+                          : "",
                       )}
                       aria-invalid={Boolean(fieldErrors.widget_title?.length)}
-                      aria-describedby={fieldErrors.widget_title?.length ? "widget_title-error" : undefined}
+                      aria-describedby={
+                        fieldErrors.widget_title?.length
+                          ? "widget_title-error"
+                          : undefined
+                      }
                     />
                     <AdminFormError name="widget_title" />
                   </label>
@@ -744,7 +784,9 @@ export default function BlockModuleManagerClient({
                         fieldErrors.limit?.length ? "border-red-400/40" : "",
                       )}
                       aria-invalid={Boolean(fieldErrors.limit?.length)}
-                      aria-describedby={fieldErrors.limit?.length ? "limit-error" : undefined}
+                      aria-describedby={
+                        fieldErrors.limit?.length ? "limit-error" : undefined
+                      }
                     />
                     <AdminFormError name="limit" />
                   </label>
@@ -753,7 +795,10 @@ export default function BlockModuleManagerClient({
               <input type="hidden" name="status" value="unpublished" />
               <input type="hidden" name="style_preset" value="premium-dark" />
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
-                <AdminModalCancelButton onClick={requestClose} disabled={pending}>
+                <AdminModalCancelButton
+                  onClick={requestClose}
+                  disabled={pending}
+                >
                   إلغاء
                 </AdminModalCancelButton>
                 <AdminModalPrimaryButton type="submit" disabled={pending}>

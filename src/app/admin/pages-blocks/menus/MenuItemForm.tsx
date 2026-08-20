@@ -1,3 +1,7 @@
+import {
+  AdminFormListboxSelect,
+  AdminFormSwitch,
+} from "../../../../components/admin/ui";
 import type { Menu, MenuItem } from "./menu-builder-shared";
 import { menuFieldClassName, menuLabelClassName } from "./menu-builder-shared";
 import MenuItemLinkSection from "./MenuItemLinkSection";
@@ -20,27 +24,28 @@ export default function MenuItemForm({
   action,
 }: MenuItemFormProps) {
   return (
-    <form action={action} className="grid gap-4 rounded-[26px] border border-white/10 bg-white/[0.025] p-5 lg:grid-cols-12">
+    <form
+      action={action}
+      className="grid gap-4 rounded-[26px] border border-white/10 bg-white/[0.025] p-5 lg:grid-cols-12"
+    >
       {item ? <input type="hidden" name="id" value={item.id} /> : null}
       <input type="hidden" name="menu_id" value={menu.id} />
 
-      <label className={`${menuLabelClassName()} lg:col-span-2`}>
-        Parent
-        <select
-          name="parent_id"
-          defaultValue={item?.parent_id ?? defaultParentId ?? ""}
-          className={menuFieldClassName("w-full")}
-        >
-          <option value="">بدون أب</option>
-          {parentItems
+      <AdminFormListboxSelect
+        name="parent_id"
+        label="Parent"
+        defaultValue={String(item?.parent_id ?? defaultParentId ?? "")}
+        options={[
+          { value: "", label: "بدون أب" },
+          ...parentItems
             .filter((parent) => parent.id !== item?.id)
-            .map((parent) => (
-              <option key={parent.id} value={parent.id}>
-                {parent.label}
-              </option>
-            ))}
-        </select>
-      </label>
+            .map((parent) => ({
+              value: String(parent.id),
+              label: parent.label,
+            })),
+        ]}
+        className="lg:col-span-2"
+      />
 
       <label className={`${menuLabelClassName()} lg:col-span-2`}>
         الاسم
@@ -74,27 +79,28 @@ export default function MenuItemForm({
         />
       </label>
 
-      <label className={`${menuLabelClassName()} lg:col-span-2`}>
-        Style Preset
-        <select name="style_preset" defaultValue={item?.style_preset ?? "default"} className={menuFieldClassName("w-full")}>
-          <option value="default">default</option>
-          <option value="premium-dark">premium-dark</option>
-          <option value="gold-card">gold-card</option>
-          <option value="compact-list">compact-list</option>
-          <option value="cinematic-hero">cinematic-hero</option>
-          <option value="minimal">minimal</option>
-        </select>
-      </label>
+      <AdminFormListboxSelect
+        name="style_preset"
+        label="Style Preset"
+        defaultValue={item?.style_preset ?? "default"}
+        options={[
+          "default",
+          "premium-dark",
+          "gold-card",
+          "compact-list",
+          "cinematic-hero",
+          "minimal",
+        ].map((value) => ({ value, label: value }))}
+        className="lg:col-span-2"
+      />
 
-      <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm text-white/62 lg:col-span-2">
-        <input
-          type="checkbox"
-          name="is_visible"
-          defaultChecked={item?.is_visible ?? true}
-          className="size-4 accent-[#D8B87A]"
-        />
-        ظاهر
-      </label>
+      <AdminFormSwitch
+        name="is_visible"
+        label="ظاهر"
+        defaultChecked={item?.is_visible ?? true}
+        surface
+        className="lg:col-span-2"
+      />
 
       <div className="flex items-end lg:col-span-1">
         <button

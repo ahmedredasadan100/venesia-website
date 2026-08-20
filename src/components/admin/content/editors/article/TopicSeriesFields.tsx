@@ -5,7 +5,7 @@ import {
   filterAdminContentSeriesByCategory,
   isAdminContentSeriesInCategory,
 } from "../../../../../lib/admin/content/category-hierarchy";
-import AdminListboxSelect from "../../../ui/AdminListboxSelect";
+import AdminFormListboxSelect from "../../../ui/AdminFormListboxSelect";
 import { AdminFormError } from "../../../ui/AdminFormRuntime";
 
 type SeriesOption = {
@@ -34,7 +34,7 @@ export default function TopicSeriesFields({
     defaultCategoryId ? String(defaultCategoryId) : "",
   );
   const [value, setValue] = useState(defaultId);
-  const hiddenRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const fallbackSeries = defaultId ? null : defaultSeries;
   const fallbackSeriesSlug = defaultId ? null : defaultSeriesSlug;
   const availableOptions = useMemo(
@@ -47,9 +47,9 @@ export default function TopicSeriesFields({
   );
 
   useEffect(() => {
-    const categoryControl = hiddenRef.current?.form?.elements.namedItem(
-      "category_id",
-    );
+    const categoryControl = containerRef.current
+      ?.closest("form")
+      ?.elements.namedItem("category_id");
     if (!(categoryControl instanceof HTMLSelectElement)) return;
     const categorySelect = categoryControl;
 
@@ -69,11 +69,6 @@ export default function TopicSeriesFields({
           ))
       ) {
         setValue("");
-        window.requestAnimationFrame(() =>
-          hiddenRef.current?.dispatchEvent(
-            new Event("change", { bubbles: true }),
-          ),
-        );
       }
     }
 
@@ -84,16 +79,20 @@ export default function TopicSeriesFields({
 
   function update(next: string) {
     setValue(next);
-    window.requestAnimationFrame(() => hiddenRef.current?.dispatchEvent(new Event("change", { bubbles: true })));
   }
 
   return (
-    <label className="inline-grid min-w-0 max-w-full shrink-0 space-y-1.5">
-      <span className="text-xs font-medium text-white/58">السلسلة (اختياري)</span>
-      <input ref={hiddenRef} type="hidden" name="series_id" value={value} />
-      <AdminListboxSelect
+    <div
+      ref={containerRef}
+      className="inline-grid min-w-0 max-w-full shrink-0 space-y-1.5"
+    >
+      <span className="text-xs font-medium text-white/58">
+        السلسلة (اختياري)
+      </span>
+      <AdminFormListboxSelect
+        name="series_id"
         id="content-series-popover"
-        triggerId="content-series-listbox"
+        focusTargetId="content-series-listbox"
         value={value}
         options={availableOptions.map((option) => ({
           value: String(option.id),
@@ -108,8 +107,16 @@ export default function TopicSeriesFields({
         className="max-w-full"
       />
       <AdminFormError name="series_id" />
-      {fallbackSeries ? <input type="hidden" name="legacy_series" value={fallbackSeries} /> : null}
-      {fallbackSeriesSlug ? <input type="hidden" name="legacy_series_slug" value={fallbackSeriesSlug} /> : null}
-    </label>
+      {fallbackSeries ? (
+        <input type="hidden" name="legacy_series" value={fallbackSeries} />
+      ) : null}
+      {fallbackSeriesSlug ? (
+        <input
+          type="hidden"
+          name="legacy_series_slug"
+          value={fallbackSeriesSlug}
+        />
+      ) : null}
+    </div>
   );
 }

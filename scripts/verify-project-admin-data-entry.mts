@@ -16,8 +16,10 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
-const migrationPath = "sql/migrations/20260728090000_rebuild_project_admin_data_entry.sql";
-const aclCorrectionPath = "sql/migrations/20260729090000_project_admin_entry_acl_correction.sql";
+const migrationPath =
+  "sql/migrations/20260728090000_rebuild_project_admin_data_entry.sql";
+const aclCorrectionPath =
+  "sql/migrations/20260729090000_project_admin_entry_acl_correction.sql";
 const schemaParityForwardFixPath =
   "sql/migrations/20260729150000_project_admin_schema_parity_forward_fix.sql";
 const saveRpcConflictArbiterFixPath =
@@ -34,16 +36,22 @@ const schemaParityAuditPath = "scripts/audit-project-admin-schema-parity.mjs";
 const formPath = "src/app/admin/projects/ProjectEditForm.tsx";
 const contractPath = "src/lib/admin/projects/project-entry-contract.ts";
 const actionPath = "src/app/admin/projects/project-actions/save-entry.ts";
-const repeatersPath = "src/components/admin/projects/entry/ProjectRepeaters.tsx";
-const mediaEditorsPath = "src/components/admin/projects/entry/ProjectMediaEditors.tsx";
-const locationEditorPath = "src/components/admin/projects/entry/ProjectLocationEditor.tsx";
-const projectSeoPanelPath = "src/components/admin/projects/entry/ProjectSeoPanel.tsx";
+const repeatersPath =
+  "src/components/admin/projects/entry/ProjectRepeaters.tsx";
+const mediaEditorsPath =
+  "src/components/admin/projects/entry/ProjectMediaEditors.tsx";
+const locationEditorPath =
+  "src/components/admin/projects/entry/ProjectLocationEditor.tsx";
+const projectSeoPanelPath =
+  "src/components/admin/projects/entry/ProjectSeoPanel.tsx";
 const sharedSeoPanelPath = "src/components/admin/seo/AdminEntitySeoPanel.tsx";
 const projectsHubPagePath = "src/app/admin/projects/page.tsx";
 const projectHelpersPath = "src/app/admin/projects/project-actions/helpers.ts";
-const previewPath = "src/components/admin/projects/entry/ProjectEntryPreview.tsx";
+const previewPath =
+  "src/components/admin/projects/entry/ProjectEntryPreview.tsx";
 const moduleTabsPath = "src/components/admin/ui/AdminModuleTabs.tsx";
-const legacyModuleTabsPath = "src/components/admin/page-blocks/AdminModuleTabs.tsx";
+const legacyModuleTabsPath =
+  "src/components/admin/page-blocks/AdminModuleTabs.tsx";
 const formPresentationPath = "src/components/admin/ui/AdminForm.tsx";
 const pageExperiencePath = "src/components/admin/ui/AdminPageExperience.tsx";
 const formListboxPath = "src/components/admin/ui/AdminFormListboxSelect.tsx";
@@ -51,7 +59,8 @@ const listboxPath = "src/components/admin/ui/AdminListboxSelect.tsx";
 const slugFieldPath = "src/components/admin/ui/AdminSlugField.tsx";
 const formRuntimePath = "src/components/admin/ui/AdminFormRuntime.tsx";
 const entryDataPath = "src/lib/admin/projects/project-entry-data.ts";
-const dataRuntimePath = "src/lib/admin/entity-list/data-engine/client-controller.ts";
+const dataRuntimePath =
+  "src/lib/admin/entity-list/data-engine/client-controller.ts";
 
 for (const path of [
   migrationPath,
@@ -92,7 +101,9 @@ const aclCorrection = read(aclCorrectionPath);
 const schemaParityForwardFix = read(schemaParityForwardFixPath);
 const saveRpcConflictArbiterFix = read(saveRpcConflictArbiterFixPath);
 const projectRowActionsMigration = read(projectRowActionsMigrationPath);
-const projectDomainHardeningMigration = read(projectDomainHardeningMigrationPath);
+const projectDomainHardeningMigration = read(
+  projectDomainHardeningMigrationPath,
+);
 const fixture = read(fixturePath);
 const projectRowActionsFixture = read(projectRowActionsFixturePath);
 const aclAudit = read(aclAuditPath);
@@ -145,17 +156,34 @@ const dataRuntime = read(dataRuntimePath);
 const deleteProjectRpc = ["delete", "project", "admin", "entry"].join("_");
 const createPage = read("src/app/admin/projects/new/page.tsx");
 const editPage = read("src/app/admin/projects/[id]/page.tsx");
-const coordinator = read("src/lib/admin/projects/project-entry-media-coordination.ts");
+const coordinator = read(
+  "src/lib/admin/projects/project-entry-media-coordination.ts",
+);
 const projectSeoPanel = read(projectSeoPanelPath);
 const seoPanel = read(sharedSeoPanelPath);
 const entitySeoPrimaryStart = seoPanel.indexOf("const seoBasicsContent");
-const entitySeoReturnStart = seoPanel.indexOf("  return (", entitySeoPrimaryStart);
-const entitySeoPrimaryRender = seoPanel.slice(entitySeoPrimaryStart, entitySeoReturnStart);
-const entitySeoHelperStart = seoPanel.indexOf("<AdminSingleOpenAccordion", entitySeoReturnStart);
+const entitySeoReturnStart = seoPanel.indexOf(
+  "  return (",
+  entitySeoPrimaryStart,
+);
+const entitySeoPrimaryRender = seoPanel.slice(
+  entitySeoPrimaryStart,
+  entitySeoReturnStart,
+);
+const entitySeoHelperStart = seoPanel.indexOf(
+  "<AdminSingleOpenAccordion",
+  entitySeoReturnStart,
+);
 const entitySeoHelperRender = seoPanel.slice(entitySeoHelperStart);
-const entitySeoRobotsIndexPosition = seoPanel.indexOf("name={fieldNames.robotsIndex}");
-const entitySeoRobotsFollowPosition = seoPanel.indexOf("name={fieldNames.robotsFollow}");
-const entitySeoCanonicalPosition = seoPanel.indexOf("name={fieldNames.canonicalUrl}");
+const entitySeoRobotsIndexPosition = seoPanel.indexOf(
+  "name={fieldNames.robotsIndex}",
+);
+const entitySeoRobotsFollowPosition = seoPanel.indexOf(
+  "name={fieldNames.robotsFollow}",
+);
+const entitySeoCanonicalPosition = seoPanel.indexOf(
+  "name={fieldNames.canonicalUrl}",
+);
 const projectsHubPage = read(projectsHubPagePath);
 const projectHelpers = read(projectHelpersPath);
 const projectHelperExports = Array.from(
@@ -234,15 +262,22 @@ const provenMissingChecks = [
 ] as const;
 
 function withoutCreatedFunctionBodies(sql: string) {
-  return sql.replace(/\$function\$[\s\S]*?\$function\$/g, "$function$BODY$function$");
+  return sql.replace(
+    /\$function\$[\s\S]*?\$function\$/g,
+    "$function$BODY$function$",
+  );
 }
 
 function extractFunctionDefinition(sql: string, functionName: string) {
-  const start = sql.indexOf(`create or replace function public.${functionName}(`);
+  const start = sql.indexOf(
+    `create or replace function public.${functionName}(`,
+  );
   assert.notEqual(start, -1, `${functionName} definition exists`);
   const bodyEnd = sql.indexOf("$function$;", start);
   assert.notEqual(bodyEnd, -1, `${functionName} definition is complete`);
-  return sql.slice(start, bodyEnd + "$function$;".length).replace(/\r\n?/g, "\n");
+  return sql
+    .slice(start, bodyEnd + "$function$;".length)
+    .replace(/\r\n?/g, "\n");
 }
 
 function extractForwardFixColumnManifest(sql: string) {
@@ -279,9 +314,13 @@ check(
 check(
   "aggregate RPC execute privilege is service-role-only",
   ["public", "anon", "authenticated"].every((role) =>
-    migration.includes(`revoke all on function public.save_project_admin_entry(bigint, jsonb) from ${role}`),
+    migration.includes(
+      `revoke all on function public.save_project_admin_entry(bigint, jsonb) from ${role}`,
+    ),
   ) &&
-    migration.includes("grant execute on function public.save_project_admin_entry(bigint, jsonb) to service_role"),
+    migration.includes(
+      "grant execute on function public.save_project_admin_entry(bigint, jsonb) to service_role",
+    ),
 );
 check(
   "runtime table DML is RPC-only while service_role keeps aggregate reads",
@@ -292,10 +331,18 @@ check(
 check(
   "clean rebuild neutralizes materialized default grants for every aggregate object",
   migration.includes("do $project_acl_cleanup$") &&
-    migration.includes("cross join lateral pg_catalog.aclexplode(relation.relacl)") &&
-    migration.includes("cross join lateral pg_catalog.aclexplode(attribute.attacl)") &&
-    migration.includes("cross join lateral pg_catalog.aclexplode(sequence.relacl)") &&
-    migration.includes("cross join lateral pg_catalog.aclexplode(procedure.proacl)") &&
+    migration.includes(
+      "cross join lateral pg_catalog.aclexplode(relation.relacl)",
+    ) &&
+    migration.includes(
+      "cross join lateral pg_catalog.aclexplode(attribute.attacl)",
+    ) &&
+    migration.includes(
+      "cross join lateral pg_catalog.aclexplode(sequence.relacl)",
+    ) &&
+    migration.includes(
+      "cross join lateral pg_catalog.aclexplode(procedure.proacl)",
+    ) &&
     migration.includes("acl.grantee <> relation.relowner") &&
     aggregateTables.every((table) => migration.includes(`'${table}'`)) &&
     aggregateSequences.every((sequence) => migration.includes(`'${sequence}'`)),
@@ -308,7 +355,9 @@ check(
     migration.includes("A non-owner direct sequence grant remains") &&
     migration.includes("A non-owner direct Project RPC grant remains") &&
     migration.includes("A non-owner direct helper-function grant remains") &&
-    migration.includes("INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN") &&
+    migration.includes(
+      "INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER,MAINTAIN",
+    ) &&
     helperFunctions.every((functionName) =>
       migration.includes(`public.${functionName}()`),
     ),
@@ -319,7 +368,9 @@ check(
     migration.includes("expected 114 columns") &&
     migration.includes("expected 99 constraints") &&
     migration.includes("expected 44 indexes") &&
-    migration.includes("Both Project location trigger definitions must include is_active") &&
+    migration.includes(
+      "Both Project location trigger definitions must include is_active",
+    ) &&
     migration.includes("exact 4-row reference location chain"),
 );
 check(
@@ -349,14 +400,18 @@ check(
     aclCorrection.includes("do $project_acl_cleanup$") &&
     aclCorrection.includes("do $project_acl_assert$") &&
     aggregateTables.every((table) => aclCorrection.includes(`'${table}'`)) &&
-    aggregateSequences.every((sequence) => aclCorrection.includes(`'${sequence}'`)) &&
+    aggregateSequences.every((sequence) =>
+      aclCorrection.includes(`'${sequence}'`),
+    ) &&
     aclCorrection.includes("grant select on table") &&
     aclCorrection.includes("to service_role") &&
     aclCorrection.includes("from public, anon, authenticated, service_role"),
 );
 check(
   "forward fix creates the missing delete RPC and limits both RPCs to service_role",
-  aclCorrection.includes(`create or replace function public.${deleteProjectRpc}`) &&
+  aclCorrection.includes(
+    `create or replace function public.${deleteProjectRpc}`,
+  ) &&
     aclCorrection.includes("security definer") &&
     aclCorrection.includes("set search_path = pg_catalog, pg_temp") &&
     aclCorrection.includes(
@@ -388,45 +443,61 @@ check(
   schemaParityAudit.includes('client.query("begin read only")') &&
     schemaParityAudit.includes('client.query("rollback")') &&
     schemaParityAudit.includes('transaction_read_only !== "on"') &&
-    schemaParityAudit.includes('constraints') &&
-    schemaParityAudit.includes('indexes') &&
-    schemaParityAudit.includes('rls_policies') &&
-    schemaParityAudit.includes('user_triggers') &&
-    schemaParityAudit.includes('expected_function_source_sha256') &&
-    schemaParityAudit.includes('sequence_state') &&
-    schemaParityAudit.includes('project_identity_snapshot') &&
-    schemaParityAudit.includes('reference_location_parity') &&
-    schemaParityAudit.includes('forbidden_legacy_function_presence') &&
-    schemaParityAudit.includes('migration_registry') &&
-    schemaParityAudit.includes('catalog_fingerprints') &&
-    schemaParityAudit.includes('expected_pre_fix_gate') &&
-    schemaParityAudit.includes('final_parity_gate') &&
-    schemaParityAudit.includes('data_integrity_pass') &&
-    schemaParityAudit.includes('acl_pass') &&
-    schemaParityAudit.includes('schema_drift_remaining') &&
-    schemaParityAudit.includes('qa_marker_residue') &&
-    schemaParityAudit.includes('trigger_definition_drift') &&
-    schemaParityAudit.includes('exact_column_drift') &&
-    schemaParityAudit.includes('identity_sequences_uncalled') &&
-    schemaParityAudit.includes('parent_constraint_oid') &&
-    schemaParityAudit.includes('parent_trigger_oid') &&
-    schemaParityAudit.includes('column_storage_inheritance_acl_and_comment_defaults') &&
-    schemaParityAudit.includes('function_signature_security_owner_and_search_path'),
+    schemaParityAudit.includes("constraints") &&
+    schemaParityAudit.includes("indexes") &&
+    schemaParityAudit.includes("rls_policies") &&
+    schemaParityAudit.includes("user_triggers") &&
+    schemaParityAudit.includes("expected_function_source_sha256") &&
+    schemaParityAudit.includes("sequence_state") &&
+    schemaParityAudit.includes("project_identity_snapshot") &&
+    schemaParityAudit.includes("reference_location_parity") &&
+    schemaParityAudit.includes("forbidden_legacy_function_presence") &&
+    schemaParityAudit.includes("migration_registry") &&
+    schemaParityAudit.includes("catalog_fingerprints") &&
+    schemaParityAudit.includes("expected_pre_fix_gate") &&
+    schemaParityAudit.includes("final_parity_gate") &&
+    schemaParityAudit.includes("data_integrity_pass") &&
+    schemaParityAudit.includes("acl_pass") &&
+    schemaParityAudit.includes("schema_drift_remaining") &&
+    schemaParityAudit.includes("qa_marker_residue") &&
+    schemaParityAudit.includes("trigger_definition_drift") &&
+    schemaParityAudit.includes("exact_column_drift") &&
+    schemaParityAudit.includes("identity_sequences_uncalled") &&
+    schemaParityAudit.includes("parent_constraint_oid") &&
+    schemaParityAudit.includes("parent_trigger_oid") &&
+    schemaParityAudit.includes(
+      "column_storage_inheritance_acl_and_comment_defaults",
+    ) &&
+    schemaParityAudit.includes(
+      "function_signature_security_owner_and_search_path",
+    ),
 );
 check(
   "schema parity final contract includes Project Row Actions and Global Truth owners",
-  schemaParityAudit.includes("20260731100000_project_row_actions_capability.sql") &&
-    schemaParityAudit.includes("20260805180000_global_truth_atomic_operations_closure.sql") &&
-    schemaParityAudit.includes("20260814020742_projects_domain_hardening.sql") &&
-    schemaParityAudit.includes("20260814020750_location_management_foundation.sql") &&
-    schemaParityAudit.includes("20260817100000_project_section_title_contract.sql") &&
+  schemaParityAudit.includes(
+    "20260731100000_project_row_actions_capability.sql",
+  ) &&
+    schemaParityAudit.includes(
+      "20260805180000_global_truth_atomic_operations_closure.sql",
+    ) &&
+    schemaParityAudit.includes(
+      "20260814020742_projects_domain_hardening.sql",
+    ) &&
+    schemaParityAudit.includes(
+      "20260814020750_location_management_foundation.sql",
+    ) &&
+    schemaParityAudit.includes(
+      "20260817100000_project_section_title_contract.sql",
+    ) &&
     schemaParityAudit.includes('"set_project_featured_admin_entry"') &&
     schemaParityAudit.includes('"duplicate_project_admin_entry"') &&
     schemaParityAudit.includes("columns: 125") &&
     schemaParityAudit.includes("constraints: 106") &&
     schemaParityAudit.includes("indexes: 53") &&
     schemaParityAudit.includes("project_domain_hardening_migration_sha256") &&
-    schemaParityAudit.includes("legacy_project_media_canonicalization_migration_sha256") &&
+    schemaParityAudit.includes(
+      "legacy_project_media_canonicalization_migration_sha256",
+    ) &&
     schemaParityAudit.includes("dashboard_truth_migration_sha256") &&
     schemaParityAudit.includes("reports_analytics_migration_sha256") &&
     schemaParityAudit.includes("system_publication_migration_sha256") &&
@@ -448,11 +519,17 @@ check(
   "schema parity audit decomposes column catalog properties semantically",
   schemaParityAudit.includes("function buildColumnPropertyDiagnostics") &&
     schemaParityAudit.includes("a.attstorage as storage_strategy") &&
-    schemaParityAudit.includes("t.typstorage as type_default_storage_strategy") &&
-    schemaParityAudit.includes("a.attcompression::integer as compression_code") &&
+    schemaParityAudit.includes(
+      "t.typstorage as type_default_storage_strategy",
+    ) &&
+    schemaParityAudit.includes(
+      "a.attcompression::integer as compression_code",
+    ) &&
     schemaParityAudit.includes("function isSemanticallyDefaultCompression") &&
     schemaParityAudit.includes("Number(code) === 0") &&
-    schemaParityAudit.includes("function isSemanticallyDefaultStatisticsTarget") &&
+    schemaParityAudit.includes(
+      "function isSemanticallyDefaultStatisticsTarget",
+    ) &&
     schemaParityAudit.includes("value === null || Number(value) === -1") &&
     schemaParityAudit.includes("stored_column_acl_cardinality") &&
     schemaParityAudit.includes("directGrantsByColumn") &&
@@ -471,7 +548,8 @@ const expectedDefaultBlock = sliceBetween(
 );
 check(
   "schema parity audit has the exact final-default and allowed pre-fix counts",
-  (expectedDefaultBlock.match(/^\s*\["[a-z_]+\.[a-z_]+",/gm) ?? []).length === 46 &&
+  (expectedDefaultBlock.match(/^\s*\["[a-z_]+\.[a-z_]+",/gm) ?? []).length ===
+    46 &&
     provenMissingChecks.length === 24 &&
     schemaParityAudit.includes("knownLegacyDefaultColumnKeys") &&
     schemaParityAudit.includes("legacyDefaultAllowed"),
@@ -486,12 +564,18 @@ check(
       "constraintDiagnostics.all.length === expectedConstraintManifest.length",
     ) &&
     schemaParityAudit.includes("constraint.actual_present") &&
-    schemaParityAudit.includes("constraint.metadata_differences.length === 0") &&
-    schemaParityAudit.includes("constraint.definition_comparison.semantic_match") &&
+    schemaParityAudit.includes(
+      "constraint.metadata_differences.length === 0",
+    ) &&
+    schemaParityAudit.includes(
+      "constraint.definition_comparison.semantic_match",
+    ) &&
     schemaParityAudit.includes("unexpectedActual.length === 0") &&
     schemaParityAudit.includes("expected_final_count") &&
     schemaParityAudit.includes("actual_final_count") &&
-    schemaParityAudit.includes("expectedExistingConstraintManifest.length !== 75") &&
+    schemaParityAudit.includes(
+      "expectedExistingConstraintManifest.length !== 75",
+    ) &&
     schemaParityAudit.includes("knownAdditiveConstraintKeys") &&
     schemaParityAudit.includes("if (/\\bunique\\b/iu.test(clause))") &&
     schemaParityAudit.includes("constraint_type") &&
@@ -514,9 +598,13 @@ check(
     schemaParityAudit.includes("function normalizeTriggerDefinition") &&
     schemaParityAudit.includes("function buildTriggerDiagnostics") &&
     schemaParityAudit.includes("expectedTriggerManifest.map") &&
-    schemaParityAudit.includes("triggerDiagnostics.definitions.length === expectedTriggerManifest.length") &&
+    schemaParityAudit.includes(
+      "triggerDiagnostics.definitions.length === expectedTriggerManifest.length",
+    ) &&
     schemaParityAudit.includes("triggerDiagnostics.mismatches.length === 0") &&
-    schemaParityAudit.includes("triggerDiagnostics.unexpectedActual.length === 0") &&
+    schemaParityAudit.includes(
+      "triggerDiagnostics.unexpectedActual.length === 0",
+    ) &&
     schemaParityAudit.includes("trigger_definition_drift") &&
     schemaParityAudit.includes("expected_definition") &&
     schemaParityAudit.includes("actual_definition"),
@@ -585,11 +673,17 @@ check(
     schemaParityAudit.includes('rowCounts.get("projects")') &&
     schemaParityAudit.includes("Number.isSafeInteger(count) && count >= 0") &&
     schemaParityAudit.includes("Number(stats.null_count) === 0") &&
-    schemaParityAudit.includes("Number(stats.distinct_count) === expectedRows") &&
+    schemaParityAudit.includes(
+      "Number(stats.distinct_count) === expectedRows",
+    ) &&
     schemaParityAudit.includes("Number(stats.duplicate_value_count) === 0") &&
-    schemaParityAudit.includes("summary.data_integrity_snapshot.reference_locations.length ===") &&
-    schemaParityAudit.includes("location.present && location.matches_expected") &&
-    schemaParityAudit.includes("sequence.replace(/_id_seq$/u, \"\")") &&
+    schemaParityAudit.includes(
+      "summary.data_integrity_snapshot.reference_locations.length ===",
+    ) &&
+    schemaParityAudit.includes(
+      "location.present && location.matches_expected",
+    ) &&
+    schemaParityAudit.includes('sequence.replace(/_id_seq$/u, "")') &&
     schemaParityAudit.includes("Number(state.last_value) >= expectedRows") &&
     schemaParityAudit.includes("state.is_called === true") &&
     schemaParityAudit.includes("Number(state.last_value) >= 1") &&
@@ -597,7 +691,9 @@ check(
     schemaParityAudit.includes("fixtureClientKeys") &&
     schemaParityAudit.includes("fixtureTextMarkerPattern") &&
     schemaParityAudit.includes("to_jsonb(row_record)::text ~* $2") &&
-    schemaParityAudit.includes("summary.data_integrity_snapshot.qa_marker_residue.length === 0"),
+    schemaParityAudit.includes(
+      "summary.data_integrity_snapshot.qa_marker_residue.length === 0",
+    ),
 );
 check(
   "schema parity forward fix has one fail-closed additive transaction and no destructive object operation",
@@ -629,8 +725,10 @@ check(
 );
 check(
   "schema parity forward fix is limited to the proven column and check drift",
-  (schemaParityForwardFix.match(/alter column [a-z_]+ drop default/g) ?? []).length === 11 &&
-    (schemaParityForwardFix.match(/alter column [a-z_]+ set not null/g) ?? []).length === 10 &&
+  (schemaParityForwardFix.match(/alter column [a-z_]+ drop default/g) ?? [])
+    .length === 11 &&
+    (schemaParityForwardFix.match(/alter column [a-z_]+ set not null/g) ?? [])
+      .length === 10 &&
     provenMissingChecks.every((constraintName) =>
       schemaParityForwardFix.includes(`'${constraintName}'`),
     ) &&
@@ -643,28 +741,43 @@ check(
   "schema parity forward fix locks and validates the exact 114-column old/final allowlist",
   schemaParityForwardFix.includes("in share row exclusive mode;") &&
     aggregateTables.every((table) =>
-      schemaParityForwardFix.slice(
-        schemaParityForwardFix.indexOf("lock table"),
-        schemaParityForwardFix.indexOf("in share row exclusive mode;") +
-          "in share row exclusive mode;".length,
-      ).includes(`public.${table}`),
+      schemaParityForwardFix
+        .slice(
+          schemaParityForwardFix.indexOf("lock table"),
+          schemaParityForwardFix.indexOf("in share row exclusive mode;") +
+            "in share row exclusive mode;".length,
+        )
+        .includes(`public.${table}`),
     ) &&
-    (extractForwardFixColumnManifest(schemaParityForwardFix).match(
-      /^\s*\('[a-z_]+',\s*\d+,\s*'[a-z_]+'/gm,
-    ) ?? []).length === 114 &&
-    (extractForwardFixColumnManifest(schemaParityForwardFix).match(/null::text/g) ?? [])
-      .length === 72 &&
-    (extractForwardFixColumnManifest(schemaParityForwardFix).match(
-      /,\s*true,\s*'d',\s*'',\s*null::text\)/g,
-    ) ?? []).length === 9 &&
-    (extractForwardFixColumnManifest(schemaParityForwardFix).match(
-      /,\s*false,\s*'',\s*'',\s*null::text\)/g,
-    ) ?? []).length === 11 &&
+    (
+      extractForwardFixColumnManifest(schemaParityForwardFix).match(
+        /^\s*\('[a-z_]+',\s*\d+,\s*'[a-z_]+'/gm,
+      ) ?? []
+    ).length === 114 &&
+    (
+      extractForwardFixColumnManifest(schemaParityForwardFix).match(
+        /null::text/g,
+      ) ?? []
+    ).length === 72 &&
+    (
+      extractForwardFixColumnManifest(schemaParityForwardFix).match(
+        /,\s*true,\s*'d',\s*'',\s*null::text\)/g,
+      ) ?? []
+    ).length === 9 &&
+    (
+      extractForwardFixColumnManifest(schemaParityForwardFix).match(
+        /,\s*false,\s*'',\s*'',\s*null::text\)/g,
+      ) ?? []
+    ).length === 11 &&
     schemaParityForwardFix.includes("attribute.attidentity::text") &&
     schemaParityForwardFix.includes("attribute.attgenerated::text") &&
-    schemaParityForwardFix.includes("attribute.attcollation = type_record.typcollation") &&
+    schemaParityForwardFix.includes(
+      "attribute.attcollation = type_record.typcollation",
+    ) &&
     schemaParityForwardFix.includes("attribute.atthasmissing") &&
-    schemaParityForwardFix.includes("outside the audited pre-fix/final manifest"),
+    schemaParityForwardFix.includes(
+      "outside the audited pre-fix/final manifest",
+    ),
 );
 const forwardColumnManifestAssertion = sliceBetween(
   schemaParityForwardFix,
@@ -673,14 +786,18 @@ const forwardColumnManifestAssertion = sliceBetween(
 );
 check(
   "schema parity forward-fix preflight uses PostgreSQL-version semantic catalog defaults",
-  forwardColumnManifestAssertion.includes("attribute.attcompression::integer = 0") &&
+  forwardColumnManifestAssertion.includes(
+    "attribute.attcompression::integer = 0",
+  ) &&
     /\(\s*attribute\.attstattarget\s+is\s+null\s+or\s+attribute\.attstattarget\s*=\s*\(-1\)::smallint\s*\)/iu.test(
       forwardColumnManifestAssertion,
     ) &&
     /\(\s*attribute\.attacl\s+is\s+null\s+or\s+pg_catalog\.cardinality\(attribute\.attacl\)\s*=\s*0\s*\)/iu.test(
       forwardColumnManifestAssertion,
     ) &&
-    !forwardColumnManifestAssertion.includes("attribute.attcompression::text = ''") &&
+    !forwardColumnManifestAssertion.includes(
+      "attribute.attcompression::text = ''",
+    ) &&
     !forwardColumnManifestAssertion.includes("attribute.attstattarget = -1"),
 );
 check(
@@ -707,9 +824,15 @@ check(
 check(
   "schema parity forward fix fails closed on owners, overloads, legacy routines, and exact triggers",
   schemaParityForwardFix.includes("relation.relowner = 'postgres'::regrole") &&
-    schemaParityForwardFix.includes("sequence_relation.relowner = 'postgres'::regrole") &&
-    schemaParityForwardFix.includes("procedure_record.proowner = 'postgres'::regrole") &&
-    schemaParityForwardFix.includes("sync_project_children(bigint,jsonb,jsonb,jsonb,jsonb,jsonb)") &&
+    schemaParityForwardFix.includes(
+      "sequence_relation.relowner = 'postgres'::regrole",
+    ) &&
+    schemaParityForwardFix.includes(
+      "procedure_record.proowner = 'postgres'::regrole",
+    ) &&
+    schemaParityForwardFix.includes(
+      "sync_project_children(bigint,jsonb,jsonb,jsonb,jsonb,jsonb)",
+    ) &&
     schemaParityForwardFix.includes(
       "admin_list_projects(integer,integer,text,text,text,text,text,text,text,text)",
     ) &&
@@ -718,7 +841,9 @@ check(
     schemaParityForwardFix.includes("summary.deferrable_count = 7") &&
     schemaParityForwardFix.includes("summary.initially_deferred_count = 7") &&
     schemaParityForwardFix.includes("constraint_record.contype = 'c'") &&
-    schemaParityForwardFix.includes("constraint_record.contype in ('p', 'f', 'u')") &&
+    schemaParityForwardFix.includes(
+      "constraint_record.contype in ('p', 'f', 'u')",
+    ) &&
     schemaParityForwardFix.includes("all_local_expected_inheritance") &&
     !schemaParityForwardFix.includes("all_local_uninherited"),
 );
@@ -758,12 +883,8 @@ check(
     saveRpcConflictArbiterFix.includes(
       "do $project_save_rpc_conflict_arbiter_fix$",
     ) &&
-    saveRpcConflictArbiterFix.includes(
-      "aa3258d57ab320cd0fa46eeb2595ae7c",
-    ) &&
-    saveRpcConflictArbiterFix.includes(
-      "bc79445ae958779ed889651cd980c236",
-    ) &&
+    saveRpcConflictArbiterFix.includes("aa3258d57ab320cd0fa46eeb2595ae7c") &&
+    saveRpcConflictArbiterFix.includes("bc79445ae958779ed889651cd980c236") &&
     !/^\s*(?:insert|update|delete|truncate|drop)\b/im.test(
       saveRpcConflictArbiterFix,
     ) &&
@@ -789,8 +910,12 @@ check(
 );
 check(
   "save RPC correction preserves signature, owner, ACL, defaults and fixed execution contract",
-  saveRpcConflictArbiterFix.includes("procedure_record.proacl is not distinct from v_acl_before") &&
-    saveRpcConflictArbiterFix.includes("procedure_record.proowner = v_owner_before") &&
+  saveRpcConflictArbiterFix.includes(
+    "procedure_record.proacl is not distinct from v_acl_before",
+  ) &&
+    saveRpcConflictArbiterFix.includes(
+      "procedure_record.proowner = v_owner_before",
+    ) &&
     saveRpcConflictArbiterFix.includes(
       "pg_catalog.pg_get_function_arguments(procedure_record.oid) =",
     ) &&
@@ -817,7 +942,10 @@ check(
       `ca100000-0000-4000-8000-${suffix.toString().padStart(12, "0")}`,
     ),
   ) &&
-    (schemaParityForwardFix.match(/insert into public\.project_locations/g) ?? []).length === 4 &&
+    (
+      schemaParityForwardFix.match(/insert into public\.project_locations/g) ??
+      []
+    ).length === 4 &&
     !/update\s+public\.project_locations/i.test(
       withoutCreatedFunctionBodies(schemaParityForwardFix),
     ) &&
@@ -836,7 +964,9 @@ check(
   "explicit aggregate deletion is a service-role-only SECURITY DEFINER RPC",
   migration.includes(`function public.${deleteProjectRpc}`) &&
     migration.includes("security definer") &&
-    migration.includes(`grant execute on function public.${deleteProjectRpc}(bigint) to service_role`),
+    migration.includes(
+      `grant execute on function public.${deleteProjectRpc}(bigint) to service_role`,
+    ),
 );
 check(
   "database owns immutable project type and validated location hierarchy",
@@ -855,15 +985,28 @@ const deletedKeys = [
   "video_ids",
 ] as const;
 for (const key of deletedKeys) {
-  check(`explicit deletion contract includes deleted.${key}`, migration.includes(`v_deleted -> '${key}'`) && contract.includes(`${key}: number[]`));
+  check(
+    `explicit deletion contract includes deleted.${key}`,
+    migration.includes(`v_deleted -> '${key}'`) &&
+      contract.includes(`${key}: number[]`),
+  );
 }
 check(
   "implicit child omission fails closed instead of deleting a snapshot difference",
-  (migration.match(/omitted without an explicit deletion tombstone/g) ?? []).length >= 7,
+  (migration.match(/omitted without an explicit deletion tombstone/g) ?? [])
+    .length >= 7,
 );
 check(
   "stable identity validation covers every ordered child family",
-  ["location point", "feature identity", "floor plan identity", "floor plan detail identity", "delivery item identity", "media identity", "video identity"].every((token) => migration.toLowerCase().includes(token)),
+  [
+    "location point",
+    "feature identity",
+    "floor plan identity",
+    "floor plan detail identity",
+    "delivery item identity",
+    "media identity",
+    "video identity",
+  ].every((token) => migration.toLowerCase().includes(token)),
 );
 check(
   "ordered children use stable UUID client keys and explicit sort order",
@@ -875,13 +1018,15 @@ check(
   "one Project form owns create and edit through AdminFormRuntime and one save action",
   form.includes("<AdminFormRuntime") &&
     form.includes("action={saveProjectEntry}") &&
-    form.includes('mode={mode}') &&
-    createPage.includes('<ProjectEditForm key={`${type}-new`} bundle={bundle}') &&
+    form.includes("mode={mode}") &&
+    createPage.includes(
+      "<ProjectEditForm key={`${type}-new`} bundle={bundle}",
+    ) &&
     editPage.includes("<ProjectEditForm key={bundle.project.id"),
 );
 check(
   "Create and Edit remount ProjectEditForm when the route identity changes",
-  createPage.includes('<ProjectEditForm key={`${type}-new`}') &&
+  createPage.includes("<ProjectEditForm key={`${type}-new`}") &&
     editPage.includes("<ProjectEditForm key={bundle.project.id"),
 );
 check(
@@ -901,11 +1046,12 @@ check(
     form.includes('useAdminEntityListInvalidation("projects")') &&
     form.includes("void invalidateProjectsList()") &&
     formRuntime.includes("onSuccess?.(state);") &&
-    formRuntime.indexOf("onSuccess?.(state);") < formRuntime.indexOf("router.replace(editHref"),
+    formRuntime.indexOf("onSuccess?.(state);") <
+      formRuntime.indexOf("router.replace(editHref"),
 );
 check(
   "collapsed floor-plan accordions keep every field mounted for complete FormData",
-  repeaters.includes('aria-hidden={!isExpanded}') &&
+  repeaters.includes("aria-hidden={!isExpanded}") &&
     repeaters.includes('${isExpanded ? "grid" : "hidden"}'),
 );
 check(
@@ -915,7 +1061,9 @@ check(
 );
 check(
   "map URL, coordinates, and zoom are required in both TypeScript and SQL",
-  contract.includes('addError(errors, "google_maps_url", "رابط خرائط جوجل مطلوب.")') &&
+  contract.includes(
+    'addError(errors, "google_maps_url", "رابط خرائط جوجل مطلوب.")',
+  ) &&
     migration.includes("google_maps_url text not null") &&
     migration.includes("latitude numeric(9, 6) not null") &&
     migration.includes("longitude numeric(9, 6) not null") &&
@@ -925,7 +1073,11 @@ check(
   "exactly eight approved Project tab IDs are declared without duplicates",
   declaredProjectTabIds.length === approvedProjectTabIds.length &&
     new Set(declaredProjectTabIds).size === approvedProjectTabIds.length &&
-    declaredProjectTabIds.every((tabId) => approvedProjectTabIds.includes(tabId as (typeof approvedProjectTabIds)[number])),
+    declaredProjectTabIds.every((tabId) =>
+      approvedProjectTabIds.includes(
+        tabId as (typeof approvedProjectTabIds)[number],
+      ),
+    ),
 );
 check(
   "Project tabs use the shared full-width editor presentation without a parallel preview column",
@@ -943,23 +1095,49 @@ check(
     !existsSync(join(ROOT, previewPath)) &&
     form.includes('className="grid gap-4 xl:grid-cols-3"') &&
     repeaters.includes('className="grid scroll-mt-28 gap-4 xl:grid-cols-3"') &&
-    mediaEditors.includes('className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"') &&
+    mediaEditors.includes(
+      'className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"',
+    ) &&
     !mediaEditors.includes("2xl:grid-cols-4"),
 );
 check(
   "Project tab metadata adopts the shared navigation, heading, and semantic-icon contract",
-  ["البيانات", "الموقع", "نظرة عامة", "المساحات", "المواصفات", "الميديا", "SEO"].every((label) =>
-    form.includes(`navigationLabel: "${label}"`),
-  ) &&
+  [
+    "البيانات",
+    "الموقع",
+    "نظرة عامة",
+    "المساحات",
+    "المواصفات",
+    "الميديا",
+    "SEO",
+  ].every((label) => form.includes(`navigationLabel: "${label}"`)) &&
     form.includes("navigationLabel: ADMIN_ENTITY_REVIEW_TAB_LABEL") &&
-    sharedReviewContract.includes('ADMIN_ENTITY_REVIEW_TAB_LABEL = "المراجعة والنشر"') &&
-    ["البيانات الأساسية للمشروع", "بيانات الموقع الأساسية", "النظرة العامة ومميزات المشروع", "المساحات والمخططات", "مواصفات التنفيذ والتسليم", "الصور والفيديو", "تحسين محركات البحث والمشاركة", "مراجعة المشروع وحالة الظهور"].every((heading) =>
-      form.includes(`sectionHeading: "${heading}"`),
+    sharedReviewContract.includes(
+      'ADMIN_ENTITY_REVIEW_TAB_LABEL = "المراجعة والنشر"',
     ) &&
-    form.includes('sectionDescription: "حدّد الموقع الإداري والإحداثيات والطرق والمعالم المحيطة بالمشروع."') &&
-    ["content", "location", "overview", "plans", "specifications", "media", "seo", "publish"].every((icon) =>
-      form.includes(`icon: "${icon}" as const`),
+    [
+      "البيانات الأساسية للمشروع",
+      "بيانات الموقع الأساسية",
+      "النظرة العامة ومميزات المشروع",
+      "المساحات والمخططات",
+      "مواصفات التنفيذ والتسليم",
+      "الصور والفيديو",
+      "تحسين محركات البحث والمشاركة",
+      "مراجعة المشروع وحالة الظهور",
+    ].every((heading) => form.includes(`sectionHeading: "${heading}"`)) &&
+    form.includes(
+      '"حدّد الموقع الإداري والإحداثيات والطرق والمعالم المحيطة بالمشروع."',
     ) &&
+    [
+      "content",
+      "location",
+      "overview",
+      "plans",
+      "specifications",
+      "media",
+      "seo",
+      "publish",
+    ].every((icon) => form.includes(`icon: "${icon}" as const`)) &&
     moduleTabs.includes("AdminModuleTabIconName") &&
     moduleTabs.includes('variant = "editor"') &&
     moduleTabs.includes("sectionHeading?: ReactNode") &&
@@ -970,25 +1148,42 @@ check(
   !form.includes('title="بيانات المشروع الأساسية"') &&
     !form.includes('title="بيانات الموقع الأساسية"') &&
     !form.includes('title="نظرة عامة عن المشروع"') &&
-    ["بيانات الموقع الأساسية", "المساحات والمخططات", "مواصفات التنفيذ والتسليم", "الصور والفيديو"].every(
-      (heading) => form.includes(`sectionHeading: "${heading}"`),
+    [
+      "بيانات الموقع الأساسية",
+      "المساحات والمخططات",
+      "مواصفات التنفيذ والتسليم",
+      "الصور والفيديو",
+    ].every((heading) => form.includes(`sectionHeading: "${heading}"`)) &&
+    !/<SectionCard[^>]*title="(?:بيانات الموقع الأساسية|المساحات والمخططات|مواصفات التنفيذ والتسليم|الصور والفيديو)"/.test(
+      form,
     ) &&
-    !/<SectionCard[^>]*title="(?:بيانات الموقع الأساسية|المساحات والمخططات|مواصفات التنفيذ والتسليم|الصور والفيديو)"/.test(form) &&
     (form.match(/<SectionCard>/g)?.length ?? 0) >= 4 &&
-    form.includes("<ProjectFloorPlansEditor initialPlans={bundle.floor_plans} />") &&
-    ["location_title", "plans_title", "gallery_title"].every((field) => form.includes(`name="${field}"`)) &&
+    form.includes(
+      "<ProjectFloorPlansEditor initialPlans={bundle.floor_plans} />",
+    ) &&
+    ["location_title", "plans_title", "gallery_title"].every((field) =>
+      form.includes(`name="${field}"`),
+    ) &&
     form.includes("title?: string;") &&
     repeaters.includes("title?: string;") &&
-    ["إعدادات الهيرو", "ما حول المشروع", "مميزات المشروع", "بنود المواصفات", "صور المواصفات والتسليم", "معرض الصور", "معرض الفيديو"].every(
-      (subsection) => form.includes(`title="${subsection}"`),
-    ),
+    [
+      "إعدادات الهيرو",
+      "ما حول المشروع",
+      "مميزات المشروع",
+      "بنود المواصفات",
+      "صور المواصفات والتسليم",
+      "معرض الصور",
+      "معرض الفيديو",
+    ].every((subsection) => form.includes(`title="${subsection}"`)),
 );
 check(
   "Project Create and Edit adopt the shared page surface and full-form cadence",
   [createPage, editPage].every((source) =>
     source.includes("<AdminPageExperience"),
   ) &&
-    pageExperience.includes('data-admin-page-surface-owner="AdminPageExperience"') &&
+    pageExperience.includes(
+      'data-admin-page-surface-owner="AdminPageExperience"',
+    ) &&
     formPresentation.includes(
       'export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-7"',
     ) &&
@@ -997,8 +1192,12 @@ check(
 );
 check(
   "Project select consumers use the shared form listbox owner without visible native selects",
-  [form, locationEditor, seoPanel].every((source) => !/<select(?:\s|>)/.test(source)) &&
-    [form, locationEditor, seoPanel].every((source) => source.includes("<AdminFormListboxSelect")) &&
+  [form, locationEditor, seoPanel].every(
+    (source) => !/<select(?:\s|>)/.test(source),
+  ) &&
+    [form, locationEditor, seoPanel].every((source) =>
+      source.includes("<AdminFormListboxSelect"),
+    ) &&
     formListbox.includes('data-admin-form-listbox-source=""') &&
     formListbox.includes("<AdminListboxSelect"),
 );
@@ -1016,14 +1215,18 @@ check(
 check(
   "Project edit retains an inactive saved location chain without offering it as a new choice",
   entryData.includes("retainedLocationIds") &&
-    entryData.includes('query.or(`is_active.eq.true,id.in.(${retainedIds.join(",")})`)') &&
+    entryData.includes(
+      'query.or(`is_active.eq.true,id.in.(${retainedIds.join(",")})`)',
+    ) &&
     locationEditor.includes("disabled: !option.isActive") &&
     listbox.includes("option.disabled"),
 );
 check(
   "Project entry surfaces do not opt back into light appearances or standalone light surface tokens",
   projectEntryVisualSources.every(
-    (source) => !source.includes('appearance="light"') && !standaloneLightClass.test(source),
+    (source) =>
+      !source.includes('appearance="light"') &&
+      !standaloneLightClass.test(source),
   ),
 );
 check(
@@ -1066,14 +1269,23 @@ check(
     projectDomainHardeningMigration.includes(
       "drop index if exists public.projects_code_unique_idx",
     ) &&
-    projectDomainHardeningMigration.includes("Required user-visible Project label") &&
+    projectDomainHardeningMigration.includes(
+      "Required user-visible Project label",
+    ) &&
     !action.includes("projects_code_unique_idx"),
 );
 check(
   "Project save adopts shared Media write coordination for all Project media domains",
   action.includes("coordinateProjectEntrySave") &&
-    ["projects", "project_floor_plans", "project_media", "project_videos"].every((domain) => coordinator.includes(`"${domain}"`)) &&
-    coordinator.includes("synchronizeMediaReferenceWriteScopesAfterDomainMutation"),
+    [
+      "projects",
+      "project_floor_plans",
+      "project_media",
+      "project_videos",
+    ].every((domain) => coordinator.includes(`"${domain}"`)) &&
+    coordinator.includes(
+      "synchronizeMediaReferenceWriteScopesAfterDomainMutation",
+    ),
 );
 check(
   "Media cleanup is driven only by explicit tombstones",
@@ -1095,22 +1307,46 @@ check(
     seoPanel.match(/<AdminFormLayout/g)?.length === 1 &&
     seoPanel.match(/<AdminSingleOpenAccordion/g)?.length === 1 &&
     seoPanel.includes('defaultOpenId="search-result-preview"') &&
-    ["search-result-preview", "open-graph-preview", "live-seo-analysis"].every((id) => seoPanel.includes(`id: "${id}"`)) &&
-    ["معاينة نتائج البحث", "معاينة المشاركة الاجتماعية (Open Graph)", "تحليل SEO المباشر"].every((label) => seoPanel.includes(label)) &&
+    ["search-result-preview", "open-graph-preview", "live-seo-analysis"].every(
+      (id) => seoPanel.includes(`id: "${id}"`),
+    ) &&
+    [
+      "معاينة نتائج البحث",
+      "معاينة المشاركة الاجتماعية (Open Graph)",
+      "تحليل SEO المباشر",
+    ].every((label) => seoPanel.includes(label)) &&
     entitySeoPrimaryStart >= 0 &&
     entitySeoReturnStart > entitySeoPrimaryStart &&
     entitySeoHelperStart > entitySeoReturnStart &&
-    ["seoTitle", "seoDescription", "focusKeyword", "seoKeywords", "robotsIndex", "robotsFollow", "canonicalUrl", "ogImage", "ogImageAlt"].every(
-      (field) => entitySeoPrimaryRender.includes(`fieldNames.${field}`) && !entitySeoHelperRender.includes(`fieldNames.${field}`),
+    [
+      "seoTitle",
+      "seoDescription",
+      "focusKeyword",
+      "seoKeywords",
+      "robotsIndex",
+      "robotsFollow",
+      "canonicalUrl",
+      "ogImage",
+      "ogImageAlt",
+    ].every(
+      (field) =>
+        entitySeoPrimaryRender.includes(`fieldNames.${field}`) &&
+        !entitySeoHelperRender.includes(`fieldNames.${field}`),
     ) &&
     entitySeoRobotsIndexPosition >= 0 &&
     entitySeoRobotsIndexPosition < entitySeoRobotsFollowPosition &&
     entitySeoRobotsFollowPosition < entitySeoCanonicalPosition &&
-    seoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
+    seoPanel.includes(
+      'data-admin-seo-control-order="index-follow-canonical"',
+    ) &&
     !seoPanel.includes("البيانات الأساسية لتحسين محركات البحث") &&
     !seoPanel.includes("خصص عنوان ووصف وكلمات") &&
-    entitySeoHelperRender.includes("navigationEventName={navigationEventName}") &&
-    !["seo-basics", "social-sharing", "analysis-preview"].some((id) => seoPanel.includes(`id: "${id}"`)) &&
+    entitySeoHelperRender.includes(
+      "navigationEventName={navigationEventName}",
+    ) &&
+    !["seo-basics", "social-sharing", "analysis-preview"].some((id) =>
+      seoPanel.includes(`id: "${id}"`),
+    ) &&
     !seoPanel.includes("project-") &&
     !seoPanel.includes("images/projects"),
 );
@@ -1124,7 +1360,9 @@ check(
   "PostgreSQL fixture covers stable IDs, reorder, explicit deletion, and forced rollback",
   fixture.includes("stable feature IDs or reorder failed") &&
     fixture.includes("explicit feature deletion tombstone failed") &&
-    fixture.includes("explicit aggregate delete RPC did not cascade atomically") &&
+    fixture.includes(
+      "explicit aggregate delete RPC did not cascade atomically",
+    ) &&
     fixture.includes("forced aggregate failure did not fail") &&
     fixture.trimEnd().toLowerCase().endsWith("rollback;"),
 );
@@ -1139,11 +1377,16 @@ check(
     fixture.includes("source=direct_function_acl") &&
     fixture.includes("source=effective_function_privilege") &&
     fixture.includes("MAINTAIN") &&
-    fixture.includes("aggregate ACL diagnostics found %s violation(s) before fixture writes") &&
-    fixture.indexOf("aggregate ACL diagnostics found %s violation(s) before fixture writes") <
-      fixture.indexOf("insert into public.project_locations") &&
+    fixture.includes(
+      "aggregate ACL diagnostics found %s violation(s) before fixture writes",
+    ) &&
+    fixture.indexOf(
+      "aggregate ACL diagnostics found %s violation(s) before fixture writes",
+    ) < fixture.indexOf("insert into public.project_locations") &&
     aggregateTables.every((table) => fixture.includes(`public.${table}`)) &&
-    aggregateSequences.every((sequence) => fixture.includes(`public.${sequence}`)),
+    aggregateSequences.every((sequence) =>
+      fixture.includes(`public.${sequence}`),
+    ),
 );
 check(
   "PostgreSQL fixture is rollback-only and never targets a remote environment",
@@ -1154,24 +1397,35 @@ check(
 
 check(
   "Project Row Actions migration is additive, local-only, and owns authoritative featured state",
-  projectRowActionsMigration.includes("add column if not exists featured boolean") &&
+  projectRowActionsMigration.includes(
+    "add column if not exists featured boolean",
+  ) &&
     projectRowActionsMigration.includes("set featured = false") &&
-    projectRowActionsMigration.includes("alter column featured set default false") &&
+    projectRowActionsMigration.includes(
+      "alter column featured set default false",
+    ) &&
     projectRowActionsMigration.includes("alter column featured set not null") &&
-    projectRowActionsMigration.includes("does not retain an atthasmissing representation") &&
-    projectRowActionsMigration.includes("MUST NOT be applied to Remote/Production") &&
+    projectRowActionsMigration.includes(
+      "does not retain an atthasmissing representation",
+    ) &&
+    projectRowActionsMigration.includes(
+      "MUST NOT be applied to Remote/Production",
+    ) &&
     !/\bdrop\s+table\b/i.test(projectRowActionsMigration),
 );
 check(
   "Project Row Actions RPCs are fixed-search-path service-role-only domain commands",
-  [
-    "set_project_featured_admin_entry",
-    "duplicate_project_admin_entry",
-  ].every((functionName) =>
-    projectRowActionsMigration.includes(`function public.${functionName}`),
+  ["set_project_featured_admin_entry", "duplicate_project_admin_entry"].every(
+    (functionName) =>
+      projectRowActionsMigration.includes(`function public.${functionName}`),
   ) &&
-    (projectRowActionsMigration.match(/security definer/g) ?? []).length === 2 &&
-    (projectRowActionsMigration.match(/set search_path = pg_catalog, pg_temp/g) ?? []).length === 2 &&
+    (projectRowActionsMigration.match(/security definer/g) ?? []).length ===
+      2 &&
+    (
+      projectRowActionsMigration.match(
+        /set search_path = pg_catalog, pg_temp/g,
+      ) ?? []
+    ).length === 2 &&
     projectRowActionsMigration.includes(
       "grant execute on function public.set_project_featured_admin_entry(bigint, boolean) to service_role",
     ) &&
@@ -1194,20 +1448,35 @@ check(
     "public.project_delivery_items",
     "public.project_media",
     "public.project_videos",
-  ].every((table) => projectRowActionsMigration.includes(`insert into ${table}`)) &&
-    (projectRowActionsMigration.match(/pg_catalog\.gen_random_uuid\(\)/g) ?? []).length >= 7 &&
+  ].every((table) =>
+    projectRowActionsMigration.includes(`insert into ${table}`),
+  ) &&
+    (projectRowActionsMigration.match(/pg_catalog\.gen_random_uuid\(\)/g) ?? [])
+      .length >= 7 &&
     projectRowActionsMigration.includes("for update") &&
     projectRowActionsMigration.includes("exception") &&
     projectRowActionsMigration.trimEnd().toLowerCase().endsWith("commit;"),
 );
 check(
   "Project Row Actions PostgreSQL fixture proves success, forced child rollback, non-mutating failures, authoritative featured writes, and ACL",
-  projectRowActionsFixture.includes("forced duplicate child failure left a partial Project root") &&
-    projectRowActionsFixture.includes("duplicate Project child counts are incomplete") &&
-    projectRowActionsFixture.includes("duplicate floor-plan detail count is incomplete") &&
-    projectRowActionsFixture.includes("missing-source duplicate failure mutated Project data") &&
-    projectRowActionsFixture.includes("authoritative featured RPC did not persist true") &&
-    projectRowActionsFixture.includes("Project Row Actions RPC ACL is broader than service_role") &&
+  projectRowActionsFixture.includes(
+    "forced duplicate child failure left a partial Project root",
+  ) &&
+    projectRowActionsFixture.includes(
+      "duplicate Project child counts are incomplete",
+    ) &&
+    projectRowActionsFixture.includes(
+      "duplicate floor-plan detail count is incomplete",
+    ) &&
+    projectRowActionsFixture.includes(
+      "missing-source duplicate failure mutated Project data",
+    ) &&
+    projectRowActionsFixture.includes(
+      "authoritative featured RPC did not persist true",
+    ) &&
+    projectRowActionsFixture.includes(
+      "Project Row Actions RPC ACL is broader than service_role",
+    ) &&
     /^begin;/im.test(projectRowActionsFixture) &&
     projectRowActionsFixture.trimEnd().toLowerCase().endsWith("rollback;"),
 );

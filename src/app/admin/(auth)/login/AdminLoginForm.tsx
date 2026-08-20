@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { FormEvent, useState } from "react";
 
+import { AdminCheckbox } from "../../../../components/admin/ui";
 import { resolveSafeInternalPath } from "../../../../lib/security/safe-internal-path";
 
 export default function AdminLoginForm() {
@@ -25,7 +26,11 @@ export default function AdminLoginForm() {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
-        body: JSON.stringify({ username: trimmedUsername, password, rememberMe }),
+        body: JSON.stringify({
+          username: trimmedUsername,
+          password,
+          rememberMe,
+        }),
       });
 
       const payload = (await response.json()) as { error?: string };
@@ -43,7 +48,10 @@ export default function AdminLoginForm() {
         return;
       }
 
-      const safePath = resolveSafeInternalPath(searchParams.get("next"), "/admin");
+      const safePath = resolveSafeInternalPath(
+        searchParams.get("next"),
+        "/admin",
+      );
       const destination = safePath.startsWith("/admin") ? safePath : "/admin";
       window.location.assign(destination);
     } catch {
@@ -54,7 +62,11 @@ export default function AdminLoginForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="mx-auto w-full max-w-md space-y-4" dir="rtl">
+    <form
+      onSubmit={onSubmit}
+      className="mx-auto w-full max-w-md space-y-4"
+      dir="rtl"
+    >
       <label className="block space-y-2 text-sm text-white/55">
         <span>اسم المستخدم</span>
         <input
@@ -81,24 +93,31 @@ export default function AdminLoginForm() {
       </label>
 
       <label className="flex cursor-pointer items-center gap-2 text-sm text-white/55">
-        <input
-          type="checkbox"
+        <AdminCheckbox
           name="rememberMe"
           checked={rememberMe}
           onChange={(event) => setRememberMe(event.target.checked)}
-          className="h-4 w-4 rounded border-white/20 bg-[#05070B] accent-[#D8B87A]"
+          label="تذكرني"
         />
         <span>تذكرني</span>
       </label>
 
       <div className="text-sm">
-        <Link href="/admin/forgot-password" className="text-[#D8B87A]/85 transition hover:text-[#D8B87A]">
+        <Link
+          href="/admin/forgot-password"
+          className="text-[#D8B87A]/85 transition hover:text-[#D8B87A]"
+        >
           نسيت كلمة المرور؟
         </Link>
       </div>
 
       {error ? (
-        <p role="alert" className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">{error}</p>
+        <p
+          role="alert"
+          className="rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-100"
+        >
+          {error}
+        </p>
       ) : null}
 
       <button

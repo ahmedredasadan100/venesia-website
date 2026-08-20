@@ -9,6 +9,7 @@
 
 import {
   adminConsumerCapabilityAudit,
+  type AdminConsumerCapabilityKey,
   type AdminConsumerCapabilityAuditDeclaration,
 } from "../interaction-system/adoption-manifest.ts";
 
@@ -19,15 +20,34 @@ export type AdminFormAdoptionClassification =
   | "specialized_exception"
   | "explicit_exception";
 
-export type AdminFormAdoptionEntry = {
+type AdminFormAdoptionEntryBase = {
   id: string;
   label: string;
-  classification: AdminFormAdoptionClassification;
   sourceFiles: readonly string[];
   surfaces: readonly string[];
   capabilityAudit: AdminConsumerCapabilityAuditDeclaration;
   rationale: string;
 };
+
+export type AdminFormCapabilityExceptionContract = {
+  lowerLevelSharedCapabilities: readonly AdminConsumerCapabilityKey[];
+  knownDebt: readonly string[];
+  reviewTrigger: string;
+  blocksGlobalClosure: boolean;
+};
+
+export type AdminFormAdoptionEntry =
+  | (AdminFormAdoptionEntryBase & {
+      classification: Exclude<
+        AdminFormAdoptionClassification,
+        "specialized_exception" | "explicit_exception"
+      >;
+      exceptionContract?: never;
+    })
+  | (AdminFormAdoptionEntryBase & {
+      classification: "specialized_exception" | "explicit_exception";
+      exceptionContract: AdminFormCapabilityExceptionContract;
+    });
 
 export const ADMIN_FORM_RUNTIME_MODULE = {
   id: "form_runtime",
@@ -173,7 +193,15 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/components/admin/projects/tracking/TrackingForms.tsx",
       "src/components/admin/projects/tracking/TrackingVideoFields.tsx",
     ],
-    surfaces: ["tracking-profile", "stage-create", "stage-edit", "item-create", "item-edit", "update-create", "update-edit"],
+    surfaces: [
+      "tracking-profile",
+      "stage-create",
+      "stage-edit",
+      "item-create",
+      "item-edit",
+      "update-create",
+      "update-edit",
+    ],
     rationale:
       "Tracking forms delegate pending state, structured validation feedback, dirty-close confirmation, and success handoff to AdminFormRuntime while Domain RPCs and Media coordination remain server-owned.",
   },
@@ -199,7 +227,19 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "page-composition-and-seo",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit({
+      form_runtime: {
+        state: "approved_exception",
+        scope: "page-composition-and-seo:composition-assignment-forms",
+        approvingOwner: "Page Composition domain owner",
+        evidence: [
+          "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx",
+          "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
+        ],
+        rationale:
+          "Assignment and page SEO commands are part of the existing Page Composition aggregate lifecycle, not long-lived generic entity create/edit sessions.",
+      },
+    }),
     label: "Page composition and per-page SEO",
     classification: "specialized_exception",
     sourceFiles: [
@@ -210,6 +250,22 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["composition", "assignment", "seo"],
     rationale:
       "Composite page-builder workflow has specialized assignment, ordering, and SEO lifecycles.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+        "listbox",
+        "switch",
+      ],
+      knownDebt: [
+        "The composition aggregate retains domain-owned assignment, ordering, and page SEO command lifecycles.",
+      ],
+      reviewTrigger:
+        "Review when Page Composition moves to a generic long-lived create/edit session or its domain command boundary changes.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "block-template-create-modals",
@@ -234,7 +290,19 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "block-template-builders-and-editors",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit({
+      form_runtime: {
+        state: "approved_exception",
+        scope: "block-template-builders-and-editors:schema-editors",
+        approvingOwner: "Page Blocks schema editor owner",
+        evidence: [
+          "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+          "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+        ],
+        rationale:
+          "Schema-driven block editors keep their established aggregate command lifecycle while generic create modals adopt AdminFormRuntime separately.",
+      },
+    }),
     label: "Block template builders and editors",
     classification: "specialized_exception",
     sourceFiles: [
@@ -250,22 +318,47 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["template-edit", "template-command"],
     rationale:
       "Schema-driven block editors retain their dedicated composition contract; their generic create modals are inventoried as shared adopters separately.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "media",
+        "switch",
+      ],
+      knownDebt: [
+        "Schema edit sessions remain outside the generic form runtime by explicit aggregate ownership.",
+      ],
+      reviewTrigger:
+        "Review when schema editors converge on the same save, dirty-close, and create-to-edit lifecycle as generic entity forms.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "menu-quick-create",
     capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Menu quick create",
     classification: "shared_adopter",
-    sourceFiles: [
-      "src/app/admin/pages-blocks/menus/AddMenuPanelClient.tsx",
-    ],
+    sourceFiles: ["src/app/admin/pages-blocks/menus/AddMenuPanelClient.tsx"],
     surfaces: ["menu-create"],
     rationale:
       "Generic menu creation delegates pending, validation focus, feedback, dirty confirmation, and Create-to-Edit handoff to AdminFormRuntime.",
   },
   {
     id: "menu-builder",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit({
+      form_runtime: {
+        state: "approved_exception",
+        scope: "menu-builder:hierarchical-menu-commands",
+        approvingOwner: "Menu Builder domain owner",
+        evidence: [
+          "src/app/admin/pages-blocks/menus/MenuBuilderClient.tsx",
+          "src/app/admin/pages-blocks/menus/MenuItemForm.tsx",
+        ],
+        rationale:
+          "Hierarchical menu settings and item commands retain the existing builder lifecycle rather than a generic entity edit session.",
+      },
+    }),
     label: "Menu builder",
     classification: "specialized_exception",
     sourceFiles: [
@@ -277,6 +370,21 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["menu-edit", "item-edit", "ordering", "row-command"],
     rationale:
       "Hierarchical menu editing and ordering are a specialized builder workflow.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "listbox",
+        "switch",
+      ],
+      knownDebt: [
+        "Menu hierarchy and ordering remain specialized domain commands.",
+      ],
+      reviewTrigger:
+        "Review when menu and item editing acquire a generic long-lived form session contract.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "footer-builder",
@@ -290,6 +398,22 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["footer-compose", "footer-link-edit", "ordering"],
     rationale:
       "Multi-slot footer composition is a specialized aggregate editor whose destructive interactions delegate to Shared Confirmation.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+        "listbox",
+        "switch",
+      ],
+      knownDebt: [
+        "Footer slot composition and ordering remain one aggregate draft rather than generic entity forms.",
+      ],
+      reviewTrigger:
+        "Review when footer slots become independently persisted entities or adopt generic create/edit sessions.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "global-seo-settings",
@@ -300,6 +424,15 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["global-meta"],
     rationale:
       "Singleton global metadata management is not a generic entity create/edit consumer.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["feedback", "busy_state", "listbox"],
+      knownDebt: [
+        "Global SEO remains a singleton settings aggregate with inheritance semantics.",
+      ],
+      reviewTrigger:
+        "Review when global SEO becomes a generic versioned entity create/edit workflow.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "company-identity-settings",
@@ -320,37 +453,93 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["media-policy-settings"],
     rationale:
       "Singleton upload, deletion, storage, and reconciliation policies retain a dedicated settings contract.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "switch",
+      ],
+      knownDebt: [
+        "Storage reconciliation and upload policy remain a dedicated settings aggregate.",
+      ],
+      reviewTrigger:
+        "Review when Media settings loses reconciliation commands or becomes a generic entity edit session.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "security-settings",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit({
+      form_runtime: {
+        state: "approved_exception",
+        scope: "security-settings:sensitive-session-commands",
+        approvingOwner: "Admin Auth and Security domain owner",
+        evidence: [
+          "src/app/admin/settings/security/SecuritySettingsClient.tsx",
+        ],
+        rationale:
+          "Password and session commands require the existing security-specific validation and session lifecycle.",
+      },
+    }),
     label: "Security settings",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/settings/security/SecuritySettingsClient.tsx"],
     surfaces: ["password", "session", "security-policy"],
     rationale:
       "Sensitive security mutations require dedicated validation and session semantics.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["feedback", "confirmation", "busy_state"],
+      knownDebt: [
+        "Password and session mutation lifecycles remain security-domain owned.",
+      ],
+      reviewTrigger:
+        "Review only if Auth and Permissions approve a change to security form ownership.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "integrations-server-configuration",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit({
+      form_runtime: {
+        state: "approved_exception",
+        scope: "integrations-server-configuration:vault-credential-commands",
+        approvingOwner: "Integrations server configuration owner",
+        evidence: [
+          "src/components/admin/integrations/IntegrationsServerConfiguration.tsx",
+        ],
+        rationale:
+          "Vault replacement, optimistic concurrency, and configuration tests use the existing server-configuration aggregate lifecycle.",
+      },
+    }),
     label: "Integrations server configuration",
     classification: "specialized_exception",
     sourceFiles: [
       "src/components/admin/integrations/IntegrationsServerConfiguration.tsx",
     ],
-    surfaces: ["provider-app-credentials", "vault-replacement", "configuration-test"],
+    surfaces: [
+      "provider-app-credentials",
+      "vault-replacement",
+      "configuration-test",
+    ],
     rationale:
       "Provider App credentials use a dedicated Vault-only Aggregate with optimistic concurrency, test rate limits, and no browser-owned secret state; this is not a generic entity create/edit lifecycle.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["confirmation", "busy_state"],
+      knownDebt: [
+        "Vault-backed credential replacement remains a security-sensitive aggregate command.",
+      ],
+      reviewTrigger:
+        "Review only when the Vault, concurrency, or provider-test ownership contract changes.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "users-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(),
     label: "Admin users create and edit",
     classification: "shared_adopter",
-    sourceFiles: [
-      "src/app/admin/users-roles/AdminUserFormModal.tsx",
-    ],
+    sourceFiles: ["src/app/admin/users-roles/AdminUserFormModal.tsx"],
     surfaces: ["user-create", "user-edit"],
     rationale:
       "Create and edit presentation, pending, validation focus, feedback, dirty confirmation, and modal close lifecycle delegate to AdminFormRuntime; identity, password, session, self-protection, and role policy remain with the existing Auth domain actions.",
@@ -364,6 +553,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["identity-collection", "status-command", "delete-command"],
     rationale:
       "Identity status and delete commands remain specialized Auth-domain mutations while collection presentation, feedback, and confirmation use the shared owners and create/edit lifecycle is inventoried separately.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+      ],
+      knownDebt: [
+        "Identity status and deletion remain Auth-domain commands; create/edit is governed by its separate adopter entry.",
+      ],
+      reviewTrigger:
+        "Review when Auth-domain command semantics or the separate create/edit ownership changes.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "maintenance-immediate-setting",
@@ -374,10 +577,31 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["immediate-toggle"],
     rationale:
       "Single immediate toggle command intentionally has no persistent editable form session.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["feedback", "confirmation"],
+      knownDebt: [
+        "The immediate maintenance command intentionally has no persistent form session.",
+      ],
+      reviewTrigger:
+        "Review if maintenance mode becomes a multi-field persisted settings form.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "authentication-login",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit({
+      form_runtime: {
+        state: "approved_exception",
+        scope: "authentication-login:session-entry-forms",
+        approvingOwner: "Admin Auth domain owner",
+        evidence: [
+          "src/app/admin/(auth)/login/AdminLoginForm.tsx",
+          "src/app/maintenance/MaintenanceLoginForm.tsx",
+        ],
+        rationale:
+          "Login forms own session establishment and redirect semantics rather than entity create/edit lifecycle.",
+      },
+    }),
     label: "Authentication login forms",
     classification: "explicit_exception",
     sourceFiles: [
@@ -387,6 +611,15 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["admin-login", "maintenance-login"],
     rationale:
       "Authentication forms have session and redirect semantics outside Admin entity editing.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["busy_state", "switch"],
+      knownDebt: [
+        "Authentication feedback remains local to the session-entry boundary.",
+      ],
+      reviewTrigger:
+        "Review only if Auth and Permissions change login lifecycle ownership.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "list-bulk-row-one-shot-actions",
@@ -408,6 +641,21 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["bulk-command", "row-command", "duplicate-command"],
     rationale:
       "Atomic list commands do not represent a long-lived create/edit form session.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+        "listbox",
+      ],
+      knownDebt: [
+        "Atomic list commands intentionally do not create persistent editable sessions.",
+      ],
+      reviewTrigger:
+        "Review when an atomic command expands into a long-lived create/edit workflow.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "activity-sitemap-media-commands",
@@ -423,9 +671,29 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/components/admin/media-intelligence/MediaUsagePanel.tsx",
       "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx",
     ],
-    surfaces: ["activity-query", "sitemap-check", "media-command", "media-usage"],
+    surfaces: [
+      "activity-query",
+      "sitemap-check",
+      "media-command",
+      "media-usage",
+    ],
     rationale:
       "Query/command utilities have no generic entity create/edit lifecycle.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+        "media",
+      ],
+      knownDebt: [
+        "Query and media command utilities intentionally remain outside entity form sessions.",
+      ],
+      reviewTrigger:
+        "Review when any utility becomes a persistent generic entity create/edit workflow.",
+      blocksGlobalClosure: false,
+    },
   },
 ] as const satisfies readonly AdminFormAdoptionEntry[];
 
