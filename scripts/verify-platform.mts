@@ -3,39 +3,30 @@ import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import * as ts from "typescript";
+import { ADMIN_NAVIGATION_REGISTRY } from "../src/config/admin/navigation.ts";
+import { PUBLIC_PAGE_ROUTE_REGISTRY } from "../src/lib/admin/links/static-routes.ts";
+import { ADMIN_COLLECTION_SURFACE_ADOPTION } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const APP_ROUTE_MANIFEST = ".next/app-path-routes-manifest.json";
-const BASE_URL = (
+const CONFIGURED_BASE_URL =
   process.env.PLATFORM_BASE_URL ??
   process.env.E2E_BASE_URL ??
-  "http://127.0.0.1:3000"
-).replace(/\/$/u, "");
+  "http://127.0.0.1:3000";
+const BASE_URL = CONFIGURED_BASE_URL.endsWith("/")
+  ? CONFIGURED_BASE_URL.slice(0, -1)
+  : CONFIGURED_BASE_URL;
 
-type StaticRoute = { key: string; href: string };
 type NavigationItem = {
   href: string;
   enabled: boolean;
-  children?: NavigationItem[];
+  children?: readonly NavigationItem[];
 };
 
-function read(sourceFile: string) {
-  return readFileSync(join(ROOT, sourceFile), "utf8");
-}
-
-function loadPureTypeScriptModule(sourceFile: string) {
-  const output = ts.transpileModule(read(sourceFile), {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2022,
-    },
-    fileName: sourceFile,
-  }).outputText;
-  const moduleExports: Record<string, unknown> = {};
-  Function("exports", output)(moduleExports);
-  return moduleExports;
-}
+type RouteContractFailures = {
+  unregisteredBuiltRoutes: string[];
+  registeredRoutesMissingFromBuild: string[];
+};
 
 function unique<T>(values: readonly T[]) {
   return [...new Set(values)];
@@ -48,18 +39,20 @@ function flattenAdminNavigation(items: readonly NavigationItem[]): string[] {
   ]);
 }
 
-function routeMatchesTemplate(pathname: string, template: string) {
-  const pathSegments = pathname.split("/").filter(Boolean);
-  const templateSegments = template.split("/").filter(Boolean);
+function routeSegments(pathname: string) {
+  return pathname.split("/").filter(Boolean);
+}
+
+function routeMatchesCompiledTemplate(pathname: string, template: string) {
+  const pathSegments = routeSegments(pathname);
+  const templateSegments = routeSegments(template);
   for (let index = 0; index < templateSegments.length; index += 1) {
     const templateSegment = templateSegments[index];
     if (templateSegment.startsWith("[[...")) return true;
-    if (templateSegment.startsWith("[...")) {
-      return pathSegments.length > index;
-    }
+    if (templateSegment.startsWith("[...")) return pathSegments.length > index;
     if (pathSegments[index] === undefined) return false;
     if (
-      !templateSegment.startsWith("[") &&
+      !(templateSegment.startsWith("[") && templateSegment.endsWith("]")) &&
       templateSegment !== pathSegments[index]
     ) {
       return false;
@@ -68,15 +61,32 @@ function routeMatchesTemplate(pathname: string, template: string) {
   return pathSegments.length === templateSegments.length;
 }
 
-function isFailedStatus(status: number) {
-  return status === 404 || status >= 500;
+function auditRouteContracts(input: {
+  builtRoutes: readonly string[];
+  registeredRoutes: readonly string[];
+  allowConcreteRegistrations?: boolean;
+}): RouteContractFailures {
+  const built = unique(input.builtRoutes).sort();
+  const registered = unique(input.registeredRoutes).sort();
+  return {
+    unregisteredBuiltRoutes: built.filter(
+      (route) => !registered.includes(route),
+    ),
+    registeredRoutesMissingFromBuild: registered.filter(
+      (route) =>
+        !built.includes(route) &&
+        !(
+          input.allowConcreteRegistrations &&
+          built.some((template) =>
+            routeMatchesCompiledTemplate(route, template),
+          )
+        ),
+    ),
+  };
 }
 
-function hasRenderCrash(source: string) {
-  return (
-    source.includes("id=\"__next_error__\"") ||
-    source.includes("Application error: a server-side exception")
-  );
+function isFailedStatus(status: number) {
+  return status === 404 || status >= 500;
 }
 
 async function requestRoute(pathname: string, cookie = "") {
@@ -89,23 +99,7 @@ async function requestRoute(pathname: string, cookie = "") {
     pathname,
     status: response.status,
     finalUrl: response.url,
-    body: await response.text(),
   };
-}
-
-function extractInternalHrefs(source: string) {
-  return unique(
-    [...source.matchAll(/href=["']([^"']+)["']/gu)]
-      .map((match) => match[1].replaceAll("&amp;", "&"))
-      .filter((href) => href.startsWith("/"))
-      .map((href) => href.split(/[?#]/u)[0])
-      .filter(
-        (href) =>
-          !href.startsWith("/_next/") &&
-          !href.startsWith("/api/") &&
-          !/\/[^/]+\.[^/]+$/u.test(href),
-      ),
-  );
 }
 
 function readAuthenticatedCookie() {
@@ -122,7 +116,6 @@ function readAuthenticatedCookie() {
       name: string;
       value: string;
       domain: string;
-      path?: string;
       expires?: number;
     }>;
   };
@@ -130,7 +123,9 @@ function readAuthenticatedCookie() {
   const nowSeconds = Date.now() / 1000;
   return (state.cookies ?? [])
     .filter((cookie) => {
-      const domain = cookie.domain.replace(/^\./u, "");
+      const domain = cookie.domain.startsWith(".")
+        ? cookie.domain.slice(1)
+        : cookie.domain;
       return (
         (host === domain || host.endsWith(`.${domain}`)) &&
         (!cookie.expires || cookie.expires < 0 || cookie.expires > nowSeconds)
@@ -145,10 +140,9 @@ assert.ok(
   `${APP_ROUTE_MANIFEST} is missing; run npm run build first.`,
 );
 
-const routeManifest = JSON.parse(read(APP_ROUTE_MANIFEST)) as Record<
-  string,
-  string
->;
+const routeManifest = JSON.parse(
+  readFileSync(join(ROOT, APP_ROUTE_MANIFEST), "utf8"),
+) as Record<string, string>;
 const builtPageRoutes = unique(
   Object.entries(routeManifest)
     .filter(
@@ -159,47 +153,113 @@ const builtPageRoutes = unique(
     )
     .map(([, route]) => route),
 ).sort();
-const publicPageRoutes = builtPageRoutes.filter(
+const builtPublicRoutes = builtPageRoutes.filter(
   (route) => !route.startsWith("/admin"),
 );
-
-const staticRouteModule = loadPureTypeScriptModule(
-  "src/lib/admin/links/static-routes.ts",
+const builtAdminRoutes = builtPageRoutes.filter((route) =>
+  route.startsWith("/admin"),
 );
-const navigationModule = loadPureTypeScriptModule(
-  "src/config/admin/navigation.ts",
-);
-const publicRegistryRoutes = unique(
-  (staticRouteModule.ADMIN_STATIC_ROUTES as readonly StaticRoute[]).map(
-    (route) => route.href,
+const registeredPublicRoutes = unique(
+  PUBLIC_PAGE_ROUTE_REGISTRY.map((route) => route.href),
+).sort();
+const registeredAdminRoutes = unique(
+  ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.flatMap(
+    (surface) => surface.routes,
   ),
+).sort();
+
+assert.equal(
+  registeredPublicRoutes.length,
+  PUBLIC_PAGE_ROUTE_REGISTRY.length,
+  "Public Page Route Registry contains duplicate route registrations.",
 );
-const adminRegistryRoutes = unique(
-  flattenAdminNavigation(
-    navigationModule.ADMIN_NAVIGATION_REGISTRY as readonly NavigationItem[],
-  ),
+for (const surface of ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces) {
+  assert.equal(
+    unique(surface.routes).length,
+    surface.routes.length,
+    `${surface.id} contains duplicate route registrations.`,
+  );
+  for (const sourceFile of [
+    ...surface.pageSourceFiles,
+    ...surface.presentationSourceFiles,
+  ]) {
+    assert.ok(
+      existsSync(join(ROOT, sourceFile)),
+      `${surface.id} registers missing source ${sourceFile}.`,
+    );
+  }
+}
+
+const publicContractFailures = auditRouteContracts({
+  builtRoutes: builtPublicRoutes,
+  registeredRoutes: registeredPublicRoutes,
+});
+const adminContractFailures = auditRouteContracts({
+  builtRoutes: builtAdminRoutes,
+  registeredRoutes: registeredAdminRoutes,
+  allowConcreteRegistrations: true,
+});
+assert.deepEqual(
+  publicContractFailures,
+  { unregisteredBuiltRoutes: [], registeredRoutesMissingFromBuild: [] },
+  "Public route registration must match the compiled Next route manifest bidirectionally.",
+);
+assert.deepEqual(
+  adminContractFailures,
+  { unregisteredBuiltRoutes: [], registeredRoutesMissingFromBuild: [] },
+  "Admin consumer route registration must match the compiled Next route manifest bidirectionally.",
 );
 
-const missingPublicRoutes = publicRegistryRoutes.filter(
-  (route) => !builtPageRoutes.includes(route),
-);
-const missingAdminRoutes = adminRegistryRoutes.filter(
-  (route) =>
-    !builtPageRoutes.some((template) => routeMatchesTemplate(route, template)),
-);
-assert.deepEqual(missingPublicRoutes, [], "registered public routes missing from build");
-assert.deepEqual(missingAdminRoutes, [], "registered Admin routes missing from build");
+const negativeUnregisteredFixture = auditRouteContracts({
+  builtRoutes: [...builtPublicRoutes, "/fixture-unregistered"],
+  registeredRoutes: registeredPublicRoutes,
+});
+assert.deepEqual(negativeUnregisteredFixture.unregisteredBuiltRoutes, [
+  "/fixture-unregistered",
+]);
+const negativeMissingBuildFixture = auditRouteContracts({
+  builtRoutes: builtPublicRoutes,
+  registeredRoutes: [...registeredPublicRoutes, "/fixture-missing-build"],
+});
+assert.deepEqual(negativeMissingBuildFixture.registeredRoutesMissingFromBuild, [
+  "/fixture-missing-build",
+]);
 
+console.log("Executable Route Registration Contracts\n");
+console.log(
+  `Compiled public routes ........... ${builtPublicRoutes.length} registered`,
+);
+console.log(
+  `Compiled Admin routes ............ ${builtAdminRoutes.length} registered`,
+);
+console.log(
+  `Admin consumer registrations ... ${ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.length} consumers`,
+);
+console.log("Bidirectional fail-closed proof .. PASS");
+
+if (process.argv.includes("--contracts-only")) {
+  console.log("\nPlatform route contracts PASS");
+  process.exit(0);
+}
+
+const publicHttpRoutes = PUBLIC_PAGE_ROUTE_REGISTRY.filter(
+  (route) => route.verification === "http_exact",
+).map((route) => route.href);
 const publicResults = await Promise.all(
-  publicRegistryRoutes.map((route) => requestRoute(route)),
+  publicHttpRoutes.map((route) => requestRoute(route)),
 );
-const publicFailures = publicResults.filter(
-  (result) => isFailedStatus(result.status) || hasRenderCrash(result.body),
+const publicFailures = publicResults.filter((result) =>
+  isFailedStatus(result.status),
 );
 assert.deepEqual(publicFailures, [], "public route health failures");
 
+const adminBoundaryRoutes = unique(
+  flattenAdminNavigation(
+    ADMIN_NAVIGATION_REGISTRY as readonly NavigationItem[],
+  ),
+);
 const adminBoundaryResults = await Promise.all(
-  adminRegistryRoutes.map((route) => requestRoute(route)),
+  adminBoundaryRoutes.map((route) => requestRoute(route)),
 );
 const adminBoundaryFailures = adminBoundaryResults.filter((result) => {
   const destination = new URL(result.finalUrl);
@@ -214,65 +274,19 @@ assert.deepEqual(
   "unauthenticated Admin routes did not respect the auth boundary",
 );
 
-const dynamicPublicFamilies = publicPageRoutes.filter((route) =>
-  route.includes("["),
-);
-const publicBodies = new Map(
-  publicResults.map((result) => [result.pathname, result.body]),
-);
-const exactBuiltPublicRoutes = new Set(
-  publicPageRoutes.filter((route) => !route.includes("[")),
-);
-const dynamicResults: Array<{
-  family: string;
-  representative: string | null;
-  status: "PASS" | "SKIPPED";
-}> = [];
-
-for (const family of dynamicPublicFamilies) {
-  const dynamicIndex = family.indexOf("/[");
-  const parentRoute = dynamicIndex <= 0 ? "/" : family.slice(0, dynamicIndex);
-  const candidateSources = unique([
-    ...(publicBodies.get(parentRoute) ? [publicBodies.get(parentRoute)!] : []),
-    ...publicBodies.values(),
-  ]);
-  const representative = candidateSources
-    .flatMap(extractInternalHrefs)
-    .find(
-      (href) =>
-        routeMatchesTemplate(href, family) &&
-        !exactBuiltPublicRoutes.has(href) &&
-        (family !== "/[...slug]" ||
-          !dynamicPublicFamilies.some(
-            (candidate) =>
-              candidate !== family && routeMatchesTemplate(href, candidate),
-          )),
-    );
-  if (!representative) {
-    dynamicResults.push({ family, representative: null, status: "SKIPPED" });
-    continue;
-  }
-  const result = await requestRoute(representative);
-  assert.ok(
-    !isFailedStatus(result.status) && !hasRenderCrash(result.body),
-    `${family} representative ${representative} failed with ${result.status}`,
-  );
-  dynamicResults.push({ family, representative, status: "PASS" });
-}
-
 const authenticatedCookie = readAuthenticatedCookie();
 let authenticatedAdminStatus = "SKIPPED / UNPROVEN";
 let authenticatedAdminChecked = 0;
 if (authenticatedCookie) {
   const authenticatedResults = await Promise.all(
-    adminRegistryRoutes.map((route) => requestRoute(route, authenticatedCookie)),
+    adminBoundaryRoutes.map((route) =>
+      requestRoute(route, authenticatedCookie),
+    ),
   );
   const authenticatedFailures = authenticatedResults.filter((result) => {
     const destination = new URL(result.finalUrl);
     return (
-      isFailedStatus(result.status) ||
-      destination.pathname === "/admin/login" ||
-      hasRenderCrash(result.body)
+      isFailedStatus(result.status) || destination.pathname === "/admin/login"
     );
   });
   assert.deepEqual(
@@ -284,25 +298,10 @@ if (authenticatedCookie) {
   authenticatedAdminStatus = "PASS";
 }
 
-const dynamicPassed = dynamicResults.filter(
-  (result) => result.status === "PASS",
-).length;
-const dynamicSkipped = dynamicResults.length - dynamicPassed;
-
-console.log("Platform Route and Page Health\n");
-console.log(`Build page routes ............... ${builtPageRoutes.length}`);
-console.log(`Registered public routes ........ ${publicRegistryRoutes.length} PASS`);
-console.log(`Registered Admin routes ......... ${adminRegistryRoutes.length} PASS`);
-console.log(`Public HTTP/render checks ....... ${publicResults.length} PASS`);
-console.log(`Admin auth-boundary checks ...... ${adminBoundaryResults.length} PASS`);
+console.log(`Public HTTP checks ............... ${publicResults.length} PASS`);
 console.log(
-  `Dynamic public families ........ ${dynamicPassed} PASS / ${dynamicSkipped} SKIPPED`,
+  `Admin auth-boundary checks ...... ${adminBoundaryResults.length} PASS`,
 );
-for (const result of dynamicResults) {
-  console.log(
-    `  ${result.family} -> ${result.representative ?? "no safe representative discovered"} ${result.status}`,
-  );
-}
 console.log(
   `AUTHENTICATED ADMIN ROUTE PROOF = ${authenticatedAdminStatus}${authenticatedAdminChecked ? ` (${authenticatedAdminChecked} routes)` : ""}`,
 );

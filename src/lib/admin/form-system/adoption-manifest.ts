@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Admin Form Runtime module adoption ledger.
  *
  * Form Runtime is one independent module governed by the Admin Interaction
@@ -8,7 +8,18 @@
  */
 
 import {
+  ADMIN_MODAL_CONSUMER_CAPABILITIES,
+  ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+  ADMIN_MODAL_MEDIA_CONSUMER_CAPABILITIES,
+  ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
+  ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
   adminConsumerCapabilityAudit,
+  type AdminConsumerCapabilityApprovedException,
   type AdminConsumerCapabilityKey,
   type AdminConsumerCapabilityAuditDeclaration,
 } from "../interaction-system/adoption-manifest.ts";
@@ -68,10 +79,27 @@ export const ADMIN_FORM_SYSTEM_CLOSURE = {
   ],
 } as const;
 
+function approvedFormRuntimeException(input: {
+  scope: string;
+  evidence: readonly string[];
+  rationale: string;
+}): AdminConsumerCapabilityApprovedException {
+  return {
+    state: "approved_exception",
+    scope: input.scope,
+    approvingOwner: "Admin Form System adoption manifest",
+    evidence: input.evidence,
+    rationale: input.rationale,
+  };
+}
+
 export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "topic-article-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Topic Article create and edit",
     classification: "shared_reference",
     sourceFiles: [
@@ -84,7 +112,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "topic-category-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Topic Category create and edit",
     classification: "shared_reference",
     sourceFiles: ["src/app/admin/content/categories/CategoryForm.tsx"],
@@ -94,7 +125,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "topic-series-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Topic Series create and edit",
     classification: "shared_reference",
     sourceFiles: ["src/app/admin/content/series/SeriesForm.tsx"],
@@ -104,7 +138,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "topic-media-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Media Topic create and edit",
     classification: "shared_adopter",
     sourceFiles: [
@@ -127,7 +164,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "projects-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Project create and edit",
     classification: "shared_adopter",
     sourceFiles: [
@@ -145,7 +185,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "project-locations-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Project Location create and edit",
     classification: "shared_adopter",
     sourceFiles: [
@@ -166,27 +209,32 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "project-tracking-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit({
-      date_picker: {
-        state: "owner_extension_required",
-        rationale:
-          "Tracking dates are applicable, but the current platform has no shared Date or Calendar owner that can be adopted without a prohibited owner extension.",
+    capabilityAudit: adminConsumerCapabilityAudit(
+      {
+        ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
+        date_picker: {
+          state: "owner_extension_required",
+          rationale:
+            "Tracking dates are applicable, but the current platform has no shared Date or Calendar owner that can be adopted without a prohibited owner extension.",
+        },
+        switch: {
+          state: "adopted",
+          rationale:
+            "Tracking visibility and publication inputs use AdminFormSwitch.",
+        },
+        modal: {
+          state: "adopted",
+          rationale: "Tracking create/edit surfaces use VenesiaModal.",
+        },
+        media: {
+          state: "adopted",
+          rationale:
+            "Tracking Updates use the existing Admin Media picker and gallery owner.",
+        },
       },
-      switch: {
-        state: "adopted",
-        rationale:
-          "Tracking visibility and publication inputs use AdminFormSwitch.",
-      },
-      modal: {
-        state: "adopted",
-        rationale: "Tracking create/edit surfaces use VenesiaModal.",
-      },
-      media: {
-        state: "adopted",
-        rationale:
-          "Tracking Updates use the existing Admin Media picker and gallery owner.",
-      },
-    }),
+      {},
+    ),
     label: "Project Tracking profile, stages, items, and updates",
     classification: "shared_adopter",
     sourceFiles: [
@@ -207,7 +255,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "pages-quick-create",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Page quick create",
     classification: "shared_adopter",
     sourceFiles: ["src/app/admin/pages-blocks/pages/CreatePageModal.tsx"],
@@ -217,7 +268,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "redirects-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "SEO Redirect create and edit",
     classification: "shared_adopter",
     sourceFiles: ["src/app/admin/seo/redirects/RedirectFormModal.tsx"],
@@ -227,19 +281,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "page-composition-and-seo",
-    capabilityAudit: adminConsumerCapabilityAudit({
-      form_runtime: {
-        state: "approved_exception",
-        scope: "page-composition-and-seo:composition-assignment-forms",
-        approvingOwner: "Page Composition domain owner",
-        evidence: [
-          "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx",
-          "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
-        ],
-        rationale:
-          "Assignment and page SEO commands are part of the existing Page Composition aggregate lifecycle, not long-lived generic entity create/edit sessions.",
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: "page-composition-and-seo:specialized-builder-lifecycle",
+          evidence: [
+            "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+            "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
+          ],
+          rationale:
+            "Page composition and per-page SEO are a compound builder workflow with ordering and assignment lifecycles outside a generic create/edit session.",
+        }),
       },
-    }),
+    ),
     label: "Page composition and per-page SEO",
     classification: "specialized_exception",
     sourceFiles: [
@@ -269,7 +324,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "block-template-create-modals",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Block template create modals",
     classification: "shared_adopter",
     sourceFiles: [
@@ -290,19 +348,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "block-template-builders-and-editors",
-    capabilityAudit: adminConsumerCapabilityAudit({
-      form_runtime: {
-        state: "approved_exception",
-        scope: "block-template-builders-and-editors:schema-editors",
-        approvingOwner: "Page Blocks schema editor owner",
-        evidence: [
-          "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-          "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
-        ],
-        rationale:
-          "Schema-driven block editors keep their established aggregate command lifecycle while generic create modals adopt AdminFormRuntime separately.",
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: "block-template-builders-and-editors:schema-builder-lifecycle",
+          evidence: [
+            "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+            "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+          ],
+          rationale:
+            "Schema-driven block editors own compound module composition sessions; their generic create modals are registered as separate shared adopters.",
+        }),
       },
-    }),
+    ),
     label: "Block template builders and editors",
     classification: "specialized_exception",
     sourceFiles: [
@@ -322,9 +381,9 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       lowerLevelSharedCapabilities: [
         "feedback",
         "confirmation",
-        "busy_state",
         "media",
         "switch",
+        "listbox",
       ],
       knownDebt: [
         "Schema edit sessions remain outside the generic form runtime by explicit aggregate ownership.",
@@ -336,7 +395,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "menu-quick-create",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Menu quick create",
     classification: "shared_adopter",
     sourceFiles: ["src/app/admin/pages-blocks/menus/AddMenuPanelClient.tsx"],
@@ -346,19 +408,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "menu-builder",
-    capabilityAudit: adminConsumerCapabilityAudit({
-      form_runtime: {
-        state: "approved_exception",
-        scope: "menu-builder:hierarchical-menu-commands",
-        approvingOwner: "Menu Builder domain owner",
-        evidence: [
-          "src/app/admin/pages-blocks/menus/MenuBuilderClient.tsx",
-          "src/app/admin/pages-blocks/menus/MenuItemForm.tsx",
-        ],
-        rationale:
-          "Hierarchical menu settings and item commands retain the existing builder lifecycle rather than a generic entity edit session.",
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: "menu-builder:hierarchical-builder-lifecycle",
+          evidence: [
+            "src/app/admin/pages-blocks/menus/MenuBuilderClient.tsx",
+            "src/app/admin/pages-blocks/menus/MenuItemForm.tsx",
+          ],
+          rationale:
+            "Hierarchical menu editing, ordering, and row commands form one specialized builder workflow rather than a generic entity form session.",
+        }),
       },
-    }),
+    ),
     label: "Menu builder",
     classification: "specialized_exception",
     sourceFiles: [
@@ -388,7 +451,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "footer-builder",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Footer builder",
     classification: "specialized_exception",
     sourceFiles: [
@@ -402,7 +468,6 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       lowerLevelSharedCapabilities: [
         "feedback",
         "confirmation",
-        "busy_state",
         "modal",
         "listbox",
         "switch",
@@ -417,7 +482,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "global-seo-settings",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Global SEO settings",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/seo/meta-manager/MetaManagerClient.tsx"],
@@ -436,7 +504,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "company-identity-settings",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Company identity settings",
     classification: "shared_adopter",
     sourceFiles: ["src/app/admin/settings/general/CompanyIdentityPanel.tsx"],
@@ -446,7 +517,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "media-library-settings",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Media Library settings",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/settings/media/MediaSettingsPanel.tsx"],
@@ -470,18 +544,19 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "security-settings",
-    capabilityAudit: adminConsumerCapabilityAudit({
-      form_runtime: {
-        state: "approved_exception",
-        scope: "security-settings:sensitive-session-commands",
-        approvingOwner: "Admin Auth and Security domain owner",
-        evidence: [
-          "src/app/admin/settings/security/SecuritySettingsClient.tsx",
-        ],
-        rationale:
-          "Password and session commands require the existing security-specific validation and session lifecycle.",
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: "security-settings:sensitive-session-semantics",
+          evidence: [
+            "src/app/admin/settings/security/SecuritySettingsClient.tsx",
+          ],
+          rationale:
+            "Sensitive password and session commands require their existing security-specific validation and session semantics.",
+        }),
       },
-    }),
+    ),
     label: "Security settings",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/settings/security/SecuritySettingsClient.tsx"],
@@ -489,7 +564,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     rationale:
       "Sensitive security mutations require dedicated validation and session semantics.",
     exceptionContract: {
-      lowerLevelSharedCapabilities: ["feedback", "confirmation", "busy_state"],
+      lowerLevelSharedCapabilities: ["feedback", "confirmation"],
       knownDebt: [
         "Password and session mutation lifecycles remain security-domain owned.",
       ],
@@ -500,18 +575,19 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "integrations-server-configuration",
-    capabilityAudit: adminConsumerCapabilityAudit({
-      form_runtime: {
-        state: "approved_exception",
-        scope: "integrations-server-configuration:vault-credential-commands",
-        approvingOwner: "Integrations server configuration owner",
-        evidence: [
-          "src/components/admin/integrations/IntegrationsServerConfiguration.tsx",
-        ],
-        rationale:
-          "Vault replacement, optimistic concurrency, and configuration tests use the existing server-configuration aggregate lifecycle.",
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: "integrations-server-configuration:vault-aggregate",
+          evidence: [
+            "src/components/admin/integrations/IntegrationsServerConfiguration.tsx",
+          ],
+          rationale:
+            "Vault-only provider credential replacement is an optimistic-concurrency aggregate, not a browser-owned generic edit session.",
+        }),
       },
-    }),
+    ),
     label: "Integrations server configuration",
     classification: "specialized_exception",
     sourceFiles: [
@@ -525,7 +601,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     rationale:
       "Provider App credentials use a dedicated Vault-only Aggregate with optimistic concurrency, test rate limits, and no browser-owned secret state; this is not a generic entity create/edit lifecycle.",
     exceptionContract: {
-      lowerLevelSharedCapabilities: ["confirmation", "busy_state"],
+      lowerLevelSharedCapabilities: ["confirmation"],
       knownDebt: [
         "Vault-backed credential replacement remains a security-sensitive aggregate command.",
       ],
@@ -536,7 +612,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "users-create-edit",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Admin users create and edit",
     classification: "shared_adopter",
     sourceFiles: ["src/app/admin/users-roles/AdminUserFormModal.tsx"],
@@ -546,7 +625,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "users-and-roles",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Users and roles management",
     classification: "specialized_exception",
     sourceFiles: ["src/app/admin/users-roles/UsersManagementClient.tsx"],
@@ -570,7 +652,10 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "maintenance-immediate-setting",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      {},
+    ),
     label: "Maintenance mode immediate setting",
     classification: "explicit_exception",
     sourceFiles: ["src/app/admin/settings/general/MaintenanceModePanel.tsx"],
@@ -589,19 +674,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "authentication-login",
-    capabilityAudit: adminConsumerCapabilityAudit({
-      form_runtime: {
-        state: "approved_exception",
-        scope: "authentication-login:session-entry-forms",
-        approvingOwner: "Admin Auth domain owner",
-        evidence: [
-          "src/app/admin/(auth)/login/AdminLoginForm.tsx",
-          "src/app/maintenance/MaintenanceLoginForm.tsx",
-        ],
-        rationale:
-          "Login forms own session establishment and redirect semantics rather than entity create/edit lifecycle.",
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_SWITCH_CONSUMER_CAPABILITIES,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: "authentication-login:session-boundary",
+          evidence: [
+            "src/app/admin/(auth)/login/AdminLoginForm.tsx",
+            "src/app/maintenance/MaintenanceLoginForm.tsx",
+          ],
+          rationale:
+            "Authentication owns session creation and redirect behavior outside the Admin entity form lifecycle.",
+        }),
       },
-    }),
+    ),
     label: "Authentication login forms",
     classification: "explicit_exception",
     sourceFiles: [
@@ -612,7 +698,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     rationale:
       "Authentication forms have session and redirect semantics outside Admin entity editing.",
     exceptionContract: {
-      lowerLevelSharedCapabilities: ["busy_state", "switch"],
+      lowerLevelSharedCapabilities: ["switch"],
       knownDebt: [
         "Authentication feedback remains local to the session-entry boundary.",
       ],
@@ -623,7 +709,21 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "list-bulk-row-one-shot-actions",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: "list-bulk-row-one-shot-actions:atomic-command",
+          evidence: [
+            "src/components/admin/ui/AdminBulkActionBar.tsx",
+            "src/components/admin/ui/AdminDataGridRowActions.tsx",
+            "src/components/admin/ui/AdminDuplicateResourceModal.tsx",
+          ],
+          rationale:
+            "Atomic list, bulk, row, and duplicate commands do not create a long-lived editable form session.",
+        }),
+      },
+    ),
     label: "List, bulk, row, and one-shot actions",
     classification: "explicit_exception",
     sourceFiles: [
@@ -659,7 +759,21 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   },
   {
     id: "activity-sitemap-media-commands",
-    capabilityAudit: adminConsumerCapabilityAudit(),
+    capabilityAudit: adminConsumerCapabilityAudit(
+      ADMIN_MODAL_MEDIA_CONSUMER_CAPABILITIES,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: "activity-sitemap-media-commands:query-command-utilities",
+          evidence: [
+            "src/app/admin/activity-log/ActivityLogClient.tsx",
+            "src/app/admin/seo/sitemap/SitemapMonitorClient.tsx",
+            "src/components/admin/media/MediaLibraryCore.tsx",
+          ],
+          rationale:
+            "Activity queries, sitemap checks, and Media commands are bounded command utilities without a generic entity edit lifecycle.",
+        }),
+      },
+    ),
     label: "Activity, sitemap, and media commands",
     classification: "explicit_exception",
     sourceFiles: [

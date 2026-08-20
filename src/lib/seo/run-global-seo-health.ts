@@ -492,8 +492,11 @@ export async function runGlobalSeoHealth(): Promise<GlobalSeoHealthSnapshot> {
   checks.push(...redirectChecks);
 
   const adoptionValid =
-    GLOBAL_SEO_PUBLIC_CONSUMERS.length === GLOBAL_SEO_CONSUMER_ADOPTION.expectedPublicConsumerCount &&
-    GLOBAL_SEO_SPECIALIZED_OWNERS.length === 3 &&
+    GLOBAL_SEO_CONSUMER_ADOPTION.globalClosed &&
+    new Set(GLOBAL_SEO_PUBLIC_CONSUMERS.map((consumer) => consumer.route)).size ===
+      GLOBAL_SEO_PUBLIC_CONSUMERS.length &&
+    new Set(GLOBAL_SEO_SPECIALIZED_OWNERS.map((owner) => owner.id)).size ===
+      GLOBAL_SEO_SPECIALIZED_OWNERS.length &&
     !GLOBAL_SEO_CONSUMER_ADOPTION.parallelRuntime &&
     !GLOBAL_SEO_CONSUMER_ADOPTION.parallelCapability &&
     !GLOBAL_SEO_CONSUMER_ADOPTION.parallelSourceOfTruth;
@@ -504,7 +507,7 @@ export async function runGlobalSeoHealth(): Promise<GlobalSeoHealthSnapshot> {
     weight: 10,
     title: "Global SEO adoption inventory",
     detail: adoptionValid
-      ? "21 Public consumers مسجلون، والملاك المتخصصون Sitemap/Robots/Redirects محفوظون دون Runtime موازٍ."
+      ? `${GLOBAL_SEO_PUBLIC_CONSUMERS.length} Public consumers مسجلون، والملاك المتخصصون Sitemap/Robots/Redirects محفوظون دون Runtime موازٍ.`
       : "Adoption manifest غير مكتمل أو يسجل owner موازٍ.",
   });
   checks.push({

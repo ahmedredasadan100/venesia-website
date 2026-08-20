@@ -7,7 +7,7 @@
 > **Effective date:** 2026-08-18
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
-> **Supersedes:** *Venesia CMS — Official Architecture Principle (Version 1.0)* and every shorter or conflicting architecture summary
+> **Supersedes:** _Venesia CMS — Official Architecture Principle (Version 1.0)_ and every shorter or conflicting architecture summary
 
 > **اعتماد رسمي**
 > هذه الوثيقة هي المرجع المعماري الأعلى والوحيد لمشروع Venesia Website/CMS. أي تنفيذ يخالفها لا يُعتبر صحيحًا معماريًا لمجرد أن الكود يعمل. عند وجود تعارض بين هذه الوثيقة وبين تنفيذ قديم أو ملخص سابق، يجب إظهار التعارض صراحةً، وعدم بناء حل موازٍ أو تجاوز القاعدة في صمت.
@@ -956,28 +956,29 @@ A composition root may know multiple implementations. The implementations themse
 
 The following current paths are architecture evidence, not permanent folder-law:
 
-| Concern | Representative owner path |
-|---|---|
-| Admin Shell contracts | `src/lib/admin/shell/` |
-| Admin navigation configuration | `src/config/admin/` |
-| Admin Shell UI | `src/components/admin/AdminShell.tsx` |
-| Admin collection UI | `src/components/admin/entity-list/` |
-| Data Runtime | `src/lib/admin/entity-list/data-engine/` |
-| Entity List adapters | `src/lib/admin/**/entity-list-adapter*` and content adapter folders |
-| Entity List API boundary | `src/app/api/admin/entity-lists/[entity]/route.ts` |
-| Form contract | `src/lib/admin/form-runtime.ts` |
-| Form Runtime UI/orchestration | `src/components/admin/ui/AdminFormRuntime.tsx` |
-| Form adoption ledger | `src/lib/admin/form-system/adoption-manifest.ts` |
-| Feedback Runtime | `src/components/admin/AdminFeedbackProvider.tsx` |
-| Confirmation Runtime | `src/components/admin/ui/AdminConfirmDialog.tsx` |
-| Media storage contract | `src/lib/admin/media-storage-adapter.ts` |
-| Taxonomy domain mutations | `src/lib/admin/content/taxonomy-mutations.ts` |
-| Architecture and contract gates | `scripts/verify-*`, `scripts/qa-*` |
-| Database changes | `sql/migrations/` |
+| Concern                         | Representative owner path                                           |
+| ------------------------------- | ------------------------------------------------------------------- |
+| Admin Shell contracts           | `src/lib/admin/shell/`                                              |
+| Admin navigation configuration  | `src/config/admin/`                                                 |
+| Admin Shell UI                  | `src/components/admin/AdminShell.tsx`                               |
+| Admin collection UI             | `src/components/admin/entity-list/`                                 |
+| Data Runtime                    | `src/lib/admin/entity-list/data-engine/`                            |
+| Entity List adapters            | `src/lib/admin/**/entity-list-adapter*` and content adapter folders |
+| Entity List API boundary        | `src/app/api/admin/entity-lists/[entity]/route.ts`                  |
+| Form contract                   | `src/lib/admin/form-runtime.ts`                                     |
+| Form Runtime UI/orchestration   | `src/components/admin/ui/AdminFormRuntime.tsx`                      |
+| Form adoption ledger            | `src/lib/admin/form-system/adoption-manifest.ts`                    |
+| Feedback Runtime                | `src/components/admin/AdminFeedbackProvider.tsx`                    |
+| Confirmation Runtime            | `src/components/admin/ui/AdminConfirmDialog.tsx`                    |
+| Media storage contract          | `src/lib/admin/media-storage-adapter.ts`                            |
+| Taxonomy domain mutations       | `src/lib/admin/content/taxonomy-mutations.ts`                       |
+| Architecture and contract gates | `scripts/verify-*`, `scripts/qa-*`                                  |
+| Database changes                | `sql/migrations/`                                                   |
 
 A future reorganization MAY change paths, but MUST preserve ownership and update this document or the relevant ADR.
 
 ---
+
 # 7. System and Runtime Catalogue
 
 This section defines official ownership. It distinguishes a System from the Runtime or Capability it contains.
@@ -1659,19 +1660,19 @@ These workflows MUST NOT be forced into generic contracts without a security rev
 
 # 8. Runtime Boundary Matrix
 
-| Owner | Primary responsibility | Owns state? | May know Entity details? | May access database/storage? | May render UI? | Must not own |
-|---|---|---:|---:|---:|---:|---|
-| Design System | Visual language and accessible primitives | Local presentation only | No | No | Yes | Domain and persistence logic |
-| Admin Shell System | Admin frame and navigation | Shell UI state | Navigation configuration only | Company config through server boundary | Yes | Form/list/domain lifecycle |
-| Collection Runtime | Search/filter/sort/page/selection/columns interactions | Yes | Generic labels/config only | No | Via shared collection components | Fetch/cache/domain mutation |
-| Data Runtime | Fetch/cache/cancel/optimistic/rollback/invalidate | Yes | Only entity key and adapter contract | Through server endpoint/adapter | No direct visual ownership | Domain validation and layout |
-| Form Runtime | Generic create/edit lifecycle | Yes | Entity key, mode, supplied contract | Through supplied server action | Wraps shared form UI | Domain transaction details |
-| Feedback Runtime | Feedback channels and lifecycle | Yes | No | No | Yes | Executing mutations |
-| Confirmation Runtime | Dangerous-action confirmation lifecycle | Yes | Supplied copy only | No | Yes | Delete eligibility or mutation |
-| Media Storage Adapter | Storage provider operations | Infrastructure state only | No entity business logic | Yes, server-only | No | Form or media-library UI lifecycle |
-| Entity Adapter | Translate entity to generic runtime | No independent lifecycle | Yes | Server-side where required | No | Recreating Runtime behavior |
-| Domain Service | Domain validation and mutation | Transactional | Yes | Yes | No | Generic UI state |
-| Consumer | Compose the experience | Minimal entity-local state | Yes | Only through approved boundaries | Yes | Duplicating shared owners |
+| Owner                 | Primary responsibility                                 |                Owns state? |             May know Entity details? |           May access database/storage? |                   May render UI? | Must not own                       |
+| --------------------- | ------------------------------------------------------ | -------------------------: | -----------------------------------: | -------------------------------------: | -------------------------------: | ---------------------------------- |
+| Design System         | Visual language and accessible primitives              |    Local presentation only |                                   No |                                     No |                              Yes | Domain and persistence logic       |
+| Admin Shell System    | Admin frame and navigation                             |             Shell UI state |        Navigation configuration only | Company config through server boundary |                              Yes | Form/list/domain lifecycle         |
+| Collection Runtime    | Search/filter/sort/page/selection/columns interactions |                        Yes |           Generic labels/config only |                                     No | Via shared collection components | Fetch/cache/domain mutation        |
+| Data Runtime          | Fetch/cache/cancel/optimistic/rollback/invalidate      |                        Yes | Only entity key and adapter contract |        Through server endpoint/adapter |       No direct visual ownership | Domain validation and layout       |
+| Form Runtime          | Generic create/edit lifecycle                          |                        Yes |  Entity key, mode, supplied contract |         Through supplied server action |             Wraps shared form UI | Domain transaction details         |
+| Feedback Runtime      | Feedback channels and lifecycle                        |                        Yes |                                   No |                                     No |                              Yes | Executing mutations                |
+| Confirmation Runtime  | Dangerous-action confirmation lifecycle                |                        Yes |                   Supplied copy only |                                     No |                              Yes | Delete eligibility or mutation     |
+| Media Storage Adapter | Storage provider operations                            |  Infrastructure state only |             No entity business logic |                       Yes, server-only |                               No | Form or media-library UI lifecycle |
+| Entity Adapter        | Translate entity to generic runtime                    |   No independent lifecycle |                                  Yes |             Server-side where required |                               No | Recreating Runtime behavior        |
+| Domain Service        | Domain validation and mutation                         |              Transactional |                                  Yes |                                    Yes |                               No | Generic UI state                   |
+| Consumer              | Compose the experience                                 | Minimal entity-local state |                                  Yes |       Only through approved boundaries |                              Yes | Duplicating shared owners          |
 
 ## 8.1 Runtime Creation Test
 
@@ -1716,20 +1717,20 @@ A Capability may include:
 
 Every official Capability MUST declare:
 
-| Field | Requirement |
-|---|---|
-| `key` | Stable unique name |
-| `purpose` | What product function it owns |
-| `owner` | Canonical source path/module |
-| `contract` | Typed input/output and state |
-| `eligibility` | Which states/entities may use it |
-| `failureSemantics` | Stable error behavior |
-| `security` | Auth/permission requirements |
-| `dependencies` | Runtimes and domain services used |
-| `consumers` | Adopted entities/workflows |
-| `exceptions` | Declared non-adopters |
-| `tests` | Contract and behavior proof |
-| `status` | Proposed, partial, reference-closed, global-closed, etc. |
+| Field              | Requirement                                              |
+| ------------------ | -------------------------------------------------------- |
+| `key`              | Stable unique name                                       |
+| `purpose`          | What product function it owns                            |
+| `owner`            | Canonical source path/module                             |
+| `contract`         | Typed input/output and state                             |
+| `eligibility`      | Which states/entities may use it                         |
+| `failureSemantics` | Stable error behavior                                    |
+| `security`         | Auth/permission requirements                             |
+| `dependencies`     | Runtimes and domain services used                        |
+| `consumers`        | Adopted entities/workflows                               |
+| `exceptions`       | Declared non-adopters                                    |
+| `tests`            | Contract and behavior proof                              |
+| `status`           | Proposed, partial, reference-closed, global-closed, etc. |
 
 ## 9.3 Capability Status Model
 
@@ -2059,6 +2060,7 @@ A component under a shared/core path SHOULD use domain-neutral names.
 Entity-named components belong under the entity/domain boundary unless they are deliberately reference consumers rather than generic primitives.
 
 ---
+
 # 13. Contracts, Validation, and State Ownership
 
 ## 13.1 Contract-First Rule
@@ -2116,22 +2118,22 @@ The two modes MUST NOT be merged into silent coercion at the public boundary.
 
 ## 13.4 State Ownership Table
 
-| State | Official owner |
-|---|---|
-| Admin company identity | Shell server configuration boundary |
-| Sidebar collapse/drawer | Admin Shell |
-| Collection search/filter/sort/page | Collection/Data query contract |
-| Collection cached result | Admin Query Client / Data Runtime |
-| Optimistic row changes | Data Runtime mutation lifecycle |
-| Selected rows | Collection Runtime selection hook |
-| Generic form pending | Form Runtime |
-| Generic form dirty baseline | Form Runtime |
-| Field errors from save | Structured Form action state |
-| Global/persistent action feedback | Feedback Runtime |
-| Destructive dialog pending/focus | Confirmation Runtime |
-| Entity domain status | Database/domain service |
-| Media provider | Media Storage Adapter policy |
-| Migration application history | Database migration registry plus repository files |
+| State                              | Official owner                                    |
+| ---------------------------------- | ------------------------------------------------- |
+| Admin company identity             | Shell server configuration boundary               |
+| Sidebar collapse/drawer            | Admin Shell                                       |
+| Collection search/filter/sort/page | Collection/Data query contract                    |
+| Collection cached result           | Admin Query Client / Data Runtime                 |
+| Optimistic row changes             | Data Runtime mutation lifecycle                   |
+| Selected rows                      | Collection Runtime selection hook                 |
+| Generic form pending               | Form Runtime                                      |
+| Generic form dirty baseline        | Form Runtime                                      |
+| Field errors from save             | Structured Form action state                      |
+| Global/persistent action feedback  | Feedback Runtime                                  |
+| Destructive dialog pending/focus   | Confirmation Runtime                              |
+| Entity domain status               | Database/domain service                           |
+| Media provider                     | Media Storage Adapter policy                      |
+| Migration application history      | Database migration registry plus repository files |
 
 ## 13.5 Duplicate State Review
 
@@ -2694,6 +2696,19 @@ Capability Applicability classifies every current shared-capability axis before
 implementation; Source Proof verifies canonical ownership before Verification,
 CI, and Product Review.
 
+Applicability and Source Proof MUST be executable contracts. Raw source-text
+search, proof tokens, regular-expression discovery, filenames, comments,
+unused imports, and absence-based defaults are not evidence. The official
+proof path uses typed manifest declarations, executable import bindings, an
+AST-derived runtime import graph, and explicit approved-exception evidence.
+Every registration must declare its decision and override records explicitly.
+
+Consumer and route discovery MUST fail closed. Every compiled page route is
+registered by its existing consumer/route owner, every registration resolves
+to a compiled route, and every registered presentation source is reachable
+from an executable page graph. A newly compiled but unregistered route is a CI
+failure; no route may be inferred from a filename or an HTML link scrape.
+
 ### Step 1 — Inventory the consumer
 
 Record:
@@ -2917,6 +2932,7 @@ An exception must be reviewed when:
 - the exception blocks a global closure claim.
 
 ---
+
 # 21. Forbidden Architectural Patterns
 
 A PR that introduces any pattern below is not acceptable merely because tests pass. The correct response is to redesign, adopt an existing owner, or record an approved ADR.
@@ -3990,15 +4006,15 @@ A reviewer should reject or require correction when the PR:
 
 Before a PR that affects architecture can become Ready, the reviewer MUST record a verdict for every axis below:
 
-| Axis | Required proof |
-|---|---|
-| Owner | Existing owner, any owner change, and duplicate-owner scan |
-| Runtime | Lifecycle owner, state owner, and duplicate-runtime scan |
-| Capability | Reusable product function and adopter eligibility |
-| Adapter | Boundary translation only; no lifecycle ownership |
-| Input Contract | Validated intent, rejected states, defaults, and authority |
-| Output Contract | Stable result/error shape and runtime validation |
-| Consumers | Complete in-scope inventory and compatibility impact |
+| Axis            | Required proof                                               |
+| --------------- | ------------------------------------------------------------ |
+| Owner           | Existing owner, any owner change, and duplicate-owner scan   |
+| Runtime         | Lifecycle owner, state owner, and duplicate-runtime scan     |
+| Capability      | Reusable product function and adopter eligibility            |
+| Adapter         | Boundary translation only; no lifecycle ownership            |
+| Input Contract  | Validated intent, rejected states, defaults, and authority   |
+| Output Contract | Stable result/error shape and runtime validation             |
+| Consumers       | Complete in-scope inventory and compatibility impact         |
 | Source of Truth | One authoritative state and reconciliation of derived copies |
 
 Use `PASS` only when the axis is applicable and proven, or `N/A` with a concrete reason. Unexplained `N/A`, unchecked boilerplate, or a PR body added only after implementation without truthful answers does not satisfy the checklist.
@@ -4015,6 +4031,7 @@ An architecture review outcome MUST state:
 The review does not itself authorize Ready, Merge, deployment, migration, or Production mutation.
 
 ---
+
 # 28. AI Execution Rules
 
 This section is a binding behavioral contract for Codex, Cursor, and any AI agent working in the Venesia repository.
@@ -4753,7 +4770,6 @@ The following ADRs are part of this constitution.
 
 ---
 
-
 ## ADR-021 — Canonical Documentation Is Small and Non-Volatile
 
 **Status:** Accepted
@@ -4797,8 +4813,8 @@ The following ADRs are part of this constitution.
 
 **Status:** Accepted
 **Context:** New consumers repeatedly reached Product Review before adopting existing shared owners such as Visibility, Date Picker, Switch, Scrollbar, and Collection behavior. Capability-specific guards and a fixed audit list would repeat the same governance gap as the platform evolves.
-**Decision:** The existing adoption manifest owns one Current Shared Capability Set. Capability Applicability runs before Architecture/Implementation, Source Proof runs after implementation, and both derive every axis dynamically from that set. The existing Admin Runtime CI path enforces the all-inventoried-consumer projection before Product Review.
-**Consequences:** Adding a shared capability automatically expands every inventoried consumer audit without a copied capability list or fixed count. Product Review focuses on product and UX quality instead of discovering missing shared-owner adoption. No new Runtime, Capability, manifest, registry, engine, or source of truth is introduced.
+**Decision:** The existing adoption manifest owns one Current Shared Capability Set. Capability Applicability runs before Architecture/Implementation, Source Proof runs after implementation, and both derive every axis dynamically from that set. Applicability is declared through typed owner contracts; Source Proof resolves explicit executable bindings through the AST runtime import graph. Token lists, raw source matching, unused imports, filename discovery, and absence-based decisions are invalid proof. The existing Admin Runtime CI path enforces the all-inventoried-consumer projection before Product Review.
+**Consequences:** Adding a shared capability automatically expands every inventoried consumer audit without a copied capability list or fixed count. Adding a consumer requires explicit decisions and executable registration, while a new compiled route must match the existing consumer and public-route registries bidirectionally. Product Review focuses on product and UX quality instead of discovering missing shared-owner adoption. No new Runtime, Capability, manifest, registry, engine, or source of truth is introduced.
 
 ---
 
@@ -4848,17 +4864,17 @@ Do not copy full PR reports into the current-state file.
 
 The repository maintains a deliberately small canonical set:
 
-| File | Authority |
-|---|---|
-| `AGENTS.md` | Mandatory coding-agent entry point |
-| `AI_ARCHITECTURE_PRINCIPLES.md` | Highest architecture constitution |
-| `docs/README.md` | Canonical documentation index and authority routing |
-| `docs/AI_WORKING_RULES.md` | Execution, QA, Git, and delivery contract |
-| `docs/CURRENT_PROJECT_STATE.md` | Volatile verified project state |
-| `docs/SYSTEMS_RUNTIMES_CAPABILITIES.md` | Operational ownership map |
-| `docs/DATABASE_MIGRATIONS_STORAGE.md` | Data, migration, audit, and storage contract |
-| `docs/QA_RELEASE_CLOSURE.md` | Verification, Ready, Merge, Production, and closure |
-| `docs/ROADMAP_AND_DEBT_REGISTER.md` | Confirmed findings, exceptions, debt, and roadmap |
+| File                                         | Authority                                             |
+| -------------------------------------------- | ----------------------------------------------------- |
+| `AGENTS.md`                                  | Mandatory coding-agent entry point                    |
+| `AI_ARCHITECTURE_PRINCIPLES.md`              | Highest architecture constitution                     |
+| `docs/README.md`                             | Canonical documentation index and authority routing   |
+| `docs/AI_WORKING_RULES.md`                   | Execution, QA, Git, and delivery contract             |
+| `docs/CURRENT_PROJECT_STATE.md`              | Volatile verified project state                       |
+| `docs/SYSTEMS_RUNTIMES_CAPABILITIES.md`      | Operational ownership map                             |
+| `docs/DATABASE_MIGRATIONS_STORAGE.md`        | Data, migration, audit, and storage contract          |
+| `docs/QA_RELEASE_CLOSURE.md`                 | Verification, Ready, Merge, Production, and closure   |
+| `docs/ROADMAP_AND_DEBT_REGISTER.md`          | Confirmed findings, exceptions, debt, and roadmap     |
 | `docs/ADR_MEDIA_CATALOG_REFERENCE_SAFETY.md` | Linked bounded ADR for Media catalog/reference safety |
 
 ## 32.2 No Parallel Documentation Owners
@@ -4884,7 +4900,6 @@ A historical report does not need to remain in the active documentation tree onc
 When a fact changes, update its existing canonical owner.
 
 Do not create a new dated report.
-
 
 # 33. Document Governance
 
@@ -5038,50 +5053,64 @@ These rules are the fastest summary of the constitution.
 # Runtime Proposal: <Name>
 
 ## Status
+
 Proposed / Accepted / Rejected
 
 ## Lifecycle Owned
+
 <One coherent lifecycle>
 
 ## Existing Owners Searched
+
 - ...
 
 ## Why Existing Runtime Does Not Fit
+
 - ...
 
 ## Why This Is Not a Capability
+
 - ...
 
 ## Why This Is Not an Adapter
+
 - ...
 
 ## State Machine
+
 - idle -> ...
 
 ## Contract
+
 Inputs:
 Outputs:
 Errors:
 Extension points:
 
 ## Dependencies
+
 Allowed:
 Forbidden:
 
 ## Reference Consumers
+
 1. ...
 2. ...
 
 ## Legacy Owners Removed
+
 - ...
 
 ## Security / Data Integrity
+
 - ...
 
 ## Tests / Quality Gates
+
 - ...
 
 ## ADR
+
 ADR-XXX
 ```
 
@@ -5095,38 +5124,48 @@ Status: proposed / foundation / partial_adoption / reference_consumer_closed / g
 Owner: `<path>`
 
 ## Purpose
+
 ...
 
 ## Eligibility
+
 ...
 
 ## Contract
+
 Input:
 Output:
 Errors:
 
 ## Runtime Dependencies
+
 - Form Runtime
 - Feedback Runtime
 - ...
 
 ## Entity Adapters
+
 - Topic: ...
 - Project: ...
 
 ## Consumers
+
 - ...
 
 ## Exceptions
+
 - ...
 
 ## Security / Audit
+
 - ...
 
 ## Tests
+
 - ...
 
 ## Closure Blockers
+
 - ...
 ```
 
@@ -5140,10 +5179,12 @@ Entity/provider key: <key>
 Server-only: yes/no
 
 ## Translates
+
 - input ... -> ...
 - output ... -> ...
 
 ## Does Not Own
+
 - pending
 - cache lifecycle
 - feedback
@@ -5151,13 +5192,16 @@ Server-only: yes/no
 - navigation
 
 ## Validation
+
 Input schema:
 Output schema:
 
 ## Failure Semantics
+
 - ...
 
 ## Tests
+
 - ...
 ```
 
@@ -5211,31 +5255,40 @@ Closure claim:
 **Status:** Proposed / Accepted / Superseded / Rejected
 
 ### Context
+
 What problem and constraints exist?
 
 ### Decision
+
 What is the architecture decision?
 
 ### Alternatives Considered
+
 1. ...
 2. ...
 
 ### Consequences
+
 Positive:
+
 - ...
 
 Negative / tradeoffs:
+
 - ...
 
 ### Migration / Adoption
+
 - ...
 
 ### Proof
+
 - contracts
 - tests
 - reference consumers
 
 ### Supersedes / Superseded By
+
 - ...
 ```
 
@@ -5245,6 +5298,7 @@ Negative / tradeoffs:
 # Closure Report — <Exact Scope>
 
 ## A. Proven Facts
+
 Baseline:
 Branch:
 Final HEAD:
@@ -5262,31 +5316,35 @@ Migration state:
 Cleanup:
 
 ## B. Gaps
+
 - ...
 
 ## C. Assumptions
+
 - ...
 
 ## D. Skipped
+
 - ...
 
 ## E. Required Proof
+
 - ...
 
 ## Exact Closure Claim
+
 `<level> closed for <scope>`
 ```
 
 ## 35.8 Debt Register Template
 
 ```md
-| ID | Description | Files | Risk | Blocks | Owner/Phase | Removal proof |
-|---|---|---|---|---|---|---|
-| DEBT-001 | ... | ... | ... | global form closure | ... | ... |
+| ID       | Description | Files | Risk | Blocks              | Owner/Phase | Removal proof |
+| -------- | ----------- | ----- | ---- | ------------------- | ----------- | ------------- |
+| DEBT-001 | ...         | ...   | ...  | global form closure | ...         | ...           |
 ```
 
 ---
-
 
 # 36. Appendix B — Evidence Sources and State Update Policy
 
@@ -5320,7 +5378,6 @@ Do not make the current-state record a copy of every historical PR.
 ## 36.3 Evidence Storage
 
 Routine screenshots, generated QA JSON, scan dumps, and one-off audit reports belong in PR/CI evidence or local `.tmp-qa/`, not the canonical documentation tree.
-
 
 # 37. Appendix C — Fast Architecture Review Questions
 
@@ -5410,7 +5467,6 @@ Use these questions before approving any meaningful change.
 - Added ADR-021 for documentation governance.
 - Replaced the historical PR map with evidence-precedence and state-update policy.
 - Prohibited committed routine QA screenshots, generated JSON reports, dated plans, and binary Word authority files.
-
 
 ## 2.0.0 — 2026-07-23
 
