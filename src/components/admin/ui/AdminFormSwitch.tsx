@@ -5,7 +5,7 @@ export const ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME =
 
 export type AdminFormSwitchProps = {
   id?: string;
-  name: string;
+  name?: string;
   label: ReactNode;
   defaultChecked?: boolean;
   checked?: boolean;
@@ -37,7 +37,7 @@ export default function AdminFormSwitch({
 }: AdminFormSwitchProps) {
   const switchControl = (
     <span className="relative inline-flex h-5 w-9 shrink-0">
-      {uncheckedValue !== undefined ? (
+      {name && uncheckedValue !== undefined ? (
         <input type="hidden" name={name} value={uncheckedValue} />
       ) : null}
       <input

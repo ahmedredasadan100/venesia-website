@@ -1,7 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
-import AdminListboxSelect from "../../ui/AdminListboxSelect";
+import AdminFormListboxSelect from "../../ui/AdminFormListboxSelect";
 import { AdminFormError } from "../../ui/AdminFormRuntime";
 
 export type ContentEditorCategoryOption = {
@@ -19,8 +18,6 @@ export default function ContentCategorySelect({
   defaultValue?: number | null;
 }) {
   const initialValue = defaultValue ? String(defaultValue) : "";
-  const [value, setValue] = useState(initialValue);
-  const selectRef = useRef<HTMLSelectElement>(null);
   const options = categories.map((category) => ({
     value: String(category.id),
     label: `${"— ".repeat(category.depth)}${category.name}`,
@@ -28,42 +25,15 @@ export default function ContentCategorySelect({
       category.is_active === false && String(category.id) !== initialValue,
   }));
 
-  function update(next: string) {
-    setValue(next);
-    window.requestAnimationFrame(() =>
-      selectRef.current?.dispatchEvent(new Event("change", { bubbles: true })),
-    );
-  }
-
   return (
     <div>
-      <select
-        ref={selectRef}
+      <AdminFormListboxSelect
         name="category_id"
-        value={value}
-        required
-        tabIndex={-1}
-        aria-hidden="true"
-        onChange={(event) => setValue(event.currentTarget.value)}
-        className="sr-only"
-      >
-        <option value="">اختر التصنيف</option>
-        {options.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-            disabled={option.disabled}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
-      <AdminListboxSelect
         id="content-category-popover"
-        triggerId="content-category-listbox"
-        value={value}
+        focusTargetId="content-category-listbox"
+        defaultValue={initialValue}
         options={options}
-        onChange={update}
+        required
         placeholder="اختر التصنيف"
         sizing="medium"
         className="max-w-full"
