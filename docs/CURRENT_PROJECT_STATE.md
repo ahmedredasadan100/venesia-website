@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-15
+**Updated:** 2026-08-20
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -9,19 +9,19 @@ This file records the minimum current facts needed to begin work safely. Archite
 
 ## Current official baseline
 
-The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified Platform Performance Optimization merge is:
+The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
 
 ```text
-e7a041982c0a816f14a264181f17ce41af7652c9
+30995731dc10a82216f170ffe33000cbcda807f3
 ```
 
-Verified after PR #100 merged on 2026-08-15:
+Verified at Product Surface Identity phase start on 2026-08-20:
 
 | Surface | SHA / state |
 |---|---|
-| Platform Performance Optimization merge | `e7a041982c0a816f14a264181f17ce41af7652c9` |
-| Post-merge local `main` / `origin/main` / GitHub `main` | `e7a041982c0a816f14a264181f17ce41af7652c9` |
-| Delivery state | PR #100 merged; the implementation branch is no longer an active authority |
+| Current official baseline | `30995731dc10a82216f170ffe33000cbcda807f3` |
+| Local `main` / `origin/main` / GitHub `main` | `30995731dc10a82216f170ffe33000cbcda807f3` |
+| Delivery state | Product Surface Identity is implemented only on its independent Draft PR branch until review and merge |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
@@ -31,10 +31,10 @@ The Platform Health implementation and `DEBT-TYPE-01` closure were delivered thr
 
 ## Active phase
 
-- **Title:** Dead Code Cleanup
-- **Baseline:** live GitHub `main`; Platform Performance Optimization merge `e7a041982c0a816f14a264181f17ce41af7652c9`
-- **Status:** Platform Health Discovery, Final Closure, and `DEBT-TYPE-01` are closed through PR #98; Platform Performance Optimization is closed at implementation and merge level through PR #100.
-- **Scope:** remove only dead code proven unreachable across repository, runtime, CMS, configuration, registry, and external-use evidence.
+- **Title:** Product Surface Identity
+- **Baseline:** live GitHub `main` at `30995731dc10a82216f170ffe33000cbcda807f3`
+- **Status:** implementation and local verification complete on an independent branch; not merged and not production authority.
+- **Scope:** classify every Admin/public route and governed nested surface without changing Runtime, Capability, Adoption, Product Behavior, or domain rules.
 - **Boundaries:** do not reopen Architecture, historical PRs, or old Technical Debt without current-`main` regression evidence and an explicit scoped request.
 - **Delivery:** every future phase must independently prove local `main` = `origin/main` = GitHub `main` before implementation.
 
@@ -51,6 +51,7 @@ The Platform Health implementation and `DEBT-TYPE-01` closure were delivered thr
 - The official Pages Collection read model is the only Pages list path and exposes its existing assignment aggregate as `moduleCount` through the shared output contract.
 - Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
+- Product Identity, Runtime, Capability, and Adoption are four independent governance axes. The existing interaction adoption manifest contains the typed Product Surface Identity ledger; Product Kind is never inferred from `workflowClassification`, Collection adoption, Form adoption, or capability applicability.
 - Generic Bulk selection, presentation, intent, and confirmation requests remain with the Collection owner. Bulk pending, blocking, optimistic state, snapshot, rollback, reconciliation, and invalidation are owned only by the existing Data Runtime; domain actions retain business operation, eligibility, atomicity, and persistence.
 - Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. The current matrix has 10 Full Adoption claims and 0 Partial Adoption entries; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
 - Governorates, Cities, Districts, and Sub-districts share the Location Collection/Data contracts. Their optional columns, preferences, primary Name preset, sorting, pagination, and Row Actions are shared; Bulk is explicitly `not_required`, and delete eligibility is projected by the Location contract/adapter while the guarded RPC remains final enforcement.

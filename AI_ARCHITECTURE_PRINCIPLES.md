@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.2.0
-> **Effective date:** 2026-08-18
+> **Version:** 3.3.0
+> **Effective date:** 2026-08-20
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** *Venesia CMS — Official Architecture Principle (Version 1.0)* and every shorter or conflicting architecture summary
@@ -709,6 +709,19 @@ Adoption is not a rename. It requires the legacy owner to be removed or explicit
 An **Adoption Manifest** is a machine-readable ledger that classifies every in-scope consumer and prevents silent gaps.
 
 Each source owner should be classified exactly once.
+
+### 5.20.1 Product Surface Identity
+
+**Product Surface Identity** is the explicit declaration of why a user enters a route or nested surface. It records one Product Surface Kind, Product Intent, User Lifecycle, Workflow Owner, Runtime Owners, and its parent/child composition.
+
+Product Identity, Runtime, Capability, and Adoption are independent governance axes:
+
+- Product Identity answers what lifecycle the user entered;
+- Runtime answers how reusable interaction lifecycle executes;
+- Capability answers which reusable product function is available;
+- Adoption answers how a consumer binds to an existing owner.
+
+No axis may be inferred from another. In particular, Collection/Form adoption or a technical workflow classification MUST NOT be used as proof that a surface is a Hub, Dashboard, Builder, Form, Editor, or another Product Type.
 
 ## 5.21 Generic Gap
 
@@ -2818,6 +2831,18 @@ An adoption manifest MUST:
 - include a truthful closure object;
 - explicitly set global closure false while generic gaps remain;
 - be enforced by an architecture test.
+
+### 19.5.1 Product Surface Identity Rules
+
+The existing interaction adoption manifest also owns the Product Surface Identity axis. It MUST:
+
+- register every Admin and public page route exactly once;
+- register independently governed nested surfaces;
+- declare one Product Surface Kind, Product Intent, User Lifecycle, Workflow Owner, and explicit Runtime Owners for every surface;
+- declare parent and child relationships bidirectionally;
+- fail closed when a route or governed nested consumer is added without identity;
+- remain independent from Runtime classification, Capability applicability, and Adoption state;
+- preserve Collection, Form, and specialized owners without creating a Product Runtime or parallel registry.
 
 ## 19.6 No Screen-by-Screen Rebuild
 
@@ -5385,6 +5410,12 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.3.0 — 2026-08-20
+
+- Defined Product Surface Identity as an independent governance axis beside Runtime, Capability, and Adoption.
+- Required exhaustive Admin/public route identity, nested parent/child registration, explicit Workflow/Runtime ownership, and fail-closed verification inside the existing interaction adoption manifest.
+- Kept Product Identity free from inference based on Collection/Form adoption or technical workflow classifications.
 
 ## 3.2.0 — 2026-08-18
 
