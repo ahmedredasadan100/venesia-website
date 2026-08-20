@@ -17,25 +17,25 @@ This document is an operational map. It does not override the architecture const
 
 ## 2. Top-level system map
 
-| System / bounded area | Purpose | Primary owners | Must not become |
-|---|---|---|---|
-| Admin Interaction System | Umbrella for authenticated Admin experiences | Shell, Runtimes, capabilities, domain consumers | A single God Runtime |
-| Design System | Accessible, RTL-ready, responsive presentation primitives | Shared UI components and tokens | Domain or persistence layer |
-| Admin Shell System | Navigation, layout, company identity, page context | Shell contracts, navigation registry, shell UI | Form/list/domain lifecycle owner |
-| Collection System | Search, filters, sort, page, selection, columns, row/bulk presentation | Collection Runtime and shared list UI | Database query engine |
-| Instant Data System | Fetch, cache, cancellation, hydration, optimistic mutation, rollback, invalidation | Data Runtime and entity adapters | Entity-specific business service |
-| Form System | Generic create/edit lifecycle | Form Runtime and structured actions | Parallel SaveBars or entity-specific form engines |
-| Feedback System | Action feedback channels and lifecycle | Feedback Runtime | Mutation executor |
-| Confirmation System | Accessible dangerous-action confirmation | Confirmation Runtime | Deletion policy owner |
-| Media System | Durable upload/list/delete provider contract | Media Storage Adapter and secured boundaries | Form or entity workflow owner |
-| Unified Content Domain | Topics and specialized content types in one Admin content source | Topic entity, content registry, specialized editors | Parallel Media or Article Admin engine |
-| Public Content Read | Entity-neutral public Topic/media collection and detail reads, search, filters, and pagination | `src/lib/content/public-content-read/` owner and contract | Entity-specific public search/read Runtime |
-| Public Navigation and Redirects | Active menu/published-target navigation snapshots and exact active redirect resolution | Current navigation and redirect read owners | API-local Supabase read path or full redirect collection load |
-| Taxonomy Domain | Categories, hierarchy, series, relation-safe mutations | Category/Series domain services and RPCs | Generic Runtime |
-| Page Composition Domain | Pages, blocks, assignments, menus, footer | Specialized composition workflows | Forced generic form without analysis |
-| Projects Domain | Project entity family and project-specific children | Project domain services and adapters | Duplicate systems per residential/commercial variant |
-| Auth / Users / Security | Identity, sessions, users, roles, security settings | Server authorization and specialized workflows | UI-only permission system |
-| Audit Domain | Non-blocking critical Admin mutation evidence | Audit helpers, action names, verification guard | Blocking primary transaction |
+| System / bounded area           | Purpose                                                                                        | Primary owners                                            | Must not become                                               |
+| ------------------------------- | ---------------------------------------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------- |
+| Admin Interaction System        | Umbrella for authenticated Admin experiences                                                   | Shell, Runtimes, capabilities, domain consumers           | A single God Runtime                                          |
+| Design System                   | Accessible, RTL-ready, responsive presentation primitives                                      | Shared UI components and tokens                           | Domain or persistence layer                                   |
+| Admin Shell System              | Navigation, layout, company identity, page context                                             | Shell contracts, navigation registry, shell UI            | Form/list/domain lifecycle owner                              |
+| Collection System               | Search, filters, sort, page, selection, columns, row/bulk presentation                         | Collection Runtime and shared list UI                     | Database query engine                                         |
+| Instant Data System             | Fetch, cache, cancellation, hydration, optimistic mutation, rollback, invalidation             | Data Runtime and entity adapters                          | Entity-specific business service                              |
+| Form System                     | Generic create/edit lifecycle                                                                  | Form Runtime and structured actions                       | Parallel SaveBars or entity-specific form engines             |
+| Feedback System                 | Action feedback channels and lifecycle                                                         | Feedback Runtime                                          | Mutation executor                                             |
+| Confirmation System             | Accessible dangerous-action confirmation                                                       | Confirmation Runtime                                      | Deletion policy owner                                         |
+| Media System                    | Durable upload/list/delete provider contract                                                   | Media Storage Adapter and secured boundaries              | Form or entity workflow owner                                 |
+| Unified Content Domain          | Topics and specialized content types in one Admin content source                               | Topic entity, content registry, specialized editors       | Parallel Media or Article Admin engine                        |
+| Public Content Read             | Entity-neutral public Topic/media collection and detail reads, search, filters, and pagination | `src/lib/content/public-content-read/` owner and contract | Entity-specific public search/read Runtime                    |
+| Public Navigation and Redirects | Active menu/published-target navigation snapshots and exact active redirect resolution         | Current navigation and redirect read owners               | API-local Supabase read path or full redirect collection load |
+| Taxonomy Domain                 | Categories, hierarchy, series, relation-safe mutations                                         | Category/Series domain services and RPCs                  | Generic Runtime                                               |
+| Page Composition Domain         | Pages, blocks, assignments, menus, footer                                                      | Specialized composition workflows                         | Forced generic form without analysis                          |
+| Projects Domain                 | Project entity family and project-specific children                                            | Project domain services and adapters                      | Duplicate systems per residential/commercial variant          |
+| Auth / Users / Security         | Identity, sessions, users, roles, security settings                                            | Server authorization and specialized workflows            | UI-only permission system                                     |
+| Audit Domain                    | Non-blocking critical Admin mutation evidence                                                  | Audit helpers, action names, verification guard           | Blocking primary transaction                                  |
 
 ## 3. Runtime ledger
 
@@ -168,18 +168,18 @@ Every official Capability requires:
 
 Candidate and existing capability areas include:
 
-| Capability | Required owner concern |
-|---|---|
-| Publishing | eligibility, status transition, first-publish semantics, audit |
-| SEO | fallback, override, validation, canonical/robots semantics |
-| Preview / Public View | route resolution, draft/public eligibility, safe navigation |
-| Slug | generated/manual/locked states, collision and redirect policy |
-| Media | upload/selection/clear/reference semantics |
-| Taxonomy | category/series declarations and domain relation rules |
-| Revision History | retention, restore, permissions, audit |
-| Visibility / Archive / Restore | state semantics shared across eligible entities |
-| Permissions | server authorization and UI projection |
-| Audit | action naming, actor context, sanitized metadata |
+| Capability                     | Required owner concern                                         |
+| ------------------------------ | -------------------------------------------------------------- |
+| Publishing                     | eligibility, status transition, first-publish semantics, audit |
+| SEO                            | fallback, override, validation, canonical/robots semantics     |
+| Preview / Public View          | route resolution, draft/public eligibility, safe navigation    |
+| Slug                           | generated/manual/locked states, collision and redirect policy  |
+| Media                          | upload/selection/clear/reference semantics                     |
+| Taxonomy                       | category/series declarations and domain relation rules         |
+| Revision History               | retention, restore, permissions, audit                         |
+| Visibility / Archive / Restore | state semantics shared across eligible entities                |
+| Permissions                    | server authorization and UI projection                         |
+| Audit                          | action naming, actor context, sanitized metadata               |
 
 Exact adopter and closure status must come from current code, adoption manifests, guards, and `CURRENT_PROJECT_STATE.md`. This ownership document must not freeze a stale PR snapshot.
 
@@ -337,23 +337,24 @@ A current ownership or adoption claim is invalid without:
 
 Current closure and adoption details come from executable manifests and guards. This table records ownership only.
 
-| Area | Current owner state | Remaining boundary |
-|---|---|---|
-| Admin Interaction System | Governance umbrella over separate Form, Collection, Data, Feedback, Confirmation, and shared-capability owners | It never becomes a super-runtime; adopter claims remain manifest-owned |
-| Collection and Data Runtimes | Shared collection query, cache, optimistic mutation, rollback, and adapter contracts are established | Entity read models and business invariants remain domain-owned |
-| Form Runtime | One shared long-lived create/edit lifecycle owner with registered adopters and explicit specialized exceptions | Specialized composition workflows are not forced into a generic form |
-| Feedback and Confirmation | Shared accessible owners are established; new native confirmation is forbidden | Product-specific input prompts are not destructive confirmation policy |
-| Media System | Durable provider, catalog, reference coordination, delete saga, recovery, and global writer-adoption owners are established | Live legacy paths remain read-only compatibility inputs until their data retirement gate |
-| Taxonomy and Unified Content | One Topics truth with atomic taxonomy domain mutations and specialized editors | Content-type-specific fields remain specialized, not parallel engines |
-| Page Composition and Menus | Specialized domain owners with aggregate atomic mutation RPCs | Shared UI/Data owners may be reused without owning composition truth |
-| Projects Domain | Database-only project truth with atomic aggregate persistence, publication, row actions, and public read contracts | Project-specific invariants remain in the Project domain |
-| Dashboard | `admin_dashboard_truth_v1()` is the request-time KPI/diagnostics read-model owner | Dashboard presentation must not create another KPI source |
-| Reports and Analytics | `admin_reports_truth_v1()` plus the Analytics adapter registry and normalized `analytics_provider_read_models` are the reporting/analytics owners | Reports never call providers or infer connection state |
-| External Integrations | `src/lib/admin/integrations` plus `integration_connections` own OAuth, Vault references, asset binding, provider adapters, connection diagnostics, sync leases/retry/backoff, and watermarks | Vercel Cron is a thin trigger; provider metrics cross only through the Analytics ingestion adapter |
-| Public Content Read | `src/lib/content/public-content-read/` owns current public collection/detail query input and output contracts across Topics and media consumers | Public pages compose this owner; they do not branch into entity-specific search runtimes or restore superseded direct read helpers |
-| Public Navigation and Redirects | Navigation API/layout share the current navigation owner; redirect resolution uses exact capped active lookup | Menu activity and published-target truth remain owner-side; consumers do not create duplicate Supabase read paths |
-| Auth / Users / Security | Server session and user-management foundations exist; all public application tables have live RLS enabled | Role semantics and rate limiting require explicit Product/Security decisions |
-| Database reconciliation | Repository corpus, registry provenance, catalog ownership, validity, and drift are guarded structurally and live | Supabase platform objects remain platform-owned exceptions, not application legacy |
+| Area                            | Current owner state                                                                                                                                                                                                               | Remaining boundary                                                                                                                                           |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Admin Interaction System        | Governance umbrella over separate Form, Collection, Data, Feedback, Confirmation, and shared-capability owners; the Current Shared Capability Set dynamically drives Applicability and Source Proof for every registered consumer | It never becomes a super-runtime; adopter claims and explicit per-axis exceptions remain manifest-owned                                                      |
+| Collection and Data Runtimes    | Shared collection query, cache, optimistic mutation, rollback, column-preference settlement, and adapter contracts are established                                                                                                | Entity read models and business invariants remain domain-owned; preference failure restores the last committed UI state without route-refresh reconciliation |
+| Form Runtime                    | One shared long-lived create/edit lifecycle owner with registered adopters and explicit specialized exceptions; each exception declares lower-level shared adoption, debt, review trigger, and closure impact                     | Specialized composition workflows are not forced into a generic form, and classification alone never auto-approves capability drift                          |
+| Shared Admin controls           | `AdminListboxSelect` / `AdminFormListboxSelect` own Listbox behavior; `AdminFormSwitch` / `AdminCheckbox` own boolean and selection controls                                                                                      | Consumers provide options, values, labels, and domain callbacks; native primitives remain internal to the shared owners                                      |
+| Feedback and Confirmation       | Shared accessible owners are established; new native confirmation is forbidden                                                                                                                                                    | Product-specific input prompts are not destructive confirmation policy                                                                                       |
+| Media System                    | Durable provider, catalog, reference coordination, delete saga, recovery, and global writer-adoption owners are established                                                                                                       | Live legacy paths remain read-only compatibility inputs until their data retirement gate                                                                     |
+| Taxonomy and Unified Content    | One Topics truth with atomic taxonomy domain mutations and specialized editors                                                                                                                                                    | Content-type-specific fields remain specialized, not parallel engines                                                                                        |
+| Page Composition and Menus      | Specialized domain owners with aggregate atomic mutation RPCs                                                                                                                                                                     | Shared UI/Data owners may be reused without owning composition truth                                                                                         |
+| Projects Domain                 | Database-only project truth with atomic aggregate persistence, publication, row actions, and public read contracts                                                                                                                | Project-specific invariants remain in the Project domain                                                                                                     |
+| Dashboard                       | `admin_dashboard_truth_v1()` is the request-time KPI/diagnostics read-model owner                                                                                                                                                 | Dashboard presentation must not create another KPI source                                                                                                    |
+| Reports and Analytics           | `admin_reports_truth_v1()` plus the Analytics adapter registry and normalized `analytics_provider_read_models` are the reporting/analytics owners                                                                                 | Reports never call providers or infer connection state                                                                                                       |
+| External Integrations           | `src/lib/admin/integrations` plus `integration_connections` own OAuth, Vault references, asset binding, provider adapters, connection diagnostics, sync leases/retry/backoff, and watermarks                                      | Vercel Cron is a thin trigger; provider metrics cross only through the Analytics ingestion adapter                                                           |
+| Public Content Read             | `src/lib/content/public-content-read/` owns current public collection/detail query input and output contracts across Topics and media consumers                                                                                   | Public pages compose this owner; they do not branch into entity-specific search runtimes or restore superseded direct read helpers                           |
+| Public Navigation and Redirects | Navigation API/layout share the current navigation owner; redirect resolution uses exact capped active lookup                                                                                                                     | Menu activity and published-target truth remain owner-side; consumers do not create duplicate Supabase read paths                                            |
+| Auth / Users / Security         | Server session and user-management foundations exist; all public application tables have live RLS enabled                                                                                                                         | Role semantics and rate limiting require explicit Product/Security decisions                                                                                 |
+| Database reconciliation         | Repository corpus, registry provenance, catalog ownership, validity, and drift are guarded structurally and live                                                                                                                  | Supabase platform objects remain platform-owned exceptions, not application legacy                                                                           |
 
 ### Accepted ownership consequences
 

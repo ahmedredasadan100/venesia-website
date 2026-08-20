@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 
-import { adminFormFieldClassName, ADMIN_FORM, adminFormHintClassName, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
+import {
+  adminFormFieldClassName,
+  ADMIN_FORM,
+  adminFormHintClassName,
+  adminFormLabelClassName,
+} from "../../../../lib/admin/admin-ui-styles";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { serializeAdminLink } from "../../../../lib/admin/links/serialize";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";
@@ -23,8 +28,16 @@ import {
   FOOTER_MEDIA_SOURCE_LABELS,
   FOOTER_MENU_LOCATION_LABELS,
 } from "./footer-builder-labels";
-import { ContactItemsField, ManualLinksField, QuickLinksField } from "./FooterBuilderEditors";
-import { AdminLinkField } from "../../../../components/admin/ui";
+import {
+  ContactItemsField,
+  ManualLinksField,
+  QuickLinksField,
+} from "./FooterBuilderEditors";
+import {
+  AdminFormSwitch,
+  AdminLinkField,
+  AdminListboxSelect,
+} from "../../../../components/admin/ui";
 
 type FooterSlotConfigFieldsProps = {
   slot: FooterSlot;
@@ -78,7 +91,9 @@ export default function FooterSlotConfigFields({
       return (
         <CustomLinksSlotFields
           config={slot.config as FooterCustomLinksSlotConfig}
-          onChange={(config) => onChange({ ...slot, type: "custom_links", config })}
+          onChange={(config) =>
+            onChange({ ...slot, type: "custom_links", config })
+          }
         />
       );
     default:
@@ -94,20 +109,25 @@ export function BlockTypeSelect({
   onChange: (type: FooterBlockType) => void;
 }) {
   return (
-    <label className={adminFormLabelClassName()}>
+    <div className={adminFormLabelClassName()}>
       <span>نوع البلوك</span>
-      <select value={value} onChange={(event) => onChange(event.target.value as FooterBlockType)} className={adminFormFieldClassName()}>
-        {listFooterBlockTypes().map((type) => (
-          <option key={type} value={type}>
-            {FOOTER_BLOCK_TYPE_LABELS[type]}
-          </option>
-        ))}
-      </select>
-    </label>
+      <AdminListboxSelect
+        value={value}
+        onChange={(next) => onChange(next as FooterBlockType)}
+        options={listFooterBlockTypes().map((type) => ({
+          value: type,
+          label: FOOTER_BLOCK_TYPE_LABELS[type],
+        }))}
+        ariaLabel="نوع البلوك"
+      />
+    </div>
   );
 }
 
-function updateCtaLink(config: FooterTextSlotConfig, link: AdminLinkValue): FooterTextSlotConfig {
+function updateCtaLink(
+  config: FooterTextSlotConfig,
+  link: AdminLinkValue,
+): FooterTextSlotConfig {
   return {
     ...config,
     cta: {
@@ -131,7 +151,9 @@ function TextSlotFields({
         <span>العنوان الرئيسي (Title) — اختياري</span>
         <input
           value={config.title}
-          onChange={(event) => onChange({ ...config, title: event.target.value })}
+          onChange={(event) =>
+            onChange({ ...config, title: event.target.value })
+          }
           className={adminFormFieldClassName()}
           dir="rtl"
           placeholder="يُترك فارغًا لإخفاء العنوان الرئيسي"
@@ -141,38 +163,49 @@ function TextSlotFields({
         <span>النص / Tagline</span>
         <textarea
           value={config.body}
-          onChange={(event) => onChange({ ...config, body: event.target.value })}
+          onChange={(event) =>
+            onChange({ ...config, body: event.target.value })
+          }
           className={`${adminFormFieldClassName()} min-h-24`}
           dir="rtl"
         />
       </label>
-      <label className={ADMIN_FORM.checkboxRow}>
-        <span>إظهار أيقونة البراند</span>
-        <input
-          type="checkbox"
-          checked={config.showBrandIcon}
-          onChange={(event) => onChange({ ...config, showBrandIcon: event.target.checked })}
-          className="h-4 w-4 accent-[#D8B87A]"
-        />
-      </label>
+      <AdminFormSwitch
+        label="إظهار أيقونة البراند"
+        checked={config.showBrandIcon}
+        onChange={(event) =>
+          onChange({ ...config, showBrandIcon: event.target.checked })
+        }
+        surface
+      />
       <div className="rounded-[22px] border border-white/10 bg-white/[0.02] p-4">
-        <p className="mb-3 text-sm font-medium text-white/70">زر CTA (اختياري)</p>
-        <label className={`${ADMIN_FORM.checkboxRow} mb-3`}>
-          <span>تفعيل الزر</span>
-          <input
-            type="checkbox"
-            checked={config.cta.enabled}
-            onChange={(event) => onChange({ ...config, cta: { ...config.cta, enabled: event.target.checked } })}
-            className="h-4 w-4 accent-[#D8B87A]"
-          />
-        </label>
+        <p className="mb-3 text-sm font-medium text-white/70">
+          زر CTA (اختياري)
+        </p>
+        <AdminFormSwitch
+          label="تفعيل الزر"
+          checked={config.cta.enabled}
+          onChange={(event) =>
+            onChange({
+              ...config,
+              cta: { ...config.cta, enabled: event.target.checked },
+            })
+          }
+          surface
+          className="mb-3"
+        />
         {config.cta.enabled ? (
           <div className={ADMIN_FORM.gridTwoCol}>
             <label className={adminFormLabelClassName()}>
               <span>تسمية الزر</span>
               <input
                 value={config.cta.label}
-                onChange={(event) => onChange({ ...config, cta: { ...config.cta, label: event.target.value } })}
+                onChange={(event) =>
+                  onChange({
+                    ...config,
+                    cta: { ...config.cta, label: event.target.value },
+                  })
+                }
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
@@ -181,26 +214,31 @@ function TextSlotFields({
               <AdminLinkField
                 prefix="footer_text_cta"
                 label="الرابط"
-                controlledValue={linkDefaultFromContainer(config.cta as Record<string, unknown>)}
-                onControlledChange={(link) => onChange(updateCtaLink(config, link))}
+                controlledValue={linkDefaultFromContainer(
+                  config.cta as Record<string, unknown>,
+                )}
+                onControlledChange={(link) =>
+                  onChange(updateCtaLink(config, link))
+                }
               />
             </div>
-            <label className={adminFormLabelClassName()}>
+            <div className={adminFormLabelClassName()}>
               <span>الفتح في</span>
-              <select
+              <AdminListboxSelect
                 value={config.cta.target}
-                onChange={(event) =>
+                onChange={(value) =>
                   onChange({
                     ...config,
-                    cta: { ...config.cta, target: event.target.value as "_self" | "_blank" },
+                    cta: { ...config.cta, target: value as "_self" | "_blank" },
                   })
                 }
-                className={adminFormFieldClassName()}
-              >
-                <option value="_self">نفس النافذة</option>
-                <option value="_blank">نافذة جديدة</option>
-              </select>
-            </label>
+                options={[
+                  { value: "_self", label: "نفس النافذة" },
+                  { value: "_blank", label: "نافذة جديدة" },
+                ]}
+                ariaLabel="الفتح في"
+              />
+            </div>
           </div>
         ) : null}
       </div>
@@ -225,108 +263,111 @@ function MenuSlotFields({
     <div className="space-y-4">
       <p className={adminFormHintClassName()}>
         يعرض قائمة موجودة مسبقًا فقط — إنشاء وتعديل العناصر من{" "}
-        <Link href="/admin/pages-blocks/menus" className="text-[#D8B87A] underline">
+        <Link
+          href="/admin/pages-blocks/menus"
+          className="text-[#D8B87A] underline"
+        >
           Menus Admin
         </Link>
         .
       </p>
-      <label className={adminFormLabelClassName()}>
+      <div className={adminFormLabelClassName()}>
         <span>مصدر القائمة</span>
-        <select
+        <AdminListboxSelect
           value={config.source}
-          onChange={(event) =>
+          onChange={(value) =>
             onChange({
               ...config,
-              source: event.target.value as FooterMenuSlotConfig["source"],
+              source: value as FooterMenuSlotConfig["source"],
             })
           }
-          className={adminFormFieldClassName()}
-        >
-          <option value="location">حسب موقع القائمة</option>
-          <option value="menu_id">قائمة محددة بالمعرّف</option>
-        </select>
-      </label>
+          options={[
+            { value: "location", label: "حسب موقع القائمة" },
+            { value: "menu_id", label: "قائمة محددة بالمعرّف" },
+          ]}
+          ariaLabel="مصدر القائمة"
+        />
+      </div>
 
       {config.source === "location" ? (
         <>
-          <label className={adminFormLabelClassName()}>
+          <div className={adminFormLabelClassName()}>
             <span>موقع القائمة</span>
-            <select
+            <AdminListboxSelect
               value={config.location}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   ...config,
-                  location: event.target.value as FooterMenuSlotConfig["location"],
+                  location: value as FooterMenuSlotConfig["location"],
                 })
               }
-              className={adminFormFieldClassName()}
-            >
-              {Object.entries(FOOTER_MENU_LOCATION_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className={adminFormLabelClassName()}>
+              options={Object.entries(FOOTER_MENU_LOCATION_LABELS).map(
+                ([value, label]) => ({ value, label }),
+              )}
+              ariaLabel="موقع القائمة"
+            />
+          </div>
+          <div className={adminFormLabelClassName()}>
             <span>قائمة احتياطية</span>
-            <select
+            <AdminListboxSelect
               value={config.fallbackLocation ?? ""}
-              onChange={(event) =>
+              onChange={(value) =>
                 onChange({
                   ...config,
-                  fallbackLocation: event.target.value
-                    ? (event.target.value as FooterMenuSlotConfig["fallbackLocation"])
+                  fallbackLocation: value
+                    ? (value as FooterMenuSlotConfig["fallbackLocation"])
                     : null,
                 })
               }
-              className={adminFormFieldClassName()}
-            >
-              <option value="">بدون</option>
-              {Object.entries(FOOTER_MENU_LOCATION_LABELS).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
+              options={[
+                { value: "", label: "بدون" },
+                ...Object.entries(FOOTER_MENU_LOCATION_LABELS).map(
+                  ([value, label]) => ({ value, label }),
+                ),
+              ]}
+              ariaLabel="قائمة احتياطية"
+            />
+          </div>
           {config.location === "footer" ? (
             <QuickLinksField footerMenuId={footerMenuId} links={quickLinks} />
           ) : null}
         </>
       ) : (
         <>
-        <label className={adminFormLabelClassName()}>
-          <span>القائمة</span>
-          <select
-            value={config.menuId ?? ""}
-            onChange={(event) =>
-              onChange({
-                ...config,
-                menuId: event.target.value ? Number(event.target.value) : null,
-              })
-            }
-            className={adminFormFieldClassName()}
-          >
-            <option value="">اختر قائمة</option>
-            {menuOptions.map((menu) => (
-              <option key={menu.id} value={menu.id}>
-                {menu.name} ({menu.location})
-              </option>
-            ))}
-          </select>
-        </label>
-        {config.menuId && config.menuId === footerMenuId ? (
-          <QuickLinksField footerMenuId={footerMenuId} links={quickLinks} />
-        ) : config.menuId ? (
-          <p className={adminFormHintClassName()}>
-            لتحرير عناصر هذه القائمة افتح{" "}
-            <Link href={`/admin/pages-blocks/menus/${config.menuId}`} className="text-[#D8B87A] underline">
-              محرر القائمة #{config.menuId}
-            </Link>
-            .
-          </p>
-        ) : null}
+          <div className={adminFormLabelClassName()}>
+            <span>القائمة</span>
+            <AdminListboxSelect
+              value={String(config.menuId ?? "")}
+              onChange={(value) =>
+                onChange({
+                  ...config,
+                  menuId: value ? Number(value) : null,
+                })
+              }
+              options={[
+                { value: "", label: "اختر قائمة" },
+                ...menuOptions.map((menu) => ({
+                  value: String(menu.id),
+                  label: `${menu.name} (${menu.location})`,
+                })),
+              ]}
+              ariaLabel="القائمة"
+            />
+          </div>
+          {config.menuId && config.menuId === footerMenuId ? (
+            <QuickLinksField footerMenuId={footerMenuId} links={quickLinks} />
+          ) : config.menuId ? (
+            <p className={adminFormHintClassName()}>
+              لتحرير عناصر هذه القائمة افتح{" "}
+              <Link
+                href={`/admin/pages-blocks/menus/${config.menuId}`}
+                className="text-[#D8B87A] underline"
+              >
+                محرر القائمة #{config.menuId}
+              </Link>
+              .
+            </p>
+          ) : null}
         </>
       )}
 
@@ -340,22 +381,23 @@ function MenuSlotFields({
             onChange={(event) =>
               onChange({
                 ...config,
-                maxItems: event.target.value ? Number(event.target.value) : null,
+                maxItems: event.target.value
+                  ? Number(event.target.value)
+                  : null,
               })
             }
             className={adminFormFieldClassName()}
             placeholder="بدون حد"
           />
         </label>
-        <label className={ADMIN_FORM.checkboxRow}>
-          <span>المستوى الأول فقط</span>
-          <input
-            type="checkbox"
-            checked={config.showOnlyTopLevel}
-            onChange={(event) => onChange({ ...config, showOnlyTopLevel: event.target.checked })}
-            className="h-4 w-4 accent-[#D8B87A]"
-          />
-        </label>
+        <AdminFormSwitch
+          label="المستوى الأول فقط"
+          checked={config.showOnlyTopLevel}
+          onChange={(event) =>
+            onChange({ ...config, showOnlyTopLevel: event.target.checked })
+          }
+          surface
+        />
       </div>
     </div>
   );
@@ -370,27 +412,30 @@ function ContactSlotFields({
 }) {
   return (
     <div className="space-y-4">
-      <label className={adminFormLabelClassName()}>
+      <div className={adminFormLabelClassName()}>
         <span>مصدر بيانات التواصل</span>
-        <select
+        <AdminListboxSelect
           value={config.source}
-          onChange={(event) =>
+          onChange={(value) =>
             onChange({
               ...config,
-              source: event.target.value as FooterContactSlotConfig["source"],
+              source: value as FooterContactSlotConfig["source"],
             })
           }
-          className={adminFormFieldClassName()}
-        >
-          <option value="global">المجموعة العامة (مشتركة)</option>
-          <option value="custom">مخصص لهذا العمود</option>
-        </select>
-      </label>
+          options={[
+            { value: "global", label: "المجموعة العامة (مشتركة)" },
+            { value: "custom", label: "مخصص لهذا العمود" },
+          ]}
+          ariaLabel="مصدر بيانات التواصل"
+        />
+      </div>
 
       {config.source === "global" ? (
         <div className="rounded-[22px] border border-white/10 bg-white/[0.02] p-4 text-sm leading-7 text-white/62">
           <p>هذا العمود يستخدم المجموعة العامة لبيانات التواصل.</p>
-          <p className="mt-2 text-white/45">عدّل العناصر من تبويب «بيانات التواصل» في منشئ الفوتر.</p>
+          <p className="mt-2 text-white/45">
+            عدّل العناصر من تبويب «بيانات التواصل» في منشئ الفوتر.
+          </p>
         </div>
       ) : (
         <ContactItemsField
@@ -414,25 +459,22 @@ function MediaSlotFields({
 }) {
   return (
     <div className="space-y-4">
-      <label className={adminFormLabelClassName()}>
+      <div className={adminFormLabelClassName()}>
         <span>مصدر الروابط</span>
-        <select
+        <AdminListboxSelect
           value={config.source}
-          onChange={(event) =>
+          onChange={(value) =>
             onChange({
               ...config,
-              source: event.target.value as FooterMediaSlotConfig["source"],
+              source: value as FooterMediaSlotConfig["source"],
             })
           }
-          className={adminFormFieldClassName()}
-        >
-          {Object.entries(FOOTER_MEDIA_SOURCE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
+          options={Object.entries(FOOTER_MEDIA_SOURCE_LABELS).map(
+            ([value, label]) => ({ value, label }),
+          )}
+          ariaLabel="مصدر الروابط"
+        />
+      </div>
 
       {config.source === "main_submenu" ? (
         <>
@@ -440,7 +482,11 @@ function MediaSlotFields({
             prefix="footer_media_parent"
             label="عنصر القائمة الأب"
             helperText="يُستخدم لجلب submenu من القائمة الرئيسية تحت هذا المسار."
-            controlledValue={linkDefaultFromContainer(config as Record<string, unknown>, "parentLink", "parentHref")}
+            controlledValue={linkDefaultFromContainer(
+              config as Record<string, unknown>,
+              "parentLink",
+              "parentHref",
+            )}
             onControlledChange={(link) =>
               onChange({
                 ...config,
@@ -451,7 +497,10 @@ function MediaSlotFields({
           />
           <p className={adminFormHintClassName()}>
             يقرأ الروابط من submenu تحت هذا المسار في القائمة الرئيسية.{" "}
-            <Link href="/admin/pages-blocks/menus" className="text-[#D8B87A] underline">
+            <Link
+              href="/admin/pages-blocks/menus"
+              className="text-[#D8B87A] underline"
+            >
               تعديل القوائم
             </Link>
           </p>
@@ -459,26 +508,26 @@ function MediaSlotFields({
       ) : null}
 
       {config.source === "menu_id" ? (
-        <label className={adminFormLabelClassName()}>
+        <div className={adminFormLabelClassName()}>
           <span>القائمة</span>
-          <select
-            value={config.menuId ?? ""}
-            onChange={(event) =>
+          <AdminListboxSelect
+            value={String(config.menuId ?? "")}
+            onChange={(value) =>
               onChange({
                 ...config,
-                menuId: event.target.value ? Number(event.target.value) : null,
+                menuId: value ? Number(value) : null,
               })
             }
-            className={adminFormFieldClassName()}
-          >
-            <option value="">اختر قائمة</option>
-            {menuOptions.map((menu) => (
-              <option key={menu.id} value={menu.id}>
-                {menu.name} ({menu.location})
-              </option>
-            ))}
-          </select>
-        </label>
+            options={[
+              { value: "", label: "اختر قائمة" },
+              ...menuOptions.map((menu) => ({
+                value: String(menu.id),
+                label: `${menu.name} (${menu.location})`,
+              })),
+            ]}
+            ariaLabel="القائمة"
+          />
+        </div>
       ) : null}
 
       {config.source === "manual" ? (
@@ -518,9 +567,13 @@ function CustomLinksSlotFields({
   return (
     <div className="space-y-3">
       <p className={adminFormHintClassName()}>
-        روابط يدوية (Label + URL) تُحفظ داخل إعدادات الفوتر فقط — لا تُكتب في القوائم أو menu_items.
+        روابط يدوية (Label + URL) تُحفظ داخل إعدادات الفوتر فقط — لا تُكتب في
+        القوائم أو menu_items.
       </p>
-      <ManualLinksField links={config.links} onChange={(links) => onChange({ ...config, links })} />
+      <ManualLinksField
+        links={config.links}
+        onChange={(links) => onChange({ ...config, links })}
+      />
     </div>
   );
 }

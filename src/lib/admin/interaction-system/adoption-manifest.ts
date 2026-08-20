@@ -100,6 +100,8 @@ export const ADMIN_INTERACTION_MODULES = [
 export type AdminSharedConsumerCapabilityDefinition = {
   owner: string;
   sourceFiles: readonly string[];
+  /** Canonical lower-level sources that may contain the raw primitive internally. */
+  localImplementationExemptSourceFiles?: readonly string[];
   sourceProofTokens: readonly string[];
   /** Signals that make the capability applicable, including non-canonical/local implementations. */
   applicabilitySourceTokens: readonly string[];
@@ -134,6 +136,12 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
         "src/components/admin/ui/AdminFormRuntime.tsx",
         "src/lib/admin/form-runtime.ts",
       ],
+      localImplementationExemptSourceFiles: [
+        "src/components/admin/AdminRowActions.tsx",
+        "src/components/admin/media/MediaLibraryCore.tsx",
+        "src/components/admin/ui/AdminBulkActionBar.tsx",
+        "src/components/admin/ui/AdminDuplicateResourceModal.tsx",
+      ],
       sourceProofTokens: ["AdminFormRuntime"],
       applicabilitySourceTokens: ["AdminFormRuntime", "<form"],
       localImplementationPatterns: ["<form\\b"],
@@ -145,7 +153,10 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       owner: "AdminEntityList",
       sourceFiles: ["src/components/admin/entity-list/AdminEntityList.tsx"],
       sourceProofTokens: ["AdminEntityList"],
-      applicabilitySourceTokens: ["AdminEntityList", "useAdminEntityListController"],
+      applicabilitySourceTokens: [
+        "AdminEntityList",
+        "useAdminEntityListController",
+      ],
       localImplementationPatterns: [],
       ownerAvailability: "available",
       absenceMeansNotApplicable: true,
@@ -158,7 +169,11 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
         "src/components/admin/ui/AdminDataGrid.tsx",
       ],
       sourceProofTokens: ["AdminEntityListTable", "AdminDataGrid"],
-      applicabilitySourceTokens: ["AdminEntityListTable", "AdminDataGrid", "<table"],
+      applicabilitySourceTokens: [
+        "AdminEntityListTable",
+        "AdminDataGrid",
+        "<table",
+      ],
       localImplementationPatterns: ["<table\\b"],
       ownerAvailability: "available",
       absenceMeansNotApplicable: true,
@@ -177,13 +192,21 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       consumerBoundaries: ["collection"],
     },
     search: {
-      owner: "AdminEntityListFilters + Collection query contract",
+      owner:
+        "AdminEntityListFilters + AdminSearchInput + searchable AdminListboxSelect + Collection query contract",
       sourceFiles: [
         "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+        "src/components/admin/ui/AdminSearchInput.tsx",
+        "src/components/admin/ui/AdminListboxSelect.tsx",
         "src/lib/admin/entity-list/url-state.ts",
       ],
       sourceProofTokens: ["search: {", "search:{"],
-      applicabilitySourceTokens: ["search: {", "search:{", 'type="search"', "type='search'"],
+      applicabilitySourceTokens: [
+        "search: {",
+        "search:{",
+        'type="search"',
+        "type='search'",
+      ],
       localImplementationPatterns: ["type\\s*=\\s*[\"']search[\"']"],
       ownerAvailability: "available",
       absenceMeansNotApplicable: true,
@@ -244,14 +267,43 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       consumerBoundaries: ["collection"],
     },
     switch: {
-      owner: "AdminFormSwitch",
-      sourceFiles: ["src/components/admin/ui/AdminFormSwitch.tsx"],
-      sourceProofTokens: ["AdminFormSwitch"],
-      applicabilitySourceTokens: ["AdminFormSwitch", 'role="switch"', "role='switch'"],
-      localImplementationPatterns: ["role\\s*=\\s*[\"']switch[\"']"],
+      owner: "AdminFormSwitch + AdminCheckbox",
+      sourceFiles: [
+        "src/components/admin/ui/AdminFormSwitch.tsx",
+        "src/components/admin/ui/AdminCheckbox.tsx",
+      ],
+      sourceProofTokens: ["AdminFormSwitch", "AdminCheckbox"],
+      applicabilitySourceTokens: [
+        "AdminFormSwitch",
+        'role="switch"',
+        "role='switch'",
+        'type="checkbox"',
+        "type='checkbox'",
+      ],
+      localImplementationPatterns: [
+        "role\\s*=\\s*[\"']switch[\"']",
+        "<input\\b[\\s\\S]{0,240}?type\\s*=\\s*[\"']checkbox[\"']",
+      ],
       ownerAvailability: "available",
       absenceMeansNotApplicable: true,
       consumerBoundaries: ["form"],
+    },
+    listbox: {
+      owner: "AdminListboxSelect + AdminFormListboxSelect",
+      sourceFiles: [
+        "src/components/admin/ui/AdminListboxSelect.tsx",
+        "src/components/admin/ui/AdminFormListboxSelect.tsx",
+      ],
+      sourceProofTokens: ["AdminListboxSelect", "AdminFormListboxSelect"],
+      applicabilitySourceTokens: [
+        "AdminListboxSelect",
+        "AdminFormListboxSelect",
+        "<select",
+      ],
+      localImplementationPatterns: ["<select\\b"],
+      ownerAvailability: "available",
+      absenceMeansNotApplicable: true,
+      consumerBoundaries: ["collection", "form"],
     },
     date_picker: {
       owner: "owner_extension_required",
@@ -266,6 +318,9 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
     scrollbar: {
       owner: "Venesia scrollbar visual token",
       sourceFiles: ["src/components/venesia-scrollbar-styles.ts"],
+      localImplementationExemptSourceFiles: [
+        "src/components/admin/ui/AdminModuleTabs.tsx",
+      ],
       sourceProofTokens: [
         "VENESIA_SCROLLBAR_VISUAL_CLASSES",
         "ADMIN_SCROLLBAR_VISUAL_CLASSES",
@@ -285,8 +340,18 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
     modal: {
       owner: "VenesiaModal",
       sourceFiles: ["src/components/admin/VenesiaModal.tsx"],
+      localImplementationExemptSourceFiles: [
+        "src/components/admin/AdminShell.tsx",
+        "src/components/admin/ui/AdminActivityPopover.tsx",
+        "src/components/admin/ui/AdminConfirmDialog.tsx",
+        "src/components/admin/ui/AdminDataGridRowActions.tsx",
+      ],
       sourceProofTokens: ["VenesiaModal"],
-      applicabilitySourceTokens: ["VenesiaModal", 'role="dialog"', "role='dialog'"],
+      applicabilitySourceTokens: [
+        "VenesiaModal",
+        'role="dialog"',
+        "role='dialog'",
+      ],
       localImplementationPatterns: ["role\\s*=\\s*[\"']dialog[\"']"],
       ownerAvailability: "available",
       absenceMeansNotApplicable: true,
@@ -1784,6 +1849,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "dashboard-recent-content",
       capabilityAudit: adminConsumerCapabilityAudit(),
+      gridOwner: "AdminDataGrid",
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
       routes: ["/admin"],
@@ -1796,8 +1862,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
       headerState: "adopted",
-      rowActionsState: "not_applicable",
-      rowActionsOwner: "not_applicable",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "not_applicable",
       summaryCards: true,
       filtersOrToolbar: false,
@@ -1809,7 +1875,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       exceptionRationale:
         "The Dashboard view exposes bounded edit navigation but is not a standalone collection lifecycle.",
       rationale:
-        "Recent content and projects are bounded read-model snapshots with local navigation inside the Dashboard composition.",
+        "Recent content and projects are bounded read-model snapshots; the recent-content table and edit/information actions adopt the shared Data Grid and Row Actions presentation owners.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
@@ -1916,13 +1982,12 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       workflowClassification: "page_system_only",
       generic: false,
       routes: ["/admin/projects/construction-updates"],
-      pageSourceFiles: [
-        "src/app/admin/projects/construction-updates/page.tsx",
-      ],
+      pageSourceFiles: ["src/app/admin/projects/construction-updates/page.tsx"],
       presentationSourceFiles: [
         "src/app/admin/projects/construction-updates/ConstructionUpdatesClient.tsx",
       ],
-      sourceOwner: "src/lib/admin/projects/tracking-hub.ts#loadProjectTrackingHub",
+      sourceOwner:
+        "src/lib/admin/projects/tracking-hub.ts#loadProjectTrackingHub",
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
       headerState: "adopted",
@@ -2495,6 +2560,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       capabilityAudit: adminConsumerCapabilityAudit(),
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
+      gridOwner: "AdminDataGrid",
       routes: ["/admin/pages-blocks/footer"],
       pageSourceFiles: ["src/app/admin/pages-blocks/footer/page.tsx"],
       presentationSourceFiles: [
@@ -2630,6 +2696,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "sitemap-monitor",
       capabilityAudit: adminConsumerCapabilityAudit(),
+      gridOwner: "AdminDataGrid",
       workflowClassification: "page_system_only",
       generic: false,
       routes: ["/admin/seo/sitemap"],
@@ -2654,7 +2721,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       exceptionRationale:
         "Diagnostics and global refresh do not expose a row-level collection lifecycle.",
       rationale:
-        "Read-only diagnostics and refresh commands do not expose a generic entity collection lifecycle.",
+        "Read-only diagnostics and refresh commands do not expose a generic entity collection lifecycle; the bounded Effective Source table adopts the shared Data Grid presentation owner.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -2710,13 +2777,21 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       capabilityAudit: adminConsumerCapabilityAudit(),
       workflowClassification: "page_system_only",
       generic: false,
-      routes: ["/admin/projects/new", "/admin/projects/[id]"],
+      routes: [
+        "/admin/projects/new",
+        "/admin/projects/[id]",
+        "/admin/projects/[id]/preview",
+      ],
       pageSourceFiles: [
         "src/app/admin/projects/new/page.tsx",
         "src/app/admin/projects/[id]/page.tsx",
+        "src/app/admin/projects/[id]/preview/page.tsx",
       ],
-      presentationSourceFiles: ["src/app/admin/projects/ProjectEditForm.tsx"],
-      sourceOwner: "Project form and domain actions",
+      presentationSourceFiles: [
+        "src/app/admin/projects/ProjectEditForm.tsx",
+        "src/app/admin/projects/[id]/preview/page.tsx",
+      ],
+      sourceOwner: "Project form, preview, and domain actions",
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
       headerState: "adopted",
@@ -2757,6 +2832,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "/admin/settings/theme",
         "/admin/settings/appearance",
         "/admin/settings/integrations",
+        "/admin/settings/integrations/[integration]",
+        "/admin/settings/integrations/server-configuration",
         "/admin/settings/media",
       ],
       pageSourceFiles: [
@@ -2765,6 +2842,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/settings/theme/page.tsx",
         "src/app/admin/settings/appearance/page.tsx",
         "src/app/admin/settings/integrations/page.tsx",
+        "src/app/admin/settings/integrations/[integration]/page.tsx",
+        "src/app/admin/settings/integrations/server-configuration/page.tsx",
         "src/app/admin/settings/media/page.tsx",
       ],
       presentationSourceFiles: [
@@ -2773,6 +2852,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/settings/general/MaintenanceModePanel.tsx",
         "src/app/admin/settings/media/MediaSettingsPanel.tsx",
         "src/components/admin/integrations/AdminIntegrationsPlatform.tsx",
+        "src/components/admin/integrations/IntegrationConnectionWizard.tsx",
+        "src/components/admin/integrations/IntegrationsServerConfiguration.tsx",
         "src/components/admin/AdminPlaceholderPage.tsx",
       ],
       sourceOwner: "Settings domain panels and actions",

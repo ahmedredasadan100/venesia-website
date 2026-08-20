@@ -23,9 +23,15 @@ function check(label: string, condition: unknown) {
 }
 
 const sharedTabs = read("src/components/admin/ui/AdminModuleTabs.tsx");
-const contentShell = read("src/components/admin/content/editors/ContentEditorShell.tsx");
-const aboutCta = read("src/components/admin/page-blocks/editors/AboutCtaModuleEditor.tsx");
-const moduleEditorPresentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
+const contentShell = read(
+  "src/components/admin/content/editors/ContentEditorShell.tsx",
+);
+const aboutCta = read(
+  "src/components/admin/page-blocks/editors/AboutCtaModuleEditor.tsx",
+);
+const moduleEditorPresentation = read(
+  "src/components/admin/page-blocks/ModuleEditorPresentation.tsx",
+);
 
 const moduleEditorRoots = [
   "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
@@ -54,17 +60,29 @@ const specializedConsumers = [
   "src/app/admin/settings/security/SecuritySettingsClient.tsx",
 ] as const;
 
-const consumerSources = specializedConsumers.map((path) => ({ path, source: read(path) }));
+const consumerSources = specializedConsumers.map((path) => ({
+  path,
+  source: read(path),
+}));
 const moduleEditorRootSet = new Set<string>(moduleEditorRoots);
 
 function tabsAreIndependent(path: string, source: string) {
-  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const file = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
   let independent = true;
 
   function visit(node: ts.Node, ancestors: string[]) {
     if (ts.isJsxElement(node)) {
       const name = node.openingElement.tagName.getText(file);
-      if ((name === "AdminModuleTabs" || name === "ModuleEditorTabs") && ancestors.some((value) => value === "AdminCard" || value === "section")) {
+      if (
+        (name === "AdminModuleTabs" || name === "ModuleEditorTabs") &&
+        ancestors.some((value) => value === "AdminCard" || value === "section")
+      ) {
         independent = false;
       }
       for (const child of node.children) visit(child, [...ancestors, name]);
@@ -72,7 +90,10 @@ function tabsAreIndependent(path: string, source: string) {
     }
     if (ts.isJsxSelfClosingElement(node)) {
       const name = node.tagName.getText(file);
-      if ((name === "AdminModuleTabs" || name === "ModuleEditorTabs") && ancestors.some((value) => value === "AdminCard" || value === "section")) {
+      if (
+        (name === "AdminModuleTabs" || name === "ModuleEditorTabs") &&
+        ancestors.some((value) => value === "AdminCard" || value === "section")
+      ) {
         independent = false;
       }
       return;
@@ -85,7 +106,13 @@ function tabsAreIndependent(path: string, source: string) {
 }
 
 function moduleEditorMetadataPropsAreDelegated(path: string, source: string) {
-  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const file = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
   let headerCount = 0;
   let tabsCount = 0;
   let delegated = true;
@@ -104,7 +131,11 @@ function moduleEditorMetadataPropsAreDelegated(path: string, source: string) {
     if (name === "ModuleEditorHeader") {
       headerCount += 1;
       delegated = delegated && attributeNames.has("entityName");
-      delegated = delegated && ["eyebrow", "title", "description"].every((attribute) => !attributeNames.has(attribute));
+      delegated =
+        delegated &&
+        ["eyebrow", "title", "description"].every(
+          (attribute) => !attributeNames.has(attribute),
+        );
     } else {
       tabsCount += 1;
     }
@@ -126,13 +157,15 @@ check(
     sharedTabs.includes("data-admin-active-panel-context") &&
     sharedTabs.indexOf("data-admin-tab-section-heading") <
       sharedTabs.indexOf("data-admin-active-panel-context") &&
-    sharedTabs.indexOf("data-admin-active-panel-context") < sharedTabs.indexOf("{tab.content}"),
+    sharedTabs.indexOf("data-admin-active-panel-context") <
+      sharedTabs.indexOf("{tab.content}"),
 );
 
 check(
   "the shared content shell has no generic pre-tabs presentation escape hatch",
   !contentShell.includes("beforeTabs") &&
-    contentShell.indexOf("<AdminModuleTabs") < contentShell.indexOf("<AdminFormActions"),
+    contentShell.indexOf("<AdminModuleTabs") <
+      contentShell.indexOf("<AdminFormActions"),
 );
 
 check(
@@ -140,7 +173,9 @@ check(
   consumerSources
     .filter(({ path }) => !moduleEditorRootSet.has(path))
     .every(({ source }) =>
-      ["sectionHeading", "sectionDescription", "icon:"].every((token) => source.includes(token)),
+      ["sectionHeading", "sectionDescription", "icon:"].every((token) =>
+        source.includes(token),
+      ),
     ),
 );
 
@@ -149,11 +184,12 @@ check(
   consumerSources.every(({ path, source }) => tabsAreIndependent(path, source)),
 );
 
-const blockConsumers = consumerSources.filter(({ path }) =>
-  path.includes("page-blocks/") &&
-  !path.includes("PageBlocksClient") &&
-  !path.includes("MenuBuilderClient") &&
-  !path.includes("FooterBuilderClient"),
+const blockConsumers = consumerSources.filter(
+  ({ path }) =>
+    path.includes("page-blocks/") &&
+    !path.includes("PageBlocksClient") &&
+    !path.includes("MenuBuilderClient") &&
+    !path.includes("FooterBuilderClient"),
 );
 check(
   "block context notices and dependency banners no longer sit between Main Hero and Tabs",
@@ -194,7 +230,9 @@ check(
     !menu.includes("<Link"),
 );
 
-const footer = read("src/app/admin/pages-blocks/footer/FooterBuilderClient.tsx");
+const footer = read(
+  "src/app/admin/pages-blocks/footer/FooterBuilderClient.tsx",
+);
 check(
   "Footer summary is domain content in a shared Overview section with no editor wrapper header",
   footer.includes('id: "overview"') &&
@@ -203,7 +241,9 @@ check(
     footer.match(/حفظ الفوتر/g)?.length === 2,
 );
 
-const security = read("src/app/admin/settings/security/SecuritySettingsClient.tsx");
+const security = read(
+  "src/app/admin/settings/security/SecuritySettingsClient.tsx",
+);
 check(
   "Security settings use flat shared section presentation without repeated section descriptions",
   security.includes("activePanelContext") &&
@@ -216,15 +256,22 @@ check(
   "the legacy nested About CTA Tabs owner is retired",
   !aboutCta.includes("AdminModuleTabs") &&
     !aboutCta.includes('section === "all"') &&
-    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes("aboutCtaTabs"),
+    read(
+      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+    ).includes("aboutCtaTabs"),
 );
 
 check(
   "specialized Project Hub Hero has no local header parallel to the shared Section Hero",
-  !read("src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx").includes("<h2"),
+  !read(
+    "src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx",
+  ).includes("<h2"),
 );
 
-const moduleEditorRootSources = moduleEditorRoots.map((path) => ({ path, source: read(path) }));
+const moduleEditorRootSources = moduleEditorRoots.map((path) => ({
+  path,
+  source: read(path),
+}));
 const moduleEditorFieldOwners = [
   "src/components/admin/page-blocks/FeedModuleFilterFields.tsx",
   "src/components/admin/page-blocks/editors/AboutApproachModuleEditor.tsx",
@@ -240,8 +287,14 @@ const moduleEditorFieldOwners = [
   "src/components/admin/page-blocks/editors/ProjectsHubMapModuleEditor.tsx",
   "src/components/admin/page-blocks/editors/VisionGoalsModuleEditor.tsx",
 ] as const;
-const moduleEditorFieldSources = moduleEditorFieldOwners.map((path) => ({ path, source: read(path) }));
-const moduleEditorSources = [...moduleEditorRootSources, ...moduleEditorFieldSources];
+const moduleEditorFieldSources = moduleEditorFieldOwners.map((path) => ({
+  path,
+  source: read(path),
+}));
+const moduleEditorSources = [
+  ...moduleEditorRootSources,
+  ...moduleEditorFieldSources,
+];
 
 check(
   "every Page Blocks module editor root adopts the thin shared header, tabs, feedback, pages, and save composition",
@@ -293,14 +346,17 @@ function getJsxAttribute(
   );
 }
 
-function getJsxStringValue(attribute: ts.JsxAttribute | undefined): string | null {
+function getJsxStringValue(
+  attribute: ts.JsxAttribute | undefined,
+): string | null {
   const initializer = attribute?.initializer;
   if (!initializer) return null;
   if (ts.isStringLiteral(initializer)) return initializer.text;
   if (
     ts.isJsxExpression(initializer) &&
     initializer.expression &&
-    (ts.isStringLiteral(initializer.expression) || ts.isNoSubstitutionTemplateLiteral(initializer.expression))
+    (ts.isStringLiteral(initializer.expression) ||
+      ts.isNoSubstitutionTemplateLiteral(initializer.expression))
   ) {
     return initializer.expression.text;
   }
@@ -309,11 +365,21 @@ function getJsxStringValue(attribute: ts.JsxAttribute | undefined): string | nul
 
 function collectModuleEditorTabs(path: string) {
   const source = read(path);
-  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const file = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
   const declarations = new Map<string, ts.Expression>();
 
   function collectDeclarations(node: ts.Node) {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+    if (
+      ts.isVariableDeclaration(node) &&
+      ts.isIdentifier(node.name) &&
+      node.initializer
+    ) {
       declarations.set(node.name.text, node.initializer);
     }
     ts.forEachChild(node, collectDeclarations);
@@ -321,7 +387,10 @@ function collectModuleEditorTabs(path: string) {
   collectDeclarations(file);
 
   const cache = new Map<string, readonly string[]>();
-  function resolveTabIds(expression: ts.Expression, resolving = new Set<string>()): readonly string[] {
+  function resolveTabIds(
+    expression: ts.Expression,
+    resolving = new Set<string>(),
+  ): readonly string[] {
     if (
       ts.isParenthesizedExpression(expression) ||
       ts.isAsExpression(expression) ||
@@ -344,7 +413,10 @@ function collectModuleEditorTabs(path: string) {
       if (resolving.has(expression.text)) return [];
       const declaration = declarations.get(expression.text);
       if (!declaration) return [];
-      const resolved = resolveTabIds(declaration, new Set(resolving).add(expression.text));
+      const resolved = resolveTabIds(
+        declaration,
+        new Set(resolving).add(expression.text),
+      );
       cache.set(expression.text, resolved);
       return resolved;
     }
@@ -352,11 +424,13 @@ function collectModuleEditorTabs(path: string) {
     if (ts.isObjectLiteralExpression(expression)) {
       const id = expression.properties.find(
         (property): property is ts.PropertyAssignment =>
-          ts.isPropertyAssignment(property) && property.name.getText(file) === "id",
+          ts.isPropertyAssignment(property) &&
+          property.name.getText(file) === "id",
       );
       if (
         id &&
-        (ts.isStringLiteral(id.initializer) || ts.isNoSubstitutionTemplateLiteral(id.initializer))
+        (ts.isStringLiteral(id.initializer) ||
+          ts.isNoSubstitutionTemplateLiteral(id.initializer))
       ) {
         return [id.initializer.text];
       }
@@ -392,13 +466,24 @@ function collectModuleEditorTabs(path: string) {
       tabsAttribute.initializer.expression
         ? tabsAttribute.initializer.expression
         : null;
-    assert.ok(moduleKind, `${path} must declare a literal ModuleEditorTabs moduleKind`);
-    assert.ok(tabsExpression, `${path} must declare a resolvable ModuleEditorTabs tabs expression`);
+    assert.ok(
+      moduleKind,
+      `${path} must declare a literal ModuleEditorTabs moduleKind`,
+    );
+    assert.ok(
+      tabsExpression,
+      `${path} must declare a resolvable ModuleEditorTabs tabs expression`,
+    );
     const tabIds = resolveTabIds(tabsExpression);
-    assert.ok(tabIds.length > 0, `${path} must expose at least one actual ModuleEditorTabs tab id`);
+    assert.ok(
+      tabIds.length > 0,
+      `${path} must expose at least one actual ModuleEditorTabs tab id`,
+    );
     usages.push({
       moduleKind,
-      tabsVariable: ts.isIdentifier(tabsExpression) ? tabsExpression.text : null,
+      tabsVariable: ts.isIdentifier(tabsExpression)
+        ? tabsExpression.text
+        : null,
       tabIds,
     });
   }
@@ -413,26 +498,33 @@ function collectModuleEditorTabs(path: string) {
   return usages;
 }
 
-const rootEditorInventory: ModuleEditorMetadataInventoryEntry[] = moduleEditorRoots
-  .filter((path) => !path.endsWith("ContentModuleEditClient.tsx"))
-  .flatMap((sourcePath) =>
-    collectModuleEditorTabs(sourcePath).map(({ moduleKind, tabIds }) => ({
-      sourcePath,
-      moduleKind,
-      moduleSlug: null,
-      tabIds,
-    })),
-  );
+const rootEditorInventory: ModuleEditorMetadataInventoryEntry[] =
+  moduleEditorRoots
+    .filter((path) => !path.endsWith("ContentModuleEditClient.tsx"))
+    .flatMap((sourcePath) =>
+      collectModuleEditorTabs(sourcePath).map(({ moduleKind, tabIds }) => ({
+        sourcePath,
+        moduleKind,
+        moduleSlug: null,
+        tabIds,
+      })),
+    );
 
-const contentEditorPath = "src/components/admin/page-blocks/ContentModuleEditClient.tsx";
+const contentEditorPath =
+  "src/components/admin/page-blocks/ContentModuleEditClient.tsx";
 const contentTabUsages = collectModuleEditorTabs(contentEditorPath);
 const contentTabsByVariable = new Map(
   contentTabUsages
     .filter((usage) => usage.tabsVariable !== null)
     .map((usage) => [usage.tabsVariable as string, usage.tabIds]),
 );
-const defaultContentTabs = contentTabUsages.find((usage) => usage.tabsVariable === null)?.tabIds;
-assert.ok(defaultContentTabs, "Content Module Editor must expose its actual default tab ids");
+const defaultContentTabs = contentTabUsages.find(
+  (usage) => usage.tabsVariable === null,
+)?.tabIds;
+assert.ok(
+  defaultContentTabs,
+  "Content Module Editor must expose its actual default tab ids",
+);
 
 const specializedContentTabVariables: Partial<
   Record<(typeof STRUCTURAL_CONTENT_TEMPLATE_SLUGS)[number], string>
@@ -451,8 +543,13 @@ const contentEditorInventory: ModuleEditorMetadataInventoryEntry[] = [
   },
   ...STRUCTURAL_CONTENT_TEMPLATE_SLUGS.map((moduleSlug) => {
     const tabsVariable = specializedContentTabVariables[moduleSlug];
-    const tabIds = tabsVariable ? contentTabsByVariable.get(tabsVariable) : defaultContentTabs;
-    assert.ok(tabIds, `Content Module Editor tabs are not discoverable for ${moduleSlug}`);
+    const tabIds = tabsVariable
+      ? contentTabsByVariable.get(tabsVariable)
+      : defaultContentTabs;
+    assert.ok(
+      tabIds,
+      `Content Module Editor tabs are not discoverable for ${moduleSlug}`,
+    );
     return {
       sourcePath: contentEditorPath,
       moduleKind: "content",
@@ -462,37 +559,55 @@ const contentEditorInventory: ModuleEditorMetadataInventoryEntry[] = [
   }),
 ];
 
-const moduleEditorMetadataInventory = [...rootEditorInventory, ...contentEditorInventory];
+const moduleEditorMetadataInventory = [
+  ...rootEditorInventory,
+  ...contentEditorInventory,
+];
 const missingMetadataCombinations = moduleEditorMetadataInventory.flatMap(
   ({ moduleKind, moduleSlug, tabIds }) =>
     tabIds.flatMap((tabId) => {
-      const metadata = getModuleEditorSectionMetadata(moduleKind, tabId, moduleSlug);
-      const sectionChromeComplete = metadata?.sectionHeadingAr === null
-        ? metadata.sectionDescriptionAr === null
-        : Boolean(
-            metadata?.sectionHeadingAr.trim().length &&
-            (metadata.sectionDescriptionAr === null || metadata.sectionDescriptionAr.trim().length > 0),
-          );
+      const metadata = getModuleEditorSectionMetadata(
+        moduleKind,
+        tabId,
+        moduleSlug,
+      );
+      const sectionChromeComplete =
+        metadata?.sectionHeadingAr === null
+          ? metadata.sectionDescriptionAr === null
+          : Boolean(
+              metadata?.sectionHeadingAr.trim().length &&
+              (metadata.sectionDescriptionAr === null ||
+                metadata.sectionDescriptionAr.trim().length > 0),
+            );
       const complete =
         metadata !== null &&
         metadata.navigationLabelAr.trim().length > 0 &&
         sectionChromeComplete &&
         (metadata.sectionChrome !== "implicit" ||
-          (metadata.sectionHeadingAr === null && metadata.sectionDescriptionAr === null)) &&
+          (metadata.sectionHeadingAr === null &&
+            metadata.sectionDescriptionAr === null)) &&
         metadata.icon.trim().length > 0;
-      return complete ? [] : [`${moduleKind}:${moduleSlug ?? "default"}:${tabId}`];
+      return complete
+        ? []
+        : [`${moduleKind}:${moduleSlug ?? "default"}:${tabId}`];
     }),
 );
 
 moduleEditorMetadataInventory.forEach(({ moduleKind, moduleSlug, tabIds }) => {
-  console.log(`INVENTORY ${moduleKind}:${moduleSlug ?? "default"} -> ${tabIds.join(",")}`);
+  console.log(
+    `INVENTORY ${moduleKind}:${moduleSlug ?? "default"} -> ${tabIds.join(",")}`,
+  );
 });
 
 check(
   `the current module registry completely owns every actual Module Editor Header and Section Hero combination; missing=${missingMetadataCombinations.join(",") || "none"}`,
   moduleEditorMetadataInventory.every(
     ({ moduleKind, moduleSlug }) =>
-      getModuleEditorHeaderMetadata(moduleKind, moduleSlug, "Module instance") !== null &&
+      getModuleEditorHeaderMetadata(
+        moduleKind,
+        moduleSlug,
+        "Module instance",
+      ) !== null &&
       (moduleSlug === null || getSlotModuleSlugMetadata(moduleSlug) !== null),
   ) && missingMetadataCombinations.length === 0,
 );
@@ -508,7 +623,11 @@ const misclassifiedInfrastructureTabs = moduleEditorMetadataInventory.flatMap(
     tabIds.flatMap((tabId) => {
       const expectedRole = infrastructureRoleByTabId.get(tabId);
       if (!expectedRole) return [];
-      const metadata = getModuleEditorSectionMetadata(moduleKind, tabId, moduleSlug);
+      const metadata = getModuleEditorSectionMetadata(
+        moduleKind,
+        tabId,
+        moduleSlug,
+      );
       return metadata?.operationalRole === expectedRole
         ? []
         : [`${moduleKind}:${moduleSlug ?? "default"}:${tabId}`];
@@ -554,30 +673,53 @@ check(
   moduleEditorFieldSources
     .filter(({ path }) => !path.endsWith("FeedModuleFilterFields.tsx"))
     .every(({ source }) => source.includes("<ModuleEditorSection")) &&
-    moduleEditorSources.every(({ source }) =>
-      !source.includes('space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5'),
+    moduleEditorSources.every(
+      ({ source }) =>
+        !source.includes(
+          "space-y-4 rounded-[30px] border border-white/10 bg-[#080B10]/72 p-5",
+        ),
     ),
 );
 
 check(
   "Module Editors contain no native selects and no raw on-off checkboxes",
-  moduleEditorSources.every(({ source }) => !source.includes("<select") && !source.includes('type="checkbox"')),
+  moduleEditorSources.every(
+    ({ source }) =>
+      !source.includes("<select") && !source.includes('type="checkbox"'),
+  ),
 );
 
 check(
-  "page assignment multi-selection is the only explicit raw checkbox allowlist",
-  read("src/components/admin/page-blocks/ModulePageAssignmentsField.tsx").includes('name="page_ids"') &&
-    read("src/components/admin/page-blocks/ModulePageAssignmentsField.tsx").match(/type="checkbox"/g)?.length === 1,
+  "page assignment multi-selection adopts the shared checkbox owner",
+  read(
+    "src/components/admin/page-blocks/ModulePageAssignmentsField.tsx",
+  ).includes("AdminCheckbox") &&
+    read(
+      "src/components/admin/page-blocks/ModulePageAssignmentsField.tsx",
+    ).includes('name="page_ids"') &&
+    !read(
+      "src/components/admin/page-blocks/ModulePageAssignmentsField.tsx",
+    ).includes('type="checkbox"'),
 );
 
 check(
   "locked technical identity stays hidden while genuinely editable identifiers remain visible",
   !moduleEditorPresentation.includes('"read-only"') &&
-    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes('mode="hidden"') &&
-    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes("usesLockedInternalSlug") &&
-    read("src/app/admin/pages-blocks/blocks/content/actions.ts").includes("slugLocked ? existing.slug : requestedSlug") &&
-    read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx").includes('mode="hidden"') &&
-    moduleEditorSources.every(({ source }) => !source.includes('mode="read-only"')) &&
+    read(
+      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+    ).includes('mode="hidden"') &&
+    read(
+      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+    ).includes("usesLockedInternalSlug") &&
+    read("src/app/admin/pages-blocks/blocks/content/actions.ts").includes(
+      "slugLocked ? existing.slug : requestedSlug",
+    ) &&
+    read(
+      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+    ).includes('mode="hidden"') &&
+    moduleEditorSources.every(
+      ({ source }) => !source.includes('mode="read-only"'),
+    ) &&
     [
       "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
       "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
@@ -623,8 +765,13 @@ check(
       "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
     ].every((path) => {
       const source = read(path);
-      return source.includes("AdminFormGrid") || source.includes("ModuleEditorFieldGrid");
+      return (
+        source.includes("AdminFormGrid") ||
+        source.includes("ModuleEditorFieldGrid")
+      );
     }),
 );
 
-console.log(`Shared Specialized Editors Presentation verification passed (${passed} checks).`);
+console.log(
+  `Shared Specialized Editors Presentation verification passed (${passed} checks).`,
+);

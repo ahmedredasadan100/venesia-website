@@ -54,6 +54,7 @@ const [
   editPage,
   basicPanel,
   seriesFields,
+  formListbox,
   articleValidation,
   articleSave,
   mediaSave,
@@ -64,6 +65,7 @@ const [
   read("src/app/admin/content/topics/[id]/page.tsx"),
   read("src/components/admin/content/editors/ContentBasicDataPanel.tsx"),
   read("src/components/admin/content/editors/article/TopicSeriesFields.tsx"),
+  read("src/components/admin/ui/AdminFormListboxSelect.tsx"),
   read("src/app/admin/content/topics/article-actions/validation.ts"),
   read("src/app/admin/content/topics/article-actions/save.ts"),
   read("src/app/admin/content/topics/media-actions/save.ts"),
@@ -83,13 +85,17 @@ check(
 );
 check(
   "the series owner follows the single category_id form source",
-  seriesFields.includes('elements.namedItem(\n      "category_id",') &&
+  seriesFields.includes('?.closest("form")') &&
+    seriesFields.includes('?.elements.namedItem("category_id")') &&
     seriesFields.includes('categorySelect.addEventListener("change", syncCategory)'),
 );
 check(
-  "changing category clears an incompatible hidden series value and publishes change",
-  seriesFields.includes('setValue("")') &&
-    seriesFields.includes('new Event("change", { bubbles: true })'),
+  "changing category clears an incompatible series value and the shared form listbox publishes change",
+    seriesFields.includes('setValue("")') &&
+    seriesFields.includes("<AdminFormListboxSelect") &&
+    formListbox.includes("previousValueRef.current === selectedValue") &&
+    formListbox.includes("previousValueRef.current = selectedValue") &&
+    formListbox.includes('new Event("change", { bubbles: true })'),
 );
 check(
   "series remains optional and disabled until a category is selected",

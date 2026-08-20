@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
 import { useAdminFeedback } from "../AdminFeedbackProvider";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
@@ -21,7 +20,10 @@ import AdminBulkActionBar from "../ui/AdminBulkActionBar";
 import AdminColumnVisibilityMenu from "../ui/AdminColumnVisibilityMenu";
 import AdminListboxSelect from "../ui/AdminListboxSelect";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "../ui/admin-scrollbar-styles";
-import { useAdminGridSelection, type AdminGridId } from "../ui/useAdminGridSelection";
+import {
+  useAdminGridSelection,
+  type AdminGridId,
+} from "../ui/useAdminGridSelection";
 import AdminEntityListTable, {
   type AdminEntityListTableProps,
   type AdminEntityListSizingStrategy,
@@ -44,10 +46,7 @@ export type AdminEntityListBulkConfirmation = Pick<
 
 type AdminEntityListBulkExecutionProps<TId extends AdminGridId> =
   | {
-      onBulkExecute: (
-        action: string,
-        ids: TId[],
-      ) => Promise<AdminActionResult>;
+      onBulkExecute: (action: string, ids: TId[]) => Promise<AdminActionResult>;
       bulkInteraction: AdminInstantMutationBulkInteraction;
     }
   | {
@@ -68,9 +67,7 @@ export type AdminEntityListProps<
   getRowLabel: (row: TRow) => string;
   initialVisibleColumns?: readonly string[];
   defaultVisibleColumns?: readonly string[];
-  onPersistColumns?: (
-    columns: string[],
-  ) => Promise<AdminEntityPersistResult>;
+  onPersistColumns?: (columns: string[]) => Promise<AdminEntityPersistResult>;
   onRestoreColumns?: () => Promise<AdminEntityPersistResult>;
   /** @deprecated The official control is always rendered when persistence is declared. */
   enableColumnManagement?: boolean;
@@ -119,9 +116,9 @@ export type AdminEntityListProps<
 function isAttentionFeedback(feedback: AdminActionFeedback | null) {
   return Boolean(
     feedback &&
-      (feedback.variant === "danger" ||
-        feedback.variant === "warning" ||
-        feedback.lifecycle === "persistent"),
+    (feedback.variant === "danger" ||
+      feedback.variant === "warning" ||
+      feedback.lifecycle === "persistent"),
   );
 }
 
@@ -178,15 +175,13 @@ function assertAdminEntityListContracts<
     );
   }
   const firstStickyEndTrack = input.columns.findIndex(
-    (column) =>
-      column.sticky === "end" || column.sticky === "end-adjacent",
+    (column) => column.sticky === "end" || column.sticky === "end-adjacent",
   );
   if (firstStickyEndTrack >= 0) {
     const stickyTail = input.columns.slice(firstStickyEndTrack);
     if (
       stickyTail.some(
-        (column) =>
-          column.sticky !== "end" && column.sticky !== "end-adjacent",
+        (column) => column.sticky !== "end" && column.sticky !== "end-adjacent",
       ) ||
       stickyTail.at(-1)?.sticky !== "end"
     ) {
@@ -266,7 +261,6 @@ function AdminEntityListInner<
     initialFeedback = null,
   } = props;
 
-  const router = useRouter();
   const floating = useAdminFloatingLayer();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const sortCorrectionRef = useRef(false);
@@ -302,9 +296,7 @@ function AdminEntityListInner<
   );
   const visibleSizingStrategy: AdminEntityListSizingStrategy<TKey> =
     sizingStrategy.mode === "flexible" &&
-    visibleColumnDefs.some(
-      (column) => column.key === sizingStrategy.columnKey,
-    )
+    visibleColumnDefs.some((column) => column.key === sizingStrategy.columnKey)
       ? sizingStrategy
       : { mode: "fixed" };
 
@@ -414,22 +406,17 @@ function AdminEntityListInner<
 
   const openLayerId = floating?.openLayerId ?? null;
   const setOpenLayerId = floating?.setOpenLayerId ?? (() => undefined);
-  const columnsControl =
-    onPersistColumns ? (
-      <AdminColumnVisibilityMenu
-        columns={columns}
-        visibleColumns={visibleColumns}
-        defaultColumns={resolvedDefaultVisibleColumns}
-        onChange={handleVisibleColumnsChange}
-        onPersist={onPersistColumns}
-        onRestore={onRestoreColumns}
-        onPersisted={() => {
-          if (onSuccessfulMutation) void onSuccessfulMutation();
-          else router.refresh();
-        }}
-        scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
-      />
-    ) : null;
+  const columnsControl = onPersistColumns ? (
+    <AdminColumnVisibilityMenu
+      columns={columns}
+      visibleColumns={visibleColumns}
+      defaultColumns={resolvedDefaultVisibleColumns}
+      onChange={handleVisibleColumnsChange}
+      onPersist={onPersistColumns}
+      onRestore={onRestoreColumns}
+      scrollAreaClassName={ADMIN_SCROLLBAR_VISUAL_CLASSES}
+    />
+  ) : null;
   const bulkBar =
     enableSelection && bulkOptions.length && onBulkExecute ? (
       <AdminBulkActionBar

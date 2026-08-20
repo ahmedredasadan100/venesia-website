@@ -96,9 +96,10 @@ function loadDocumentedStateMetric(label: string) {
   const source = readFileSync(CURRENT_PROJECT_STATE_PATH, "utf8");
   const row = source
     .split(/\r?\n/u)
-    .find((line) => line.startsWith(`| ${label} |`));
+    .map((line) => line.split("|").map((cell) => cell.trim()))
+    .find((cells) => cells[1] === label);
   assert.ok(row, `CURRENT_PROJECT_STATE is missing the metric: ${label}`);
-  const value = row.split("|")[2]?.trim();
+  const value = row[2];
   assert.match(value ?? "", /^\d+$/u, `CURRENT_PROJECT_STATE metric is not numeric: ${label}`);
   return Number(value);
 }

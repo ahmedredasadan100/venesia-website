@@ -24,9 +24,14 @@ import {
   AdminStatusPill,
   AdminTablePagination,
   AdminLinkField,
+  AdminFormSwitch,
+  AdminListboxSelect,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
-import { hasAdminLinkInContainer, linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
+import {
+  hasAdminLinkInContainer,
+  linkDefaultFromContainer,
+} from "../../../../lib/admin/links/link-defaults";
 import { serializeAdminLink } from "../../../../lib/admin/links/serialize";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";
 import { resolvePublicPreviewHref } from "../../../../lib/admin/links/validate";
@@ -36,16 +41,33 @@ const columns = `56px minmax(120px,1.1fr) minmax(160px,1.4fr) 88px 88px ${adminD
 const PAGE_SIZE = Number(ADMIN_TABLE_PAGINATION_DEFAULT_PAGE_SIZE);
 
 function emptyLink(sortOrder = 0): FooterManualLink {
-  return { label: "", href: "", link: null, target: "_self", visible: true, sortOrder };
+  return {
+    label: "",
+    href: "",
+    link: null,
+    target: "_self",
+    visible: true,
+    sortOrder,
+  };
 }
 
 function manualLinkHrefLabel(item: FooterManualLink) {
   if (item.href?.trim()) return item.href;
   const link = item.link;
-  if (link && typeof link === "object" && typeof link.href === "string" && link.href.trim()) {
+  if (
+    link &&
+    typeof link === "object" &&
+    typeof link.href === "string" &&
+    link.href.trim()
+  ) {
     return link.href;
   }
-  if (link && typeof link === "object" && link.link_kind && link.link_kind !== "none") {
+  if (
+    link &&
+    typeof link === "object" &&
+    link.link_kind &&
+    link.link_kind !== "none"
+  ) {
     return String(link.link_kind);
   }
   return "—";
@@ -54,7 +76,9 @@ function manualLinkHrefLabel(item: FooterManualLink) {
 function sortLinks(links: FooterManualLink[]) {
   return links
     .map((link, index) => ({ link, index }))
-    .sort((a, b) => (a.link.sortOrder ?? a.index) - (b.link.sortOrder ?? b.index))
+    .sort(
+      (a, b) => (a.link.sortOrder ?? a.index) - (b.link.sortOrder ?? b.index),
+    )
     .map(({ link }) => link);
 }
 
@@ -62,7 +86,11 @@ function reindexLinks(links: FooterManualLink[]) {
   return links.map((link, index) => ({ ...link, sortOrder: index }));
 }
 
-function moveLink(links: FooterManualLink[], fromIndex: number, direction: "up" | "down") {
+function moveLink(
+  links: FooterManualLink[],
+  fromIndex: number,
+  direction: "up" | "down",
+) {
   const sorted = sortLinks(links);
   const toIndex = direction === "up" ? fromIndex - 1 : fromIndex + 1;
   if (toIndex < 0 || toIndex >= sorted.length) return links;
@@ -93,13 +121,19 @@ export default function FooterLinksDataGrid({
   const totalPages = Math.max(1, Math.ceil(sortedLinks.length / pageSize));
   const resolvedCurrentPage = Math.min(currentPage, totalPages);
   const paginatedLinks = useMemo(
-    () => sortedLinks.slice((resolvedCurrentPage - 1) * pageSize, resolvedCurrentPage * pageSize),
+    () =>
+      sortedLinks.slice(
+        (resolvedCurrentPage - 1) * pageSize,
+        resolvedCurrentPage * pageSize,
+      ),
     [pageSize, resolvedCurrentPage, sortedLinks],
   );
 
   const isCreate = editIndex === -1;
   const modalOpen = editIndex !== null;
-  const draftHasLink = hasAdminLinkInContainer(draft as Record<string, unknown>);
+  const draftHasLink = hasAdminLinkInContainer(
+    draft as Record<string, unknown>,
+  );
 
   function openCreate() {
     setDraft(emptyLink(sortedLinks.length));
@@ -138,7 +172,13 @@ export default function FooterLinksDataGrid({
     if (isCreate) {
       onChange(reindexLinks([...sortedLinks, normalized]));
     } else if (editIndex != null && editIndex >= 0) {
-      onChange(reindexLinks(sortedLinks.map((item, index) => (index === editIndex ? normalized : item))));
+      onChange(
+        reindexLinks(
+          sortedLinks.map((item, index) =>
+            index === editIndex ? normalized : item,
+          ),
+        ),
+      );
     }
 
     closeModal();
@@ -148,21 +188,31 @@ export default function FooterLinksDataGrid({
     onChange(
       reindexLinks(
         sortedLinks.map((item, rowIndex) =>
-          rowIndex === index ? { ...item, visible: item.visible === false } : item,
+          rowIndex === index
+            ? { ...item, visible: item.visible === false }
+            : item,
         ),
       ),
     );
   }
 
   function deleteRow(index: number) {
-    onChange(reindexLinks(sortedLinks.filter((_, rowIndex) => rowIndex !== index)));
+    onChange(
+      reindexLinks(sortedLinks.filter((_, rowIndex) => rowIndex !== index)),
+    );
   }
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-white/50">إدارة الروابط بنفس جدول البيانات المستخدم في بقية لوحة التحكم.</p>
-        <AdminActionButton variant="gold" className="!min-h-10" onClick={openCreate}>
+        <p className="text-sm text-white/50">
+          إدارة الروابط بنفس جدول البيانات المستخدم في بقية لوحة التحكم.
+        </p>
+        <AdminActionButton
+          variant="gold"
+          className="!min-h-10"
+          onClick={openCreate}
+        >
           {addLabel}
         </AdminActionButton>
       </div>
@@ -181,7 +231,9 @@ export default function FooterLinksDataGrid({
         {paginatedLinks.length ? (
           paginatedLinks.map((item, pageIndex) => {
             const index = (resolvedCurrentPage - 1) * pageSize + pageIndex;
-            const previewHref = resolvePublicPreviewHref(manualLinkHrefLabel(item));
+            const previewHref = resolvePublicPreviewHref(
+              manualLinkHrefLabel(item),
+            );
             const hidden = { access: "hidden" as const };
             const capability: AdminRowActionsCapability = {
               entityType: "footer_manual_link",
@@ -190,15 +242,30 @@ export default function FooterLinksDataGrid({
               actions: {
                 edit: { access: "allowed", onSelect: () => openEdit(index) },
                 preview: previewHref
-                  ? { access: "allowed", href: previewHref, target: "_blank", rel: "noreferrer" }
-                  : { access: "disabled", disabledReason: "لم يُحدد رابط صالح للمعاينة." },
+                  ? {
+                      access: "allowed",
+                      href: previewHref,
+                      target: "_blank",
+                      rel: "noreferrer",
+                    }
+                  : {
+                      access: "disabled",
+                      disabledReason: "لم يُحدد رابط صالح للمعاينة.",
+                    },
                 information: {
                   access: "allowed",
                   title: `معلومات ${item.label || "الرابط"}`,
                   items: [
                     { label: "الرابط", value: manualLinkHrefLabel(item) },
-                    { label: "الهدف", value: item.target === "_blank" ? "تبويب جديد" : "نفس النافذة" },
-                    { label: "الحالة", value: item.visible !== false ? "ظاهر" : "مخفي" },
+                    {
+                      label: "الهدف",
+                      value:
+                        item.target === "_blank" ? "تبويب جديد" : "نفس النافذة",
+                    },
+                    {
+                      label: "الحالة",
+                      value: item.visible !== false ? "ظاهر" : "مخفي",
+                    },
                   ],
                 },
                 copyPublicLink: hidden,
@@ -224,42 +291,59 @@ export default function FooterLinksDataGrid({
             };
 
             return (
-            <AdminDataGridRow key={`link-${index}-${item.label}`} columns={columns}>
-              <span className="text-center text-sm font-en text-white/45">{index + 1}</span>
-              <span className="truncate text-sm text-white/85">{item.label || "—"}</span>
-              <span className="truncate font-en text-xs text-white/45" dir="ltr">
-                {manualLinkHrefLabel(item)}
-              </span>
-              <span className="text-center text-xs text-white/45">
-                {item.target === "_blank" ? "تبويب" : "نفس"}
-              </span>
-              <span className="flex justify-center">
-                <AdminStatusPill tone={item.visible !== false ? "green" : "muted"}>
-                  {item.visible !== false ? "ظاهر" : "مخفي"}
-                </AdminStatusPill>
-              </span>
-              <AdminDataGridActionsCell compact>
-                <AdminDataGridActionButton
-                  tone="dark"
-                  title="تحريك لأعلى"
-                  disabled={index === 0}
-                  size="compact"
-                  onClick={() => onChange(moveLink(sortedLinks, index, "up"))}
+              <AdminDataGridRow
+                key={`link-${index}-${item.label}`}
+                columns={columns}
+              >
+                <span className="text-center text-sm font-en text-white/45">
+                  {index + 1}
+                </span>
+                <span className="truncate text-sm text-white/85">
+                  {item.label || "—"}
+                </span>
+                <span
+                  className="truncate font-en text-xs text-white/45"
+                  dir="ltr"
                 >
-                  <span className="text-sm">↑</span>
-                </AdminDataGridActionButton>
-                <AdminDataGridActionButton
-                  tone="dark"
-                  title="تحريك لأسفل"
-                  disabled={index === sortedLinks.length - 1}
+                  {manualLinkHrefLabel(item)}
+                </span>
+                <span className="text-center text-xs text-white/45">
+                  {item.target === "_blank" ? "تبويب" : "نفس"}
+                </span>
+                <span className="flex justify-center">
+                  <AdminStatusPill
+                    tone={item.visible !== false ? "green" : "muted"}
+                  >
+                    {item.visible !== false ? "ظاهر" : "مخفي"}
+                  </AdminStatusPill>
+                </span>
+                <AdminDataGridActionsCell compact>
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    title="تحريك لأعلى"
+                    disabled={index === 0}
+                    size="compact"
+                    onClick={() => onChange(moveLink(sortedLinks, index, "up"))}
+                  >
+                    <span className="text-sm">↑</span>
+                  </AdminDataGridActionButton>
+                  <AdminDataGridActionButton
+                    tone="dark"
+                    title="تحريك لأسفل"
+                    disabled={index === sortedLinks.length - 1}
+                    size="compact"
+                    onClick={() =>
+                      onChange(moveLink(sortedLinks, index, "down"))
+                    }
+                  >
+                    <span className="text-sm">↓</span>
+                  </AdminDataGridActionButton>
+                </AdminDataGridActionsCell>
+                <AdminDataGridRowActions
+                  capability={capability}
                   size="compact"
-                  onClick={() => onChange(moveLink(sortedLinks, index, "down"))}
-                >
-                  <span className="text-sm">↓</span>
-                </AdminDataGridActionButton>
-              </AdminDataGridActionsCell>
-              <AdminDataGridRowActions capability={capability} size="compact" />
-            </AdminDataGridRow>
+                />
+              </AdminDataGridRow>
             );
           })
         ) : (
@@ -287,8 +371,13 @@ export default function FooterLinksDataGrid({
         onClose={closeModal}
         footer={
           <>
-            <AdminModalCancelButton onClick={closeModal}>إلغاء</AdminModalCancelButton>
-            <AdminModalPrimaryButton onClick={saveModal} disabled={!draft.label.trim() || !draftHasLink}>
+            <AdminModalCancelButton onClick={closeModal}>
+              إلغاء
+            </AdminModalCancelButton>
+            <AdminModalPrimaryButton
+              onClick={saveModal}
+              disabled={!draft.label.trim() || !draftHasLink}
+            >
               حفظ
             </AdminModalPrimaryButton>
           </>
@@ -300,46 +389,50 @@ export default function FooterLinksDataGrid({
               <span>اسم العنصر</span>
               <input
                 value={draft.label}
-                onChange={(event) => setDraft((prev) => ({ ...prev, label: event.target.value }))}
+                onChange={(event) =>
+                  setDraft((prev) => ({ ...prev, label: event.target.value }))
+                }
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
             </label>
-            <label className={adminFormLabelClassName()}>
+            <div className={adminFormLabelClassName()}>
               <span>فتح الرابط</span>
-              <select
+              <AdminListboxSelect
                 value={draft.target ?? "_self"}
-                onChange={(event) =>
+                onChange={(value) =>
                   setDraft((prev) => ({
                     ...prev,
-                    target: event.target.value === "_blank" ? "_blank" : "_self",
+                    target: value === "_blank" ? "_blank" : "_self",
                   }))
                 }
-                className={adminFormFieldClassName()}
-              >
-                <option value="_self">نفس النافذة</option>
-                <option value="_blank">تبويب جديد</option>
-              </select>
-            </label>
-            <label className={`${ADMIN_FORM.checkboxRow} md:col-span-2`}>
-              <span>إظهار في الفوتر</span>
-              <input
-                type="checkbox"
-                checked={draft.visible !== false}
-                onChange={(event) => setDraft((prev) => ({ ...prev, visible: event.target.checked }))}
-                className="h-4 w-4 accent-[#D8B87A]"
+                options={[
+                  { value: "_self", label: "نفس النافذة" },
+                  { value: "_blank", label: "تبويب جديد" },
+                ]}
+                ariaLabel="فتح الرابط"
               />
-            </label>
+            </div>
+            <AdminFormSwitch
+              label="إظهار في الفوتر"
+              checked={draft.visible !== false}
+              onChange={(event) =>
+                setDraft((prev) => ({ ...prev, visible: event.target.checked }))
+              }
+              surface
+              className="md:col-span-2"
+            />
           </div>
           <AdminLinkField
             prefix="footer_manual_link"
             label="الرابط"
-            controlledValue={linkDefaultFromContainer(draft as Record<string, unknown>)}
+            controlledValue={linkDefaultFromContainer(
+              draft as Record<string, unknown>,
+            )}
             onControlledChange={updateDraftLink}
           />
         </div>
       </VenesiaModal>
-
     </div>
   );
 }

@@ -1,15 +1,6 @@
 import assert from "node:assert/strict";
-import {
-  existsSync,
-  readFileSync,
-  readdirSync,
-} from "node:fs";
-import {
-  dirname,
-  join,
-  relative,
-  resolve,
-} from "node:path";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 
@@ -57,17 +48,21 @@ const {
   formatAdminDateTime,
   parseFormPublishedDate,
   resolveTopicPublishedAt,
-} = await jiti.import<
-  typeof import("../src/lib/content-dates.ts")
->("../src/lib/content-dates.ts");
+} = await jiti.import<typeof import("../src/lib/content-dates.ts")>(
+  "../src/lib/content-dates.ts",
+);
 
 const normalizePath = (value: string) => value.replaceAll("\\", "/");
 const absolutePath = (sourceFile: string) => join(ROOT, sourceFile);
 const read = (sourceFile: string) =>
   readFileSync(absolutePath(sourceFile), "utf8");
 const maintenanceSettingsPage = read("src/app/admin/settings/general/page.tsx");
-const maintenanceSettingsPanel = read("src/app/admin/settings/general/MaintenanceModePanel.tsx");
-const maintenanceSettingsAction = read("src/app/admin/settings/general/actions.ts");
+const maintenanceSettingsPanel = read(
+  "src/app/admin/settings/general/MaintenanceModePanel.tsx",
+);
+const maintenanceSettingsAction = read(
+  "src/app/admin/settings/general/actions.ts",
+);
 
 let passed = 0;
 function check(label: string, condition: unknown) {
@@ -139,7 +134,9 @@ check(
   "Form, Collection, Data, Feedback, Confirmation, and Shared Capabilities keep explicit owners",
   ADMIN_INTERACTION_MODULES.length === expectedInteractionModuleIds.length &&
     interactionModulesById.size === expectedInteractionModuleIds.length &&
-    expectedInteractionModuleIds.every((id) => interactionModulesById.has(id)) &&
+    expectedInteractionModuleIds.every((id) =>
+      interactionModulesById.has(id),
+    ) &&
     expectedInteractionModuleIds
       .filter((id) => id !== "shared_capabilities")
       .every(
@@ -159,8 +156,7 @@ check(
 check(
   "Form adoption is scoped to the independent Form Runtime module",
   ADMIN_FORM_RUNTIME_MODULE.id === "form_runtime" &&
-    ADMIN_FORM_RUNTIME_MODULE.governanceSystem ===
-      "admin_interaction_system" &&
+    ADMIN_FORM_RUNTIME_MODULE.governanceSystem === "admin_interaction_system" &&
     ADMIN_FORM_RUNTIME_MODULE.role === "independent_runtime" &&
     ADMIN_FORM_RUNTIME_MODULE.ownsSharedCapabilities === false &&
     ADMIN_FORM_SYSTEM_CLOSURE.module === ADMIN_FORM_RUNTIME_MODULE.id,
@@ -189,10 +185,9 @@ check(
     ),
 );
 
-const previewCapabilityAdopter =
-  ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.find(
-    (entry) => entry.id === "topic-article-edit-preview-public",
-  );
+const previewCapabilityAdopter = ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.find(
+  (entry) => entry.id === "topic-article-edit-preview-public",
+);
 const previewCapabilityGapIds = new Set<string>(
   ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.filter(
     (entry) => String(entry.status) === "gap",
@@ -234,9 +229,8 @@ check(
     "topic-series-collection-preview",
   ].every(
     (id) =>
-      ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.find(
-        (entry) => entry.id === id,
-      )?.status === "adopted",
+      ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.find((entry) => entry.id === id)
+        ?.status === "adopted",
   ),
 );
 
@@ -260,7 +254,7 @@ check(
 check(
   "Form Runtime closure claim includes the bounded shared legacy adoption",
   ADMIN_FORM_SYSTEM_CLOSURE.scope ===
-      "reference_consumers_and_in_scope_generic_legacy_forms" &&
+    "reference_consumers_and_in_scope_generic_legacy_forms" &&
     ADMIN_FORM_SYSTEM_CLOSURE.allowedClaim ===
       "shared_legacy_form_adoption_closed",
 );
@@ -279,7 +273,9 @@ check(
 );
 check(
   "every manifest source exists",
-  manifestSourceFiles.every((sourceFile) => existsSync(absolutePath(sourceFile))),
+  manifestSourceFiles.every((sourceFile) =>
+    existsSync(absolutePath(sourceFile)),
+  ),
 );
 
 const expectedClassifications: Record<
@@ -349,11 +345,18 @@ check(
     maintenanceSettingsPage.includes('status: "unavailable" as const') &&
     maintenanceSettingsPage.includes("initialReadState={maintenanceSetting}") &&
     maintenanceSettingsPanel.includes('role="alert"') &&
-    maintenanceSettingsPanel.includes("disabled={pending || refreshPending || !readAvailable}") &&
-    maintenanceSettingsPanel.includes("open={readAvailable && confirmNextEnabled !== null}") &&
-    maintenanceSettingsAction.indexOf("await getMaintenanceModeSetting();") >= 0 &&
+    maintenanceSettingsPanel.includes(
+      "disabled={pending || refreshPending || !readAvailable}",
+    ) &&
+    maintenanceSettingsPanel.includes(
+      "open={readAvailable && confirmNextEnabled !== null}",
+    ) &&
+    maintenanceSettingsAction.indexOf("await getMaintenanceModeSetting();") >=
+      0 &&
     maintenanceSettingsAction.indexOf("await getMaintenanceModeSetting();") <
-      maintenanceSettingsAction.indexOf("await setMaintenanceModeSetting(enabled);"),
+      maintenanceSettingsAction.indexOf(
+        "await setMaintenanceModeSetting(enabled);",
+      ),
 );
 
 const formMutationOwnerSources = [
@@ -367,7 +370,8 @@ const formMutationOwnerSources = [
   })
   .map((sourceFile) => normalizePath(relative(ROOT, sourceFile)))
   .filter(
-    (sourceFile) => sourceFile !== "src/components/admin/ui/AdminFormRuntime.tsx",
+    (sourceFile) =>
+      sourceFile !== "src/components/admin/ui/AdminFormRuntime.tsx",
   );
 const unclassifiedFormMutationOwners = formMutationOwnerSources.filter(
   (sourceFile) => !manifestSourceFileSet.has(sourceFile),
@@ -389,7 +393,10 @@ check(
       occurrenceCount(source, /<AdminFormActions\b/g) === 1;
     const delegatesThroughContentShell =
       occurrenceCount(source, /<ContentEditorShell\b/g) === 1;
-    return (delegatesDirectly || delegatesThroughContentShell) && !source.includes("<form");
+    return (
+      (delegatesDirectly || delegatesThroughContentShell) &&
+      !source.includes("<form")
+    );
   }) &&
     occurrenceCount(contentEditorShell, /<AdminFormRuntime\b/g) === 1 &&
     occurrenceCount(contentEditorShell, /<AdminFormActions\b/g) === 1 &&
@@ -411,9 +418,7 @@ const adminPageExperience = read(
 const mediaContentForm = read(
   "src/components/admin/content/editors/media/MediaContentForm.tsx",
 );
-const redirectForm = read(
-  "src/app/admin/seo/redirects/RedirectFormModal.tsx",
-);
+const redirectForm = read("src/app/admin/seo/redirects/RedirectFormModal.tsx");
 const createPageModal = read(
   "src/app/admin/pages-blocks/pages/CreatePageModal.tsx",
 );
@@ -435,15 +440,9 @@ const topicBasicPanel = read(
 const topicContentTypeControl = read(
   "src/components/admin/content/editors/TopicContentTypeControl.tsx",
 );
-const topicPreview = read(
-  "src/app/admin/content/topics/[id]/preview/page.tsx",
-);
-const projectPreview = read(
-  "src/app/admin/projects/[id]/preview/page.tsx",
-);
-const menuBuilderPage = read(
-  "src/app/admin/pages-blocks/menus/[id]/page.tsx",
-);
+const topicPreview = read("src/app/admin/content/topics/[id]/preview/page.tsx");
+const projectPreview = read("src/app/admin/projects/[id]/preview/page.tsx");
+const menuBuilderPage = read("src/app/admin/pages-blocks/menus/[id]/page.tsx");
 const topicSeoPanel = read("src/components/admin/SeoPanel.tsx");
 const sharedEntitySeoPanel = read(
   "src/components/admin/seo/AdminEntitySeoPanel.tsx",
@@ -462,6 +461,9 @@ const topicMediaSyncSignal = read(
 );
 const adminListboxSelect = read(
   "src/components/admin/ui/AdminListboxSelect.tsx",
+);
+const adminFormListboxSelect = read(
+  "src/components/admin/ui/AdminFormListboxSelect.tsx",
 );
 const inlineListboxHandlerStart = adminListboxSelect.indexOf(
   "function handleInlineKeyDown",
@@ -504,12 +506,18 @@ check(
     occurrenceCount(sharedEntitySeoPanel, /<AdminFormLayout/g) === 1 &&
     occurrenceCount(sharedEntitySeoPanel, /<AdminSingleOpenAccordion/g) === 1 &&
     sharedEntitySeoPanel.includes('defaultOpenId="search-result-preview"') &&
-    sharedEntitySeoPanel.includes('data-admin-seo-control-order="index-follow-canonical"') &&
+    sharedEntitySeoPanel.includes(
+      'data-admin-seo-control-order="index-follow-canonical"',
+    ) &&
     topicPublishingOptions.includes("data-content-publishing-options") &&
     topicPublishChecklist.includes("data-content-review-capability") &&
-    topicPublishChecklist.includes('data-content-review-presentation="dashboard"') &&
+    topicPublishChecklist.includes(
+      'data-content-review-presentation="dashboard"',
+    ) &&
     topicPublishChecklist.includes("<AdminEntityReviewPanel") &&
-    sharedEntityReviewPanel.includes('data-admin-entity-review-presentation="dashboard"') &&
+    sharedEntityReviewPanel.includes(
+      'data-admin-entity-review-presentation="dashboard"',
+    ) &&
     ![topicPublishChecklist, sharedEntityReviewPanel].some((source) =>
       source.includes("AdminSingleOpenAccordion"),
     ),
@@ -562,7 +570,8 @@ check(
     occurrenceCount(articleCreate, /<AdminEntityPreviewActions\b/g) === 0 &&
     occurrenceCount(articleEdit, /<AdminEntityPreviewActions\b/g) === 1 &&
     [articleCreate, articleEdit].every(
-      (source) => occurrenceCount(source, /<TopicMediaCatalogSyncSignal\b/g) === 1,
+      (source) =>
+        occurrenceCount(source, /<TopicMediaCatalogSyncSignal\b/g) === 1,
     ) &&
     topicMediaSyncSignal.includes('form.addEventListener("admin-form-saved"') &&
     topicMediaSyncSignal.includes("window.localStorage.setItem("),
@@ -580,9 +589,9 @@ check(
       'series_id: { tabId: "basic", targetId: "content-series-listbox" }',
     ) &&
     topicCategorySelect.includes('id="content-category-popover"') &&
-    topicCategorySelect.includes('triggerId="content-category-listbox"') &&
+    topicCategorySelect.includes('focusTargetId="content-category-listbox"') &&
     topicSeriesSelect.includes('id="content-series-popover"') &&
-    topicSeriesSelect.includes('triggerId="content-series-listbox"') &&
+    topicSeriesSelect.includes('focusTargetId="content-series-listbox"') &&
     ![topicCategorySelect, topicSeriesSelect].some(
       (source) =>
         /(?:^|[<\s])presentation=/m.test(source) ||
@@ -590,7 +599,8 @@ check(
         /(?:^|\s)presentation\s*===/.test(source) ||
         source.includes("inline="),
     ) &&
-    adminListboxSelect.includes('id={`${controlId}-listbox`}') &&
+    adminFormListboxSelect.includes("triggerId={focusTargetId}") &&
+    adminListboxSelect.includes("id={`${controlId}-listbox`}") &&
     adminListboxSelect.includes('role="listbox"'),
 );
 check(
@@ -672,7 +682,9 @@ check(
   ].every((marker) => mediaContentForm.includes(marker)) &&
     !mediaContentForm.includes("<form") &&
     !mediaContentForm.includes("<AdminStickyFormBar") &&
-    !mediaContentForm.includes('className="w-full rounded-2xl border border-white/10 bg-black/30'),
+    !mediaContentForm.includes(
+      'className="w-full rounded-2xl border border-white/10 bg-black/30',
+    ),
 );
 check(
   "Redirect and Page quick-create forms adopt the existing shared field presentation owners",
@@ -687,7 +699,9 @@ check(
 
 const runtime = read("src/components/admin/ui/AdminFormRuntime.tsx");
 const formRuntimeContract = read("src/lib/admin/form-runtime.ts");
-const actionsSource = runtime.slice(runtime.indexOf("export function AdminFormActions"));
+const actionsSource = runtime.slice(
+  runtime.indexOf("export function AdminFormActions"),
+);
 const createEditHandoffStart = runtime.indexOf(
   'if (state.mode === "create" && state.editHref)',
 );
@@ -759,15 +773,18 @@ check(
     createEditHandoff.includes('resolveSafeInternalPath(state.editHref, "")') &&
     createEditHandoff.includes("markClean(submittedBaseline)") &&
     createEditHandoff.includes("onSuccess?.(state)") &&
-    occurrenceCount(runtime, /router\.replace\(editHref, \{ scroll: false \}\)/g) === 1 &&
+    occurrenceCount(
+      runtime,
+      /router\.replace\(editHref, \{ scroll: false \}\)/g,
+    ) === 1 &&
     createEditHandoff.indexOf("markClean(submittedBaseline)") <
-      createEditHandoff.indexOf("router.replace(editHref, { scroll: false })") &&
+      createEditHandoff.indexOf(
+        "router.replace(editHref, { scroll: false })",
+      ) &&
     createEditHandoff.indexOf("onSuccess?.(state)") <
       createEditHandoff.indexOf("router.replace(editHref, { scroll: false })"),
 );
-const formDomPreservation = read(
-  "src/lib/admin/form-dom-preservation.ts",
-);
+const formDomPreservation = read("src/lib/admin/form-dom-preservation.ts");
 check(
   "shared runtime restores submitted DOM while successful RSC revisions stay server-owned",
   runtime.includes("captureAdminFormControls(form)") &&
@@ -778,7 +795,9 @@ check(
     formDomPreservation.includes("serverOwnedNames") &&
     formDomPreservation.includes("!serverOwnedNames.has(name)") &&
     formDomPreservation.includes("entry.element.form !== form") &&
-    formDomPreservation.includes('hasAttribute("data-admin-form-server-owned")') &&
+    formDomPreservation.includes(
+      'hasAttribute("data-admin-form-server-owned")',
+    ) &&
     contentEditorShell.includes('data-admin-form-server-owned=""') &&
     formDomPreservation.includes("new DataTransfer()"),
 );
@@ -789,9 +808,7 @@ check(
   ),
 );
 
-const feedbackProvider = read(
-  "src/components/admin/AdminFeedbackProvider.tsx",
-);
+const feedbackProvider = read("src/components/admin/AdminFeedbackProvider.tsx");
 const adminNotice = read("src/components/admin/AdminNotice.tsx");
 check(
   "pass-through feedback preserves pointer access for repair links and controls",
@@ -1081,9 +1098,7 @@ check(
 const categoryRowActions = read(
   "src/app/admin/content/categories/CategoryRowActions.tsx",
 );
-const seriesColumns = read(
-  "src/app/admin/content/series/series-columns.tsx",
-);
+const seriesColumns = read("src/app/admin/content/series/series-columns.tsx");
 const categoryListClient = read(
   "src/app/admin/content/categories/CategoriesListClient.tsx",
 );
@@ -1173,7 +1188,9 @@ check(
 );
 check(
   "Topic Create alone receives the safe shared-runtime Edit handoff target",
-  /\.\.\.\(mode === "create"\s*\?\s*\{\s*editHref: `\/admin\/content\/topics\/\$\{entityId\}`\s*\}\s*:\s*\{\}\s*\)/.test(unifiedAction) &&
+  /\.\.\.\(mode === "create"\s*\?\s*\{\s*editHref: `\/admin\/content\/topics\/\$\{entityId\}`\s*\}\s*:\s*\{\}\s*\)/.test(
+    unifiedAction,
+  ) &&
     occurrenceCount(unifiedAction, /editHref:/g) === 1 &&
     articleCreate.includes('mode="create"') &&
     articleEdit.includes('mode="edit"') &&
@@ -1194,7 +1211,9 @@ const actualConfirmDebt = [
   ...collectTsxFiles(join(ROOT, "src/app/admin")),
   ...collectTsxFiles(join(ROOT, "src/components/admin")),
 ]
-  .filter((sourceFile) => readFileSync(sourceFile, "utf8").includes("window.confirm"))
+  .filter((sourceFile) =>
+    readFileSync(sourceFile, "utf8").includes("window.confirm"),
+  )
   .map((sourceFile) => normalizePath(relative(ROOT, sourceFile)))
   .sort();
 const declaredConfirmDebt = [...ADMIN_FORM_CONFIRM_DEBT].sort();
