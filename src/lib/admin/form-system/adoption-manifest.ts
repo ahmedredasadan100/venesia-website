@@ -9,13 +9,18 @@
 
 import {
   ADMIN_MODAL_CONSUMER_CAPABILITIES,
+  ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_MODAL_MEDIA_CONSUMER_CAPABILITIES,
+  ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
   ADMIN_SWITCH_CONSUMER_CAPABILITIES,
-  ADMIN_SWITCH_MEDIA_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
   adminConsumerCapabilityAudit,
   type AdminConsumerCapabilityApprovedException,
+  type AdminConsumerCapabilityKey,
   type AdminConsumerCapabilityAuditDeclaration,
 } from "../interaction-system/adoption-manifest.ts";
 
@@ -26,15 +31,34 @@ export type AdminFormAdoptionClassification =
   | "specialized_exception"
   | "explicit_exception";
 
-export type AdminFormAdoptionEntry = {
+type AdminFormAdoptionEntryBase = {
   id: string;
   label: string;
-  classification: AdminFormAdoptionClassification;
   sourceFiles: readonly string[];
   surfaces: readonly string[];
   capabilityAudit: AdminConsumerCapabilityAuditDeclaration;
   rationale: string;
 };
+
+export type AdminFormCapabilityExceptionContract = {
+  lowerLevelSharedCapabilities: readonly AdminConsumerCapabilityKey[];
+  knownDebt: readonly string[];
+  reviewTrigger: string;
+  blocksGlobalClosure: boolean;
+};
+
+export type AdminFormAdoptionEntry =
+  | (AdminFormAdoptionEntryBase & {
+      classification: Exclude<
+        AdminFormAdoptionClassification,
+        "specialized_exception" | "explicit_exception"
+      >;
+      exceptionContract?: never;
+    })
+  | (AdminFormAdoptionEntryBase & {
+      classification: "specialized_exception" | "explicit_exception";
+      exceptionContract: AdminFormCapabilityExceptionContract;
+    });
 
 export const ADMIN_FORM_RUNTIME_MODULE = {
   id: "form_runtime",
@@ -89,7 +113,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "topic-category-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Topic Category create and edit",
@@ -102,7 +126,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "topic-series-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Topic Series create and edit",
@@ -141,7 +165,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "projects-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Project create and edit",
@@ -162,7 +186,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "project-locations-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Project Location create and edit",
@@ -188,6 +212,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     capabilityAudit: adminConsumerCapabilityAudit(
       {
         ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
         date_picker: {
           state: "owner_extension_required",
           rationale:
@@ -244,7 +269,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "redirects-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "SEO Redirect create and edit",
@@ -257,7 +282,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "page-composition-and-seo",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "page-composition-and-seo:specialized-builder-lifecycle",
@@ -280,11 +305,27 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["composition", "assignment", "seo"],
     rationale:
       "Composite page-builder workflow has specialized assignment, ordering, and SEO lifecycles.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+        "listbox",
+        "switch",
+      ],
+      knownDebt: [
+        "The composition aggregate retains domain-owned assignment, ordering, and page SEO command lifecycles.",
+      ],
+      reviewTrigger:
+        "Review when Page Composition moves to a generic long-lived create/edit session or its domain command boundary changes.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "block-template-create-modals",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Block template create modals",
@@ -308,7 +349,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "block-template-builders-and-editors",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_MEDIA_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "block-template-builders-and-editors:schema-builder-lifecycle",
@@ -336,11 +377,26 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["template-edit", "template-command"],
     rationale:
       "Schema-driven block editors retain their dedicated composition contract; their generic create modals are inventoried as shared adopters separately.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "media",
+        "switch",
+        "listbox",
+      ],
+      knownDebt: [
+        "Schema edit sessions remain outside the generic form runtime by explicit aggregate ownership.",
+      ],
+      reviewTrigger:
+        "Review when schema editors converge on the same save, dirty-close, and create-to-edit lifecycle as generic entity forms.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "menu-quick-create",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Menu quick create",
@@ -353,7 +409,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "menu-builder",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "menu-builder:hierarchical-builder-lifecycle",
@@ -377,11 +433,26 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["menu-edit", "item-edit", "ordering", "row-command"],
     rationale:
       "Hierarchical menu editing and ordering are a specialized builder workflow.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "listbox",
+        "switch",
+      ],
+      knownDebt: [
+        "Menu hierarchy and ordering remain specialized domain commands.",
+      ],
+      reviewTrigger:
+        "Review when menu and item editing acquire a generic long-lived form session contract.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "footer-builder",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Footer builder",
@@ -393,11 +464,26 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["footer-compose", "footer-link-edit", "ordering"],
     rationale:
       "Multi-slot footer composition is a specialized aggregate editor whose destructive interactions delegate to Shared Confirmation.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "modal",
+        "listbox",
+        "switch",
+      ],
+      knownDebt: [
+        "Footer slot composition and ordering remain one aggregate draft rather than generic entity forms.",
+      ],
+      reviewTrigger:
+        "Review when footer slots become independently persisted entities or adopt generic create/edit sessions.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "global-seo-settings",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Global SEO settings",
@@ -406,6 +492,15 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["global-meta"],
     rationale:
       "Singleton global metadata management is not a generic entity create/edit consumer.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["feedback", "busy_state", "listbox"],
+      knownDebt: [
+        "Global SEO remains a singleton settings aggregate with inheritance semantics.",
+      ],
+      reviewTrigger:
+        "Review when global SEO becomes a generic versioned entity create/edit workflow.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "company-identity-settings",
@@ -423,7 +518,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "media-library-settings",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Media Library settings",
@@ -432,6 +527,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["media-policy-settings"],
     rationale:
       "Singleton upload, deletion, storage, and reconciliation policies retain a dedicated settings contract.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "switch",
+      ],
+      knownDebt: [
+        "Storage reconciliation and upload policy remain a dedicated settings aggregate.",
+      ],
+      reviewTrigger:
+        "Review when Media settings loses reconciliation commands or becomes a generic entity edit session.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "security-settings",
@@ -454,6 +563,15 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["password", "session", "security-policy"],
     rationale:
       "Sensitive security mutations require dedicated validation and session semantics.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["feedback", "confirmation"],
+      knownDebt: [
+        "Password and session mutation lifecycles remain security-domain owned.",
+      ],
+      reviewTrigger:
+        "Review only if Auth and Permissions approve a change to security form ownership.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "integrations-server-configuration",
@@ -482,6 +600,15 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     ],
     rationale:
       "Provider App credentials use a dedicated Vault-only Aggregate with optimistic concurrency, test rate limits, and no browser-owned secret state; this is not a generic entity create/edit lifecycle.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["confirmation"],
+      knownDebt: [
+        "Vault-backed credential replacement remains a security-sensitive aggregate command.",
+      ],
+      reviewTrigger:
+        "Review only when the Vault, concurrency, or provider-test ownership contract changes.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "users-create-edit",
@@ -499,7 +626,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "users-and-roles",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      ADMIN_MODAL_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Users and roles management",
@@ -508,6 +635,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["identity-collection", "status-command", "delete-command"],
     rationale:
       "Identity status and delete commands remain specialized Auth-domain mutations while collection presentation, feedback, and confirmation use the shared owners and create/edit lifecycle is inventoried separately.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+      ],
+      knownDebt: [
+        "Identity status and deletion remain Auth-domain commands; create/edit is governed by its separate adopter entry.",
+      ],
+      reviewTrigger:
+        "Review when Auth-domain command semantics or the separate create/edit ownership changes.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "maintenance-immediate-setting",
@@ -521,11 +662,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["immediate-toggle"],
     rationale:
       "Single immediate toggle command intentionally has no persistent editable form session.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["feedback", "confirmation"],
+      knownDebt: [
+        "The immediate maintenance command intentionally has no persistent form session.",
+      ],
+      reviewTrigger:
+        "Review if maintenance mode becomes a multi-field persisted settings form.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "authentication-login",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "authentication-login:session-boundary",
@@ -547,11 +697,20 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["admin-login", "maintenance-login"],
     rationale:
       "Authentication forms have session and redirect semantics outside Admin entity editing.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: ["switch"],
+      knownDebt: [
+        "Authentication feedback remains local to the session-entry boundary.",
+      ],
+      reviewTrigger:
+        "Review only if Auth and Permissions change login lifecycle ownership.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "list-bulk-row-one-shot-actions",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "list-bulk-row-one-shot-actions:atomic-command",
@@ -582,6 +741,21 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     surfaces: ["bulk-command", "row-command", "duplicate-command"],
     rationale:
       "Atomic list commands do not represent a long-lived create/edit form session.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+        "listbox",
+      ],
+      knownDebt: [
+        "Atomic list commands intentionally do not create persistent editable sessions.",
+      ],
+      reviewTrigger:
+        "Review when an atomic command expands into a long-lived create/edit workflow.",
+      blocksGlobalClosure: false,
+    },
   },
   {
     id: "activity-sitemap-media-commands",
@@ -619,6 +793,21 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     ],
     rationale:
       "Query/command utilities have no generic entity create/edit lifecycle.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        "feedback",
+        "confirmation",
+        "busy_state",
+        "modal",
+        "media",
+      ],
+      knownDebt: [
+        "Query and media command utilities intentionally remain outside entity form sessions.",
+      ],
+      reviewTrigger:
+        "Review when any utility becomes a persistent generic entity create/edit workflow.",
+      blocksGlobalClosure: false,
+    },
   },
 ] as const satisfies readonly AdminFormAdoptionEntry[];
 

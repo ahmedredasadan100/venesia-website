@@ -20,8 +20,8 @@ import {
   ADMIN_DATA_GRID_HEADER_CLASSES,
   ADMIN_DATA_GRID_HEADER_ROW_CELL_CLASSES,
   ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT,
-  ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   getAdminDataGridFixedColumnStyle,
+  getAdminDataGridPrimaryPresentationStyle,
 } from "../ui/AdminDataGrid";
 import type { AdminGridId } from "../ui/useAdminGridSelection";
 
@@ -301,20 +301,14 @@ export default function AdminEntityListTable<
     column: AdminEntityColumnDef<TRow, TKey, TSortKey>,
   ) {
     const trackStyle = getColumnTrackStyle(column);
-    const usesTextOnlyPrimaryPreset =
-      column.primary === true &&
-      column.minWidth === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly &&
-      column.width === ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly;
+    if (!column.primary) return trackStyle;
 
-    return usesTextOnlyPrimaryPreset
-      ? {
-          ...(trackStyle ?? {}),
-          paddingInlineStart:
-            ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textOnlyCellInlinePaddingPx,
-          paddingInlineEnd:
-            ADMIN_DATA_GRID_PRIMARY_COLUMN_CONTRACT.textOnlyCellInlinePaddingPx,
-        }
-      : trackStyle;
+    return {
+      ...(trackStyle ?? {}),
+      ...getAdminDataGridPrimaryPresentationStyle(
+        column.primaryPresentation,
+      ),
+    };
   }
 
   function renderHeaderLabel(column: AdminEntityColumnDef<TRow, TKey, TSortKey>) {

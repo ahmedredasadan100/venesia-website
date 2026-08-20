@@ -215,12 +215,14 @@ check(
     ),
 );
 check(
-  "Location primary Name column adopts the shared text-only geometry preset",
+  "Location primary Name column adopts the explicit shared text-only presentation and geometry preset",
   dataGrid.includes("ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS") &&
+    dataGrid.includes("ADMIN_DATA_GRID_PRIMARY_PRESENTATION_CONTRACT") &&
+    dataGrid.includes("getAdminDataGridPrimaryPresentationStyle") &&
     dataGrid.includes("textOnlyCellInlinePaddingPx: 20") &&
-    entityTable.includes("usesTextOnlyPrimaryPreset") &&
-    entityTable.includes("paddingInlineStart:") &&
-    entityTable.includes("paddingInlineEnd:") &&
+    entityTable.includes("column.primaryPresentation") &&
+    !entityTable.includes("usesTextOnlyPrimaryPreset") &&
+    managementClient.includes('primaryPresentation: "text-only"') &&
     managementClient.includes(
       "minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly",
     ) &&

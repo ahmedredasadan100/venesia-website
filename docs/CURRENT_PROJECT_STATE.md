@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-15
+**Updated:** 2026-08-20
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -9,34 +9,34 @@ This file records the minimum current facts needed to begin work safely. Archite
 
 ## Current official baseline
 
-The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified Platform Performance Optimization merge is:
+The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The verified entering baseline for Platform Governance & Consistency Closure is:
 
 ```text
-e7a041982c0a816f14a264181f17ce41af7652c9
+30995731dc10a82216f170ffe33000cbcda807f3
 ```
 
-Verified after PR #100 merged on 2026-08-15:
+Verified before the implementation branch was created on 2026-08-20:
 
-| Surface                                                 | SHA / state                                                                |
-| ------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Platform Performance Optimization merge                 | `e7a041982c0a816f14a264181f17ce41af7652c9`                                 |
-| Post-merge local `main` / `origin/main` / GitHub `main` | `e7a041982c0a816f14a264181f17ce41af7652c9`                                 |
-| Delivery state                                          | PR #100 merged; the implementation branch is no longer an active authority |
+| Surface                                                  | SHA / state                                                                                                     |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Platform Governance & Consistency entering baseline      | `30995731dc10a82216f170ffe33000cbcda807f3`                                                                      |
+| Phase-start local `main` / `origin/main` / GitHub `main` | `30995731dc10a82216f170ffe33000cbcda807f3`                                                                      |
+| Delivery state                                           | Independent implementation phase; merge and Production closure remain unclaimed until their separate gates pass |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-The Platform Health implementation and `DEBT-TYPE-01` closure were delivered through PR #98, and Platform Performance Optimization was delivered through PR #100. Current `main` is the only official baseline. This snapshot does not reopen closed Architecture, historical Technical Debt, or completed Performance work.
+Current `main` remains the only official entering baseline. The Platform Governance & Consistency implementation is a candidate delta from that exact baseline; its branch or PR is not architecture authority unless merged. This snapshot does not reopen closed Architecture, historical Technical Debt, or completed phases.
 
 ## Active phase
 
-- **Title:** Dead Code Cleanup
-- **Baseline:** live GitHub `main`; Platform Performance Optimization merge `e7a041982c0a816f14a264181f17ce41af7652c9`
-- **Status:** Platform Health Discovery, Final Closure, and `DEBT-TYPE-01` are closed through PR #98; Platform Performance Optimization is closed at implementation and merge level through PR #100.
-- **Scope:** remove only dead code proven unreachable across repository, runtime, CMS, configuration, registry, and external-use evidence.
-- **Boundaries:** do not reopen Architecture, historical PRs, or old Technical Debt without current-`main` regression evidence and an explicit scoped request.
-- **Delivery:** every future phase must independently prove local `main` = `origin/main` = GitHub `main` before implementation.
+- **Title:** Platform Governance & Consistency Closure
+- **Baseline:** `30995731dc10a82216f170ffe33000cbcda807f3`, verified as local `main`, `origin/main`, and GitHub `main` at phase start.
+- **Status:** Implementation closure candidate. Source Proof covers every registered consumer; final CI, Product Review, PR checks, merge, deployment, and Production remain separate claims until actually proven.
+- **Scope:** close Consumer inventory, capability-exception governance, shared Listbox/Switch adoption, column-preference rollback/runtime consistency, shared behavior ownership, and executable governance/runtime/capability guards.
+- **Boundaries:** no new Runtime, Capability, System, Source of Truth, Product rule, Auth rule, schema, migration, or Production mutation is introduced.
+- **Delivery:** the phase remains independent from Entity List Platform Hardening and every previous closed phase.
 
 ## Current architecture truth
 
@@ -53,6 +53,11 @@ The Platform Health implementation and `DEBT-TYPE-01` closure were delivered thr
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
 - Generic Bulk selection, presentation, intent, and confirmation requests remain with the Collection owner. Bulk pending, blocking, optimistic state, snapshot, rollback, reconciliation, and invalidation are owned only by the existing Data Runtime; domain actions retain business operation, eligibility, atomicity, and persistence.
 - Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. The current matrix has 11 Full Adoption claims and 0 Partial Adoption entries; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
+- The Consumer Capability Adoption Audit derives 18 axes from the Current Shared Capability Set and covers 61 registered Collection/Form consumer records. Every `src/app/admin/**/page.tsx` source has executable inventory coverage; nested consumer graphs stop at separately registered presentation boundaries.
+- Shared Listbox behavior is owned by `AdminListboxSelect` and `AdminFormListboxSelect`; the retired native `AdminSelect` owner has no remaining consumer. Boolean switches and selection checkboxes use `AdminFormSwitch` and `AdminCheckbox`; raw primitives remain internal to those owners.
+- Every specialized or explicit Form exception records its lower-level shared capabilities, known debt, review trigger, and closure impact. Capability exceptions require explicit per-axis Scope, Approving Owner, Evidence, and Rationale; classification alone cannot auto-approve a local implementation.
+- Shared column preferences apply optimistic visibility locally, serialize writes, commit only verified success, roll back the latest failed request to the last committed state, and never use route refresh as preference reconciliation.
+- Dashboard recent content and Sitemap Effective Source tables adopt the shared Data Grid presentation owner; Dashboard edit/information interactions adopt Shared Row Actions.
 - Governorates, Cities, Districts, and Sub-districts share the Location Collection/Data contracts. Their optional columns, preferences, primary Name preset, sorting, pagination, and Row Actions are shared; Bulk is explicitly `not_required`, and delete eligibility is projected by the Location contract/adapter while the guarded RPC remains final enforcement.
 - Existing `/images/**` and `/files/**` values are an explicit read-compatibility boundary for live content, not a write owner and not permission for filesystem uploads in Production.
 - Public navigation API/layout consumers share the current public navigation owner, which applies active-menu and published linked-target truth. Redirect resolution uses the current exact capped lookup; neither path may restore the superseded PR #82 read owners.
@@ -83,20 +88,20 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 The 2026-08-19 authorized Production migration closure established the following facts against the configured Supabase Production project.
 
-| Proof | Reconciled state |
-|---|---:|
-| Repository migration files | 86 |
-| Production registry versions | 86 |
-| Registry SQL provenance | Exact repository SQL for all 86 deployed versions |
-| Public tables | 56 |
-| Public tables with RLS enabled | 56 |
-| Public catalog objects with repository provenance | 291 |
-| Invalid, unready, or non-live indexes | 0 |
-| Unvalidated public constraints | 0 |
-| Parallel public function overload names | 0 |
-| Public RLS policies | 3 |
-| Anonymous-callable application data functions | 0 |
-| Registry reconciliation audit records | 12 |
+| Proof                                             |                                  Reconciled state |
+| ------------------------------------------------- | ------------------------------------------------: |
+| Repository migration files                        |                                                86 |
+| Production registry versions                      |                                                86 |
+| Registry SQL provenance                           | Exact repository SQL for all 86 deployed versions |
+| Public tables                                     |                                                56 |
+| Public tables with RLS enabled                    |                                                56 |
+| Public catalog objects with repository provenance |                                               291 |
+| Invalid, unready, or non-live indexes             |                                                 0 |
+| Unvalidated public constraints                    |                                                 0 |
+| Parallel public function overload names           |                                                 0 |
+| Public RLS policies                               |                                                 3 |
+| Anonymous-callable application data functions     |                                                 0 |
+| Registry reconciliation audit records             |                                                12 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 

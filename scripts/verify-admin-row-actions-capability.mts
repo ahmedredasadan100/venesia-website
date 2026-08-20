@@ -8,6 +8,7 @@ import {
   ADMIN_ROW_ACTION_MORE_ORDER,
   ADMIN_ROW_ACTION_PRIMARY_ORDER,
 } from "../src/lib/admin/interaction-system/admin-row-actions-capability.ts";
+import { settleAdminColumnPreferenceSave } from "../src/lib/admin/entity-list/column-preferences.ts";
 import {
   resolveClientPagination,
   slicePageRows,
@@ -17,6 +18,7 @@ import {
   resolveAdminEntityListInteractionState,
   resolveAdminInstantMutationInteraction,
 } from "../src/lib/admin/entity-list/data-engine/interaction-state.ts";
+import { ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS } from "../src/lib/admin/entity-list/types.ts";
 import {
   ADMIN_CURRENT_SHARED_CAPABILITY_SET,
   ADMIN_INTERACTION_MODULES,
@@ -249,6 +251,10 @@ function formBaseCapabilities(entry: AdminFormAdoptionEntry) {
     capabilities.add("confirmation");
     capabilities.add("busy_state");
   }
+  for (const capability of entry.exceptionContract
+    ?.lowerLevelSharedCapabilities ?? []) {
+    capabilities.add(capability);
+  }
   return capabilities;
 }
 
@@ -321,7 +327,6 @@ function resolveConsumerCapabilityAudit(
   ) {
     baseCapabilities.add("scrollbar");
   }
-
   const decisions = projectSharedCapabilitySet(
     ADMIN_CURRENT_SHARED_CAPABILITY_SET,
     (capability): ResolvedConsumerCapabilityDecision => {
@@ -686,6 +691,9 @@ const CANONICAL_COLUMN_PREFERENCES_OWNER =
   "src/lib/admin/preferences/admin-column-preferences.ts";
 const CANONICAL_PRIMARY_COLUMN_OWNER =
   "src/components/admin/ui/AdminDataGrid.tsx";
+const PRIMARY_COLUMN_PRESENTATIONS: ReadonlySet<string> = new Set(
+  ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS,
+);
 
 function normalizeSourcePath(sourceFile: string) {
   return sourceFile.replaceAll("\\", "/");
@@ -1102,38 +1110,69 @@ function evidenceGraphCallsCanonicalImport(
   });
 }
 
-function evidenceGraphUsesPrimaryColumnPreset(
+type PrimaryColumnPresentationDeclaration = {
+  sourceFile: string;
+  line: number;
+  declaresPrimary: boolean;
+  presentation: string | null;
+};
+
+function collectPrimaryColumnPresentationDeclarations(
   graph: ReadonlyMap<string, string>,
 ) {
-  return [...graph].some(([sourceFile, source]) => {
-    if (sourceFile === CANONICAL_PRIMARY_COLUMN_OWNER) return false;
+  return [...graph].flatMap(([sourceFile, source]) => {
+    if (sourceFile === CANONICAL_PRIMARY_COLUMN_OWNER) return [];
     const parsed = parseEvidenceSource(sourceFile, source);
-    let used = false;
+    const declarations: PrimaryColumnPresentationDeclaration[] = [];
+    const propertyAssignment = (
+      node: ts.ObjectLiteralExpression,
+      name: string,
+    ) =>
+      node.properties.find(
+        (property): property is ts.PropertyAssignment =>
+          ts.isPropertyAssignment(property) &&
+          property.name.getText(parsed) === name,
+      );
     const visit = (node: ts.Node) => {
-      if (
-        ts.isPropertyAccessExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        node.expression.text === "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS"
-      ) {
-        used = true;
-        return;
+      if (ts.isObjectLiteralExpression(node)) {
+        const primary = propertyAssignment(node, "primary");
+        const presentation = propertyAssignment(node, "primaryPresentation");
+        const declaresPrimary =
+          primary?.initializer.kind === ts.SyntaxKind.TrueKeyword;
+        if (declaresPrimary || presentation) {
+          const position = parsed.getLineAndCharacterOfPosition(
+            node.getStart(parsed),
+          );
+          declarations.push({
+            sourceFile,
+            line: position.line + 1,
+            declaresPrimary,
+            presentation:
+              presentation && ts.isStringLiteral(presentation.initializer)
+                ? presentation.initializer.text
+                : null,
+          });
+        }
       }
-      if (
-        ts.isCallExpression(node) &&
-        ts.isIdentifier(node.expression) &&
-        [
-          "getAdminDataGridPrimaryColumnWidth",
-          "getAdminDataGridHierarchyPrimaryColumnWidth",
-        ].includes(node.expression.text)
-      ) {
-        used = true;
-        return;
-      }
-      if (!used) ts.forEachChild(node, visit);
+      ts.forEachChild(node, visit);
     };
     visit(parsed);
-    return used;
+    return declarations;
   });
+}
+
+function evidenceGraphAdoptsPrimaryColumnPresentationContract(
+  graph: ReadonlyMap<string, string>,
+) {
+  const declarations = collectPrimaryColumnPresentationDeclarations(graph);
+  return (
+    declarations.some((declaration) => declaration.declaresPrimary) &&
+    declarations.every(
+      (declaration) =>
+        declaration.declaresPrimary &&
+        PRIMARY_COLUMN_PRESENTATIONS.has(declaration.presentation ?? ""),
+    )
+  );
 }
 
 function evidenceGraphUsesBulkMutationLifecycle(
@@ -1378,24 +1417,28 @@ function collectCollectionSurfaceComplianceFailures(
   }
 
   if (surface.workflowClassification === "fixed_structure_not_paginated") {
+    const expectedGridOwner = usesDataGrid ? "AdminDataGrid" : "not_applicable";
     if (
       surface.generic ||
       surface.collectionAdoption !== "not_applicable" ||
-      surface.gridOwner !== "not_applicable" ||
+      surface.gridOwner !== expectedGridOwner ||
       surface.dataRegistryEntities.length > 0 ||
       surface.paginationState !== "not_required" ||
       surface.paginationOwner !== "not_applicable" ||
       surface.requiredAdoption.length > 0 ||
       !surface.exceptionRationale ||
-      surface.genuineExceptions.length === 0
+      surface.genuineExceptions.length === 0 ||
+      usesNativeTable ||
+      (surface.rowActionsState === "adopted" &&
+        (surface.rowActionsOwner !== "shared_admin_row_actions" ||
+          !usesSharedRowActions)) ||
+      (surface.rowActionsState !== "adopted" &&
+        surface.rowActionsOwner === "shared_admin_row_actions")
     ) {
       failures.push("fixed_structure_exception_contract");
     }
 
-    if (
-      usesDataGrid &&
-      (usesSharedRowActions || usesSharedPagination || usesBoundedClientRuntime)
-    ) {
+    if (usesSharedPagination || usesBoundedClientRuntime) {
       failures.push("collection_misclassified_as_fixed_structure");
     }
 
@@ -1403,20 +1446,17 @@ function collectCollectionSurfaceComplianceFailures(
   }
 
   if (surface.workflowClassification === "page_system_only") {
+    const expectedGridOwner = usesDataGrid ? "AdminDataGrid" : "not_applicable";
     if (
       surface.generic ||
       surface.collectionAdoption !== "not_applicable" ||
-      surface.gridOwner !== "not_applicable" ||
+      surface.gridOwner !== expectedGridOwner ||
       surface.dataRegistryEntities.length > 0 ||
       surface.paginationState !== "not_required" ||
       surface.paginationOwner !== "not_applicable" ||
       surface.queryMode !== "specialized" ||
       surface.requiredAdoption.length > 0 ||
-      usesDataGrid ||
-      (usesNativeTable &&
-        (surface.rowActionsState !== "read_only_no_row_commands" ||
-          surface.rowActionsOwner !== "not_applicable" ||
-          !surface.exceptionRationale))
+      usesNativeTable
     ) {
       failures.push("page_system_exception_contract");
     }
@@ -1621,6 +1661,122 @@ const capabilitySourceProofFailures = consumerCapabilityAuditRecords.flatMap(
       (failure) => `${consumer.boundary}:${consumer.id}:${failure}`,
     ),
 );
+const formExceptionContractFailures =
+  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.flatMap((entry) => {
+    const isException =
+      entry.classification === "specialized_exception" ||
+      entry.classification === "explicit_exception";
+    if (!isException) {
+      return "exceptionContract" in entry
+        ? [`${entry.id}:unexpected_exception_contract`]
+        : [];
+    }
+
+    const contract = entry.exceptionContract;
+    const lowerLevelSharedCapabilities: readonly AdminConsumerCapabilityKey[] =
+      contract.lowerLevelSharedCapabilities;
+    const knownDebt: readonly string[] = contract.knownDebt;
+    const consumer = consumerCapabilityAuditRecords.find(
+      (candidate) => candidate.boundary === "form" && candidate.id === entry.id,
+    );
+    if (!consumer) return [`${entry.id}:missing_consumer_record`];
+    const decisions = resolveConsumerCapabilityAudit(consumer);
+    const failures: string[] = [];
+    if (
+      lowerLevelSharedCapabilities.length === 0 ||
+      new Set(lowerLevelSharedCapabilities).size !==
+        lowerLevelSharedCapabilities.length
+    ) {
+      failures.push(`${entry.id}:invalid_lower_level_capabilities`);
+    }
+    if (knownDebt.length === 0 || knownDebt.some((debt) => !debt.trim())) {
+      failures.push(`${entry.id}:invalid_known_debt`);
+    }
+    if (!contract.reviewTrigger.trim()) {
+      failures.push(`${entry.id}:missing_review_trigger`);
+    }
+    if (contract.blocksGlobalClosure) {
+      failures.push(`${entry.id}:blocks_global_closure`);
+    }
+    for (const capability of lowerLevelSharedCapabilities) {
+      if (decisions[capability].state !== "adopted") {
+        failures.push(`${entry.id}:${capability}:lower_level_not_adopted`);
+      }
+    }
+    return failures;
+  });
+const approvedExceptionDeclarationFailures =
+  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.flatMap((entry) =>
+    Object.entries(entry.capabilityAudit.overrides).flatMap(
+      ([capability, override]) => {
+        if (override.state !== "approved_exception") return [];
+        const exceptionClassification =
+          entry.classification === "specialized_exception" ||
+          entry.classification === "explicit_exception";
+        return exceptionClassification &&
+          override.scope.trim() &&
+          override.approvingOwner.trim() &&
+          override.rationale.trim() &&
+          override.evidence.length > 0 &&
+          override.evidence.every((sourceFile) =>
+            existsSync(join(ROOT, sourceFile)),
+          )
+          ? []
+          : [`${entry.id}:${capability}:invalid_exception_declaration`];
+      },
+    ),
+  );
+
+const successfulPreferenceSettlement = settleAdminColumnPreferenceSave({
+  committedColumns: ["name"],
+  requestedColumns: ["name", "status"],
+  latestColumns: ["name", "status"],
+  ok: true,
+});
+const latestFailedPreferenceSettlement = settleAdminColumnPreferenceSave({
+  committedColumns: ["name"],
+  requestedColumns: ["name", "status"],
+  latestColumns: ["name", "status"],
+  ok: false,
+});
+const supersededFailedPreferenceSettlement = settleAdminColumnPreferenceSave({
+  committedColumns: ["name"],
+  requestedColumns: ["name", "status"],
+  latestColumns: ["name", "updatedAt"],
+  ok: false,
+});
+const registeredAdminConsumerGraph = new Map(
+  consumerCapabilityAuditRecords.flatMap((consumer) => [
+    ...consumerExecutableGraph(consumer),
+  ]),
+);
+const rawListboxConsumerSources = detectLocalImplementations(
+  graphWithoutOwnerSources(
+    registeredAdminConsumerGraph,
+    ADMIN_CURRENT_SHARED_CAPABILITY_SET.listbox.sourceFiles,
+  ),
+).has("native_select")
+  ? ["registered_consumer_graph:native_select"]
+  : [];
+const rawBooleanControlConsumerSources = detectLocalImplementations(
+  graphWithoutOwnerSources(
+    registeredAdminConsumerGraph,
+    ADMIN_CURRENT_SHARED_CAPABILITY_SET.switch.sourceFiles,
+  ),
+).has("native_checkbox")
+  ? ["registered_consumer_graph:native_checkbox"]
+  : [];
+
+if (formExceptionContractFailures.length > 0) {
+  console.error(
+    `Form capability exception contract failures:\n${formExceptionContractFailures.join("\n")}`,
+  );
+}
+if (approvedExceptionDeclarationFailures.length > 0) {
+  console.error(
+    `Approved exception declaration failures:\n${approvedExceptionDeclarationFailures.join("\n")}`,
+  );
+}
 
 if (capabilityApplicabilityFailures.length > 0) {
   console.error(
@@ -1699,6 +1855,57 @@ check(
     invalidApprovedExceptionConsumer,
     "applicability",
   ).includes("confirmation:invalid_approved_exception_contract"),
+);
+check(
+  "Form capability exceptions declare lower-level adoption, known debt, review trigger, and closure impact",
+  formExceptionContractFailures.length === 0,
+);
+check(
+  "only explicit manifest declarations can approve a capability exception",
+  approvedExceptionDeclarationFailures.length === 0 &&
+    !read("scripts/verify-admin-row-actions-capability.mts").includes(
+      ["resolveExisting", "ConsumerException"].join(""),
+    ),
+);
+check(
+  "column preference settlement commits success and rolls back only the latest failed optimistic request",
+  sameOrderedValues(successfulPreferenceSettlement.committedColumns, [
+    "name",
+    "status",
+  ]) &&
+    successfulPreferenceSettlement.rollbackColumns === null &&
+    sameOrderedValues(latestFailedPreferenceSettlement.committedColumns, [
+      "name",
+    ]) &&
+    sameOrderedValues(latestFailedPreferenceSettlement.rollbackColumns ?? [], [
+      "name",
+    ]) &&
+    sameOrderedValues(supersededFailedPreferenceSettlement.committedColumns, [
+      "name",
+    ]) &&
+    supersededFailedPreferenceSettlement.rollbackColumns === null,
+);
+check(
+  "shared column preference UI owns optimistic rollback without refresh reconciliation",
+  read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx").includes(
+    "settleAdminColumnPreferenceSave",
+  ) &&
+    !read("src/components/admin/ui/AdminColumnVisibilityMenu.tsx").includes(
+      "onPersisted",
+    ) &&
+    !read("src/components/admin/entity-list/AdminEntityList.tsx").includes(
+      "router.refresh()",
+    ),
+);
+check(
+  "Listbox adoption has no native or retired parallel Admin select owner",
+  rawListboxConsumerSources.length === 0 &&
+    !existsSync(join(ROOT, "src/components/admin/ui/AdminSelect.tsx")) &&
+    !read("src/components/admin/ui/index.ts").includes("AdminSelect"),
+);
+check(
+  "boolean and selection controls render raw checkboxes only inside their shared owners",
+  rawBooleanControlConsumerSources.length === 0,
 );
 check(
   "applicable behavior without canonical adoption cannot disappear inside not_applicable",
@@ -2094,6 +2301,13 @@ const categoriesListSource = read(paths.categoriesList);
 const categoriesColumnsSource = read(paths.categoriesColumns);
 const seriesColumnsSource = read(paths.series);
 const projectsColumnsSource = read(paths.projects);
+const primaryColumnPresentationGraph = new Map(
+  collectionSurfaces.flatMap((surface) => [
+    ...collectSourceGraph(surface.pageSourceFiles),
+  ]),
+);
+const primaryColumnPresentationDeclarations =
+  collectPrimaryColumnPresentationDeclarations(primaryColumnPresentationGraph);
 
 check(
   "shared Row Actions geometry fixes three compact buttons at 144px",
@@ -2212,22 +2426,67 @@ check(
   "shared primary-column contract budgets 200px before ellipsis",
   dataGridSource.includes("textBudgetPx: 200") &&
     dataGridSource.includes("ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS") &&
+    dataGridSource.includes("ADMIN_DATA_GRID_PRIMARY_PRESENTATION_CONTRACT") &&
+    dataGridSource.includes("getAdminDataGridPrimaryPresentationStyle") &&
     dataGridSource.includes("textOnly:") &&
     dataGridSource.includes("compactIcon:") &&
     dataGridSource.includes("standardIcon:"),
 );
 check(
-  "Topics, Series, Projects, and Pages consume shared primary presets",
+  "Topics, Series, Projects, and Pages consume explicit primary presentations and shared sizing presets",
   topicsColumnsSource.includes(
     "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.compactIcon",
   ) &&
+    topicsColumnsSource.includes('primaryPresentation: "compact-icon"') &&
     seriesColumnsSource.includes(
       "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon",
     ) &&
+    seriesColumnsSource.includes('primaryPresentation: "standard-icon"') &&
     projectsColumnsSource.includes(
       "ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.standardIcon",
     ) &&
-    pagesSource.includes("ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly"),
+    projectsColumnsSource.includes('primaryPresentation: "standard-icon"') &&
+    pagesSource.includes("ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS.textOnly") &&
+    pagesSource.includes('primaryPresentation: "text-only"'),
+);
+check(
+  "every primary-column declaration adopts exactly one supported presentation",
+  primaryColumnPresentationDeclarations.length > 0 &&
+    primaryColumnPresentationDeclarations.every(
+      (declaration) =>
+        declaration.declaresPrimary &&
+        PRIMARY_COLUMN_PRESENTATIONS.has(declaration.presentation ?? ""),
+    ),
+);
+check(
+  "primary presentation proof fails when one declaration is missing even if a sibling is valid",
+  !evidenceGraphAdoptsPrimaryColumnPresentationContract(
+    new Map([
+      [
+        "primary-presentation-mixed-fixture.tsx",
+        'const columns = [{ primary: true, primaryPresentation: "text-only" }, { primary: true }];',
+      ],
+    ]),
+  ),
+);
+check(
+  "primary presentation proof uses explicit semantics instead of numeric width equality",
+  evidenceGraphAdoptsPrimaryColumnPresentationContract(
+    new Map([
+      [
+        "primary-presentation-numeric-fixture.tsx",
+        'const columns = [{ primary: true, primaryPresentation: "text-only", minWidth: 380, width: 440 }];',
+      ],
+    ]),
+  ) &&
+    !evidenceGraphAdoptsPrimaryColumnPresentationContract(
+      new Map([
+        [
+          "primary-presentation-invalid-fixture.tsx",
+          'const columns = [{ primary: true, primaryPresentation: "wide", minWidth: 240, width: 240 }];',
+        ],
+      ]),
+    ),
 );
 check(
   "Categories derives one hierarchy-aware width from maximum visible depth",
@@ -2507,7 +2766,7 @@ const collectionSurfaceComplianceFailures = collectionSurfaces.flatMap(
     ),
 );
 check(
-  "every Collection, specialized adopter, and explicit exception proves its classification from the existing contracts",
+  `every Collection, specialized adopter, and explicit exception proves its classification from the existing contracts${collectionSurfaceComplianceFailures.length > 0 ? `: ${collectionSurfaceComplianceFailures.join(", ")}` : ""}`,
   collectionSurfaceComplianceFailures.length === 0,
 );
 const blockTemplateLibraries = collectionSurfaces.find(
@@ -2802,7 +3061,7 @@ function collectFullAdoptionContractFailures(
       "saveAdminColumnPreferences",
       CANONICAL_COLUMN_PREFERENCES_OWNER,
     ) ||
-    !evidenceGraphUsesPrimaryColumnPreset(sourceGraph)
+    !evidenceGraphAdoptsPrimaryColumnPresentationContract(sourceGraph)
   ) {
     failures.push("columns");
   }
@@ -3273,7 +3532,10 @@ check(
     )?.workflowClassification === "fixed_structure_not_paginated" &&
     collectionSurfaces.find(
       (surface) => surface.id === "dashboard-recent-content",
-    )?.rowActionsState === "not_applicable" &&
+    )?.rowActionsState === "adopted" &&
+    collectionSurfaces.find(
+      (surface) => surface.id === "dashboard-recent-content",
+    )?.rowActionsOwner === "shared_admin_row_actions" &&
     collectionSurfaces
       .find((surface) => surface.id === "blocks-library-hub")
       ?.presentationSourceFiles.includes(

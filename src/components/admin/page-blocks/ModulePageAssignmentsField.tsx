@@ -1,4 +1,4 @@
-import { AdminFormSection } from "../ui";
+import { AdminCheckbox, AdminFormSection } from "../ui";
 
 type ModulePageOption = {
   id: number;
@@ -27,18 +27,24 @@ export default function ModulePageAssignmentsField({
           >
             <span>
               {page.title}
-              <span className="mr-2 font-mono text-xs text-white/35">{page.path}</span>
+              <span className="mr-2 font-mono text-xs text-white/35">
+                {page.path}
+              </span>
             </span>
-            <input
-              type="checkbox"
+            <AdminCheckbox
               name="page_ids"
               value={page.id}
               defaultChecked={assignedSet.has(page.id)}
+              label={`ربط ${page.title}`}
             />
           </label>
         ))}
 
-        {!pages.length ? <p className="text-sm text-white/45">لا توجد صفحات منشورة في النظام.</p> : null}
+        {!pages.length ? (
+          <p className="text-sm text-white/45">
+            لا توجد صفحات منشورة في النظام.
+          </p>
+        ) : null}
       </div>
     </AdminFormSection>
   );

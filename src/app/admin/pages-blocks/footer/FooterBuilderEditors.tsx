@@ -1,9 +1,21 @@
 "use client";
 
 import { adminFormFieldClassName } from "../../../../components/admin/VenesiaModal";
-import { AdminActionButton } from "../../../../components/admin/ui";
-import { ADMIN_FORM, adminFormHintClassName, adminFormLabelClassName } from "../../../../lib/admin/admin-ui-styles";
-import type { FooterContactItem, FooterLegal, FooterSocialLink } from "../../../../lib/footer/types";
+import {
+  AdminActionButton,
+  AdminFormSwitch,
+  AdminListboxSelect,
+} from "../../../../components/admin/ui";
+import {
+  ADMIN_FORM,
+  adminFormHintClassName,
+  adminFormLabelClassName,
+} from "../../../../lib/admin/admin-ui-styles";
+import type {
+  FooterContactItem,
+  FooterLegal,
+  FooterSocialLink,
+} from "../../../../lib/footer/types";
 import type { FooterManualLink } from "../../../../lib/footer/footer-slot-types";
 import { isSocialPlatform } from "../../../../lib/footer/defaults";
 
@@ -34,12 +46,18 @@ type ContactItemsFieldProps = {
   hint?: string;
 };
 
-export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldProps) {
+export function ContactItemsField({
+  items,
+  onChange,
+  hint,
+}: ContactItemsFieldProps) {
   const rows = items.length ? items : [emptyContactRow()];
 
   function updateRow(index: number, patch: Partial<FooterContactItem>) {
     onChange(
-      rows.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
+      rows.map((row, rowIndex) =>
+        rowIndex === index ? { ...row, ...patch } : row,
+      ),
     );
   }
 
@@ -57,33 +75,45 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
             <p className="text-sm font-medium text-white/75">
               عنصر #{index + 1}
               {item.visible === false ? (
-                <span className="ms-2 text-xs font-normal text-white/40">(مخفي في الفوتر)</span>
+                <span className="ms-2 text-xs font-normal text-white/40">
+                  (مخفي في الفوتر)
+                </span>
               ) : null}
             </p>
             <AdminActionButton
               variant="ghost"
               className="!min-h-8 !px-3 !py-1.5 text-xs text-red-300"
-              onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+              onClick={() =>
+                onChange(rows.filter((_, rowIndex) => rowIndex !== index))
+              }
             >
               حذف
             </AdminActionButton>
           </div>
 
           <div className="rounded-2xl border border-white/8 bg-[#05070B]/70 px-4 py-3">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">معاينة</p>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/35">
+              معاينة
+            </p>
             <div className="text-[13px] text-white/50">
               {item.icon?.trim() || item.label?.trim() ? (
                 <div className="flex items-center gap-2">
                   {item.icon?.trim() ? (
-                    <span className="shrink-0 text-[#D8B87A]/50">{item.icon.trim()}</span>
+                    <span className="shrink-0 text-[#D8B87A]/50">
+                      {item.icon.trim()}
+                    </span>
                   ) : null}
                   {item.label?.trim() ? (
-                    <span className="text-[11px] font-medium text-white/45">{item.label.trim()}</span>
+                    <span className="text-[11px] font-medium text-white/45">
+                      {item.label.trim()}
+                    </span>
                   ) : null}
                 </div>
               ) : null}
               {item.value?.trim() ? (
-                <p className={`break-all text-white/55 ${item.icon?.trim() || item.label?.trim() ? "mt-1" : ""}`}>
+                <p
+                  className={`break-all text-white/55 ${item.icon?.trim() || item.label?.trim() ? "mt-1" : ""}`}
+                >
                   {item.value.trim()}
                 </p>
               ) : !item.icon?.trim() && !item.label?.trim() ? (
@@ -97,7 +127,9 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
               <span>التسمية</span>
               <input
                 value={item.label}
-                onChange={(event) => updateRow(index, { label: event.target.value })}
+                onChange={(event) =>
+                  updateRow(index, { label: event.target.value })
+                }
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
@@ -106,7 +138,9 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
               <span>القيمة</span>
               <input
                 value={item.value}
-                onChange={(event) => updateRow(index, { value: event.target.value })}
+                onChange={(event) =>
+                  updateRow(index, { value: event.target.value })
+                }
                 className={adminFormFieldClassName()}
                 dir="rtl"
               />
@@ -115,7 +149,9 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
               <span>الرابط (اختياري)</span>
               <input
                 value={item.href ?? ""}
-                onChange={(event) => updateRow(index, { href: event.target.value })}
+                onChange={(event) =>
+                  updateRow(index, { href: event.target.value })
+                }
                 className={adminFormFieldClassName()}
                 dir="ltr"
               />
@@ -124,25 +160,29 @@ export function ContactItemsField({ items, onChange, hint }: ContactItemsFieldPr
               <span>أيقونة (اختياري)</span>
               <input
                 value={item.icon ?? ""}
-                onChange={(event) => updateRow(index, { icon: event.target.value })}
+                onChange={(event) =>
+                  updateRow(index, { icon: event.target.value })
+                }
                 className={adminFormFieldClassName()}
               />
             </label>
-            <label className={ADMIN_FORM.checkboxRow}>
-              <span>إظهار</span>
-              <input
-                type="checkbox"
-                checked={item.visible !== false}
-                onChange={(event) =>
-                  updateRow(index, { visible: event.target.checked ? undefined : false })
-                }
-                className="h-4 w-4 accent-[#D8B87A]"
-              />
-            </label>
+            <AdminFormSwitch
+              label="إظهار"
+              checked={item.visible !== false}
+              onChange={(event) =>
+                updateRow(index, {
+                  visible: event.target.checked ? undefined : false,
+                })
+              }
+              surface
+            />
           </div>
         </div>
       ))}
-      <AdminActionButton variant="gold" onClick={() => onChange([...rows, emptyContactRow()])}>
+      <AdminActionButton
+        variant="gold"
+        onClick={() => onChange([...rows, emptyContactRow()])}
+      >
         + إضافة عنصر تواصل
       </AdminActionButton>
     </div>
@@ -155,7 +195,12 @@ type ManualLinksFieldProps = {
 };
 
 export function ManualLinksField({ links, onChange }: ManualLinksFieldProps) {
-  return <FooterLinksDataGrid links={links.length ? links : []} onChange={onChange} />;
+  return (
+    <FooterLinksDataGrid
+      links={links.length ? links : []}
+      onChange={onChange}
+    />
+  );
 }
 
 type QuickLinksFieldProps = {
@@ -164,7 +209,9 @@ type QuickLinksFieldProps = {
 };
 
 export function QuickLinksField({ footerMenuId, links }: QuickLinksFieldProps) {
-  return <FooterMenuPreviewDataGrid footerMenuId={footerMenuId} links={links} />;
+  return (
+    <FooterMenuPreviewDataGrid footerMenuId={footerMenuId} links={links} />
+  );
 }
 
 type SocialLinksFieldProps = {
@@ -183,39 +230,51 @@ export function SocialLinksField({ links, onChange }: SocialLinksFieldProps) {
           className="space-y-3 rounded-[22px] border border-white/10 bg-white/[0.02] p-4"
         >
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium text-white/75">رابط #{index + 1}</p>
+            <p className="text-sm font-medium text-white/75">
+              رابط #{index + 1}
+            </p>
             <AdminActionButton
               variant="ghost"
               className="!min-h-8 !px-3 !py-1.5 text-xs text-red-300"
-              onClick={() => onChange(rows.filter((_, rowIndex) => rowIndex !== index))}
+              onClick={() =>
+                onChange(rows.filter((_, rowIndex) => rowIndex !== index))
+              }
             >
               حذف
             </AdminActionButton>
           </div>
           <div className={ADMIN_FORM.gridTwoCol}>
-            <label className={adminFormLabelClassName()}>
-              <span>المنصة</span>
-              <select
+            <div className={adminFormLabelClassName()}>
+              <span id={`footer-social-platform-${index}-label`}>المنصة</span>
+              <AdminListboxSelect
                 value={item.platform}
-                onChange={(event) => {
-                  const platform = isSocialPlatform(event.target.value) ? event.target.value : "facebook";
-                  onChange(rows.map((row, rowIndex) => (rowIndex === index ? { ...row, platform } : row)));
+                onChange={(value) => {
+                  const platform = isSocialPlatform(value) ? value : "facebook";
+                  onChange(
+                    rows.map((row, rowIndex) =>
+                      rowIndex === index ? { ...row, platform } : row,
+                    ),
+                  );
                 }}
-                className={adminFormFieldClassName()}
-              >
-                {SOCIAL_PLATFORM_OPTIONS.map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
+                options={SOCIAL_PLATFORM_OPTIONS.map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+                ariaLabelledBy={`footer-social-platform-${index}-label`}
+              />
+            </div>
             <label className={adminFormLabelClassName()}>
               <span>التسمية</span>
               <input
                 value={item.label}
                 onChange={(event) =>
-                  onChange(rows.map((row, rowIndex) => (rowIndex === index ? { ...row, label: event.target.value } : row)))
+                  onChange(
+                    rows.map((row, rowIndex) =>
+                      rowIndex === index
+                        ? { ...row, label: event.target.value }
+                        : row,
+                    ),
+                  )
                 }
                 className={adminFormFieldClassName()}
                 dir="rtl"
@@ -226,31 +285,40 @@ export function SocialLinksField({ links, onChange }: SocialLinksFieldProps) {
               <input
                 value={item.href}
                 onChange={(event) =>
-                  onChange(rows.map((row, rowIndex) => (rowIndex === index ? { ...row, href: event.target.value } : row)))
+                  onChange(
+                    rows.map((row, rowIndex) =>
+                      rowIndex === index
+                        ? { ...row, href: event.target.value }
+                        : row,
+                    ),
+                  )
                 }
                 className={adminFormFieldClassName()}
                 dir="ltr"
               />
             </label>
-            <label className={`${ADMIN_FORM.checkboxRow} md:col-span-2`}>
-              <span>إظهار في الشريط السفلي</span>
-              <input
-                type="checkbox"
-                checked={item.visible !== false}
-                onChange={(event) =>
-                  onChange(
-                    rows.map((row, rowIndex) =>
-                      rowIndex === index ? { ...row, visible: event.target.checked } : row,
-                    ),
-                  )
-                }
-                className="h-4 w-4 accent-[#D8B87A]"
-              />
-            </label>
+            <AdminFormSwitch
+              label="إظهار في الشريط السفلي"
+              checked={item.visible !== false}
+              onChange={(event) =>
+                onChange(
+                  rows.map((row, rowIndex) =>
+                    rowIndex === index
+                      ? { ...row, visible: event.target.checked }
+                      : row,
+                  ),
+                )
+              }
+              surface
+              className="md:col-span-2"
+            />
           </div>
         </div>
       ))}
-      <AdminActionButton variant="gold" onClick={() => onChange([...rows, emptySocialRow()])}>
+      <AdminActionButton
+        variant="gold"
+        onClick={() => onChange([...rows, emptySocialRow()])}
+      >
         + إضافة رابط سوشيال
       </AdminActionButton>
     </div>
@@ -269,7 +337,9 @@ export function LegalFields({ legal, onChange }: LegalFieldsProps) {
         <span>Copyright</span>
         <input
           value={legal.copyright}
-          onChange={(event) => onChange({ ...legal, copyright: event.target.value })}
+          onChange={(event) =>
+            onChange({ ...legal, copyright: event.target.value })
+          }
           className={adminFormFieldClassName()}
         />
       </label>
@@ -277,7 +347,9 @@ export function LegalFields({ legal, onChange }: LegalFieldsProps) {
         <span>Legal Tagline</span>
         <input
           value={legal.tagline}
-          onChange={(event) => onChange({ ...legal, tagline: event.target.value })}
+          onChange={(event) =>
+            onChange({ ...legal, tagline: event.target.value })
+          }
           className={adminFormFieldClassName()}
         />
       </label>

@@ -161,7 +161,7 @@ check(
 check(
   "Stage and Item sizing is explicit and their sticky-end tracks remain cumulative before Actions",
   (adminCollections.match(
-    /key: "name"[\s\S]{0,260}primary: true[\s\S]{0,180}flexible: true/g,
+    /key: "name"[\s\S]{0,320}primary: true[\s\S]{0,240}flexible: true/g,
   )?.length ?? 0) === 2 &&
     (adminCollections.match(
       /listId="project-tracking-(?:stages|items)"[\s\S]{0,140}sizingStrategy=\{\{ mode: "flexible", columnKey: "name" \}\}/g,
@@ -185,6 +185,22 @@ check(
     entityListTable.includes("data-admin-table-width-budget") &&
     entityListTable.includes("stickyEndOffsets.get(column.key) ?? 0") &&
     !entityListTable.includes("insetInlineEnd: actionsColumnWidth"),
+);
+check(
+  "Stage, Item, and Update primary columns adopt the explicit text-only presentation contract",
+  (adminCollections.match(/primaryPresentation: "text-only"/g)?.length ?? 0) ===
+    3 &&
+    (adminCollections.match(
+      /minWidth: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS\.textOnly/g,
+    )?.length ?? 0) === 3 &&
+    (adminCollections.match(
+      /width: ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS\.textOnly/g,
+    )?.length ?? 0) === 3 &&
+    !adminCollections.includes("minWidth: 380") &&
+    !adminCollections.includes("width: 440") &&
+    entityListTable.includes("getAdminDataGridPrimaryPresentationStyle") &&
+    entityListTable.includes("column.primaryPresentation") &&
+    !entityListTable.includes("usesTextOnlyPrimaryPreset"),
 );
 check(
   "Construction Updates Hub is Specialized and excluded from the Full Collection claim",

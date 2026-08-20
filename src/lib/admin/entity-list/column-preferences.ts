@@ -40,7 +40,36 @@ export function filterPersistableColumnKeys(
   return [...new Set(keys)].filter((key) => allowed.has(key));
 }
 
-export function resolveActiveSortColumnKey<TRow, TKey extends string, TSortKey extends string>(
+export function settleAdminColumnPreferenceSave<TKey extends string>(input: {
+  committedColumns: readonly TKey[];
+  requestedColumns: readonly TKey[];
+  latestColumns: readonly TKey[];
+  ok: boolean;
+}) {
+  if (input.ok) {
+    return {
+      committedColumns: [...input.requestedColumns],
+      rollbackColumns: null,
+    };
+  }
+
+  const requestIsLatest =
+    input.latestColumns.length === input.requestedColumns.length &&
+    input.latestColumns.every(
+      (key, index) => key === input.requestedColumns[index],
+    );
+
+  return {
+    committedColumns: [...input.committedColumns],
+    rollbackColumns: requestIsLatest ? [...input.committedColumns] : null,
+  };
+}
+
+export function resolveActiveSortColumnKey<
+  TRow,
+  TKey extends string,
+  TSortKey extends string,
+>(
   columns: readonly AdminEntityColumnDef<TRow, TKey, TSortKey>[],
   sortKey: TSortKey | null | undefined,
 ): TKey | null {

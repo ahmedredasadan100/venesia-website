@@ -28,6 +28,7 @@ import {
   AdminDataGridSortLabel,
   AdminDataGridStatusCell,
   AdminFormError,
+  AdminFormListboxSelect,
   AdminFormRuntime,
   AdminModalCancelButton,
   AdminModalPrimaryButton,
@@ -100,14 +101,19 @@ const HERO_FILTERS: readonly AdminEntityFilterDef[] = [
 
 function mutationFormData(fields: Record<string, string | number | boolean>) {
   const formData = new FormData();
-  for (const [key, value] of Object.entries(fields)) formData.set(key, String(value));
+  for (const [key, value] of Object.entries(fields))
+    formData.set(key, String(value));
   return formData;
 }
 
 function resolveHeroPreviewPath(hero: HeroTemplateRow) {
-  const activeAssignment = hero.hero_assignments.find((assignment) => assignment.is_active && assignment.path);
+  const activeAssignment = hero.hero_assignments.find(
+    (assignment) => assignment.is_active && assignment.path,
+  );
   if (activeAssignment?.path) return activeAssignment.path;
-  const anyAssignment = hero.hero_assignments.find((assignment) => assignment.path);
+  const anyAssignment = hero.hero_assignments.find(
+    (assignment) => assignment.path,
+  );
   return anyAssignment?.path ?? null;
 }
 
@@ -122,7 +128,8 @@ export default function HeroManagerClient({
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const [showCreateModal, setShowCreateModal] = useState(false);
   const createRuntimeRef = useRef<AdminFormRuntimeHandle>(null);
-  const columnConfig = getPageCompositionColumnPreferenceConfig("heroTemplates");
+  const columnConfig =
+    getPageCompositionColumnPreferenceConfig("heroTemplates");
   const defaultColumns = getPageCompositionDefaultColumnKeys("heroTemplates");
   const [visibleColumns, setVisibleColumns] = useState(() =>
     normalizePageCompositionVisibleColumnKeys(
@@ -139,8 +146,12 @@ export default function HeroManagerClient({
       [
         ADMIN_DATA_GRID_COLUMNS.checkbox,
         ADMIN_DATA_GRID_COLUMNS.primaryCompact,
-        visibleColumnSet.has("slug") ? ADMIN_DATA_GRID_COLUMNS.slugCompact : null,
-        visibleColumnSet.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusStandard : null,
+        visibleColumnSet.has("slug")
+          ? ADMIN_DATA_GRID_COLUMNS.slugCompact
+          : null,
+        visibleColumnSet.has("status")
+          ? ADMIN_DATA_GRID_COLUMNS.statusStandard
+          : null,
         ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
       ]
         .filter((column) => column !== null)
@@ -168,20 +179,25 @@ export default function HeroManagerClient({
   useEffect(() => {
     setTableRows(instant.rows);
   }, [instant.rows, setTableRows]);
-  const queryContract = useMemo<AdminBoundedClientQueryContract<HeroTemplateRow>>(
+  const queryContract = useMemo<
+    AdminBoundedClientQueryContract<HeroTemplateRow>
+  >(
     () => ({
       mode: "bounded-client",
       search: { minLength: 1 },
       filters: HERO_FILTERS,
       matchesRow: (hero, query) => {
-      if (
-        query.search &&
-        !adminCollectionSearchIncludes(
-          `${hero.name} ${hero.slug} ${hero.description ?? ""}`,
-          query.search,
+        if (
+          query.search &&
+          !adminCollectionSearchIncludes(
+            `${hero.name} ${hero.slug} ${hero.description ?? ""}`,
+            query.search,
+          )
         )
-      ) return false;
-      return query.filters.status === "all" || hero.status === query.filters.status;
+          return false;
+        return (
+          query.filters.status === "all" || hero.status === query.filters.status
+        );
       },
       getRowId: (hero) => hero.id,
     }),
@@ -196,7 +212,10 @@ export default function HeroManagerClient({
   const search = pagination.search;
   const status = pagination.filterValues.status;
   const paginatedHeroes = pagination.rows;
-  const visibleIds = useMemo(() => paginatedHeroes.map((hero) => hero.id), [paginatedHeroes]);
+  const visibleIds = useMemo(
+    () => paginatedHeroes.map((hero) => hero.id),
+    [paginatedHeroes],
+  );
   const selection = useAdminGridSelection<number>(visibleIds);
   const loadFeedback = useMemo(
     () =>
@@ -213,7 +232,11 @@ export default function HeroManagerClient({
     [loadError],
   );
   const mediaWarningNotice = useMemo(
-    () => <MediaSynchronizationWarningNotice visible={mediaSynchronizationWarning} />,
+    () => (
+      <MediaSynchronizationWarningNotice
+        visible={mediaSynchronizationWarning}
+      />
+    ),
     [mediaSynchronizationWarning],
   );
 
@@ -256,7 +279,10 @@ export default function HeroManagerClient({
         {
           variant: "danger",
           title: "تعذر تنفيذ الإجراء",
-          message: error instanceof Error ? error.message : "تعذر تنفيذ العملية. حاول مرة أخرى.",
+          message:
+            error instanceof Error
+              ? error.message
+              : "تعذر تنفيذ العملية. حاول مرة أخرى.",
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
@@ -330,7 +356,7 @@ export default function HeroManagerClient({
         eyebrow="إدارة الموديولات"
         title="إدارة الهيرو"
         description="جدول موحّد لكل قوالب الهيرو، ويمكن ربط كل قالب بصفحة أو أكثر."
-        actions={(
+        actions={
           <button
             type="button"
             onClick={() => setShowCreateModal(true)}
@@ -340,7 +366,7 @@ export default function HeroManagerClient({
             <PlusIcon />
             إضافة هيرو
           </button>
-        )}
+        }
       />
 
       {mediaWarningNotice}
@@ -372,7 +398,11 @@ export default function HeroManagerClient({
       <div className="space-y-4">
         <AdminEntityListFilters
           basePath="/admin/pages-blocks/blocks/hero"
-          search={{ value: search, placeholder: "ابحث باسم الهيرو أو المعرّف الداخلي…", minLength: 1 }}
+          search={{
+            value: search,
+            placeholder: "ابحث باسم الهيرو أو المعرّف الداخلي…",
+            minLength: 1,
+          }}
           filters={HERO_FILTERS}
           values={{ status }}
           columnsControl={
@@ -414,9 +444,15 @@ export default function HeroManagerClient({
                 const formData = new FormData();
                 formData.set("bulk_action", action);
                 ids.forEach((id) => formData.append("ids", String(id)));
-                const succeeded = await runMutation(null, "bulk", () => bulkHeroTemplates(formData), "تم تنفيذ الإجراء الجماعي على الهيروهات المحددة.");
+                const succeeded = await runMutation(
+                  null,
+                  "bulk",
+                  () => bulkHeroTemplates(formData),
+                  "تم تنفيذ الإجراء الجماعي على الهيروهات المحددة.",
+                );
                 if (!succeeded) {
-                  if (action === "delete") throw new Error("bulk hero delete failed");
+                  if (action === "delete")
+                    throw new Error("bulk hero delete failed");
                   return;
                 }
                 selection.clearSelection();
@@ -432,7 +468,9 @@ export default function HeroManagerClient({
               <AdminDataGridCheckbox
                 inputRef={selection.selectAllRef}
                 checked={selection.allSelected}
-                onChange={(event) => selection.toggleAll(event.currentTarget.checked)}
+                onChange={(event) =>
+                  selection.toggleAll(event.currentTarget.checked)
+                }
                 label="تحديد كل الهيروهات"
               />
             </AdminDataGridCheckboxCell>
@@ -496,15 +534,30 @@ export default function HeroManagerClient({
                   href: `/admin/pages-blocks/blocks/hero/${hero.id}`,
                 },
                 preview: previewPath
-                  ? { access: "allowed", href: previewPath, target: "_blank", rel: "noreferrer" }
-                  : { access: "disabled", disabledReason: "لا توجد صفحة مربوطة للمعاينة." },
+                  ? {
+                      access: "allowed",
+                      href: previewPath,
+                      target: "_blank",
+                      rel: "noreferrer",
+                    }
+                  : {
+                      access: "disabled",
+                      disabledReason: "لا توجد صفحة مربوطة للمعاينة.",
+                    },
                 information: {
                   access: "allowed",
                   title: `معلومات ${hero.name}`,
                   items: [
                     { label: "المعرّف", value: hero.slug },
-                    { label: "الحالة", value: hero.status === "published" ? "منشور" : "غير منشور" },
-                    { label: "الصفحات المربوطة", value: String(hero.hero_assignments.length) },
+                    {
+                      label: "الحالة",
+                      value:
+                        hero.status === "published" ? "منشور" : "غير منشور",
+                    },
+                    {
+                      label: "الصفحات المربوطة",
+                      value: String(hero.hero_assignments.length),
+                    },
                   ],
                 },
                 copyPublicLink: hidden,
@@ -551,9 +604,7 @@ export default function HeroManagerClient({
                       hero.id,
                       "delete",
                       () =>
-                        deleteHeroTemplate(
-                          mutationFormData({ id: hero.id }),
-                        ),
+                        deleteHeroTemplate(mutationFormData({ id: hero.id })),
                       "تم حذف الهيرو.",
                     );
                     if (!succeeded) throw new Error("hero delete failed");
@@ -569,25 +620,41 @@ export default function HeroManagerClient({
             };
 
             return (
-              <AdminDataGridRow key={hero.id} columns={gridColumns} className="border-b border-white/8 last:border-b-0">
+              <AdminDataGridRow
+                key={hero.id}
+                columns={gridColumns}
+                className="border-b border-white/8 last:border-b-0"
+              >
                 <AdminDataGridCheckboxCell>
                   <AdminDataGridCheckbox
                     checked={selection.selectedSet.has(hero.id)}
-                    onChange={(event) => selection.toggleOne(hero.id, event.currentTarget.checked)}
+                    onChange={(event) =>
+                      selection.toggleOne(hero.id, event.currentTarget.checked)
+                    }
                     label={`تحديد ${hero.name}`}
                   />
                 </AdminDataGridCheckboxCell>
 
                 <AdminDataGridPrimaryCell>
-                  <Link href={`/admin/pages-blocks/blocks/hero/${hero.id}`} className="block truncate font-semibold text-white transition hover:text-[#D8B87A]">
+                  <Link
+                    href={`/admin/pages-blocks/blocks/hero/${hero.id}`}
+                    className="block truncate font-semibold text-white transition hover:text-[#D8B87A]"
+                  >
                     {hero.name}
                   </Link>
-                  {hero.description ? <p className="mt-1 line-clamp-1 text-xs text-white/36">{hero.description}</p> : null}
+                  {hero.description ? (
+                    <p className="mt-1 line-clamp-1 text-xs text-white/36">
+                      {hero.description}
+                    </p>
+                  ) : null}
                 </AdminDataGridPrimaryCell>
 
                 {visibleColumnSet.has("slug") ? (
                   <AdminDataGridCenterCell>
-                    <Link href={`/admin/pages-blocks/blocks/hero/${hero.id}`} className="font-en block truncate text-xs text-[#D8B87A]/78 transition hover:text-[#D8B87A]">
+                    <Link
+                      href={`/admin/pages-blocks/blocks/hero/${hero.id}`}
+                      className="font-en block truncate text-xs text-[#D8B87A]/78 transition hover:text-[#D8B87A]"
+                    >
                       {hero.slug}
                     </Link>
                   </AdminDataGridCenterCell>
@@ -603,12 +670,17 @@ export default function HeroManagerClient({
                   </AdminDataGridStatusCell>
                 ) : null}
 
-                <AdminDataGridRowActions capability={capability} size="compact" />
+                <AdminDataGridRowActions
+                  capability={capability}
+                  size="compact"
+                />
               </AdminDataGridRow>
             );
           })}
 
-          {!pagination.totalCount ? <AdminDataGridEmpty>لا توجد هيروهات مطابقة.</AdminDataGridEmpty> : null}
+          {!pagination.totalCount ? (
+            <AdminDataGridEmpty>لا توجد هيروهات مطابقة.</AdminDataGridEmpty>
+          ) : null}
         </AdminDataGrid>
 
         <AdminTablePagination
@@ -652,7 +724,9 @@ export default function HeroManagerClient({
                     fieldErrors.name?.length ? "border-red-400/40" : "",
                   )}
                   aria-invalid={Boolean(fieldErrors.name?.length)}
-                  aria-describedby={fieldErrors.name?.length ? "name-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.name?.length ? "name-error" : undefined
+                  }
                 />
                 <AdminFormError name="name" />
               </label>
@@ -666,25 +740,39 @@ export default function HeroManagerClient({
                     `text-left font-en ${fieldErrors.slug?.length ? "border-red-400/40" : ""}`,
                   )}
                   aria-invalid={Boolean(fieldErrors.slug?.length)}
-                  aria-describedby={fieldErrors.slug?.length ? "slug-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.slug?.length ? "slug-error" : undefined
+                  }
                 />
                 <AdminFormError name="slug" />
               </label>
               <label className={`${adminFormLabelClassName()} md:col-span-2`}>
                 وصف داخلي
-                <input name="template_description" placeholder="وصف مختصر يظهر في جدول الإدارة" className={adminFormFieldClassName()} />
+                <input
+                  name="template_description"
+                  placeholder="وصف مختصر يظهر في جدول الإدارة"
+                  className={adminFormFieldClassName()}
+                />
               </label>
-              <label className={adminFormLabelClassName()}>
-                النمط
-                <select name="variant" defaultValue="internal-page" className={adminFormFieldClassName()}>
-                  <option value="internal-page">صفحة داخلية</option>
-                  <option value="home-cinematic">سينمائي للصفحة الرئيسية</option>
-                </select>
-              </label>
-              <ModuleEditorStatusSwitch status="unpublished" className="md:col-span-2" />
+              <AdminFormListboxSelect
+                name="variant"
+                label="النمط"
+                defaultValue="internal-page"
+                options={[
+                  { value: "internal-page", label: "صفحة داخلية" },
+                  { value: "home-cinematic", label: "سينمائي للصفحة الرئيسية" },
+                ]}
+              />
+              <ModuleEditorStatusSwitch
+                status="unpublished"
+                className="md:col-span-2"
+              />
               <input type="hidden" name="style_preset" value="cinematic-gold" />
               <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end md:col-span-2">
-                <AdminModalCancelButton onClick={requestClose} disabled={pending}>
+                <AdminModalCancelButton
+                  onClick={requestClose}
+                  disabled={pending}
+                >
                   إلغاء
                 </AdminModalCancelButton>
                 <AdminModalPrimaryButton type="submit" disabled={pending}>
@@ -695,7 +783,6 @@ export default function HeroManagerClient({
           )}
         </AdminFormRuntime>
       </VenesiaModal>
-
     </AdminPageExperience>
   );
 }

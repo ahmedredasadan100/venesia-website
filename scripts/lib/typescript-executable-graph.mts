@@ -16,7 +16,9 @@ export type LocalImplementationKind =
   | "native_form"
   | "native_table"
   | "native_search_input"
+  | "native_select"
   | "native_switch"
+  | "native_checkbox"
   | "native_date_input"
   | "native_file_input"
   | "native_dialog"
@@ -763,12 +765,14 @@ export function detectLocalImplementations(graph: ExecutableSourceGraph) {
           attributes.find((item) => item.name.getText(parsed) === name);
         if (tag === "form") detected.add("native_form");
         if (tag === "table") detected.add("native_table");
+        if (tag === "select") detected.add("native_select");
         if (tag === "input") {
           const type = attribute("type");
           const value = type ? literalAttributeValue(type) : undefined;
           if (value === "search") detected.add("native_search_input");
           if (value === "date") detected.add("native_date_input");
           if (value === "file") detected.add("native_file_input");
+          if (value === "checkbox") detected.add("native_checkbox");
         }
         const role = attribute("role");
         const roleValue = role ? literalAttributeValue(role) : undefined;

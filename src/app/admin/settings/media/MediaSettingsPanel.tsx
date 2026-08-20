@@ -12,6 +12,10 @@ import AdminFormRuntime, {
   AdminFormError,
 } from "../../../../components/admin/ui/AdminFormRuntime";
 import {
+  AdminCheckbox,
+  AdminFormSwitch,
+} from "../../../../components/admin/ui";
+import {
   CMS_IMAGE_EXTENSIONS,
   CMS_PDF_EXTENSIONS,
 } from "../../../../lib/admin/media-intelligence/cms-upload-policy";
@@ -111,7 +115,9 @@ export default function MediaSettingsPanel({
         : current.filter((item) => item !== extension),
     );
     if (checked) {
-      setAllowedKinds((current) => [...new Set([...current, "image" as const])]);
+      setAllowedKinds((current) => [
+        ...new Set([...current, "image" as const]),
+      ]);
     }
   }
 
@@ -122,7 +128,9 @@ export default function MediaSettingsPanel({
         : current.filter((item) => item !== extension),
     );
     if (checked) {
-      setAllowedKinds((current) => [...new Set([...current, "document" as const])]);
+      setAllowedKinds((current) => [
+        ...new Set([...current, "document" as const]),
+      ]);
     }
   }
 
@@ -142,7 +150,9 @@ export default function MediaSettingsPanel({
         setPreview(result);
         announce(
           result.previewReliable ? "success" : "warning",
-          result.previewReliable ? "اكتملت معاينة الفحص" : "المعاينة غير مكتملة",
+          result.previewReliable
+            ? "اكتملت معاينة الفحص"
+            : "المعاينة غير مكتملة",
           result.previewReliable
             ? `ستُجهز ${result.toRegisterCount} ملفات للمكتبة، وسيُفحص ${result.discoveredReferenceCount} ارتباطًا.`
             : "تعذر فحص جميع مواضع الارتباط؛ لن تُعامل هذه المعاينة كنتيجة موثوقة.",
@@ -152,7 +162,9 @@ export default function MediaSettingsPanel({
         setPreview(null);
         announce(
           result.complete ? "success" : "warning",
-          result.complete ? "اكتمل الفحص والمزامنة" : "اكتمل الفحص مع عناصر تحتاج مراجعة",
+          result.complete
+            ? "اكتمل الفحص والمزامنة"
+            : "اكتمل الفحص مع عناصر تحتاج مراجعة",
           result.complete
             ? "أصبحت نتائج الاستخدام مرتبطة بالتخزين والبيئة الحاليين."
             : `لم يكتمل فحص ${result.uncertainties.length} حالة؛ ستظل إجراءات الأمان محجوبة.`,
@@ -181,7 +193,8 @@ export default function MediaSettingsPanel({
         <div>
           <h2 className="text-lg font-semibold text-white">حالة فحص المكتبة</h2>
           <p className="mt-1 text-sm leading-7 text-white/50">
-            يطابق الفحص الملفات المُدارة في مكان الحفظ مع سجل المكتبة ومواضع استخدامها.
+            يطابق الفحص الملفات المُدارة في مكان الحفظ مع سجل المكتبة ومواضع
+            استخدامها.
           </p>
         </div>
 
@@ -208,18 +221,24 @@ export default function MediaSettingsPanel({
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <dt className="text-xs text-white/40">موثوقية نتائج الاستخدام</dt>
             <dd className="mt-2 font-semibold text-white">
-              {readiness.usageResultsAuthoritative ? "موثوقة" : "غير جاهزة للاعتماد"}
+              {readiness.usageResultsAuthoritative
+                ? "موثوقة"
+                : "غير جاهزة للاعتماد"}
             </dd>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <dt className="text-xs text-white/40">ملفات لم يكتمل فحصها</dt>
-            <dd className="mt-2 font-semibold text-white">{readiness.unscannedAssetCount}</dd>
+            <dd className="mt-2 font-semibold text-white">
+              {readiness.unscannedAssetCount}
+            </dd>
           </div>
         </dl>
 
         {!readiness.usageResultsAuthoritative ? (
           <div className="rounded-2xl border border-amber-300/20 bg-amber-300/8 p-4">
-            <p className="text-sm font-semibold text-amber-100">سبب عدم الجاهزية</p>
+            <p className="text-sm font-semibold text-amber-100">
+              سبب عدم الجاهزية
+            </p>
             <ul className="mt-2 space-y-1 text-xs leading-6 text-amber-100/70">
               {readiness.reasons.map((reason) => (
                 <li key={reason}>• {getMediaReadinessReasonLabel(reason)}</li>
@@ -232,12 +251,14 @@ export default function MediaSettingsPanel({
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/65">
             <p className="font-semibold text-white">نتيجة المعاينة</p>
             <p className="mt-2 leading-7">
-              {preview.storageAssetCount} ملفًا في مكان الحفظ، {preview.catalogAssetCount} ملفًا
-              جاهزًا للإدارة، {preview.toRegisterCount} يحتاج تجهيزًا، و
+              {preview.storageAssetCount} ملفًا في مكان الحفظ،{" "}
+              {preview.catalogAssetCount} ملفًا جاهزًا للإدارة،{" "}
+              {preview.toRegisterCount} يحتاج تجهيزًا، و
               {preview.missingObjectCount} غير موجود في مكان الحفظ.
             </p>
             <p className="mt-1 text-xs text-white/42">
-              تم فحص {preview.scannedProviderCount} من {preview.providerCount} مصادر ارتباط.
+              تم فحص {preview.scannedProviderCount} من {preview.providerCount}{" "}
+              مصادر ارتباط.
             </p>
           </div>
         ) : null}
@@ -254,7 +275,11 @@ export default function MediaSettingsPanel({
           <button
             ref={applyScanTriggerRef}
             type="button"
-            title={!canApplyScan ? "نفّذ معاينة موثوقة أولًا قبل تطبيق الفحص والمزامنة." : undefined}
+            title={
+              !canApplyScan
+                ? "نفّذ معاينة موثوقة أولًا قبل تطبيق الفحص والمزامنة."
+                : undefined
+            }
             disabled={!canApplyScan || scanBusy !== null}
             onClick={() => setConfirmScan(true)}
             className="rounded-2xl bg-[var(--admin-accent)] px-5 py-3 text-sm font-bold text-[#05070B] disabled:opacity-40"
@@ -274,9 +299,12 @@ export default function MediaSettingsPanel({
         {({ fieldErrors, pending }) => (
           <>
             <div>
-              <h2 className="text-lg font-semibold text-white">سياسة رفع الملفات</h2>
+              <h2 className="text-lg font-semibold text-white">
+                سياسة رفع الملفات
+              </h2>
               <p className="mt-1 text-sm leading-7 text-white/50">
-                تحدد هذه القيم أنواع الملفات وأحجامها المسموح بها عند الرفع من لوحة الإدارة.
+                تحدد هذه القيم أنواع الملفات وأحجامها المسموح بها عند الرفع من
+                لوحة الإدارة.
               </p>
             </div>
 
@@ -287,7 +315,9 @@ export default function MediaSettingsPanel({
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">أقصى حجم للصورة — MB</span>
+                <span className="text-xs font-semibold text-white/55">
+                  أقصى حجم للصورة — MB
+                </span>
                 <input
                   name="maxImageMb"
                   type="number"
@@ -296,13 +326,22 @@ export default function MediaSettingsPanel({
                   required
                   defaultValue={settings.maxImageBytes / 1024 / 1024}
                   aria-invalid={Boolean(fieldErrors.maxImageMb?.length)}
-                  aria-describedby={fieldErrors.maxImageMb?.length ? "maxImageMb-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.maxImageMb?.length
+                      ? "maxImageMb-error"
+                      : undefined
+                  }
                   className={`${inputClass} ${fieldErrors.maxImageMb?.length ? "border-red-300/45" : ""}`}
                 />
-                <AdminFormError name="maxImageMb" className="text-xs font-normal leading-5 text-red-200" />
+                <AdminFormError
+                  name="maxImageMb"
+                  className="text-xs font-normal leading-5 text-red-200"
+                />
               </label>
               <label className="space-y-2">
-                <span className="text-xs font-semibold text-white/55">أقصى حجم للمستند — MB</span>
+                <span className="text-xs font-semibold text-white/55">
+                  أقصى حجم للمستند — MB
+                </span>
                 <input
                   name="maxDocumentMb"
                   type="number"
@@ -311,91 +350,159 @@ export default function MediaSettingsPanel({
                   required
                   defaultValue={settings.maxDocumentBytes / 1024 / 1024}
                   aria-invalid={Boolean(fieldErrors.maxDocumentMb?.length)}
-                  aria-describedby={fieldErrors.maxDocumentMb?.length ? "maxDocumentMb-error" : undefined}
+                  aria-describedby={
+                    fieldErrors.maxDocumentMb?.length
+                      ? "maxDocumentMb-error"
+                      : undefined
+                  }
                   className={`${inputClass} ${fieldErrors.maxDocumentMb?.length ? "border-red-300/45" : ""}`}
                 />
-                <AdminFormError name="maxDocumentMb" className="text-xs font-normal leading-5 text-red-200" />
+                <AdminFormError
+                  name="maxDocumentMb"
+                  className="text-xs font-normal leading-5 text-red-200"
+                />
               </label>
             </div>
 
             <fieldset
               className={`space-y-5 rounded-2xl border p-4 sm:p-5 ${fieldErrors.allowedKinds?.length ? "border-red-300/35" : "border-white/10"}`}
-              aria-describedby={fieldErrors.allowedKinds?.length ? "allowedKinds-error" : undefined}
+              aria-describedby={
+                fieldErrors.allowedKinds?.length
+                  ? "allowedKinds-error"
+                  : undefined
+              }
             >
-              <legend className="px-2 text-xs font-semibold text-white/60">الأنواع والامتدادات المسموح بها</legend>
+              <legend className="px-2 text-xs font-semibold text-white/60">
+                الأنواع والامتدادات المسموح بها
+              </legend>
               <div className="flex flex-wrap gap-4">
                 {(["image", "document"] as const).map((kind) => (
-                  <label key={kind} className="flex items-center gap-2 text-sm text-white/70">
-                    <input
-                      type="checkbox"
+                  <label
+                    key={kind}
+                    className="flex items-center gap-2 text-sm text-white/70"
+                  >
+                    <AdminCheckbox
                       name="allowedKinds"
                       value={kind}
                       checked={allowedKinds.includes(kind)}
-                      onChange={(event) => toggleKind(kind, event.currentTarget.checked)}
+                      onChange={(event) =>
+                        toggleKind(kind, event.currentTarget.checked)
+                      }
+                      label={kind === "image" ? "صور" : "مستندات PDF"}
                     />
                     {kind === "image" ? "صور" : "مستندات PDF"}
                   </label>
                 ))}
               </div>
-              <AdminFormError name="allowedKinds" className="text-xs font-normal leading-5 text-red-200" />
+              <AdminFormError
+                name="allowedKinds"
+                className="text-xs font-normal leading-5 text-red-200"
+              />
               <div
                 role="group"
                 aria-labelledby="allowed-image-extensions-label"
-                aria-describedby={fieldErrors.allowedImageExtensions?.length ? "allowedImageExtensions-error" : undefined}
+                aria-describedby={
+                  fieldErrors.allowedImageExtensions?.length
+                    ? "allowedImageExtensions-error"
+                    : undefined
+                }
                 className={`rounded-2xl border p-4 ${fieldErrors.allowedImageExtensions?.length ? "border-red-300/30" : "border-white/8"}`}
               >
-                <p id="allowed-image-extensions-label" className="mb-3 text-xs font-semibold text-white/45">امتدادات الصور</p>
+                <p
+                  id="allowed-image-extensions-label"
+                  className="mb-3 text-xs font-semibold text-white/45"
+                >
+                  امتدادات الصور
+                </p>
                 <div className="flex flex-wrap gap-3">
                   {CMS_IMAGE_EXTENSIONS.map((extension) => (
-                    <label key={extension} className="flex items-center gap-2 text-xs text-white/55">
-                      <input
-                        type="checkbox"
+                    <label
+                      key={extension}
+                      className="flex items-center gap-2 text-xs text-white/55"
+                    >
+                      <AdminCheckbox
                         name="allowedImageExtensions"
                         value={extension}
                         checked={allowedImageExtensions.includes(extension)}
-                        onChange={(event) => toggleImageExtension(extension, event.currentTarget.checked)}
+                        onChange={(event) =>
+                          toggleImageExtension(
+                            extension,
+                            event.currentTarget.checked,
+                          )
+                        }
+                        label={extension}
                       />
                       {extension}
                     </label>
                   ))}
                 </div>
-                <AdminFormError name="allowedImageExtensions" className="mt-3 text-xs font-normal leading-5 text-red-200" />
+                <AdminFormError
+                  name="allowedImageExtensions"
+                  className="mt-3 text-xs font-normal leading-5 text-red-200"
+                />
               </div>
               <div
                 role="group"
                 aria-labelledby="allowed-document-extensions-label"
-                aria-describedby={fieldErrors.allowedDocumentExtensions?.length ? "allowedDocumentExtensions-error" : undefined}
+                aria-describedby={
+                  fieldErrors.allowedDocumentExtensions?.length
+                    ? "allowedDocumentExtensions-error"
+                    : undefined
+                }
                 className={`rounded-2xl border p-4 ${fieldErrors.allowedDocumentExtensions?.length ? "border-red-300/30" : "border-white/8"}`}
               >
-                <p id="allowed-document-extensions-label" className="mb-3 text-xs font-semibold text-white/45">امتدادات المستندات</p>
+                <p
+                  id="allowed-document-extensions-label"
+                  className="mb-3 text-xs font-semibold text-white/45"
+                >
+                  امتدادات المستندات
+                </p>
                 <div className="flex flex-wrap gap-3">
                   {CMS_PDF_EXTENSIONS.map((extension) => (
-                    <label key={extension} className="flex items-center gap-2 text-xs text-white/55">
-                      <input
-                        type="checkbox"
+                    <label
+                      key={extension}
+                      className="flex items-center gap-2 text-xs text-white/55"
+                    >
+                      <AdminCheckbox
                         name="allowedDocumentExtensions"
                         value={extension}
                         checked={allowedDocumentExtensions.includes(extension)}
-                        onChange={(event) => toggleDocumentExtension(extension, event.currentTarget.checked)}
+                        onChange={(event) =>
+                          toggleDocumentExtension(
+                            extension,
+                            event.currentTarget.checked,
+                          )
+                        }
+                        label={extension}
                       />
                       {extension}
                     </label>
                   ))}
                 </div>
-                <AdminFormError name="allowedDocumentExtensions" className="mt-3 text-xs font-normal leading-5 text-red-200" />
+                <AdminFormError
+                  name="allowedDocumentExtensions"
+                  className="mt-3 text-xs font-normal leading-5 text-red-200"
+                />
               </div>
-              <label className="flex items-start gap-2 text-sm leading-6 text-white/70">
-                <input type="checkbox" name="mimeVerification" defaultChecked={settings.mimeVerification} className="mt-1" />
-                التحقق من أن محتوى الملف يطابق امتداده قبل قبوله
-              </label>
+              <AdminFormSwitch
+                name="mimeVerification"
+                label="التحقق من أن محتوى الملف يطابق امتداده قبل قبوله"
+                defaultChecked={settings.mimeVerification}
+                surface
+              />
             </fieldset>
 
             <p className="rounded-2xl border border-white/8 bg-black/20 p-4 text-xs leading-6 text-white/42">
-              تُطبق التغييرات على عمليات الرفع الجديدة، ولا تعدّل الملفات الموجودة حاليًا.
+              تُطبق التغييرات على عمليات الرفع الجديدة، ولا تعدّل الملفات
+              الموجودة حاليًا.
             </p>
 
             <div className="flex justify-end border-t border-white/10 pt-5">
-              <button type="submit" disabled={pending} className="rounded-2xl bg-[var(--admin-accent)] px-5 py-3 text-sm font-bold text-[#05070B] disabled:opacity-50">
+              <button
+                type="submit"
+                disabled={pending}
+                className="rounded-2xl bg-[var(--admin-accent)] px-5 py-3 text-sm font-bold text-[#05070B] disabled:opacity-50"
+              >
                 {pending ? "جارٍ الحفظ…" : "حفظ إعدادات الرفع"}
               </button>
             </div>

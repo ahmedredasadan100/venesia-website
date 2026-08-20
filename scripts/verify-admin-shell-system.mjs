@@ -8,16 +8,22 @@ const checks = [];
 
 function check(name, condition, detail = "") {
   checks.push({ name, ok: Boolean(condition), detail });
-  console.log(`${condition ? "PASS" : "FAIL"} ${name}${detail ? `: ${detail}` : ""}`);
+  console.log(
+    `${condition ? "PASS" : "FAIL"} ${name}${detail ? `: ${detail}` : ""}`,
+  );
 }
 
 const layout = read("src/app/admin/layout.tsx");
 const access = read("src/components/admin/AdminAccessLayout.tsx");
-const authenticatedLayout = read("src/components/admin/AdminAuthenticatedLayout.tsx");
+const authenticatedLayout = read(
+  "src/components/admin/AdminAuthenticatedLayout.tsx",
+);
 const shell = read("src/components/admin/AdminShell.tsx");
 const registry = read("src/config/admin/navigation.ts");
 const company = read("src/config/admin/company.ts");
-const settings = read("src/app/admin/settings/general/CompanyIdentityPanel.tsx");
+const settings = read(
+  "src/app/admin/settings/general/CompanyIdentityPanel.tsx",
+);
 const selection = read("src/components/admin/ui/useAdminGridSelection.ts");
 const pageHeader = read("src/components/admin/ui/AdminPageContextHeader.tsx");
 const pageExperience = read("src/components/admin/ui/AdminPageExperience.tsx");
@@ -26,26 +32,76 @@ const feedbackOwner = read("src/components/admin/AdminFeedbackProvider.tsx");
 const confirmOwner = read("src/components/admin/ui/AdminConfirmDialog.tsx");
 const bulkActionOwner = read("src/components/admin/ui/AdminBulkActionBar.tsx");
 const dataGridOwner = read("src/components/admin/ui/AdminDataGrid.tsx");
-const rowActionsOwner = read("src/components/admin/ui/AdminDataGridRowActions.tsx");
-const adoptionManifest = read("src/lib/admin/interaction-system/adoption-manifest.ts");
-const blockEditorHeader = read("src/components/admin/page-blocks/BlockEditorContextHeader.tsx");
-const pageCompositionClient = read("src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx");
-const pageCompositionBulkAction = read("src/app/admin/pages-blocks/pages/page-actions/bulk.ts");
+const rowActionsOwner = read(
+  "src/components/admin/ui/AdminDataGridRowActions.tsx",
+);
+const adoptionManifest = read(
+  "src/lib/admin/interaction-system/adoption-manifest.ts",
+);
+const blockEditorHeader = read(
+  "src/components/admin/page-blocks/BlockEditorContextHeader.tsx",
+);
+const pageCompositionClient = read(
+  "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+);
+const pageCompositionBulkAction = read(
+  "src/app/admin/pages-blocks/pages/page-actions/bulk.ts",
+);
 const linkValidationOwner = read("src/lib/admin/links/validate.ts");
-const footerLinksGrid = read("src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx");
+const footerLinksGrid = read(
+  "src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx",
+);
 const seoMetaPage = read("src/app/admin/seo/meta-manager/page.tsx");
-const seoMetaClient = read("src/app/admin/seo/meta-manager/MetaManagerClient.tsx");
-const heroManager = read("src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx");
-const blockModuleManager = read("src/components/admin/page-blocks/BlockModuleManagerClient.tsx");
+const seoMetaClient = read(
+  "src/app/admin/seo/meta-manager/MetaManagerClient.tsx",
+);
+const heroManager = read(
+  "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+);
+const blockModuleManager = read(
+  "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+);
 
-check("Root admin layout resolves company config", layout.includes("loadAdminCompanyConfig") && layout.includes("ADMIN_COMPANY_DEFAULT"));
-check("Root admin layout resolves navigation registry", layout.includes("resolveAdminNavigation") && layout.includes("ADMIN_NAVIGATION_REGISTRY"));
-check("Auth routes retain the centralized shell exception", access.includes("isAdminAuthPagePath") && /return\s+<>\{children\}<\/>/.test(access));
-check("Shell consumes registry data", shell.includes("navigation.map") && !shell.includes("const menuItems"));
-check("Shell performs safe intent prefetch", shell.includes("router.prefetch(href)") && shell.includes("onMouseEnter={prefetch}") && shell.includes("onFocus={prefetch}"));
-check("Shell persists collapse preference", shell.includes("window.localStorage.setItem") && shell.includes("collapseKey"));
-check("Shell exposes stable navigation state", shell.includes("data-admin-shell-route") && shell.includes("data-admin-navigation-pending"));
-check("Shell uses the one shared page header core for fallback coverage", shell.includes("AdminPageContextHeader") && shell.includes("data-admin-fallback-header"));
+check(
+  "Root admin layout resolves company config",
+  layout.includes("loadAdminCompanyConfig") &&
+    layout.includes("ADMIN_COMPANY_DEFAULT"),
+);
+check(
+  "Root admin layout resolves navigation registry",
+  layout.includes("resolveAdminNavigation") &&
+    layout.includes("ADMIN_NAVIGATION_REGISTRY"),
+);
+check(
+  "Auth routes retain the centralized shell exception",
+  access.includes("isAdminAuthPagePath") &&
+    /return\s+<>\{children\}<\/>/.test(access),
+);
+check(
+  "Shell consumes registry data",
+  shell.includes("navigation.map") && !shell.includes("const menuItems"),
+);
+check(
+  "Shell performs safe intent prefetch",
+  shell.includes("router.prefetch(href)") &&
+    shell.includes("onMouseEnter={prefetch}") &&
+    shell.includes("onFocus={prefetch}"),
+);
+check(
+  "Shell persists collapse preference",
+  shell.includes("window.localStorage.setItem") &&
+    shell.includes("collapseKey"),
+);
+check(
+  "Shell exposes stable navigation state",
+  shell.includes("data-admin-shell-route") &&
+    shell.includes("data-admin-navigation-pending"),
+);
+check(
+  "Shell uses the one shared page header core for fallback coverage",
+  shell.includes("AdminPageContextHeader") &&
+    shell.includes("data-admin-fallback-header"),
+);
 check(
   "Authenticated routes inherit the one shared page surface owner",
   layout.includes("<AdminAccessLayout") &&
@@ -53,15 +109,17 @@ check(
     authenticatedLayout.includes("<AdminShell") &&
     shell.includes("<AdminPageExperience") &&
     shell.includes("data-admin-route-content") &&
-    pageExperience.includes('data-admin-page-surface-owner="AdminPageExperience"') &&
+    pageExperience.includes(
+      'data-admin-page-surface-owner="AdminPageExperience"',
+    ) &&
     pageExperience.includes("flex flex-col gap-7"),
 );
 check(
   "Shell normalizes legacy page-root cadence at the shared boundary",
-  shell.includes(':has(>[data-admin-page-header])]:contents') &&
+  shell.includes(":has(>[data-admin-page-header])]:contents") &&
     shell.includes(":has(>[data-admin-page-header])>*]:!my-0") &&
     shell.includes("pb-10") &&
-    !shell.includes("data-admin-fallback-header className=\"order-first mb-7\""),
+    !shell.includes('data-admin-fallback-header className="order-first mb-7"'),
 );
 check(
   "Shared page header exposes three logical levels with no legacy compatibility entry point",
@@ -124,7 +182,9 @@ check(
   pageCompositionClient.includes("await instant.mutateAsync({") &&
     pageCompositionClient.includes("bulk: true") &&
     pageCompositionClient.includes("cache.removeRows(idSet)") &&
-    pageCompositionClient.includes("await bulkPageBlockAssignments(formData)") &&
+    pageCompositionClient.includes(
+      "await bulkPageBlockAssignments(formData)",
+    ) &&
     pageCompositionClient.includes('value: "detach"') &&
     pageCompositionClient.includes('label: "إزالة المحدد من الصفحة"') &&
     pageCompositionClient.includes('if (action === "detach")') &&
@@ -133,7 +193,9 @@ check(
     !pageCompositionClient.includes("return new Promise<void>") &&
     pageCompositionClient.indexOf("selection.clearSelection()") >
       pageCompositionClient.indexOf("await instant.mutateAsync({") &&
-    pageCompositionBulkAction.includes('await mutatePageComposition(pageId, "bulk"') &&
+    pageCompositionBulkAction.includes(
+      'await mutatePageComposition(pageId, "bulk"',
+    ) &&
     !pageCompositionBulkAction.includes("Promise.all") &&
     !pageCompositionBulkAction.includes("mutationResults") &&
     !pageCompositionBulkAction.includes(".from(") &&
@@ -141,7 +203,9 @@ check(
       'const databaseAction = action === "detach" ? "delete" : action',
     ) &&
     pageCompositionBulkAction.includes("action: databaseAction") &&
-    pageCompositionBulkAction.includes('throw new Error("Unsupported page block bulk action.")'),
+    pageCompositionBulkAction.includes(
+      'throw new Error("Unsupported page block bulk action.")',
+    ),
 );
 check(
   "Hero and block delete confirmation preserves failure retry and selection",
@@ -149,17 +213,50 @@ check(
     (source) =>
       source.includes("): Promise<boolean>") &&
       source.includes("return false;") &&
-      source.includes('if (action === "delete") throw new Error') &&
+      /if\s*\(action === "delete"\)\s*throw new Error/.test(source) &&
       source.includes("if (!succeeded) throw new Error") &&
-      source.indexOf("if (!succeeded)") < source.indexOf("selection.clearSelection()"),
+      source.indexOf("if (!succeeded)") <
+        source.indexOf("selection.clearSelection()"),
   ),
 );
-check("Navigation registry exposes contract fields", ["id:", "href:", "label:", "icon:", "order:", "enabled:", "moduleKey:", "permission:"].every((field) => registry.includes(field)));
-check("Current admins remain allowed", registry.includes('mode: "allow-current-admins"'));
-check("Company default is isolated in company config", company.includes("ADMIN_COMPANY_DEFAULT") && !shell.toLowerCase().includes("venesia"));
-check("Company identity is editable through existing media management", settings.includes("AdminMediaImageField") && settings.includes("logoUrl") && settings.includes("compactLogoUrl"));
-check("Selection resets when the visible entity set changes", selection.includes("previousVisibleSignature") && selection.includes("setSelectedIds([])"));
-check("Unified loading and error boundaries exist", read("src/app/admin/loading.tsx").includes('state="loading"') && read("src/app/admin/error.tsx").includes('state="error"'));
+check(
+  "Navigation registry exposes contract fields",
+  [
+    "id:",
+    "href:",
+    "label:",
+    "icon:",
+    "order:",
+    "enabled:",
+    "moduleKey:",
+    "permission:",
+  ].every((field) => registry.includes(field)),
+);
+check(
+  "Current admins remain allowed",
+  registry.includes('mode: "allow-current-admins"'),
+);
+check(
+  "Company default is isolated in company config",
+  company.includes("ADMIN_COMPANY_DEFAULT") &&
+    !shell.toLowerCase().includes("venesia"),
+);
+check(
+  "Company identity is editable through existing media management",
+  settings.includes("AdminMediaImageField") &&
+    settings.includes("logoUrl") &&
+    settings.includes("compactLogoUrl"),
+);
+check(
+  "Selection resets when the visible entity set changes",
+  selection.includes("previousVisibleSignature") &&
+    selection.includes("setSelectedIds([])"),
+);
+check(
+  "Unified loading and error boundaries exist",
+  read("src/app/admin/loading.tsx").includes('state="loading"') &&
+    read("src/app/admin/error.tsx").includes('state="error"'),
+);
 
 const sharedCoreFiles = [
   "src/lib/admin/shell/contracts.ts",
@@ -169,8 +266,14 @@ const sharedCoreFiles = [
   "src/components/admin/ui/AdminPageContextHeader.tsx",
   "src/components/admin/ui/AdminPageExperience.tsx",
 ];
-const sharedHardcoding = sharedCoreFiles.filter((path) => /venesia/i.test(read(path)));
-check("Shared Core contains no company-name hardcoding", sharedHardcoding.length === 0, sharedHardcoding.join(", "));
+const sharedHardcoding = sharedCoreFiles.filter((path) =>
+  /venesia/i.test(read(path)),
+);
+check(
+  "Shared Core contains no company-name hardcoding",
+  sharedHardcoding.length === 0,
+  sharedHardcoding.join(", "),
+);
 
 function collectPages(directory, result = []) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -233,7 +336,10 @@ check(
       ),
   `${inventory.filter((item) => !item.authExcluded).length} authenticated pages`,
 );
-check("Auth pages are explicitly excluded from the shell", inventory.some((item) => item.authExcluded));
+check(
+  "Auth pages are explicitly excluded from the shell",
+  inventory.some((item) => item.authExcluded),
+);
 
 const chromeAdopters = [
   "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
@@ -264,9 +370,9 @@ check(
         "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksDeleteConfirm.tsx",
       ),
     ) &&
-    !read("src/app/admin/pages-blocks/footer/FooterBuilderEditors.tsx").includes(
-      "RestoreConfirmModal",
-    ) &&
+    !read(
+      "src/app/admin/pages-blocks/footer/FooterBuilderEditors.tsx",
+    ).includes("RestoreConfirmModal") &&
     !read("src/app/admin/pages-blocks/footer/FooterLinksDataGrid.tsx").includes(
       "window.confirm",
     ) &&
@@ -287,13 +393,19 @@ check(
   "Menu and Footer Preview hrefs use one fail-closed shared policy owner",
   linkValidationOwner.includes("export function resolvePublicPreviewHref") &&
     linkValidationOwner.includes('href.startsWith("#")') &&
-    linkValidationOwner.includes('href.startsWith("/") && !href.startsWith("//")') &&
+    linkValidationOwner.includes(
+      'href.startsWith("/") && !href.startsWith("//")',
+    ) &&
     linkValidationOwner.includes("!/^https?:\\/\\//i.test(href)") &&
-    linkValidationOwner.includes('url.protocol === "http:" || url.protocol === "https:"') &&
+    linkValidationOwner.includes(
+      'url.protocol === "http:" || url.protocol === "https:"',
+    ) &&
     menuItemsGrid.includes("resolvePublicPreviewHref(item.href)") &&
     !menuItemsGrid.includes("function resolveMenuItemPreviewHref") &&
     menuItemsGrid.includes("preview: previewHref") &&
-    footerLinksGrid.includes("resolvePublicPreviewHref(manualLinkHrefLabel(item))") &&
+    /resolvePublicPreviewHref\(\s*manualLinkHrefLabel\(item\),?\s*\)/.test(
+      footerLinksGrid,
+    ) &&
     !footerLinksGrid.includes("function manualLinkPreviewHref") &&
     footerLinksGrid.includes("preview: previewHref") &&
     menuItemsGrid.includes(
@@ -308,5 +420,7 @@ check(
 );
 
 const failed = checks.filter((item) => !item.ok);
-console.log(`verify-admin-shell-system: ${checks.length - failed.length}/${checks.length} passed`);
+console.log(
+  `verify-admin-shell-system: ${checks.length - failed.length}/${checks.length} passed`,
+);
 if (failed.length) process.exitCode = 1;

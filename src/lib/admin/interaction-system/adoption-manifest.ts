@@ -113,7 +113,9 @@ export type AdminSharedConsumerCapabilityDefinition = {
     | "native_form"
     | "native_table"
     | "native_search_input"
+    | "native_select"
     | "native_switch"
+    | "native_checkbox"
     | "native_date_input"
     | "native_file_input"
     | "native_dialog"
@@ -229,9 +231,12 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       consumerBoundaries: ["collection"],
     },
     search: {
-      owner: "AdminEntityListFilters + Collection query contract",
+      owner:
+        "AdminEntityListFilters + AdminSearchInput + searchable AdminListboxSelect + Collection query contract",
       sourceFiles: [
         "src/components/admin/entity-list/AdminEntityListFilters.tsx",
+        "src/components/admin/ui/AdminSearchInput.tsx",
+        "src/components/admin/ui/AdminListboxSelect.tsx",
         "src/lib/admin/entity-list/url-state.ts",
       ],
       executableBindings: [
@@ -319,18 +324,46 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       consumerBoundaries: ["collection"],
     },
     switch: {
-      owner: "AdminFormSwitch",
-      sourceFiles: ["src/components/admin/ui/AdminFormSwitch.tsx"],
+      owner: "AdminFormSwitch + AdminCheckbox",
+      sourceFiles: [
+        "src/components/admin/ui/AdminFormSwitch.tsx",
+        "src/components/admin/ui/AdminCheckbox.tsx",
+      ],
       executableBindings: [
         {
           sourceFile: "src/components/admin/ui/AdminFormSwitch.tsx",
           exportNames: ["default", "AdminFormSwitch"],
         },
+        {
+          sourceFile: "src/components/admin/ui/AdminCheckbox.tsx",
+          exportNames: ["default", "AdminCheckbox"],
+        },
       ],
       applicabilityOwner: "explicit_consumer_declaration",
-      localImplementationKinds: ["native_switch"],
+      localImplementationKinds: ["native_switch", "native_checkbox"],
       ownerAvailability: "available",
       consumerBoundaries: ["form"],
+    },
+    listbox: {
+      owner: "AdminListboxSelect + AdminFormListboxSelect",
+      sourceFiles: [
+        "src/components/admin/ui/AdminListboxSelect.tsx",
+        "src/components/admin/ui/AdminFormListboxSelect.tsx",
+      ],
+      executableBindings: [
+        {
+          sourceFile: "src/components/admin/ui/AdminListboxSelect.tsx",
+          exportNames: ["default", "AdminListboxSelect"],
+        },
+        {
+          sourceFile: "src/components/admin/ui/AdminFormListboxSelect.tsx",
+          exportNames: ["default", "AdminFormListboxSelect"],
+        },
+      ],
+      applicabilityOwner: "explicit_consumer_declaration",
+      localImplementationKinds: ["native_select"],
+      ownerAvailability: "available",
+      consumerBoundaries: ["collection", "form"],
     },
     date_picker: {
       owner: "owner_extension_required",
@@ -520,6 +553,10 @@ export type AdminConsumerCapabilityAuditDeclaration = {
 };
 
 export const ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES = {
+  listbox: {
+    state: "not_applicable",
+    rationale: "This registered consumer does not expose a Listbox control.",
+  },
   switch: {
     state: "not_applicable",
     rationale:
@@ -551,6 +588,20 @@ export const ADMIN_SWITCH_CONSUMER_CAPABILITIES = {
   },
 } as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
 
+export const ADMIN_LISTBOX_CONSUMER_CAPABILITIES = {
+  ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+  listbox: {
+    state: "adopted",
+    rationale:
+      "The registered consumer binds selection intent to the shared Listbox owner.",
+  },
+} as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
+export const ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES = {
+  ...ADMIN_SWITCH_CONSUMER_CAPABILITIES,
+  listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
+} as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
 export const ADMIN_MODAL_CONSUMER_CAPABILITIES = {
   ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
   modal: {
@@ -566,6 +617,16 @@ export const ADMIN_MODAL_MEDIA_CONSUMER_CAPABILITIES = {
     rationale:
       "The registered consumer binds Media behavior to the Admin Media owner.",
   },
+} as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
+export const ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES = {
+  ...ADMIN_MODAL_CONSUMER_CAPABILITIES,
+  listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
+} as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
+export const ADMIN_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES = {
+  ...ADMIN_MODAL_MEDIA_CONSUMER_CAPABILITIES,
+  listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
 } as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
 
 export const ADMIN_MEDIA_CONSUMER_CAPABILITIES = {
@@ -586,6 +647,16 @@ export const ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES = {
   },
 } as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
 
+export const ADMIN_MEDIA_LISTBOX_CONSUMER_CAPABILITIES = {
+  ...ADMIN_MEDIA_CONSUMER_CAPABILITIES,
+  listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
+} as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
+export const ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES = {
+  ...ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
+  listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
+} as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
 export const ADMIN_SWITCH_MEDIA_CONSUMER_CAPABILITIES = {
   ...ADMIN_MEDIA_CONSUMER_CAPABILITIES,
   switch: {
@@ -593,6 +664,11 @@ export const ADMIN_SWITCH_MEDIA_CONSUMER_CAPABILITIES = {
     rationale:
       "The registered consumer binds Boolean intent to AdminFormSwitch.",
   },
+} as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
+export const ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES = {
+  ...ADMIN_SWITCH_MEDIA_CONSUMER_CAPABILITIES,
+  listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
 } as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
 
 export function adminConsumerCapabilityAudit(
@@ -1593,7 +1669,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "content-topics",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "full_collection_adoption",
@@ -2031,18 +2107,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       id: "dashboard-recent-content",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {
-          table: {
-            state: "approved_exception",
-            scope: "dashboard-recent-content:bounded-read-model-snapshots",
-            approvingOwner: "Admin Collection adoption manifest",
-            evidence: ["src/components/admin/dashboard/AdminDashboardView.tsx"],
-            rationale:
-              "Dashboard snapshots are fixed read-model summaries and do not expose a management collection lifecycle.",
-          },
-        },
+        {},
       ),
       feedbackOwner: "not_applicable",
+      gridOwner: "AdminDataGrid",
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
       routes: ["/admin"],
@@ -2055,8 +2123,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
       headerState: "adopted",
-      rowActionsState: "not_applicable",
-      rowActionsOwner: "not_applicable",
+      rowActionsState: "adopted",
+      rowActionsOwner: "shared_admin_row_actions",
       columnVisibility: "not_applicable",
       summaryCards: true,
       filtersOrToolbar: false,
@@ -2068,7 +2136,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       exceptionRationale:
         "The Dashboard view exposes bounded edit navigation but is not a standalone collection lifecycle.",
       rationale:
-        "Recent content and projects are bounded read-model snapshots with local navigation inside the Dashboard composition.",
+        "Recent content and projects are bounded read-model snapshots; the recent-content table and edit/information actions adopt the shared Data Grid and Row Actions presentation owners.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
@@ -2380,7 +2448,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "block-template-libraries",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       gridOwner: "AdminDataGrid",
@@ -2508,7 +2576,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "block-template-editors",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_MEDIA_CONSUMER_CAPABILITIES,
+        ADMIN_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "page_system_only",
@@ -2618,7 +2686,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "menu-editor-shell",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "page_system_only",
@@ -2821,11 +2889,12 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "footer-fixed-slots",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
+      gridOwner: "AdminDataGrid",
       routes: ["/admin/pages-blocks/footer"],
       pageSourceFiles: ["src/app/admin/pages-blocks/footer/page.tsx"],
       presentationSourceFiles: [
@@ -2859,7 +2928,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ],
       id: "footer-manual-links",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       collectionAdoption: "not_applicable",
@@ -2971,17 +3040,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       confirmationOwner: "not_applicable",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {
-          table: {
-            state: "approved_exception",
-            scope: "sitemap-monitor:fixed-diagnostics",
-            approvingOwner: "Admin Collection adoption manifest",
-            evidence: ["src/app/admin/seo/sitemap/SitemapMonitorClient.tsx"],
-            rationale:
-              "Sitemap diagnostics are a fixed read-only diagnostic surface without collection query or row lifecycle semantics.",
-          },
-        },
+        {},
       ),
+      gridOwner: "AdminDataGrid",
       workflowClassification: "page_system_only",
       generic: false,
       routes: ["/admin/seo/sitemap"],
@@ -3006,13 +3067,13 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       exceptionRationale:
         "Diagnostics and global refresh do not expose a row-level collection lifecycle.",
       rationale:
-        "Read-only diagnostics and refresh commands do not expose a generic entity collection lifecycle.",
+        "Read-only diagnostics and refresh commands do not expose a generic entity collection lifecycle; the bounded Effective Source table adopts the shared Data Grid presentation owner.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "content-editor-pages",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "page_system_only",
@@ -3063,7 +3124,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "project-editor-pages",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "page_system_only",
@@ -3078,8 +3139,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/projects/[id]/page.tsx",
         "src/app/admin/projects/[id]/preview/page.tsx",
       ],
-      presentationSourceFiles: ["src/app/admin/projects/ProjectEditForm.tsx"],
-      sourceOwner: "Project form and domain actions",
+      presentationSourceFiles: [
+        "src/app/admin/projects/ProjectEditForm.tsx",
+        "src/app/admin/projects/[id]/preview/page.tsx",
+      ],
+      sourceOwner: "Project form, preview, and domain actions",
       headerOwner: "AdminPageContextHeader",
       engineLabel: null,
       headerState: "adopted",
@@ -3101,7 +3165,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "settings-pages",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {
           search: {
             state: "approved_exception",
@@ -3226,7 +3290,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "seo-meta-manager",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "page_system_only",

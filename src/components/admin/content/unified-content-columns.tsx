@@ -110,6 +110,7 @@ export function createUnifiedContentColumns(
       flexible: true,
       sticky: "start",
       primary: true,
+      primaryPresentation: "compact-icon",
       renderCell: ({ row }) => (
         <div className="flex min-w-0 flex-nowrap items-center gap-3">
           <svg
