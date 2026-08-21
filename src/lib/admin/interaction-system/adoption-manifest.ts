@@ -2260,7 +2260,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       routes: ["/admin/projects/construction-updates"],
       pageSourceFiles: ["src/app/admin/projects/construction-updates/page.tsx"],
       presentationSourceFiles: [
-        "src/app/admin/projects/construction-updates/ConstructionUpdatesClient.tsx",
+        "src/app/admin/projects/construction-updates/page.tsx",
       ],
       sourceOwner:
         "src/lib/admin/projects/tracking-hub.ts#loadProjectTrackingHub",
@@ -2275,12 +2275,13 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       paginationState: "not_required",
       paginationOwner: "not_applicable",
       queryMode: "specialized",
-      layoutOwner: "ConstructionUpdatesClient specialized project selector",
+      layoutOwner:
+        "AdminPageExperience with shared navigation and summary presentation",
       requiredAdoption: [],
       exceptionRationale:
         "This is a dynamic project-selection and aggregate-summary hub, not a record Collection and not a fixed structural catalog.",
       rationale:
-        "ConstructionUpdatesClient is classified Specialized inside the existing Page System contract; it does not claim Collection adoption.",
+        "The project tracking destination hub composes the existing shared Page Experience and presentation owners without claiming Collection adoption.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,

@@ -1,11 +1,50 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import ts from "typescript";
 
 import { ADMIN_COLLECTION_SURFACE_ADOPTION } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 
 const read = (path: string) =>
   readFileSync(resolve(process.cwd(), path), "utf8").replace(/\r\n?/g, "\n");
+const parseTsx = (path: string) =>
+  ts.createSourceFile(
+    path,
+    read(path),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TSX,
+  );
+const importedBindings = (sourceFile: ts.SourceFile, moduleName: string) => {
+  const bindings = new Set<string>();
+  for (const statement of sourceFile.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier) ||
+      statement.moduleSpecifier.text !== moduleName
+    ) {
+      continue;
+    }
+    const namedBindings = statement.importClause?.namedBindings;
+    if (namedBindings && ts.isNamedImports(namedBindings)) {
+      for (const binding of namedBindings.elements) {
+        if (!binding.isTypeOnly) bindings.add(binding.name.text);
+      }
+    }
+  }
+  return bindings;
+};
+const renderedJsxElements = (sourceFile: ts.SourceFile) => {
+  const elements = new Set<string>();
+  const visit = (node: ts.Node) => {
+    if (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) {
+      if (ts.isIdentifier(node.tagName)) elements.add(node.tagName.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return elements;
+};
 let passed = 0;
 const check = (label: string, value: unknown) => {
   assert.ok(value, label);
@@ -37,8 +76,8 @@ const adminForms = read(
 );
 const adminAdapter = read("src/lib/admin/projects/tracking-adapter.ts");
 const trackingHub = read("src/lib/admin/projects/tracking-hub.ts");
-const adoptionManifest = read(
-  "src/lib/admin/interaction-system/adoption-manifest.ts",
+const constructionUpdatesPage = parseTsx(
+  "src/app/admin/projects/construction-updates/page.tsx",
 );
 const formManifest = read("src/lib/admin/form-system/adoption-manifest.ts");
 const instantMutation = read(
@@ -204,14 +243,65 @@ check(
 );
 check(
   "Construction Updates Hub is Specialized and excluded from the Full Collection claim",
-  adoptionManifest.includes('id: "construction-updates-hub"') &&
-    adoptionManifest.includes(
-      'layoutOwner: "ConstructionUpdatesClient specialized project selector"',
-    ) &&
-    adoptionManifest.includes('id: "project-construction-tracking"') &&
-    !/id: "project-construction-tracking"[\s\S]{0,900}ConstructionUpdatesClient/u.test(
-      adoptionManifest,
-    ),
+  (() => {
+    const hub = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.find(
+      (surface) => surface.id === "construction-updates-hub",
+    );
+    const trackingCollection = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.find(
+      (surface) => surface.id === "project-construction-tracking",
+    );
+    return (
+      hub?.workflowClassification === "page_system_only" &&
+      hub.generic === false &&
+      hub.routes.length === 1 &&
+      hub.routes[0] === "/admin/projects/construction-updates" &&
+      hub.presentationSourceFiles.length === 1 &&
+      hub.presentationSourceFiles[0] ===
+        "src/app/admin/projects/construction-updates/page.tsx" &&
+      hub.layoutOwner ===
+        "AdminPageExperience with shared navigation and summary presentation" &&
+      hub.requiredAdoption.length === 0 &&
+      trackingCollection?.presentationSourceFiles.every(
+        (sourceFile) => !sourceFile.includes("construction-updates"),
+      ) === true &&
+      !existsSync(
+        resolve(
+          process.cwd(),
+          "src/app/admin/projects/construction-updates/ConstructionUpdatesClient.tsx",
+        ),
+      )
+    );
+  })(),
+);
+check(
+  "Construction Updates Hub renders the existing shared page, summary, navigation, status, and empty presentation owners",
+  (() => {
+    const sharedImports = importedBindings(
+      constructionUpdatesPage,
+      "../../../../components/admin/ui",
+    );
+    const renderedElements = renderedJsxElements(constructionUpdatesPage);
+    const requiredOwners = [
+      "AdminActionButton",
+      "AdminCard",
+      "AdminListEmptyState",
+      "AdminMetricCardsGrid",
+      "AdminPageContextHeader",
+      "AdminPageExperience",
+      "AdminStatusPill",
+    ];
+    const hasClientDirective = constructionUpdatesPage.statements.some(
+      (statement) =>
+        ts.isExpressionStatement(statement) &&
+        ts.isStringLiteral(statement.expression) &&
+        statement.expression.text === "use client",
+    );
+    return (
+      requiredOwners.every(
+        (owner) => sharedImports.has(owner) && renderedElements.has(owner),
+      ) && !hasClientDirective
+    );
+  })(),
 );
 check(
   "each Tracking Collection consumer carries independent applicability and Source Proof",
