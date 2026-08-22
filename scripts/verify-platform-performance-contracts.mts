@@ -110,14 +110,15 @@ assert.ok(
 );
 
 const hero = parse("src/components/sections/DynamicHeroSection.tsx");
-const transparentFallback = findVariable(hero, "TRANSPARENT_IMAGE_FALLBACK");
+const publicMediaImage = parse("src/components/public/PublicMediaImage.tsx");
+const transparentFallback = findVariable(publicMediaImage, "TRANSPARENT_IMAGE_FALLBACK");
 assert.ok(
   transparentFallback.initializer && ts.isStringLiteral(transparentFallback.initializer),
-  "The art-directed hero must own an explicit transparent fallback",
+  "The shared public image owner must own an explicit art-direction fallback",
 );
-const heroNodes = descendants(hero);
+const publicMediaImageNodes = descendants(publicMediaImage);
 assert.ok(
-  heroNodes.some(
+  publicMediaImageNodes.some(
     (node) =>
       ts.isJsxAttribute(node) &&
       ts.isIdentifier(node.name) &&
@@ -128,9 +129,9 @@ assert.ok(
       ts.isIdentifier(node.initializer.expression) &&
       node.initializer.expression.text === "TRANSPARENT_IMAGE_FALLBACK",
   ),
-  "Art-directed hero images must execute the transparent fallback binding",
+  "Shared art-directed public images must execute the transparent fallback binding",
 );
-const common = findVariable(hero, "common");
+const common = findVariable(publicMediaImage, "common");
 assert.ok(common.initializer && ts.isObjectLiteralExpression(common.initializer));
 for (const propertyName of ["fetchPriority", "loading"] as const) {
   const property = propertyAssignment(common.initializer, propertyName);
@@ -139,6 +140,11 @@ for (const propertyName of ["fetchPriority", "loading"] as const) {
     `Hero ${propertyName} intent must be an explicit runtime branch`,
   );
 }
+const heroNodes = descendants(hero);
+assert.ok(
+  jsxElementNames(hero).has("PublicArtDirectedMediaImage"),
+  "Hero art direction must adopt the shared public image owner",
+);
 assert.ok(
   heroNodes.some(
     (node) =>

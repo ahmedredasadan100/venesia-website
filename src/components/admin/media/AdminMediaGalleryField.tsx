@@ -7,8 +7,15 @@ import AdminMediaPickerModal from "./AdminMediaPickerModal";
 import type { ImageDimensionHint } from "./AdminMediaImageField";
 
 const DIMENSION_HINTS: Record<ImageDimensionHint, string> = {
-  hero: "الأبعاد الموصى بها لصور الهيرو: 1920 × 1080 px (16:9)",
+  hero: "المقاس المستهدف بعد إعادة التحجيم: 1920 × 1080 px (16:9)",
+  "hero-mobile": "المقاس المستهدف بعد إعادة التحجيم: 1080 × 1920 px (9:16)",
   content: "الأبعاد الموصى بها للصور المميزة/المحتوى: 1600 × 900 px (16:9)",
+};
+
+const DIMENSION_CARD_LABELS: Record<ImageDimensionHint, string> = {
+  hero: "1920 × 1080 • 16:9",
+  "hero-mobile": "1080 × 1920 • 9:16",
+  content: "1600 × 900 • 16:9",
 };
 
 function parsePaths(value: string) {
@@ -148,17 +155,22 @@ export default function AdminMediaGalleryField({
                 <Image src={path} alt="" fill className="object-cover" sizes="200px" />
               </div>
 
-              <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-                <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/45" dir="ltr">
-                  {path}
+              <div className="space-y-2 px-3 py-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-white/45" dir="ltr">
+                    {path}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => openReplace(index)}
+                    className="cursor-pointer shrink-0 rounded-lg border border-[#D8B87A]/30 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/10"
+                  >
+                    استبدال
+                  </button>
+                </div>
+                <p className="text-[10px] font-medium tracking-wide text-[#D8B87A]/65" dir="ltr">
+                  {DIMENSION_CARD_LABELS[dimensionHint]}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => openReplace(index)}
-                  className="cursor-pointer shrink-0 rounded-lg border border-[#D8B87A]/30 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/10"
-                >
-                  استبدال
-                </button>
               </div>
             </div>
           ))}

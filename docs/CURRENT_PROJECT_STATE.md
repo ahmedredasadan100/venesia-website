@@ -87,13 +87,13 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The 2026-08-19 authorized Production migration closure established the following facts against the configured Supabase Production project.
+The 2026-08-22 authorized Hero Platform migration closure established the following facts against the configured Supabase Production project.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                                86 |
-| Production registry versions                      |                                                86 |
-| Registry SQL provenance                           | Exact repository SQL for all 86 deployed versions |
+| Repository migration files                        |                                                87 |
+| Production registry versions                      |                                                87 |
+| Registry SQL provenance                           | Exact repository SQL for all 87 deployed versions |
 | Public tables                                     |                                                56 |
 | Public tables with RLS enabled                    |                                                56 |
 | Public catalog objects with repository provenance |                                               291 |
@@ -102,7 +102,7 @@ The 2026-08-19 authorized Production migration closure established the following
 | Parallel public function overload names           |                                                 0 |
 | Public RLS policies                               |                                                 3 |
 | Anonymous-callable application data functions     |                                                 0 |
-| Registry reconciliation audit records             |                                                12 |
+| Registry reconciliation audit records             |                                                13 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 

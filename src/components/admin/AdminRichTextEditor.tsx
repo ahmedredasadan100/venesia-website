@@ -27,21 +27,10 @@ type AdminRichTextEditorProps = {
   defaultValue?: string;
   placeholder?: string;
   minHeight?: number;
-  /** full = all tools; minimal = Bold (+ optional text align). Backward-compatible default: full. */
-  toolbarMode?: "full" | "minimal";
-  /** Home Story only — show paragraph alignment controls next to Bold. */
+  /** full = all tools; minimal = Bold (+ optional text align); none = content input only. */
+  toolbarMode?: "full" | "minimal" | "none";
+  /** Show paragraph alignment controls when the content domain owns text alignment. */
   enableTextAlign?: boolean;
-  /**
-   * top = toolbar above editor (default for all existing editors).
-   * side = toolbar beside editor on md+ (Hero editor compact layout only).
-   */
-  toolbarPlacement?: "top" | "side";
-  /**
-   * Optional visibility toggle appended to the toolbar (Hero description only).
-   * Writes a hidden input; does not change other editors.
-   */
-  visibilityName?: string;
-  visibilityDefault?: boolean;
   helperText?: string;
   appearance?: "dark" | "light";
   /** Keep HTML as the default contract; Article consumers opt into their existing Markdown contract. */
@@ -99,9 +88,6 @@ export default function AdminRichTextEditor({
   minHeight = 220,
   toolbarMode = "full",
   enableTextAlign = false,
-  toolbarPlacement = "top",
-  visibilityName,
-  visibilityDefault = true,
   helperText,
   appearance = "dark",
   storageFormat = "html",
@@ -126,16 +112,14 @@ export default function AdminRichTextEditor({
       : initialValue,
     [initialValue, storageFormat],
   );
-  const [contentVisible, setContentVisible] = useState(visibilityDefault);
   const [linkEditorOpen, setLinkEditorOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const valueInputRef = useRef<HTMLInputElement>(null);
   const currentValueRef = useRef(initialValue);
   const hasUserInteractedRef = useRef(false);
-  const isMinimal = toolbarMode === "minimal";
-  const withTextAlign = enableTextAlign;
-  const sideToolbar = toolbarPlacement === "side";
-  const withVisibility = Boolean(visibilityName);
+  const isMinimal = toolbarMode !== "full";
+  const showToolbar = toolbarMode !== "none";
+  const withTextAlign = showToolbar && enableTextAlign;
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -260,9 +244,7 @@ export default function AdminRichTextEditor({
       className={[
         "flex flex-wrap gap-2 p-3",
         appearance === "light" ? "bg-slate-50" : "bg-[#05070B]",
-        sideToolbar
-          ? `border-b md:w-[7.5rem] md:shrink-0 md:flex-col md:border-b-0 md:border-l ${appearance === "light" ? "border-slate-200 md:border-slate-200" : "border-white/10 md:border-white/10"}`
-          : appearance === "light" ? "border-b border-slate-200" : "border-b border-white/10",
+        appearance === "light" ? "border-b border-slate-200" : "border-b border-white/10",
       ].join(" ")}
       role="toolbar"
       aria-label={`شريط أدوات ${label}`}
@@ -327,18 +309,6 @@ export default function AdminRichTextEditor({
             title="ضبط النص من الجانبين"
             active={editor?.isActive({ textAlign: "justify" })}
             onClick={() => setAlign("justify")}
-            appearance={appearance}
-          />
-        </>
-      ) : null}
-      {withVisibility ? (
-        <>
-          <span className="mx-0.5 hidden h-5 w-px bg-white/10 sm:inline-block" aria-hidden />
-          <ToolButton
-            label={contentVisible ? "إخفاء" : "إظهار"}
-            title={contentVisible ? "إخفاء العنصر" : "إظهار العنصر"}
-            active={contentVisible}
-            onClick={() => setContentVisible((current) => !current)}
             appearance={appearance}
           />
         </>
@@ -445,12 +415,9 @@ export default function AdminRichTextEditor({
 
   return (
     <div className="space-y-2" data-admin-rich-text-scope={styleScope}>
-      {withVisibility && visibilityName ? (
-        <input type="hidden" name={visibilityName} value={contentVisible ? "true" : "false"} />
-      ) : null}
       <input ref={valueInputRef} type="hidden" name={name} defaultValue={initialValue} />
 
-      {label ? (
+      {label && toolbarMode !== "none" ? (
         <span className={`text-sm font-medium ${appearance === "light" ? "text-slate-700" : "text-white/70"}`}>
           {label}
         </span>
@@ -465,10 +432,9 @@ export default function AdminRichTextEditor({
           className={[
             "overflow-hidden rounded-[24px] border",
             appearance === "light" ? "border-slate-200 bg-white" : "border-white/10 bg-black/25",
-            sideToolbar ? "md:flex md:flex-row-reverse md:items-stretch" : "",
           ].join(" ")}
         >
-          {toolbar}
+          {showToolbar ? toolbar : null}
 
           <div className="admin-rich-text-editor min-w-0 flex-1 px-4 py-4" style={{ minHeight }}>
             <EditorContent editor={editor} />

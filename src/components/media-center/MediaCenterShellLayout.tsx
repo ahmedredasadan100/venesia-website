@@ -39,7 +39,6 @@ export default function MediaCenterShellLayout({
     <InternalPageLayout
       title=""
       heroImage={config.heroImage}
-      heroImagePositionClassName={config.heroImagePositionClassName}
       dynamicHero={heroEntry?.hero}
       allowStaticHeroFallback={false}
       breadcrumbCurrentLabel={breadcrumbCurrentLabel}

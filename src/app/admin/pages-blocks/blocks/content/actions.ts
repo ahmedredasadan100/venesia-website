@@ -42,11 +42,7 @@ import type {
   VisionGoalsModuleConfig,
 } from "../../../../../lib/page-blocks/configs";
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
-import {
-  normalizeHeroElementOrder,
-  parseHeroDescriptionAlignment,
-  parseHeroTextAlignment,
-} from "../../../../../lib/hero/hero-content-controls";
+import { parseHeroContentControlsFormData } from "../../../../../lib/hero/hero-content-controls";
 import { isStructuralContentTemplateSlug } from "../../../../../lib/page-blocks/module-edit-registry";
 import { isRetiredContentBlockTemplateSlug } from "../../../../../lib/page-blocks/deprecated-block-modules";
 import {
@@ -62,7 +58,9 @@ import {
   PROJECTS_HUB_FEATURED_KEYS,
   PROJECTS_HUB_FEATURED_SELECTION_MODES,
   PROJECTS_HUB_FILTER_IDS,
+  PROJECTS_HUB_HERO_ELEMENT_KEYS,
   PROJECTS_HUB_HERO_KEYS,
+  PROJECTS_HUB_HERO_LEGACY_KEYS,
   PROJECTS_HUB_HERO_PROJECT_TYPES,
   PROJECTS_HUB_HERO_SELECTION_MODES,
   PROJECTS_HUB_HERO_VARIANTS,
@@ -410,51 +408,25 @@ function buildProjectsHubHeroTypedConfig(formData: FormData): ProjectsHubHeroMod
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 12) {
     throw new Error("عدد شرائح الهيرو يجب أن يكون بين 1 و12.");
   }
-  const readProjectIds = (name: string) =>
-    [...new Set(cleanText(formData.get(name))
-      .split(/[\s,]+/)
-      .map(Number)
-      .filter((id) => Number.isSafeInteger(id) && id > 0))];
-  const orderedProjectIds = readProjectIds("project_order");
-  const hiddenProjectIds = new Set(readProjectIds("hidden_project_ids"));
-  const referencedProjectIds = [...new Set([...orderedProjectIds, ...hiddenProjectIds])];
-  const projectReferences = referencedProjectIds.map((projectId) => ({
-    projectId,
-    order: Math.max(0, orderedProjectIds.indexOf(projectId)),
-    visible: !hiddenProjectIds.has(projectId),
-  }));
   const autoplayMs = assertAutoplayMs(Number(cleanText(formData.get("autoplay_ms")) || 6000));
   const emptyRaw = cleanText(formData.get("empty_state"));
   const emptyState = emptyRaw ? assertSafePlainText(emptyRaw, "نص الحالة الفارغة", 400) : null;
+  const controls = parseHeroContentControlsFormData(formData, {
+    allowedElementKeys: PROJECTS_HUB_HERO_ELEMENT_KEYS,
+  });
   return {
     selectionMode,
     projectType: projectType as ProjectsHubHeroModuleConfig["projectType"],
     variant: variant as ProjectsHubHeroModuleConfig["variant"],
     limit,
-    projectReferences,
     autoplayMs,
     emptyState,
-    showEyebrow: parseFormBoolean(formData, "show_eyebrow", false),
-    eyebrowBold: parseFormBoolean(formData, "eyebrow_bold", false),
-    eyebrowAlignment: parseHeroTextAlignment(formData.get("eyebrow_alignment"), "right"),
-    showTitle: parseFormBoolean(formData, "show_title", false),
-    titleBold: parseFormBoolean(formData, "title_bold", false),
-    titleAlignment: parseHeroTextAlignment(formData.get("title_alignment"), "right"),
-    showHighlight: parseFormBoolean(formData, "show_highlight", false),
-    highlightBold: parseFormBoolean(formData, "highlight_bold", false),
-    highlightAlignment: parseHeroTextAlignment(formData.get("highlight_alignment"), "right"),
-    showSubtitle: parseFormBoolean(formData, "show_subtitle", false),
-    subtitleBold: parseFormBoolean(formData, "subtitle_bold", false),
-    subtitleAlignment: parseHeroTextAlignment(formData.get("subtitle_alignment"), "right"),
-    showDescription: parseFormBoolean(formData, "show_description", false),
-    descriptionAlignment: parseHeroDescriptionAlignment(formData.get("description_alignment"), "right"),
-    showBreadcrumb: false,
-    breadcrumbBold: false,
-    breadcrumbAlignment: "right",
-    breadcrumbCurrentLabel: "",
-    showCta: parseFormBoolean(formData, "show_cta", false),
-    ctaAlignment: parseHeroTextAlignment(formData.get("cta_alignment"), "right"),
-    heroElementOrder: normalizeHeroElementOrder(formData.get("hero_element_order")),
+    primaryCtaLabel: assertSafePlainText(
+      cleanText(formData.get("primary_cta_label")) || "استكشف المشروع",
+      "نص زر الإجراء",
+      100,
+    ),
+    ...controls,
   };
 }
 
@@ -620,6 +592,7 @@ async function buildContentConfig(
         existingConfig,
         buildProjectsHubHeroTypedConfig(formData),
         PROJECTS_HUB_HERO_KEYS,
+        PROJECTS_HUB_HERO_LEGACY_KEYS,
       );
     }
     if (

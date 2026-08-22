@@ -68,7 +68,6 @@ export default function AboutIntroSingleImageModuleEditor({
             defaultValue={config.body ?? ""}
             toolbarMode="minimal"
             enableTextAlign
-            toolbarPlacement="top"
             minHeight={160}
             helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
           />

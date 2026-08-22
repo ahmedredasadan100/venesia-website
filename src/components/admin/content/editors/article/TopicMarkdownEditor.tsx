@@ -322,7 +322,6 @@ export function AdminPublicRichContentEditor({
           placeholder="ابدأ كتابة المقال هنا..."
           minHeight={compact ? 440 : 620}
           toolbarMode="full"
-          toolbarPlacement="top"
           storageFormat="markdown"
           enableArticleStructure
           enableTextAlign

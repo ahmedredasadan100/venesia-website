@@ -2,9 +2,13 @@ import type {
   HeroContentControls,
   HeroDescriptionAlignment,
   HeroElementKey,
+  HeroImageCompositionPreset,
   HeroTextAlignment,
 } from "./hero/hero-content-controls";
-import { resolveHeroContentControls } from "./hero/hero-content-controls";
+import {
+  resolveHeroContentControlsForVariant,
+  resolveHeroImageCompositionPreset,
+} from "./hero/hero-content-controls";
 
 /** Hero owns presentation; domain-backed content is supplied only through typed adapters. */
 export type HeroSourceType = "manual" | "domain-backed";
@@ -55,8 +59,6 @@ export type HeroSectionData = PageSectionRecord & {
   template?: Pick<HeroTemplateRecord, "id" | "name" | "slug"> | null;
 };
 
-export type HeroLayoutPreset = "compact" | "standard";
-
 export type HeroConfig = {
   eyebrow?: string;
   title?: string;
@@ -71,8 +73,7 @@ export type HeroConfig = {
   secondaryCtaLabel?: string;
   secondaryCtaHref?: string;
   secondaryCtaLink?: Record<string, unknown>;
-  imagePositionClassName?: string;
-  heroLayout?: HeroLayoutPreset;
+  imageComposition: HeroImageCompositionPreset;
 } & HeroContentControls;
 
 export type {
@@ -104,13 +105,9 @@ export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
       : [];
   const mobileImages = mobileImagesRaw.map((item) => String(item).trim()).filter(Boolean);
 
-  const controls = resolveHeroContentControls(raw);
+  const controls = resolveHeroContentControlsForVariant(raw, hero?.variant ?? "internal-page");
   const legacyShowCta = readBool(raw.showCta) ?? readBool(raw.show_cta);
   const showCta = legacyShowCta === undefined ? controls.showCta : legacyShowCta;
-
-  const heroLayoutRaw = readText(raw.heroLayout) || readText(raw.hero_layout);
-  const heroLayout: HeroLayoutPreset | undefined =
-    heroLayoutRaw === "compact" || heroLayoutRaw === "standard" ? heroLayoutRaw : undefined;
 
   return {
     eyebrow: readText(raw.eyebrow) || undefined,
@@ -125,9 +122,12 @@ export function getHeroConfig(hero?: HeroSectionData | null): HeroConfig {
     primaryCtaHref: readText(raw.primaryCtaHref) || readText(raw.primary_cta_href) || undefined,
     secondaryCtaLabel: readText(raw.secondaryCtaLabel) || readText(raw.secondary_cta_label) || undefined,
     secondaryCtaHref: readText(raw.secondaryCtaHref) || readText(raw.secondary_cta_href) || undefined,
-    imagePositionClassName:
-      readText(raw.imagePositionClassName) || readText(raw.image_position_class) || undefined,
-    heroLayout,
+    imageComposition: resolveHeroImageCompositionPreset(
+      readText(raw.imageComposition) ||
+        readText(raw.image_composition) ||
+        readText(raw.imagePositionClassName) ||
+        readText(raw.image_position_class),
+    ),
     ...controls,
     showCta,
   };

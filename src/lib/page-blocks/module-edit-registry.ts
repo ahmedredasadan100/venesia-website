@@ -63,3 +63,23 @@ export function getContentModuleEditorKey(slug: string, variant: string): Conten
   if (slug === "about-approach" || variant === "about-approach") return "about-approach";
   return "generic";
 }
+
+/**
+ * Resolves the product-facing module kind without changing its persistence family.
+ * Projects Hub Hero is stored and routed through Content composition, but its
+ * editor and public purpose are Hero. All other modules keep their physical kind.
+ */
+export function resolveModuleProductKind(
+  moduleKind: string,
+  slug?: string | null,
+  variant?: string | null,
+) {
+  if (
+    moduleKind === "content" &&
+    getContentModuleEditorKey(slug ?? "", variant ?? "") === "projects-hub-hero"
+  ) {
+    return "hero";
+  }
+
+  return moduleKind;
+}

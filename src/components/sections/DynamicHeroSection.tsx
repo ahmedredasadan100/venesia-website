@@ -1,6 +1,5 @@
 "use client";
 
-import { getImageProps } from "next/image";
 import Link from "next/link";
 import {
   useCallback,
@@ -16,27 +15,43 @@ import { getHeroConfig } from "../../lib/page-sections";
 import {
   heroFlexJustifyClass,
   heroTextAlignClass,
+  resolveHeroFamily,
   resolveDistinctHeroDescription,
+  STANDARD_INTERNAL_HERO_COMPOSITION_BASELINE,
+  STANDARD_INTERNAL_HERO_ELEMENT_ORDER,
   type HeroElementKey,
+  type HeroImageCompositionPreset,
   type HeroTextAlignment,
 } from "../../lib/hero/hero-content-controls";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
 import { usePrefersReducedMotion } from "../../hooks/use-prefers-reduced-motion";
 import RichTextContent from "../content/RichTextContent";
-import PublicMediaImage, { PUBLIC_MEDIA_IMAGE_FALLBACK } from "../public/PublicMediaImage";
+import {
+  PublicArtDirectedMediaImage,
+} from "../public/PublicMediaImage";
 
 type DynamicHeroSectionProps = {
-  hero: HeroSectionData;
+  hero?: HeroSectionData | null;
   fallbackTitle?: string;
   fallbackEyebrow?: string;
   fallbackSubtitle?: string;
   fallbackImage?: string;
-  belowTitle?: React.ReactNode;
+  /** Page Composition-owned content placed in the Standard Hero footer slot. */
+  compositionFooter?: ReactNode;
   domainSlides?: readonly HeroDomainSlide[];
   autoplayMs?: number;
   emptyState?: string | null;
+  fallbackVisibility?: {
+    title?: boolean;
+    image?: boolean;
+    subtitle?: boolean;
+  };
 };
+
+function heroPillAlignmentClass(alignment: HeroTextAlignment) {
+  return alignment === "center" ? "self-center" : alignment === "left" ? "self-end" : "self-start";
+}
 
 export default function DynamicHeroSection({
   hero,
@@ -44,15 +59,22 @@ export default function DynamicHeroSection({
   fallbackEyebrow,
   fallbackSubtitle,
   fallbackImage,
-  belowTitle,
+  compositionFooter,
   domainSlides,
   autoplayMs,
   emptyState,
 }: DynamicHeroSectionProps) {
-  const variant = hero.variant || "internal-page";
+  const variant = hero?.variant || "internal-page";
 
-  if (variant === "home-cinematic") {
-    return <HomeDynamicHero hero={hero} domainSlides={domainSlides} autoplayMs={autoplayMs} emptyState={emptyState} />;
+  if (hero && (variant === "home-cinematic" || variant === "projects-hub")) {
+    return (
+      <HomeDynamicHero
+        hero={hero}
+        domainSlides={domainSlides}
+        autoplayMs={autoplayMs}
+        emptyState={emptyState}
+      />
+    );
   }
 
   if (domainSlides && !domainSlides.length) {
@@ -64,7 +86,7 @@ export default function DynamicHeroSection({
   }
 
   const domainSlide = domainSlides?.[0];
-  const resolvedHero = domainSlide ? {
+  const resolvedHero = domainSlide && hero ? {
     ...hero,
     config: {
       ...(hero.config ?? {}),
@@ -89,8 +111,11 @@ export default function DynamicHeroSection({
       fallbackEyebrow={fallbackEyebrow}
       fallbackSubtitle={fallbackSubtitle}
       fallbackImage={fallbackImage}
-      belowTitle={belowTitle}
-      collapseHiddenContent={Boolean(domainSlides)}
+      compositionFooter={compositionFooter}
+      domainSlides={domainSlides}
+      // Visibility is a public contract: hidden content is removed from the
+      // composed Hero, not merely made transparent while reserving DOM space.
+      collapseHiddenContent={true}
     />
   );
 }
@@ -128,12 +153,9 @@ type HeroSlideImageProps = {
   desktopSrc: string;
   mobileSrc?: string;
   priority?: boolean;
-  imagePositionClassName?: string;
+  imageComposition?: HeroImageCompositionPreset;
   brightnessFilter?: string;
 };
-
-const TRANSPARENT_IMAGE_FALLBACK =
-  "data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=";
 
 /**
  * Browser picks mobile/desktop source via <picture> before hydration —
@@ -143,70 +165,20 @@ function HeroArtDirectedImage({
   desktopSrc,
   mobileSrc,
   priority = false,
-  imagePositionClassName = "object-center",
+  imageComposition = "cover-center",
   brightnessFilter = "brightness(1.12) contrast(1.08) saturate(1.04)",
 }: HeroSlideImageProps) {
-  const className = `hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none object-cover ${imagePositionClassName}`;
-  const style = { filter: brightnessFilter };
-  const sourceKey = `${desktopSrc}\n${mobileSrc ?? ""}`;
-  const [failedSourceKey, setFailedSourceKey] = useState<string | null>(null);
-
-  if (!mobileSrc || mobileSrc === desktopSrc) {
-    return (
-      <PublicMediaImage
-        src={desktopSrc}
-        alt=""
-        fill
-        priority={priority}
-        sizes="100vw"
-        className={className}
-        style={style}
-      />
-    );
-  }
-
-  if (failedSourceKey === sourceKey) {
-    return (
-      <PublicMediaImage
-        src={PUBLIC_MEDIA_IMAGE_FALLBACK}
-        alt=""
-        fill
-        priority={priority}
-        sizes="100vw"
-        className={className}
-        style={style}
-      />
-    );
-  }
-
-  const common = {
-    alt: "",
-    sizes: "100vw",
-    fill: true as const,
-    fetchPriority: priority ? ("high" as const) : ("auto" as const),
-    loading: priority ? ("eager" as const) : ("lazy" as const),
-  };
-
-  const {
-    props: { srcSet: desktopSrcSet },
-  } = getImageProps({ ...common, src: desktopSrc });
-  const {
-    props: { srcSet: mobileSrcSet, ...mobileRest },
-  } = getImageProps({ ...common, src: mobileSrc });
-
   return (
-    <picture>
-      <source media="(max-width: 767px)" srcSet={mobileSrcSet} sizes="100vw" />
-      <source media="(min-width: 768px)" srcSet={desktopSrcSet} sizes="100vw" />
-      <img
-        {...mobileRest}
-        src={TRANSPARENT_IMAGE_FALLBACK}
-        alt=""
-        className={className}
-        style={{ ...mobileRest.style, ...style }}
-        onError={() => setFailedSourceKey(sourceKey)}
-      />
-    </picture>
+    <PublicArtDirectedMediaImage
+      desktopSrc={desktopSrc}
+      mobileSrc={mobileSrc}
+      alt=""
+      priority={priority}
+      sizes="100vw"
+      composition={imageComposition}
+      className="hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none"
+      style={{ filter: brightnessFilter }}
+    />
   );
 }
 
@@ -322,6 +294,8 @@ function HomeDynamicHero({
     secondaryCtaLabel: activeSlide?.secondaryCtaLabel ?? config.secondaryCtaLabel,
     secondaryCtaHref: activeSlide?.secondaryCtaHref ?? config.secondaryCtaHref,
   };
+  const usesHomeCinematicTypography = hero.variant === "home-cinematic";
+  const usesProjectIdentityTypography = hero.variant === "projects-hub";
 
   const hasHeroContent = Boolean(
     slides.length ||
@@ -341,24 +315,54 @@ function HomeDynamicHero({
 
   const contentElements: Partial<Record<HeroElementKey, ReactNode>> = {
     eyebrow: activeConfig.eyebrow && activeConfig.showEyebrow ? (
-      <div className={`inline-flex max-w-full rounded-full border border-white/10 bg-[#0B1220]/32 px-4 py-3 text-sm tracking-wide text-[#D8B87A] backdrop-blur-md ${heroTextAlignClass(activeConfig.eyebrowAlignment)} ${activeConfig.eyebrowBold ? "font-bold" : "font-normal"}`}>
+      <div
+        className={`inline-flex w-fit max-w-full whitespace-normal rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide ${heroPillAlignmentClass(activeConfig.eyebrowAlignment)} ${heroTextAlignClass(activeConfig.eyebrowAlignment)} ${activeConfig.eyebrowBold ? "font-bold" : "font-normal"}`}
+      >
         {activeConfig.eyebrow}
       </div>
     ) : null,
     title: title && activeConfig.showTitle ? (
-      <h1 className={`max-w-none text-4xl leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:text-6xl lg:text-7xl ${heroTextAlignClass(activeConfig.titleAlignment)} ${activeConfig.titleBold ? "font-bold" : "font-normal"}`}>
+      <h1
+        className={`${
+          usesProjectIdentityTypography
+            ? "max-w-none font-en text-xl font-bold leading-tight tracking-[-0.02em] sm:text-2xl md:text-3xl"
+            : "max-w-none text-4xl font-bold leading-[1.06] tracking-[-0.045em] sm:text-5xl md:text-6xl lg:text-7xl"
+        } text-white ${heroTextAlignClass(activeConfig.titleAlignment)}`}
+        style={usesProjectIdentityTypography ? { fontWeight: 700 } : undefined}
+      >
         {title}
       </h1>
     ) : null,
     highlight: highlight && activeConfig.showHighlight ? (
-      <p className={`bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-2xl text-transparent ${heroTextAlignClass(activeConfig.highlightAlignment)} ${activeConfig.highlightBold ? "font-bold" : "font-medium"}`}>
-        {highlight}
-      </p>
+      usesHomeCinematicTypography ? (
+        <span
+          className={`block w-fit max-w-full bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-4xl font-semibold leading-[1.18] tracking-[-0.02em] text-transparent sm:text-5xl md:text-6xl lg:text-7xl ${heroPillAlignmentClass(activeConfig.highlightAlignment)} ${heroTextAlignClass(activeConfig.highlightAlignment)}`}
+        >
+          {highlight}
+        </span>
+      ) : (
+        <p
+          className={`bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-2xl text-transparent ${heroTextAlignClass(activeConfig.highlightAlignment)} ${activeConfig.highlightBold ? "font-bold" : "font-medium"}`}
+        >
+          {highlight}
+        </p>
+      )
     ) : null,
     subtitle: subtitle && activeConfig.showSubtitle ? (
-      <p className={`text-2xl leading-tight text-[#E8D5A8] md:text-4xl ${heroTextAlignClass(activeConfig.subtitleAlignment)} ${activeConfig.subtitleBold ? "font-bold" : "font-semibold"}`}>
-        {subtitle}
-      </p>
+      usesHomeCinematicTypography ? (
+        <div
+          className={`inline-flex w-fit max-w-full whitespace-normal rounded-full border border-[#D8B87A]/22 bg-[rgba(216,184,122,0.10)] px-3 py-3 text-xs tracking-normal text-[#E8D5A8] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-md min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide md:text-base ${heroPillAlignmentClass(activeConfig.subtitleAlignment)} ${heroTextAlignClass(activeConfig.subtitleAlignment)}`}
+        >
+          {subtitle}
+        </div>
+      ) : (
+        <p
+          className={`text-3xl font-bold leading-tight text-[#E8D5A8] sm:text-4xl md:text-5xl ${heroTextAlignClass(activeConfig.subtitleAlignment)}`}
+          style={usesProjectIdentityTypography ? { fontWeight: 700 } : undefined}
+        >
+          {subtitle}
+        </p>
+      )
     ) : null,
     description: description && activeConfig.showDescription ? (
       <RichTextContent
@@ -367,7 +371,13 @@ function HomeDynamicHero({
         className={`max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9 ${heroTextAlignClass(activeConfig.descriptionAlignment)}`}
       />
     ) : null,
-    cta: activeConfig.showCta ? <HeroCtaButtons config={activeConfig} alignment={activeConfig.ctaAlignment} /> : null,
+    cta: (
+      <HeroCtaButtons
+        config={activeConfig}
+        alignment={activeConfig.ctaAlignment}
+        visible={activeConfig.showCta !== false}
+      />
+    ),
   };
 
   return (
@@ -375,6 +385,8 @@ function HomeDynamicHero({
       ref={containerRef}
       className="relative isolate min-h-screen touch-pan-y overflow-hidden bg-[#05070B]"
       dir="rtl"
+      data-hero-variant={hero.variant}
+      data-hero-family={resolveHeroFamily(hero.variant)}
       data-hero-reduced-motion={reducedMotion ? "true" : undefined}
       {...swipeHandlers}
     >
@@ -392,7 +404,7 @@ function HomeDynamicHero({
                 desktopSrc={slide.desktopImage}
                 mobileSrc={slide.mobileImage}
                 priority={index === 0}
-                imagePositionClassName={config.imagePositionClassName ?? "object-center"}
+                imageComposition={config.imageComposition}
               />
             ) : null}
           </div>
@@ -407,47 +419,12 @@ function HomeDynamicHero({
       <div className="relative z-10 flex min-h-screen items-center max-md:items-start max-md:pt-40">
         <div className="mx-auto flex w-full max-w-7xl items-center px-6 pt-28 pb-20 max-md:pt-0 max-md:pb-24">
           <div className="min-w-0 max-w-4xl lg:min-w-auto">
-            {isDomainBacked ? (
-              <div className="flex flex-col gap-4">
-                {activeConfig.heroElementOrder.map((key) => {
-                  const node = contentElements[key];
-                  return node == null ? null : <Fragment key={key}>{node}</Fragment>;
-                })}
-              </div>
-            ) : (
-              <div className="text-right">
-                <div className="lg:translate-y-[5em]">
-                  {config.eyebrow ? (
-                    <div className="mb-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-white/10 bg-[#0B1220]/32 px-3 py-3 text-xs tracking-normal text-[#D8B87A] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide">
-                      {config.eyebrow}
-                    </div>
-                  ) : null}
-                  <h1 className="max-w-none text-4xl font-bold leading-[1.06] tracking-[-0.045em] text-white sm:text-5xl md:max-w-[12ch] md:text-6xl lg:w-max lg:max-w-none lg:pb-[1.06em] lg:text-7xl">
-                    <span className="max-md:block max-md:whitespace-nowrap lg:block lg:whitespace-nowrap">{title}</span>
-                    {highlight ? (
-                      <span className="mt-2 block bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-transparent md:mt-3 lg:whitespace-nowrap">
-                        {highlight}
-                      </span>
-                    ) : null}
-                  </h1>
-                </div>
-                {subtitle ? (
-                  <div className="mt-5 inline-flex max-w-full whitespace-nowrap rounded-full border border-[#D8B87A]/22 bg-[rgba(216,184,122,0.10)] px-3 py-3 text-xs tracking-normal text-[#E8D5A8] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-md min-[361px]:whitespace-normal min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide md:text-base">
-                    {subtitle}
-                  </div>
-                ) : null}
-                {description ? (
-                  <p className={`${subtitle ? "mt-4" : "mt-6"} max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9`}>
-                    {description}
-                  </p>
-                ) : null}
-                {config.showCta !== false && (config.primaryCtaLabel || config.secondaryCtaLabel) ? (
-                  <div className="mt-8">
-                    <HeroCtaButtons config={config} alignment={config.ctaAlignment} />
-                  </div>
-                ) : null}
-              </div>
-            )}
+            <div className={`flex flex-col gap-4 ${isDomainBacked ? "" : "text-right lg:translate-y-[2.75em]"}`}>
+              {activeConfig.heroElementOrder.map((key) => {
+                const node = contentElements[key];
+                return node == null ? null : <Fragment key={key}>{node}</Fragment>;
+              })}
+            </div>
           </div>
 
         </div>
@@ -554,20 +531,24 @@ function InternalDynamicHero({
   fallbackEyebrow,
   fallbackSubtitle,
   fallbackImage,
-  belowTitle,
-  collapseHiddenContent = false,
+  compositionFooter,
+  fallbackVisibility,
+  collapseHiddenContent = true,
 }: DynamicHeroSectionProps & { collapseHiddenContent?: boolean }) {
   const config = getHeroConfig(hero);
-  const isAboutPage = hero.page?.slug === "about";
-  const isCompactHero = isAboutPage || config.heroLayout === "compact";
   const reducedMotion = usePrefersReducedMotion();
 
-  const images = config.images?.length ? config.images : fallbackImage ? [fallbackImage] : [];
+  const isCmsHero = Boolean(hero);
+  const showFallbackImage = fallbackVisibility?.image !== false;
+  const images = config.images?.length
+    ? config.images
+    : fallbackImage && showFallbackImage
+      ? [fallbackImage]
+      : [];
   const image = images[0];
-  // Mobile image support for internal heroes, excluding the Contact page hero.
-  const supportsMobileImages = hero.page?.slug !== "contact";
-  const mobileImage = supportsMobileImages ? config.mobileImages?.[0] : undefined;
-  const title = config.title || fallbackTitle || hero.page?.title || "";
+  // Mobile image support is a shared variant contract, not a route exception.
+  const mobileImage = config.mobileImages?.[0];
+  const title = config.title || fallbackTitle || hero?.page?.title || "";
   const eyebrow = config.eyebrow || fallbackEyebrow || "Internal Page";
   const highlight = (config.highlight || "").trim();
   const subtitle = (config.subtitle || fallbackSubtitle || "").trim();
@@ -575,17 +556,10 @@ function InternalDynamicHero({
     config.description,
     subtitle,
   );
-  const imagePosition =
-    config.imagePositionClassName ?? (isCompactHero ? "object-[50%_42%]" : "object-center");
-  const brightness = isCompactHero
-    ? "brightness(1.05) contrast(1.04) saturate(1.02)"
-    : "brightness(1.04) contrast(1.04) saturate(1.02)";
-
-  const titleSizeClass = isCompactHero
-    ? "text-[2rem] leading-[1.15] sm:text-4xl md:text-[2.5rem]"
-    : "max-w-[14ch] text-[2rem] leading-[1.2] sm:text-4xl md:text-[2.5rem]";
-
-  const hasBreadcrumb = Boolean(belowTitle);
+  const showTitle = config.showTitle && (isCmsHero || fallbackVisibility?.title !== false);
+  const showSubtitle = config.showSubtitle && (isCmsHero || fallbackVisibility?.subtitle !== false);
+  const brightness = "brightness(1.04) contrast(1.04) saturate(1.02)";
+  const titleSizeClass = "max-w-[14ch] text-[2rem] leading-[1.2] sm:text-4xl md:text-[2.5rem]";
   const elements: Partial<Record<HeroElementKey, ReactNode>> = {
     eyebrow: (
       <HeroReservedSlot
@@ -616,7 +590,7 @@ function InternalDynamicHero({
         config.titleBold ? "font-bold" : "font-normal"
       } ${heroTextAlignClass(config.titleAlignment)}`;
 
-      if (config.showTitle) {
+      if (showTitle) {
         return <h1 className={titleClass}>{title}</h1>;
       }
 
@@ -642,29 +616,19 @@ function InternalDynamicHero({
         reserveWhenHidden={!collapseHiddenContent}
         className={heroTextAlignClass(config.highlightAlignment)}
       >
-        {isAboutPage ? (
-          <p
-            className={`text-[1.44rem] tracking-[0.08em] text-[#D8B87A] sm:text-[1.8rem] ${
-              config.highlightBold ? "font-bold" : "font-medium"
-            }`}
-          >
-            {highlight}
-          </p>
-        ) : (
-          <p
-            className={`bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-[1.35rem] text-transparent sm:text-[1.65rem] ${
-              config.highlightBold ? "font-bold" : "font-medium"
-            }`}
-          >
-            {highlight}
-          </p>
-        )}
+        <p
+          className={`bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-[1.35rem] text-transparent sm:text-[1.65rem] ${
+            config.highlightBold ? "font-bold" : "font-medium"
+          }`}
+        >
+          {highlight}
+        </p>
       </HeroReservedSlot>
     ),
     subtitle: (
       <HeroReservedSlot
         hasContent={Boolean(subtitle)}
-        visible={config.showSubtitle}
+        visible={showSubtitle}
         reserveWhenHidden={!collapseHiddenContent}
         className={`max-w-2xl ${heroTextAlignClass(config.subtitleAlignment)} ${
           config.subtitleAlignment === "center"
@@ -703,11 +667,6 @@ function InternalDynamicHero({
         />
       </HeroReservedSlot>
     ),
-    breadcrumb: hasBreadcrumb ? (
-      <HeroReservedSlot hasContent visible={config.showBreadcrumb} reserveWhenHidden={!collapseHiddenContent}>
-        {belowTitle}
-      </HeroReservedSlot>
-    ) : null,
     cta: (
       <HeroCtaButtons
         config={config}
@@ -720,12 +679,12 @@ function InternalDynamicHero({
 
   return (
     <section
-      className={`relative isolate z-0 overflow-hidden bg-[#05070B] ${
-        isCompactHero
-          ? "h-[min(46vh,500px)] min-h-[400px]"
-          : "h-[min(62vh,580px)] min-h-[440px]"
-      }`}
+      className="relative isolate z-0 h-[min(62vh,580px)] min-h-[440px] overflow-hidden bg-[#05070B]"
       dir="rtl"
+      data-hero-variant={hero?.variant ?? "internal-page"}
+      data-hero-family="standard-internal"
+      data-hero-height-preset="standard-internal"
+      data-hero-composition-baseline={STANDARD_INTERNAL_HERO_COMPOSITION_BASELINE}
       data-hero-reduced-motion={reducedMotion ? "true" : undefined}
     >
       {image ? (
@@ -734,7 +693,7 @@ function InternalDynamicHero({
             desktopSrc={image}
             mobileSrc={mobileImage}
             priority
-            imagePositionClassName={imagePosition}
+            imageComposition={config.imageComposition}
             brightnessFilter={brightness}
           />
           <div className="pointer-events-none absolute inset-0 bg-[#05070B]/20" />
@@ -750,18 +709,23 @@ function InternalDynamicHero({
       )}
 
       <div className="relative z-10 flex h-full min-h-0 flex-col">
-        <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-end px-6 pb-10 pt-20 sm:pb-12 sm:pt-24 md:pb-14 md:pt-28 lg:px-6 lg:pb-16">
-          <div className="w-full max-w-3xl">
+        <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-6 pb-10 pt-20 sm:pb-12 sm:pt-24 md:pb-14 md:pt-28 lg:px-6 lg:pb-16">
+          <div
+            className="w-full max-w-3xl"
+            data-hero-composition-root="standard-internal"
+          >
             <div className="flex min-w-0 flex-col gap-3 text-right md:gap-3.5">
-              {config.heroElementOrder.map((key) => {
+              {STANDARD_INTERNAL_HERO_ELEMENT_ORDER.map((key) => {
                 const node = elements[key];
                 if (node == null) return null;
                 // Fragment avoids empty wrapper <div>s that still create flex gaps
                 // when a reserved slot returns null (e.g. empty subtitle).
                 return <Fragment key={key}>{node}</Fragment>;
               })}
+              {compositionFooter ? (
+                <div data-hero-composition-footer="page-composition">{compositionFooter}</div>
+              ) : null}
             </div>
-
           </div>
         </div>
       </div>

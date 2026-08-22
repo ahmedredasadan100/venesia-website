@@ -16,6 +16,7 @@ const {
   PAGE_BLOCK_PUBLICATION_BULK_ACTIONS,
   isPageModulePubliclyVisible,
   moduleEditHref,
+  moduleKindLabel,
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
   resolveModuleEditorReturnNavigation,
@@ -92,6 +93,7 @@ const pageCompositionRoute = read("src/app/admin/pages-blocks/pages/[id]/page.ts
 const assignmentColumns = read("src/lib/page-blocks/admin-collection-columns.ts");
 const assignmentGrid = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx");
 const assignmentRow = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx");
+const moduleEditRegistry = read("src/lib/page-blocks/module-edit-registry.ts");
 const adminQueries = read("src/lib/page-blocks/admin-queries.ts");
 const adminRevalidationOwner = read("src/lib/page-blocks/admin-revalidate.ts");
 const assignmentContextQuery = read("src/lib/page-blocks/module-assignments-query.ts");
@@ -140,6 +142,18 @@ check(
     pagesClient.includes("مرجع موديولات الصفحة ${page.title || page.slug}") &&
     !pagesClient.includes("PageModuleKindsBar") &&
     !pagesHeader.includes("{usedModuleKinds.length}"),
+);
+
+check(
+  "Page Composition resolves product-facing Hero classification without changing the Content persistence route",
+  moduleKindLabel("content", "projects-hub-hero", "projects-hub-hero") === "Hero" &&
+    moduleKindLabel("content", "projects-hub-listing", "projects-hub-listing") === "Content" &&
+    moduleEditRegistry.includes("resolveModuleProductKind") &&
+    pagesClient.includes("resolveModuleProductKind") &&
+    pagesClient.includes("listKind: assignment.module_kind") &&
+    assignmentRow.includes("row.template_slug") &&
+    assignmentRow.includes("row.template_variant") &&
+    assignmentRow.includes("moduleEditHref(row.module_kind")
 );
 
 check(
@@ -256,7 +270,8 @@ check(
   "binary Page Block state delegates to the shared switch",
   presentation.includes("AdminFormSwitch") &&
     heroVisibility.includes("AdminFormSwitch") &&
-    heroText.includes("AdminFormSwitch") &&
+    heroText.includes("HeroVisibilityAlignRow") &&
+    !heroText.includes("AdminFormSwitch") &&
     !heroVisibility.includes("aria-pressed={show}") &&
     !heroText.includes("aria-pressed={show}") &&
     !binaryPresentationSources.includes("aria-pressed={bold}"),

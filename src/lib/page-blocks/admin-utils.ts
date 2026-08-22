@@ -1,5 +1,6 @@
 import type { PageBlockStatus, PageBlockType } from "./types";
 import { getContentStatusMetadata } from "../admin/content/content-status-metadata";
+import { resolveModuleProductKind } from "./module-edit-registry";
 
 export const BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"];
 
@@ -164,7 +165,8 @@ export function heroModuleListHref() {
   return "/admin/pages-blocks/blocks/hero";
 }
 
-export function moduleKindLabel(kind: string) {
+export function moduleKindLabel(kind: string, slug?: string | null, variant?: string | null) {
+  kind = resolveModuleProductKind(kind, slug, variant);
   if (kind === "hero") return "Hero";
   if (kind === "breadcrumb") return "Breadcrumb";
   if (kind === "content") return "Content";

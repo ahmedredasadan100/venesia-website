@@ -3,16 +3,12 @@ import { getStatus } from "../../../../../../lib/page-blocks/admin-utils";
 import { getHeroModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
 import HeroEditClient from "./HeroEditClient";
+import { HERO_TEMPLATE_VARIANT_OPTIONS_AR } from "../../../../../../lib/hero/hero-content-controls";
 
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
   searchParams?: Promise<{ saved?: string; notice?: string }> | { saved?: string; notice?: string };
 };
-
-const variantOptions: [string, string][] = [
-  ["home-cinematic", "سينمائي للصفحة الرئيسية"],
-  ["internal-page", "صفحة داخلية"],
-];
 
 function imagesToTextarea(config: Record<string, unknown> | null) {
   const images = config?.images;
@@ -61,7 +57,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
       config={config}
       imagesText={imagesToTextarea(config)}
       mobileImagesText={mobileImagesToTextarea(config)}
-      variantOptions={variantOptions}
+      variantOptions={HERO_TEMPLATE_VARIANT_OPTIONS_AR}
       saved={Boolean(resolvedSearch.saved)}
       mediaSynchronizationWarning={
         resolvedSearch.notice === "saved_with_media_sync_warning"

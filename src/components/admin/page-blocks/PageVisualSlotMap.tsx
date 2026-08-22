@@ -87,7 +87,7 @@ export default function PageVisualSlotMap({ assignments, pageSlug }: PageVisualS
                           <div className="min-w-0">
                             <p className="truncate text-sm font-semibold text-white">{row.template_name}</p>
                             <p className="mt-1 text-[11px] text-white/45">
-                              {moduleKindLabel(row.module_kind)}
+                              {moduleKindLabel(row.module_kind, row.template_slug, row.template_variant)}
                               {compatibility ? ` · يُفضّل: ${compatibility}` : null}
                             </p>
                           </div>

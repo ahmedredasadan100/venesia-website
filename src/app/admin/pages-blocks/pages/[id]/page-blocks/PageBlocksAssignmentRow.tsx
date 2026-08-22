@@ -69,6 +69,11 @@ export default function PageBlocksAssignmentRow({
   const pendingAction = interaction.pendingAction;
   const templatePublished = isPublishedPageBlockStatus(row.template_status);
   const assignmentVisible = normalizeBoolean(row.is_visible, false);
+  const moduleLabel = moduleKindLabel(
+    row.module_kind,
+    row.template_slug,
+    row.template_variant,
+  );
   const hidden = { access: "hidden" as const };
   const reorderDisabledTitle =
     "أعد فرز العرض إلى الترتيب الافتراضي لاستخدام الترتيب اليدوي.";
@@ -103,7 +108,7 @@ export default function PageBlocksAssignmentRow({
         access: "allowed",
         title: `معلومات ${row.template_name}`,
         items: [
-          { label: "نوع الموديول", value: moduleKindLabel(row.module_kind) },
+          { label: "نوع الموديول", value: moduleLabel },
           { label: "المعرّف", value: row.template_slug },
           { label: "الموضع", value: LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)] },
           { label: "حالة النشر", value: templatePublished ? "منشور" : "غير منشور" },
@@ -148,7 +153,7 @@ export default function PageBlocksAssignmentRow({
               confirmation: {
                 mode: "shared",
                 title: "تأكيد الإزالة من الصفحة",
-                description: `إزالة ${moduleKindLabel(row.module_kind)} «${row.template_name}» من الصفحة؟ سيبقى القالب في المكتبة.`,
+                description: `إزالة ${moduleLabel} «${row.template_name}» من الصفحة؟ سيبقى القالب في المكتبة.`,
                 confirmLabel: "إزالة من الصفحة",
               },
             },
@@ -190,7 +195,7 @@ export default function PageBlocksAssignmentRow({
 
       {showModule ? (
         <AdminDataGridCenterCell className="truncate text-sm font-semibold text-white/75">
-          {moduleKindLabel(row.module_kind)}
+          {moduleLabel}
         </AdminDataGridCenterCell>
       ) : null}
 
