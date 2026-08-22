@@ -4,22 +4,30 @@
 
 import type { Json } from "../database.types";
 import {
+  normalizeHeroElementOrder,
   resolveHeroContentControls,
   type HeroContentControls,
+  type HeroElementKey,
 } from "../hero/hero-content-controls";
 
 export const PROJECTS_HUB_HERO_SELECTION_MODES = ["domain_projects"] as const;
 export type ProjectsHubHeroSelectionMode = (typeof PROJECTS_HUB_HERO_SELECTION_MODES)[number];
 export const PROJECTS_HUB_HERO_PROJECT_TYPES = ["residential", "commercial", "both"] as const;
 export type ProjectsHubHeroProjectType = (typeof PROJECTS_HUB_HERO_PROJECT_TYPES)[number];
-export const PROJECTS_HUB_HERO_VARIANTS = ["home-cinematic", "internal-page"] as const;
+/** The module adopts the platform variant; visual selection is renderer-owned. */
+export const PROJECTS_HUB_HERO_VARIANTS = ["projects-hub"] as const;
 export type ProjectsHubHeroVariant = (typeof PROJECTS_HUB_HERO_VARIANTS)[number];
+export const PROJECTS_HUB_HERO_ELEMENT_KEYS = [
+  "eyebrow",
+  "title",
+  "subtitle",
+  "description",
+  "cta",
+] as const satisfies readonly HeroElementKey[];
 
-export type ProjectsHubHeroProjectReference = {
-  projectId: number;
-  order: number;
-  visible: boolean;
-};
+export function normalizeProjectsHubHeroElementOrder(raw: unknown): HeroElementKey[] {
+  return normalizeHeroElementOrder(raw, PROJECTS_HUB_HERO_ELEMENT_KEYS);
+}
 
 export const PROJECTS_HUB_FEATURED_SELECTION_MODES = ["featured_flag"] as const;
 export type ProjectsHubFeaturedSelectionMode = (typeof PROJECTS_HUB_FEATURED_SELECTION_MODES)[number];
@@ -47,9 +55,9 @@ export type ProjectsHubHeroModuleConfig = {
   projectType: ProjectsHubHeroProjectType;
   variant: ProjectsHubHeroVariant;
   limit: number;
-  projectReferences: ProjectsHubHeroProjectReference[];
   autoplayMs: number;
   emptyState: string | null;
+  primaryCtaLabel: string;
 } & HeroContentControls;
 
 export type ProjectsHubFeaturedModuleConfig = {
@@ -106,9 +114,9 @@ export const PROJECTS_HUB_HERO_KEYS = [
   "projectType",
   "variant",
   "limit",
-  "projectReferences",
   "autoplayMs",
   "emptyState",
+  "primaryCtaLabel",
   "showEyebrow",
   "eyebrowBold",
   "eyebrowAlignment",
@@ -123,13 +131,25 @@ export const PROJECTS_HUB_HERO_KEYS = [
   "subtitleAlignment",
   "showDescription",
   "descriptionAlignment",
-  "showBreadcrumb",
-  "breadcrumbBold",
-  "breadcrumbAlignment",
-  "breadcrumbCurrentLabel",
   "showCta",
   "ctaAlignment",
   "heroElementOrder",
+] as const;
+
+/** Removed parallel Projects Hub Hero keys; purged when the canonical editor next saves. */
+export const PROJECTS_HUB_HERO_LEGACY_KEYS = [
+  "projectReferences",
+  "exploreLabel",
+  "exploreHref",
+  "showExploreLink",
+  "showExplore",
+  "exploreAlignment",
+  "project_references",
+  "explore_label",
+  "explore_href",
+  "show_explore_link",
+  "show_explore",
+  "explore_alignment",
 ] as const;
 export const PROJECTS_HUB_FEATURED_KEYS = [
   "selectionMode",
@@ -238,23 +258,9 @@ function readShowFlag(value: unknown, fallback = true) {
 
 export function asProjectsHubHeroConfig(raw: unknown): ProjectsHubHeroModuleConfig {
   const config = asRecord(raw);
+  const controls = resolveHeroContentControls(config);
   const selectionMode = readText(config.selectionMode);
   const projectTypeRaw = readText(config.projectType);
-  const variantRaw = readText(config.variant);
-  const referencesRaw = Array.isArray(config.projectReferences) ? config.projectReferences : [];
-  const projectReferences = referencesRaw
-    .map((item) => {
-      const reference = asRecord(item);
-      const projectId = Number(reference.projectId);
-      const order = Number(reference.order);
-      if (!Number.isSafeInteger(projectId) || projectId <= 0) return null;
-      return {
-        projectId,
-        order: Number.isSafeInteger(order) && order >= 0 ? order : 0,
-        visible: readShowFlag(reference.visible),
-      };
-    })
-    .filter((item): item is ProjectsHubHeroProjectReference => item !== null);
   return {
     selectionMode: PROJECTS_HUB_HERO_SELECTION_MODES.includes(selectionMode as ProjectsHubHeroSelectionMode)
       ? (selectionMode as ProjectsHubHeroSelectionMode)
@@ -262,14 +268,17 @@ export function asProjectsHubHeroConfig(raw: unknown): ProjectsHubHeroModuleConf
     projectType: PROJECTS_HUB_HERO_PROJECT_TYPES.includes(projectTypeRaw as ProjectsHubHeroProjectType)
       ? (projectTypeRaw as ProjectsHubHeroProjectType)
       : "residential",
-    variant: PROJECTS_HUB_HERO_VARIANTS.includes(variantRaw as ProjectsHubHeroVariant)
-      ? (variantRaw as ProjectsHubHeroVariant)
-      : "home-cinematic",
+    variant: "projects-hub",
     limit: Math.min(12, readPositiveInt(config.limit, 6)),
-    projectReferences,
     autoplayMs: readPositiveInt(config.autoplayMs, 6000),
     emptyState: config.emptyState == null || config.emptyState === "" ? null : readText(config.emptyState) || null,
-    ...resolveHeroContentControls(config),
+    primaryCtaLabel:
+      readText(config.primaryCtaLabel ?? config.primary_cta_label ?? config.exploreLabel ?? config.explore_label) ||
+      "استكشف المشروع",
+    ...controls,
+    heroElementOrder: normalizeProjectsHubHeroElementOrder(
+      config.heroElementOrder ?? config.hero_element_order,
+    ),
   };
 }
 
@@ -370,6 +379,7 @@ export function mergeProjectsHubConfig<
   existing: Json | undefined,
   typedPatch: T,
   knownKeys: readonly (keyof T & string)[],
+  removedKeys: readonly string[] = [],
 ): { [key: string]: Json | undefined } {
   const base: { [key: string]: Json | undefined } =
     existing && typeof existing === "object" && !Array.isArray(existing)
@@ -377,6 +387,9 @@ export function mergeProjectsHubConfig<
       : {};
   for (const key of knownKeys) {
     base[key] = typedPatch[key];
+  }
+  for (const key of removedKeys) {
+    delete base[key];
   }
   return base;
 }

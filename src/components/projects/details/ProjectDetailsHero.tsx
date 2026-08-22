@@ -11,14 +11,20 @@ type ProjectDetailsHeroProps = {
 
 export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps) {
   return (
-    <section className="relative isolate min-h-[620px] overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]">
+    <section
+      className="relative isolate min-h-[620px] overflow-hidden border-b border-[#D8B87A]/15 bg-[#05070B]"
+      dir="rtl"
+      data-hero-variant="project-detail"
+      data-hero-family="special"
+      data-hero-contract="shared"
+    >
       <PublicMediaImage
         src={project.heroImage.src}
         alt={project.heroImage.alt}
         fill
         loading="eager"
         sizes="100vw"
-        className="object-cover opacity-55"
+        className="opacity-55"
       />
 
       <div
@@ -63,7 +69,6 @@ export default function ProjectDetailsHero({ project }: ProjectDetailsHeroProps)
                   alt={project.heroBoxImage.alt}
                   fill
                   sizes="420px"
-                  className="object-cover"
                 />
 
                 <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/90 via-transparent to-transparent" />

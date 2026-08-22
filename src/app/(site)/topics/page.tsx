@@ -115,7 +115,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
       subtitle="محتوى توعوي واستثماري وهندسي يساعدك على اتخاذ قرارات عقارية أكثر وعيًا."
       heroImage="/images/venesia-5.png"
       dynamicHero={heroEntry?.hero ?? dynamicHero}
-      heroBelowTitle={
+      heroBreadcrumb={
         breadcrumbBlock ? (
           <BreadcrumbModuleSection config={asBreadcrumbConfig(breadcrumbBlock.template.config)} />
         ) : undefined

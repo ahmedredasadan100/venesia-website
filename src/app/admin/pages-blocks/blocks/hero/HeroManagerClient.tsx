@@ -52,6 +52,7 @@ import {
 } from "../../../../../lib/admin/entity-list";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../../../lib/admin/entity-list/bulk-action-labels";
 import { useAdminBoundedClientInstantMutation } from "../../../../../lib/admin/entity-list/data-engine/instant-mutation";
+import { HERO_TEMPLATE_VARIANT_OPTIONS_AR } from "../../../../../lib/hero/hero-content-controls";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -756,12 +757,9 @@ export default function HeroManagerClient({
               </label>
               <AdminFormListboxSelect
                 name="variant"
-                label="النمط"
+                label="نمط العرض"
                 defaultValue="internal-page"
-                options={[
-                  { value: "internal-page", label: "صفحة داخلية" },
-                  { value: "home-cinematic", label: "سينمائي للصفحة الرئيسية" },
-                ]}
+                options={HERO_TEMPLATE_VARIANT_OPTIONS_AR}
               />
               <ModuleEditorStatusSwitch
                 status="unpublished"

@@ -27,10 +27,12 @@ import {
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import {
-  normalizeHeroElementOrder,
-  parseHeroDescriptionAlignment,
-  parseHeroTextAlignment,
-  parseOptionalBool,
+  parseHeroTemplateVariant,
+  parseHeroContentControlsFormData,
+  normalizeHeroTemplateProductConfig,
+  resolveHeroContentControlsForVariant,
+  resolveHeroImageCompositionPreset,
+  type HeroTemplateVariant,
 } from "../../../../../lib/hero/hero-content-controls";
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
 import { mutatePageComposition } from "../../pages/page-actions/helpers";
@@ -46,10 +48,6 @@ export type HeroTemplateRow = Pick<
 
 function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
-}
-
-function formBool(formData: FormData, key: string, fallback = true) {
-  return parseOptionalBool(formData.get(key)) ?? fallback;
 }
 
 function splitImages(value: FormDataEntryValue | null) {
@@ -72,7 +70,7 @@ function parseNumber(value: FormDataEntryValue | null, fallback = 1) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function buildHeroConfig(formData: FormData) {
+function buildHeroConfig(formData: FormData, variant: HeroTemplateVariant) {
   const primaryCtaLabel = cleanText(formData.get("primary_cta_label"));
   const secondaryCtaLabel = cleanText(formData.get("secondary_cta_label"));
   const primaryCtaLink = serializeAdminLink(parseAdminLinkFromFormData(formData, "primary_cta"));
@@ -83,12 +81,13 @@ function buildHeroConfig(formData: FormData) {
 
   const hasInternalContentControls =
     formData.has("hero_element_order") || formData.has("show_eyebrow");
-
-  const showCtaFromContent = parseOptionalBool(formData.get("show_cta_element"));
-  const showCtaFromCheckbox = formData.get("show_cta") === "on";
+  const controls = resolveHeroContentControlsForVariant(
+    parseHeroContentControlsFormData(formData),
+    variant,
+  );
   const showCta = hasInternalContentControls
-    ? (showCtaFromContent ?? true)
-    : showCtaFromCheckbox || hasCtaContent;
+    ? controls.showCta
+    : formData.get("show_cta") === "on" || hasCtaContent;
 
   const descriptionRaw = String(formData.get("description") ?? "").trim();
   const description = hasInternalContentControls
@@ -110,7 +109,9 @@ function buildHeroConfig(formData: FormData) {
     secondaryCtaLabel,
     secondaryCtaLink,
     showCta,
-    imagePositionClassName: cleanText(formData.get("image_position_class")),
+    imageComposition: resolveHeroImageCompositionPreset(
+      formData.get("image_composition"),
+    ),
   };
 
   if (!hasInternalContentControls) {
@@ -119,33 +120,7 @@ function buildHeroConfig(formData: FormData) {
 
   return {
     ...base,
-    showEyebrow: formBool(formData, "show_eyebrow"),
-    eyebrowBold: formBool(formData, "eyebrow_bold", false),
-    eyebrowAlignment: parseHeroTextAlignment(formData.get("eyebrow_alignment"), "right"),
-
-    showTitle: formBool(formData, "show_title"),
-    titleBold: formBool(formData, "title_bold", true),
-    titleAlignment: parseHeroTextAlignment(formData.get("title_alignment"), "right"),
-
-    showHighlight: formBool(formData, "show_highlight"),
-    highlightBold: formBool(formData, "highlight_bold", false),
-    highlightAlignment: parseHeroTextAlignment(formData.get("highlight_alignment"), "right"),
-
-    showSubtitle: formBool(formData, "show_subtitle"),
-    subtitleBold: formBool(formData, "subtitle_bold", false),
-    subtitleAlignment: parseHeroTextAlignment(formData.get("subtitle_alignment"), "right"),
-
-    showDescription: formBool(formData, "show_description"),
-    descriptionAlignment: parseHeroDescriptionAlignment(formData.get("description_alignment"), "right"),
-
-    showBreadcrumb: formBool(formData, "show_breadcrumb"),
-    breadcrumbBold: formBool(formData, "breadcrumb_bold", false),
-    breadcrumbAlignment: parseHeroTextAlignment(formData.get("breadcrumb_alignment"), "right"),
-    breadcrumbCurrentLabel: cleanText(formData.get("breadcrumb_current_label")),
-
-    ctaAlignment: parseHeroTextAlignment(formData.get("cta_alignment"), "right"),
-
-    heroElementOrder: normalizeHeroElementOrder(formData.get("hero_element_order")),
+    ...controls,
   };
 }
 
@@ -242,18 +217,19 @@ export async function createHeroTemplate(
       );
     }
 
+    const variant = parseHeroTemplateVariant(formData.get("variant"));
     const nextRow = {
       name,
       slug,
       description: cleanText(formData.get("template_description")) || null,
-      variant: cleanText(formData.get("variant")) || "internal-page",
+      variant,
       style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
       source_type: "manual",
       source_id: null,
       source_slug: null,
       limit_count: 1,
       status: parseFormStatus(formData),
-      config: buildHeroConfig(formData),
+      config: buildHeroConfig(formData, variant),
     };
     const provisionalIdentity = `create:${crypto.randomUUID()}`;
     const coordinated = await coordinateMediaReferenceEntityMutation({
@@ -400,7 +376,12 @@ export async function duplicateHeroTemplate(formData: FormData) {
     limit_count: 1,
     status: "unpublished",
     sort_order: hero.sort_order + 1,
-    config: hero.config,
+    config: normalizeHeroTemplateProductConfig(
+      hero.config && typeof hero.config === "object" && !Array.isArray(hero.config)
+        ? hero.config as Record<string, unknown>
+        : {},
+      hero.variant,
+    ),
   };
   const provisionalIdentity = `duplicate:${id}:${crypto.randomUUID()}`;
   const coordinated = await coordinateMediaReferenceEntityMutation({
@@ -519,18 +500,19 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     throw new Error("الـ slug مستخدم بالفعل في Hero آخر.");
   }
 
+  const variant = parseHeroTemplateVariant(formData.get("variant"));
   const nextRow = {
     name,
     slug,
     description: cleanText(formData.get("template_description")) || null,
-    variant: cleanText(formData.get("variant")) || "internal-page",
+    variant,
     style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
     source_type: "manual",
     source_id: null,
     source_slug: null,
     limit_count: 1,
     status: parseFormStatus(formData),
-    config: buildHeroConfig(formData),
+    config: buildHeroConfig(formData, variant),
     updated_at: new Date().toISOString(),
   };
   const pageIds = [...new Set(formData.getAll("page_ids").map((value) => Number(value)).filter(Boolean))];

@@ -33,6 +33,7 @@ import {
   moduleKindLabel,
   normalizeBoolean,
 } from "../../../../../lib/page-blocks/admin-utils";
+import { resolveModuleProductKind } from "../../../../../lib/page-blocks/module-edit-registry";
 import {
   LAYOUT_SLOT_LABELS_AR,
   PAGE_LAYOUT_SLOT_ORDER,
@@ -174,7 +175,8 @@ export default function PageBlocksClient({
 
   const sortAccessors = useMemo(
     () => ({
-      module_kind: (row: PageBlockAssignmentRow) => moduleKindLabel(row.module_kind),
+      module_kind: (row: PageBlockAssignmentRow) =>
+        moduleKindLabel(row.module_kind, row.template_slug, row.template_variant),
       template_name: (row: PageBlockAssignmentRow) => row.template_name,
       slot: (row: PageBlockAssignmentRow) => PAGE_LAYOUT_SLOT_ORDER.indexOf(normalizeLayoutSlot(row.slot)),
       visibility: (row: PageBlockAssignmentRow) =>
@@ -189,7 +191,13 @@ export default function PageBlocksClient({
     sortAccessors,
   });
   const assignmentFilters = useMemo<readonly AdminEntityFilterDef[]>(() => {
-    const kinds = [...new Set(assignments.map((row) => row.module_kind))];
+    const kinds = [
+      ...new Set(
+        assignments.map((row) =>
+          resolveModuleProductKind(row.module_kind, row.template_slug, row.template_variant),
+        ),
+      ),
+    ];
     return [
       {
         id: "assignment-module-type",
@@ -237,14 +245,17 @@ export default function PageBlocksClient({
         if (
           query.search &&
           !adminCollectionSearchIncludes(
-            `${row.template_name} ${moduleKindLabel(row.module_kind)} ${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]} ${row.template_id}`,
+            `${row.template_name} ${moduleKindLabel(row.module_kind, row.template_slug, row.template_variant)} ${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]} ${row.template_id}`,
             query.search,
           )
         ) return false;
         const moduleType = query.filters.module_type;
         const slot = query.filters.slot;
         const visibility = query.filters.visibility;
-        if (moduleType !== "all" && row.module_kind !== moduleType) return false;
+        if (
+          moduleType !== "all" &&
+          resolveModuleProductKind(row.module_kind, row.template_slug, row.template_variant) !== moduleType
+        ) return false;
         if (slot !== "all" && normalizeLayoutSlot(row.slot) !== slot) return false;
         const rowVisibility = normalizeBoolean(row.is_publicly_visible, false)
           ? "visible"
@@ -274,11 +285,16 @@ export default function PageBlocksClient({
 
   const usedModuleKinds = useMemo(() => {
     const seen = new Set<string>();
-    const list: string[] = [];
+    const list: Array<{ productKind: string; listKind: string }> = [];
     for (const assignment of assignments) {
-      if (seen.has(assignment.module_kind)) continue;
-      seen.add(assignment.module_kind);
-      list.push(assignment.module_kind);
+      const productKind = resolveModuleProductKind(
+        assignment.module_kind,
+        assignment.template_slug,
+        assignment.template_variant,
+      );
+      if (seen.has(productKind)) continue;
+      seen.add(productKind);
+      list.push({ productKind, listKind: assignment.module_kind });
     }
     return list;
   }, [assignments]);

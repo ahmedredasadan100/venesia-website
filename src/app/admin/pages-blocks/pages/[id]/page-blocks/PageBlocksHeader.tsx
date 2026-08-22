@@ -20,7 +20,7 @@ type PageBlocksHeaderProps = {
 };
 
 type PageModuleKindsSummaryProps = {
-  usedModuleKinds: string[];
+  usedModuleKinds: Array<{ productKind: string; listKind: string }>;
 };
 
 function resolveEditorTitle(page: PageBlocksHeaderPage) {
@@ -36,13 +36,13 @@ export function PageModuleKindsSummary({ usedModuleKinds }: PageModuleKindsSumma
 
   return (
     <>
-      {usedModuleKinds.map((kind) => (
+      {usedModuleKinds.map(({ productKind, listKind }) => (
         <Link
-          key={kind}
-          href={moduleListHref(kind)}
+          key={productKind}
+          href={moduleListHref(listKind)}
           className="inline-flex items-center rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
         >
-          {moduleKindLabel(kind)}
+          {moduleKindLabel(productKind)}
         </Link>
       ))}
     </>

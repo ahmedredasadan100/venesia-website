@@ -14,7 +14,6 @@ export type MediaCenterShellConfig = {
   cmsPageSlug: MediaCenterCmsPageSlug;
   publicPath: string;
   heroImage: string;
-  heroImagePositionClassName?: string;
 };
 
 export const MEDIA_CENTER_CMS_PAGES: Record<MediaCenterCmsPageSlug, MediaCenterShellConfig> = {
@@ -22,7 +21,6 @@ export const MEDIA_CENTER_CMS_PAGES: Record<MediaCenterCmsPageSlug, MediaCenterS
     cmsPageSlug: "media-center",
     publicPath: "/media-center",
     heroImage: "/images/venesia-5.png",
-    heroImagePositionClassName: "object-[42%_36%]",
   },
   "media-center-news": {
     cmsPageSlug: "media-center-news",

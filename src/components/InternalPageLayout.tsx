@@ -1,7 +1,3 @@
-"use client";
-
-import Image from "next/image";
-
 import type { HeroSectionData } from "../lib/page-sections";
 import BreadcrumbModuleSection from "./modules/BreadcrumbModuleSection";
 import DynamicHeroSection from "./sections/DynamicHeroSection";
@@ -12,12 +8,11 @@ type InternalPageLayoutProps = {
   eyebrow?: string;
   subtitle?: string;
   breadcrumbCurrentLabel?: string;
-  heroHeightClassName?: string;
-  heroImagePositionClassName?: string;
   mainClassName?: string;
   children?: React.ReactNode;
   dynamicHero?: HeroSectionData | null;
-  heroBelowTitle?: React.ReactNode;
+  /** Page Composition-owned breadcrumb injected into the Standard Hero footer slot. */
+  heroBreadcrumb?: React.ReactNode;
   /** When false and dynamicHero is absent, static hero section is omitted (Home/Media CMS hide rule). */
   allowStaticHeroFallback?: boolean;
   showTitle?: boolean;
@@ -31,109 +26,41 @@ export default function InternalPageLayout({
   eyebrow,
   subtitle,
   breadcrumbCurrentLabel,
-  heroHeightClassName,
-  heroImagePositionClassName,
   mainClassName,
   children,
   dynamicHero,
-  heroBelowTitle,
+  heroBreadcrumb,
   allowStaticHeroFallback = true,
   showTitle = true,
   showHeroImage = true,
   showSubtitle = true,
 }: InternalPageLayoutProps) {
+  const shouldRenderHero = Boolean(dynamicHero) || allowStaticHeroFallback;
+  const heroCompositionFooter = shouldRenderHero
+    ? heroBreadcrumb ?? (
+        <BreadcrumbModuleSection currentLabelOverride={breadcrumbCurrentLabel} />
+      )
+    : null;
+
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white" dir="rtl">
       <div aria-hidden className="venesia-grain pointer-events-none fixed inset-0 z-[4]" />
 
       <main className={`relative z-10 min-h-[50vh] pb-20 ${mainClassName ?? ""}`.trim()}>
-        {dynamicHero ? (
+        {shouldRenderHero ? (
           <DynamicHeroSection
             hero={dynamicHero}
             fallbackTitle={title}
             fallbackEyebrow={eyebrow}
             fallbackSubtitle={subtitle}
             fallbackImage={heroImage}
-            belowTitle={heroBelowTitle}
+            compositionFooter={heroCompositionFooter}
+            fallbackVisibility={{
+              title: showTitle,
+              image: showHeroImage,
+              subtitle: showSubtitle,
+            }}
           />
-        ) : allowStaticHeroFallback ? (
-        <section
-          className={`relative isolate overflow-hidden bg-[#05070B] ${
-            heroHeightClassName ?? "h-[min(62vh,580px)] min-h-[440px]"
-          }`}
-        >
-          {heroImage && showHeroImage ? (
-            <>
-              <div className="absolute inset-0 z-0 overflow-hidden">
-                <Image
-                  src={heroImage}
-                  alt=""
-                  fill
-                  priority
-                  sizes="100vw"
-                  className={`hero-slide-ken-burns hero-slide-ken-burns-image pointer-events-none object-cover ${
-                    heroImagePositionClassName ?? "object-center"
-                  }`}
-                  style={{ filter: "brightness(1.04) contrast(1.04) saturate(1.02)" }}
-                />
-              </div>
-
-              <div aria-hidden className="pointer-events-none absolute inset-0 bg-[#05070B]/20" />
-
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_left,rgba(5,7,11,0.52)_0%,rgba(5,7,11,0.20)_26%,rgba(5,7,11,0.06)_44%,transparent_64%)]"
-              />
-
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_bottom,rgba(5,7,11,0.24)_0%,transparent_34%,rgba(5,7,11,0.68)_100%)]"
-              />
-
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-px bg-[linear-gradient(to_right,transparent,rgba(255,196,92,0.82)_50%,transparent)]"
-              />
-            </>
-          ) : (
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_75%_70%_at_18%_22%,rgba(192,143,62,0.11),transparent_64%),radial-gradient(ellipse_95%_74%_at_84%_18%,rgba(18,36,78,0.22),transparent_68%)]"
-            />
-          )}
-
-          <div className="relative z-10 flex h-full min-h-0 flex-col">
-            <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col justify-end px-6 pb-10 pt-20 sm:pb-12 sm:pt-24 md:pb-14 md:pt-28 lg:px-6 lg:pb-16">
-              <div className="grid w-full items-end gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
-                <div className="min-w-0">
-                  <p className="mb-5 flex items-center gap-3 font-en text-[10px] uppercase tracking-[0.2em] text-[#D8B87A]/55">
-                    <span className="h-px w-8 shrink-0 bg-gradient-to-r from-[#D8B87A]/60 to-transparent" />
-                    {eyebrow ?? "Internal Page"}
-                  </p>
-
-                  {showTitle ? (
-                    <h1 className="max-w-[14ch] text-[2rem] font-bold leading-[1.2] tracking-[-0.02em] text-white sm:text-4xl md:text-[2.5rem]">
-                      {title}
-                    </h1>
-                  ) : null}
-
-                  {showSubtitle && subtitle ? (
-                    <p className="mt-4 max-w-2xl text-[15px] leading-8 text-white/60 md:text-base md:leading-9">
-                      {subtitle}
-                    </p>
-                  ) : null}
-
-                  <BreadcrumbModuleSection
-                    currentLabelOverride={breadcrumbCurrentLabel}
-                    className="mt-6"
-                  />
-                </div>
-
-                <div aria-hidden className="hidden min-w-0 lg:block" />
-              </div>
-            </div>
-          </div>
-        </section>
         ) : null}
 
         <section className="mx-auto max-w-7xl px-6 pt-10">

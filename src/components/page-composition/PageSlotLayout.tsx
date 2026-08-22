@@ -7,7 +7,6 @@ import type { PageComposition, SlotEntry } from "../../lib/page-blocks/page-comp
 import { getSlotBlocks, getSlotEntries } from "../../lib/page-blocks/page-composition-utils";
 import { PAGE_LAYOUT_SLOT_ORDER, type PageLayoutSlot } from "../../lib/page-blocks/layout-slots";
 import { asBreadcrumbConfig } from "../../lib/page-blocks/configs";
-import { getHeroConfig } from "../../lib/page-sections";
 import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import { buildSlotRenderPlan } from "./build-slot-render-plan";
 
@@ -29,24 +28,13 @@ export function HeroSlotContent({ composition, fallbackHero }: HeroSlotContentPr
 
   if (!heroEntry) return null;
 
-  const heroConfig = getHeroConfig(heroEntry.hero);
   const breadcrumbNode = breadcrumbBlock ? (
     <BreadcrumbModuleSection
       config={asBreadcrumbConfig(breadcrumbBlock.template.config)}
-      alignment={heroConfig.breadcrumbAlignment}
-      bold={heroConfig.breadcrumbBold}
-      currentLabelOverride={heroConfig.breadcrumbCurrentLabel || undefined}
-      className=""
-      compact
     />
   ) : null;
 
-  return (
-    <DynamicHeroSection
-      hero={heroEntry.hero}
-      belowTitle={breadcrumbNode}
-    />
-  );
+  return <DynamicHeroSection hero={heroEntry.hero} compositionFooter={breadcrumbNode} />;
 }
 
 /**

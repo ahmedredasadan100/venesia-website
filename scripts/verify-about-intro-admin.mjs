@@ -26,6 +26,7 @@ const client = read("src/components/admin/page-blocks/ContentModuleEditClient.ts
 const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
 const presentationRegistry = read("src/lib/page-composition/module-registry-metadata.ts");
 const editor = read("src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx");
+const richTextEditor = read("src/components/admin/AdminRichTextEditor.tsx");
 const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 const whoWeAre = read("src/components/modules/WhoWeAreModuleSection.tsx");
 const mapper = read("src/components/about/about-cms-mappers.ts");
@@ -40,7 +41,11 @@ assert(
   !client.includes("ModuleDependencyHintsPanel"),
   "legacy ModuleDependencyHintsPanel must remain retired",
 );
-assert(presentation.includes("معرّف بنيوي للقراءة فقط"), "shared structural slug helper missing");
+assert(
+  presentation.includes('mode: "editable" | "hidden"') &&
+    presentation.includes('if (mode === "hidden") return <input type="hidden"'),
+  "shared structural slug helper missing",
+);
 assert(
   client.includes("usesLockedInternalSlug"),
   "about-intro slug must be read-only like home modules",
@@ -49,7 +54,12 @@ assert(client.includes('saveLabel="حفظ التعديلات"'), "about-intro sa
 
 assert(editor.includes('toolbarMode="minimal"'), "AdminRichTextEditor minimal toolbar missing");
 assert(editor.includes("enableTextAlign"), "AdminRichTextEditor text align missing");
-assert(editor.includes('toolbarPlacement="top"'), "AdminRichTextEditor top toolbar missing");
+assert(
+  !editor.includes("toolbarPlacement=") &&
+    !richTextEditor.includes("toolbarPlacement") &&
+    richTextEditor.indexOf("{showToolbar ? toolbar : null}") < richTextEditor.indexOf("admin-rich-text-editor min-w-0"),
+  "AdminRichTextEditor default top toolbar missing",
+);
 assert(editor.includes('name="body"'), "body rich text field missing");
 assert(!/eyebrow:\s*"Eyebrow"/.test(editor), "English Eyebrow label still present");
 assert(!/Badge \/ Number/.test(editor), "English Badge/Number label still present");

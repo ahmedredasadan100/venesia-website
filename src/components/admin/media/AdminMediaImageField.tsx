@@ -5,10 +5,11 @@ import { useRef, useState } from "react";
 
 import AdminMediaPickerModal from "./AdminMediaPickerModal";
 
-export type ImageDimensionHint = "hero" | "content";
+export type ImageDimensionHint = "hero" | "hero-mobile" | "content";
 
 const DIMENSION_HINTS: Record<ImageDimensionHint, string> = {
-  hero: "الأبعاد الموصى بها: 1920 × 1080 px (16:9)",
+  hero: "المقاس المستهدف بعد إعادة التحجيم: 1920 × 1080 px (16:9)",
+  "hero-mobile": "المقاس المستهدف بعد إعادة التحجيم: 1080 × 1920 px (9:16)",
   content: "الأبعاد الموصى بها: 1600 × 900 px (16:9)",
 };
 

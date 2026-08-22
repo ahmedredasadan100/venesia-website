@@ -1,48 +1,73 @@
 /**
- * Phase 3A foundation tests — no public CMS activation.
- * Does not mutate DB rows permanently. Does not enable PROJECTS_HUB_CMS on the long-lived server.
+ * Projects Hub CMS composition and activation contract tests.
+ * Does not mutate DB rows.
  */
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
-import { resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
+import ts from "typescript";
 
 // Load compiled-free TS via dynamic transpile is unavailable — duplicate minimal logic
 // by importing through next's resolution is hard. Instead import built helpers via tsx if present,
 // else re-implement assertions against source by spawning node with experimental strip.
 const require = createRequire(import.meta.url);
+const moduleCache = new Map();
 
-async function loadTs(relPath) {
+function resolveLocalModule(fromPath, specifier) {
+  const base = resolve(dirname(fromPath), specifier);
+  const candidates = extname(base)
+    ? [base]
+    : [`${base}.ts`, `${base}.tsx`, resolve(base, "index.ts"), resolve(base, "index.tsx")];
+  const match = candidates.find((candidate) => existsSync(candidate));
+  if (!match) throw new Error(`Cannot resolve ${specifier} from ${fromPath}`);
+  return match;
+}
+
+function loadTs(relPath) {
+  const absolutePath = resolve(relPath);
+  if (moduleCache.has(absolutePath)) return moduleCache.get(absolutePath).exports;
+
+  const commonJsModule = { exports: {} };
+  moduleCache.set(absolutePath, commonJsModule);
+  const output = ts.transpileModule(readFileSync(absolutePath, "utf8"), {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: absolutePath,
+  }).outputText;
+  const localRequire = (specifier) => {
+    if (specifier.startsWith(".")) {
+      return loadTs(resolveLocalModule(absolutePath, specifier));
+    }
+    if (specifier === "server-only") return {};
+    return require(specifier);
+  };
+
   try {
-    return await import(pathToFileURL(resolve(relPath)).href);
-  } catch {
-    // Fallback: use ts-node/register if available
-    require("ts-node/register/transpile-only");
-    return require(resolve(relPath));
+    Function("exports", "module", "require", "__filename", "__dirname", output)(
+      commonJsModule.exports,
+      commonJsModule,
+      localRequire,
+      absolutePath,
+      dirname(absolutePath),
+    );
+    return commonJsModule.exports;
+  } catch (error) {
+    moduleCache.delete(absolutePath);
+    throw error;
   }
 }
 
-const flagMod = await loadTs("src/lib/projects/projects-hub-cms-flag.ts");
-const planMod = await loadTs("src/lib/projects/build-projects-hub-render-plan.ts");
-const mapMod = await loadTs("src/lib/projects/map-projects-hub-module-props.ts");
-const helpersMod = await loadTs("src/lib/projects/public-helpers.ts");
+const planMod = loadTs("src/lib/projects/build-projects-hub-render-plan.ts");
+const mapMod = loadTs("src/lib/projects/map-projects-hub-module-props.ts");
+const helpersMod = loadTs("src/lib/projects/public-helpers.ts");
 
-const { isProjectsHubCmsEnabled } = flagMod;
 const { buildProjectsHubRenderPlan } = planMod;
 const { applyFeaturedLimit, mapProjectsHubListingProps } = mapMod;
 const { getHubFilterOptionsFromProjects, getProjectsByFilter, PROJECT_CATEGORY_LABELS } = helpersMod;
-
-delete process.env.PROJECTS_HUB_CMS;
-assert.equal(isProjectsHubCmsEnabled(), false, "missing env => false");
-process.env.PROJECTS_HUB_CMS = "false";
-assert.equal(isProjectsHubCmsEnabled(), false, "false => false");
-process.env.PROJECTS_HUB_CMS = "true";
-assert.equal(isProjectsHubCmsEnabled(), true, "true => true");
-process.env.NODE_ENV = "production";
-process.env.VERCEL = "1";
-delete process.env.PROJECTS_HUB_CMS;
-assert.equal(isProjectsHubCmsEnabled(), false, "NODE_ENV/VERCEL must not enable");
-delete process.env.VERCEL;
 
 function assignment(overrides) {
   return {
@@ -72,9 +97,9 @@ const baseComposition = {
         projectType: "both",
         variant: "home-cinematic",
         limit: 6,
-        projectReferences: [],
         autoplayMs: 6000,
         emptyState: null,
+        primaryCtaLabel: "استكشف المشروع",
       },
     }),
     assignment({
@@ -130,6 +155,41 @@ const baseComposition = {
       [40, "projects-hub-map"],
     ],
   );
+  const hero = plan.modules.find((module) => module.slug === "projects-hub-hero");
+  assert.equal(hero.config.showCta, true, "shared CTA defaults visible");
+  assert.equal(hero.config.primaryCtaLabel, "استكشف المشروع");
+  assert.deepEqual(
+    hero.config.heroElementOrder,
+    ["eyebrow", "title", "subtitle", "description", "cta"],
+    "Projects Hero ordering adopts the shared CTA slot and excludes unsupported fields",
+  );
+}
+
+// 1b. Versioned optional-section visibility is explicit and fail-closed.
+{
+  const explicitVisibility = {
+    ...baseComposition,
+    assignments: baseComposition.assignments.map((row) =>
+      row.templateSlug === "projects-hub-hero"
+        ? {
+            ...row,
+            config: {
+              ...row.config,
+              showEyebrow: false,
+              primaryCtaLabel: undefined,
+              showExploreLink: false,
+              exploreLabel: "تفاصيل المشروع",
+            },
+          }
+        : row,
+    ),
+  };
+  const plan = buildProjectsHubRenderPlan(explicitVisibility);
+  assert.equal(plan.ready, true);
+  const hero = plan.modules.find((module) => module.slug === "projects-hub-hero");
+  assert.equal(hero.config.showEyebrow, false);
+  assert.equal(hero.config.showCta, false, "legacy Explore visibility maps into canonical CTA");
+  assert.equal(hero.config.primaryCtaLabel, "تفاصيل المشروع", "legacy Explore label maps into canonical CTA");
 }
 
 // 2. Reordered mock assignments
@@ -171,7 +231,7 @@ const baseComposition = {
   );
 }
 
-// 3. Hidden assignment => incomplete (all-or-nothing) => Static path
+// 3. Hidden assignment => incomplete (all-or-nothing) => public route fails closed
 {
   const withHidden = {
     ...baseComposition,
@@ -343,7 +403,8 @@ console.log(
   JSON.stringify(
     {
       ok: true,
-      flagDefaultFalse: true,
+      noEnvironmentAdoptionGate: true,
+      heroOptionalSectionVisibility: true,
       planOrder: true,
       reorder: true,
       visibilityIncomplete: true,

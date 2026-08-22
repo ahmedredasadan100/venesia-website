@@ -2,6 +2,8 @@
 
 import AdminNotice from "../AdminNotice";
 import { AdminActionButton } from "../ui";
+import HeroCtaFields from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields";
+import HeroElementOrderEditor from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroElementOrderEditor";
 import {
   ModuleEditorHeader,
   ModuleEditorFeedback,
@@ -43,10 +45,12 @@ import {
   asProjectsHubHeroConfig,
   asProjectsHubListingConfig,
   asProjectsHubMapConfig,
+  PROJECTS_HUB_HERO_ELEMENT_KEYS,
 } from "../../../lib/page-blocks/projects-hub-config";
 import {
   getContentModuleEditorKey,
   isStructuralContentTemplateSlug,
+  resolveModuleProductKind,
 } from "../../../lib/page-blocks/module-edit-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 
@@ -73,6 +77,7 @@ export default function ContentModuleEditClient({
   updateAction,
 }: ContentModuleEditClientProps) {
   const editorKey = getContentModuleEditorKey(block.slug, block.variant);
+  const moduleProductKind = resolveModuleProductKind("content", block.slug, block.variant);
   const usesAboutIntroConfig = editorKey === "about-intro" || editorKey === "home-story";
   const isAboutIntroSingleImage = editorKey === "about-intro-single-image";
   const usesAboutPrinciplesConfig = editorKey === "about-principles" || editorKey === "home-trust";
@@ -125,6 +130,7 @@ export default function ContentModuleEditClient({
             : null;
 
   const isHomeStory = editorKey === "home-story";
+  const isProjectsHubHero = editorKey === "projects-hub-hero";
   const isHomeContact = editorKey === "home-contact";
   const isHomeProjects = editorKey === "home-projects";
   const isHomeTrust = editorKey === "home-trust";
@@ -147,6 +153,7 @@ export default function ContentModuleEditClient({
   const hubStatus = statusMeta(block.status);
   const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
   const homeContactConfig = isHomeContact ? (config as ReturnType<typeof asAboutCtaConfig>) : null;
+  const settingsFieldSpan = isProjectsHubHero ? 6 : 4;
 
   const settingsTab = {
     id: "settings",
@@ -161,21 +168,21 @@ export default function ContentModuleEditClient({
             inputClassName={fieldClassName()}
           />
         ) : null}
-        <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
+        <ModuleEditorFieldGrid className={isProjectsHubHero ? "lg:grid-cols-2 xl:grid-cols-12" : ""}>
+        <ModuleEditorField nature="standard" span={settingsFieldSpan}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">
             {usesAboutStructuredChrome ? "اسم الموديول" : "الاسم"}
           </span>
           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
         </label></ModuleEditorField>
         {!usesLockedInternalSlug ? (
-          <ModuleEditorField nature="technical" span={4}><ModuleEditorTechnicalIdentity
+          <ModuleEditorField nature="technical" span={settingsFieldSpan}><ModuleEditorTechnicalIdentity
             mode="editable"
             value={block.slug}
             inputClassName={fieldClassName()}
           /></ModuleEditorField>
         ) : null}
-        <ModuleEditorField nature="short-description" span={4}>
+        <ModuleEditorField nature="short-description" span={settingsFieldSpan}>
         {usesInternalDescriptionField ? (
           <label className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
@@ -195,7 +202,7 @@ export default function ContentModuleEditClient({
           </label>
         )}
         </ModuleEditorField>
-        <ModuleEditorField nature="binary-state" span={4}>
+        <ModuleEditorField nature="binary-state" span={settingsFieldSpan}>
           <ModuleEditorStatusSwitch status={block.status} />
         </ModuleEditorField>
         </ModuleEditorFieldGrid>
@@ -209,6 +216,47 @@ export default function ContentModuleEditClient({
     id: "pages",
     content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
   };
+
+  const heroPlatformTabs = isProjectsHubHero
+    ? [
+        {
+          id: "content",
+          content: <ProjectsHubHeroModuleEditor config={config as ReturnType<typeof asProjectsHubHeroConfig>} />,
+        },
+        {
+          id: "buttons",
+          content: (
+            <ModuleEditorSection>
+              <HeroCtaFields
+                primaryLabel={(config as ReturnType<typeof asProjectsHubHeroConfig>).primaryCtaLabel}
+                linkSource="project-domain"
+                showDefault={(config as ReturnType<typeof asProjectsHubHeroConfig>).showCta}
+                alignmentDefault={(config as ReturnType<typeof asProjectsHubHeroConfig>).ctaAlignment}
+              />
+            </ModuleEditorSection>
+          ),
+        },
+        {
+          id: "order",
+          content: (
+            <ModuleEditorSection>
+              <HeroElementOrderEditor
+                defaultOrder={(config as ReturnType<typeof asProjectsHubHeroConfig>).heroElementOrder}
+                allowedKeys={PROJECTS_HUB_HERO_ELEMENT_KEYS}
+              />
+            </ModuleEditorSection>
+          ),
+        },
+        {
+          id: "display",
+          content: (
+            <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext}>
+              {settingsTab.content}
+            </ModuleEditorPagesTab>
+          ),
+        },
+      ]
+    : null;
 
   const homeStoryTabs = homeStoryConfig
     ? [
@@ -476,7 +524,7 @@ export default function ContentModuleEditClient({
         />
       ) : projectsHubNavigation ? (
         <ModuleEditorHeader
-          moduleKind="content"
+          moduleKind={moduleProductKind}
           moduleSlug={presentationSlug}
           entityName={block.name}
           backHref={projectsHubNavigation.backHref}
@@ -544,6 +592,13 @@ export default function ContentModuleEditClient({
         {editorKey === "about-approach" ? <input type="hidden" name="config_schema" value="about-approach" /> : null}
         {editorKey === "home-projects" ? <input type="hidden" name="config_schema" value="home-projects" /> : null}
         {editorKey === "projects-hub-hero" ? <input type="hidden" name="config_schema" value="projects-hub-hero" /> : null}
+        {editorKey === "projects-hub-hero" ? (
+          <input
+            type="hidden"
+            name="hero_variant"
+            value={(config as ReturnType<typeof asProjectsHubHeroConfig>).variant}
+          />
+        ) : null}
         {editorKey === "projects-hub-featured" ? (
           <input type="hidden" name="config_schema" value="projects-hub-featured" />
         ) : null}
@@ -552,7 +607,9 @@ export default function ContentModuleEditClient({
         ) : null}
         {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
 
-        {isHomeStory ? (
+        {heroPlatformTabs ? (
+          <ModuleEditorTabs moduleKind="hero" nowrap tabs={heroPlatformTabs} activePanelContext={activePanelContext} />
+        ) : isHomeStory ? (
           <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeStoryTabs} activePanelContext={activePanelContext} />
         ) : isHomeContact ? (
           <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeContactTabs} activePanelContext={activePanelContext} />
@@ -592,8 +649,6 @@ export default function ContentModuleEditClient({
                     />
                   ) : editorKey === "about-approach" ? (
                     <AboutApproachModuleEditor config={config as ReturnType<typeof asAboutApproachConfig>} />
-                  ) : editorKey === "projects-hub-hero" ? (
-                    <ProjectsHubHeroModuleEditor config={config as ReturnType<typeof asProjectsHubHeroConfig>} />
                   ) : editorKey === "projects-hub-featured" ? (
                     <ProjectsHubFeaturedModuleEditor
                       config={config as ReturnType<typeof asProjectsHubFeaturedConfig>}

@@ -33,12 +33,24 @@ assert.match(heroAdapter, /adaptProjectsToHeroSlides/);
 assert.match(heroAdapter, /project\.heroImage\.src/);
 assert.doesNotMatch(heroConfig, /arabicName|englishName|heroImage|shortDescription/,
   "Hero config must not copy Project domain data");
-for (const token of ["projectType", "projectReferences", "limit", "visible", "order", "heroElementOrder"]) {
+for (const token of ["projectType", "limit", "heroElementOrder", "showCta", "ctaAlignment", "primaryCtaLabel", "projects-hub"]) {
   assert.ok(heroConfig.includes(token), `Hero contract missing ${token}`);
 }
 assert.match(heroConsumer, /DynamicHeroSection/);
-assert.match(heroRenderer, /onError=\{\(\) => setFailedSourceKey\(sourceKey\)\}/,
-  "art-directed Hero images must fall back after a selected source fails");
+assert.doesNotMatch(heroConsumer, /BreadcrumbModuleSection/);
+assert.doesNotMatch(heroRenderer, /belowTitle|breadcrumb/);
+assert.match(heroAdapter, /sortProjectsByHomepageOrder\(projects\)/,
+  "Projects Hero must consume the Projects Domain ordering owner");
+assert.doesNotMatch(heroAdapter, /config\.projectReferences/,
+  "Projects Hero must not apply parallel project ordering");
+assert.match(heroAdapter, /primaryCtaLabel:/,
+  "Projects Hero must adopt the shared CTA contract");
+assert.match(heroAdapter, /primaryCtaHref:\s*config\.showCta\s*\?\s*getProjectHref\(project\)/,
+  "Projects Hero CTA links must resolve from the Project domain");
+assert.match(heroRenderer, /PublicArtDirectedMediaImage/,
+  "art-directed Hero images must adopt the shared public image owner");
+assert.match(publicMediaImage, /onError=\{\(\) => setFailedSourceKey\(sourceKey\)\}/,
+  "the shared public image owner must fall back after an art-directed source fails");
 assert.match(heroRenderer, /setPreparedSlideIndexes\(new Set\(\[safeIndex, nextIndex\]\)\)/,
   "Hero image preparation must replace its bounded window instead of accumulating slides");
 assert.match(publicMediaImage, /PUBLIC_MEDIA_IMAGE_FALLBACK/);

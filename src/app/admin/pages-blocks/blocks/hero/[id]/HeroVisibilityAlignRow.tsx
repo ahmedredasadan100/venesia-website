@@ -9,8 +9,10 @@ type HeroVisibilityAlignRowProps = {
   label: string;
   alignmentName: string;
   showName: string;
+  boldName?: string;
   alignmentDefault?: HeroTextAlignment;
   showDefault?: boolean;
+  boldDefault?: boolean;
   /** When false, only show/hide is rendered (useful when alignment lives in Rich Text). */
   enableAlignment?: boolean;
   children?: ReactNode;
@@ -19,19 +21,27 @@ type HeroVisibilityAlignRowProps = {
 
 function toolClass(active: boolean) {
   return [
-    "inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border text-xs font-semibold transition",
+    "inline-flex h-9 min-w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg px-2 text-xs font-semibold transition sm:min-w-14 sm:px-3",
     active
-      ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
-      : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
+      ? "bg-[#D8B87A]/16 text-[#F2D99B] shadow-[0_0_0_1px_rgba(216,184,122,0.28)]"
+      : "text-white/55 hover:bg-white/[0.05] hover:text-white/85",
   ].join(" ");
 }
+
+const ALIGN_OPTIONS: Array<{ value: HeroTextAlignment; label: string; title: string }> = [
+  { value: "right", label: "يمين", title: "محاذاة لليمين" },
+  { value: "center", label: "وسط", title: "محاذاة للوسط" },
+  { value: "left", label: "يسار", title: "محاذاة لليسار" },
+];
 
 export default function HeroVisibilityAlignRow({
   label,
   alignmentName,
   showName,
+  boldName,
   alignmentDefault = "right",
   showDefault = true,
+  boldDefault = false,
   enableAlignment = true,
   children,
   helperText,
@@ -39,20 +49,38 @@ export default function HeroVisibilityAlignRow({
   const [alignment, setAlignment] = useState<HeroTextAlignment>(alignmentDefault);
   const [show, setShow] = useState(showDefault);
 
-  const alignOptions: Array<{ value: HeroTextAlignment; label: string; title: string }> = [
-    { value: "right", label: "يمين", title: "محاذاة لليمين" },
-    { value: "center", label: "وسط", title: "محاذاة للوسط" },
-    { value: "left", label: "يسار", title: "محاذاة لليسار" },
-  ];
-
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs font-semibold text-white/55">{label}</span>
-        <input type="hidden" name={alignmentName} value={alignment} />
-        <div className="flex shrink-0 flex-wrap gap-1.5" role="toolbar" aria-label={`إعدادات ${label}`}>
-          {enableAlignment
-            ? alignOptions.map((option) => {
+    <div
+      data-hero-control-row=""
+      className="rounded-2xl border border-white/10 bg-[#05070B]/72 p-4"
+    >
+      <div className="flex flex-col gap-3">
+        <span className="text-sm font-semibold text-white/78">{label}</span>
+        {enableAlignment ? <input type="hidden" name={alignmentName} value={alignment} /> : null}
+        {boldName ? <input type="hidden" name={boldName} value={String(boldDefault)} /> : null}
+        <div
+          className="flex w-full flex-nowrap items-center justify-between gap-2"
+          role="toolbar"
+          aria-label={`إعدادات ${label}`}
+          dir="rtl"
+        >
+          <AdminFormSwitch
+            name={showName}
+            label={show ? "ظاهر" : "مخفي"}
+            value="true"
+            uncheckedValue="false"
+            checked={show}
+            onChange={(event) => setShow(event.target.checked)}
+            wrapLabel
+            className="h-9 min-w-24 justify-between border border-white/10 bg-white/[0.035] px-3 py-2 sm:min-w-28"
+          />
+          {enableAlignment ? (
+            <div
+              className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-black/20 p-1"
+              role="group"
+              aria-label={`محاذاة ${label}`}
+            >
+              {ALIGN_OPTIONS.map((option) => {
                 const active = option.value === alignment;
                 return (
                   <button
@@ -67,22 +95,13 @@ export default function HeroVisibilityAlignRow({
                     {option.label}
                   </button>
                 );
-              })
-            : null}
-          <AdminFormSwitch
-            name={showName}
-            label={show ? "ظاهر" : "مخفي"}
-            value="true"
-            uncheckedValue="false"
-            checked={show}
-            onChange={(event) => setShow(event.target.checked)}
-            surface
-            className="min-w-32"
-          />
+              })}
+            </div>
+          ) : null}
         </div>
       </div>
-      {children}
-      {helperText ? <p className="text-xs leading-6 text-white/45">{helperText}</p> : null}
+      {children ? <div className="mt-3">{children}</div> : null}
+      {helperText ? <p className="mt-3 text-xs leading-6 text-white/45">{helperText}</p> : null}
     </div>
   );
 }

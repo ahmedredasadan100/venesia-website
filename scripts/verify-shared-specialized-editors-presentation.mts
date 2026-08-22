@@ -4,7 +4,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 
-import { STRUCTURAL_CONTENT_TEMPLATE_SLUGS } from "../src/lib/page-blocks/module-edit-registry.ts";
+import {
+  STRUCTURAL_CONTENT_TEMPLATE_SLUGS,
+  resolveModuleProductKind,
+} from "../src/lib/page-blocks/module-edit-registry.ts";
 import {
   getModuleEditorHeaderMetadata,
   getModuleEditorSectionOrder,
@@ -532,6 +535,7 @@ const specializedContentTabVariables: Partial<
   "home-story": "homeStoryTabs",
   "home-contact": "homeContactTabs",
   "about-cta": "aboutCtaTabs",
+  "projects-hub-hero": "heroPlatformTabs",
 };
 
 const contentEditorInventory: ModuleEditorMetadataInventoryEntry[] = [
@@ -552,7 +556,7 @@ const contentEditorInventory: ModuleEditorMetadataInventoryEntry[] = [
     );
     return {
       sourcePath: contentEditorPath,
-      moduleKind: "content",
+      moduleKind: resolveModuleProductKind("content", moduleSlug, moduleSlug),
       moduleSlug,
       tabIds,
     };
@@ -753,8 +757,10 @@ check(
       "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
-      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
     ].every((path) => read(path).includes("AdminFormSwitch")) &&
+    read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx").includes("HeroTextFieldRow") &&
+    read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields.tsx").includes("HeroVisibilityAlignRow") &&
+    read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx").includes("AdminFormSwitch") &&
     [
       "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
       "src/components/admin/page-blocks/FeedModuleEditClient.tsx",

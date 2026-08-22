@@ -55,10 +55,14 @@ function loadTranspiledModule(
   return targetModule.exports;
 }
 
+const moduleEditRegistry = loadTranspiledModule(
+  "src/lib/page-blocks/module-edit-registry.ts",
+);
 const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "../admin/content/content-status-metadata": {
     getContentStatusMetadata: () => ({}),
   },
+  "./module-edit-registry": moduleEditRegistry,
 });
 const feedTypes = loadTranspiledModule("src/lib/feed-modules/types.ts");
 const feedConfigContract = loadTranspiledModule(

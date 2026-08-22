@@ -11,7 +11,10 @@ const { Client } = pg;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = join(ROOT, "sql", "migrations");
 const MIGRATION_FILE = /^(\d{14})_([a-z0-9_]+)\.sql$/u;
-const VERSION_ALIASES = new Map([["20260717063702", "20260717070000"]]);
+const VERSION_ALIASES = new Map([
+  ["20260717063702", "20260717070000"],
+  ["20260822094544", "20260822090000"],
+]);
 
 type Migration = {
   version: string;
