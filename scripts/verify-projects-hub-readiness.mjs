@@ -161,13 +161,15 @@ assert(
 );
 
 assert(
-  heroContractSrc.includes('HERO_TEMPLATE_VARIANTS = ["home-cinematic", "internal-page"]') &&
+  heroContractSrc.includes("HERO_TEMPLATE_VARIANTS = [") &&
+    heroContractSrc.includes('"project-detail",') &&
+    heroContractSrc.includes('HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS = ["project-detail"]') &&
     heroContractSrc.includes("HERO_TEMPLATE_VARIANT_OPTIONS_AR") &&
     heroContractSrc.includes("parseHeroTemplateVariant") &&
     read("src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx").includes("HERO_TEMPLATE_VARIANT_OPTIONS_AR") &&
     read("src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx").includes("HERO_TEMPLATE_VARIANT_OPTIONS_AR") &&
     genericHeroActionsSrc.match(/parseHeroTemplateVariant\(formData\.get\("variant"\)\)/g)?.length === 2,
-  "Generic Hero editor variants must exclude domain-owned Hero pipelines",
+  "Hero Template variants must author presentation while domain-backed content ownership remains explicit",
 );
 
 assert(heroAdapterSrc.includes("sortProjectsByHomepageOrder(projects)"), "Hero must consume Projects Domain ordering");

@@ -11,10 +11,10 @@ function showColumnDivider(index: number, total: number) {
 }
 
 function gridColumnsClass(count: number) {
-  if (count <= 1) return "md:grid-cols-1";
-  if (count === 2) return "md:grid-cols-2";
-  if (count === 4) return "md:grid-cols-2 lg:grid-cols-4";
-  return "md:grid-cols-3";
+  if (count <= 1) return "@xl/slot-module:grid-cols-1";
+  if (count === 2) return "@xl/slot-module:grid-cols-2";
+  if (count === 4) return "@xl/slot-module:grid-cols-2 @5xl/slot-module:grid-cols-4";
+  return "@3xl/slot-module:grid-cols-3";
 }
 
 function itemPaddingClass(count: number) {
@@ -37,7 +37,7 @@ export default function AboutPrinciplesModuleSection({ cmsContent }: AboutPrinci
   const itemPad = itemPaddingClass(principles.length);
 
   return (
-    <section className="relative py-16 md:py-20">
+    <section className="relative py-12 @xl/slot-module:py-16 @4xl/slot-module:py-20">
       <div className="mx-auto max-w-7xl px-6">
         <div data-reveal className="mb-3 text-center">
           {section.eyebrow.trim() ? (
@@ -45,7 +45,7 @@ export default function AboutPrinciplesModuleSection({ cmsContent }: AboutPrinci
           ) : null}
 
           {section.title.trim() ? (
-            <h2 className="mt-1 text-2xl font-bold tracking-[-0.03em] text-white md:text-3xl">{section.title}</h2>
+            <h2 className="mt-1 text-2xl font-bold tracking-[-0.03em] text-white @xl/slot-module:text-3xl">{section.title}</h2>
           ) : null}
 
           <div className="mx-auto mt-3 h-[3px] w-20 rounded-full bg-white/80" />
@@ -62,7 +62,7 @@ export default function AboutPrinciplesModuleSection({ cmsContent }: AboutPrinci
                   className={`relative ${itemPad} text-center`}
                 >
                   {showColumnDivider(index, principles.length) ? (
-                    <div className="absolute left-0 top-1/2 hidden h-24 w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent md:block" />
+                    <div className="absolute left-0 top-1/2 hidden h-24 w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-[#D8B87A]/45 to-transparent @xl/slot-module:block" />
                   ) : null}
 
                   <div className="mx-auto mb-5 flex justify-center text-[#D8B87A]">

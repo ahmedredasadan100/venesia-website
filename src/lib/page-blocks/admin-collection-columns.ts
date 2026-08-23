@@ -32,6 +32,13 @@ const blockTemplateColumns = [
   { key: "actions", label: "الإجراءات", defaultVisible: true, hideable: false },
 ] as const satisfies readonly PageCompositionColumnMeta[];
 
+const breadcrumbTemplateColumns = [
+  { key: "selection", label: "التحديد", defaultVisible: true, hideable: false },
+  { key: "name", label: "الاسم", defaultVisible: true, hideable: false },
+  { key: "status", label: "الحالة", defaultVisible: true, hideable: true },
+  { key: "actions", label: "الإجراءات", defaultVisible: true, hideable: false },
+] as const satisfies readonly PageCompositionColumnMeta[];
+
 const blockSummaryColumns = [
   { key: "name", label: "الاسم", defaultVisible: true, hideable: false },
   { key: "slug", label: "المعرّف", defaultVisible: true, hideable: true },
@@ -60,7 +67,7 @@ const pageAssignmentColumns = [
   { key: "selection", label: "التحديد", defaultVisible: true, hideable: false },
   { key: "template", label: "القالب", defaultVisible: true, hideable: false },
   { key: "module", label: "النوع", defaultVisible: true, hideable: true },
-  { key: "slot", label: "الموضع", defaultVisible: true, hideable: false },
+  { key: "slot", label: "موضع العرض", defaultVisible: true, hideable: false },
   { key: "status", label: "الحالة", defaultVisible: true, hideable: true },
   { key: "actions", label: "الإجراءات", defaultVisible: true, hideable: false },
 ] as const satisfies readonly PageCompositionColumnMeta[];
@@ -84,7 +91,7 @@ export const PAGE_COMPOSITION_COLUMN_PREFERENCES = {
   },
   breadcrumbTemplates: {
     viewKey: "page-composition:breadcrumb-templates",
-    columns: blockTemplateColumns,
+    columns: breadcrumbTemplateColumns,
     consumerSourceFiles: [
       "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
     ],

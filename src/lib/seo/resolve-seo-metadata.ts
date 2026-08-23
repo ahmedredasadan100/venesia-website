@@ -3,8 +3,17 @@ import { SEO_DEFAULTS } from "../../config/seo/seo-rules";
 import { SEO_SITE } from "../../config/seo/seo-site";
 import type { SeoRobotsDirective } from "../../config/seo/seo-types";
 import type { GlobalSeoSettings } from "./global-seo-types";
-import type { ResolveSeoMetadataInput, ResolvedSeoMetadata } from "./entity-seo-types";
-import { buildCanonicalWithBase } from "./seo-utils";
+import {
+  hasEntitySeoData,
+  type ResolveSeoMetadataInput,
+  type ResolvedSeoMetadata,
+} from "./entity-seo-types";
+import {
+  buildCanonicalWithBase,
+  composeSeoTitle,
+  getSeoTitleSuffix,
+  stripSeoTitleSuffix,
+} from "./seo-utils";
 
 function pickString(...values: Array<string | null | undefined>) {
   for (const value of values) {
@@ -60,21 +69,50 @@ export function resolveSeoMetadata(
   const route = getSeoRoute(input.path);
   const metadataBase = pickString(global.canonicalBaseUrl, global.siteUrl, SEO_SITE.defaultUrl);
 
-  const title = pickString(
-    input.entitySeo?.title,
-    input.title,
-    route?.title,
-    global.defaultTitle,
-    SEO_DEFAULTS.fallbackTitle,
+  const hasRouteSeo = Boolean(
+    route?.title ||
+      route?.description ||
+      route?.openGraph?.image ||
+      route?.alternates?.canonical ||
+      route?.robots,
   );
+  const hasExplicitSeoWithoutEntityContract =
+    input.entitySeo === undefined &&
+    Boolean(
+      input.title?.trim() ||
+        input.description?.trim() ||
+        input.keywords?.length ||
+        input.image?.trim() ||
+        input.imageAlt?.trim() ||
+        input.robots,
+    );
+  const hasLocalSeo =
+    hasEntitySeoData(input.entitySeo) ||
+    hasRouteSeo ||
+    hasExplicitSeoWithoutEntityContract;
 
-  const description = pickString(
-    input.entitySeo?.description,
-    input.description,
-    route?.description,
-    global.defaultDescription,
-    SEO_DEFAULTS.fallbackDescription,
+  const preferredTitle = pickString(
+    input.entitySeo?.title,
   );
+  const fallbackTitle = pickString(input.title, route?.title);
+  const titleSuffix = getSeoTitleSuffix(global);
+  const normalizedPreferredTitle =
+    preferredTitle && preferredTitle === global.defaultTitle
+      ? ""
+      : stripSeoTitleSuffix(preferredTitle, titleSuffix);
+  const title = hasLocalSeo && (normalizedPreferredTitle || fallbackTitle)
+    ? composeSeoTitle(normalizedPreferredTitle, fallbackTitle, titleSuffix)
+    : pickString(global.defaultTitle, SEO_DEFAULTS.fallbackTitle);
+
+  const description = hasLocalSeo
+    ? pickString(
+        input.entitySeo?.description,
+        input.description,
+        route?.description,
+        global.defaultDescription,
+        SEO_DEFAULTS.fallbackDescription,
+      )
+    : pickString(global.defaultDescription, SEO_DEFAULTS.fallbackDescription);
 
   const keywords = pickKeywords(
     input.entitySeo?.keywords,
@@ -82,12 +120,14 @@ export function resolveSeoMetadata(
   );
 
   const entityOgImage = pickString(input.entitySeo?.ogImage);
-  const specificImage = pickString(
-    entityOgImage,
-    input.image,
-    input.entitySeo?.image,
-    route?.openGraph?.image,
-  );
+  const specificImage = hasLocalSeo
+    ? pickString(
+        entityOgImage,
+        input.image,
+        input.entitySeo?.image,
+        route?.openGraph?.image,
+      )
+    : "";
   const image = pickString(
     specificImage,
     global.defaultOgImage,

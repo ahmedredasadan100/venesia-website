@@ -11,7 +11,6 @@ const footerSave = read("src/app/admin/pages-blocks/footer/footer-actions/save.t
 const footerRestore = read("src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts");
 const footerHelpers = read("src/app/admin/pages-blocks/footer/footer-actions/helpers.ts");
 const siteLayout = read("src/app/(site)/layout.tsx");
-const homePlan = read("src/components/home/build-home-main-render-plan.ts");
 const homeContent = read("src/components/home/HomeMainSlotContent.tsx");
 const homeSections = [
   "HomeStorySection.tsx",
@@ -35,8 +34,7 @@ assert.ok(footerLoader.includes('sourceStatus: "database"') && footerLoader.incl
 assert.ok(!footerLoader.includes("buildSlotsFromLegacy") && !siteLayout.includes("DEFAULT_FOOTER_SETTINGS"), "Public Footer must not use a hidden legacy/default composition fallback");
 assert.ok(footerHelpers.includes('rpc("save_footer_settings"') && footerSave.includes("saveFooterSettingsWithAudit") && footerRestore.includes("saveFooterSettingsWithAudit"), "Footer persistence and Audit must share the atomic owner");
 
-assert.ok(!homePlan.includes('source: "fallback"') && !homePlan.includes("HOME_MAIN_PLACEMENTS"), "Home render plan must be CMS-only");
-assert.ok(!homeContent.includes("HomeStorySection") && !homeContent.includes("HomeContactSection"), "Home content owner must not render hardcoded section fallbacks");
+assert.ok(homeContent.includes("PageSlotContent") && !homeContent.includes("HomeStorySection") && !homeContent.includes("HomeContactSection"), "Home must use the shared CMS-only renderer without hardcoded section fallbacks");
 for (const source of homeSections) {
   assert.ok(!source.includes("STATIC_DEFAULTS"), "Home sections must not hide persisted gaps behind static content");
   assert.ok(source.includes("content:"), "Home section content must be required from the CMS mapper");
@@ -45,11 +43,12 @@ for (const source of homeSections) {
 assert.ok(compositionTypes.includes("mediaHubModules") && compositionTypes.includes("mediaSidebarModules") && compositionTypes.includes("heroVisibility"), "Page Composition must own specialized Media states and Hero visibility");
 assert.ok(compositionLoader.includes("queryMediaHubModules") && compositionLoader.includes("queryMediaSidebarModules"), "Page Composition must aggregate Media Hub/Sidebar queries");
 for (const consumer of [mediaHubConsumer, mediaListingConsumer, mediaDetailConsumer]) {
-  assert.ok(consumer.includes("composition.mediaSidebarModules"), "Media public consumer must receive sidebar truth from Page Composition");
   assert.ok(!consumer.includes("loadMediaCenterSidebarProps") && !consumer.includes("loadMediaSidebarModules"), "Parallel Media Sidebar public loader is forbidden");
 }
+assert.ok(compositionLoader.includes("slots.sidebar.push") && !compositionLoader.includes("if (!isMediaCenterPage)"), "Media Sidebar truth must enter the canonical Page Composition slot path");
+assert.ok(!mediaHubConsumer.includes("MediaSidebar") && !mediaListingConsumer.includes("sidebarModules=") && !mediaDetailConsumer.includes("sidebarModules="), "Media consumers must not render the specialized Sidebar in parallel");
 assert.ok(mediaHubConsumer.includes("composition.mediaHubModules") && !mediaHubConsumer.includes("loadMediaHubModules"), "Media Hub public consumer must use Page Composition");
-assert.ok(mediaShell.includes("composition: PageComposition") && !mediaShell.includes("loadPageCompositionBySlug") && mediaShell.includes("allowStaticHeroFallback={false}"), "Media shell must consume one passed composition without a static hero fallback");
+assert.ok(mediaShell.includes("composition: PageComposition") && !mediaShell.includes("loadPageCompositionBySlug") && mediaShell.includes("<PageSlotLayout"), "Media shell must consume one passed composition through the shared renderer without a static hero fallback");
 
 assert.ok(cacheOwner.includes('"media-center", "media-sidebar"') && cacheOwner.includes('revalidateTag(tag, "max")'), "Page Composition cache owner must cover specialized Media tags with current Next semantics");
 for (const check of ["footer_single_source", "home_composition_assignment_count", "media_hub_composition_assignment_count", "media_sidebar_composition_assignment_count", "public_composition_reference_integrity", "footer_public_composition_audit_evidence"]) {

@@ -139,6 +139,7 @@ export type HomeProjectsModuleConfig = {
   showEyebrow?: boolean;
   showTitle?: boolean;
   showIntro?: boolean;
+  showProjectLocation?: boolean;
   showFooterCta?: boolean;
   projectsLimit?: number;
   /**
@@ -207,6 +208,57 @@ export type BreadcrumbBlockConfig = {
   currentLabelOverride?: string;
   manualItems?: BreadcrumbBlockItem[];
 };
+
+const PAGE_BLOCK_SEO_TEXT_KEYS = new Set([
+  "eyebrow",
+  "title",
+  "subtitle",
+  "body",
+  "description",
+  "text",
+  "intro",
+  "highlight",
+  "note",
+  "label",
+  "value",
+  "secondaryValue",
+  "num",
+  "currentLabelOverride",
+  "question",
+  "answer",
+]);
+
+/**
+ * Extracts authored, visible copy from the existing Page Block config truth.
+ * URLs, image paths, identifiers, icons, and presentation controls are excluded.
+ */
+export function extractPageBlockSeoText(config: unknown): string {
+  const values: string[] = [];
+
+  function visit(value: unknown, key: string | null) {
+    if (typeof value === "string") {
+      const cleaned = value.trim();
+      if (cleaned && key && PAGE_BLOCK_SEO_TEXT_KEYS.has(key)) {
+        values.push(cleaned);
+      }
+      return;
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item, key);
+      return;
+    }
+    if (!value || typeof value !== "object") return;
+    const record = value as Record<string, unknown>;
+    for (const [nestedKey, nestedValue] of Object.entries(record)) {
+      const visibilityKey = `show${nestedKey.charAt(0).toUpperCase()}${nestedKey.slice(1)}`;
+      if (record[visibilityKey] === false) continue;
+      visit(nestedValue, nestedKey);
+    }
+  }
+
+  visit(config, null);
+  return values.join("\n");
+}
 
 export function asContentConfig(raw: unknown): ContentBlockConfig {
   return (raw ?? {}) as ContentBlockConfig;
@@ -277,7 +329,8 @@ export function resolveContentBlockConfig(template: {
   | VisionGoalsModuleConfig
   | AboutCtaModuleConfig
   | AboutPrinciplesModuleConfig
-  | AboutApproachModuleConfig {
+  | AboutApproachModuleConfig
+  | HomeProjectsModuleConfig {
   if (usesAboutIntroConfigSchema(template.slug, template.variant)) {
     return asAboutIntroConfig(template.config);
   }
@@ -295,6 +348,9 @@ export function resolveContentBlockConfig(template: {
   }
   if (isAboutApproachTemplate(template.slug, template.variant)) {
     return asAboutApproachConfig(template.config);
+  }
+  if (isHomeProjectsTemplate(template.slug, template.variant)) {
+    return asHomeProjectsConfig(template.config);
   }
   return asContentConfig(template.config);
 }
@@ -677,6 +733,7 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
     showEyebrow: readShowFlag("showEyebrow", "show_eyebrow"),
     showTitle: readShowFlag("showTitle", "show_title"),
     showIntro: readShowFlag("showIntro", "show_intro"),
+    showProjectLocation: readShowFlag("showProjectLocation", "show_project_location"),
     showFooterCta: readShowFlag("showFooterCta", "show_footer_cta"),
     projectsLimit: parsedLimit,
     cardCtaAlignment,
@@ -728,8 +785,16 @@ export function asBreadcrumbConfig(raw: unknown): BreadcrumbBlockConfig {
           const row = item as Record<string, unknown>;
           const label = readText(row.label);
           const href = readText(row.href);
+          const link =
+            row.link && typeof row.link === "object"
+              ? deserializeAdminLink(row.link)
+              : undefined;
           if (!label) return null;
-          return { label, href: href || undefined };
+          return {
+            label,
+            ...(href ? { href } : {}),
+            ...(link ? { link } : {}),
+          };
         })
         .filter(Boolean) as BreadcrumbBlockItem[]
     : undefined;

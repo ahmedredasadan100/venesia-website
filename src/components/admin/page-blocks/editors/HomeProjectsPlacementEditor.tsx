@@ -218,6 +218,7 @@ export default function HomeProjectsPlacementEditor({ config }: HomeProjectsPlac
 
         <AdminFormGrid>
           <VisibilityToggle name="show_intro" label="إظهار النص التمهيدي" defaultChecked={config.showIntro !== false} />
+          <VisibilityToggle name="show_project_location" label="إظهار موقع المشروع داخل البطاقات" defaultChecked={config.showProjectLocation !== false} />
           <VisibilityToggle name="show_footer_cta" label="إظهار زر أسفل السكشن" defaultChecked={config.showFooterCta !== false} />
         </AdminFormGrid>
 

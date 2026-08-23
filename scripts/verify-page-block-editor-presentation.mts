@@ -27,6 +27,9 @@ const {
 const { PAGE_MODULE_KINDS } = await jiti.import<typeof import("../src/lib/page-blocks/types.ts")>(
   "../src/lib/page-blocks/types.ts",
 );
+const { resolveContentModuleEditorConfig } = await jiti.import<
+  typeof import("../src/lib/page-blocks/module-edit-registry.ts")
+>("../src/lib/page-blocks/module-edit-registry.ts");
 
 let passed = 0;
 function check(label: string, condition: unknown) {
@@ -66,12 +69,17 @@ const cardsActions = read("src/app/admin/pages-blocks/blocks/cards/actions.ts");
 const cardsRepeater = read("src/components/admin/page-blocks/editors/AdminCardsItemsField.tsx");
 const breadcrumbRepeater = read("src/components/admin/page-blocks/editors/BreadcrumbManualItemsField.tsx");
 const breadcrumbActions = read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts");
+const breadcrumbEditor = read("src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx");
+const breadcrumbEditRoute = read("src/app/admin/pages-blocks/blocks/breadcrumb/[id]/page.tsx");
+const breadcrumbListRoute = read("src/app/admin/pages-blocks/blocks/breadcrumb/page.tsx");
+const breadcrumbConfig = read("src/lib/page-blocks/configs.ts");
+const sharedDataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const heroPublicLoader = read("src/lib/load-hero-section.ts");
 const pageBlockPublicLoader = read("src/lib/page-blocks/load-page-blocks.ts");
 const feedPublicLoader = read("src/lib/feed-modules/load-feed-modules.ts");
 const mediaSidebarPublicLoader = read("src/lib/media-sidebar-modules/load-media-sidebar-modules.ts");
 const mediaHubPublicLoader = read("src/lib/media-hub-modules/load-media-hub-modules.ts");
-const mediaSidebarRenderer = read("src/components/media-center/MediaSidebar.tsx");
+const pageCompositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
 const mediaHubRenderPlan = read("src/lib/media-hub-modules/build-media-hub-render-plan.ts");
 const publicationClosureMigration = read("sql/migrations/20260807120000_system_publication_summary_cards_closure.sql");
 const pagesListClient = read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx");
@@ -94,8 +102,13 @@ const assignmentColumns = read("src/lib/page-blocks/admin-collection-columns.ts"
 const assignmentGrid = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx");
 const assignmentRow = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx");
 const moduleEditRegistry = read("src/lib/page-blocks/module-edit-registry.ts");
+const contentEditRoute = read("src/app/admin/pages-blocks/blocks/content/[id]/page.tsx");
+const contentEditClient = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
+const slotModuleNodes = read("src/components/page-composition/slot-module-nodes.tsx");
+const slotRenderPlan = read("src/components/page-composition/build-slot-render-plan.ts");
 const adminQueries = read("src/lib/page-blocks/admin-queries.ts");
 const adminRevalidationOwner = read("src/lib/page-blocks/admin-revalidate.ts");
+const assignmentModalOwner = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/use-page-blocks-assign-modal.ts");
 const assignmentContextQuery = read("src/lib/page-blocks/module-assignments-query.ts");
 const heroDetailRoute = read("src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx");
 const adoptionManifest = read("src/lib/admin/interaction-system/adoption-manifest.ts");
@@ -256,6 +269,89 @@ check(
     breadcrumbRepeater.includes("removeItem") &&
     breadcrumbRepeater.includes('prefix={`manual_item_${index}`}') &&
     breadcrumbActions.includes("index < 8"),
+);
+
+const resolvedAboutIntro = resolveContentModuleEditorConfig({
+  slug: "about-intro",
+  variant: "about-intro",
+  config: {
+    title: "من نحن",
+    beats: [{ num: "01", title: "البداية من الأرض", text: "محتوى فعلي" }],
+  },
+});
+const resolvedAboutIntroBeats = (
+  resolvedAboutIntro as { beats?: Array<{ title?: string }> }
+).beats;
+check(
+  "Content editors receive one canonical server read model and rehydrate by persisted revision",
+  moduleEditRegistry.includes("export function resolveContentModuleEditorConfig") &&
+    contentEditRoute.includes("resolveContentModuleEditorConfig({") &&
+    contentEditRoute.includes("config={config}") &&
+    !contentEditRoute.includes("block={block}") &&
+    !contentEditClient.includes("block.config") &&
+    contentEditClient.includes("config: unknown") &&
+    contentEditClient.includes("key={`${block.id}:${block.updated_at}`}") &&
+    resolvedAboutIntroBeats?.[0]?.title === "البداية من الأرض",
+);
+
+check(
+  "Content composition cannot source editor-owned data from a Cards template",
+  !slotRenderPlan.includes("about-intro-beats") &&
+    !slotRenderPlan.includes("about-documentary-beats") &&
+    !slotModuleNodes.includes('bySlug.get("about-documentary-beats")') &&
+    !slotModuleNodes.includes("mapAboutDocumentaryBeatsBlock") &&
+    slotModuleNodes.includes("mapAboutIntroBeatsFromBlock(block)"),
+);
+
+check(
+  "shared Settings composition aligns binary state surfaces with labeled controls",
+  presentation.includes("data-module-editor-settings") &&
+    presentation.includes("[data-module-editor-field-nature='binary-state']]:pt-6") &&
+    presentation.includes("min-h-[46px]"),
+);
+
+check(
+  "Breadcrumb editor keeps empty manual state, internal identity, and assignment-owned placement",
+  breadcrumbRepeater.includes("return initial;") &&
+    !breadcrumbRepeater.includes("empty-breadcrumb-0") &&
+    breadcrumbRepeater.includes("{rows.length ? (") &&
+    breadcrumbRepeater.includes("current.filter") &&
+    breadcrumbEditor.includes('className="items-end"') &&
+    breadcrumbEditor.includes('surface className="h-full"') &&
+    (breadcrumbEditor.match(/span=\{4\}/g)?.length ?? 0) >= 3 &&
+    presentation.includes('className={`h-full ${className}`.trim()}') &&
+    !breadcrumbEditor.includes("ModuleEditorTechnicalIdentity") &&
+    !breadcrumbEditor.includes('name="variant"\n                      label="نمط العرض"') &&
+    blockManager.includes('technicalIdentityMode?: "editable" | "internal"') &&
+    blockManager.includes('variantFieldMode?: "editable" | "internal"') &&
+    blockManager.includes("blockSearchPlaceholder(") &&
+    blockManager.includes('technicalIdentityMode === "editable"') &&
+    blockManager.includes('variantFieldMode === "editable"') &&
+    !blockManager.includes('placeholder: "ابحث باسم البلوك أو المعرّف أو النمط…"') &&
+    blockManager.includes("slug?: string") &&
+    blockManager.includes("variant?: string") &&
+    breadcrumbListRoute.includes('.select("id,name,description,status,updated_at")') &&
+    !breadcrumbListRoute.includes('select("id,name,slug') &&
+    breadcrumbEditRoute.includes('.select("id,name,description,style_preset,status,config")') &&
+    !breadcrumbEditRoute.includes('.select("*")') &&
+    pagesClient.includes('placeholder: "ابحث باسم الموديول أو نوعه أو موضع العرض…"') &&
+    !pagesClient.includes("${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]} ${row.template_id}") &&
+    getModuleEditorSectionMetadata("breadcrumb", "settings")?.sectionDescriptionAr ===
+      "أدر اسم الموديول ووصفه الداخلي وحالة النشر." &&
+    breadcrumbActions.includes("resolveUniqueSlug") &&
+    breadcrumbActions.includes('.select("slug,variant")') &&
+    breadcrumbConfig.includes("deserializeAdminLink(row.link)"),
+);
+
+check(
+  "Page Composition free ordering uses the shared grip with keyboard parity and atomic persistence",
+  sharedDataGrid.includes("export function AdminDataGridReorderHandle") &&
+    sharedDataGrid.includes('aria-keyshortcuts="ArrowUp ArrowDown Home End"') &&
+    assignmentRow.includes("AdminDataGridReorderHandle") &&
+    assignmentGrid.includes("onDragStart") &&
+    assignmentGrid.includes("onDrop") &&
+    pagesClient.includes("handleReorderAssignment") &&
+    pagesClient.includes("reorderPageComposition("),
 );
 
 const heroVisibility = read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx");
@@ -525,7 +621,7 @@ check(
     pageBlockPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
     feedPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
     mediaSidebarPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
-    mediaSidebarRenderer.includes(".filter((widget) => widget.isVisible)") &&
+    pageCompositionLoader.includes("if (!widget.isVisible) continue;") &&
     mediaHubPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
     mediaHubRenderPlan.includes(".filter((module) => module.isVisible)"),
 );
@@ -556,6 +652,14 @@ check(
     compatibilityPresentation.includes("getPreferredSlotsForModuleKind") &&
     slotMap.includes("getSlotCompatibilityLabel") &&
     serverSlotGuard.includes("isSlotAllowedForRoute"),
+);
+
+check(
+  "Page Composition assignment feedback follows only the submitted module action",
+  assignmentModalOwner.includes("const activeAssignState =") &&
+    assignmentModalOwner.includes("if (activeAssignState.ok)") &&
+    assignmentModalOwner.includes("setActionMessage(activeAssignState.message)") &&
+    !assignmentModalOwner.includes("assignState.ok || assignHeroState.ok"),
 );
 
 const retiredHint = resolve(ROOT, "src/components/admin/page-blocks/ModuleDependencyHintsPanel.tsx");
@@ -614,11 +718,16 @@ check(
 );
 
 check(
-  "Page Composition exposes the mandatory shared Slot contract in columns, filters, sorting, and rows",
-  assignmentColumns.includes('{ key: "slot", label: "الموضع", defaultVisible: true, hideable: false }') &&
-    assignmentGrid.includes('sortProps("slot")') &&
-    assignmentGrid.includes(">الموضع</") &&
+  "Page Composition exposes the mandatory shared display-position contract in columns, filters, sorting, and rows",
+  assignmentColumns.includes('{ key: "slot", label: "موضع العرض", defaultVisible: true, hideable: false }') &&
+  assignmentGrid.includes('sortProps("slot")') &&
+    assignmentGrid.includes(">موضع العرض</") &&
     assignmentRow.includes("LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]") &&
+    assignmentRow.includes("AdminListboxSelect") &&
+    pagesClient.includes("handleDisplayPositionChange") &&
+    pagesClient.includes("updatePageBlockAssignment(") &&
+    pagesClient.includes("<PageVisualSlotMap assignments={instant.rows}") &&
+    pagesClient.includes("reconcileSuccess:") &&
     pagesClient.includes('paramKey: "slot"') &&
     pagesClient.includes("PAGE_LAYOUT_SLOT_ORDER.map") &&
     pagesClient.includes('slot: (row: PageBlockAssignmentRow)') &&
@@ -684,7 +793,7 @@ check(
     heroDetailRoute.includes("getHeroModuleAssignmentContext(heroId)") &&
     !heroDetailRoute.includes('.from("pages")') &&
     !heroDetailRoute.includes("hero_assignments(") &&
-    pageCompositionRoute.includes("const [pageResult, preference, assignmentsResult] = await Promise.all") &&
+    pageCompositionRoute.includes("const [pageResult, preference, assignmentsResult, globalSeo] = await Promise.all") &&
     !pageCompositionRoute.includes("assignmentsData = await getPageModuleAssignmentsForAdmin"),
 );
 

@@ -1,5 +1,5 @@
 /**
- * Verifies composite slot render-plan wiring (Contact office+form, About intro+beats).
+ * Verifies composite slot render-plan wiring and prevents cross-family Content sources.
  * Source-level only — no DB writes.
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -32,18 +32,17 @@ assert(
 );
 assert(plan.includes("SLOT_COMPOSITE_RELATIONSHIPS"), "Composite relationships catalog missing");
 assert(plan.includes("contact-office-form"), "Contact composite relationship missing");
-assert(plan.includes("about-intro-beats"), "About intro/beats composite relationship missing");
 assert(
-  plan.includes("about-intro-single-image is intentionally independent") ||
-    plan.includes("about-intro-single-image"),
-  "Single-image module must stay outside about-intro composite",
+  !plan.includes("about-intro-beats") && !plan.includes("about-documentary-beats"),
+  "Content composition must not declare a Cards template as an About intro data peer",
 );
 assert(nodes.includes('slug === "contact-form-office" || slug === "contact-form"'), "Contact pairing missing");
 assert(nodes.includes('bySlug.get("contact-form-office")'), "Contact office peer lookup missing");
-assert(nodes.includes('bySlug.get("about-documentary-beats")'), "About beats peer lookup missing");
 assert(
-  nodes.includes("if (introBlock) {") && nodes.includes("mark(block)") && nodes.includes("continue;"),
-  "Beats must defer to intro when intro exists (no double WhoWeAre)",
+  nodes.includes("mapAboutIntroBeatsFromBlock(block)") &&
+    !nodes.includes('bySlug.get("about-documentary-beats")') &&
+    !nodes.includes("mapAboutDocumentaryBeatsBlock"),
+  "About intro beats must come only from the Content template config",
 );
 assert(nodes.includes("consumed.add"), "Peer consumption via consumed set missing");
 assert(plan.includes("buildSlotModuleNodes(blocks"), "Plan must batch blocks into buildSlotModuleNodes");

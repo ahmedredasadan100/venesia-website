@@ -1,3 +1,11 @@
+import { resolveContentBlockConfig } from "./configs";
+import {
+  asProjectsHubFeaturedConfig,
+  asProjectsHubHeroConfig,
+  asProjectsHubListingConfig,
+  asProjectsHubMapConfig,
+} from "./projects-hub-config";
+
 /** Maps module slugs / variants to structured admin editor keys. */
 export type ContentModuleEditorKey =
   | "about-intro"
@@ -62,6 +70,26 @@ export function getContentModuleEditorKey(slug: string, variant: string): Conten
   if (slug === "about-principles" || variant === "about-principles") return "about-principles";
   if (slug === "about-approach" || variant === "about-approach") return "about-approach";
   return "generic";
+}
+
+/**
+ * Canonical Admin read-model resolver for every Content module editor.
+ * Public composition and Admin editing must normalize the same persisted row;
+ * no editor may source presentation data from another template family.
+ */
+export function resolveContentModuleEditorConfig(template: {
+  slug: string;
+  variant?: string | null;
+  config: unknown;
+}) {
+  const editorKey = getContentModuleEditorKey(template.slug, template.variant ?? "");
+
+  if (editorKey === "projects-hub-hero") return asProjectsHubHeroConfig(template.config);
+  if (editorKey === "projects-hub-featured") return asProjectsHubFeaturedConfig(template.config);
+  if (editorKey === "projects-hub-listing") return asProjectsHubListingConfig(template.config);
+  if (editorKey === "projects-hub-map") return asProjectsHubMapConfig(template.config);
+
+  return resolveContentBlockConfig(template);
 }
 
 /**

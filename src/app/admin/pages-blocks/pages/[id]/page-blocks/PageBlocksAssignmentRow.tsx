@@ -1,14 +1,16 @@
 import Link from "next/link";
+import type { DragEventHandler } from "react";
 
 import {
   AdminDataGridRowActions,
-  AdminDataGridActionButton,
   AdminDataGridCenterCell,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
   AdminDataGridPrimaryCell,
+  AdminDataGridReorderHandle,
   AdminDataGridRow,
   AdminDataGridStatusCell,
+  AdminListboxSelect,
   type AdminRowActionsCapability,
 } from "../../../../../../components/admin/ui";
 import {
@@ -17,7 +19,11 @@ import {
   moduleKindLabel,
   normalizeBoolean,
 } from "../../../../../../lib/page-blocks/admin-utils";
-import { LAYOUT_SLOT_LABELS_AR, normalizeLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
+import {
+  LAYOUT_SLOT_LABELS_AR,
+  normalizeLayoutSlot,
+  type PageLayoutSlot,
+} from "../../../../../../lib/page-blocks/layout-slots";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
 import type { AdminInstantMutationRowInteraction } from "../../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 
@@ -33,13 +39,18 @@ type PageBlocksAssignmentRowProps = {
   interaction: AdminInstantMutationRowInteraction;
   onToggleSelect: (checked: boolean) => void;
   onToggleVisibility: () => void;
+  displayPositionOptions: PageLayoutSlot[];
+  onDisplayPositionChange: (slot: PageLayoutSlot) => void;
   onDuplicate: () => void;
   onDetach: () => void;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
+  reorderPosition: number;
+  reorderCount: number;
   manualReorderEnabled: boolean;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
+  onMoveTo: (targetPosition: number) => void;
+  onDragStart: DragEventHandler<HTMLButtonElement>;
+  onDragOver: DragEventHandler<HTMLButtonElement>;
+  onDrop: DragEventHandler<HTMLButtonElement>;
+  onDragEnd: DragEventHandler<HTMLButtonElement>;
   showModule: boolean;
   showStatus: boolean;
 };
@@ -56,13 +67,18 @@ export default function PageBlocksAssignmentRow({
   interaction,
   onToggleSelect,
   onToggleVisibility,
+  displayPositionOptions,
+  onDisplayPositionChange,
   onDuplicate,
   onDetach,
-  canMoveUp,
-  canMoveDown,
+  reorderPosition,
+  reorderCount,
   manualReorderEnabled,
-  onMoveUp,
-  onMoveDown,
+  onMoveTo,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
   showModule,
   showStatus,
 }: PageBlocksAssignmentRowProps) {
@@ -74,6 +90,7 @@ export default function PageBlocksAssignmentRow({
     row.template_slug,
     row.template_variant,
   );
+  const technicalIdentityIsInternal = row.module_kind === "breadcrumb";
   const hidden = { access: "hidden" as const };
   const reorderDisabledTitle =
     "أعد فرز العرض إلى الترتيب الافتراضي لاستخدام الترتيب اليدوي.";
@@ -109,8 +126,10 @@ export default function PageBlocksAssignmentRow({
         title: `معلومات ${row.template_name}`,
         items: [
           { label: "نوع الموديول", value: moduleLabel },
-          { label: "المعرّف", value: row.template_slug },
-          { label: "الموضع", value: LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)] },
+          ...(technicalIdentityIsInternal
+            ? []
+            : [{ label: "المعرّف", value: row.template_slug }]),
+          { label: "موضع العرض", value: LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)] },
           { label: "حالة النشر", value: templatePublished ? "منشور" : "غير منشور" },
           { label: "الربط بالصفحة", value: assignmentVisible ? "ظاهر" : "مخفي" },
           { label: "الظهور العام", value: isVisible ? "ظاهر للعامة" : "غير ظاهر للعامة" },
@@ -177,17 +196,33 @@ export default function PageBlocksAssignmentRow({
         )}
       </AdminDataGridCheckboxCell>
 
-      <AdminDataGridPrimaryCell className="flex items-center gap-2">
-        <span className="flex shrink-0 gap-1">
-          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأعلى" : reorderDisabledTitle} disabled={!canMoveUp} pending={pendingAction === "reorder-up"} onClick={onMoveUp}>↑</AdminDataGridActionButton>
-          <AdminDataGridActionButton size="compact" title={manualReorderEnabled ? "تحريك لأسفل" : reorderDisabledTitle} disabled={!canMoveDown} pending={pendingAction === "reorder-down"} onClick={onMoveDown}>↓</AdminDataGridActionButton>
-        </span>
+      <AdminDataGridCenterCell>
+        <AdminDataGridReorderHandle
+          label={row.template_name}
+          position={reorderPosition}
+          count={reorderCount}
+          disabled={!manageable || !manualReorderEnabled}
+          pending={pendingAction === "reorder"}
+          disabledReason={
+            manageable
+              ? reorderDisabledTitle
+              : "هذا النوع غير قابل للترتيب من هذه القائمة."
+          }
+          onMoveTo={onMoveTo}
+          onDragStart={onDragStart}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+          onDragEnd={onDragEnd}
+        />
+      </AdminDataGridCenterCell>
+
+      <AdminDataGridPrimaryCell>
         <Link
           href={moduleEditHref(row.module_kind, row.template_id, {
             returnPageId: row.page_id,
           })}
           className="min-w-0 truncate text-sm font-semibold text-white hover:text-[#D8B87A]"
-          title={row.template_slug}
+          title={technicalIdentityIsInternal ? undefined : row.template_slug}
         >
           {row.template_name}
         </Link>
@@ -199,8 +234,21 @@ export default function PageBlocksAssignmentRow({
         </AdminDataGridCenterCell>
       ) : null}
 
-      <AdminDataGridCenterCell className="truncate text-sm text-white/70">
-        {LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]}
+      <AdminDataGridCenterCell>
+        <AdminListboxSelect
+          value={normalizeLayoutSlot(row.slot)}
+          options={displayPositionOptions.map((slot) => ({
+            value: slot,
+            label: LAYOUT_SLOT_LABELS_AR[slot],
+          }))}
+          onChange={(value) => onDisplayPositionChange(value as PageLayoutSlot)}
+          disabled={
+            !manageable ||
+            displayPositionOptions.length <= 1 ||
+            pendingAction === "display-position"
+          }
+          ariaLabel={`موضع عرض ${row.template_name}`}
+        />
       </AdminDataGridCenterCell>
 
       {showStatus ? (

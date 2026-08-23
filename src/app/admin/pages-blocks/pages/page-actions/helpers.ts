@@ -116,11 +116,16 @@ export function failure(message: string): PageBlockActionResult {
   return { ok: false, message, redirectTo: null };
 }
 
-export function success(options?: { message?: string | null; redirectTo?: string | null }): PageBlockActionResult {
+export function success(options?: {
+  message?: string | null;
+  redirectTo?: string | null;
+  updatedAt?: string;
+}): PageBlockActionResult {
   return {
     ok: true,
     message: options?.message ?? null,
     redirectTo: options?.redirectTo ?? null,
+    ...(options?.updatedAt ? { updatedAt: options.updatedAt } : {}),
   };
 }
 

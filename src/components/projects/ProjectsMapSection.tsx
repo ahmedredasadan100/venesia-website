@@ -2,7 +2,11 @@ import PublicMediaImage from "../public/PublicMediaImage";
 import Link from "next/link";
 
 import { getProjectHref } from "../../lib/projects/public-helpers";
-import type { PublicProject } from "../../lib/projects/public-types";
+import type { PublicProject, PublicProjectLocationLevel } from "../../lib/projects/public-types";
+import {
+  resolveVisibleProjectLocationLabel,
+  resolveVisibleProjectLocationTags,
+} from "../../lib/projects/project-location-presentation";
 import {
   PROJECTS_HUB_MAP_DEFAULTS,
   type ProjectsHubMapPresentationProps,
@@ -29,7 +33,16 @@ export default function ProjectsMapSection({
 
   const grouped = residentialProjects.reduce<Record<string, number>>(
     (acc, project) => {
-      const area = project.location.subArea?.nameAr ?? project.location.mainArea?.nameAr ?? project.location.label;
+      const visibleTags = resolveVisibleProjectLocationTags(
+        project.location.presentation,
+        [project.location.governorate, project.location.city, project.location.mainArea, project.location.subArea].filter(
+          (item): item is PublicProjectLocationLevel => item !== null,
+        ),
+      );
+      const area =
+        visibleTags.at(-1)?.nameAr ??
+        resolveVisibleProjectLocationLabel(project.location);
+      if (!area) return acc;
       acc[area] = (acc[area] ?? 0) + 1;
       return acc;
     },

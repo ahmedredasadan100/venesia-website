@@ -14,11 +14,11 @@ export default function ContactMapSection({ cmsContent }: ContactMapSectionProps
   if (!showCopy && !showPoints) return null;
 
   return (
-    <section className="mx-auto max-w-7xl px-5 pb-8 sm:px-8 lg:px-10">
+    <section className="mx-auto max-w-7xl px-4 pb-8 @xl/slot-module:px-6 @4xl/slot-module:px-10">
       <div className="relative overflow-hidden rounded-[28px] border border-white/10 bg-[#070d12] p-7">
         <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(255,255,255,.08)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.08)_1px,transparent_1px)] [background-size:42px_42px]" />
 
-        <div className="relative grid gap-8 lg:grid-cols-[0.8fr_1.4fr]">
+        <div className="relative grid gap-8 @4xl/slot-module:grid-cols-[0.8fr_1.4fr]">
           <div className="rounded-3xl bg-black/35 p-7">
             {map.title.trim() ? (
               <h2 className="text-2xl font-semibold text-[#d2a75a]">
@@ -52,7 +52,7 @@ export default function ContactMapSection({ cmsContent }: ContactMapSectionProps
         </div>
 
         {showPoints ? (
-          <div className="relative mt-7 grid gap-3 border-t border-white/10 pt-6 md:grid-cols-4">
+          <div className="relative mt-7 grid gap-3 border-t border-white/10 pt-6 @3xl/slot-module:grid-cols-4">
             {map.points.map((point) => (
               <div key={point} className="text-center text-sm text-white/65">
                 {point}

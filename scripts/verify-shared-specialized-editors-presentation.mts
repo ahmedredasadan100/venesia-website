@@ -2,12 +2,16 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createJiti } from "jiti";
 import ts from "typescript";
 
-import {
+const jiti = createJiti(import.meta.url);
+const {
   STRUCTURAL_CONTENT_TEMPLATE_SLUGS,
   resolveModuleProductKind,
-} from "../src/lib/page-blocks/module-edit-registry.ts";
+} = await jiti.import<typeof import("../src/lib/page-blocks/module-edit-registry.ts")>(
+  "../src/lib/page-blocks/module-edit-registry.ts",
+);
 import {
   getModuleEditorHeaderMetadata,
   getModuleEditorSectionOrder,
@@ -725,11 +729,16 @@ check(
       ({ source }) => !source.includes('mode="read-only"'),
     ) &&
     [
-      "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
       "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
       "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
       "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
     ].every((path) => read(path).includes('mode="editable"')) &&
+    !read(
+      "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+    ).includes("ModuleEditorTechnicalIdentity") &&
+    read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts").includes(
+      '.select("slug,variant")',
+    ) &&
     [
       "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
       "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",

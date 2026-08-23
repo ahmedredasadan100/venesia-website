@@ -26,7 +26,7 @@ const composition = read("src/lib/page-blocks/load-page-composition.ts");
 const types = read("src/lib/page-blocks/page-composition-types.ts");
 const feeds = read("src/lib/feed-modules/load-feed-modules.ts");
 const topics = read("src/app/(site)/topics/page.tsx");
-const homePlan = read("src/components/home/build-home-main-render-plan.ts");
+const homeContent = read("src/components/home/HomeMainSlotContent.tsx");
 
 assert(types.includes("hasAnyAssignmentRows"), "PageComposition must expose hasAnyAssignmentRows");
 assert(types.includes("hasRenderableModules"), "PageComposition must expose hasRenderableModules");
@@ -49,10 +49,7 @@ assert(
   !topics.includes("composition.hasAssignments"),
   "Topics must not use post-filter hasAssignments as CMS vs static gate",
 );
-assert(
-  homePlan.includes("hiddenHomeModuleSlugs") || homePlan.includes("hiddenHomeSlugs"),
-  "Home hide-suppress path must remain intact",
-);
+assert(homeContent.includes("PageSlotContent"), "Home must use the shared slot renderer");
 
 if (failures.length) {
   console.error("verify-assignment-presence FAILED:");

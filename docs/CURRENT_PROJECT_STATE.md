@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-20
+**Updated:** 2026-08-23
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -87,22 +87,22 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The 2026-08-22 authorized Hero Platform migration closure established the following facts against the configured Supabase Production project.
+The 2026-08-23 authorized Project Location Presentation migration closure established the following facts against the configured Supabase Production project.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                                87 |
-| Production registry versions                      |                                                87 |
-| Registry SQL provenance                           | Exact repository SQL for all 87 deployed versions |
+| Repository migration files                        |                                                90 |
+| Production registry versions                      |                                                90 |
+| Registry SQL provenance                           | Exact repository SQL for all 90 deployed versions |
 | Public tables                                     |                                                56 |
 | Public tables with RLS enabled                    |                                                56 |
-| Public catalog objects with repository provenance |                                               291 |
+| Public catalog objects with repository provenance |                                               292 |
 | Invalid, unready, or non-live indexes             |                                                 0 |
 | Unvalidated public constraints                    |                                                 0 |
 | Parallel public function overload names           |                                                 0 |
 | Public RLS policies                               |                                                 3 |
 | Anonymous-callable application data functions     |                                                 0 |
-| Registry reconciliation audit records             |                                                13 |
+| Registry reconciliation audit records             |                                                14 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
@@ -122,6 +122,12 @@ The authorized Construction Tracking closure then applied `20260817170332_projec
 The authorized Tracking and Governance completion then applied `20260818010000_project_tracking_public_pagination.sql` as migration 85 with exact repository SQL provenance. It replaces the existing public Tracking detail function in place so child Stages, Items, Updates, Media, and history remain bounded by the canonical application Read Model; it creates no table, view, Runtime, or second read owner, and the function remains service-role-only.
 
 The authorized security hardening applied `20260819041808_harden_rls_auto_enable_execute_acl.sql` as migration 86 with exact repository SQL provenance. It only revokes `EXECUTE` on the Supabase platform-owned `public.rls_auto_enable()` event-trigger function from `PUBLIC`, `anon`, and `authenticated`; the function body, owner, search path, event trigger, `service_role`, and `postgres` owner access remain unchanged.
+
+The authorized Hero Platform Product closure applied `20260822090000_hero_platform_product_preset_closure.sql` as migration 87. The Project Detail Hero adoption then applied `20260823100000_project_detail_hero_configuration_adoption.sql` as migration 88 with exact repository SQL provenance. Migration 88 adds one `domain-backed` Project Detail presentation template and its singleton invariant inside the existing Hero System; it does not copy Project Domain content or modify the shared Hero status-persistence contract.
+
+The authorized Project Location Presentation Phase 1 closure then applied `20260823114743_project_location_presentation_contract.sql` as migration 89 with exact repository SQL provenance. It adds two visible-by-default Boolean presentation decisions to the existing Project Aggregate, extends the canonical atomic save and duplicate owners in place, preserves all location data, and deliberately leaves Hero and every Public Consumer outside this phase.
+
+The authorized Project Location Presentation Phase 2 closure then applied `20260823123750_project_location_presentation_consumer_adoption.sql` as migration 90 with exact repository SQL provenance. Every visual Project-location Consumer now composes its existing local presentation decision with the Project-owned flags through one semantic selector owner. The existing bounded Project Tracking RPC is replaced in place only to carry those same decisions; no Project data, table, Runtime, Capability, function name, or second source of truth is introduced.
 
 ## Removed final-cleanup legacy
 

@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import vm from "node:vm";
 
 import { PGlite } from "@electric-sql/pglite";
+import { createJiti } from "jiti";
 import ts from "typescript";
 
 import type {
@@ -55,8 +56,9 @@ function loadTranspiledModule(
   return targetModule.exports;
 }
 
-const moduleEditRegistry = loadTranspiledModule(
-  "src/lib/page-blocks/module-edit-registry.ts",
+const jiti = createJiti(import.meta.url);
+const moduleEditRegistry = await jiti.import<Record<string, unknown>>(
+  "../src/lib/page-blocks/module-edit-registry.ts",
 );
 const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "../admin/content/content-status-metadata": {
@@ -660,7 +662,7 @@ for (const aggregateMember of [
   "blockState.hasAnyAssignmentRows",
   "feedState.hasAnyAssignmentRows",
   "mediaHubModules?.hasAnyAssignmentRows",
-  "mediaSidebarModules?.hasAnyAssignmentRows",
+  "mediaSidebarModules.hasAnyAssignmentRows",
 ]) {
   assert.ok(
     compositionLoader.includes(aggregateMember),
@@ -672,7 +674,7 @@ for (const renderableMember of [
   "blockState.hasRenderableModules",
   "feedState.modules.length > 0",
   "mediaHubModules?.hasRenderableModules",
-  "mediaSidebarModules?.hasRenderableModules",
+  "mediaSidebarModules.hasRenderableModules",
 ]) {
   assert.ok(
     compositionLoader.includes(renderableMember),

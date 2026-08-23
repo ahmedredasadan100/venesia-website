@@ -395,12 +395,15 @@ assert.match(adminDateOwner, /export function formatAdminDateTime/u);
 assert.match(pageSeoPanel, /const publicSlug = props\.path === "\/" \? "" : props\.path\.replace\(\/\^\\\/\+\/, ""\)/u);
 for (const input of [
   'name="page_description" value=""',
-  'name="page_content" value=""',
   'name="page_image" value=""',
   'name="page_image_alt" value=""',
 ]) {
   assert.ok(pageSeoPanel.includes(input), `Page SEO input contract missing ${input}`);
 }
+assert.ok(
+  pageSeoPanel.includes('name="page_content" value={props.content}'),
+  "Page SEO must analyze the current Page Composition content instead of a permanent empty adapter.",
+);
 assert.match(pageSeoPanel, /initial=\{\{[\s\S]*profile:\s*"entity"[\s\S]*faq:\s*\[\]/u);
 
 assert.match(config, /PAGES_LIST_COLUMN_CONTRACT_VERSION\s*=\s*3/u);
@@ -707,10 +710,14 @@ assert.match(
   bulkActionBar,
   /confirmation\?: \{[\s\S]*resolvedOption\?\.confirmation[\s\S]*if \(resolvedConfirmation\)[\s\S]*<AdminBulkActionConfirm/u,
 );
-assert.match(compositionClient, /if \(table\.sort\.key !== null\) return false;/u);
-assert.match(compositionClient, /if \(table\.sort\.key !== null\) return;/u);
+assert.match(compositionClient, /const manualReorderEnabled =/u);
+assert.match(compositionClient, /if \(!manualReorderEnabled\) return;/u);
 assert.match(compositionClient, /table\.toggleSort\(key\)/u);
-assert.match(compositionClient, /manualReorderEnabled=\{table\.sort\.key === null\}/u);
+assert.match(compositionClient, /manualReorderEnabled=\{manualReorderEnabled\}/u);
+assert.match(assignmentRow, /AdminDataGridReorderHandle/u);
+assert.match(compositionClient, /handleDisplayPositionChange/u);
+assert.match(compositionClient, /updatePageBlockAssignment\(/u);
+assert.match(assignmentRow, /AdminListboxSelect/u);
 assert.match(
   compositionClient,
   /<PageCompositionTableSurface[\s\S]*toolbar=\{[\s\S]*<AdminEntityListFilters[\s\S]*surface="embedded"[\s\S]*table=\{[\s\S]*<PageBlocksAssignmentsGrid[\s\S]*pagination=\{[\s\S]*<AdminTablePagination/u,

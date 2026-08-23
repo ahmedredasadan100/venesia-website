@@ -31,28 +31,14 @@ function planCompositeKeys(blocks) {
     const slug = block.template.slug;
 
     if (slug === "about-intro" || block.template.variant === "about-intro") {
-      const beats = bySlug.get("about-documentary-beats");
-      const embedded = Boolean(block.template.config?.beats?.length);
       mark(block);
-      if (!embedded && beats) mark(beats);
-      keys.push({ key: `about-intro-${block.assignmentId}`, sortOrder: block.sortOrder, consumes: [block.assignmentId, !embedded && beats ? beats.assignmentId : null].filter(Boolean) });
+      keys.push({ key: `about-intro-${block.assignmentId}`, sortOrder: block.sortOrder, consumes: [block.assignmentId] });
       continue;
     }
 
     if (slug === "about-intro-single-image" || block.template.variant === "about-intro-single-image") {
       mark(block);
       keys.push({ key: `about-intro-single-image-${block.assignmentId}`, sortOrder: block.sortOrder, consumes: [block.assignmentId] });
-      continue;
-    }
-
-    if (slug === "about-documentary-beats") {
-      const intro = sorted.find((b) => b.template.slug === "about-intro" || b.template.variant === "about-intro");
-      if (intro) {
-        mark(block);
-        continue;
-      }
-      mark(block);
-      keys.push({ key: `about-beats-${block.assignmentId}`, sortOrder: block.sortOrder, consumes: [block.assignmentId] });
       continue;
     }
 
@@ -98,25 +84,26 @@ function assert(cond, msg) {
   assert(keys.length === 1, "office-only still one section");
 }
 
-// About intro + beats (beats first sort) → one intro composite, beats consumed
+// Failure path: a legacy Cards template must remain independent from Content intro.
 {
   const keys = planCompositeKeys([
     { assignmentId: 5, sortOrder: 5, template: { slug: "about-documentary-beats", variant: null, config: {} } },
     { assignmentId: 4, sortOrder: 10, template: { slug: "about-intro", variant: "about-intro", config: {} } },
   ]);
-  assert(keys.length === 1, "beats-before-intro must not double-render");
-  assert(keys[0].key.startsWith("about-intro-"), "parent key must be intro");
-  assert(keys[0].consumes.includes(4) && keys[0].consumes.includes(5), "must consume intro+beats");
+  assert(keys.length === 2, "Cards and Content assignments must remain independent");
+  assert(keys.some((key) => key.key === "block-5"), "legacy Cards assignment keeps its own renderer");
+  assert(keys.some((key) => key.key === "about-intro-4"), "Content intro keeps its own renderer");
+  assert(keys.every((key) => key.consumes.length === 1), "neither template may consume the other");
 }
 
-// Single-image independent of intro+beats
+// Single-image remains independent from both Content intro and legacy Cards.
 {
   const keys = planCompositeKeys([
     { assignmentId: 4, sortOrder: 10, template: { slug: "about-intro", variant: "about-intro", config: {} } },
     { assignmentId: 5, sortOrder: 15, template: { slug: "about-documentary-beats", variant: null, config: {} } },
     { assignmentId: 6, sortOrder: 20, template: { slug: "about-intro-single-image", variant: "about-intro-single-image", config: {} } },
   ]);
-  assert(keys.length === 2, "single-image stays independent alongside intro composite");
+  assert(keys.length === 3, "all three template assignments stay independent");
   assert(keys.some((k) => k.key.startsWith("about-intro-single-image-")), "single-image node present");
 }
 

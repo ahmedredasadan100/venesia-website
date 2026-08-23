@@ -9,6 +9,7 @@ import { getSupabaseAdmin } from "../../supabase-admin";
 import { loadProjectBySlugResult } from "../load-published-projects";
 import {
   deriveProjectTrackingStageStatus,
+  projectLocationPresentationReadSchema,
   projectTrackingPublicDetailSchema,
   projectTrackingReadInputSchema,
   type ProjectTrackingPageInfo,
@@ -18,7 +19,7 @@ import {
 } from "./contract";
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const TRACKING_PUBLIC_READ_VERSION = "project-tracking-detail-v3-paginated";
+const TRACKING_PUBLIC_READ_VERSION = "project-tracking-detail-v4-location-presentation";
 const TRACKING_PUBLIC_RPC = "project_tracking_public_detail_v1";
 const TRACKING_PUBLIC_RPC_SIGNATURE =
   "public.project_tracking_public_detail_v1(text)";
@@ -43,6 +44,7 @@ const coreSchema = z.object({
     arabicName: z.string().min(1),
     englishName: z.string().nullable(),
     location: z.string().nullable(),
+    locationPresentation: projectLocationPresentationReadSchema,
     heroImage: z.string().nullable(),
     heroImageAlt: z.string().nullable(),
   }),

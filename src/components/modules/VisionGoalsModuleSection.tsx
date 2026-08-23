@@ -71,38 +71,21 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
   if (!showImage && !showCopy) return null;
 
   return (
-    <section className="relative border-y border-white/[0.05] py-10 md:py-12">
+    <section className="relative border-y border-white/[0.05] py-10 @xl/slot-module:py-12">
       <div className="mx-auto max-w-7xl px-6">
-        <div className="grid items-center gap-10 lg:grid-cols-[1.1fr_0.9fr] lg:gap-12">
-          <div data-reveal className="max-w-2xl">
-            {content.eyebrow.trim() ? (
-              <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-[#D8B87A]">
-                {content.eyebrow}
-              </p>
-            ) : null}
-
-            {content.title.trim() ? (
-              <h2 className="text-3xl font-bold leading-tight text-white md:text-5xl">{content.title}</h2>
-            ) : null}
-
-            {content.intro.map((paragraph) =>
-              paragraph.trim() ? (
-                <p key={paragraph} className="mt-6 text-[15px] leading-8 text-white/70 md:text-[16px]">
-                  {paragraph}
-                </p>
-              ) : null,
-            )}
-
-            <div className="mt-8 grid gap-6 md:grid-cols-2">
-              <VisionGoalsColumnBlock column={content.vision} />
-              <VisionGoalsColumnBlock column={content.goals} />
-            </div>
-          </div>
-
+        <div
+          className={
+            showImage && showCopy
+              ? "slot-editorial-flow slot-editorial-flow--copy-wide slot-editorial-flow--media-end"
+              : ""
+          }
+          data-module-presentation={showImage && showCopy ? "editorial-flow" : undefined}
+        >
           {showImage && imageSrc ? (
             <div
               data-reveal
-              className="group relative w-full overflow-hidden rounded-[1.75rem] border border-[#D8B87A]/10"
+              className={`${showCopy ? "slot-editorial-media " : ""}group relative w-full overflow-hidden rounded-[1.75rem] border border-[#D8B87A]/10`}
+              data-editorial-media-side={showCopy ? "end" : undefined}
             >
               <div className="relative aspect-[16/12] overflow-hidden">
                 <Image
@@ -117,6 +100,38 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
                   aria-hidden
                   className="absolute inset-0 bg-[linear-gradient(to_top,rgba(5,7,11,0.65)_0%,rgba(5,7,11,0.12)_40%,transparent_70%)]"
                 />
+              </div>
+            </div>
+          ) : null}
+
+          {showCopy ? (
+            <div data-reveal className="slot-editorial-copy max-w-2xl">
+              {content.eyebrow.trim() ? (
+                <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-[#D8B87A]">
+                  {content.eyebrow}
+                </p>
+              ) : null}
+
+              {content.title.trim() ? (
+                <h2 className="text-3xl font-bold leading-tight text-white @3xl/slot-module:text-5xl">
+                  {content.title}
+                </h2>
+              ) : null}
+
+              {content.intro.map((paragraph) =>
+                paragraph.trim() ? (
+                  <p
+                    key={paragraph}
+                    className="mt-6 text-[15px] leading-8 text-white/70 @xl/slot-module:text-[16px]"
+                  >
+                    {paragraph}
+                  </p>
+                ) : null,
+              )}
+
+              <div className="slot-editorial-clear mt-8 grid gap-6 @xl/slot-module:grid-cols-2">
+                <VisionGoalsColumnBlock column={content.vision} />
+                <VisionGoalsColumnBlock column={content.goals} />
               </div>
             </div>
           ) : null}

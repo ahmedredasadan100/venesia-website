@@ -11,7 +11,7 @@ export default function ContactDepartmentsSection({ cmsContent }: ContactDepartm
   const departments = cmsContent;
 
   return (
-    <section className="mx-auto max-w-7xl px-5 pb-8 sm:px-8 lg:px-10">
+    <section className="mx-auto max-w-7xl px-4 pb-8 @xl/slot-module:px-6 @4xl/slot-module:px-10">
       <div className="rounded-[28px] border border-white/10 bg-white/[0.035] p-7">
         {departments.title.trim() ? (
           <h2 className="text-center text-2xl font-semibold text-[#d2a75a]">
@@ -19,7 +19,7 @@ export default function ContactDepartmentsSection({ cmsContent }: ContactDepartm
           </h2>
         ) : null}
 
-        <div className={`grid gap-4 md:grid-cols-3 ${departments.title.trim() ? "mt-7" : ""}`}>
+        <div className={`grid gap-4 @3xl/slot-module:grid-cols-3 ${departments.title.trim() ? "mt-7" : ""}`}>
           {departments.items.map((item) => (
             <div
               key={item.title}

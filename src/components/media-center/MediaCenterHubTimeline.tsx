@@ -29,7 +29,7 @@ export default function MediaCenterHubTimeline({
           >
             <span className="relative z-10 mt-2 h-7 w-7 rounded-full border border-[#D8B87A]/35 bg-[#05070B] shadow-[0_0_0_6px_rgba(216,184,122,0.06)]" />
 
-            <article className="grid gap-4 rounded-[1.4rem] border border-white/10 bg-white/[0.035] p-4 transition duration-500 hover:border-[#D8B87A]/35 md:grid-cols-[130px_1fr]">
+            <article className="grid gap-4 rounded-[1.4rem] border border-white/10 bg-white/[0.035] p-4 transition duration-500 hover:border-[#D8B87A]/35 @xl/slot-module:grid-cols-[130px_1fr]">
               <div className="relative min-h-[105px] overflow-hidden rounded-[1rem]">
                 <Image
                   src={item.image}

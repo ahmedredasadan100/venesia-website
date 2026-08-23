@@ -10,7 +10,7 @@ export async function generateMetadata() {
 }
 
 export default async function AboutPage() {
-  const composition = await loadPageCompositionBySlug("about", "stack");
+  const composition = await loadPageCompositionBySlug("about");
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white">

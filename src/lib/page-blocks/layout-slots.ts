@@ -27,6 +27,16 @@ const LEGACY_SLOT_MAP: Record<string, PageLayoutSlot> = {
   hero: "hero",
 };
 
+export function isRecognizedLayoutSlot(
+  slot: string | null | undefined,
+): boolean {
+  const value = (slot ?? "").trim().toLowerCase();
+  return Boolean(value) && (
+    Object.hasOwn(LEGACY_SLOT_MAP, value) ||
+    PAGE_LAYOUT_SLOTS.includes(value as PageLayoutSlot)
+  );
+}
+
 export function normalizeLayoutSlot(slot: string | null | undefined): PageLayoutSlot {
   const value = (slot ?? "main").trim().toLowerCase();
   return LEGACY_SLOT_MAP[value] ?? (PAGE_LAYOUT_SLOTS.includes(value as PageLayoutSlot) ? (value as PageLayoutSlot) : "main");

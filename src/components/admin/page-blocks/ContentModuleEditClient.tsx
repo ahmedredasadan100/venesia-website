@@ -60,11 +60,12 @@ type ContentModuleEditClientProps = {
     name: string;
     slug: string;
     description: string | null;
-    variant: string;
+    variant: string | null;
     style_preset: string | null;
     status: string;
-    config: unknown;
+    updated_at: string;
   };
+  config: unknown;
   assignmentContext: ModuleAssignmentContext;
   saved?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
@@ -72,39 +73,17 @@ type ContentModuleEditClientProps = {
 
 export default function ContentModuleEditClient({
   block,
+  config,
   assignmentContext,
   saved,
   updateAction,
 }: ContentModuleEditClientProps) {
-  const editorKey = getContentModuleEditorKey(block.slug, block.variant);
+  const editorKey = getContentModuleEditorKey(block.slug, block.variant ?? "");
   const moduleProductKind = resolveModuleProductKind("content", block.slug, block.variant);
   const usesAboutIntroConfig = editorKey === "about-intro" || editorKey === "home-story";
   const isAboutIntroSingleImage = editorKey === "about-intro-single-image";
   const usesAboutPrinciplesConfig = editorKey === "about-principles" || editorKey === "home-trust";
   const usesAboutCtaConfig = editorKey === "about-cta" || editorKey === "home-contact";
-  const config = usesAboutIntroConfig
-    ? asAboutIntroConfig(block.config)
-    : isAboutIntroSingleImage
-      ? asAboutIntroSingleImageConfig(block.config)
-      : editorKey === "vision-goals"
-        ? asVisionGoalsConfig(block.config)
-        : usesAboutCtaConfig
-          ? asAboutCtaConfig(block.config)
-          : usesAboutPrinciplesConfig
-            ? asAboutPrinciplesConfig(block.config)
-            : editorKey === "about-approach"
-              ? asAboutApproachConfig(block.config)
-              : editorKey === "home-projects"
-                ? asHomeProjectsConfig(block.config)
-                : editorKey === "projects-hub-hero"
-                  ? asProjectsHubHeroConfig(block.config)
-                  : editorKey === "projects-hub-featured"
-                    ? asProjectsHubFeaturedConfig(block.config)
-                    : editorKey === "projects-hub-listing"
-                      ? asProjectsHubListingConfig(block.config)
-                      : editorKey === "projects-hub-map"
-                        ? asProjectsHubMapConfig(block.config)
-                        : asContentConfig(block.config);
   const presentationSlug = editorKey === "generic" ? block.slug : editorKey;
   const projectsHubNavigation =
     editorKey === "projects-hub-hero"
@@ -547,7 +526,7 @@ export default function ContentModuleEditClient({
         />
       )}
 
-      <form action={updateAction}>
+      <form key={`${block.id}:${block.updated_at}`} action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
         <input
           type="hidden"

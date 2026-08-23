@@ -100,6 +100,7 @@ export {
   AdminDataGridSortLink,
   AdminDataGridCheckbox,
   AdminDataGridCheckboxCell,
+  AdminDataGridReorderHandle,
   AdminDataGridPrimaryCell,
   AdminDataGridCenterCell,
   AdminDataGridStatusCell,

@@ -141,7 +141,7 @@ function ContactTextAnchor({ href, value }: { href: string; value: string }) {
 }
 
 const CTA_CLASS_NAME =
-  "home-pressable home-pressable--contact-cta flex cursor-pointer items-center justify-center gap-2.5 rounded-xl bg-[#D8B87A] px-5 py-3 text-sm font-medium text-[#06101C] shadow-[0_8px_24px_rgba(216,184,122,0.20)] transition-[transform,box-shadow,background-color] duration-300 will-change-transform hover:-translate-y-0.5 hover:bg-[#c9a760] hover:shadow-[0_10px_30px_rgba(216,184,122,0.30)] active:scale-[0.97] max-md:w-full max-md:px-4";
+  "home-pressable home-pressable--contact-cta flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-xl bg-[#D8B87A] px-4 py-3 text-sm font-medium text-[#06101C] shadow-[0_8px_24px_rgba(216,184,122,0.20)] transition-[transform,box-shadow,background-color] duration-300 will-change-transform hover:-translate-y-0.5 hover:bg-[#c9a760] hover:shadow-[0_10px_30px_rgba(216,184,122,0.30)] active:scale-[0.97] @xl/slot-module:w-auto @xl/slot-module:px-5";
 
 function HomeContactCtaButton({
   href,
@@ -204,7 +204,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
   const titleLines = resolved.title.split("\n");
 
   return (
-    <section className="relative mx-auto max-w-7xl overflow-hidden px-6 pb-4 pt-10">
+    <section className="relative mx-auto max-w-7xl overflow-hidden px-4 pb-4 pt-8 @xl/slot-module:px-6 @xl/slot-module:pt-10">
       {/* outer ambient glow — contained by section overflow-hidden */}
       <div
         aria-hidden
@@ -226,7 +226,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
         {/* panel ambient — warm gold bloom biased toward the building side */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_72%_50%,rgba(192,143,62,0.06),transparent_68%)] max-md:hidden"
+          className="pointer-events-none absolute inset-0 hidden bg-[radial-gradient(ellipse_80%_60%_at_72%_50%,rgba(192,143,62,0.06),transparent_68%)] @4xl/slot-module:block"
         />
 
         {/*
@@ -235,11 +235,11 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
           RTL render: main → physical RIGHT (dominant)
                       contact → physical LEFT (sidebar)
         */}
-        <div className="grid lg:grid-cols-[1fr_288px]">
+        <div className="grid @4xl/slot-module:grid-cols-[1fr_288px]">
           {/* ══ MAIN AREA (DOM first → physical RIGHT in RTL) ══ */}
-          <div className="relative overflow-hidden border-b border-white/[0.05] max-md:flex max-md:min-h-[440px] max-md:flex-col lg:border-b-0 lg:border-l lg:border-l-white/[0.06]">
+          <div className="relative flex min-h-[440px] flex-col overflow-hidden border-b border-white/[0.05] @4xl/slot-module:block @4xl/slot-module:min-h-0 @4xl/slot-module:border-b-0 @4xl/slot-module:border-l @4xl/slot-module:border-l-white/[0.06]">
             {/* mobile — full-bleed background image inside MAIN/CTA area */}
-            <div aria-hidden className="absolute inset-0 overflow-hidden md:hidden">
+            <div aria-hidden className="absolute inset-0 overflow-hidden @4xl/slot-module:hidden">
               <Image
                 src={resolved.image}
                 alt=""
@@ -259,17 +259,17 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
               aria-hidden
               fill
               sizes="100vw"
-              className="object-cover object-[right_center] opacity-[1] max-md:hidden"
+              className="hidden object-cover object-[right_center] opacity-[1] @4xl/slot-module:block"
               style={{ filter: "brightness(1) contrast(1.03)" }}
             />
             {/* text legibility — single soft dissolve from the left, keeps image natural */}
             <div
               aria-hidden
-              className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,#05070B_0%,rgba(5,7,11,0.62)_28%,rgba(5,7,11,0.12)_58%,transparent_82%)] max-md:hidden"
+              className="pointer-events-none absolute inset-0 hidden bg-[linear-gradient(to_right,#05070B_0%,rgba(5,7,11,0.62)_28%,rgba(5,7,11,0.12)_58%,transparent_82%)] @4xl/slot-module:block"
             />
 
             {/* content — headline, description, CTA */}
-            <div className="relative z-10 flex flex-col justify-center px-10 py-10 pr-[50%] max-md:px-6 max-md:pb-4 max-md:pr-6 max-md:pt-28 lg:px-12 lg:py-12 lg:pr-[52%]">
+            <div className="relative z-10 flex flex-col justify-center px-6 pb-4 pr-6 pt-28 @4xl/slot-module:px-12 @4xl/slot-module:py-12 @4xl/slot-module:pr-[52%]">
               {/* micro label + gold rule */}
               <div className="mb-4 flex items-center gap-3">
                 <div className="h-px w-7 shrink-0 bg-gradient-to-r from-[#D8B87A]/55 to-transparent" />
@@ -278,7 +278,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
                 </p>
               </div>
 
-              <h2 className="text-[1.72rem] font-bold leading-[1.42] tracking-[-0.02em] text-white md:text-[1.8rem] lg:whitespace-nowrap lg:text-[1.68rem]">
+              <h2 className="text-[1.72rem] font-bold leading-[1.42] tracking-[-0.02em] text-white @xl/slot-module:text-[1.8rem] @4xl/slot-module:whitespace-nowrap @4xl/slot-module:text-[1.68rem]">
                 {titleLines.map((line, index) => (
                   <Fragment key={index}>
                     {line}
@@ -289,7 +289,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
 
               <p className="mt-4 text-[12.5px] leading-[1.9] text-white/55">{resolved.description}</p>
 
-              <div className="mt-6 flex flex-col items-center gap-2.5 max-md:items-stretch">
+              <div className="mt-6 flex flex-col items-stretch gap-2.5 @xl/slot-module:items-center">
                 <HomeContactCtaButton
                   href={resolved.button.href}
                   label={resolved.button.label}
@@ -304,7 +304,7 @@ export default function HomeContactSection({ content }: HomeContactSectionProps)
           <div
             data-reveal="fade-up"
             data-delay="80"
-            className="flex flex-col justify-center divide-y divide-white/[0.05] border-t border-white/[0.05] lg:border-t-0 lg:border-r lg:border-r-white/[0.06]"
+            className="flex flex-col justify-center divide-y divide-white/[0.05] border-t border-white/[0.05] @4xl/slot-module:border-t-0 @4xl/slot-module:border-r @4xl/slot-module:border-r-white/[0.06]"
           >
             {resolved.contacts.map(({ icon, label, value, secondaryValue, href }, idx) => (
               <div key={label || idx} className="flex items-center gap-3.5 px-6 py-[1.1rem]">

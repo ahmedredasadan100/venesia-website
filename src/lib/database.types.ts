@@ -2590,6 +2590,8 @@ export type Database = {
           seo_keywords: string[]
           seo_title: string
           short_description: string
+          show_location_label: boolean
+          show_location_tags: boolean
           show_on_homepage: boolean
           slug: string
           small_box_image: string
@@ -2644,6 +2646,8 @@ export type Database = {
           seo_keywords?: string[]
           seo_title?: string
           short_description: string
+          show_location_label?: boolean
+          show_location_tags?: boolean
           show_on_homepage?: boolean
           slug: string
           small_box_image: string
@@ -2698,6 +2702,8 @@ export type Database = {
           seo_keywords?: string[]
           seo_title?: string
           short_description?: string
+          show_location_label?: boolean
+          show_location_tags?: boolean
           show_on_homepage?: boolean
           slug?: string
           small_box_image?: string

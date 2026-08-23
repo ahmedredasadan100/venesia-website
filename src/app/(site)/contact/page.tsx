@@ -9,7 +9,7 @@ export async function generateMetadata() {
 }
 
 export default async function ContactPage() {
-  const composition = await loadPageCompositionBySlug("contact", "stack");
+  const composition = await loadPageCompositionBySlug("contact");
 
   return <ContactPageContent composition={composition} />;
 }

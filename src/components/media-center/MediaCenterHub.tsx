@@ -4,15 +4,14 @@ import { renderMediaHubSections } from "./renderMediaHubSections";
 
 export default function MediaCenterHub({ composition }: { composition: PageComposition }) {
   const hubModulesState = composition.mediaHubModules;
-  const sidebarModules = composition.mediaSidebarModules;
-  if (!hubModulesState || !sidebarModules) return null;
+  if (!hubModulesState) return null;
 
   const sectionNodes = renderMediaHubSections(
     hubModulesState.modules.filter((module) => module.config.placement === "hub"),
   );
 
   return (
-    <MediaPageShell sidebarModules={sidebarModules}>
+    <MediaPageShell>
       <section className="space-y-10 text-right text-white" dir="rtl">
         {sectionNodes}
       </section>

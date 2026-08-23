@@ -137,17 +137,17 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
   if (!resolved.images.main || !resolved.images.secondary) return null;
 
   return (
-    <section className="relative overflow-hidden bg-[#05070B] py-24 text-white max-md:py-10 md:max-lg:py-16">
+    <section className="relative overflow-hidden bg-[#05070B] py-10 text-white @xl/slot-module:py-16 @4xl/slot-module:py-24">
       <div className="mx-auto max-w-7xl px-6">
-        <div className="grid items-center gap-14 max-md:gap-10 lg:grid-cols-[0.95fr_1.05fr]">
+        <div className="grid items-center gap-10 @4xl/slot-module:grid-cols-[0.95fr_1.05fr] @4xl/slot-module:gap-14">
           <div data-reveal="fade-up" data-delay="0" className="home-story-reveal">
             <div
               ref={mediaRef}
               {...inViewProps}
-              className="home-story-media relative min-h-[500px] max-md:min-h-[280px] md:max-lg:mx-auto md:max-lg:min-h-[360px] md:max-lg:w-full md:max-lg:max-w-md"
+              className="home-story-media relative min-h-[280px] @xl/slot-module:mx-auto @xl/slot-module:min-h-[360px] @xl/slot-module:w-full @xl/slot-module:max-w-md @4xl/slot-module:min-h-[500px] @4xl/slot-module:max-w-none"
             >
               <HomeStoryMediaFrame
-                className="home-story-frame--main absolute right-0 top-0 z-[1] h-[380px] w-[78%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40 max-md:h-[220px] max-md:w-[70%] md:max-lg:h-[265px] md:max-lg:w-[74%]"
+                className="home-story-frame--main absolute right-0 top-0 z-[1] h-[220px] w-[70%] overflow-hidden rounded-[2rem] border border-white/10 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.45)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/40 @xl/slot-module:h-[265px] @xl/slot-module:w-[74%] @4xl/slot-module:h-[380px] @4xl/slot-module:w-[78%]"
                 imageSrc={resolved.images.main}
                 imageAlt={resolved.images.mainAlt}
                 sizes="(max-width: 768px) 70vw, 40vw"
@@ -155,7 +155,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
               />
 
               <HomeStoryMediaFrame
-                className="home-story-frame--secondary absolute bottom-0 left-0 z-[2] h-[320px] w-[65%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50 max-md:h-[185px] max-md:w-[58%] md:max-lg:h-[220px] md:max-lg:w-[60%]"
+                className="home-story-frame--secondary absolute bottom-0 left-0 z-[2] h-[185px] w-[58%] overflow-hidden rounded-[2rem] border border-[#D8B87A]/20 bg-black shadow-[0_24px_80px_rgba(0,0,0,0.5)] transition duration-700 hover:-translate-y-1 hover:border-[#D8B87A]/50 @xl/slot-module:h-[220px] @xl/slot-module:w-[60%] @4xl/slot-module:h-[320px] @4xl/slot-module:w-[65%]"
                 imageSrc={resolved.images.secondary}
                 imageAlt={resolved.images.secondaryAlt}
                 sizes="(max-width: 768px) 58vw, 35vw"
@@ -169,7 +169,7 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
               {resolved.eyebrow}
             </p>
 
-            <h2 className="home-story-title mt-4 max-w-xl text-4xl font-semibold leading-tight lg:text-5xl">
+            <h2 className="home-story-title mt-4 max-w-xl text-4xl font-semibold leading-tight @4xl/slot-module:text-5xl">
               {resolved.title}
             </h2>
 

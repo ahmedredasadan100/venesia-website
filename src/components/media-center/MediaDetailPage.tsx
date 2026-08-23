@@ -1,15 +1,20 @@
 import { notFound } from "next/navigation";
 
 import InternalPageLayout from "../InternalPageLayout";
+import PageSlotLayout, {
+  PageSlotContent,
+} from "../page-composition/PageSlotLayout";
 import JsonLd from "../seo/JsonLd";
 import TopicViewTracker from "../content/TopicViewTracker";
 import { getMediaItemBySlug, getRelatedMediaItems } from "../../lib/media-center";
 import { MEDIA_DETAIL_PAGE_CONFIG, type MediaDetailPageKey } from "../../lib/media-center/detail-page-config";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
+import { getSlotEntries } from "../../lib/page-blocks/page-composition-utils";
 import { buildPageJsonLd } from "../../lib/seo/build-jsonld";
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 import MediaDetailArticle from "./MediaDetailArticle";
 import MediaPageShell from "./MediaPageShell";
+import { MediaSidebarSearch } from "./MediaSidebar";
 
 type MediaDetailPageProps = {
   configKey: MediaDetailPageKey;
@@ -19,7 +24,7 @@ type MediaDetailPageProps = {
 export default async function MediaDetailPage({ configKey, slug }: MediaDetailPageProps) {
   const config = MEDIA_DETAIL_PAGE_CONFIG[configKey];
   const itemPromise = getMediaItemBySlug(config.mediaType, slug);
-  const compositionPromise = loadPageCompositionBySlug(config.cmsPageSlug, "stack");
+  const compositionPromise = loadPageCompositionBySlug(config.cmsPageSlug);
   const globalSeoPromise = loadResolvedGlobalSeo();
 
   const [item, composition] = await Promise.all([
@@ -69,21 +74,37 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
       showTitle={item.showTitleOnPage !== false}
       showHeroImage={item.showImageOnPage !== false}
       showSubtitle={item.showExcerptOnPage !== false}
+      heroSlotContent={
+        getSlotEntries(composition, "hero").length ? (
+          <PageSlotContent
+            entries={getSlotEntries(composition, "hero")}
+            breadcrumbCurrentLabel={item.title}
+          />
+        ) : composition.hasAnyAssignmentRows || composition.hasCompositionError ? null : undefined
+      }
+      compositionChildren
     >
-      {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}
-      <JsonLd data={pageJsonLd} />
+      <PageSlotLayout
+        composition={composition}
+        skipSlots={["hero"]}
+        breadcrumbCurrentLabel={item.title}
+        sidebarPrefix={<MediaSidebarSearch searchBasePath={config.basePath} />}
+        mainAfter={
+          <>
+            {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}
+            <JsonLd data={pageJsonLd} />
 
-      <MediaPageShell
-        sidebarModules={composition.mediaSidebarModules}
-        searchBasePath={config.basePath}
-      >
-        <MediaDetailArticle
-          item={item}
-          content={content}
-          config={config}
-          relatedItems={relatedItems}
-        />
-      </MediaPageShell>
+            <MediaPageShell>
+              <MediaDetailArticle
+                item={item}
+                content={content}
+                config={config}
+                relatedItems={relatedItems}
+              />
+            </MediaPageShell>
+          </>
+        }
+      />
     </InternalPageLayout>
   );
 }

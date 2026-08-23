@@ -3,9 +3,9 @@ import type { BlockRendererProps } from "./block-registry";
 import type { CardsBlockConfig } from "../../lib/page-blocks";
 
 function columnsClass(columns?: number) {
-  if (columns === 2) return "md:grid-cols-2";
-  if (columns === 4) return "md:grid-cols-2 xl:grid-cols-4";
-  return "md:grid-cols-3";
+  if (columns === 2) return "@xl/slot-module:grid-cols-2";
+  if (columns === 4) return "@xl/slot-module:grid-cols-2 @5xl/slot-module:grid-cols-4";
+  return "@3xl/slot-module:grid-cols-3";
 }
 
 export default function CardsSection({ block }: BlockRendererProps) {
@@ -14,7 +14,7 @@ export default function CardsSection({ block }: BlockRendererProps) {
   const items = config.items ?? [];
 
   return (
-    <section className="relative py-16 md:py-20" data-block-variant={variant}>
+    <section className="relative py-12 @xl/slot-module:py-16 @4xl/slot-module:py-20" data-block-variant={variant}>
       <div className="mx-auto max-w-7xl px-6">
         {(config.eyebrow || config.title || config.description) && (
           <div className="mb-10 text-right">
@@ -22,7 +22,7 @@ export default function CardsSection({ block }: BlockRendererProps) {
               <p className="font-en text-[10px] uppercase tracking-[0.22em] text-[#D8B87A]/55">{config.eyebrow}</p>
             ) : null}
             {config.title ? (
-              <h2 className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white md:text-3xl">{config.title}</h2>
+              <h2 className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white @xl/slot-module:text-3xl">{config.title}</h2>
             ) : null}
             {config.description ? (
               <p className="mt-4 max-w-2xl text-sm leading-7 text-white/55">{config.description}</p>

@@ -3,7 +3,7 @@ import type { SeoRouteConfig } from "./seo-types";
 export const SEO_ROUTES: SeoRouteConfig[] = [
   {
     path: "/",
-    title: "فينيسيا للتطوير العقاري | الثقة مش وعد… الثقة فعل",
+    title: "الثقة مش وعد… الثقة فعل",
     description:
       "فينيسيا للتطوير العقاري توثق مشروعاتها على أرض الواقع، من مراحل التنفيذ إلى التسليم، برؤية هندسية واضحة وثقة تُبنى بالفعل.",
     kind: "home",
@@ -16,7 +16,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/about",
-    title: "من نحن | فينيسيا للتطوير العقاري",
+    title: "من نحن",
     description:
       "تعرف على فينيسيا للتطوير العقاري، رؤيتها، منهجها في التنفيذ، وفلسفتها القائمة على وضوح الملكية، جودة البناء، وتوثيق كل خطوة.",
     kind: "static",
@@ -29,7 +29,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/contact",
-    title: "تواصل معنا | فينيسيا للتطوير العقاري",
+    title: "تواصل معنا",
     description:
       "تواصل مع فريق فينيسيا للتطوير العقاري لمعرفة تفاصيل المشروعات السكنية والتجارية ومتابعة أحدث مراحل التنفيذ.",
     kind: "static",
@@ -38,7 +38,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/projects",
-    title: "المشروعات | فينيسيا للتطوير العقاري",
+    title: "المشروعات",
     description:
       "استكشف مشروعات فينيسيا السكنية والتجارية في القاهرة الجديدة وبيت الوطن، مع توثيق مراحل التنفيذ خطوة بخطوة.",
     kind: "project-listing",
@@ -51,7 +51,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/media-center",
-    title: "المركز الإعلامي | فينيسيا للتطوير العقاري",
+    title: "المركز الإعلامي",
     description:
       "أخبار فينيسيا، تحديثات الموقع، الجولات المرئية، والمواد الإعلامية التي توثق ما يحدث داخل المشروعات على أرض الواقع.",
     kind: "media-listing",
@@ -60,7 +60,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/media-center/news",
-    title: "الأخبار | المركز الإعلامي | فينيسيا للتطوير العقاري",
+    title: "الأخبار | المركز الإعلامي",
     description:
       "آخر أخبار فينيسيا للتطوير العقاري وتحديثات المشروعات، موثقة من أرض التنفيذ بلغة واضحة وواقعية.",
     kind: "media-listing",
@@ -69,7 +69,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/media-center/site-updates",
-    title: "تحديثات الموقع | فينيسيا للتطوير العقاري",
+    title: "تحديثات الموقع",
     description:
       "توثيق مستمر لمراحل التنفيذ في مشروعات فينيسيا، من الحفر والخرسانة إلى التشطيبات والاستعداد للتسليم.",
     kind: "media-listing",
@@ -78,7 +78,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/media-center/videos",
-    title: "الفيديوهات | فينيسيا للتطوير العقاري",
+    title: "الفيديوهات",
     description:
       "جولات مرئية ولقطات من مواقع التنفيذ توضح تقدم الأعمال داخل مشروعات فينيسيا للتطوير العقاري.",
     kind: "media-listing",
@@ -87,7 +87,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/media-center/gallery",
-    title: "معرض الصور | فينيسيا للتطوير العقاري",
+    title: "معرض الصور",
     description:
       "صور واقعية من مواقع ومشروعات فينيسيا للتطوير العقاري، توثق مراحل البناء والتفاصيل التنفيذية.",
     kind: "media-listing",
@@ -96,7 +96,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/media-center/press",
-    title: "الصحافة | فينيسيا للتطوير العقاري",
+    title: "الصحافة",
     description:
       "المواد الصحفية والإعلانات الرسمية الخاصة بفينيسيا للتطوير العقاري ومشروعاتها.",
     kind: "media-listing",
@@ -105,7 +105,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
   {
     path: "/topics",
-    title: "الموضوعات العقارية | فينيسيا للتطوير العقاري",
+    title: "الموضوعات العقارية",
     description:
       "موضوعات توعوية تساعدك على فهم السوق العقاري، قراءة العقود، تقييم المطور، واختيار الاستثمار بوعي.",
     kind: "topic-listing",
@@ -115,7 +115,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
 
   {
     path: "/track-your-project",
-    title: "تابع مشروعك | فينيسيا للتطوير العقاري",
+    title: "تابع مشروعك",
     description:
       "تابع تطورات مشروعك مع فينيسيا للتطوير العقاري من خلال تحديثات موثقة تعكس تقدم التنفيذ على أرض الواقع.",
     kind: "static",

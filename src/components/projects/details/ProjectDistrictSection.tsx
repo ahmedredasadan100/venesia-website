@@ -1,6 +1,10 @@
 import type { PublicProject } from "../../../lib/projects/public-types";
 import RichTextContent from "../../content/RichTextContent";
 import PublicMediaImage from "../../public/PublicMediaImage";
+import {
+  resolveVisibleProjectLocationLabel,
+  resolveVisibleProjectLocationTags,
+} from "../../../lib/projects/project-location-presentation";
 
 type ProjectDistrictSectionProps = Pick<PublicProject, "location" | "cardImage" | "englishName">;
 
@@ -9,12 +13,13 @@ export default function ProjectDistrictSection({
   cardImage,
   englishName,
 }: ProjectDistrictSectionProps) {
-  const hierarchy = [
-    location.governorate,
-    location.city,
-    location.mainArea,
-    location.subArea,
-  ].filter((item): item is NonNullable<typeof item> => item !== null);
+  const locationLabel = resolveVisibleProjectLocationLabel(location);
+  const hierarchy = resolveVisibleProjectLocationTags(
+    location.presentation,
+    [location.governorate, location.city, location.mainArea, location.subArea].filter(
+      (item): item is NonNullable<typeof item> => item !== null,
+    ),
+  );
 
   return (
     <section id="district" className="scroll-mt-24 border-b border-white/10 bg-[#05070B] px-6 py-16">
@@ -26,9 +31,11 @@ export default function ProjectDistrictSection({
             </h2>
           ) : null}
 
-          <p className={`${location.title ? "mt-3" : ""} text-base font-medium text-white/80`}>
-            {location.label}
-          </p>
+          {locationLabel ? (
+            <p className={`${location.title ? "mt-3" : ""} text-base font-medium text-white/80`}>
+              {locationLabel}
+            </p>
+          ) : null}
 
           {hierarchy.length ? (
             <div className="mt-4 flex flex-wrap gap-2">

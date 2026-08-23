@@ -10,6 +10,7 @@ import {
 import {
   SEO_LENGTH_STANDARDS,
   assessSeoLength,
+  countSeoTextCharacters,
   formatSeoLengthRange,
   getSeoLengthStateLabel,
   type SeoLengthStandard,
@@ -23,6 +24,11 @@ import {
   useOptionalAdminFormRuntime,
 } from "../ui/AdminFormRuntime";
 import AdminSingleOpenAccordion from "../ui/AdminSingleOpenAccordion";
+import {
+  composeSeoTitle,
+  stripSeoTitleSuffix,
+} from "../../../lib/seo/seo-utils";
+import { hasEntitySeoData } from "../../../lib/seo/entity-seo-types";
 
 export const ADMIN_ENTITY_SEO_TERMINOLOGY = {
   seoTitle: "عنوان صفحة محركات البحث (SEO Title)",
@@ -102,6 +108,15 @@ export type AdminEntitySeoPanelProps<TAnalysisState = undefined> = {
   fieldNames: AdminEntitySeoFieldNames;
   fieldIds: AdminEntitySeoFieldIds;
   social: AdminEntitySeoSocialContract;
+  /** Site Settings-owned suffix. The persisted field remains page/entity-specific. */
+  seoTitleSuffix?: string;
+  /** Actual route/global metadata when the entity has no meaningful local SEO. */
+  resolvedFallback?: {
+    title: string;
+    description: string;
+    image: string;
+    imageAlt: string;
+  };
   initial: SeoScoreInput & {
     canonicalUrl: string;
     robotsIndex: boolean | null;
@@ -286,7 +301,7 @@ function SeoTextField({
             assessment ? formatSeoLengthRange(assessment) : undefined
           }
         >
-          {liveValue.length} حرف
+          {assessment?.count ?? countSeoTextCharacters(liveValue)} حرف
           {assessment
             ? ` — المدى القياسي ${formatSeoLengthRange(assessment)}`
             : ""}
@@ -369,11 +384,20 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   fieldNames,
   fieldIds,
   social,
+  seoTitleSuffix = "",
+  resolvedFallback,
   initial,
   correctionTargets,
   analysisExtension,
 }: AdminEntitySeoPanelProps<TAnalysisState>) {
-  const [live, setLive] = useState<LiveSeoState>(initial);
+  const initialSeoTitleSegment = stripSeoTitleSuffix(
+    initial.seoTitle,
+    seoTitleSuffix,
+  );
+  const [live, setLive] = useState<LiveSeoState>(() => ({
+    ...initial,
+    seoTitle: initialSeoTitleSegment,
+  }));
   const [analysisState, setAnalysisState] = useState<TAnalysisState>(() =>
     analysisExtension
       ? analysisExtension.initialState
@@ -398,7 +422,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
         slug: readValue(form, sourceFieldNames.slug, initial.slug),
         image: readValue(form, sourceFieldNames.image, initial.image),
         imageAlt: readValue(form, sourceFieldNames.imageAlt, initial.imageAlt),
-        seoTitle: readValue(form, fieldNames.seoTitle, initial.seoTitle),
+        seoTitle: readValue(form, fieldNames.seoTitle, initialSeoTitleSegment),
         seoDescription: readValue(
           form,
           fieldNames.seoDescription,
@@ -445,7 +469,35 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       form.removeEventListener("input", read);
       form.removeEventListener("change", read);
     };
-  }, [analysisExtension, fieldNames, id, initial, social, sourceFieldNames]);
+  }, [analysisExtension, fieldNames, id, initial, initialSeoTitleSegment, social, sourceFieldNames]);
+
+  const hasLocalSeo = hasEntitySeoData({
+    title: live.seoTitle,
+    description: live.seoDescription,
+    focusKeyword: live.focusKeyword,
+    keywords: live.seoKeywords,
+    canonical: live.canonicalUrl,
+    robotsIndex: live.robotsIndex,
+    robotsFollow: live.robotsFollow,
+    ogImage: live.ogImage,
+    ogImageAlt: live.ogImageAlt,
+  });
+  const effectiveSeoTitle = resolvedFallback && !hasLocalSeo
+    ? resolvedFallback.title
+    : composeSeoTitle(
+        live.seoTitle,
+        live.title,
+        seoTitleSuffix,
+      );
+  const effectiveSeoDescription =
+    live.seoDescription.trim() ||
+    live.description.trim() ||
+    resolvedFallback?.description ||
+    "";
+  const effectiveImage =
+    live.image.trim() || resolvedFallback?.image || "";
+  const effectiveImageAlt =
+    live.imageAlt.trim() || resolvedFallback?.imageAlt || "";
 
   const analysisInput = useMemo<SeoScoreInput>(
     () => ({
@@ -454,33 +506,40 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       description: live.description,
       content: live.content,
       slug: live.slug,
-      image: live.image,
-      imageAlt: live.imageAlt,
+      image: effectiveImage,
+      imageAlt: effectiveImageAlt,
       ogImage: live.ogImage,
       ogImageAlt: live.ogImageAlt,
-      seoTitle: live.seoTitle,
-      seoDescription: live.seoDescription,
+      seoTitle: effectiveSeoTitle,
+      seoDescription: effectiveSeoDescription,
       seoKeywords: live.seoKeywords,
       focusKeyword: live.focusKeyword,
       faq: analysisExtension
         ? analysisExtension.resolveFaq(analysisState)
         : live.faq,
     }),
-    [analysisExtension, analysisState, live],
+    [
+      analysisExtension,
+      analysisState,
+      effectiveImage,
+      effectiveImageAlt,
+      effectiveSeoDescription,
+      effectiveSeoTitle,
+      live,
+    ],
   );
   const analysis = useMemo(
     () => analyzeEntitySeo(analysisInput),
     [analysisInput],
   );
-  const previewImage = live.ogImage.trim() || live.image.trim();
+  const previewImage =
+    live.ogImage.trim() || live.image.trim() || resolvedFallback?.image || "";
   const previewImageAlt = live.ogImage.trim()
     ? live.ogImageAlt.trim()
-    : live.imageAlt.trim();
-  const title =
-    live.seoTitle.trim() || live.title.trim() || `عنوان ${entityLabel}`;
+    : live.imageAlt.trim() || resolvedFallback?.imageAlt || "";
+  const title = effectiveSeoTitle || `عنوان ${entityLabel}`;
   const description =
-    live.seoDescription.trim() ||
-    live.description.trim() ||
+    effectiveSeoDescription ||
     `سيظهر وصف ${entityLabel} هنا بعد إدخاله.`;
   const publicPath = `${publicPathPrefix}/${live.slug.trim() || slugPlaceholder}`;
   const canonical = live.canonicalUrl.trim() || publicPath;
@@ -494,11 +553,20 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
         <SeoTextField
           id={fieldIds.seoTitle}
           name={fieldNames.seoTitle}
-          label={ADMIN_ENTITY_SEO_TERMINOLOGY.seoTitle}
-          defaultValue={initial.seoTitle}
-          liveValue={live.seoTitle}
+          label={
+            seoTitleSuffix
+              ? "عنوان صفحة محركات البحث (بدون اسم الموقع)"
+              : ADMIN_ENTITY_SEO_TERMINOLOGY.seoTitle
+          }
+          defaultValue={initialSeoTitleSegment}
+          liveValue={effectiveSeoTitle}
           standard={SEO_LENGTH_STANDARDS.title}
         />
+        {seoTitleSuffix ? (
+          <p className="-mt-3 text-xs leading-6 text-white/42" data-admin-seo-title-template>
+            يُضاف تلقائيًا: <span dir="auto" className="text-white/60">{seoTitleSuffix}</span>
+          </p>
+        ) : null}
         <SeoTextField
           id={fieldIds.seoDescription}
           name={fieldNames.seoDescription}

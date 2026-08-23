@@ -69,7 +69,7 @@ export function renderMediaHubSections(modules: MediaHubModuleState[]): ReactNod
       nodes.push(
         <div
           key={`hub-grid-${current.assignmentId}-${next.assignmentId}-${index}`}
-          className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]"
+          className="grid gap-8 @5xl/slot-module:grid-cols-[0.95fr_1.05fr]"
         >
           {timelineFirst ? (
             <>
@@ -90,7 +90,7 @@ export function renderMediaHubSections(modules: MediaHubModuleState[]): ReactNod
 
     if (current.sectionKey === "site-updates" || current.sectionKey === "videos") {
       nodes.push(
-        <div key={`hub-grid-${current.assignmentId}-${index}`} className="grid gap-8 xl:grid-cols-[0.95fr_1.05fr]">
+        <div key={`hub-grid-${current.assignmentId}-${index}`} className="grid gap-8 @5xl/slot-module:grid-cols-[0.95fr_1.05fr]">
           {renderHubSection(current)}
         </div>,
       );

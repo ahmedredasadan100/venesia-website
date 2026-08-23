@@ -9,6 +9,7 @@ import {
 } from "./block-module-registry";
 import { revalidatePageBlocksPath } from "./admin-revalidate";
 import type { PageBlockType } from "./types";
+import { getAssignableSlotsForRoute } from "../page-composition/route-slot-policy";
 
 type AssignmentSyncActor = { id: number; username: string };
 
@@ -66,6 +67,23 @@ export async function syncBlockModulePageAssignments(
   pageIds: number[],
   actor: AssignmentSyncActor,
 ) {
+  if (blockType === "breadcrumb" && pageIds.length) {
+    const { data: pages, error } = await getSupabaseAdmin()
+      .from("pages")
+      .select("id,slug")
+      .in("id", pageIds);
+    if (error) throw new Error(error.message);
+
+    const allowedIds = new Set(
+      (pages ?? [])
+        .filter((page) => getAssignableSlotsForRoute(page.slug, "breadcrumb").length > 0)
+        .map((page) => page.id),
+    );
+    if (allowedIds.size !== new Set(pageIds).size) {
+      throw new Error("إحدى الصفحات المحددة لا تدعم موضع عرض لمسار التنقل.");
+    }
+  }
+
   await syncModulePageAssignmentsForTable(
     BLOCK_MODULE_REGISTRY[blockType].assignmentTable,
     blockType,

@@ -42,9 +42,36 @@ export function resolveHeroFamily(variant: unknown): HeroFamily {
   return HERO_VARIANT_FAMILY[normalized] ?? "standard-internal";
 }
 
-/** Variants authored by the Generic Hero Template pipeline. Domain-owned variants use their own adapters. */
-export const HERO_TEMPLATE_VARIANTS = ["home-cinematic", "internal-page"] as const satisfies readonly HeroVariant[];
+/** Variants whose presentation is authored by the existing Hero Template pipeline. */
+export const HERO_TEMPLATE_VARIANTS = [
+  "home-cinematic",
+  "internal-page",
+  "project-detail",
+] as const satisfies readonly HeroVariant[];
 export type HeroTemplateVariant = (typeof HERO_TEMPLATE_VARIANTS)[number];
+
+/**
+ * These variants read content from their domain while keeping presentation in
+ * hero_templates.config. This is a source classification, not a second config.
+ */
+export const HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS = ["project-detail"] as const satisfies readonly HeroTemplateVariant[];
+export type HeroDomainBackedTemplateVariant =
+  (typeof HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS)[number];
+
+export function isDomainBackedHeroTemplateVariant(
+  value: unknown,
+): value is HeroDomainBackedTemplateVariant {
+  return (HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS as readonly unknown[]).includes(value);
+}
+
+/** Semantic elements actually rendered by the Project Detail Hero variant. */
+export const PROJECT_DETAIL_HERO_ELEMENT_KEYS = [
+  "eyebrow",
+  "title",
+  "subtitle",
+  "description",
+  "cta",
+] as const satisfies readonly HeroElementKey[];
 
 export const HERO_VARIANT_LABELS_AR: Record<HeroVariant, string> = {
   "home-cinematic": "رئيسية سينمائية",
@@ -275,6 +302,20 @@ export function resolveHeroContentControlsForVariant(
   variant: unknown = "internal-page",
 ): HeroContentControls {
   const controls = resolveHeroContentControls(raw);
+  if (variant === "project-detail") {
+    return {
+      ...controls,
+      subtitleBold:
+        parseOptionalBool(raw.subtitleBold ?? raw.subtitle_bold) ?? true,
+      showHighlight: false,
+      highlightBold: false,
+      highlightAlignment: "right",
+      heroElementOrder: normalizeHeroElementOrder(
+        raw.heroElementOrder ?? raw.hero_element_order,
+        PROJECT_DETAIL_HERO_ELEMENT_KEYS,
+      ),
+    };
+  }
   if (resolveHeroFamily(variant) !== "standard-internal") return controls;
 
   return {

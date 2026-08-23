@@ -39,6 +39,9 @@ function buildManualItems(formData: FormData): BreadcrumbBlockItem[] {
   for (let index = 0; index < 8; index += 1) {
     const label = cleanText(formData.get(`manual_item_${index}_label`));
     const linkData = linkFieldFromFormData(formData, `manual_item_${index}`);
+    if (!label && hasSavedLinkField(linkData)) {
+      throw new Error(`تسمية عنصر المسار ${index + 1} مطلوبة عند اختيار رابط.`);
+    }
     if (!label && !hasSavedLinkField(linkData)) continue;
     items.push({
       label: label || undefined,
@@ -59,12 +62,28 @@ function buildBreadcrumbConfig(formData: FormData): BreadcrumbBlockConfig {
   };
 }
 
-async function ensureUniqueSlug(slug: string, id?: number) {
-  let query = getSupabaseAdmin().from("breadcrumb_block_templates").select("id").eq("slug", slug).limit(1);
-  if (id) query = query.neq("id", id);
-  const { data, error } = await query.maybeSingle();
+async function ensureUniqueSlug(slug: string) {
+  const { data, error } = await getSupabaseAdmin()
+    .from("breadcrumb_block_templates")
+    .select("id")
+    .eq("slug", slug)
+    .limit(1)
+    .maybeSingle();
   if (error) throw new Error(`Breadcrumb slug lookup failed: ${error.message}`);
   return !data;
+}
+
+async function resolveUniqueSlug(name: string) {
+  const base = slugify(name);
+  if (!base) return "";
+  if (await ensureUniqueSlug(base)) return base;
+
+  for (let suffix = 2; suffix <= 100; suffix += 1) {
+    const candidate = `${base}-${suffix}`;
+    if (await ensureUniqueSlug(candidate)) return candidate;
+  }
+
+  throw new Error("تعذر إنشاء معرّف داخلي فريد. حاول باسم أوضح.");
 }
 
 export type CreateBreadcrumbBlockFormActionState = AdminFormActionState;
@@ -72,7 +91,7 @@ export type CreateBreadcrumbBlockFormActionState = AdminFormActionState;
 function createBreadcrumbBlockFailure(
   revision: number,
   message: string,
-  field?: "name" | "slug",
+  field?: "name",
 ): CreateBreadcrumbBlockFormActionState {
   return {
     status: "error",
@@ -117,22 +136,21 @@ export async function createBreadcrumbBlock(
   const revision = previousState.revision + 1;
   const actor = await requireAdminSession();
   const name = cleanText(formData.get("name"));
-  const slug = slugify(cleanText(formData.get("slug")) || name);
 
   if (!name) return createBreadcrumbBlockFailure(revision, "اسم البلوك مطلوب.", "name");
-  if (!slug) return createBreadcrumbBlockFailure(revision, "اكتب slug صالحًا للبلوك.", "slug");
-  if (!(await ensureUniqueSlug(slug))) {
-    return createBreadcrumbBlockFailure(revision, "الـ slug مستخدم بالفعل.", "slug");
-  }
 
   let createdId: number | null = null;
   let mediaWarning = false;
   try {
+    const slug = await resolveUniqueSlug(name);
+    if (!slug) {
+      return createBreadcrumbBlockFailure(revision, "تعذر إنشاء معرّف داخلي من الاسم.", "name");
+    }
     const nextRow: TablesInsert<"breadcrumb_block_templates"> = {
       name,
       slug,
       description: cleanText(formData.get("description")) || null,
-      variant: cleanText(formData.get("variant")) || "hero-inline",
+      variant: cleanText(formData.get("variant")) || "default",
       style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
       status: parseFormStatus(formData),
       config: buildBreadcrumbConfig(formData),
@@ -181,7 +199,6 @@ export async function createBreadcrumbBlock(
     return createBreadcrumbBlockFailure(
       revision,
       message,
-      message.toLowerCase().includes("slug") ? "slug" : undefined,
     );
   }
 }
@@ -190,16 +207,23 @@ export async function updateBreadcrumbBlock(formData: FormData) {
   const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const name = cleanText(formData.get("name"));
-  const slug = slugify(cleanText(formData.get("slug")) || name);
 
-  if (!id || !name || !slug) throw new Error("بيانات البلوك غير مكتملة.");
-  if (!(await ensureUniqueSlug(slug, id))) throw new Error("الـ slug مستخدم بالفعل.");
+  if (!id || !name) throw new Error("بيانات البلوك غير مكتملة.");
+  const { data: existing, error: existingError } = await getSupabaseAdmin()
+    .from("breadcrumb_block_templates")
+    .select("slug,variant")
+    .eq("id", id)
+    .maybeSingle();
+  if (existingError || !existing) {
+    throw new Error(existingError?.message ?? "بلوك مسار التنقل غير موجود.");
+  }
+  const slug = existing.slug;
 
   const nextRow: TablesUpdate<"breadcrumb_block_templates"> = {
     name,
     slug,
     description: cleanText(formData.get("description")) || null,
-    variant: cleanText(formData.get("variant")) || "hero-inline",
+    variant: existing.variant,
     style_preset: cleanText(formData.get("style_preset")) || "premium-dark",
     status: parseFormStatus(formData),
     config: buildBreadcrumbConfig(formData),

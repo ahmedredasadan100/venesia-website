@@ -52,7 +52,10 @@ import {
 } from "../../../../../lib/admin/entity-list";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../../../lib/admin/entity-list/bulk-action-labels";
 import { useAdminBoundedClientInstantMutation } from "../../../../../lib/admin/entity-list/data-engine/instant-mutation";
-import { HERO_TEMPLATE_VARIANT_OPTIONS_AR } from "../../../../../lib/hero/hero-content-controls";
+import {
+  HERO_TEMPLATE_VARIANT_OPTIONS_AR,
+  isDomainBackedHeroTemplateVariant,
+} from "../../../../../lib/hero/hero-content-controls";
 import {
   getPageCompositionColumnPreferenceConfig,
   getPageCompositionDefaultColumnKeys,
@@ -356,7 +359,7 @@ export default function HeroManagerClient({
       <AdminPageContextHeader
         eyebrow="إدارة الموديولات"
         title="إدارة الهيرو"
-        description="جدول موحّد لكل قوالب الهيرو، ويمكن ربط كل قالب بصفحة أو أكثر."
+        description="جدول موحّد لقوالب Hero: القوالب الصفحية تُربط بالصفحات، والـvariants الديناميكية تُدار من الشاشة نفسها."
         actions={
           <button
             type="button"
@@ -522,6 +525,7 @@ export default function HeroManagerClient({
           {paginatedHeroes.map((hero) => {
             const previewPath = resolveHeroPreviewPath(hero);
             const hidden = { access: "hidden" as const };
+            const isRequiredVariantConfiguration = isDomainBackedHeroTemplateVariant(hero.variant);
             const interaction = instant.getRowInteraction(hero.id);
             const pendingAction = interaction.pendingAction;
             const visibilityPending = pendingAction === "visibility";
@@ -581,42 +585,52 @@ export default function HeroManagerClient({
                         ),
                     },
                 featured: hidden,
-                duplicate: {
-                  access: "allowed",
-                  pending: pendingAction === "duplicate",
-                  onSelect: async () => {
-                    await runMutation(
-                      hero.id,
-                      "duplicate",
-                      () =>
-                        duplicateHeroTemplate(
-                          mutationFormData({ id: hero.id }),
-                        ),
-                      "تم إنشاء نسخة من الهيرو.",
-                    );
-                  },
-                },
+                duplicate: isRequiredVariantConfiguration
+                  ? {
+                      access: "disabled",
+                      disabledReason: "هذا هو Configuration المعتمدة للـvariant ولا يقبل مصدرًا موازيًا.",
+                    }
+                  : {
+                      access: "allowed",
+                      pending: pendingAction === "duplicate",
+                      onSelect: async () => {
+                        await runMutation(
+                          hero.id,
+                          "duplicate",
+                          () =>
+                            duplicateHeroTemplate(
+                              mutationFormData({ id: hero.id }),
+                            ),
+                          "تم إنشاء نسخة من الهيرو.",
+                        );
+                      },
+                    },
                 archive: hidden,
-                delete: {
-                  access: "allowed",
-                  pending: pendingAction === "delete",
-                  onSelect: async () => {
-                    const succeeded = await runMutation(
-                      hero.id,
-                      "delete",
-                      () =>
-                        deleteHeroTemplate(mutationFormData({ id: hero.id })),
-                      "تم حذف الهيرو.",
-                    );
-                    if (!succeeded) throw new Error("hero delete failed");
-                  },
-                  confirmation: {
-                    mode: "shared",
-                    title: "تأكيد حذف الهيرو",
-                    description: `حذف الهيرو «${hero.name}» نهائيًا؟`,
-                    confirmLabel: "حذف الهيرو",
-                  },
-                },
+                delete: isRequiredVariantConfiguration
+                  ? {
+                      access: "disabled",
+                      disabledReason: "هذا Configuration معتمدة لكل Routes هذا الـvariant؛ استخدم حالة النشر لإخفائه.",
+                    }
+                  : {
+                      access: "allowed",
+                      pending: pendingAction === "delete",
+                      onSelect: async () => {
+                        const succeeded = await runMutation(
+                          hero.id,
+                          "delete",
+                          () =>
+                            deleteHeroTemplate(mutationFormData({ id: hero.id })),
+                          "تم حذف الهيرو.",
+                        );
+                        if (!succeeded) throw new Error("hero delete failed");
+                      },
+                      confirmation: {
+                        mode: "shared",
+                        title: "تأكيد حذف الهيرو",
+                        description: `حذف الهيرو «${hero.name}» نهائيًا؟`,
+                        confirmLabel: "حذف الهيرو",
+                      },
+                    },
               },
             };
 
@@ -698,7 +712,7 @@ export default function HeroManagerClient({
       <VenesiaModal
         open={showCreateModal}
         title="إضافة هيرو جديد"
-        description="يمكنك إنشاء هيرو فارغ ثم الدخول لتفاصيله وربطه بالصفحات."
+        description="اختر Hero variant ثم افتح إعداداته؛ الـvariants الديناميكية تعتمدها Routes تلقائيًا دون نسخ بيانات الـDomain."
         size="lg"
         onClose={requestCreateClose}
       >

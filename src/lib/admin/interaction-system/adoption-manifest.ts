@@ -2809,7 +2809,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       genuineExceptions: [],
       id: "page-block-assignments",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       gridOwner: "AdminDataGrid",
@@ -2852,7 +2852,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "The complete assignment dataset declares one shared bounded-client query lifecycle through the Collection owner; Page Composition owns one cross-table atomic reorder mutation.",
+        "The complete assignment dataset declares one shared bounded-client query lifecycle through the Collection owner; display-position selection adopts the shared Listbox owner, while Page Composition owns one cross-table atomic reorder mutation.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,

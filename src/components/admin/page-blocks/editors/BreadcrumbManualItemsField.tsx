@@ -24,7 +24,7 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
       ...item,
       clientKey: `saved-breadcrumb-${index}`,
     }));
-    return initial.length ? initial : [{ clientKey: "empty-breadcrumb-0" }];
+    return initial;
   });
 
   function updateLabel(index: number, label: string) {
@@ -50,9 +50,7 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
   }
 
   function removeItem(index: number) {
-    setRows((current) => current.length <= 1
-      ? current
-      : current.filter((_, itemIndex) => itemIndex !== index));
+    setRows((current) => current.filter((_, itemIndex) => itemIndex !== index));
   }
 
   return (
@@ -71,32 +69,34 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
         </button>
       </div>
 
-      <ModuleEditorRepeaterGrid>
-        {rows.map((item, index) => (
-          <ModuleEditorRepeaterCard
-            key={item.clientKey}
-            title={`عنصر ${index + 1}`}
-            actions={(
-              <>
-                <button type="button" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك عنصر المسار ${index + 1} لأعلى`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↑</button>
-                <button type="button" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك عنصر المسار ${index + 1} لأسفل`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↓</button>
-                <button type="button" onClick={() => removeItem(index)} disabled={rows.length <= 1} aria-label={`حذف عنصر المسار ${index + 1}`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">حذف</button>
-              </>
-            )}
-          >
-            <label className="block space-y-2">
-              <span className="text-xs font-semibold text-white/55">التسمية</span>
-              <input name={`manual_item_${index}_label`} value={item.label ?? ""} onChange={(event) => updateLabel(index, event.target.value)} className={fieldClassName()} />
-            </label>
-            <AdminLinkField
-              prefix={`manual_item_${index}`}
-              label="الرابط"
-              defaultValue={linkDefaultFromContainer(item as Record<string, unknown>)}
-              showAnchor
-            />
-          </ModuleEditorRepeaterCard>
-        ))}
-      </ModuleEditorRepeaterGrid>
+      {rows.length ? (
+        <ModuleEditorRepeaterGrid>
+          {rows.map((item, index) => (
+            <ModuleEditorRepeaterCard
+              key={item.clientKey}
+              title={`عنصر ${index + 1}`}
+              actions={(
+                <>
+                  <button type="button" onClick={() => moveItem(index, -1)} disabled={index === 0} aria-label={`تحريك عنصر المسار ${index + 1} لأعلى`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↑</button>
+                  <button type="button" onClick={() => moveItem(index, 1)} disabled={index === rows.length - 1} aria-label={`تحريك عنصر المسار ${index + 1} لأسفل`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30">↓</button>
+                  <button type="button" onClick={() => removeItem(index)} aria-label={`حذف عنصر المسار ${index + 1}`} className="cursor-pointer rounded-xl border border-white/10 px-3 py-1 text-xs text-white/55 hover:bg-white/5">حذف</button>
+                </>
+              )}
+            >
+              <label className="block space-y-2">
+                <span className="text-xs font-semibold text-white/55">التسمية</span>
+                <input name={`manual_item_${index}_label`} value={item.label ?? ""} onChange={(event) => updateLabel(index, event.target.value)} className={fieldClassName()} />
+              </label>
+              <AdminLinkField
+                prefix={`manual_item_${index}`}
+                label="الرابط"
+                defaultValue={linkDefaultFromContainer(item as Record<string, unknown>)}
+                showAnchor
+              />
+            </ModuleEditorRepeaterCard>
+          ))}
+        </ModuleEditorRepeaterGrid>
+      ) : null}
     </div>
   );
 }

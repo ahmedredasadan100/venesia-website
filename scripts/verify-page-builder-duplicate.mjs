@@ -37,7 +37,7 @@ const result = read("src/lib/page-blocks/action-result.ts");
 const audit = read("scripts/verify-admin-audit-coverage.mjs");
 
 assert(row.includes("AdminDataGridRowActions"), "Page assignment row must adopt shared row actions");
-assert(row.includes("duplicate: manageable"), "Page assignment row must expose the duplicate capability");
+assert(row.includes("duplicate: !manageable"), "Page assignment row must expose the duplicate capability for manageable assignments");
 assert(row.includes("onSelect: onDuplicate"), "Shared duplicate capability must invoke onDuplicate");
 assert(
   pagePolicy.includes("export function resolvePagePublicPath"),
@@ -63,10 +63,10 @@ assert(
 );
 assert(grid.includes("onDuplicate"), "Assignments grid must wire onDuplicate");
 assert(
-  grid.includes("canMove") && grid.includes("onMove") &&
-    row.includes("canMoveUp") && row.includes("canMoveDown") &&
-    client.includes("handleMoveAssignment") && reorder.includes('"reorder"'),
-  "Assignments grid must delegate persisted ordering to the atomic reorder action",
+  grid.includes("getReorderPosition") && grid.includes("onReorder") &&
+    row.includes("AdminDataGridReorderHandle") &&
+    client.includes("handleReorderAssignment") && reorder.includes('"reorder"'),
+  "Assignments grid must expose free shared ordering and delegate persistence to the atomic reorder action",
 );
 assert(
   grid.includes("ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact"),

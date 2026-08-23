@@ -3,13 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useMemo } from "react";
 import { usePublicNavigation } from "../PublicNavigationProvider";
 import PublicContentSearchInput from "../public/PublicContentSearchInput";
 import { SidebarFeedPanel } from "../sidebar-feeds/SidebarFeedPanel";
 import type { PublicContentSearchSuggestion } from "../../lib/content/public-content-read";
 import type { MediaSidebarItem } from "../../lib/media-center/types";
-import type { MediaSidebarModulesState, MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
+import type { MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
 
 function SidebarMediaList({
   items,
@@ -135,12 +134,11 @@ function SectionsPanel({
   );
 }
 
-type MediaSidebarProps = {
+type MediaSidebarSearchProps = {
   searchBasePath?: string;
   searchQuery?: string;
   searchSuggestions?: readonly PublicContentSearchSuggestion[];
   searchResultCount?: number;
-  sidebarModules: MediaSidebarModulesState;
 };
 
 function renderWidgetPanel(
@@ -180,46 +178,32 @@ function renderWidgetPanel(
   }
 }
 
-export default function MediaSidebar({
+export function MediaSidebarWidget({ widget }: { widget: MediaSidebarWidgetState }) {
+  const pathname = usePathname();
+  const navItems = usePublicNavigation();
+
+  return renderWidgetPanel(widget, { navItems, pathname });
+}
+
+export function MediaSidebarSearch({
   searchBasePath,
   searchQuery = "",
   searchSuggestions = [],
   searchResultCount = 0,
-  sidebarModules,
-}: MediaSidebarProps) {
-  const pathname = usePathname();
-  const navItems = usePublicNavigation();
-
-  const visibleWidgets = useMemo(
-    () =>
-      [...sidebarModules.widgets]
-        .filter((widget) => widget.isVisible)
-        .sort((left, right) => left.sortOrder - right.sortOrder || left.widgetKey.localeCompare(right.widgetKey)),
-    [sidebarModules.widgets],
-  );
+}: MediaSidebarSearchProps) {
+  if (!searchBasePath) return null;
 
   return (
-    <aside className="space-y-6 text-right" dir="rtl">
-      {searchBasePath ? (
-        <SidebarFeedPanel eyebrow="Search" title="ابحث في المركز الإعلامي">
-          <PublicContentSearchInput
-            basePath={searchBasePath}
-            query={searchQuery}
-            suggestions={searchSuggestions}
-            resultCount={searchResultCount}
-            placeholder="اكتب كلمة البحث..."
-            ariaLabel="ابحث داخل القسم الحالي من المركز الإعلامي"
-            helpText="البحث يعمل داخل القسم الحالي فقط."
-          />
-        </SidebarFeedPanel>
-      ) : null}
-
-      {visibleWidgets.map((widget) =>
-        renderWidgetPanel(widget, {
-          navItems,
-          pathname,
-        }),
-      )}
-    </aside>
+    <SidebarFeedPanel eyebrow="Search" title="ابحث في المركز الإعلامي">
+      <PublicContentSearchInput
+        basePath={searchBasePath}
+        query={searchQuery}
+        suggestions={searchSuggestions}
+        resultCount={searchResultCount}
+        placeholder="اكتب كلمة البحث..."
+        ariaLabel="ابحث داخل القسم الحالي من المركز الإعلامي"
+        helpText="البحث يعمل داخل القسم الحالي فقط."
+      />
+    </SidebarFeedPanel>
   );
 }

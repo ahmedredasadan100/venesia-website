@@ -37,8 +37,10 @@ import { resolveModuleProductKind } from "../../../../../lib/page-blocks/module-
 import {
   LAYOUT_SLOT_LABELS_AR,
   PAGE_LAYOUT_SLOT_ORDER,
+  type PageLayoutSlot,
   normalizeLayoutSlot,
 } from "../../../../../lib/page-blocks/layout-slots";
+import { getAssignableSlotsForRoute } from "../../../../../lib/page-composition/route-slot-policy";
 import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/types";
 import { resolvePagePublicPath } from "../../../../../lib/pages/page-admin-policy";
 import {
@@ -47,6 +49,7 @@ import {
   duplicateAssignedPageModule,
   reorderPageComposition,
   togglePageBlockAssignment,
+  updatePageBlockAssignment,
 } from "../actions";
 import {
   restorePageCompositionColumnPreferences,
@@ -88,6 +91,14 @@ type PageBlocksClientProps = {
     mediaHub: TemplateOption[];
   };
   seo: {
+    content: string;
+    titleSuffix: string;
+    resolvedFallback: {
+      title: string;
+      description: string;
+      image: string;
+      imageAlt: string;
+    };
     seoTitle: string;
     seoDescription: string;
     focusKeyword: string;
@@ -211,10 +222,10 @@ export default function PageBlocksClient({
       {
         id: "assignment-slot",
         paramKey: "slot",
-        label: "الموضع",
+        label: "موضع العرض",
         type: "single_select",
         allValue: "all",
-        placeholder: "الموضع",
+        placeholder: "موضع العرض",
         options: PAGE_LAYOUT_SLOT_ORDER.map((value) => ({
           value,
           label: LAYOUT_SLOT_LABELS_AR[value],
@@ -245,7 +256,7 @@ export default function PageBlocksClient({
         if (
           query.search &&
           !adminCollectionSearchIncludes(
-            `${row.template_name} ${moduleKindLabel(row.module_kind, row.template_slug, row.template_variant)} ${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]} ${row.template_id}`,
+            `${row.template_name} ${moduleKindLabel(row.module_kind, row.template_slug, row.template_variant)} ${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]}`,
             query.search,
           )
         ) return false;
@@ -429,36 +440,137 @@ export default function PageBlocksClient({
     }
   }
 
-  function canMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
-    if (table.sort.key !== null) return false;
-    const siblings = instant.rows
+  function getAssignmentSiblings(row: PageBlockAssignmentRow) {
+    return instant.rows
       .filter((candidate) => candidate.slot === row.slot)
       .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
-    const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
-    return index >= 0 && index + direction >= 0 && index + direction < siblings.length;
   }
 
-  async function handleMoveAssignment(row: PageBlockAssignmentRow, direction: -1 | 1) {
-    if (table.sort.key !== null) return;
-    const siblings = instant.rows
-      .filter((candidate) => candidate.slot === row.slot)
-      .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
+  function getDisplayPositionOptions(row: PageBlockAssignmentRow): PageLayoutSlot[] {
+    return getAssignableSlotsForRoute(page.slug, row.module_kind);
+  }
+
+  async function handleDisplayPositionChange(
+    row: PageBlockAssignmentRow,
+    nextSlot: PageLayoutSlot,
+  ) {
+    if (normalizeLayoutSlot(row.slot) === nextSlot) return;
+    if (!getDisplayPositionOptions(row).includes(nextSlot)) return;
+
+    const nextSortOrder =
+      instant.rows
+        .filter((candidate) => normalizeLayoutSlot(candidate.slot) === nextSlot)
+        .reduce((largest, candidate) => Math.max(largest, candidate.sort_order), 0) + 10;
+    const movedRowId = assignmentRowId(row);
+    const positionedRows = instant.rows.map((candidate) =>
+      assignmentRowId(candidate) === movedRowId
+        ? { ...candidate, slot: nextSlot, sort_order: nextSortOrder }
+        : candidate,
+    );
+    const canonicalPositionByRowId = new Map<string, { slot: string; sortOrder: number }>();
+    for (const candidateSlot of PAGE_LAYOUT_SLOT_ORDER) {
+      positionedRows
+        .filter(
+          (candidate) =>
+            candidate.module_kind !== "hero" &&
+            normalizeLayoutSlot(candidate.slot) === candidateSlot,
+        )
+        .sort(
+          (left, right) =>
+            left.sort_order - right.sort_order ||
+            left.module_kind.localeCompare(right.module_kind) ||
+            left.id - right.id,
+        )
+        .forEach((candidate, index) => {
+          canonicalPositionByRowId.set(assignmentRowId(candidate), {
+            slot: candidate.slot,
+            sortOrder: (index + 1) * 10,
+          });
+        });
+    }
+    const formData = new FormData();
+    formData.set("page_id", String(page.id));
+    formData.set("assignment_id", String(row.id));
+    formData.set("block_type", row.module_kind);
+    formData.set("slot", nextSlot);
+    formData.set("sort_order", String(nextSortOrder));
+    formData.set("is_visible", normalizeBoolean(row.is_visible, true) ? "true" : "false");
+
+    try {
+      const result = await instant.mutateAsync({
+        rowId: assignmentRowId(row),
+        action: "display-position",
+        optimistic: (cache) =>
+          cache.patchRows((candidate) => {
+            const canonical = canonicalPositionByRowId.get(assignmentRowId(candidate));
+            return canonical
+              ? { ...candidate, slot: canonical.slot, sort_order: canonical.sortOrder }
+              : candidate;
+          }),
+        execute: async () => {
+          const response = await updatePageBlockAssignment(
+            { ok: true, message: null },
+            formData,
+          );
+          return response.ok
+            ? {
+                ok: true as const,
+                message: response.message ?? "تم تحديث موضع العرض.",
+                updatedAt: response.updatedAt,
+              }
+            : {
+                ok: false as const,
+                code: "display_position_update_failed",
+                message: response.message ?? "تعذر تحديث موضع العرض.",
+              };
+        },
+        reconcileSuccess: (response, { cache }) => {
+          if (!response.updatedAt) return;
+          cache.patchRows((candidate) =>
+            canonicalPositionByRowId.has(assignmentRowId(candidate))
+              ? { ...candidate, updated_at: String(response.updatedAt) }
+              : candidate,
+          );
+        },
+      });
+      setActionFeedback({ message: result.message, ok: true });
+    } catch (error) {
+      setActionFeedback({
+        message: error instanceof Error ? error.message : "تعذر تحديث موضع العرض.",
+        ok: false,
+      });
+    }
+  }
+
+  function getReorderPosition(row: PageBlockAssignmentRow) {
+    const siblings = getAssignmentSiblings(row);
     const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= siblings.length) return;
+    return { position: Math.max(index, 0), count: siblings.length };
+  }
+
+  const manualReorderEnabled =
+    table.sort.key === null &&
+    !search &&
+    moduleType === "all" &&
+    slot === "all" &&
+    visibility === "all";
+
+  async function handleReorderAssignment(row: PageBlockAssignmentRow, targetPosition: number) {
+    if (!manualReorderEnabled) return;
+    const siblings = getAssignmentSiblings(row);
+    const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
+    if (index < 0 || targetPosition < 0 || targetPosition >= siblings.length || targetPosition === index) return;
     const ordered = [...siblings];
-    [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+    const [moved] = ordered.splice(index, 1);
+    ordered.splice(targetPosition, 0, moved);
     const sortOrderByRowId = new Map(
-      ordered.map((item, orderedIndex) => [
-        assignmentRowId(item),
-        siblings[orderedIndex].sort_order,
-      ]),
+      ordered.map((item, orderedIndex) => [assignmentRowId(item), (orderedIndex + 1) * 10]),
     );
     try {
       let warning: string | null = null;
       const result = await instant.mutateAsync({
         rowId: assignmentRowId(row),
-        action: direction === -1 ? "reorder-up" : "reorder-down",
+        action: "reorder",
         optimistic: (cache) =>
           cache.patchRows((candidate) => {
             const sortOrder = sortOrderByRowId.get(assignmentRowId(candidate));
@@ -581,6 +693,9 @@ export default function PageBlocksClient({
                 pageId={page.id}
                 pageTitle={page.title}
                 path={page.path}
+                content={seo.content}
+                titleSuffix={seo.titleSuffix}
+                resolvedFallback={seo.resolvedFallback}
                 seoTitle={seo.seoTitle}
                 seoDescription={seo.seoDescription}
                 focusKeyword={seo.focusKeyword}
@@ -603,7 +718,7 @@ export default function PageBlocksClient({
             icon: "plans",
             content: (
               <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <PageVisualSlotMap assignments={assignments} pageSlug={page.slug} />
+                <PageVisualSlotMap assignments={instant.rows} pageSlug={page.slug} />
               </section>
             ),
           },
@@ -640,7 +755,7 @@ export default function PageBlocksClient({
                     basePath={`/admin/pages-blocks/pages/${page.id}`}
                     search={{
                       value: search,
-                      placeholder: "ابحث باسم الموديول أو نوعه أو المعرّف…",
+                      placeholder: "ابحث باسم الموديول أو نوعه أو موضع العرض…",
                       minLength: 1,
                     }}
                     filters={assignmentFilters}
@@ -708,11 +823,13 @@ export default function PageBlocksClient({
                     onToggleSelect={(rowId, checked) => selection.toggleOne(rowId, checked)}
                     rowInteraction={instant.getRowInteraction}
                     onToggleVisibility={handleToggleVisibility}
+                    getDisplayPositionOptions={getDisplayPositionOptions}
+                    onDisplayPositionChange={handleDisplayPositionChange}
                     onDuplicate={handleDuplicateAssignment}
                     onDetach={handleDetachAssignment}
-                    canMove={canMoveAssignment}
-                    onMove={handleMoveAssignment}
-                    manualReorderEnabled={table.sort.key === null}
+                    getReorderPosition={getReorderPosition}
+                    onReorder={handleReorderAssignment}
+                    manualReorderEnabled={manualReorderEnabled}
                     visibleColumns={visibleColumnSet}
                   />
                 }

@@ -29,12 +29,12 @@ export default function RelatedMediaRail({
         <h2 className="mt-3 text-2xl font-semibold text-white">{title}</h2>
       </div>
 
-      <div className="flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:grid lg:grid-cols-3 lg:overflow-visible lg:pb-0">
+      <div className="flex gap-5 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @3xl/slot-module:grid @3xl/slot-module:grid-cols-3 @3xl/slot-module:overflow-visible @3xl/slot-module:pb-0">
         {items.slice(0, 3).map((item) => (
           <Link
             key={item.id}
             href={getHref(item)}
-            className="group min-w-[260px] overflow-hidden rounded-[1.35rem] border border-white/10 bg-white/[0.035] transition duration-500 hover:-translate-y-1 hover:border-[#D8B87A]/30 lg:min-w-0"
+            className="group min-w-[260px] overflow-hidden rounded-[1.35rem] border border-white/10 bg-white/[0.035] transition duration-500 hover:-translate-y-1 hover:border-[#D8B87A]/30 @3xl/slot-module:min-w-0"
           >
             <div className="relative h-36 overflow-hidden">
               <Image

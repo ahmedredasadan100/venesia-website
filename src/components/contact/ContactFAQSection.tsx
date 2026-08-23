@@ -48,7 +48,7 @@ export default function ContactFAQSection({ cmsContent }: ContactFAQSectionProps
   };
 
   return (
-    <section className="mx-auto max-w-7xl px-5 pb-8 sm:px-8 lg:px-10">
+    <section className="mx-auto max-w-7xl px-4 pb-8 @xl/slot-module:px-6 @4xl/slot-module:px-10">
       <div className="rounded-[28px] border border-white/10 bg-white/[0.035] p-7 transition duration-500 hover:border-[#d2a75a]/25">
         {faqs.title.trim() ? (
           <h2 className="text-center text-2xl font-semibold text-[#d2a75a]">
@@ -56,7 +56,7 @@ export default function ContactFAQSection({ cmsContent }: ContactFAQSectionProps
           </h2>
         ) : null}
 
-        <div className={`grid gap-4 md:grid-cols-2 ${faqs.title.trim() ? "mt-7" : ""}`}>
+        <div className={`grid gap-4 @2xl/slot-module:grid-cols-2 ${faqs.title.trim() ? "mt-7" : ""}`}>
           <div className="grid content-start gap-4">
             {rightColumn.map((item) => {
               const originalIndex = faqs.items.indexOf(item);

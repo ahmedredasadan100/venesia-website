@@ -28,6 +28,11 @@ const paths = {
   page: "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
   migration: "sql/migrations/20260803153000_shared_entity_seo_capability.sql",
 } as const;
+const pageRoute = read("src/app/admin/pages-blocks/pages/[id]/page.tsx");
+const pageClient = read("src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx");
+const pageAdminQueries = read("src/lib/page-blocks/admin-queries.ts");
+const seoResolver = read("src/lib/seo/resolve-seo-metadata.ts");
+const seoUtils = read("src/lib/seo/seo-utils.ts");
 
 const source = Object.fromEntries(
   Object.entries(paths).map(([key, path]) => [key, read(path)]),
@@ -123,6 +128,29 @@ check(
 );
 
 check(
+  "Page SEO adopts the shared Site Settings title template and current Page Composition copy",
+  source.page.includes("seoTitleSuffix={props.titleSuffix}") &&
+    source.page.includes('name="page_content" value={props.content}') &&
+    source.page.includes("content: props.content") &&
+    pageClient.includes("content={seo.content}") &&
+    pageClient.includes("titleSuffix={seo.titleSuffix}") &&
+    pageRoute.includes("getSeoTitleSuffix(globalSeo)") &&
+    pageRoute.includes("assignmentsData.seoContent") &&
+    pageAdminQueries.includes("extractPageBlockSeoText") &&
+    pageAdminQueries.includes("isPageModulePubliclyVisible"),
+);
+
+check(
+  "one SEO metadata owner composes the final title without a persisted parallel template",
+  seoUtils.includes("export function getSeoTitleSuffix") &&
+    seoUtils.includes("export function composeSeoTitle") &&
+    seoResolver.includes("getSeoTitleSuffix(global)") &&
+    seoResolver.includes("composeSeoTitle(") &&
+    source.shared.includes("data-admin-seo-title-template") &&
+    source.shared.includes("effectiveSeoTitle"),
+);
+
+check(
   "the historical entity-fallback presentation contract is removed",
   !source.shared.includes("entity_fallback") &&
     !source.topic.includes("entity_fallback") &&
@@ -133,10 +161,13 @@ check(
 );
 
 check(
-  "Open Graph preview uses explicit override first and the entity image only as fallback",
-  source.shared.includes("const previewImage = live.ogImage.trim() || live.image.trim()") &&
+  "Open Graph preview uses explicit override, entity image, then the actual resolved fallback",
+  source.shared.includes("const previewImage =") &&
     source.shared.includes("live.ogImage.trim()") &&
+    source.shared.includes("live.image.trim()") &&
+    source.shared.includes("resolvedFallback?.image") &&
     source.shared.includes("live.ogImageAlt.trim()") &&
+    source.shared.includes("resolvedFallback?.imageAlt") &&
     source.shared.includes("url(${previewImage})") &&
     source.shared.includes("aria-label={previewImageAlt || title}"),
 );
@@ -162,7 +193,9 @@ check(
     !source.contract.includes("pageSeo?:") &&
     !resolver.includes("input.pageSeo") &&
     generator.includes("mergeEntitySeoData(input.entitySeo, pageSeo)") &&
-    resolver.indexOf("input.entitySeo?.ogImage") < resolver.indexOf("input.image"),
+    resolver.includes("const entityOgImage = pickString(input.entitySeo?.ogImage)") &&
+    resolver.indexOf("const entityOgImage") < resolver.indexOf("const specificImage") &&
+    resolver.includes("entityOgImage,"),
 );
 
 check(

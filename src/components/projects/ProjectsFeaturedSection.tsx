@@ -12,6 +12,7 @@ import {
   ProjectCodeBadge,
   ProjectImageBottomBadges,
 } from "./ProjectCardMobileOverlays";
+import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 
 export type ProjectsFeaturedCardDisplay = {
   showProjectImage?: boolean;
@@ -192,16 +193,21 @@ function FeaturedProjectMetaRow({
   showType: boolean;
   className?: string;
 }) {
-  if (!showLocation && !showType) return null;
+  const locationLabel = resolveVisibleProjectLocationLabel(
+    project.location,
+    showLocation,
+  );
+
+  if (!locationLabel && !showType) return null;
 
   return (
     <div className={`flex min-w-0 flex-nowrap items-center gap-2 ${className}`.trim()}>
-      {showLocation ? (
+      {locationLabel ? (
         <span
-          title={project.location.label}
+          title={locationLabel}
           className="min-w-0 truncate rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]"
         >
-          {project.location.label}
+          {locationLabel}
         </span>
       ) : null}
       {showType ? (
@@ -220,6 +226,11 @@ function MainFeaturedCard({
   project: PublicProject;
   display: Required<ProjectsFeaturedCardDisplay>;
 }) {
+  const locationLabel = resolveVisibleProjectLocationLabel(
+    project.location,
+    display.showProjectLocation,
+  );
+
   return (
     <article
       key={project.id}
@@ -249,11 +260,11 @@ function MainFeaturedCard({
               />
             </div>
 
-            {display.showProjectLocation || display.showProjectType ? (
+            {locationLabel || display.showProjectType ? (
               <ProjectImageBottomBadges
                 project={project}
                 hideFrom="lg"
-                showLocation={display.showProjectLocation}
+                showLocation={Boolean(locationLabel)}
                 showType={display.showProjectType}
               />
             ) : null}

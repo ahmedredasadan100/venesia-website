@@ -20,6 +20,7 @@ import { AdminFormListboxSelect } from "../../../../../../components/admin/ui";
 import { legacyHrefFromConfig } from "../../../../../../lib/admin/links/serialize";
 import {
   HERO_IMAGE_COMPOSITION_OPTIONS_AR,
+  PROJECT_DETAIL_HERO_ELEMENT_KEYS,
   resolveHeroContentControlsForVariant,
   resolveHeroImageCompositionPreset,
 } from "../../../../../../lib/hero/hero-content-controls";
@@ -70,8 +71,69 @@ export default function HeroEditClient({
       config.image_position_class,
   );
   const isStandardInternal = hero.variant === "internal-page";
+  const isProjectDetail = hero.variant === "project-detail";
 
-  const contentTab = (
+  const contentTab = isProjectDetail ? (
+    <div className="space-y-5">
+      <ModuleEditorSection>
+        <ModuleEditorSectionHeading intent="domain" className="text-base">
+          Presentation بيانات المشروع
+        </ModuleEditorSectionHeading>
+        <p className="mb-5 text-xs leading-6 text-white/45">
+          الأسماء والوصف والموقع والصور تُقرأ من Project Domain. هذه الشاشة تتحكم في طريقة عرضها داخل Hero فقط، ولا تنسخ بيانات المشروع.
+        </p>
+        <ModuleEditorFieldGrid className="lg:grid-cols-2 xl:grid-cols-12">
+          <ModuleEditorField nature="binary-state" span={6}>
+            <HeroVisibilityAlignRow
+              label="موقع المشروع"
+              alignmentName="eyebrow_alignment"
+              showName="show_eyebrow"
+              boldName="eyebrow_bold"
+              alignmentDefault={controls.eyebrowAlignment}
+              showDefault={controls.showEyebrow}
+              boldDefault={controls.eyebrowBold}
+            />
+          </ModuleEditorField>
+          <ModuleEditorField nature="binary-state" span={6}>
+            <HeroVisibilityAlignRow
+              label="اسم المشروع الإنجليزي"
+              alignmentName="title_alignment"
+              showName="show_title"
+              boldName="title_bold"
+              alignmentDefault={controls.titleAlignment}
+              showDefault={controls.showTitle}
+              boldDefault={controls.titleBold}
+            />
+          </ModuleEditorField>
+          <ModuleEditorField nature="binary-state" span={6}>
+            <HeroVisibilityAlignRow
+              label="اسم المشروع العربي"
+              alignmentName="subtitle_alignment"
+              showName="show_subtitle"
+              boldName="subtitle_bold"
+              alignmentDefault={controls.subtitleAlignment}
+              showDefault={controls.showSubtitle}
+              boldDefault={controls.subtitleBold}
+            />
+          </ModuleEditorField>
+          <ModuleEditorField nature="binary-state" span={6}>
+            <HeroVisibilityAlignRow
+              label="وصف المشروع"
+              alignmentName="description_alignment"
+              showName="show_description"
+              alignmentDefault={
+                controls.descriptionAlignment === "justify" ? "right" : controls.descriptionAlignment
+              }
+              showDefault={controls.showDescription}
+            />
+          </ModuleEditorField>
+        </ModuleEditorFieldGrid>
+        <input type="hidden" name="show_highlight" value="false" />
+        <input type="hidden" name="highlight_bold" value="false" />
+        <input type="hidden" name="highlight_alignment" value="right" />
+      </ModuleEditorSection>
+    </div>
+  ) : (
     <div className="space-y-5">
       <ModuleEditorSection>
           <ModuleEditorSectionHeading intent="domain" className="text-base">عناصر الهيرو</ModuleEditorSectionHeading>
@@ -164,7 +226,10 @@ export default function HeroEditClient({
   const orderTab = (
     <div>
       <ModuleEditorSection>
-        <HeroElementOrderEditor defaultOrder={controls.heroElementOrder} />
+        <HeroElementOrderEditor
+          defaultOrder={controls.heroElementOrder}
+          allowedKeys={isProjectDetail ? PROJECT_DETAIL_HERO_ELEMENT_KEYS : undefined}
+        />
       </ModuleEditorSection>
     </div>
   );
@@ -186,6 +251,7 @@ export default function HeroEditClient({
           inputClassName={fieldClassName("h-11")}
         />
         <input type="hidden" name="style_preset" value={hero.style_preset ?? "cinematic-gold"} />
+        {isProjectDetail ? <input type="hidden" name="variant" value="project-detail" /> : null}
 
         <ModuleEditorTabs
           moduleKind="hero"
@@ -210,14 +276,20 @@ export default function HeroEditClient({
               content: (
                 <div>
                   <ModuleEditorSection>
-                    <AdminImagePathListField
-                      name="images"
-                      label="صور الهيرو (ديسكتوب)"
-                      defaultValue={imagesText}
-                      dimensionHint="hero"
-                      density="compact"
-                      helperText="اختر أو ارفع الصور من المكتبة. استخدم الأسهم لترتيب الشرائح في العرض."
-                    />
+                    {isProjectDetail ? (
+                      <p className="rounded-2xl border border-white/10 bg-[#05070B]/72 px-4 py-3 text-xs leading-6 text-white/45">
+                        صورة Hero تأتي من Project Domain. إعداد التكوين التالي Presentation مشتركة تطبق على الصورة من دون نسخ مسارها داخل Hero Configuration.
+                      </p>
+                    ) : (
+                      <AdminImagePathListField
+                        name="images"
+                        label="صور الهيرو (ديسكتوب)"
+                        defaultValue={imagesText}
+                        dimensionHint="hero"
+                        density="compact"
+                        helperText="اختر أو ارفع الصور من المكتبة. استخدم الأسهم لترتيب الشرائح في العرض."
+                      />
+                    )}
                     <AdminFormListboxSelect
                       name="image_composition"
                       label="تكوين الصورة"
@@ -229,7 +301,7 @@ export default function HeroEditClient({
                 </div>
               ),
             },
-            {
+            ...(!isProjectDetail ? [{
               id: "media-mobile",
               content: (
                 <div>
@@ -245,21 +317,32 @@ export default function HeroEditClient({
                   </ModuleEditorSection>
                 </div>
               ),
-            },
+            }] : []),
             {
               id: "buttons",
               content: (
                 <div>
                   <ModuleEditorSection>
-                    <HeroCtaFields
-                      primaryLabel={String(config.primaryCtaLabel ?? "")}
-                      primaryLink={primaryCtaLink}
-                      secondaryLabel={String(config.secondaryCtaLabel ?? "")}
-                      secondaryLink={secondaryCtaLink}
-                      showDefault={controls.showCta}
-                      alignmentDefault={controls.ctaAlignment}
-                      enableAlignment={!isStandardInternal}
-                    />
+                    {isProjectDetail ? (
+                      <HeroVisibilityAlignRow
+                        label="مجموعة إجراءات المشروع"
+                        alignmentName="cta_alignment"
+                        showName="show_cta"
+                        alignmentDefault={controls.ctaAlignment}
+                        showDefault={controls.showCta}
+                        helperText="وجهات الإجراءات تُشتق من Route وProject Domain؛ Hero Configuration تملك الظهور والمحاذاة فقط."
+                      />
+                    ) : (
+                      <HeroCtaFields
+                        primaryLabel={String(config.primaryCtaLabel ?? "")}
+                        primaryLink={primaryCtaLink}
+                        secondaryLabel={String(config.secondaryCtaLabel ?? "")}
+                        secondaryLink={secondaryCtaLink}
+                        showDefault={controls.showCta}
+                        alignmentDefault={controls.ctaAlignment}
+                        enableAlignment={!isStandardInternal}
+                      />
+                    )}
                   </ModuleEditorSection>
                 </div>
               ),
@@ -274,8 +357,11 @@ export default function HeroEditClient({
               id: "display",
               content: (
                 <div>
-                  <ModuleEditorPagesTab moduleName={hero.name} assignmentContext={assignmentContext}>
+                  {isProjectDetail ? (
                     <ModuleEditorSection>
+                      <p className="mb-5 text-xs leading-6 text-white/45">
+                        هذا الـvariant معتمد تلقائيًا لكل Routes تفاصيل المشاريع؛ لا يحتاج Page Assignment ولا يخزن أي قيمة داخل المشروع.
+                      </p>
                       <ModuleEditorFieldGrid className="lg:grid-cols-2 xl:grid-cols-12">
                         <ModuleEditorField nature="standard" span={6}><label className="space-y-2">
                           <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
@@ -292,17 +378,47 @@ export default function HeroEditClient({
                         <ModuleEditorField nature="binary-state" span={6}>
                           <ModuleEditorStatusSwitch status={hero.status} className="min-h-11" />
                         </ModuleEditorField>
-                        <ModuleEditorField nature="standard" span={6}>
+                        {!isProjectDetail ? <ModuleEditorField nature="standard" span={6}>
                           <AdminFormListboxSelect
                             name="variant"
                             label="نمط العرض"
                             defaultValue={hero.variant}
                             options={variantOptions}
                           />
-                        </ModuleEditorField>
+                        </ModuleEditorField> : null}
                       </ModuleEditorFieldGrid>
                     </ModuleEditorSection>
-                  </ModuleEditorPagesTab>
+                  ) : (
+                    <ModuleEditorPagesTab moduleName={hero.name} assignmentContext={assignmentContext}>
+                      <ModuleEditorSection>
+                        <ModuleEditorFieldGrid className="lg:grid-cols-2 xl:grid-cols-12">
+                          <ModuleEditorField nature="standard" span={6}><label className="space-y-2">
+                            <span className="text-xs font-semibold text-white/55">اسم الهيرو</span>
+                            <input name="name" defaultValue={hero.name} required className={fieldClassName("h-11")} />
+                          </label></ModuleEditorField>
+                          <ModuleEditorField nature="short-description" span={6}><label className="space-y-2">
+                            <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
+                            <input
+                              name="template_description"
+                              defaultValue={hero.description ?? ""}
+                              className={fieldClassName("h-11")}
+                            />
+                          </label></ModuleEditorField>
+                          <ModuleEditorField nature="binary-state" span={6}>
+                            <ModuleEditorStatusSwitch status={hero.status} className="min-h-11" />
+                          </ModuleEditorField>
+                          <ModuleEditorField nature="standard" span={6}>
+                            <AdminFormListboxSelect
+                              name="variant"
+                              label="نمط العرض"
+                              defaultValue={hero.variant}
+                              options={variantOptions}
+                            />
+                          </ModuleEditorField>
+                        </ModuleEditorFieldGrid>
+                      </ModuleEditorSection>
+                    </ModuleEditorPagesTab>
+                  )}
                 </div>
               ),
             },

@@ -1,6 +1,7 @@
 import {
   SEO_LENGTH_STANDARDS,
   assessSeoLength,
+  countSeoTextCharacters,
   describeSeoLength,
   type SeoLengthAssessment,
 } from "./seo-length-standards";
@@ -86,12 +87,15 @@ function hasValue(value?: string | null) {
 
 function normalizeText(text: string) {
   return text
-    .normalize("NFKC")
+    .normalize("NFKD")
     .toLowerCase()
-    .replace(/[\u0640\u064B-\u065F\u0670]/g, "")
+    .replace(/[\p{M}\p{Cf}\u0640]/gu, "")
     .replace(/[أإآٱ]/g, "ا")
+    .replace(/[ؤ]/g, "و")
+    .replace(/[ئ]/g, "ي")
     .replace(/ة/g, "ه")
-    .replace(/ى/g, "ي");
+    .replace(/[ىی]/g, "ي")
+    .replace(/ک/g, "ك");
 }
 
 function renderMarkdown(text: string) {
@@ -114,6 +118,10 @@ function tokenizeVisibleText(text: string) {
 
 function getWordTokens(text: string) {
   return tokenizeVisibleText(toVisibleText(text));
+}
+
+function getEntityWordTokens(text: string) {
+  return tokenizeVisibleText(stripHtml(text));
 }
 
 export function countWords(text: string) {
@@ -141,6 +149,21 @@ function countHeadings(rendered: string, level: 1 | 2 | 3) {
 
 function includesTokens(source: string, keywordTokens: readonly string[]) {
   return countTokenMatches(getWordTokens(source), keywordTokens) > 0;
+}
+
+function isValidEntityPublicPath(value: string) {
+  if (!value) return true;
+  if (value.length > 240) return false;
+  return value.split("/").every(
+    (segment) =>
+      segment.length > 0 &&
+      segment.length <= 80 &&
+      /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(segment),
+  );
+}
+
+function includesEntityTokens(source: string, keywordTokens: readonly string[]) {
+  return countTokenMatches(getEntityWordTokens(source), keywordTokens) > 0;
 }
 
 function addScore(
@@ -196,11 +219,11 @@ function analyzeArticleSeo(input: SeoScoreInput) {
 
   const renderedContent = renderMarkdown(input.content);
   const visibleContent = getVisibleText(renderedContent);
-  const visibleContentTokens = getWordTokens(visibleContent);
+  const visibleContentTokens = tokenizeVisibleText(visibleContent);
   const firstContentTokens = tokenizeVisibleText(visibleContent).slice(0, 150);
   const keywordTokens = getWordTokens(input.focusKeyword);
   const wordCount = visibleContentTokens.length;
-  const charCount = visibleContent.length;
+  const charCount = countSeoTextCharacters(visibleContent);
   const h1Count = countHeadings(renderedContent, 1);
   const h2Count = countHeadings(renderedContent, 2);
   const h3Count = countHeadings(renderedContent, 3);
@@ -236,7 +259,7 @@ function analyzeArticleSeo(input: SeoScoreInput) {
   );
 
   const internalLinksCount =
-    input.content.match(/\[[^\]]+\]\((\/topics\/|\/projects\/)[^)]+\)/g)?.length ?? 0;
+    input.content.match(/\[[^\]]+\]\(\/(?!\/)[^)#]+\)/g)?.length ?? 0;
 
   const seoIssues: SeoIssue[] = [];
   const contentIssues: SeoIssue[] = [];
@@ -311,7 +334,9 @@ function analyzeArticleSeo(input: SeoScoreInput) {
 
   seoScore += addScore(
     seoIssues,
-    hasValue(input.image) && input.imageAlt.length >= 35 && input.imageAlt.length <= 140,
+    hasValue(input.image) &&
+      countSeoTextCharacters(input.imageAlt) >= 35 &&
+      countSeoTextCharacters(input.imageAlt) <= 140,
     "Alt Text مناسب",
     "Alt Text محتاج تحسين",
     8,
@@ -397,7 +422,7 @@ function analyzeArticleSeo(input: SeoScoreInput) {
     "يوجد رابط داخلي",
     "لا توجد روابط داخلية",
     10,
-    "اربط المقال بموضوعات أو مشاريع داخل الموقع."
+    "اربط المقال بصفحة مفيدة أخرى داخل الموقع."
   );
 
   contentScore += addScore(
@@ -420,7 +445,8 @@ function analyzeArticleSeo(input: SeoScoreInput) {
 
   contentScore += addScore(
     contentIssues,
-    input.description.length >= 80 && input.description.length <= 220,
+    countSeoTextCharacters(input.description) >= 80 &&
+      countSeoTextCharacters(input.description) <= 220,
     "الوصف المختصر مناسب للكروت",
     "الوصف المختصر يحتاج ضبط",
     6,
@@ -449,7 +475,7 @@ function analyzeArticleSeo(input: SeoScoreInput) {
 
   readinessScore += addScore(
     readinessIssues,
-    hasValue(input.description) && input.description.length >= 20,
+    hasValue(input.description) && countSeoTextCharacters(input.description) >= 20,
     "الوصف المختصر موجود",
     "الوصف المختصر ناقص",
     10,
@@ -610,11 +636,10 @@ function analyzeEntityProfile(input: SeoScoreInput) {
   const effectiveDescription =
     input.seoDescription.trim() || input.description.trim();
   const keyword = input.focusKeyword.trim();
-  const combinedContent = toVisibleText(
+  const combinedTokens = getEntityWordTokens(
     `${input.title} ${input.description} ${input.content}`,
   );
-  const combinedTokens = getWordTokens(combinedContent);
-  const keywordTokens = getWordTokens(keyword);
+  const keywordTokens = getEntityWordTokens(keyword);
   const wordCount = combinedTokens.length;
   const keywordMatches = countTokenMatches(combinedTokens, keywordTokens);
   const keywordWordCount = keywordTokens.length;
@@ -650,7 +675,7 @@ function analyzeEntityProfile(input: SeoScoreInput) {
   );
   score += addScore(
     issues,
-    includesTokens(effectiveTitle, keywordTokens),
+    includesEntityTokens(effectiveTitle, keywordTokens),
     "الكلمة المفتاحية مستخدمة في العنوان",
     "استخدم الكلمة المفتاحية في العنوان",
     10,
@@ -658,7 +683,7 @@ function analyzeEntityProfile(input: SeoScoreInput) {
   );
   score += addScore(
     issues,
-    includesTokens(effectiveDescription, keywordTokens),
+    includesEntityTokens(effectiveDescription, keywordTokens),
     "الكلمة المفتاحية مستخدمة في الوصف",
     "استخدم الكلمة المفتاحية في وصف Meta",
     10,
@@ -666,7 +691,7 @@ function analyzeEntityProfile(input: SeoScoreInput) {
   );
   score += addScore(
     issues,
-    includesTokens(input.content, keywordTokens),
+    includesEntityTokens(input.content, keywordTokens),
     "الكلمة المفتاحية موجودة في المحتوى",
     "استخدم الكلمة المفتاحية في المحتوى",
     10,
@@ -690,11 +715,11 @@ function analyzeEntityProfile(input: SeoScoreInput) {
   );
   score += addScore(
     issues,
-    /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug) && input.slug.length <= 80,
+    isValidEntityPublicPath(input.slug),
     "Slug صالح ومقروء",
-    "Slug غير صالح أو طويل",
+    "Slug أو مسار الصفحة غير صالح أو طويل",
     8,
-    "استخدم حروفًا إنجليزية صغيرة وأرقامًا وشرطات، وبحد أقصى 80 حرفًا.",
+    "استخدم مقاطع إنجليزية صغيرة وأرقامًا وشرطات؛ المسارات المتداخلة الصحيحة مدعومة.",
   );
   score += addScore(
     issues,

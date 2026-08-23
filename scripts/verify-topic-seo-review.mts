@@ -28,11 +28,13 @@ require.extensions[".ts"] = (module, filename) => {
 const { getGlobalSeoDefaults } = require("../src/lib/seo/global-seo-defaults.ts") as typeof import("../src/lib/seo/global-seo-defaults.ts");
 const { resolveSeoMetadata } = require("../src/lib/seo/resolve-seo-metadata.ts") as typeof import("../src/lib/seo/resolve-seo-metadata.ts");
 const { buildMetadataFromResolved } = require("../src/lib/seo/build-metadata-from-resolved.ts") as typeof import("../src/lib/seo/build-metadata-from-resolved.ts");
+const { composeSeoTitle, getSeoTitleSuffix, trimToSeoLength } = require("../src/lib/seo/seo-utils.ts") as typeof import("../src/lib/seo/seo-utils.ts");
 const {
   buildTopicPublishChecklist,
   getTopicPublishOnlyValidationError,
 } = require("../src/lib/admin/content-workflow/topic-publish-validation.ts") as typeof import("../src/lib/admin/content-workflow/topic-publish-validation.ts");
 const { analyzeEntitySeo } = require("../src/lib/admin/seo-score.ts") as typeof import("../src/lib/admin/seo-score.ts");
+const { extractPageBlockSeoText } = require("../src/lib/page-blocks/configs.ts") as typeof import("../src/lib/page-blocks/configs.ts");
 const {
   SEO_LENGTH_STANDARDS,
   assessSeoLength,
@@ -125,12 +127,58 @@ const topicResolved = resolveSeoMetadata(
   global,
 );
 const topicMetadata = buildMetadataFromResolved(topicResolved);
+const globalTitleSuffix = getSeoTitleSuffix(global);
+const expectedTopicTitle = composeSeoTitle("Topic SEO title", "", globalTitleSuffix);
 
 check("topic canonical override resolves and reaches Metadata", topicResolved.canonical === "https://canonical.example/topic" && topicMetadata.alternates?.canonical === "https://canonical.example/topic");
 check("topic noindex override resolves and reaches Metadata", topicResolved.robots.index === false && typeof topicMetadata.robots === "object" && topicMetadata.robots?.index === false);
 check("topic nofollow override resolves and reaches Metadata", topicResolved.robots.follow === false && typeof topicMetadata.robots === "object" && topicMetadata.robots?.follow === false);
-check("topic SEO title and description drive public metadata", topicMetadata.title === "Topic SEO title" && topicMetadata.description === "Topic SEO description");
-check("topic image drives Open Graph override", topicResolved.image === "/images/topic-og.jpg" && topicMetadata.openGraph?.title === "Topic SEO title");
+check("topic SEO segment and Site Settings template drive public metadata", topicResolved.title === expectedTopicTitle && topicMetadata.title === trimToSeoLength(expectedTopicTitle, 65) && topicMetadata.description === "Topic SEO description");
+check("topic image drives Open Graph override with the same final title", topicResolved.image === "/images/topic-og.jpg" && topicMetadata.openGraph?.title === trimToSeoLength(expectedTopicTitle, 65));
+
+const legacyBrandOnlyTitle = resolveSeoMetadata(
+  {
+    path: "/about",
+    title: "من نحن",
+    entitySeo: { title: globalTitleSuffix },
+  },
+  global,
+);
+check(
+  "legacy brand-only Page SEO values fall back to the page segment without duplicating the site name",
+  legacyBrandOnlyTitle.title === composeSeoTitle("من نحن", "", globalTitleSuffix),
+);
+
+const emptyLocalPageSeo = resolveSeoMetadata(
+  {
+    path: "/custom-page-without-route-seo",
+    title: "اسم الصفحة",
+    description: "وصف الصفحة",
+    image: "/images/page.jpg",
+    entitySeo: {},
+  },
+  global,
+);
+check(
+  "an empty local Page SEO row preserves the exact Global SEO fallback",
+  emptyLocalPageSeo.title === global.defaultTitle &&
+    emptyLocalPageSeo.description === global.defaultDescription &&
+    emptyLocalPageSeo.image === global.defaultOgImage,
+);
+
+const descriptionOnlyLocalPageSeo = resolveSeoMetadata(
+  {
+    path: "/custom-page-with-local-seo",
+    title: "اسم الصفحة",
+    entitySeo: { description: "وصف SEO محلي" },
+  },
+  global,
+);
+check(
+  "local Page SEO composes the page name with the Site Settings title suffix centrally",
+  descriptionOnlyLocalPageSeo.title === composeSeoTitle("", "اسم الصفحة", globalTitleSuffix) &&
+    descriptionOnlyLocalPageSeo.description === "وصف SEO محلي",
+);
 
 const fallbackResolved = resolveSeoMetadata(
   {
@@ -349,6 +397,12 @@ const effectiveOgScore = analyzeEntitySeo({
   seoKeywords: ["عقد SEO", "المستهلكون"],
   faq: [{ question: "ما العقد الموحد؟", answer: "عقد واحد لكل المستهلكين." }],
 });
+const arabicEntityScore = analyzeEntitySeo({
+  ...articleScoreInput,
+  profile: "entity",
+  content: "مقدمة الصفحة\n<p>محتوى منسق داخل الموديول.</p>\nتعمل فينيسيا للتطوير العقاري على توثيق مراحل التنفيذ.",
+  focusKeyword: "فينيسيا للتطوير العقارى",
+});
 check(
   "the SEO Score owner returns one official score after shared OG, keyword, and FAQ normalization",
   Number.isInteger(articleScore.score) &&
@@ -357,6 +411,33 @@ check(
     !Object.hasOwn(articleScore, "overallScore") &&
     articleScore.metrics.some((metric) => metric.id === "keyword-density") &&
     articleScore.metrics.some((metric) => metric.id === "faq-count"),
+);
+check(
+  "Arabic Entity SEO keyword matching normalizes ya and alef maqsura inside mixed Page Composition content",
+  arabicEntityScore.issues.find((issue) => issue.id === "keyword-content")?.type === "success",
+);
+const unicodeArabicEntityScore = analyzeEntitySeo({
+  ...articleScoreInput,
+  profile: "entity",
+  content: "تعمل فـيـنيسيا\u200f للتطوير العَقاري على توثيق التنفيذ",
+  focusKeyword: "فينيسيا للتطوير العقاری",
+});
+check(
+  "Arabic Entity SEO matching removes formatting marks, tatweel, diacritics, and Persian letter variants",
+  unicodeArabicEntityScore.issues.find((issue) => issue.id === "keyword-content")?.type === "success",
+);
+const extractedVisiblePageCopy = extractPageBlockSeoText({
+  title: "عنوان مخفي",
+  showTitle: false,
+  contacts: [{ label: "واتساب", value: "01000000000" }],
+  currentLabelOverride: "من نحن",
+});
+check(
+  "Page SEO content bridge includes visible labels and values while respecting show controls",
+  !extractedVisiblePageCopy.includes("عنوان مخفي") &&
+    extractedVisiblePageCopy.includes("واتساب") &&
+    extractedVisiblePageCopy.includes("01000000000") &&
+    extractedVisiblePageCopy.includes("من نحن"),
 );
 check(
   "the SEO Score owner shares each article Markdown render across visible-text and heading checks",

@@ -28,7 +28,7 @@ export default function ContactFormSection({ cmsOffice, cmsForm }: ContactFormSe
   const form = cmsForm;
 
   return (
-    <section className="mx-auto grid max-w-7xl gap-5 px-5 py-8 sm:px-8 lg:grid-cols-[0.9fr_1.6fr] lg:px-10">
+    <section className="mx-auto grid max-w-7xl gap-5 px-4 py-8 @xl/slot-module:px-6 @4xl/slot-module:grid-cols-[0.9fr_1.6fr] @4xl/slot-module:px-10">
       {office ? (
         <aside className="rounded-[28px] border border-white/10 bg-white/[0.035] p-7">
           <p className="text-sm font-semibold text-[#d2a75a]">Venesia Office</p>
@@ -74,7 +74,7 @@ export default function ContactFormSection({ cmsOffice, cmsForm }: ContactFormSe
           {/* Submission destination intentionally deferred — no backend yet, so the
               button stays inert to avoid a reload that falsely implies the message was sent. */}
           <form className="grid min-w-0 gap-5">
-            <div className="grid min-w-0 gap-5 md:grid-cols-2">
+            <div className="grid min-w-0 gap-5 @xl/slot-module:grid-cols-2">
               <input
                 type="text"
                 autoComplete="name"

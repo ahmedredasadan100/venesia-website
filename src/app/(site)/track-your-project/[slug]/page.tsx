@@ -48,8 +48,8 @@ export async function generateMetadata({
       path: "/track-your-project",
       title:
         result.status === "unavailable"
-          ? `متابعة ${result.project.arabicName} غير متاحة مؤقتًا | فينيسيا للتطوير العقاري`
-          : "متابعة المشروع غير متاحة | فينيسيا للتطوير العقاري",
+          ? `متابعة ${result.project.arabicName} غير متاحة مؤقتًا`
+          : "متابعة المشروع غير متاحة",
       description:
         result.status === "unavailable"
           ? "بيانات متابعة التنفيذ غير متاحة مؤقتًا."
@@ -60,7 +60,7 @@ export async function generateMetadata({
 
   return generatePublicMetadata({
     path: `/track-your-project/${result.detail.project.slug}`,
-    title: `متابعة ${result.detail.project.arabicName} | فينيسيا للتطوير العقاري`,
+    title: `متابعة ${result.detail.project.arabicName}`,
     description: result.detail.latestUpdate?.body ?? `تابع مراحل تنفيذ ${result.detail.project.arabicName} وآخر تحديثات المشروع الموثقة.`,
     robots: NO_INDEX_ROBOTS,
   });

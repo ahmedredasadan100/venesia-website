@@ -27,6 +27,14 @@ type PageSeoPanelProps = {
   pageId: number;
   pageTitle: string;
   path: string;
+  content: string;
+  titleSuffix: string;
+  resolvedFallback: {
+    title: string;
+    description: string;
+    image: string;
+    imageAlt: string;
+  };
   seoTitle: string;
   seoDescription: string;
   focusKeyword: string;
@@ -84,7 +92,7 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
         <input type="hidden" name="redirect_to" value={`/admin/pages-blocks/pages/${props.pageId}?tab=seo`} />
         <input type="hidden" name="page_title" value={props.pageTitle} />
         <input type="hidden" name="page_description" value="" />
-        <input type="hidden" name="page_content" value="" />
+        <input type="hidden" name="page_content" value={props.content} />
         <input type="hidden" name="page_slug" value={publicSlug} />
         <input type="hidden" name="page_image" value="" />
         <input type="hidden" name="page_image_alt" value="" />
@@ -112,11 +120,13 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
               imageAlt: "page-og-image-alt",
             },
           }}
+          seoTitleSuffix={props.titleSuffix}
+          resolvedFallback={props.resolvedFallback}
           initial={{
             profile: "entity",
             title: props.pageTitle,
             description: "",
-            content: "",
+            content: props.content,
             slug: publicSlug,
             image: "",
             imageAlt: "",

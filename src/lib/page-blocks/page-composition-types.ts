@@ -2,6 +2,7 @@ import type { ResolvedFeedModule } from "../feed-modules/types";
 import type { HeroSectionVisibility } from "../load-hero-section";
 import type { MediaHubModulesState } from "../media-hub-modules/types";
 import type { MediaSidebarModulesState } from "../media-sidebar-modules/types";
+import type { MediaSidebarWidgetState } from "../media-sidebar-modules/types";
 import type { HeroSectionData } from "../page-sections";
 import type { PageLayoutSlot } from "./layout-slots";
 import type { PageBlockPublicState, ResolvedPageBlock } from "./types";
@@ -29,7 +30,14 @@ export type FeedSlotEntry = {
   module: ResolvedFeedModule;
 };
 
-export type SlotEntry = HeroSlotEntry | BlockSlotEntry | FeedSlotEntry;
+export type MediaSidebarSlotEntry = {
+  kind: "media-sidebar";
+  assignmentId: number;
+  sortOrder: number;
+  widget: MediaSidebarWidgetState;
+};
+
+export type SlotEntry = HeroSlotEntry | BlockSlotEntry | FeedSlotEntry | MediaSidebarSlotEntry;
 
 export type PageComposition = {
   layoutMode: PageLayoutMode;

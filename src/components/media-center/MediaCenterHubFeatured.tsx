@@ -39,7 +39,7 @@ export default function MediaCenterHubFeatured({
             className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/55 to-transparent"
           />
 
-          <div className="absolute inset-x-0 bottom-0 p-6 md:p-8">
+          <div className="absolute inset-x-0 bottom-0 p-6 @xl/slot-module:p-8">
             <div className="mb-4 flex flex-wrap items-center gap-3">
               {featuredItem.showCategoryOnPage && featuredItem.category ? (
                 <span className="rounded-full border border-[#D8B87A]/35 bg-[#05070B]/70 px-4 py-1.5 text-[11px] font-medium text-[#D8B87A] backdrop-blur">
@@ -60,7 +60,7 @@ export default function MediaCenterHubFeatured({
               ) : null}
             </div>
 
-            <h3 className="max-w-2xl text-2xl font-semibold leading-tight text-white md:text-3xl">
+            <h3 className="max-w-2xl text-2xl font-semibold leading-tight text-white @xl/slot-module:text-3xl">
               {featuredItem.title}
             </h3>
 

@@ -1,6 +1,7 @@
-export const PAGE_COMPOSITION_SLOTS = ["hero", "main", "sidebar", "bottom", "footer"] as const;
-
-export type PageCompositionSlot = (typeof PAGE_COMPOSITION_SLOTS)[number];
+export {
+  PAGE_LAYOUT_SLOTS as PAGE_COMPOSITION_SLOTS,
+  type PageLayoutSlot as PageCompositionSlot,
+} from "../page-blocks/layout-slots";
 
 export {
   getModuleEditorHeaderMetadata,

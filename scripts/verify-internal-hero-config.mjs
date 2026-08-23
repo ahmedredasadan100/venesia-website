@@ -323,7 +323,7 @@ assert(
     !internalPageLayoutSource.includes("PublicMediaImage") &&
     internalPageLayoutSource.includes("shouldRenderHero") &&
     internalPageLayoutSource.includes("<DynamicHeroSection") &&
-    internalPageLayoutSource.includes("compositionFooter={heroCompositionFooter}") &&
+    internalPageLayoutSource.includes("compositionFooter={resolvedHeroSlotContent}") &&
     heroSource.includes('data-hero-composition-footer="page-composition"'),
   "Static internal fallbacks delegate to the same shared Hero presentation owner",
 );

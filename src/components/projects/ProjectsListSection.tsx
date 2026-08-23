@@ -15,6 +15,7 @@ import {
   ProjectImageBottomBadges,
 } from "./ProjectCardMobileOverlays";
 import PublicMediaImage from "../public/PublicMediaImage";
+import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 
 type ViewMode = "list" | "cards";
 
@@ -312,6 +313,11 @@ function ProjectRow({
   project: PublicProject;
   display: Required<ProjectsListCardDisplay>;
 }) {
+  const locationLabel = resolveVisibleProjectLocationLabel(
+    project.location,
+    display.showProjectLocation,
+  );
+
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">
       <div className="flex flex-col md:grid md:min-h-[250px] md:grid-cols-[250px_1fr]">
@@ -333,10 +339,10 @@ function ProjectRow({
               <div className="pointer-events-none absolute inset-y-0 left-0 hidden w-16 bg-gradient-to-r from-[#05070B] to-transparent md:block" />
             </div>
 
-            {(display.showProjectLocation || display.showProjectType) ? (
+            {(locationLabel || display.showProjectType) ? (
               <ProjectImageBottomBadges
                 project={project}
-                showLocation={display.showProjectLocation}
+                showLocation={Boolean(locationLabel)}
                 showType={display.showProjectType}
               />
             ) : null}
@@ -349,9 +355,9 @@ function ProjectRow({
               <ProjectListingEnglishName project={project} />
             ) : null}
 
-            {display.showProjectLocation ? (
+            {locationLabel ? (
               <span className="mt-3 hidden rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111] md:inline-flex">
-                {project.location.label}
+                {locationLabel}
               </span>
             ) : null}
 
@@ -391,6 +397,11 @@ function ProjectCard({
   project: PublicProject;
   display: Required<ProjectsListCardDisplay>;
 }) {
+  const locationLabel = resolveVisibleProjectLocationLabel(
+    project.location,
+    display.showProjectLocation,
+  );
+
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">
       {display.showProjectImage ? (
@@ -408,10 +419,10 @@ function ProjectCard({
             {display.showProjectCode ? <ProjectCodeBadge code={project.code} /> : null}
           </div>
 
-          {(display.showProjectLocation || display.showProjectType) ? (
+          {(locationLabel || display.showProjectType) ? (
             <ProjectImageBottomBadges
               project={project}
-              showLocation={display.showProjectLocation}
+              showLocation={Boolean(locationLabel)}
               showType={display.showProjectType}
             />
           ) : null}
@@ -423,9 +434,9 @@ function ProjectCard({
           <ProjectListingEnglishName project={project} />
         ) : null}
 
-        {display.showProjectLocation ? (
+        {locationLabel ? (
           <span className="mt-2 hidden rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111] md:inline-flex">
-            {project.location.label}
+            {locationLabel}
           </span>
         ) : null}
 

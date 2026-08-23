@@ -67,9 +67,9 @@ import {
 export type BlockModuleRow = {
   id: number;
   name: string;
-  slug: string;
+  slug?: string;
   description: string | null;
-  variant: string;
+  variant?: string;
   status: string;
 };
 
@@ -87,6 +87,8 @@ type BlockModuleManagerClientProps = {
   bulkAction: (formData: FormData) => Promise<void>;
   defaultVariant: string;
   variantOptions: Array<[string, string]>;
+  technicalIdentityMode?: "editable" | "internal";
+  variantFieldMode?: "editable" | "internal";
   loadError?: string | null;
   mediaSynchronizationWarning?: boolean;
   initialVisibleColumns?: readonly string[] | null;
@@ -112,6 +114,16 @@ function mutationFormData(fields: Record<string, string | number>) {
   return formData;
 }
 
+function blockSearchPlaceholder(
+  technicalIdentityMode: "editable" | "internal",
+  variantFieldMode: "editable" | "internal",
+) {
+  const terms = ["اسم البلوك", "الوصف"];
+  if (technicalIdentityMode === "editable") terms.push("المعرّف");
+  if (variantFieldMode === "editable") terms.push("النمط");
+  return `ابحث بـ${terms.join(" أو ")}…`;
+}
+
 export default function BlockModuleManagerClient({
   moduleKey,
   moduleTitle,
@@ -124,6 +136,8 @@ export default function BlockModuleManagerClient({
   bulkAction,
   defaultVariant,
   variantOptions,
+  technicalIdentityMode = "editable",
+  variantFieldMode = "editable",
   loadError = null,
   mediaSynchronizationWarning = false,
   initialVisibleColumns = null,
@@ -176,9 +190,9 @@ export default function BlockModuleManagerClient({
   const sortAccessors = useMemo(
     () => ({
       name: (row: BlockModuleRow) => row.name,
-      slug: (row: BlockModuleRow) => row.slug,
+      slug: (row: BlockModuleRow) => row.slug ?? "",
       variant: (row: BlockModuleRow) =>
-        variantLabelByValue.get(row.variant) ?? row.variant,
+        variantLabelByValue.get(row.variant ?? "") ?? row.variant ?? "",
       status: (row: BlockModuleRow) => statusMeta(row.status).label,
     }),
     [variantLabelByValue],
@@ -200,12 +214,18 @@ export default function BlockModuleManagerClient({
       search: { minLength: 1 },
       matchesRow: (row, query) =>
         adminCollectionSearchIncludes(
-          `${row.name} ${row.slug} ${row.description ?? ""} ${row.variant} ${variantLabelByValue.get(row.variant) ?? ""}`,
+          [
+            row.name,
+            row.description ?? "",
+            technicalIdentityMode === "editable" ? row.slug ?? "" : "",
+            variantFieldMode === "editable" ? row.variant ?? "" : "",
+            variantFieldMode === "editable" ? variantLabelByValue.get(row.variant ?? "") ?? "" : "",
+          ].join(" "),
           query.search,
         ),
       getRowId: (row) => row.id,
     }),
-    [variantLabelByValue],
+    [technicalIdentityMode, variantFieldMode, variantLabelByValue],
   );
   const pagination = useAdminBoundedClientPagination({
     rows: table.rows,
@@ -402,7 +422,10 @@ export default function BlockModuleManagerClient({
         basePath={`/admin/pages-blocks/blocks/${moduleKey}`}
         search={{
           value: search,
-          placeholder: "ابحث باسم البلوك أو المعرّف أو النمط…",
+          placeholder: blockSearchPlaceholder(
+            technicalIdentityMode,
+            variantFieldMode,
+          ),
           minLength: 1,
         }}
         filters={[]}
@@ -557,11 +580,15 @@ export default function BlockModuleManagerClient({
                 access: "allowed",
                 title: `معلومات ${row.name}`,
                 items: [
-                  { label: "المعرّف", value: row.slug },
-                  {
-                    label: "النمط",
-                    value: variantLabelByValue.get(row.variant) ?? row.variant,
-                  },
+                  ...(technicalIdentityMode === "editable"
+                    ? [{ label: "المعرّف", value: row.slug ?? "" }]
+                    : []),
+                  ...(variantFieldMode === "editable"
+                    ? [{
+                        label: "النمط",
+                        value: variantLabelByValue.get(row.variant ?? "") ?? row.variant ?? "",
+                      }]
+                    : []),
                   { label: "الحالة", value: status.label },
                 ],
               },
@@ -650,14 +677,14 @@ export default function BlockModuleManagerClient({
                     href={`/admin/pages-blocks/blocks/${moduleKey}/${row.id}`}
                     className="font-en text-xs text-[#D8B87A]/78 transition hover:text-[#D8B87A]"
                   >
-                    {row.slug}
+                    {row.slug ?? ""}
                   </Link>
                 </AdminDataGridCenterCell>
               ) : null}
 
               {visibleColumnSet.has("variant") ? (
                 <AdminDataGridCenterCell className="text-white/58">
-                  {variantLabelByValue.get(row.variant) ?? row.variant}
+                  {variantLabelByValue.get(row.variant ?? "") ?? row.variant ?? ""}
                 </AdminDataGridCenterCell>
               ) : null}
 
@@ -726,31 +753,37 @@ export default function BlockModuleManagerClient({
                 />
                 <AdminFormError name="name" />
               </label>
-              <label className={adminFormLabelClassName()}>
-                المعرّف التقني
-                <input
-                  name="slug"
-                  dir="ltr"
-                  placeholder={`${moduleKey}-example`}
-                  className={adminFormFieldClassName(
-                    `text-left font-en ${fieldErrors.slug?.length ? "border-red-400/40" : ""}`,
-                  )}
-                  aria-invalid={Boolean(fieldErrors.slug?.length)}
-                  aria-describedby={
-                    fieldErrors.slug?.length ? "slug-error" : undefined
-                  }
+              {technicalIdentityMode === "editable" ? (
+                <label className={adminFormLabelClassName()}>
+                  المعرّف التقني
+                  <input
+                    name="slug"
+                    dir="ltr"
+                    placeholder={`${moduleKey}-example`}
+                    className={adminFormFieldClassName(
+                      `text-left font-en ${fieldErrors.slug?.length ? "border-red-400/40" : ""}`,
+                    )}
+                    aria-invalid={Boolean(fieldErrors.slug?.length)}
+                    aria-describedby={
+                      fieldErrors.slug?.length ? "slug-error" : undefined
+                    }
+                  />
+                  <AdminFormError name="slug" />
+                </label>
+              ) : null}
+              {variantFieldMode === "editable" ? (
+                <AdminFormListboxSelect
+                  name={moduleKey === "feed" ? "feed_type" : "variant"}
+                  label={moduleKey === "feed" ? "نوع موديول المحتوى" : "النمط"}
+                  defaultValue={defaultVariant}
+                  options={variantOptions.map(([value, label]) => ({
+                    value,
+                    label,
+                  }))}
                 />
-                <AdminFormError name="slug" />
-              </label>
-              <AdminFormListboxSelect
-                name={moduleKey === "feed" ? "feed_type" : "variant"}
-                label={moduleKey === "feed" ? "نوع موديول المحتوى" : "النمط"}
-                defaultValue={defaultVariant}
-                options={variantOptions.map(([value, label]) => ({
-                  value,
-                  label,
-                }))}
-              />
+              ) : (
+                <input type="hidden" name="variant" value={defaultVariant} />
+              )}
               {moduleKey === "feed" ? (
                 <>
                   <label className={adminFormLabelClassName()}>

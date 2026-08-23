@@ -1,4 +1,4 @@
-import type { RefObject } from "react";
+import { useRef, type RefObject } from "react";
 
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
@@ -15,6 +15,7 @@ import {
 import type { AdminTableSortDirection } from "../../../../../../components/admin/table-engine";
 import { normalizeBoolean } from "../../../../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
+import type { PageLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import type { PageCompositionColumnKey } from "../../../../../../lib/page-blocks/admin-collection-columns";
 import type { AdminInstantMutationRowInteraction } from "../../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import PageBlocksAssignmentRow from "./PageBlocksAssignmentRow";
@@ -35,10 +36,12 @@ type PageBlocksAssignmentsGridProps = {
   onToggleSelect: (rowId: string, checked: boolean) => void;
   rowInteraction: (rowId: string) => AdminInstantMutationRowInteraction;
   onToggleVisibility: (row: PageBlockAssignmentRow) => Promise<void>;
+  getDisplayPositionOptions: (row: PageBlockAssignmentRow) => PageLayoutSlot[];
+  onDisplayPositionChange: (row: PageBlockAssignmentRow, slot: PageLayoutSlot) => void;
   onDuplicate: (row: PageBlockAssignmentRow) => void;
   onDetach: (row: PageBlockAssignmentRow) => void;
-  canMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => boolean;
-  onMove: (row: PageBlockAssignmentRow, direction: -1 | 1) => void;
+  getReorderPosition: (row: PageBlockAssignmentRow) => { position: number; count: number };
+  onReorder: (row: PageBlockAssignmentRow, targetPosition: number) => void;
   manualReorderEnabled: boolean;
   visibleColumns: ReadonlySet<PageCompositionColumnKey<"pageAssignments">>;
 };
@@ -55,18 +58,22 @@ export default function PageBlocksAssignmentsGrid({
   onToggleSelect,
   rowInteraction,
   onToggleVisibility,
+  getDisplayPositionOptions,
+  onDisplayPositionChange,
   onDuplicate,
   onDetach,
-  canMove,
-  onMove,
+  getReorderPosition,
+  onReorder,
   manualReorderEnabled,
   visibleColumns,
 }: PageBlocksAssignmentsGridProps) {
+  const draggedRowIdRef = useRef<string | null>(null);
   const gridColumns = [
     ADMIN_DATA_GRID_COLUMNS.checkbox,
+    ADMIN_DATA_GRID_COLUMNS.reorder,
     ADMIN_DATA_GRID_COLUMNS.primaryStandard,
     visibleColumns.has("module") ? "150px" : null,
-    "150px",
+    ADMIN_DATA_GRID_COLUMNS.displayPosition,
     visibleColumns.has("status") ? ADMIN_DATA_GRID_COLUMNS.statusCompact : null,
     ADMIN_DATA_GRID_ACTION_COLUMNS.threeCompact,
   ]
@@ -92,6 +99,7 @@ export default function PageBlocksAssignmentsGrid({
             label="تحديد الكل"
           />
         </AdminDataGridCheckboxCell>
+        <AdminDataGridCenterCell>ترتيب</AdminDataGridCenterCell>
         <AdminDataGridPrimaryCell>
           <AdminDataGridSortLabel {...sortProps("template_name")} className="justify-end">القالب</AdminDataGridSortLabel>
         </AdminDataGridPrimaryCell>
@@ -101,7 +109,7 @@ export default function PageBlocksAssignmentsGrid({
           </AdminDataGridCenterCell>
         ) : null}
         <AdminDataGridCenterCell>
-          <AdminDataGridSortLabel {...sortProps("slot")} className="justify-center">الموضع</AdminDataGridSortLabel>
+          <AdminDataGridSortLabel {...sortProps("slot")} className="justify-center">موضع العرض</AdminDataGridSortLabel>
         </AdminDataGridCenterCell>
         {visibleColumns.has("status") ? (
           <AdminDataGridCenterCell>
@@ -116,6 +124,7 @@ export default function PageBlocksAssignmentsGrid({
         const isVisible = normalizeBoolean(row.is_publicly_visible, false);
         const manageable = isManageableAssignment(row);
         const interaction = rowInteraction(rowId);
+        const reorder = getReorderPosition(row);
         return (
           <PageBlocksAssignmentRow
             key={rowId}
@@ -130,13 +139,35 @@ export default function PageBlocksAssignmentsGrid({
             interaction={interaction}
             onToggleSelect={(checked) => onToggleSelect(rowId, checked)}
             onToggleVisibility={() => onToggleVisibility(row)}
+            displayPositionOptions={getDisplayPositionOptions(row)}
+            onDisplayPositionChange={(slot) => onDisplayPositionChange(row, slot)}
             onDuplicate={() => onDuplicate(row)}
             onDetach={() => onDetach(row)}
-            canMoveUp={canMove(row, -1)}
-            canMoveDown={canMove(row, 1)}
+            reorderPosition={reorder.position}
+            reorderCount={reorder.count}
             manualReorderEnabled={manualReorderEnabled}
-            onMoveUp={() => onMove(row, -1)}
-            onMoveDown={() => onMove(row, 1)}
+            onMoveTo={(targetPosition) => onReorder(row, targetPosition)}
+            onDragStart={(event) => {
+              draggedRowIdRef.current = rowId;
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", rowId);
+            }}
+            onDragOver={(event) => {
+              if (!manualReorderEnabled || !draggedRowIdRef.current) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              const sourceId = draggedRowIdRef.current || event.dataTransfer.getData("text/plain");
+              const source = rows.find((candidate) => assignmentRowId(candidate) === sourceId);
+              draggedRowIdRef.current = null;
+              if (!source || source.slot !== row.slot) return;
+              onReorder(source, reorder.position);
+            }}
+            onDragEnd={() => {
+              draggedRowIdRef.current = null;
+            }}
             showModule={visibleColumns.has("module")}
             showStatus={visibleColumns.has("status")}
           />
