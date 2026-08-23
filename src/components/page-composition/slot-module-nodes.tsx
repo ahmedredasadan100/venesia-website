@@ -13,7 +13,6 @@ import VisionGoalsModuleSection from "../modules/VisionGoalsModuleSection";
 import BreadcrumbModuleSection from "../modules/BreadcrumbModuleSection";
 import {
   mapAboutApproachBlock,
-  mapAboutDocumentaryBeatsBlock,
   mapAboutIntroBeatsFromBlock,
   mapAboutIntroBlock,
   mapAboutIntroSingleImageBlock,
@@ -125,12 +124,9 @@ function indexBySlug(blocks: ResolvedPageBlock[]) {
   return map;
 }
 
-function findWhoWeAreContentBlock(blocks: ResolvedPageBlock[]) {
-  return blocks.find(isWhoWeAreContentBlock);
-}
-
 export type SlotModuleRenderContext = {
   homepageProjects?: HomepageProjectCard[];
+  breadcrumbCurrentLabel?: string;
 };
 
 /**
@@ -153,7 +149,11 @@ export function buildSlotModuleNodes(
     if (block) consumed.add(block.assignmentId);
   };
 
-  const push = (id: string, sortOrder: number, node: ReactNode) => {
+  const push = (
+    id: string,
+    sortOrder: number,
+    node: ReactNode,
+  ) => {
     nodes.push({ key: id, sortOrder, node });
   };
 
@@ -206,20 +206,16 @@ export function buildSlotModuleNodes(
     }
 
     if (isWhoWeAreContentBlock(block)) {
-      const beatsBlock = bySlug.get("about-documentary-beats");
       const embeddedBeats = mapAboutIntroBeatsFromBlock(block);
       const moduleKey = `about-intro-${block.assignmentId}`;
       const cmsIntro = mapAboutIntroBlock(block);
       mark(block);
-      if (!embeddedBeats?.length && beatsBlock) {
-        mark(beatsBlock);
-      }
       push(
         moduleKey,
         block.sortOrder,
         <WhoWeAreModuleSection
           cmsIntro={cmsIntro}
-          cmsBeats={embeddedBeats ?? (beatsBlock ? mapAboutDocumentaryBeatsBlock(beatsBlock) : null)}
+          cmsBeats={embeddedBeats}
         />,
       );
       continue;
@@ -231,24 +227,6 @@ export function buildSlotModuleNodes(
         `about-intro-single-image-${block.assignmentId}`,
         block.sortOrder,
         <AboutIntroSingleImageModuleSection content={mapAboutIntroSingleImageBlock(block)} />,
-      );
-      continue;
-    }
-
-    if (slug === "about-documentary-beats") {
-      const introBlock = findWhoWeAreContentBlock(sorted);
-      // Peer of about-intro: always defer to the intro composite when intro exists
-      // (embedded beats or peer lookup). Prevents a second WhoWeAre when beats
-      // sort before intro. Standalone beats-only section only when no intro.
-      if (introBlock) {
-        mark(block);
-        continue;
-      }
-      mark(block);
-      push(
-        `about-beats-${block.assignmentId}`,
-        block.sortOrder,
-        <WhoWeAreModuleSection cmsIntro={null} cmsBeats={mapAboutDocumentaryBeatsBlock(block)} />,
       );
       continue;
     }
@@ -414,16 +392,15 @@ export function buildSlotModuleNodes(
     }
 
     if (block.blockType === "breadcrumb") {
-      if ((block.template.variant ?? "hero-inline") === "standalone") {
-        mark(block);
-        push(
-          `breadcrumb-${block.assignmentId}`,
-          block.sortOrder,
-          <BreadcrumbModuleSection config={asBreadcrumbConfig(block.template.config)} className="mb-2" />,
-        );
-      } else {
-        mark(block);
-      }
+      mark(block);
+      push(
+        `breadcrumb-${block.assignmentId}`,
+        block.sortOrder,
+        <BreadcrumbModuleSection
+          config={asBreadcrumbConfig(block.template.config)}
+          currentLabelOverride={context.breadcrumbCurrentLabel}
+        />,
+      );
       continue;
     }
 

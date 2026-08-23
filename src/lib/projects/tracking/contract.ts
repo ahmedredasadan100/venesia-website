@@ -1,5 +1,10 @@
 import { z } from "zod";
 
+export const projectLocationPresentationReadSchema = z.object({
+  showDetailedAddress: z.boolean(),
+  showLocationTags: z.boolean(),
+});
+
 export const PROJECT_TRACKING_STATUSES = [
   "not_started",
   "in_progress",
@@ -111,6 +116,7 @@ export const projectTrackingPublicDetailSchema = z.object({
     arabicName: z.string().min(1),
     englishName: z.string().nullable(),
     location: z.string().nullable(),
+    locationPresentation: projectLocationPresentationReadSchema,
     heroImage: z.string().nullable(),
     heroImageAlt: z.string().nullable(),
   }),

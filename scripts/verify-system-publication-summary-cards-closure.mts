@@ -208,7 +208,9 @@ check(
 check(
   "Hero and assignment visibility adopt the shared public publication contract",
   moduleStatus.includes("export function isPageModulePubliclyVisible") &&
-    heroLoader.includes("isPageModulePubliclyVisible(true, template.status)") &&
+    heroLoader.includes("isPageModulePubliclyVisible(template.is_visible, template.status)") &&
+    heroLoader.includes("isPageModulePubliclyVisible(template?.is_visible, template?.status)") &&
+    !heroLoader.includes("isPageModulePubliclyVisible(true, template.status)") &&
     assignmentLoader.includes("resolvePageModuleVisibilityFields(row.is_active, template.status)") &&
     !heroLoader.includes('template.status === "published"') &&
     !assignmentLoader.includes('template.status === "published"') &&

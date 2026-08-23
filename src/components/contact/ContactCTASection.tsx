@@ -14,8 +14,8 @@ export default function ContactCTASection({ cmsContent }: ContactCTASectionProps
   if (!showCopy && !cta.image.trim()) return null;
 
   return (
-    <section className="mx-auto max-w-7xl px-5 pb-16 sm:px-8 lg:px-10">
-      <div className="group relative overflow-hidden rounded-[28px] border border-[#d2a75a]/25 p-8 transition duration-500 hover:-translate-y-1 hover:border-[#d2a75a]/55 hover:shadow-[0_22px_70px_rgba(0,0,0,0.38)] md:p-12">
+    <section className="mx-auto max-w-7xl px-4 pb-12 @xl/slot-module:px-6 @xl/slot-module:pb-16 @4xl/slot-module:px-10">
+      <div className="group relative overflow-hidden rounded-[28px] border border-[#d2a75a]/25 p-6 transition duration-500 hover:-translate-y-1 hover:border-[#d2a75a]/55 hover:shadow-[0_22px_70px_rgba(0,0,0,0.38)] @xl/slot-module:p-8 @3xl/slot-module:p-12">
         {cta.image.trim() ? (
           <Image
             src={cta.image}
@@ -34,7 +34,7 @@ export default function ContactCTASection({ cmsContent }: ContactCTASectionProps
 
         <div className="relative max-w-2xl">
           {cta.title.trim() ? (
-            <h2 className="text-balance text-3xl font-semibold max-[359px]:text-2xl md:text-5xl">
+            <h2 className="text-balance text-3xl font-semibold max-[359px]:text-2xl @3xl/slot-module:text-5xl">
               {cta.title}
             </h2>
           ) : null}

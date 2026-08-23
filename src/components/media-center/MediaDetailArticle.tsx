@@ -56,7 +56,7 @@ export default function MediaDetailArticle({
             </div>
 
             {item.showTitleOnPage ? (
-              <h1 className="mt-5 max-w-4xl text-3xl font-semibold leading-tight text-white md:text-4xl">
+              <h1 className="mt-5 max-w-4xl text-3xl font-semibold leading-tight text-white @xl/slot-module:text-4xl">
                 {item.title}
               </h1>
             ) : null}
@@ -74,9 +74,9 @@ export default function MediaDetailArticle({
 
       {item.type === "video" ? <MediaVideoPlayback item={item} /> : null}
 
-      <div className="space-y-6 rounded-[2rem] border border-white/10 bg-black/15 p-7 md:p-9">
+      <div className="space-y-6 rounded-[2rem] border border-white/10 bg-black/15 p-6 @xl/slot-module:p-7 @3xl/slot-module:p-9">
         {content.map((paragraph) => (
-          <p key={paragraph} className="text-[15px] leading-9 text-white/68 md:text-base">
+          <p key={paragraph} className="text-[15px] leading-9 text-white/68 @xl/slot-module:text-base">
             {paragraph}
           </p>
         ))}

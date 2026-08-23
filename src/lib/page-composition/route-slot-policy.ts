@@ -1,8 +1,10 @@
 import {
+  isRecognizedLayoutSlot,
   normalizeLayoutSlot,
   PAGE_LAYOUT_SLOTS,
   type PageLayoutSlot,
 } from "../page-blocks/layout-slots.ts";
+import type { PageLayoutMode } from "../page-blocks/page-composition-types.ts";
 
 /**
  * Central Route × Module slot capabilities.
@@ -16,6 +18,7 @@ type ModuleSlotContract = {
 };
 
 const ALL_NON_HERO_SLOTS: readonly PageLayoutSlot[] = ["main", "sidebar", "bottom", "footer"];
+const ALL_LAYOUT_SLOTS: readonly PageLayoutSlot[] = PAGE_LAYOUT_SLOTS;
 
 /**
  * Canonical Module × Slot contract.
@@ -23,7 +26,7 @@ const ALL_NON_HERO_SLOTS: readonly PageLayoutSlot[] = ["main", "sidebar", "botto
  */
 export const MODULE_SLOT_CONTRACT: Record<string, ModuleSlotContract> = {
   hero: { allowed: ["hero"], preferred: ["hero"] },
-  breadcrumb: { allowed: ["hero"], preferred: ["hero"] },
+  breadcrumb: { allowed: ALL_LAYOUT_SLOTS, preferred: ["hero", "main"] },
   content: { allowed: ALL_NON_HERO_SLOTS, preferred: ["main", "bottom"] },
   cta: { allowed: ALL_NON_HERO_SLOTS, preferred: ["main", "bottom"] },
   cards: { allowed: ALL_NON_HERO_SLOTS, preferred: ["main", "sidebar", "bottom"] },
@@ -34,16 +37,13 @@ export const MODULE_SLOT_CONTRACT: Record<string, ModuleSlotContract> = {
 
 const FREEFORM_KINDS = new Set(["content", "cta", "cards"]);
 
-function getModuleSlotContract(moduleKind: string): ModuleSlotContract {
+function getModuleSlotContract(moduleKind: string): ModuleSlotContract | null {
   const kind = moduleKind.trim().toLowerCase();
-  return MODULE_SLOT_CONTRACT[kind] ?? {
-    allowed: PAGE_LAYOUT_SLOTS,
-    preferred: ["main"],
-  };
+  return MODULE_SLOT_CONTRACT[kind] ?? null;
 }
 
 function kindBaseSlots(moduleKind: string): PageLayoutSlot[] {
-  return [...getModuleSlotContract(moduleKind).allowed];
+  return [...(getModuleSlotContract(moduleKind)?.allowed ?? [])];
 }
 
 function orderByPreference(
@@ -58,11 +58,11 @@ function orderByPreference(
 }
 
 /** Slots that freeform modules (content/cta/cards) may use on a given page slug. */
-function freeformSlotsForRoute(pageSlug: string): PageLayoutSlot[] {
+function freeformSlotsForRoute(pageSlug: string, moduleKind: string): PageLayoutSlot[] {
   const slug = pageSlug.trim().toLowerCase();
 
   if (slug === "home") return ["main"];
-  if (slug === "projects") return ["main"];
+  if (slug === "projects") return moduleKind === "content" ? ["main"] : [];
   if (slug === "topics") return ["main", "sidebar", "bottom", "footer"];
   if (slug === "media-center") return ["main", "bottom", "footer"];
   if (slug.startsWith("media-center-")) return ["main", "bottom"];
@@ -75,8 +75,49 @@ function freeformSlotsForRoute(pageSlug: string): PageLayoutSlot[] {
 function routeAllowsCompositionFeed(pageSlug: string): boolean {
   const slug = pageSlug.trim().toLowerCase();
   if (slug === "home") return false;
+  if (slug === "projects") return false;
   if (slug.startsWith("media-center-")) return false;
   return true;
+}
+
+function routeAllowsHero(pageSlug: string): boolean {
+  return pageSlug.trim().toLowerCase() !== "projects";
+}
+
+function routeAllowsMediaHub(pageSlug: string): boolean {
+  const slug = pageSlug.trim().toLowerCase();
+  return slug === "media-center" || slug.startsWith("media-center-");
+}
+
+function routeAllowsMediaSidebar(pageSlug: string): boolean {
+  const slug = pageSlug.trim().toLowerCase();
+  return slug !== "home" && slug !== "projects";
+}
+
+/**
+ * One Page Composition layout decision for loaders and renderers. `main-sidebar`
+ * only becomes two-column when the sidebar contains an entry (or a prefix).
+ */
+export function getPageLayoutModeForRoute(
+  pageSlug: string | null | undefined,
+): PageLayoutMode {
+  const slug = (pageSlug ?? "").trim().toLowerCase();
+  if (slug === "home" || slug === "projects") {
+    return "stack";
+  }
+  return "main-sidebar";
+}
+
+/** Breadcrumb adopts the display positions already rendered by each route runtime. */
+function breadcrumbSlotsForRoute(pageSlug: string): PageLayoutSlot[] {
+  const slug = pageSlug.trim().toLowerCase();
+
+  if (slug === "home") return ["hero", "main"];
+  if (slug === "projects") return [];
+  if (slug === "media-center") return ["hero", "main", "bottom", "footer"];
+  if (slug.startsWith("media-center-")) return ["hero", "main", "bottom"];
+
+  return [...PAGE_LAYOUT_SLOTS];
 }
 
 /**
@@ -89,8 +130,10 @@ export function getAssignableSlotsForRoute(
 ): PageLayoutSlot[] {
   const slug = (pageSlug ?? "").trim().toLowerCase();
   const kind = moduleKind.trim().toLowerCase();
+  const contract = getModuleSlotContract(kind);
+  if (!contract) return [];
   const base = kindBaseSlots(kind);
-  const preferred = getModuleSlotContract(kind).preferred;
+  const preferred = contract.preferred;
 
   if (!slug) {
     // Without a page context, keep kind constraints only (server must resolve slug).
@@ -100,8 +143,25 @@ export function getAssignableSlotsForRoute(
     return orderByPreference(base, preferred);
   }
 
-  if (kind === "hero" || kind === "breadcrumb" || kind === "media-hub" || kind === "media-sidebar") {
-    return orderByPreference(base, preferred);
+  if (kind === "breadcrumb") {
+    const allowed = new Set(breadcrumbSlotsForRoute(slug));
+    return orderByPreference(base.filter((slot) => allowed.has(slot)), preferred);
+  }
+
+  if (kind === "hero") {
+    return routeAllowsHero(slug) ? orderByPreference(base, preferred) : [];
+  }
+
+  if (kind === "media-hub") {
+    return routeAllowsMediaHub(slug)
+      ? orderByPreference(base, preferred)
+      : [];
+  }
+
+  if (kind === "media-sidebar") {
+    return routeAllowsMediaSidebar(slug)
+      ? orderByPreference(base, preferred)
+      : [];
   }
 
   if (kind === "feed") {
@@ -109,7 +169,7 @@ export function getAssignableSlotsForRoute(
   }
 
   if (FREEFORM_KINDS.has(kind)) {
-    const allowed = new Set(freeformSlotsForRoute(slug));
+    const allowed = new Set(freeformSlotsForRoute(slug, kind));
     return orderByPreference(base.filter((slot) => allowed.has(slot)), preferred);
   }
 
@@ -121,7 +181,9 @@ export function getPreferredSlotsForModuleKind(
   pageSlug?: string | null,
 ): PageLayoutSlot[] {
   const allowed = new Set(getAssignableSlotsForRoute(pageSlug, moduleKind));
-  return getModuleSlotContract(moduleKind).preferred.filter((slot) => allowed.has(slot));
+  return (getModuleSlotContract(moduleKind)?.preferred ?? []).filter((slot) =>
+    allowed.has(slot),
+  );
 }
 
 export function isSlotAllowedForRoute(
@@ -129,6 +191,7 @@ export function isSlotAllowedForRoute(
   moduleKind: string,
   slot: string | null | undefined,
 ): boolean {
+  if (!isRecognizedLayoutSlot(slot)) return false;
   const normalized = normalizeLayoutSlot(slot);
   return getAssignableSlotsForRoute(pageSlug, moduleKind).includes(normalized);
 }
@@ -141,11 +204,14 @@ export function getUnsupportedSlotAssignmentMessage(
 ): string {
   const options = getAssignableSlotsForRoute(pageSlug, moduleKind);
   const normalized = normalizeLayoutSlot(slot);
+  const requested = isRecognizedLayoutSlot(slot)
+    ? normalized
+    : String(slot ?? "").trim() || "غير محدد";
   const kindLabel = moduleKind.trim() || "الموديول";
 
   if (!options.length) {
     return `لا يمكن ربط موديول من نوع «${kindLabel}» بهذه الصفحة — لا يوجد موضع عرض مدعوم في الواجهة العامة.`;
   }
 
-  return `الموضع «${normalized}» غير مدعوم لموديول «${kindLabel}» على هذه الصفحة. المواضع المتاحة: ${options.join(", ")}.`;
+  return `الموضع «${requested}» غير مدعوم لموديول «${kindLabel}» على هذه الصفحة. المواضع المتاحة: ${options.join(", ")}.`;
 }

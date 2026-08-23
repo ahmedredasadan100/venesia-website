@@ -18,9 +18,13 @@ export const SEO_LENGTH_STANDARDS = ENTITY_SEO_LIMITS satisfies Record<
   SeoLengthStandard
 >;
 
-/** Counts every character currently present in the field. */
+const seoGraphemeSegmenter = new Intl.Segmenter("ar", {
+  granularity: "grapheme",
+});
+
+/** Counts user-perceived Unicode characters, not UTF-16 code units. */
 export function countSeoTextCharacters(value: string) {
-  return value.length;
+  return Array.from(seoGraphemeSegmenter.segment(value)).length;
 }
 
 export function assessSeoLength(

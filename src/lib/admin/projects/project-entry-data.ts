@@ -19,7 +19,7 @@ import {
 import { PROJECT_LOCATION_LEVELS } from "./location-management-contract";
 import { isProjectPublicationStatus } from "./project-publishing-capability";
 
-const PROJECT_ROOT_SELECT = "id,type,code,arabic_name,english_name,slug,general_description,short_description,image,image_alt,hero_image,hero_image_alt,small_box_image,small_box_image_alt,governorate_id,city_id,main_area_id,sub_area_id,location_label,location_description,google_maps_url,latitude,longitude,map_zoom,location_title,overview_title,overview_body,overview_media_type,overview_main_image,overview_main_image_alt,plans_title,delivery_title,delivery_body,gallery_title,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,publication_status,published_at,published_by,featured,show_on_homepage,homepage_order,brochure_url,created_at,updated_at";
+const PROJECT_ROOT_SELECT = "id,type,code,arabic_name,english_name,slug,general_description,short_description,image,image_alt,hero_image,hero_image_alt,small_box_image,small_box_image_alt,governorate_id,city_id,main_area_id,sub_area_id,location_label,show_location_label,show_location_tags,location_description,google_maps_url,latitude,longitude,map_zoom,location_title,overview_title,overview_body,overview_media_type,overview_main_image,overview_main_image_alt,plans_title,delivery_title,delivery_body,gallery_title,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,publication_status,published_at,published_by,featured,show_on_homepage,homepage_order,brochure_url,created_at,updated_at";
 
 type ProjectLocationSelection = Pick<
   Tables<"project_locations">,
@@ -284,6 +284,8 @@ export async function loadProjectEntry(
       main_area_id: numberOrNull(root.main_area_id),
       sub_area_id: numberOrNull(root.sub_area_id),
       location_label: stringValue(root.location_label),
+      show_location_label: root.show_location_label !== false,
+      show_location_tags: root.show_location_tags !== false,
       location_description: stringValue(root.location_description),
       google_maps_url: stringValue(root.google_maps_url),
       latitude: stringValue(root.latitude),

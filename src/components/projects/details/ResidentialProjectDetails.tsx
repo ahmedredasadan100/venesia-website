@@ -7,9 +7,17 @@ import ProjectDistrictSection from "./ProjectDistrictSection";
 import ProjectPlansAndAreasSection from "./ProjectPlansAndAreasSection";
 import { ProjectMainGallery } from "./ProjectImageGalleries";
 
-type ResidentialProjectDetailsProps = { project: PublicProject };
+type ResidentialProjectDetailsProps = {
+  project: PublicProject;
+  heroPresentation?: Parameters<typeof ProjectDetailsHero>[0]["presentation"];
+  showProjectHero?: boolean;
+};
 
-export default function ResidentialProjectDetails({ project }: ResidentialProjectDetailsProps) {
+export default function ResidentialProjectDetails({
+  project,
+  heroPresentation,
+  showProjectHero = true,
+}: ResidentialProjectDetailsProps) {
   const overviewImage = project.overview.mainImage ?? project.overview.images[0] ?? null;
   const tabs = [
     { id: "district", label: "عن الموقع", visible: true },
@@ -21,7 +29,9 @@ export default function ResidentialProjectDetails({ project }: ResidentialProjec
 
   return (
     <main className="min-h-screen bg-[#05070B] text-white" dir="rtl">
-      <ProjectDetailsHero project={project} />
+      {showProjectHero ? (
+        <ProjectDetailsHero project={project} presentation={heroPresentation} />
+      ) : null}
 
       <nav className="sticky top-0 z-30 border-b border-[#D8B87A]/15 bg-[#070A0F]/92 backdrop-blur-xl">
         <div className="mx-auto flex max-w-7xl gap-2 overflow-x-auto px-6 py-3">
@@ -33,7 +43,11 @@ export default function ResidentialProjectDetails({ project }: ResidentialProjec
         </div>
       </nav>
 
-      <ProjectDistrictSection location={project.location} cardImage={project.cardImage} englishName={project.englishName} />
+      <ProjectDistrictSection
+        location={project.location}
+        cardImage={project.cardImage}
+        englishName={project.englishName}
+      />
 
       <section id="overview" className="scroll-mt-24 mx-auto max-w-7xl px-6 py-14">
         <div className={`grid gap-8 ${overviewImage ? "lg:grid-cols-[0.85fr_1.15fr]" : ""}`}>

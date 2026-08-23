@@ -1,4 +1,4 @@
-import type { AboutIntroModuleConfig, CardsBlockConfig } from "../../lib/page-blocks";
+import type { AboutIntroModuleConfig } from "../../lib/page-blocks";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 import { asAboutIntroConfig, asAboutIntroSingleImageConfig } from "../../lib/page-blocks/configs";
 import { mapAboutApproachBlock as mapAboutApproachModuleBlock } from "../modules/about-approach-mappers";
@@ -135,17 +135,6 @@ export function mapAboutIntroSingleImageBlock(block: ResolvedPageBlock) {
       }))
       .filter(isFilledBeat),
   };
-}
-
-export function mapAboutDocumentaryBeatsBlock(block: ResolvedPageBlock): AboutDocumentaryBeat[] {
-  const config = block.template.config as CardsBlockConfig;
-  return (config.items ?? [])
-    .map((item, index) => ({
-      num: item.icon ?? String(index + 1).padStart(2, "0"),
-      title: item.title ?? "",
-      text: item.body ?? "",
-    }))
-    .filter(isFilledBeat);
 }
 
 export function mapAboutApproachBlock(block: ResolvedPageBlock): AboutApproachContent {

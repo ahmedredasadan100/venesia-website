@@ -5,6 +5,10 @@ import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences
 import { getPageModuleAssignmentsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { getGlobalSeoDefaults } from "../../../../../lib/seo/global-seo-defaults";
+import { loadGlobalSeoSettings } from "../../../../../lib/seo/load-global-seo-settings";
+import { getSeoTitleSuffix } from "../../../../../lib/seo/seo-utils";
+import { resolveSeoMetadata } from "../../../../../lib/seo/resolve-seo-metadata";
 import PageBlocksClient from "./PageBlocksClient";
 
 type PageProps = {
@@ -54,7 +58,7 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     notFound();
   }
 
-  const [pageResult, preference, assignmentsResult] = await Promise.all([
+  const [pageResult, preference, assignmentsResult, globalSeo] = await Promise.all([
     getSupabaseAdmin()
       .from("pages")
       .select("id,title,slug,path,page_type,status,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt")
@@ -66,6 +70,7 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     getPageModuleAssignmentsForAdmin(pageId)
       .then((data) => ({ data, error: null }))
       .catch((error: unknown) => ({ data: null, error })),
+    loadGlobalSeoSettings().catch(() => getGlobalSeoDefaults()),
   ]);
   const { data: page, error: pageError } = pageResult;
 
@@ -95,6 +100,10 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
   }
 
   const assignmentsData = assignmentsResult.data;
+  const resolvedSeoFallback = resolveSeoMetadata(
+    { path: page.path },
+    globalSeo,
+  );
 
   const seoNotice = resolvedSearchParams?.seo_notice ?? null;
   const seoError = resolvedSearchParams?.seo_error
@@ -107,6 +116,14 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       assignments={assignmentsData.assignments}
       templates={assignmentsData.templates}
       seo={{
+        content: assignmentsData.seoContent,
+        titleSuffix: getSeoTitleSuffix(globalSeo),
+        resolvedFallback: {
+          title: resolvedSeoFallback.title,
+          description: resolvedSeoFallback.description,
+          image: resolvedSeoFallback.image,
+          imageAlt: resolvedSeoFallback.imageAlt,
+        },
         seoTitle: page.seo_title ?? "",
         seoDescription: page.seo_description ?? "",
         focusKeyword: page.focus_keyword ?? "",

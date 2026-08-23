@@ -210,11 +210,12 @@ export function ModuleEditorField({
   return (
     <AdminFormGridItem
       span={resolvedSpan}
-      className={className}
+      className={`h-full ${className}`.trim()}
     >
       <div
         data-module-editor-field-nature={nature}
         data-module-editor-field-span={resolvedSpan}
+        className="h-full"
       >
         {children}
       </div>
@@ -336,7 +337,7 @@ export function ModuleEditorStatusSwitch({
       uncheckedValue="unpublished"
       defaultChecked={status === "published"}
       surface
-      className={className}
+      className={`min-h-[46px] ${className}`.trim()}
     />
   );
 }
@@ -353,7 +354,10 @@ export function ModuleEditorSettingsComposition({
   className?: string;
 }) {
   return (
-    <div data-module-editor-settings="" className={`space-y-5 ${className}`.trim()}>
+    <div
+      data-module-editor-settings=""
+      className={`space-y-5 xl:[&_[data-module-editor-field-nature='binary-state']]:pt-6 ${className}`.trim()}
+    >
       {context}
       {secondary ? (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">

@@ -21,7 +21,6 @@ function assert(condition, message) {
 }
 
 const client = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
-const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
 const presentationRegistry = read("src/lib/page-composition/module-registry-metadata.ts");
 const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 
@@ -40,8 +39,9 @@ assert(
 );
 assert(
   client.includes("usesLockedInternalSlug") &&
-    presentation.includes("معرّف بنيوي للقراءة فقط"),
-  "Vision goals internal slug must be read-only with helper text",
+    /<ModuleEditorTechnicalIdentity\s+mode="hidden"/.test(client) &&
+    client.includes("!usesLockedInternalSlug"),
+  "Vision goals internal slug must remain hidden while editable identities keep the shared field",
 );
 assert(client.includes("تم حفظ موديول الرؤية والأهداف بنجاح."), "Vision goals save notice missing");
 assert(

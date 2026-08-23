@@ -35,7 +35,7 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
     layoutEyebrow: "News",
     breadcrumbSectionLabel: "الأخبار",
     notFound: {
-      title: "خبر غير موجود | فينيسيا للتطوير العقاري",
+      title: "خبر غير موجود",
       description:
         "الخبر المطلوب غير متاح حاليًا داخل المركز الإعلامي لفينيسيا للتطوير العقاري.",
     },
@@ -59,7 +59,7 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
     layoutEyebrow: "Press",
     breadcrumbSectionLabel: "البيانات الصحفية",
     notFound: {
-      title: "بيان غير موجود | فينيسيا للتطوير العقاري",
+      title: "بيان غير موجود",
       description:
         "البيان المطلوب غير متاح حاليًا داخل المركز الإعلامي لفينيسيا للتطوير العقاري.",
     },
@@ -86,7 +86,7 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
     layoutEyebrow: "Site Update",
     breadcrumbSectionLabel: "تحديثات المواقع",
     notFound: {
-      title: "تحديث غير موجود | فينيسيا للتطوير العقاري",
+      title: "تحديث غير موجود",
       description:
         "التحديث المطلوب غير متاح حاليًا داخل المركز الإعلامي لفينيسيا للتطوير العقاري.",
     },
@@ -113,7 +113,7 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
     layoutEyebrow: "Video",
     breadcrumbSectionLabel: "الفيديوهات",
     notFound: {
-      title: "فيديو غير موجود | فينيسيا للتطوير العقاري",
+      title: "فيديو غير موجود",
       description:
         "الفيديو المطلوب غير متاح حاليًا داخل المركز الإعلامي لفينيسيا للتطوير العقاري.",
     },
@@ -141,7 +141,7 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
     layoutEyebrow: "Gallery",
     breadcrumbSectionLabel: "معرض الصور",
     notFound: {
-      title: "معرض غير موجود | فينيسيا للتطوير العقاري",
+      title: "معرض غير موجود",
       description:
         "المعرض المطلوب غير متاح حاليًا داخل المركز الإعلامي لفينيسيا للتطوير العقاري.",
     },

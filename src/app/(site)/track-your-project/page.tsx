@@ -9,7 +9,7 @@ export async function generateMetadata() {
 }
 
 export default async function TrackYourProjectPage() {
-  const composition = await loadPageCompositionBySlug("track-your-project", "stack");
+  const composition = await loadPageCompositionBySlug("track-your-project");
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white">

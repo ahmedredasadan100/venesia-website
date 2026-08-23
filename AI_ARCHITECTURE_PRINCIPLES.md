@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.3.1
-> **Effective date:** 2026-08-20
+> **Version:** 3.4.1
+> **Effective date:** 2026-08-23
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** _Venesia CMS — Official Architecture Principle (Version 1.0)_ and every shorter or conflicting architecture summary
@@ -2073,6 +2073,32 @@ Consumer-specific CSS patches are allowed only when the layout difference is gen
 A component under a shared/core path SHOULD use domain-neutral names.
 
 Entity-named components belong under the entity/domain boundary unless they are deliberately reference consumers rather than generic primitives.
+
+## 12.7 Page Composition Space and Module Presentation Ownership
+
+Within the public rendering boundary, Page Composition MUST own the space around a module, including:
+
+- Display Position and assignment eligibility;
+- the page-level Layout and region relationship;
+- the outer Container and Grid;
+- the available width and any explicitly allocated height;
+- spacing between page regions and modules.
+
+Page Composition MUST NOT own the internal Presentation of a module. It MUST NOT decide or rewrite:
+
+- the module's visual composition;
+- image placement or aspect ratio;
+- internal content distribution or semantic order;
+- the module's visual identity;
+- a position-specific alternative design.
+
+The module presenter owns those decisions. A module MUST adapt to the actual size of its assigned container while preserving its declared visual identity as far as the available space permits. Changing Display Position alone MUST NOT select a different module design.
+
+Reusable responsive behavior belongs to the existing Shared Module Presentation Contract. Portable modules MUST respond to their assigned container rather than infer presentation from the viewport or receive Display Position as a styling switch. A genuinely narrow container MAY trigger proportional rebalancing or stacking, and an explicit module-owned Product variant MAY intentionally change composition; neither case transfers Presentation ownership to Page Composition.
+
+The responsive contract MUST be bidirectional: `Wide ↔ Editorial ↔ Stack`. Each state MUST explicitly neutralize the float, clear, sizing, aspect-ratio, margin, gap, alignment, and grid-placement values that belong only to another state. Returning to a previous container size MUST restore that state's complete module-owned Presentation without retaining cascade residue from the state being left.
+
+Page Composition MAY select, order, and place a registered renderer. It MUST remain unaware of that renderer's image geometry, internal flow, typography, and presentation variants. Shared Module Presentation is a presentation contract under the existing Design System/shared-component boundary; it is not a Runtime, Capability, or second composition owner.
 
 ---
 
@@ -4845,6 +4871,14 @@ The following ADRs are part of this constitution.
 **Decision:** The existing adoption manifest owns one Current Shared Capability Set. Capability Applicability runs before Architecture/Implementation, Source Proof runs after implementation, and both derive every axis dynamically from that set. Applicability is declared through typed owner contracts; Source Proof resolves explicit executable bindings through the AST runtime import graph. Token lists, raw source matching, unused imports, filename discovery, and absence-based decisions are invalid proof. The existing Admin Runtime CI path enforces the all-inventoried-consumer projection before Product Review.
 **Consequences:** Adding a shared capability automatically expands every inventoried consumer audit without a copied capability list or fixed count. Adding a consumer requires explicit decisions and executable registration, while a new compiled route must match the existing consumer and public-route registries bidirectionally. Product Review focuses on product and UX quality instead of discovering missing shared-owner adoption. No new Runtime, Capability, manifest, registry, engine, or source of truth is introduced.
 
+## ADR-027 — Page Composition Owns Space; Modules Own Presentation
+
+**Status:** Accepted
+**Context:** Product Review proved that technically valid Display Position rendering can still redesign a module when Page Composition or viewport breakpoints decide its internal image and content layout. That makes module identity depend on the page template and produces inconsistent quality across slots.
+**Decision:** Page Composition owns Display Positions, assignment, outer Layout, Container, Grid, and available dimensions only. Each module owns its internal visual composition, image placement and ratio, content distribution, and visual identity. Reusable adaptation to available space belongs to the existing Shared Module Presentation Contract and is driven by the module container, not by Display Position or viewport-specific template logic.
+**Consequences:** Moving a module between supported positions changes its available space, not its design owner. Page Composition cannot special-case a module's Presentation or pass position as a styling switch. Modules rebalance proportionally and stack only when their own presentation contract requires it. `Wide`, `Editorial`, and `Stack` are reversible Presentation states: leaving one state cannot leak its float, clear, geometry, spacing, or alignment into another. Explicit module variants remain module-owned. No new Runtime, Capability, System, manifest, or source of truth is introduced.
+**Evidence:** `PageSlotLayout` exposes the shared slot container and page-region geometry; module presenters and shared styles own internal container-responsive behavior; `verify:route-slot-policy` rejects presentation ownership inside Page Composition and is part of the existing quality gate.
+
 ---
 
 # 31. Current State Is External
@@ -5471,6 +5505,17 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.4.1 — 2026-08-23
+
+- Required `Wide ↔ Editorial ↔ Stack` to be a bidirectional Shared Module Presentation transition.
+- Required every responsive state to neutralize state-specific geometry and restore the complete prior Presentation without cascade residue.
+
+## 3.4.0 — 2026-08-23
+
+- Added ADR-027: Page Composition owns module space while modules own their internal Presentation.
+- Required portable modules to adapt to their assigned container without using Display Position or viewport template logic as a styling switch.
+- Classified Shared Module Presentation as an existing Design System/shared-component contract, not a Runtime, Capability, or second composition owner.
 
 ## 3.3.1 — 2026-08-20
 

@@ -10,6 +10,7 @@ import RichTextContent from "../content/RichTextContent";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
 import { isHtmlContent, stripHtml } from "../../lib/rich-text/html-utils";
+import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 
 export type HomeProjectsSectionProps = {
   projects: HomepageProjectCard[];
@@ -60,6 +61,7 @@ function resolveHomeProjectsContent(content: HomeProjectsContent) {
     showEyebrow: content.showEyebrow,
     showTitle: content.showTitle,
     showIntro: content.showIntro,
+    showProjectLocation: content.showProjectLocation,
     showFooterCta: content.showFooterCta,
     projectsLimit: content.projectsLimit,
     cardCtaAlignment: content.cardCtaAlignment,
@@ -119,23 +121,23 @@ function buildProjectPages(projects: HomepageProjectCard[]) {
 function getHeaderLayoutClass(hasIntroColumn: boolean, hasHeadingColumn: boolean) {
   // RTL row: first DOM child sits on the physical right. Mobile stacks heading → intro.
   if (hasIntroColumn && hasHeadingColumn) {
-    return "mb-9 flex flex-col gap-6 lg:mb-10 lg:flex-row lg:items-start lg:justify-between lg:gap-10";
+    return "mb-9 flex flex-col gap-6 @4xl/slot-module:mb-10 @4xl/slot-module:flex-row @4xl/slot-module:items-start @4xl/slot-module:justify-between @4xl/slot-module:gap-10";
   }
   if (hasHeadingColumn) {
-    return "mb-9 flex flex-col gap-6 lg:mb-10 lg:items-start";
+    return "mb-9 flex flex-col gap-6 @4xl/slot-module:mb-10 @4xl/slot-module:items-start";
   }
   if (hasIntroColumn) {
-    return "mb-9 flex flex-col gap-6 lg:mb-10";
+    return "mb-9 flex flex-col gap-6 @4xl/slot-module:mb-10";
   }
   return "";
 }
 
 function getProjectPageLayoutClass(cardCount: number) {
   if (cardCount >= 3) {
-    return "grid h-full shrink-0 grid-cols-1 gap-5 md:grid-cols-3";
+    return "grid h-full shrink-0 grid-cols-1 gap-5 @3xl/slot-module:grid-cols-3";
   }
 
-  return "flex h-full shrink-0 flex-col gap-5 md:flex-row md:flex-wrap md:justify-center";
+  return "flex h-full shrink-0 flex-col gap-5 @3xl/slot-module:flex-row @3xl/slot-module:flex-wrap @3xl/slot-module:justify-center";
 }
 
 function getProjectCardSlideClass(cardCount: number) {
@@ -143,22 +145,28 @@ function getProjectCardSlideClass(cardCount: number) {
     return "";
   }
 
-  return "w-full md:w-[calc((100%-2.5rem)/3)] md:max-w-none md:shrink-0";
+  return "w-full @3xl/slot-module:w-[calc((100%-2.5rem)/3)] @3xl/slot-module:max-w-none @3xl/slot-module:shrink-0";
 }
 
 function HomeProjectCard({
   project,
   cardCtaAlignment,
+  showProjectLocation,
   slideClass,
   revealDelay,
 }: {
   project: HomepageProjectCard;
   cardCtaAlignment: HomeProjectsButtonAlignment;
+  showProjectLocation: boolean;
   slideClass: string;
   revealDelay: number;
 }) {
   const { pressProps } = usePressFeedback();
   const prefetchProps = useIntentPrefetch();
+  const locationLabel = resolveVisibleProjectLocationLabel(
+    project.location,
+    showProjectLocation,
+  );
 
   return (
     <div
@@ -206,9 +214,11 @@ function HomeProjectCard({
               {project.englishName}
             </p>
 
-            <span className="mt-1 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
-              {project.locationLabel}
-            </span>
+            {locationLabel ? (
+              <span className="mt-1 inline-flex rounded-lg bg-[#D8B87A] px-3 py-1 text-xs font-medium text-[#111]">
+                {locationLabel}
+              </span>
+            ) : null}
 
             <PlainTextContent
               value={project.shortDescription}
@@ -275,7 +285,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
   const showTitle = sectionCopy.showTitle && Boolean(sectionCopy.title.trim());
 
   const introColumn = showIntro ? (
-    <div className="flex max-w-md flex-col text-right lg:max-w-sm xl:max-w-md">
+    <div className="flex max-w-md flex-col text-right @4xl/slot-module:max-w-sm @5xl/slot-module:max-w-md">
       {/*
         Scoped Home Projects intro only via .home-projects-intro in globals.css:
         muted body + gold <strong> lead line. Does not change Home Story rich text.
@@ -300,7 +310,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
         ) : null}
         {showTitle ? (
           <h2
-            className="m-0 text-right text-3xl font-bold tracking-[-0.04em] md:text-5xl"
+            className="m-0 text-right text-3xl font-bold tracking-[-0.04em] @3xl/slot-module:text-5xl"
             style={{ lineHeight: 1.08 }}
           >
             {sectionCopy.title}
@@ -342,7 +352,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
   if (limitedProjects.length === 0) return null;
 
   return (
-    <section className="relative overflow-x-hidden bg-[#05070B] px-6 pb-16 pt-12 text-white max-md:pb-12 max-md:pt-8 md:pb-20 md:pt-14">
+    <section className="relative overflow-x-hidden bg-[#05070B] px-4 pb-12 pt-8 text-white @xl/slot-module:px-6 @xl/slot-module:pb-16 @xl/slot-module:pt-12 @3xl/slot-module:pb-20 @3xl/slot-module:pt-14">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 cursor-pointer bg-[radial-gradient(circle_at_18%_12%,rgba(216,184,122,0.10),transparent_34%),radial-gradient(circle_at_88%_4%,rgba(255,255,255,0.055),transparent_30%)]"
@@ -362,7 +372,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
               <button
                 type="button"
                 onClick={goToPrevPage}
-                className="absolute left-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#070A0F]/90 text-2xl text-white/80 shadow-[0_0_32px_rgba(216,184,122,0.12)] backdrop-blur-md transition-all duration-300 hover:border-[#D8B87A]/55 hover:bg-[#0B0E14]/95 hover:text-[#D8B87A] hover:shadow-[0_0_38px_rgba(216,184,122,0.20)] lg:flex"
+                className="absolute left-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#070A0F]/90 text-2xl text-white/80 shadow-[0_0_32px_rgba(216,184,122,0.12)] backdrop-blur-md transition-all duration-300 hover:border-[#D8B87A]/55 hover:bg-[#0B0E14]/95 hover:text-[#D8B87A] hover:shadow-[0_0_38px_rgba(216,184,122,0.20)] @4xl/slot-module:flex"
                 aria-label="المشاريع السابقة"
               >
                 ‹
@@ -371,7 +381,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
               <button
                 type="button"
                 onClick={goToNextPage}
-                className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#070A0F]/90 text-2xl text-white/80 shadow-[0_0_32px_rgba(216,184,122,0.12)] backdrop-blur-md transition-all duration-300 hover:border-[#D8B87A]/55 hover:bg-[#0B0E14]/95 hover:text-[#D8B87A] hover:shadow-[0_0_38px_rgba(216,184,122,0.20)] lg:flex"
+                className="absolute right-[-28px] top-1/2 z-40 hidden h-14 w-14 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-[#D8B87A]/25 bg-[#070A0F]/90 text-2xl text-white/80 shadow-[0_0_32px_rgba(216,184,122,0.12)] backdrop-blur-md transition-all duration-300 hover:border-[#D8B87A]/55 hover:bg-[#0B0E14]/95 hover:text-[#D8B87A] hover:shadow-[0_0_38px_rgba(216,184,122,0.20)] @4xl/slot-module:flex"
                 aria-label="المشاريع التالية"
               >
                 ›
@@ -412,6 +422,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
                         key={project.id}
                         project={project}
                         cardCtaAlignment={sectionCopy.cardCtaAlignment}
+                        showProjectLocation={sectionCopy.showProjectLocation}
                         slideClass={getProjectCardSlideClass(page.length)}
                         revealDelay={cardIndex * 80}
                       />

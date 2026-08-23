@@ -81,7 +81,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
   const accentAlt = intro?.images?.accentAlt || "";
 
   return (
-    <section className="relative overflow-hidden pb-10 pt-8 md:pb-12 md:pt-10">
+    <section className="relative overflow-hidden pb-10 pt-8 @xl/slot-module:pb-12 @xl/slot-module:pt-10">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-56 venesia-projects-cap opacity-85"
@@ -94,11 +94,19 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
 
       <div className="relative mx-auto max-w-7xl px-6">
         <div
-          className={`grid items-stretch gap-8 ${hasAnyImage ? "lg:grid-cols-[0.8fr_1.0fr] lg:gap-5 xl:gap-6" : ""}`}
+          className={
+            hasAnyImage
+              ? "slot-editorial-flow slot-editorial-flow--media-compact"
+              : ""
+          }
+          data-module-presentation={hasAnyImage ? "editorial-flow" : undefined}
         >
           {hasAnyImage ? (
-            <div className="relative flex min-h-[520px] w-full items-center lg:mt-15">
-              <div className="relative h-full min-h-[520px] w-full">
+            <div
+              className="slot-editorial-media relative w-full"
+              data-editorial-media-side="start"
+            >
+              <div className="relative h-full w-full">
                 {showMain ? (
                   <div className="group absolute right-0 top-0 h-[58%] w-[78%] overflow-hidden rounded-[1.5rem] border border-[#D8B87A]/[0.11] bg-white/[0.03] shadow-[0_0_0_1px_rgba(216,184,122,0.06),0_16px_40px_rgba(0,0,0,0.22)]">
                     <ImageFrame
@@ -153,7 +161,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
             </div>
           ) : null}
 
-          <div className="min-w-0 pt-1 lg:flex lg:min-h-[520px] lg:flex-col lg:justify-center lg:py-4">
+          <div className="slot-editorial-copy min-w-0 pt-1 @5xl/slot-module:flex @5xl/slot-module:flex-col @5xl/slot-module:justify-center @5xl/slot-module:py-4">
             {showIntroCopy ? (
               <>
                 <p
@@ -166,7 +174,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                 </p>
 
                 <div data-reveal="fade-up" data-delay="430">
-                  <h2 className="max-w-[44rem] text-[2rem] font-bold leading-[1.18] tracking-[-0.025em] text-white md:text-[2.2rem]">
+                  <h2 className="max-w-[44rem] text-[2rem] font-bold leading-[1.18] tracking-[-0.025em] text-white @xl/slot-module:text-[2.2rem]">
                     {intro!.title}
                   </h2>
                 </div>
@@ -184,7 +192,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
                     <RichTextContent
                       value={intro!.description}
                       mode="rich"
-                      className="mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 md:text-[16px] [&_p+_p]:mt-1 [&_strong]:text-inherit [&_b]:text-inherit"
+                      className="mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 @xl/slot-module:text-[16px] [&_p+_p]:mt-1 [&_strong]:text-inherit [&_b]:text-inherit"
                     />
                   </div>
                 ) : null}
@@ -193,7 +201,7 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
 
             {showBeats ? (
               <ul
-                className={`grid max-w-[62rem] gap-5 border-t border-white/[0.07] pt-7 md:grid-cols-3 ${showIntroCopy ? "mt-8" : "mt-0 border-t-0 pt-0"}`}
+                className={`slot-editorial-clear grid max-w-[62rem] gap-5 border-t border-white/[0.07] pt-7 @3xl/slot-module:grid-cols-3 ${showIntroCopy ? "mt-8" : "mt-0 border-t-0 pt-0"}`}
               >
                 {beats.map(({ num, title, text }, index) => (
                   <li

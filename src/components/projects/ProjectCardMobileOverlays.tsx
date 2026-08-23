@@ -1,4 +1,5 @@
 import type { PublicProject } from "../../lib/projects/public-types";
+import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 
 type OverlayBreakpoint = "md" | "lg";
 
@@ -38,15 +39,20 @@ export function ProjectImageBottomBadges({
   showLocation?: boolean;
   showType?: boolean;
 }) {
-  if (!showLocation && !showType) return null;
+  const locationLabel = resolveVisibleProjectLocationLabel(
+    project.location,
+    showLocation,
+  );
+
+  if (!locationLabel && !showType) return null;
 
   return (
     <div
       className={`pointer-events-none absolute inset-x-3 bottom-0 z-20 flex translate-y-1/2 flex-wrap items-center gap-1.5 ${hideAt[hideFrom]}`}
     >
-      {showLocation ? (
+      {locationLabel ? (
         <span className="inline-flex max-w-full rounded-lg bg-[#D8B87A] px-2.5 py-1 text-[11px] font-medium leading-snug text-[#111]">
-          {project.location.label}
+          {locationLabel}
         </span>
       ) : null}
 

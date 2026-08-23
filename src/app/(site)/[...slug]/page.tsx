@@ -52,7 +52,7 @@ export default async function DynamicCmsPage({ params }: DynamicCmsPageProps) {
     notFound();
   }
 
-  const composition = await loadPageCompositionBySlug(page.slug, "stack");
+  const composition = await loadPageCompositionBySlug(page.slug);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white">

@@ -19,7 +19,11 @@ export default async function BreadcrumbBlockEditPage({ params, searchParams }: 
   if (!id) notFound();
 
   const [{ data: block, error }, assignmentContext] = await Promise.all([
-    getSupabaseAdmin().from("breadcrumb_block_templates").select("*").eq("id", id).maybeSingle(),
+    getSupabaseAdmin()
+      .from("breadcrumb_block_templates")
+      .select("id,name,description,style_preset,status,config")
+      .eq("id", id)
+      .maybeSingle(),
     getModuleAssignmentContext("breadcrumb", id),
   ]);
 

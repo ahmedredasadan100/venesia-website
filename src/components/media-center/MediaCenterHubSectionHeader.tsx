@@ -24,7 +24,7 @@ export default function MediaCenterHubSectionHeader({
         ) : null}
 
         {presentation.title ? (
-          <h2 className="mt-3 text-2xl font-semibold text-white md:text-3xl">
+          <h2 className="mt-3 text-2xl font-semibold text-white @xl/slot-module:text-3xl">
             {presentation.title}
           </h2>
         ) : null}

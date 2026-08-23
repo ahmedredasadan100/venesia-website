@@ -62,6 +62,14 @@ export function usePageBlocksAssignModal({
     PAGE_BLOCK_ACTION_INITIAL,
   );
   const assignPending = assignBlockPending || assignHeroPending || assignMediaSidebarPending || assignMediaHubPending;
+  const activeAssignState =
+    assignModuleKind === "hero"
+      ? assignHeroState
+      : assignModuleKind === "media-sidebar"
+        ? assignMediaSidebarState
+        : assignModuleKind === "media-hub"
+          ? assignMediaHubState
+          : assignState;
   const [assignModalSession, setAssignModalSession] = useState(0);
   const [assignDismissSession, setAssignDismissSession] = useState<number | null>(null);
   const [assignSubmitSession, setAssignSubmitSession] = useState<number | null>(null);
@@ -75,13 +83,13 @@ export function usePageBlocksAssignModal({
       if (assignPending) {
       setAssignSubmitSession(assignModalSession);
     } else if (showAssignModal) {
-      if (assignState.ok || assignHeroState.ok || assignMediaSidebarState.ok || assignMediaHubState.ok) {
+      if (activeAssignState.ok) {
         setAssignDismissSession(assignModalSession);
         setAssignVisible(true);
         setActionMessage(null);
         setAssignRefreshNonce((value) => value + 1);
       } else if (assignSubmitSession === assignModalSession) {
-        setActionMessage(assignState.message ?? assignHeroState.message ?? assignMediaSidebarState.message ?? assignMediaHubState.message);
+        setActionMessage(activeAssignState.message);
       }
     }
   }

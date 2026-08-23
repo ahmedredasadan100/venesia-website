@@ -382,6 +382,7 @@ function buildHomeProjectsConfig(formData: FormData): HomeProjectsModuleConfig {
     showEyebrow: parseFormBoolean(formData, "show_eyebrow", false),
     showTitle: parseFormBoolean(formData, "show_title", false),
     showIntro: parseFormBoolean(formData, "show_intro", false),
+    showProjectLocation: parseFormBoolean(formData, "show_project_location", false),
     showFooterCta: parseFormBoolean(formData, "show_footer_cta", false),
     projectsLimit,
     cardCtaAlignment,

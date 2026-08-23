@@ -37,7 +37,7 @@ export async function generateMetadata({
   if (!topic) {
     return generatePublicMetadata({
       path: `/topics/${slug}`,
-      title: "الموضوع غير موجود | فينيسيا للتطوير العقاري",
+      title: "الموضوع غير موجود",
       description: "الموضوع المطلوب غير متاح حاليًا.",
       robots: NO_INDEX_ROBOTS,
       includePageSeo: false,
@@ -60,7 +60,7 @@ export async function generateMetadata({
       robotsIndex: topic.robotsIndex,
       robotsFollow: topic.robotsFollow,
     },
-    title: `${topic.seoTitle || topic.title} | فينيسيا للتطوير العقاري`,
+    title: topic.seoTitle || topic.title,
     description: topic.seoDescription || topic.excerpt,
     type: "article",
     publishedTime: topic.publishedAt,

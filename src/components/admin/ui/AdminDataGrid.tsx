@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type {
   ChangeEventHandler,
+  DragEventHandler,
   KeyboardEventHandler,
   MouseEventHandler,
   ReactNode,
@@ -84,6 +85,20 @@ type CheckboxProps = {
   onChange: ChangeEventHandler<HTMLInputElement>;
   label: string;
   inputRef?: RefObject<HTMLInputElement | null>;
+};
+
+type ReorderHandleProps = {
+  label: string;
+  position: number;
+  count: number;
+  disabled?: boolean;
+  pending?: boolean;
+  disabledReason?: string;
+  onMoveTo: (position: number) => void;
+  onDragStart?: DragEventHandler<HTMLButtonElement>;
+  onDragOver?: DragEventHandler<HTMLButtonElement>;
+  onDrop?: DragEventHandler<HTMLButtonElement>;
+  onDragEnd?: DragEventHandler<HTMLButtonElement>;
 };
 
 const actionTones: Record<NonNullable<ActionButtonProps["tone"]>, string> = {
@@ -357,6 +372,8 @@ export const ADMIN_DATA_GRID_ACTION_COLUMNS = {
 export const ADMIN_DATA_GRID_COLUMNS = {
   /** Checkbox column — fixed, matches Topics golden reference. */
   checkbox: "46px",
+  /** Manual ordering grip — separate from Row Actions and the primary content column. */
+  reorder: "48px",
   /** Primary column for content-heavy tables (Topic / Template / Series). */
   primaryStandard: "minmax(320px,1fr)",
   /** Primary column for multi-column tables that need room for the rest (Pages / Menus). */
@@ -369,9 +386,67 @@ export const ADMIN_DATA_GRID_COLUMNS = {
   count: "72px",
   /** Slug / short code column. */
   slug: "150px",
+  /** Page Composition display-position selector. */
+  displayPosition: "190px",
   /** Compact slug / short-code column for dense multi-column tables (Menus). */
   slugCompact: "120px",
 } as const;
+
+export function AdminDataGridReorderHandle({
+  label,
+  position,
+  count,
+  disabled = false,
+  pending = false,
+  disabledReason,
+  onMoveTo,
+  onDragStart,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}: ReorderHandleProps) {
+  const unavailable = disabled || pending || count < 2;
+  const positionLabel = `${position + 1} من ${count}`;
+
+  return (
+    <button
+      type="button"
+      draggable={!unavailable}
+      disabled={unavailable}
+      title={unavailable ? disabledReason : "اسحب لتغيير الموضع، أو استخدم الأسهم وHome وEnd"}
+      aria-label={`ترتيب ${label}. الموضع ${positionLabel}`}
+      aria-keyshortcuts="ArrowUp ArrowDown Home End"
+      data-admin-grid-reorder-handle=""
+      data-reorder-position={position}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
+      onDragEnd={onDragEnd}
+      onKeyDown={(event) => {
+        if (unavailable) return;
+        let nextPosition = position;
+        if (event.key === "ArrowUp") nextPosition = Math.max(0, position - 1);
+        else if (event.key === "ArrowDown") nextPosition = Math.min(count - 1, position + 1);
+        else if (event.key === "Home") nextPosition = 0;
+        else if (event.key === "End") nextPosition = count - 1;
+        else return;
+
+        event.preventDefault();
+        if (nextPosition !== position) onMoveTo(nextPosition);
+      }}
+      className="inline-flex size-8 cursor-grab items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-white/48 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"
+    >
+      <svg aria-hidden="true" viewBox="0 0 20 20" className={`size-4 ${pending ? "animate-pulse" : ""}`} fill="currentColor">
+        <circle cx="6" cy="4" r="1.25" />
+        <circle cx="14" cy="4" r="1.25" />
+        <circle cx="6" cy="10" r="1.25" />
+        <circle cx="14" cy="10" r="1.25" />
+        <circle cx="6" cy="16" r="1.25" />
+        <circle cx="14" cy="16" r="1.25" />
+      </svg>
+    </button>
+  );
+}
 
 export function AdminDataGridActionIcon({
   action,

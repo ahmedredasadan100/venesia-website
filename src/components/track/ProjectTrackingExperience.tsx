@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import PublicMediaImage from "../public/PublicMediaImage";
 import Pagination from "../Pagination";
+import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 import {
   projectTrackingStatusLabel,
   type ProjectTrackingMedia,
@@ -301,6 +302,10 @@ export default function ProjectTrackingExperience({
 
   const heroImage = detail.latestVisual ?? detail.project.heroImage;
   const latestDate = detail.latestUpdate?.occurredAt;
+  const locationLabel = resolveVisibleProjectLocationLabel({
+    label: detail.project.location,
+    presentation: detail.project.locationPresentation,
+  });
 
   return (
     <main
@@ -331,9 +336,9 @@ export default function ProjectTrackingExperience({
             <h1 className="mt-3 text-3xl font-semibold md:text-5xl">
               {detail.project.arabicName}
             </h1>
-            {detail.project.location ? (
+            {locationLabel ? (
               <p className="mt-4 text-base text-white/72">
-                ⌖ {detail.project.location}
+                ⌖ {locationLabel}
               </p>
             ) : null}
             <div className="mt-6 flex flex-wrap gap-3 text-sm">

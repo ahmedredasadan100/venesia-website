@@ -86,12 +86,12 @@ try {
   const hub = read("src/app/(site)/media-center/page.tsx");
   if (
     hub.includes("loadPageCompositionBySlug") &&
-    hub.includes("findHeroInComposition") &&
+    hub.includes("PageSlotLayout") &&
     hub.includes("MediaCenterGrid")
   ) {
-    pass("Hub uses Page Composition hero + MediaCenterGrid core");
+    pass("Hub delegates Page Composition Hero and body to PageSlotLayout");
   } else {
-    fail("Hub core wiring", "expected Page Composition hero + MediaCenterGrid");
+    fail("Hub core wiring", "expected PageSlotLayout + MediaCenterGrid");
   }
   if (
     hub.includes("PageSlotLayout") &&
@@ -147,24 +147,24 @@ try {
 try {
   const shell = read("src/components/media-center/MediaCenterShellLayout.tsx");
   const listingPage = read("src/components/media-center/MediaListingPage.tsx");
-  if (shell.includes("findHeroInComposition") && shell.includes("allowStaticHeroFallback")) {
-    pass("Shell hero visibility rule");
+  if (shell.includes("<PageSlotLayout") && !shell.includes("fallbackHero=")) {
+    pass("Shell delegates Hero visibility to PageSlotLayout");
   } else {
-    fail("Shell hero visibility rule", "composition hero/allowStaticHeroFallback missing");
+    fail("Shell hero visibility rule", "shared PageSlotLayout/no-fallback contract missing");
   }
   if (
     listingPage.includes("loadPageCompositionBySlug") &&
     listingPage.includes("composition={composition}") &&
-    shell.includes("getSlotBlocks")
+    shell.includes("mainAfter={children}")
   ) {
-    pass("Shell loads CMS blocks for listing pages");
+    pass("Shell hands listing content to the shared slot renderer");
   } else {
     fail("Shell loads CMS blocks", "shared listing composition handoff missing");
   }
-  if (shell.includes("MediaCenterCmsBlocksProvider")) {
-    pass("Shell provides CMS blocks context to MediaPageShell");
+  if (!shell.includes("MediaCenterCmsBlocksProvider") && !shell.includes("getSlotBlocks")) {
+    pass("Shell has no parallel CMS-block context renderer");
   } else {
-    fail("Shell provides CMS blocks", "MediaCenterCmsBlocksProvider missing");
+    fail("Shell CMS blocks", "parallel block context/rendering remains");
   }
 } catch (error) {
   fail("MediaCenterShellLayout", error instanceof Error ? error.message : String(error));
@@ -172,15 +172,15 @@ try {
 
 try {
   const mediaPageShell = read("src/components/media-center/MediaPageShell.tsx");
-  if (mediaPageShell.includes("prefixBlocks") && mediaPageShell.includes("suffixBlocks")) {
-    pass("MediaPageShell accepts prefix/suffix blocks");
+  if (!mediaPageShell.includes("prefixBlocks") && !mediaPageShell.includes("suffixBlocks")) {
+    pass("MediaPageShell leaves Page Composition placement to PageSlotLayout");
   } else {
-    fail("MediaPageShell block props", "prefixBlocks/suffixBlocks missing");
+    fail("MediaPageShell block props", "parallel prefix/suffix block placement remains");
   }
-  if (!mediaPageShell.includes("MediaSidebar")) {
-    fail("MediaSidebar unchanged", "unexpected MediaSidebar removal");
+  if (!mediaPageShell.includes("MediaSidebar") && !mediaPageShell.includes("grid-cols-[320px_1fr]")) {
+    pass("MediaPageShell delegates Sidebar geometry to PageSlotLayout");
   } else {
-    pass("MediaSidebar unchanged in MediaPageShell");
+    fail("MediaPageShell Sidebar owner", "parallel Media Sidebar layout remains");
   }
 } catch (error) {
   fail("MediaPageShell", error instanceof Error ? error.message : String(error));

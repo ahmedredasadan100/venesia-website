@@ -38,11 +38,7 @@ export {
   loadPageBlocksBySlug,
 } from "./load-page-blocks";
 export { loadPageCompositionBySlug } from "./load-page-composition";
-export {
-  findBreadcrumbInComposition,
-  findHeroInComposition,
-  getSlotBlocks,
-} from "./page-composition-utils";
+export { getSlotEntries } from "./page-composition-utils";
 export type { PageComposition, PageLayoutMode, SlotEntry } from "./page-composition-types";
 export {
   LAYOUT_SLOT_LABELS,

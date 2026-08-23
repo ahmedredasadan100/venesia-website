@@ -13,12 +13,15 @@ export async function loadHomepageProjects(): Promise<HomepageProjectCard[]> {
     .filter((project) => project.showOnHomepage)
     .sort((left, right) => left.homepageOrder - right.homepageOrder || Number(left.id) - Number(right.id))
     .map((project) => ({
-    id: Number(project.id),
-    slug: project.slug,
-    code: project.code,
-    englishName: project.englishName,
-    locationLabel: project.location.label,
-    shortDescription: project.shortDescription,
-    cardImage: project.cardImage,
+      id: Number(project.id),
+      slug: project.slug,
+      code: project.code,
+      englishName: project.englishName,
+      location: {
+        label: project.location.label,
+        presentation: project.location.presentation,
+      },
+      shortDescription: project.shortDescription,
+      cardImage: project.cardImage,
     }));
 }

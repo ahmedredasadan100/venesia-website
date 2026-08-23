@@ -1,9 +1,6 @@
 import MediaCenterGrid from "../../../components/media-center/MediaCenterGrid";
 import PageSlotLayout from "../../../components/page-composition/PageSlotLayout";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
-import { findHeroInComposition } from "../../../lib/page-blocks/page-composition-utils";
-import { getMediaCenterCmsPageConfig } from "../../../lib/media-center-page-config";
-import InternalPageLayout from "../../../components/InternalPageLayout";
 import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
 
 export const revalidate = 300;
@@ -15,23 +12,17 @@ export async function generateMetadata() {
 const CMS_PAGE_SLUG = "media-center" as const;
 
 export default async function MediaCenterPage() {
-  const config = getMediaCenterCmsPageConfig(CMS_PAGE_SLUG);
-  const composition = await loadPageCompositionBySlug(CMS_PAGE_SLUG, "stack");
-
-  const heroEntry = findHeroInComposition(composition);
+  const composition = await loadPageCompositionBySlug(CMS_PAGE_SLUG);
 
   return (
-    <InternalPageLayout
-      title=""
-      heroImage={config.heroImage}
-      dynamicHero={heroEntry?.hero}
-      allowStaticHeroFallback={false}
-    >
-      <PageSlotLayout
-        composition={composition}
-        skipSlots={["hero"]}
-        mainAfter={<MediaCenterGrid composition={composition} />}
-      />
-    </InternalPageLayout>
+    <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white" dir="rtl">
+      <div aria-hidden className="venesia-grain pointer-events-none fixed inset-0 z-[4]" />
+      <main className="relative z-10 min-h-[50vh] pb-20">
+        <PageSlotLayout
+          composition={composition}
+          mainAfter={<MediaCenterGrid composition={composition} />}
+        />
+      </main>
+    </div>
   );
 }

@@ -9,6 +9,7 @@ import { isPageModulePubliclyVisible } from "./page-blocks/admin-utils";
 import { getPublishedPageStateBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { logError } from "./logging";
+import type { HeroDomainBackedTemplateVariant } from "./hero/hero-content-controls";
 import type {
   HeroSectionData,
   HeroSourceType,
@@ -24,6 +25,7 @@ type HeroTemplateRecord = {
   variant: string;
   style_preset: string;
   status: "published" | "unpublished";
+  is_visible: boolean;
   sort_order: number;
   config: JsonObject | null;
 };
@@ -36,6 +38,7 @@ type HeroTemplateSelection = Pick<
   | "variant"
   | "style_preset"
   | "status"
+  | "is_visible"
   | "sort_order"
   | "config"
 >;
@@ -64,10 +67,105 @@ function mapHeroTemplateSelection(
     variant: template.variant,
     style_preset: template.style_preset,
     status: template.status,
+    is_visible: template.is_visible,
     sort_order: template.sort_order,
     config: isJsonObject(template.config) ? template.config : null,
   };
 }
+
+function templateToDomainBackedHeroSection(
+  template: HeroTemplateRecord,
+): HeroSectionData {
+  return {
+    id: template.id,
+    page_id: 0,
+    section_key: "hero",
+    section_type: "hero",
+    slot: "top",
+    variant: template.variant,
+    style_preset: template.style_preset,
+    source_type: "domain-backed",
+    source_id: null,
+    source_slug: null,
+    limit_count: 1,
+    is_visible: isPageModulePubliclyVisible(template.is_visible, template.status),
+    sort_order: template.sort_order,
+    config: template.config,
+    page: null,
+    template: {
+      id: template.id,
+      name: template.name,
+      slug: template.slug,
+    },
+  };
+}
+
+export type DomainBackedHeroTemplateState = {
+  hero: HeroSectionData | null;
+  visibility: "visible" | "hidden" | "none" | "error";
+  sourceIssue?: string;
+};
+
+async function queryDomainBackedHeroTemplateState(
+  variant: HeroDomainBackedTemplateVariant,
+): Promise<DomainBackedHeroTemplateState> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("hero_templates")
+    .select("id,name,slug,variant,style_preset,status,is_visible,sort_order,config")
+    .eq("variant", variant)
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true })
+    .limit(2);
+
+  if (error) {
+    logError("queryDomainBackedHeroTemplateState failed", error, { variant });
+    return { hero: null, visibility: "error", sourceIssue: error.message };
+  }
+  if (!data?.length) return { hero: null, visibility: "none" };
+  if (data.length > 1) {
+    const sourceIssue = `Multiple Hero templates are configured for ${variant}.`;
+    logError("queryDomainBackedHeroTemplateState is ambiguous", new Error(sourceIssue), {
+      variant,
+      templateIds: data.map((row) => row.id),
+    });
+    return { hero: null, visibility: "error", sourceIssue };
+  }
+
+  const template = mapHeroTemplateSelection(data[0]);
+  if (!template) {
+    const sourceIssue = `Hero template ${data[0].id} has an invalid publication status.`;
+    logError("queryDomainBackedHeroTemplateState rejected invalid template", new Error(sourceIssue), {
+      variant,
+      templateId: data[0].id,
+    });
+    return { hero: null, visibility: "error", sourceIssue };
+  }
+
+  if (!isPageModulePubliclyVisible(template.is_visible, template.status)) {
+    return { hero: null, visibility: "hidden" };
+  }
+
+  const hero = templateToDomainBackedHeroSection(template);
+  hero.config = await resolveHeroConfigLinks(template.config);
+  return { hero, visibility: "visible" };
+}
+
+/**
+ * Loads presentation for a domain-backed Hero variant from the existing
+ * hero_templates owner. Missing/error states deliberately fall back at the
+ * consumer; an explicitly unpublished template remains hidden.
+ */
+export const getDomainBackedHeroTemplateState = cache(
+  async function getDomainBackedHeroTemplateState(
+    variant: HeroDomainBackedTemplateVariant,
+  ): Promise<DomainBackedHeroTemplateState> {
+    return unstable_cache(
+      async () => queryDomainBackedHeroTemplateState(variant),
+      ["domain-backed-hero-template-state", variant],
+      { revalidate: 300, tags: ["hero"] },
+    )();
+  },
+);
 
 function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): HeroSectionData {
   return {
@@ -82,7 +180,7 @@ function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): 
     source_id: null,
     source_slug: null,
     limit_count: 1,
-    is_visible: isPageModulePubliclyVisible(true, template.status),
+    is_visible: isPageModulePubliclyVisible(template.is_visible, template.status),
     sort_order: template.sort_order,
     config: template.config,
     page,
@@ -116,7 +214,7 @@ function resolveAssignedHeroRow(
     ? (row.hero_templates[0] ?? null)
     : row.hero_templates;
   const template = selectedTemplate ? mapHeroTemplateSelection(selectedTemplate) : null;
-  return isPageModulePubliclyVisible(true, template?.status) && template
+  return isPageModulePubliclyVisible(template?.is_visible, template?.status) && template
     ? { status: "visible", assignmentId: row.id, template }
     : { status: "hidden", assignmentId: row.id };
 }
@@ -124,7 +222,7 @@ function resolveAssignedHeroRow(
 async function getAssignedHeroTemplate(page: PageRecord): Promise<AssignedHeroTemplateResult> {
   const supabaseAdmin = getSupabaseAdmin();
   const baseSelect =
-    "id,hero_templates(id,name,slug,variant,style_preset,status,sort_order,config)";
+    "id,hero_templates(id,name,slug,variant,style_preset,status,is_visible,sort_order,config)";
 
   const byId = await supabaseAdmin
     .from("hero_assignments")

@@ -1367,11 +1367,126 @@ select.admin-select option {
 }
 
 /*
+  Shared Module Presentation contract for image-led editorial sections.
+
+  The slot owns only the available width. The module keeps its media side,
+  aspect ratio, and wide composition. Medium containers use an editorial
+  float so copy wraps beside proportionally scaled media and then naturally
+  returns to the full line width. Only genuinely narrow containers stack.
+*/
+.slot-editorial-flow {
+  display: flow-root;
+  --slot-editorial-columns: minmax(0, 1fr) minmax(0, 1fr);
+  --slot-editorial-wide-gap: 3rem;
+  --slot-editorial-align: start;
+  --slot-editorial-stack-media-aspect: auto;
+  --slot-editorial-wide-media-aspect: auto;
+  --slot-editorial-wide-media-min-block-size: 0;
+  --slot-editorial-wide-media-margin-block-start: 0;
+}
+
+.slot-editorial-flow--media-compact {
+  --slot-editorial-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  --slot-editorial-wide-gap: 1.5rem;
+  --slot-editorial-align: stretch;
+  --slot-editorial-stack-media-aspect: 1 / 1;
+  --slot-editorial-wide-media-aspect: auto;
+  --slot-editorial-wide-media-min-block-size: 32.5rem;
+  --slot-editorial-wide-media-margin-block-start: 3.75rem;
+}
+
+.slot-editorial-flow--copy-wide {
+  --slot-editorial-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  --slot-editorial-align: center;
+}
+
+.slot-editorial-media {
+  float: none;
+  grid-column: auto;
+  grid-row: auto;
+  inline-size: 100%;
+  block-size: auto;
+  min-block-size: 0;
+  aspect-ratio: var(--slot-editorial-stack-media-aspect);
+  margin-block-start: 0;
+  margin-block-end: 2rem;
+  margin-inline: 0;
+}
+
+.slot-editorial-copy {
+  grid-column: auto;
+  grid-row: auto;
+  min-inline-size: 0;
+}
+
+.slot-editorial-clear {
+  clear: none;
+}
+
+@container slot-module (36rem <= width < 64rem) {
+  .slot-editorial-media {
+    float: inline-start;
+    inline-size: clamp(15rem, 42cqi, 22rem);
+    margin-block-end: 1.5rem;
+    margin-inline-end: clamp(1.25rem, 3cqi, 2rem);
+  }
+
+  .slot-editorial-flow--media-end .slot-editorial-media {
+    float: inline-end;
+    margin-inline-end: 0;
+    margin-inline-start: clamp(1.25rem, 3cqi, 2rem);
+  }
+
+  .slot-editorial-clear {
+    clear: both;
+  }
+}
+
+@container slot-module (width >= 64rem) {
+  .slot-editorial-flow {
+    display: grid;
+    grid-template-columns: var(--slot-editorial-columns);
+    align-items: var(--slot-editorial-align);
+    gap: var(--slot-editorial-wide-gap);
+  }
+
+  .slot-editorial-media {
+    float: none;
+    grid-column: 1;
+    grid-row: 1;
+    inline-size: 100%;
+    block-size: auto;
+    min-block-size: var(--slot-editorial-wide-media-min-block-size);
+    aspect-ratio: var(--slot-editorial-wide-media-aspect);
+    margin-block-start: var(--slot-editorial-wide-media-margin-block-start);
+    margin-block-end: 0;
+    margin-inline: 0;
+  }
+
+  .slot-editorial-copy {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .slot-editorial-flow--media-end .slot-editorial-media {
+    grid-column: 2;
+  }
+
+  .slot-editorial-flow--media-end .slot-editorial-copy {
+    grid-column: 1;
+  }
+
+  .slot-editorial-clear {
+    clear: none;
+  }
+}
+
+/*
   Home Story title — mobile only: constrains width + text-wrap:balance so the CMS
   sentence wraps to exactly two lines without forced <br> / nowrap / CMS edits.
   Desktop keeps text-4xl / lg:text-5xl and max-w-xl as-is.
 */
-@media (max-width: 767px) {
+@container slot-module (width < 48rem) {
   .home-story-title {
     max-width: min(100%, 21.5rem);
     text-wrap: balance;
@@ -1379,7 +1494,7 @@ select.admin-select option {
 }
 
 /* Slight size ease on narrower phones so balance stays at 2 lines (not 3). */
-@media (max-width: 379px) {
+@container slot-module (width < 23.75rem) {
   .home-story-title {
     font-size: clamp(1.875rem, 7.8vw, 2.125rem);
   }

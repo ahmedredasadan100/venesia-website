@@ -25,7 +25,7 @@ export default function MediaCenterHubGallery({
         href="/media-center/gallery"
       />
 
-<div className="grid gap-3 lg:grid-cols-[1.35fr_0.85fr] lg:[direction:ltr]">        <div className="grid grid-cols-2 gap-3">
+<div className="grid gap-3 @4xl/slot-module:grid-cols-[1.35fr_0.85fr] @4xl/slot-module:[direction:ltr]">        <div className="grid grid-cols-2 gap-3">
           {sideImages.map((item) => (
             <Link
               key={item.id}
@@ -56,7 +56,7 @@ export default function MediaCenterHubGallery({
                   {item.showDateOnPage && item.date ? <span>{item.date}</span> : null}
                 </div>
 
-                <h3 className="truncate text-sm font-semibold leading-6 text-white md:text-base">
+                <h3 className="truncate text-sm font-semibold leading-6 text-white @xl/slot-module:text-base">
                   {item.title}
                 </h3>
               </div>
@@ -92,7 +92,7 @@ export default function MediaCenterHubGallery({
               {featuredImage.showDateOnPage && featuredImage.date ? <span>{featuredImage.date}</span> : null}
             </div>
 
-            <h3 className="truncate text-lg font-semibold leading-8 text-white md:text-xl">
+            <h3 className="truncate text-lg font-semibold leading-8 text-white @xl/slot-module:text-xl">
               {featuredImage.title}
             </h3>
           </div>

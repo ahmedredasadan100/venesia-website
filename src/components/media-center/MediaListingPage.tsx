@@ -1,6 +1,7 @@
 import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
+import { MediaSidebarSearch } from "./MediaSidebar";
 import { renderMediaHubSections } from "./renderMediaHubSections";
 import {
   getMediaHref,
@@ -29,7 +30,7 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
   const config = MEDIA_LISTING_PAGE_CONFIG[configKey];
   const [params, composition] = await Promise.all([
     searchParams ?? Promise.resolve(undefined),
-    loadPageCompositionBySlug(config.cmsPageSlug, "stack"),
+    loadPageCompositionBySlug(config.cmsPageSlug),
   ]);
   if (!composition.mediaSidebarModules) return null;
 
@@ -65,14 +66,19 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     : [];
 
   return (
-    <MediaCenterShellLayout cmsPageSlug={config.cmsPageSlug} composition={composition}>
-      <MediaPageShell
-        sidebarModules={composition.mediaSidebarModules}
-        searchBasePath={config.basePath}
-        searchQuery={searchQuery}
-        searchSuggestions={searchSuggestions}
-        searchResultCount={listing.totalRegular}
-      >
+    <MediaCenterShellLayout
+      cmsPageSlug={config.cmsPageSlug}
+      composition={composition}
+      sidebarPrefix={
+        <MediaSidebarSearch
+          searchBasePath={config.basePath}
+          searchQuery={searchQuery}
+          searchSuggestions={searchSuggestions}
+          searchResultCount={listing.totalRegular}
+        />
+      }
+    >
+      <MediaPageShell>
         <div className="space-y-10">
           {featuredNodes.length > 0 ? (
             <section className="space-y-10 text-right text-white" dir="rtl">

@@ -1,94 +1,177 @@
-import { Fragment, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
-import BreadcrumbModuleSection from "../modules/BreadcrumbModuleSection";
 import DynamicHeroSection from "../sections/DynamicHeroSection";
 import FeedModuleSection from "../feed-modules/FeedModuleSection";
-import type { PageComposition, SlotEntry } from "../../lib/page-blocks/page-composition-types";
-import { getSlotBlocks, getSlotEntries } from "../../lib/page-blocks/page-composition-utils";
-import { PAGE_LAYOUT_SLOT_ORDER, type PageLayoutSlot } from "../../lib/page-blocks/layout-slots";
-import { asBreadcrumbConfig } from "../../lib/page-blocks/configs";
+import { MediaSidebarWidget } from "../media-center/MediaSidebar";
+import type {
+  PageComposition,
+  SlotEntry,
+} from "../../lib/page-blocks/page-composition-types";
+import { getSlotEntries } from "../../lib/page-blocks/page-composition-utils";
+import {
+  PAGE_LAYOUT_SLOT_ORDER,
+  type PageLayoutSlot,
+} from "../../lib/page-blocks/layout-slots";
 import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import { buildSlotRenderPlan } from "./build-slot-render-plan";
 
-type HeroSlotContentProps = {
-  composition: PageComposition;
-  fallbackHero?: React.ReactNode;
+type SlotContentOptions = {
+  prefix?: ReactNode;
+  suffix?: ReactNode;
+  homepageProjects?: HomepageProjectCard[];
+  breadcrumbCurrentLabel?: string;
 };
 
-export function HeroSlotContent({ composition, fallbackHero }: HeroSlotContentProps) {
-  const heroEntry = composition.slots.hero.find((entry) => entry.kind === "hero");
-  const breadcrumbBlock = getSlotBlocks(composition, "hero").find(
-    (block) =>
-      block.blockType === "breadcrumb" && (block.template.variant ?? "hero-inline") !== "standalone",
+function SlotModuleContainer({
+  children,
+  source,
+}: {
+  children: ReactNode;
+  source: "assignment" | "prefix" | "suffix";
+}) {
+  return (
+    <div
+      className="@container/slot-module min-w-0"
+      data-slot-module-container={source}
+    >
+      {children}
+    </div>
   );
-
-  if (!heroEntry && fallbackHero) {
-    return <>{fallbackHero}</>;
-  }
-
-  if (!heroEntry) return null;
-
-  const breadcrumbNode = breadcrumbBlock ? (
-    <BreadcrumbModuleSection
-      config={asBreadcrumbConfig(breadcrumbBlock.template.config)}
-    />
-  ) : null;
-
-  return <DynamicHeroSection hero={heroEntry.hero} compositionFooter={breadcrumbNode} />;
 }
 
 /**
- * Render slot entries via an explicit plan:
- * blocks are batched so composite peer lookup works; feeds keep their sort_order.
+ * One renderer for every non-Hero Page Composition entry. Module renderers
+ * provide presentation only; the surrounding slot owns width and geometry.
  */
 function renderOrderedSlotEntries(
   entries: SlotEntry[],
-  homepageProjects?: HomepageProjectCard[],
+  options: SlotContentOptions = {},
 ) {
-  const plan = buildSlotRenderPlan(entries, { homepageProjects });
+  const plan = buildSlotRenderPlan(entries, {
+    homepageProjects: options.homepageProjects,
+    breadcrumbCurrentLabel: options.breadcrumbCurrentLabel,
+  });
   const nodes: ReactNode[] = [];
 
   for (const item of plan) {
     if (item.kind === "feed") {
-      nodes.push(<FeedModuleSection key={item.key} module={item.module} />);
+      nodes.push(
+        <SlotModuleContainer key={item.key} source="assignment">
+          <FeedModuleSection module={item.module} />
+        </SlotModuleContainer>,
+      );
       continue;
     }
 
-    nodes.push(<Fragment key={item.key}>{item.node}</Fragment>);
+    if (item.kind === "media-sidebar") {
+      nodes.push(
+        <SlotModuleContainer key={item.key} source="assignment">
+          <MediaSidebarWidget widget={item.widget} />
+        </SlotModuleContainer>,
+      );
+      continue;
+    }
+
+    nodes.push(
+      <SlotModuleContainer key={item.key} source="assignment">
+        {item.node}
+      </SlotModuleContainer>,
+    );
   }
 
   return nodes;
 }
 
-function renderSlotContent(
-  entries: SlotEntry[],
-  options?: { prefix?: ReactNode; suffix?: ReactNode; homepageProjects?: HomepageProjectCard[] },
-) {
-  const nodes = renderOrderedSlotEntries(entries, options?.homepageProjects);
+export function PageSlotContent({
+  entries,
+  prefix,
+  suffix,
+  homepageProjects,
+  breadcrumbCurrentLabel,
+}: {
+  entries: SlotEntry[];
+} & SlotContentOptions) {
+  const nodes = renderOrderedSlotEntries(entries, {
+    homepageProjects,
+    breadcrumbCurrentLabel,
+  });
 
-  if (options?.prefix != null) {
-    nodes.unshift(<Fragment key="slot-prefix">{options.prefix}</Fragment>);
+  if (prefix != null) {
+    nodes.unshift(
+      <SlotModuleContainer key="slot-prefix" source="prefix">
+        {prefix}
+      </SlotModuleContainer>,
+    );
+  }
+  if (suffix != null) {
+    nodes.push(
+      <SlotModuleContainer key="slot-suffix" source="suffix">
+        {suffix}
+      </SlotModuleContainer>,
+    );
   }
 
-  if (options?.suffix != null) {
-    nodes.push(<Fragment key="slot-suffix">{options.suffix}</Fragment>);
+  return <>{nodes}</>;
+}
+
+type HeroSlotContentProps = {
+  composition: PageComposition;
+  fallbackHero?: ReactNode;
+  breadcrumbCurrentLabel?: string;
+};
+
+export function HeroSlotContent({
+  composition,
+  fallbackHero,
+  breadcrumbCurrentLabel,
+}: HeroSlotContentProps) {
+  const heroEntry = composition.slots.hero.find((entry) => entry.kind === "hero");
+  const heroEntries = getSlotEntries(composition, "hero");
+  const slotContent = heroEntries.length ? (
+    <PageSlotContent
+      entries={heroEntries}
+      breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+    />
+  ) : null;
+
+  if (!heroEntry) {
+    if (!fallbackHero && !slotContent) return null;
+    return (
+      <div className="page-layout-slot" data-layout-slot="hero">
+        {fallbackHero}
+        {slotContent ? (
+          <div className="mx-auto w-full max-w-7xl px-6 pt-6">
+            {slotContent}
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
-  return nodes;
+  return (
+    <div className="page-layout-slot" data-layout-slot="hero">
+      <DynamicHeroSection
+        hero={heroEntry.hero}
+        compositionFooter={slotContent}
+      />
+    </div>
+  );
 }
 
 type PageSlotLayoutProps = {
   composition: PageComposition;
-  /** Static hero fallback when CMS hero slot is empty */
-  fallbackHero?: React.ReactNode;
-  /** Content injected into the main column (e.g. topics listing grid) */
-  mainAfter?: React.ReactNode;
-  /** Optional prefix before sidebar slot entries (e.g. topics search panel) */
-  sidebarPrefix?: React.ReactNode;
-  /** Slots to skip (e.g. hero rendered by parent shell) */
+  /** Static hero fallback when CMS hero slot is empty. */
+  fallbackHero?: ReactNode;
+  /** Content injected into the main region after assigned modules. */
+  mainAfter?: ReactNode;
+  /** Optional content before assigned sidebar modules. */
+  sidebarPrefix?: ReactNode;
+  /** Slots already owned by an explicit template shell. */
   skipSlots?: PageLayoutSlot[];
-  /** Published homepage projects for home-projects placement module */
+  /** Published homepage projects for the existing home-projects renderer. */
   homepageProjects?: HomepageProjectCard[];
+  /** Dynamic detail label consumed by the shared Breadcrumb renderer. */
+  breadcrumbCurrentLabel?: string;
 };
 
 export default function PageSlotLayout({
@@ -98,58 +181,114 @@ export default function PageSlotLayout({
   sidebarPrefix,
   skipSlots = [],
   homepageProjects,
+  breadcrumbCurrentLabel,
 }: PageSlotLayoutProps) {
   const skip = new Set(skipSlots);
-  const isMainSidebar = composition.layoutMode === "main-sidebar";
+  const sidebarEntries = getSlotEntries(composition, "sidebar");
+  const hasSidebarContent =
+    !skip.has("sidebar") && Boolean(sidebarEntries.length || sidebarPrefix);
+  const isMainSidebar =
+    composition.layoutMode === "main-sidebar" && hasSidebarContent;
 
   const renderSlotStack = (slot: PageLayoutSlot) => {
     if (skip.has(slot)) return null;
 
     if (slot === "hero") {
-      return <HeroSlotContent key="slot-hero" composition={composition} fallbackHero={fallbackHero} />;
+      return (
+        <HeroSlotContent
+          key="slot-hero"
+          composition={composition}
+          fallbackHero={fallbackHero}
+          breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+        />
+      );
     }
 
     const entries = getSlotEntries(composition, slot);
-    const showMainAfter = slot === "main" && mainAfter;
-    if (!entries.length && !showMainAfter) return null;
+    const suffix = slot === "main" ? mainAfter : undefined;
+    const prefix = slot === "sidebar" ? sidebarPrefix : undefined;
+    if (!entries.length && prefix == null && suffix == null) return null;
 
     return (
-      <div key={`slot-${slot}`} className="page-layout-slot" data-layout-slot={slot}>
-        {renderSlotContent(entries, {
-          suffix: showMainAfter ? mainAfter : undefined,
-          homepageProjects,
-        })}
+      <div
+        key={`slot-${slot}`}
+        className="page-layout-slot"
+        data-layout-slot={slot}
+      >
+        <div className="mx-auto w-full max-w-7xl px-6">
+          <PageSlotContent
+            entries={entries}
+            prefix={prefix}
+            suffix={suffix}
+            homepageProjects={homepageProjects}
+            breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+          />
+        </div>
       </div>
     );
   };
 
   if (isMainSidebar) {
-    const sidebarEntries = getSlotEntries(composition, "sidebar");
-
     return (
-      <div className="page-layout page-layout--main-sidebar">
-        {!skip.has("hero") ? <HeroSlotContent composition={composition} fallbackHero={fallbackHero} /> : null}
+      <div
+        className="page-layout page-layout--main-sidebar"
+        data-page-layout-contract="slot-owned"
+      >
+        {!skip.has("hero") ? (
+          <HeroSlotContent
+            composition={composition}
+            fallbackHero={fallbackHero}
+            breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+          />
+        ) : null}
 
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:[direction:ltr]">
-          <div dir="rtl" className="page-layout-slot page-layout-slot--main space-y-10" data-layout-slot="main">
-            {renderSlotContent(getSlotEntries(composition, "main"), {
-              suffix: mainAfter,
-              homepageProjects,
-            })}
-          </div>
+        <div className="mx-auto w-full max-w-7xl px-6 pt-10" data-page-layout-body>
+          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_340px] xl:[direction:ltr]">
+            {!skip.has("main") ? (
+              <section
+                dir="rtl"
+                className="page-layout-slot page-layout-slot--main min-w-0"
+                data-layout-slot="main"
+                aria-label="المحتوى الرئيسي"
+              >
+                <PageSlotContent
+                  entries={getSlotEntries(composition, "main")}
+                  suffix={mainAfter}
+                  homepageProjects={homepageProjects}
+                  breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+                />
+              </section>
+            ) : null}
 
-          <div dir="rtl" className="page-layout-slot page-layout-slot--sidebar space-y-6" data-layout-slot="sidebar">
-            {renderSlotContent(sidebarEntries, { prefix: sidebarPrefix, homepageProjects })}
+            {!skip.has("sidebar") ? (
+              <aside
+                dir="rtl"
+                className="page-layout-slot page-layout-slot--sidebar grid min-w-0 grid-cols-[repeat(auto-fit,minmax(min(100%,20rem),1fr))] gap-6 xl:block xl:space-y-6"
+                data-layout-slot="sidebar"
+              >
+                <PageSlotContent
+                  entries={sidebarEntries}
+                  prefix={sidebarPrefix}
+                  homepageProjects={homepageProjects}
+                  breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+                />
+              </aside>
+            ) : null}
           </div>
         </div>
 
-        {PAGE_LAYOUT_SLOT_ORDER.filter((slot) => slot === "bottom" || slot === "footer").map(renderSlotStack)}
+        {PAGE_LAYOUT_SLOT_ORDER.filter(
+          (slot) => slot === "bottom" || slot === "footer",
+        ).map(renderSlotStack)}
       </div>
     );
   }
 
   return (
-    <div className="page-layout page-layout--stack">
+    <div
+      className="page-layout page-layout--stack"
+      data-page-layout-contract="slot-owned"
+    >
       {PAGE_LAYOUT_SLOT_ORDER.map(renderSlotStack)}
     </div>
   );

@@ -50,7 +50,7 @@ export default function AboutIntroSingleImageModuleSection({
   const imageOnRight = content.imagePosition === "right";
 
   return (
-    <section className="relative overflow-hidden pb-10 pt-8 md:pb-12 md:pt-10">
+    <section className="relative overflow-hidden pb-10 pt-8 @xl/slot-module:pb-12 @xl/slot-module:pt-10">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-56 venesia-projects-cap opacity-85"
@@ -61,15 +61,22 @@ export default function AboutIntroSingleImageModuleSection({
       />
 
       <div className="relative mx-auto max-w-7xl px-6">
-        <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-12" dir="ltr">
+        <div
+          className={[
+            showImage ? "slot-editorial-flow" : "",
+            showImage && !imageOnRight ? "slot-editorial-flow--media-end" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          data-module-presentation={showImage ? "editorial-flow" : undefined}
+          dir="rtl"
+        >
           {showImage && imageSrc ? (
             <div
               data-reveal="fade-up"
               data-delay="120"
-              className={[
-                "group relative w-full overflow-hidden rounded-[1.75rem] border border-[#D8B87A]/10",
-                imageOnRight ? "lg:order-2" : "lg:order-1",
-              ].join(" ")}
+              className="slot-editorial-media group relative w-full overflow-hidden rounded-[1.75rem] border border-[#D8B87A]/10"
+              data-editorial-media-side={imageOnRight ? "start" : "end"}
             >
               <div className="relative aspect-[16/12] overflow-hidden">
                 <Image
@@ -90,10 +97,7 @@ export default function AboutIntroSingleImageModuleSection({
           {showCopy || showBeats ? (
             <div
               dir="rtl"
-              className={[
-                "min-w-0",
-                showImage ? (imageOnRight ? "lg:order-1" : "lg:order-2") : "",
-              ].join(" ")}
+              className="slot-editorial-copy min-w-0"
             >
               {showCopy ? (
                 <>
@@ -110,7 +114,7 @@ export default function AboutIntroSingleImageModuleSection({
 
                   {content.title?.trim() ? (
                     <div data-reveal="fade-up" data-delay="430">
-                      <h2 className="max-w-[34rem] text-[1.9rem] font-bold leading-[1.2] tracking-[-0.025em] text-white md:text-[2.15rem]">
+                      <h2 className="max-w-[34rem] text-[1.9rem] font-bold leading-[1.2] tracking-[-0.025em] text-white @xl/slot-module:text-[2.15rem]">
                         {content.title}
                       </h2>
                     </div>
@@ -129,7 +133,7 @@ export default function AboutIntroSingleImageModuleSection({
                       <RichTextContent
                         value={content.description}
                         mode="rich"
-                        className="mt-6 max-w-[34rem] text-[15.5px] leading-[1.9] text-white/72 md:text-[16px] [&_p+_p]:mt-4 [&_strong]:text-inherit [&_b]:text-inherit"
+                        className="mt-6 max-w-[34rem] text-[15.5px] leading-[1.9] text-white/72 @xl/slot-module:text-[16px] [&_p+_p]:mt-4 [&_strong]:text-inherit [&_b]:text-inherit"
                       />
                     </div>
                   ) : null}
@@ -138,7 +142,7 @@ export default function AboutIntroSingleImageModuleSection({
 
               {showBeats ? (
                 <ul
-                  className={`grid max-w-[62rem] gap-5 border-t border-white/[0.07] pt-7 md:grid-cols-3 ${
+                  className={`slot-editorial-clear grid max-w-[62rem] gap-5 border-t border-white/[0.07] pt-7 @3xl/slot-module:grid-cols-3 ${
                     showCopy ? "mt-8" : "mt-0 border-t-0 pt-0"
                   }`}
                 >

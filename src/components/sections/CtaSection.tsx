@@ -13,8 +13,8 @@ export default function CtaSection({ block }: BlockRendererProps) {
         : "border-white/10 bg-[#080B10]/86";
 
   return (
-    <section className="px-6 py-12 md:py-16" data-block-variant={variant}>
-      <div className={`mx-auto max-w-7xl overflow-hidden rounded-[2rem] border p-8 md:p-12 ${backgroundClass}`}>
+    <section className="px-4 py-10 @xl/slot-module:px-6 @xl/slot-module:py-12 @3xl/slot-module:py-16" data-block-variant={variant}>
+      <div className={`mx-auto max-w-7xl overflow-hidden rounded-[2rem] border p-6 @xl/slot-module:p-8 @3xl/slot-module:p-12 ${backgroundClass}`}>
         {config.backgroundImage ? (
           <div
             aria-hidden
@@ -33,14 +33,14 @@ export default function CtaSection({ block }: BlockRendererProps) {
           ) : null}
 
           {config.title ? (
-            <h2 className="mt-4 text-3xl font-semibold leading-tight text-white md:text-4xl">
+            <h2 className="mt-4 text-3xl font-semibold leading-tight text-white @xl/slot-module:text-4xl">
               {config.title}
               {config.highlight ? <span className="mt-2 block text-[#D8B87A]">{config.highlight}</span> : null}
             </h2>
           ) : null}
 
           {config.description ? (
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-white/58 md:text-base">{config.description}</p>
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-white/58 @xl/slot-module:text-base">{config.description}</p>
           ) : null}
 
           <div className="mt-8 flex flex-wrap gap-3">

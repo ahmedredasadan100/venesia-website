@@ -75,6 +75,31 @@ export type EntitySeoData = {
   robotsFollow?: boolean | null;
 };
 
+/**
+ * Whether an entity carries a meaningful local SEO override.
+ * Empty persistence rows are deliberately not local SEO: public metadata must
+ * keep using the existing route/global fallback contract in that case.
+ */
+export function hasEntitySeoData(
+  value: EntitySeoData | null | undefined,
+): boolean {
+  if (!value) return false;
+
+  return Boolean(
+    value.title?.trim() ||
+      value.description?.trim() ||
+      value.focusKeyword?.trim() ||
+      value.keywords?.some((keyword) => String(keyword).trim()) ||
+      value.image?.trim() ||
+      value.imageAlt?.trim() ||
+      value.ogImage?.trim() ||
+      value.ogImageAlt?.trim() ||
+      value.canonical?.trim() ||
+      (value.robotsIndex !== null && value.robotsIndex !== undefined) ||
+      (value.robotsFollow !== null && value.robotsFollow !== undefined)
+  );
+}
+
 export type ResolveSeoMetadataInput = {
   path: string;
   entitySeo?: EntitySeoData | null;

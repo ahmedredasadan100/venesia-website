@@ -56,14 +56,23 @@ const foundationMigrationPath =
   "sql/migrations/20260817170332_project_construction_tracking_detail.sql";
 const paginationMigrationPath =
   "sql/migrations/20260818010000_project_tracking_public_pagination.sql";
+const locationPresentationConsumerMigrationPath =
+  "sql/migrations/20260823123750_project_location_presentation_consumer_adoption.sql";
 check(
-  "Tracking foundation and corrective pagination migrations exist",
-  [foundationMigrationPath, paginationMigrationPath].every((path) =>
+  "Tracking foundation and corrective owner migrations exist",
+  [
+    foundationMigrationPath,
+    paginationMigrationPath,
+    locationPresentationConsumerMigrationPath,
+  ].every((path) =>
     existsSync(resolve(process.cwd(), path)),
   ),
 );
 const foundationMigration = read(foundationMigrationPath);
 const paginationMigration = read(paginationMigrationPath);
+const locationPresentationConsumerMigration = read(
+  locationPresentationConsumerMigrationPath,
+);
 const publicRoute = read("src/app/(site)/track-your-project/[slug]/page.tsx");
 const publicRead = read("src/lib/projects/tracking/public-read.ts");
 const publicContract = read("src/lib/projects/tracking/contract.ts");
@@ -112,6 +121,20 @@ check(
     !paginationMigration.includes("create view") &&
     !paginationMigration.includes("'stages', coalesce") &&
     !paginationMigration.includes("jsonb_agg"),
+);
+check(
+  "Project Tracking adopts Location Presentation through its existing RPC and shared application owner",
+  locationPresentationConsumerMigration.includes(
+    "create or replace function public.project_tracking_public_detail_v1",
+  ) &&
+    locationPresentationConsumerMigration.includes("'locationPresentation'") &&
+    locationPresentationConsumerMigration.includes("project.show_location_label") &&
+    locationPresentationConsumerMigration.includes("project.show_location_tags") &&
+    !locationPresentationConsumerMigration.includes("create table") &&
+    !locationPresentationConsumerMigration.includes("create view") &&
+    publicContract.includes("projectLocationPresentationReadSchema") &&
+    publicRead.includes("projectLocationPresentationReadSchema") &&
+    publicView.includes("resolveVisibleProjectLocationLabel"),
 );
 check(
   "public child collections use independent stable server ranges",

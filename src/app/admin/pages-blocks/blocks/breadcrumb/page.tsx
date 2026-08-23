@@ -19,7 +19,7 @@ export default async function BreadcrumbBlocksPage({ searchParams }: PageProps) 
   const [templatesResult, preference] = await Promise.all([
     getSupabaseAdmin()
       .from("breadcrumb_block_templates")
-      .select("id,name,slug,description,variant,status,updated_at")
+      .select("id,name,description,status,updated_at")
       .order("sort_order", { ascending: true })
       .order("id", { ascending: true }),
     readAdminColumnPreferences(
@@ -32,15 +32,17 @@ export default async function BreadcrumbBlocksPage({ searchParams }: PageProps) 
     <BlockModuleManagerClient
       moduleKey="breadcrumb"
       moduleTitle="إدارة مسارات التنقل"
-      moduleDescription="موديولات مسار التنقل المستقلة القابلة للربط بالصفحات."
+      moduleDescription="موديولات مسار التنقل القابلة للربط بمواضع العرض التي تدعمها كل صفحة."
       rows={(data ?? []).map((row) => ({ ...row, description: row.description ?? null }))}
       createAction={createBreadcrumbBlock}
       deleteAction={deleteBreadcrumbBlock}
       duplicateAction={duplicateBreadcrumbBlock}
       toggleAction={toggleBreadcrumbBlockStatus}
       bulkAction={bulkBreadcrumbBlocks}
-      defaultVariant="hero-inline"
-      variantOptions={[["hero-inline", "مدمج مع الهيرو"], ["standalone", "مستقل"]]}
+      defaultVariant="default"
+      variantOptions={[]}
+      technicalIdentityMode="internal"
+      variantFieldMode="internal"
       loadError={error ? `حدث خطأ أثناء قراءة بلوكات Breadcrumb: ${error.message}` : null}
       mediaSynchronizationWarning={query.notice === "saved_with_media_sync_warning"}
       initialVisibleColumns={preference.visibleColumns}

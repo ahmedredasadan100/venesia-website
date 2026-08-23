@@ -67,7 +67,7 @@ export default function MediaCenterHubPress({
         ) : undefined}
       />
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 @xl/slot-module:grid-cols-2 @5xl/slot-module:grid-cols-4">
         {visibleItems.map((item) => (
           <Link
             key={item.id}

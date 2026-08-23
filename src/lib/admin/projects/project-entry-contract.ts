@@ -9,6 +9,10 @@ import {
   type ProjectPublicationStatus,
 } from "./project-publishing-capability";
 import type { ProjectLocationLevel } from "./location-management-contract";
+import {
+  DEFAULT_PROJECT_LOCATION_PRESENTATION,
+  type ProjectLocationPresentationStorage,
+} from "../../projects/project-location-presentation";
 
 export type ProjectType = "residential" | "commercial";
 export type { ProjectLocationLevel } from "./location-management-contract";
@@ -25,7 +29,7 @@ export type ProjectLocationOption = {
   isActive: boolean;
 };
 
-export type ProjectEntryRoot = {
+export type ProjectEntryRoot = ProjectLocationPresentationStorage & {
   id: number | null;
   type: ProjectType;
   code: string;
@@ -369,6 +373,10 @@ export function createEmptyProjectEntry(
       main_area_id: null,
       sub_area_id: null,
       location_label: "",
+      show_location_label:
+        DEFAULT_PROJECT_LOCATION_PRESENTATION.showDetailedAddress,
+      show_location_tags:
+        DEFAULT_PROJECT_LOCATION_PRESENTATION.showLocationTags,
       location_description: "",
       google_maps_url: "",
       latitude: "",
@@ -613,6 +621,12 @@ export function projectEntryPayloadFromFormData(
       main_area_id: readOptionalId(readString(formData, "main_area_id")),
       sub_area_id: readOptionalId(readString(formData, "sub_area_id")),
       location_label: readString(formData, "location_label"),
+      show_location_label: readBoolean(
+        readLastString(formData, "show_location_label"),
+      ),
+      show_location_tags: readBoolean(
+        readLastString(formData, "show_location_tags"),
+      ),
       location_description: readString(formData, "location_description"),
       google_maps_url: readString(formData, "google_maps_url"),
       latitude: readString(formData, "latitude"),

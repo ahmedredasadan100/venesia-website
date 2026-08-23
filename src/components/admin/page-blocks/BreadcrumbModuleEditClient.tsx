@@ -13,7 +13,6 @@ import {
   ModuleEditorSettingsComposition,
   ModuleEditorStatusSwitch,
   ModuleEditorTabs,
-  ModuleEditorTechnicalIdentity,
 } from "./ModuleEditorPresentation";
 import BreadcrumbManualItemsField from "./editors/BreadcrumbManualItemsField";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
@@ -24,9 +23,7 @@ type BreadcrumbModuleEditClientProps = {
   block: {
     id: number;
     name: string;
-    slug: string;
     description: string | null;
-    variant: string;
     style_preset: string | null;
     status: string;
   };
@@ -66,7 +63,7 @@ export default function BreadcrumbModuleEditClient({
               id: "content",
               content: (
                 <ModuleEditorSection>
-                  <ModuleEditorFieldGrid>
+                  <ModuleEditorFieldGrid className="items-end">
                     <ModuleEditorField nature="standard" span={4}>
                       <AdminFormListboxSelect
                         name="source"
@@ -78,9 +75,9 @@ export default function BreadcrumbModuleEditClient({
                         ]}
                       />
                     </ModuleEditorField>
-                    <ModuleEditorField nature="short-text" span={5}>
+                    <ModuleEditorField nature="short-text" span={4}>
                       <label className="block space-y-2">
-                        <span className="text-xs font-semibold text-white/55">تسمية الرابط (اختياري)</span>
+                        <span className="text-sm font-medium text-white/70">تسمية الرابط (اختياري)</span>
                         <input
                           name="current_label_override"
                           defaultValue={config.currentLabelOverride ?? ""}
@@ -89,8 +86,8 @@ export default function BreadcrumbModuleEditClient({
                         />
                       </label>
                     </ModuleEditorField>
-                    <ModuleEditorField nature="binary-state" span={3}>
-                      <AdminFormSwitch name="show_home" label="إظهار الرئيسية" value="true" defaultChecked={config.showHome !== false} surface />
+                    <ModuleEditorField nature="binary-state" span={4}>
+                      <AdminFormSwitch name="show_home" label="إظهار الرئيسية" value="true" defaultChecked={config.showHome !== false} surface className="h-full" />
                     </ModuleEditorField>
                   </ModuleEditorFieldGrid>
                   <BreadcrumbManualItemsField items={config.manualItems ?? []} />
@@ -104,16 +101,13 @@ export default function BreadcrumbModuleEditClient({
                   primary={
                   <ModuleEditorSection>
                     <ModuleEditorFieldGrid>
-                      <ModuleEditorField nature="standard" span={4}>
+                      <ModuleEditorField nature="standard" span={6}>
                         <label className="block space-y-2">
                           <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
                           <input name="name" defaultValue={block.name} required className={fieldClassName()} />
                         </label>
                       </ModuleEditorField>
-                      <ModuleEditorField nature="technical" span={4}>
-                        <ModuleEditorTechnicalIdentity mode="editable" value={block.slug} inputClassName={fieldClassName()} />
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-description" span={4}>
+                      <ModuleEditorField nature="short-description" span={6}>
                         <label className="block space-y-2">
                           <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
                           <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
@@ -125,16 +119,7 @@ export default function BreadcrumbModuleEditClient({
 
                   secondary={
                   <ModuleEditorSection>
-                    <ModuleEditorSectionHeading intent="settings" className="text-lg">إعدادات العرض</ModuleEditorSectionHeading>
-                    <AdminFormListboxSelect
-                      name="variant"
-                      label="نمط العرض"
-                      defaultValue={block.variant}
-                      options={[
-                        { value: "hero-inline", label: "داخل الهيرو" },
-                        { value: "standalone", label: "موضع مستقل في الصفحة" },
-                      ]}
-                    />
+                    <ModuleEditorSectionHeading intent="settings" className="text-lg">النشر</ModuleEditorSectionHeading>
                     <ModuleEditorStatusSwitch status={block.status} />
                     <p className="text-xs leading-6 text-white/42">
                       الموديول المخفي أو غير المنشور لا يظهر على الموقع حتى لو كان مربوطًا بصفحة.

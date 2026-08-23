@@ -11,8 +11,10 @@ type InternalPageLayoutProps = {
   mainClassName?: string;
   children?: React.ReactNode;
   dynamicHero?: HeroSectionData | null;
-  /** Page Composition-owned breadcrumb injected into the Standard Hero footer slot. */
-  heroBreadcrumb?: React.ReactNode;
+  /** Page Composition-owned Hero slot tail. `null` suppresses the legacy breadcrumb fallback. */
+  heroSlotContent?: React.ReactNode;
+  /** PageSlotLayout owns body geometry when true. */
+  compositionChildren?: boolean;
   /** When false and dynamicHero is absent, static hero section is omitted (Home/Media CMS hide rule). */
   allowStaticHeroFallback?: boolean;
   showTitle?: boolean;
@@ -29,18 +31,18 @@ export default function InternalPageLayout({
   mainClassName,
   children,
   dynamicHero,
-  heroBreadcrumb,
+  heroSlotContent,
+  compositionChildren = false,
   allowStaticHeroFallback = true,
   showTitle = true,
   showHeroImage = true,
   showSubtitle = true,
 }: InternalPageLayoutProps) {
   const shouldRenderHero = Boolean(dynamicHero) || allowStaticHeroFallback;
-  const heroCompositionFooter = shouldRenderHero
-    ? heroBreadcrumb ?? (
-        <BreadcrumbModuleSection currentLabelOverride={breadcrumbCurrentLabel} />
-      )
-    : null;
+  const hasExplicitHeroSlotContent = heroSlotContent !== undefined;
+  const resolvedHeroSlotContent = hasExplicitHeroSlotContent
+    ? heroSlotContent
+    : <BreadcrumbModuleSection currentLabelOverride={breadcrumbCurrentLabel} />;
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white" dir="rtl">
@@ -54,7 +56,7 @@ export default function InternalPageLayout({
             fallbackEyebrow={eyebrow}
             fallbackSubtitle={subtitle}
             fallbackImage={heroImage}
-            compositionFooter={heroCompositionFooter}
+            compositionFooter={resolvedHeroSlotContent}
             fallbackVisibility={{
               title: showTitle,
               image: showHeroImage,
@@ -63,7 +65,17 @@ export default function InternalPageLayout({
           />
         ) : null}
 
-        <section className="mx-auto max-w-7xl px-6 pt-10">
+        {!shouldRenderHero && hasExplicitHeroSlotContent && resolvedHeroSlotContent ? (
+          <div className="mx-auto max-w-7xl px-6 pt-6">{resolvedHeroSlotContent}</div>
+        ) : null}
+
+        <section
+          className={
+            compositionChildren
+              ? ""
+              : "mx-auto max-w-7xl px-6 pt-10"
+          }
+        >
           {children ?? (
             <>
               <h2 className="text-2xl font-medium tracking-wide text-white/90 md:text-3xl">

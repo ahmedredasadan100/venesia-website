@@ -172,7 +172,12 @@ for (const source of [heroEditor, heroManager]) {
     assert.ok(!source.includes(retiredControl), `Hero Admin must retire ${retiredControl}`);
   }
 }
-assert.equal(heroActions.match(/source_type: "manual"/g)?.length, 3);
+assert.match(
+  heroActions,
+  /source_type: isDomainBackedHeroTemplateVariant\(variant\) \? "domain-backed" : "manual"/,
+  "Hero template writes must classify domain-backed variants without reviving Media Center content sourcing",
+);
+assert.equal(heroActions.match(/source_type: "manual"/g)?.length, 1);
 assert.equal(heroActions.match(/source_id: null/g)?.length, 3);
 assert.equal(heroActions.match(/source_slug: null/g)?.length, 3);
 
@@ -220,7 +225,9 @@ const shellLayout = read("src/components/media-center/MediaCenterShellLayout.tsx
 for (const forbidden of ["ListingShell", "listing-shell", "Placeholder", "hasListingPresentationModule"]) {
   assert.ok(!shellLayout.includes(forbidden), `Media layout must retire ${forbidden}`);
 }
-assert.ok(shellLayout.includes("getSlotBlocks(composition, \"main\")"));
+assert.ok(shellLayout.includes("<PageSlotLayout"));
+assert.ok(shellLayout.includes("mainAfter={children}"));
+assert.ok(!shellLayout.includes("getSlotBlocks") && !shellLayout.includes("SlotModulesRenderer"));
 
 const compositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
 assert.ok(compositionLoader.includes("queryMediaHubModules(pageSlug)"));

@@ -65,7 +65,13 @@ assert(editor.includes('name="image_position"'), "imagePosition field missing");
 assert(!editor.includes("image_secondary"), "Single-image editor must not expose secondary image");
 assert(!editor.includes('name="config_schema"'), "config_schema must live in ContentModuleEditClient only");
 assert(section.includes("aspect-[16/12]"), "Public single-image frame aspect missing");
-assert(section.includes('dir="ltr"'), "Explicit LTR grid order missing");
+assert(
+  section.includes("slot-editorial-flow") &&
+    section.includes("slot-editorial-flow--media-end") &&
+    section.includes('data-module-presentation={showImage ? "editorial-flow" : undefined}'),
+  "Public single-image module must adopt the shared reversible Presentation contract",
+);
+assert(!section.includes("lg:grid-cols-2"), "Public module must not restore a local parallel grid owner");
 assert(section.includes("if (!content) return null"), "Empty content must return null");
 assert(migration.includes("about-intro-single-image"), "Migration slug missing");
 assert(migration.includes("where slug = 'about-intro'"), "Migration must look up about-intro by slug");
@@ -73,7 +79,11 @@ assert(migration.includes("where not exists"), "Migration must be idempotent");
 assert(slots.includes("AboutIntroSingleImageModuleSection"), "Public slot renderer missing");
 assert(slots.includes("isAboutIntroSingleImageContentBlock"), "Public detector missing");
 assert(!slots.includes("template.id ==="), "Renderer must not hardcode template IDs");
-assert(slotRegistry.includes('"about-intro-single-image"'), "Slot registry slug missing");
+assert(
+  slotRegistry.includes("SLOT_MODULE_SLUG_METADATA") &&
+    presentationRegistry.includes('"about-intro-single-image"'),
+  "Slot registry must delegate slug metadata to the shared registry owner",
+);
 assert(actions.includes("buildAboutIntroSingleImageConfig"), "Save builder missing");
 assert(
   structuralTemplateSlugs.has("about-intro-single-image"),

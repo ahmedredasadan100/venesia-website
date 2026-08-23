@@ -6,8 +6,6 @@ import { usePathname } from "next/navigation";
 import { buildBreadcrumbsFromNavigation } from "../../lib/public-navigation";
 import { asBreadcrumbConfig } from "../../lib/page-blocks/configs";
 import type { BreadcrumbBlockConfig } from "../../lib/page-blocks/configs";
-import type { HeroTextAlignment } from "../../lib/hero/hero-content-controls";
-import { heroTextAlignClass } from "../../lib/hero/hero-content-controls";
 import { usePublicNavigation } from "../PublicNavigationProvider";
 import PublicGoldPill from "../public/PublicGoldPill";
 
@@ -15,9 +13,6 @@ type BreadcrumbModuleSectionProps = {
   config?: BreadcrumbBlockConfig | unknown | null;
   className?: string;
   compact?: boolean;
-  /** Physical alignment override (hero content controls). */
-  alignment?: HeroTextAlignment;
-  bold?: boolean;
   /**
    * Highest-priority override for the current (last) crumb — e.g. hero.breadcrumbCurrentLabel.
    * Falls back to Breadcrumb module config.currentLabelOverride, then navigation-derived label.
@@ -43,8 +38,6 @@ export default function BreadcrumbModuleSection({
   config: rawConfig,
   className,
   compact = false,
-  alignment = "right",
-  bold = false,
   currentLabelOverride,
 }: BreadcrumbModuleSectionProps) {
   const pathname = usePathname();
@@ -55,8 +48,8 @@ export default function BreadcrumbModuleSection({
     const labelOverride =
       currentLabelOverride?.trim() || config.currentLabelOverride?.trim() || "";
 
-    if (config.source === "manual" && config.manualItems?.length) {
-      let manual: BreadcrumbNavItem[] = config.manualItems
+    if (config.source === "manual") {
+      let manual: BreadcrumbNavItem[] = (config.manualItems ?? [])
         .filter((item) => item.label?.trim())
         .map((item) => ({ label: item.label!.trim(), href: item.href || undefined }));
 
@@ -87,19 +80,11 @@ export default function BreadcrumbModuleSection({
   if (!items.length) return null;
 
   const navClassName = className ?? (compact ? "" : "mt-6");
-  const justify =
-    alignment === "center" ? "justify-center" : alignment === "left" ? "justify-end" : "justify-start";
 
   return (
-    <nav className={[navClassName, heroTextAlignClass(alignment)].filter(Boolean).join(" ") || undefined} aria-label="Breadcrumb">
+    <nav className={[navClassName, "text-right"].filter(Boolean).join(" ")} aria-label="مسار التنقل">
       <ol
-        className={[
-          "flex flex-wrap items-center gap-2 text-sm text-white/62",
-          justify,
-          bold ? "font-bold" : "",
-        ]
-          .filter(Boolean)
-          .join(" ")}
+        className="flex flex-wrap items-center justify-start gap-2 text-sm text-white/62"
       >
         {items.map((item, index) => (
           <li key={`${item.label}-${index}`} className="flex items-center gap-2">

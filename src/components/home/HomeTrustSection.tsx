@@ -238,7 +238,7 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
 
   return (
     <section className="mx-auto max-w-7xl px-6 py-7">
-      <div className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
+      <div className="grid gap-10 @4xl/slot-module:grid-cols-[0.8fr_1.2fr]">
         <div data-reveal="from-inline-start" data-delay="0">
           <p
             className={`text-sm text-[#D8B87A] ${TEXT_ALIGN_CLASS[resolved.eyebrowAlignment]}`}
@@ -262,7 +262,7 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
         </div>
 
         <div
-          className="grid items-stretch gap-4 sm:grid-cols-2"
+          className="grid items-stretch gap-4 @xl/slot-module:grid-cols-2"
           data-home-trust-touch={needsTouchToggle ? "true" : undefined}
         >
           {resolved.items.map((item, idx) => {

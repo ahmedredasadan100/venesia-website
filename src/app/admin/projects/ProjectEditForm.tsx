@@ -573,6 +573,29 @@ export default function ProjectEditForm({
       icon: "location" as const,
       content: (
         <div className="space-y-4">
+          <SectionCard
+            title="إعدادات عرض الموقع"
+            description="تتحكم هذه الخيارات في Presentation بيانات الموقع مع بقاء القيم محفوظة داخل المشروع."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <AdminFormSwitch
+                name="show_location_label"
+                label="إظهار العنوان التفصيلي"
+                value="true"
+                uncheckedValue="false"
+                defaultChecked={bundle.project.show_location_label}
+                surface
+              />
+              <AdminFormSwitch
+                name="show_location_tags"
+                label="إظهار بيانات الموقع (Location Tags)"
+                value="true"
+                uncheckedValue="false"
+                defaultChecked={bundle.project.show_location_tags}
+                surface
+              />
+            </div>
+          </SectionCard>
           <SectionCard>
             <Field name="location_title" label="عنوان قسم الموقع (اختياري)">
               <input

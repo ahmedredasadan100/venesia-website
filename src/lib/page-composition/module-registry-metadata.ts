@@ -134,7 +134,7 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
       },
       settings: {
         ...SETTINGS_SECTION,
-        sectionDescriptionAr: "أدر الهوية الداخلية ونمط العرض وحالة النشر.",
+        sectionDescriptionAr: "أدر اسم الموديول ووصفه الداخلي وحالة النشر.",
       },
       pages: PAGES_SECTION,
     },

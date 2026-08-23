@@ -10,6 +10,7 @@ export type HomeProjectsContent = {
   showEyebrow: boolean;
   showTitle: boolean;
   showIntro: boolean;
+  showProjectLocation: boolean;
   showFooterCta: boolean;
   projectsLimit?: number;
   /** Physical alignment of in-card CTA. Legacy default: right. */
@@ -54,6 +55,7 @@ export function mapHomeProjectsBlock(block: ResolvedPageBlock): HomeProjectsCont
     showEyebrow: config.showEyebrow !== false,
     showTitle: config.showTitle !== false,
     showIntro: config.showIntro !== false,
+    showProjectLocation: config.showProjectLocation !== false,
     showFooterCta: config.showFooterCta !== false,
     projectsLimit: config.projectsLimit,
     cardCtaAlignment: mapCardCtaAlignment(config.cardCtaAlignment),

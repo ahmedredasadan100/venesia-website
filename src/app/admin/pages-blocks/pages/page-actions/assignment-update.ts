@@ -31,19 +31,21 @@ export async function updatePageBlockAssignment(
   if (!pageSlug) return failure("الصفحة غير موجودة.");
   const slotRejection = slotPolicyFailure(pageSlug, kind, slot);
   if (slotRejection) return slotRejection;
+  let updatedAt: string | undefined;
   try {
-    await mutatePageComposition(pageId, "save_assignment", {
+    const result = await mutatePageComposition(pageId, "save_assignment", {
       kind: databaseAssignmentKind(kind),
       assignment_id: assignmentId,
       slot,
       sort_order: parseNumber(formData.get("sort_order"), 0),
       is_visible: parseFormBoolean(formData, "is_visible", false),
     }, actor);
+    updatedAt = typeof result.updated_at === "string" ? result.updated_at : undefined;
   } catch (error) {
     return failure(error instanceof Error ? error.message : "تعذر تحديث الربط.");
   }
   await revalidatePageBlocksPath(pageId);
-  return success();
+  return success({ updatedAt });
 }
 
 export async function updateHeroPageAssignment(

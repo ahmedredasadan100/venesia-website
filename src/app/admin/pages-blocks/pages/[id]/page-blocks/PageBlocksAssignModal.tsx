@@ -204,7 +204,7 @@ export default function PageBlocksAssignModal({
 
         <AdminFormListboxSelect
           name="slot"
-          label="Slot"
+          label="موضع العرض"
           defaultValue={
             assignModuleKind === "breadcrumb" || assignModuleKind === "hero"
               ? "hero"

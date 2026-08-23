@@ -27,6 +27,8 @@ import {
 } from "../../../../../lib/page-blocks/admin-utils";
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import {
+  PROJECT_DETAIL_HERO_ELEMENT_KEYS,
+  isDomainBackedHeroTemplateVariant,
   parseHeroTemplateVariant,
   parseHeroContentControlsFormData,
   normalizeHeroTemplateProductConfig,
@@ -39,7 +41,7 @@ import { mutatePageComposition } from "../../pages/page-actions/helpers";
 
 export type HeroTemplateRow = Pick<
   Tables<"hero_templates">,
-  "id" | "name" | "slug" | "description" | "status"
+  "id" | "name" | "slug" | "description" | "status" | "variant"
 > & {
   hero_assignments: Array<
     Pick<Tables<"hero_assignments">, "id" | "path" | "is_active">
@@ -82,7 +84,12 @@ function buildHeroConfig(formData: FormData, variant: HeroTemplateVariant) {
   const hasInternalContentControls =
     formData.has("hero_element_order") || formData.has("show_eyebrow");
   const controls = resolveHeroContentControlsForVariant(
-    parseHeroContentControlsFormData(formData),
+    parseHeroContentControlsFormData(formData, {
+      allowedElementKeys: variant === "project-detail"
+        ? PROJECT_DETAIL_HERO_ELEMENT_KEYS
+        : undefined,
+      defaults: resolveHeroContentControlsForVariant({}, variant),
+    }),
     variant,
   );
   const showCta = hasInternalContentControls
@@ -114,6 +121,13 @@ function buildHeroConfig(formData: FormData, variant: HeroTemplateVariant) {
     ),
   };
 
+  if (isDomainBackedHeroTemplateVariant(variant)) {
+    return {
+      imageComposition: base.imageComposition,
+      ...controls,
+    };
+  }
+
   if (!hasInternalContentControls) {
     return base;
   }
@@ -133,6 +147,24 @@ async function revalidateHeroAdmin() {
   revalidatePath("/topics");
   revalidatePath("/contact");
   revalidatePath("/track-your-project");
+  revalidatePath("/projects/[slug]", "page");
+}
+
+async function findDomainBackedVariantTemplate(
+  variant: HeroTemplateVariant,
+  excludeId?: number,
+) {
+  if (!isDomainBackedHeroTemplateVariant(variant)) return null;
+
+  let query = getSupabaseAdmin()
+    .from("hero_templates")
+    .select("id")
+    .eq("variant", variant)
+    .limit(1);
+  if (excludeId) query = query.neq("id", excludeId);
+  const { data, error } = await query.maybeSingle();
+  if (error) throw new Error(error.message);
+  return data;
 }
 
 function mediaSynchronizationNotice(
@@ -148,7 +180,7 @@ export type CreateHeroTemplateFormActionState = AdminFormActionState;
 function createHeroTemplateFailure(
   revision: number,
   message: string,
-  field?: "name" | "slug",
+  field?: "name" | "slug" | "variant",
 ): CreateHeroTemplateFormActionState {
   return {
     status: "error",
@@ -218,13 +250,21 @@ export async function createHeroTemplate(
     }
 
     const variant = parseHeroTemplateVariant(formData.get("variant"));
+    const existingVariant = await findDomainBackedVariantTemplate(variant);
+    if (existingVariant) {
+      return createHeroTemplateFailure(
+        revision,
+        "يوجد بالفعل قالب Hero معتمد لهذا الـvariant؛ افتحه لإدارة Presentation بدل إنشاء مصدر موازٍ.",
+        "variant",
+      );
+    }
     const nextRow = {
       name,
       slug,
       description: cleanText(formData.get("template_description")) || null,
       variant,
       style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
-      source_type: "manual",
+      source_type: isDomainBackedHeroTemplateVariant(variant) ? "domain-backed" : "manual",
       source_id: null,
       source_slug: null,
       limit_count: 1,
@@ -314,10 +354,13 @@ export async function deleteHeroTemplate(formData: FormData) {
 
   const { data: existing, error: lookupError } = await getSupabaseAdmin()
     .from("hero_templates")
-    .select("id")
+    .select("id,variant")
     .eq("id", id)
     .maybeSingle();
   if (lookupError) throw new Error(lookupError.message);
+  if (isDomainBackedHeroTemplateVariant(existing?.variant)) {
+    throw new Error("قالب Hero المعتمد لتفاصيل المشروع لا يُحذف؛ يمكن إخفاؤه من حالة النشر.");
+  }
   const cleanupIdentity = existing?.id ?? id;
 
   const { error } = await getSupabaseAdmin()
@@ -360,6 +403,9 @@ export async function duplicateHeroTemplate(formData: FormData) {
     .single();
 
   if (error || !hero) throw new Error(error?.message || "Hero not found.");
+  if (isDomainBackedHeroTemplateVariant(hero.variant)) {
+    throw new Error("هذا Hero هو Configuration معتمدة للـvariant ولا يقبل إنشاء نسخة موازية.");
+  }
 
   const copySlug = `${hero.slug}-copy-${Date.now()}`;
 
@@ -435,9 +481,12 @@ export async function bulkHeroTemplates(formData: FormData) {
   if (action === "delete") {
     const { data: existingRows, error: lookupError } = await getSupabaseAdmin()
       .from("hero_templates")
-      .select("id")
+      .select("id,variant")
       .in("id", ids);
     if (lookupError) throw new Error(lookupError.message);
+    if ((existingRows ?? []).some((row) => isDomainBackedHeroTemplateVariant(row.variant))) {
+      throw new Error("لا يمكن حذف Hero المعتمد لvariant ديناميكي ضمن إجراء جماعي.");
+    }
 
     const capturedIds = (existingRows ?? []).map((row) => Number(row.id));
     const cleanupIds = [...new Set([...capturedIds, ...ids])];
@@ -501,13 +550,17 @@ export async function updateHeroTemplateDetails(formData: FormData) {
   }
 
   const variant = parseHeroTemplateVariant(formData.get("variant"));
+  const existingVariant = await findDomainBackedVariantTemplate(variant, id);
+  if (existingVariant) {
+    throw new Error("يوجد بالفعل قالب Hero معتمد لهذا الـvariant.");
+  }
   const nextRow = {
     name,
     slug,
     description: cleanText(formData.get("template_description")) || null,
     variant,
     style_preset: cleanText(formData.get("style_preset")) || "cinematic-gold",
-    source_type: "manual",
+    source_type: isDomainBackedHeroTemplateVariant(variant) ? "domain-backed" : "manual",
     source_id: null,
     source_slug: null,
     limit_count: 1,
@@ -557,7 +610,7 @@ export async function getHeroTemplateRows(): Promise<HeroTemplateRow[]> {
   await requireAdminSession();
   const { data, error } = await getSupabaseAdmin()
     .from("hero_templates")
-    .select("id,name,slug,description,status,hero_assignments(id,path,is_active)")
+    .select("id,name,slug,description,status,variant,hero_assignments(id,path,is_active)")
     .order("sort_order", { ascending: true })
     .order("id", { ascending: true });
 

@@ -1,9 +1,13 @@
 import { type ReactNode } from "react";
 
 import type { ResolvedFeedModule } from "../../lib/feed-modules/types";
+import type { MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
 import type { SlotEntry } from "../../lib/page-blocks/page-composition-types";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
-import { buildSlotModuleNodes, type SlotModuleRenderContext } from "./slot-module-nodes";
+import {
+  buildSlotModuleNodes,
+  type SlotModuleRenderContext,
+} from "./slot-module-nodes";
 
 /**
  * Explicit slot render plan items.
@@ -19,6 +23,13 @@ export type SlotRenderPlanItem =
       assignmentId: number;
       sortOrder: number;
       module: ResolvedFeedModule;
+    }
+  | {
+      kind: "media-sidebar";
+      key: string;
+      assignmentId: number;
+      sortOrder: number;
+      widget: MediaSidebarWidgetState;
     }
   | {
       kind: "module";
@@ -40,13 +51,6 @@ export const SLOT_COMPOSITE_RELATIONSHIPS = [
     peerSlugs: ["contact-form-office", "contact-form"] as const,
     notes: "Either slug opens one ContactFormSection; missing peer renders half section.",
   },
-  {
-    id: "about-intro-beats",
-    parentSlugs: ["about-intro"] as const,
-    peerSlugs: ["about-documentary-beats"] as const,
-    notes:
-      "about-intro consumes about-documentary-beats when beats are not embedded in intro config. about-intro-single-image is intentionally independent.",
-  },
 ] as const;
 
 /**
@@ -65,6 +69,7 @@ export function buildSlotRenderPlan(
   context: SlotModuleRenderContext = {},
 ): SlotRenderPlanItem[] {
   const feedItems: SlotRenderPlanItem[] = [];
+  const mediaSidebarItems: SlotRenderPlanItem[] = [];
   const blocks: ResolvedPageBlock[] = [];
 
   for (const entry of entries) {
@@ -75,6 +80,17 @@ export function buildSlotRenderPlan(
         assignmentId: entry.assignmentId,
         sortOrder: entry.sortOrder,
         module: entry.module,
+      });
+      continue;
+    }
+
+    if (entry.kind === "media-sidebar") {
+      mediaSidebarItems.push({
+        kind: "media-sidebar",
+        key: `media-sidebar-${entry.assignmentId}`,
+        assignmentId: entry.assignmentId,
+        sortOrder: entry.sortOrder,
+        widget: entry.widget,
       });
       continue;
     }
@@ -91,7 +107,7 @@ export function buildSlotRenderPlan(
     node: node.node,
   }));
 
-  return [...feedItems, ...moduleItems].sort(
+  return [...feedItems, ...mediaSidebarItems, ...moduleItems].sort(
     (a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key),
   );
 }

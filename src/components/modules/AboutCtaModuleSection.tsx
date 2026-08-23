@@ -44,7 +44,7 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
   const showImage = Boolean(imageSrc);
 
   return (
-    <section className="overflow-x-hidden pb-0 pt-0 md:pb-2">
+    <section className="overflow-x-hidden pb-0 pt-0 @xl/slot-module:pb-2">
       <div className="mx-auto max-w-7xl overflow-hidden px-6">
         <div
           data-reveal
@@ -65,11 +65,11 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
             className="pointer-events-none absolute inset-x-0 top-0 h-px origin-right scale-x-0 bg-gradient-to-l from-[#D8B87A]/70 via-[#D8B87A]/25 to-transparent transition-transform duration-700 ease-out group-hover:scale-x-100"
           />
 
-          <div className="relative grid min-h-[320px] max-w-full overflow-hidden [direction:ltr] lg:grid-cols-[0.68fr_1fr_1.32fr]">
-            <div className="relative z-20 order-3 min-w-0 bg-[#05070B]/72 p-7 [direction:rtl] backdrop-blur-sm lg:order-1 lg:p-8">
+          <div className="relative grid min-h-[320px] max-w-full overflow-hidden [direction:ltr] @3xl/slot-module:grid-cols-[0.68fr_1fr_1.32fr]">
+            <div className="relative z-20 order-3 min-w-0 bg-[#05070B]/72 p-6 [direction:rtl] backdrop-blur-sm @xl/slot-module:p-7 @3xl/slot-module:order-1 @5xl/slot-module:p-8">
               <div
                 aria-hidden
-                className="absolute right-0 top-10 hidden h-[calc(100%-5rem)] w-px bg-gradient-to-b from-transparent via-[#D8B87A]/70 to-transparent lg:block"
+                className="absolute right-0 top-10 hidden h-[calc(100%-5rem)] w-px bg-gradient-to-b from-transparent via-[#D8B87A]/70 to-transparent @3xl/slot-module:block"
               />
 
               {contacts.length ? (
@@ -93,7 +93,7 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
               ) : null}
             </div>
 
-            <div className="relative z-20 order-2 flex min-h-[200px] min-w-0 items-center justify-center px-7 py-9 text-center [direction:rtl] lg:min-h-[320px] lg:px-10">
+            <div className="relative z-20 order-2 flex min-h-[200px] min-w-0 items-center justify-center px-6 py-9 text-center [direction:rtl] @xl/slot-module:px-7 @3xl/slot-module:min-h-[320px] @5xl/slot-module:px-10">
               <div className="max-w-xl">
                 {content.eyebrow.trim() ? (
                   <p className="font-en text-[10px] uppercase tracking-[0.24em] text-[#D8B87A]/58">
@@ -102,13 +102,13 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
                 ) : null}
 
                 {content.title.trim() ? (
-                  <h2 className="mt-5 text-3xl font-bold leading-tight tracking-[-0.04em] text-white md:text-5xl">
+                  <h2 className="mt-5 text-3xl font-bold leading-tight tracking-[-0.04em] text-white @3xl/slot-module:text-4xl @5xl/slot-module:text-5xl">
                     {content.title}
                   </h2>
                 ) : null}
 
                 {content.description.trim() ? (
-                  <p className="mt-5 text-[15px] leading-8 text-white/60 md:text-[16px]">{content.description}</p>
+                  <p className="mt-5 text-[15px] leading-8 text-white/60 @xl/slot-module:text-[16px]">{content.description}</p>
                 ) : null}
 
                 {content.button.label.trim() ? (
@@ -124,7 +124,7 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
               </div>
             </div>
 
-            <div className="relative order-1 min-h-[250px] min-w-0 overflow-hidden [direction:rtl] lg:order-3 lg:min-h-[220px]">
+            <div className="relative order-1 min-h-[250px] min-w-0 overflow-hidden [direction:rtl] @3xl/slot-module:order-3 @3xl/slot-module:min-h-[220px]">
               {showImage && imageSrc ? (
                 <Image
                   src={imageSrc}
