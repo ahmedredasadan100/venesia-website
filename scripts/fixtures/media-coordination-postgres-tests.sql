@@ -48,6 +48,17 @@ create table media_coordination_test.runtime_state (
   value text not null
 );
 
+-- The disposable proof loads only the minimal Media Catalog migration chain,
+-- so mirror the canonical provider constraint established by
+-- 20260813220634_legacy_project_media_canonicalization without replaying its
+-- environment-specific asset seed corpus.
+alter table public.media_assets
+  drop constraint if exists media_assets_provider_check;
+
+alter table public.media_assets
+  add constraint media_assets_provider_check
+  check (provider in ('supabase', 'filesystem'));
+
 update public.site_settings
 set value = jsonb_build_object(
   'state', 'synced',
@@ -108,6 +119,41 @@ from (
     ('00000000-0000-0000-0000-0000000000ab'::uuid, 'coordination/a11.jpg'),
     ('00000000-0000-0000-0000-0000000000ac'::uuid, 'coordination/a12.jpg')
 ) source(id, object_key);
+
+insert into public.media_assets (
+  id,
+  provider,
+  bucket,
+  object_key,
+  public_url,
+  original_filename,
+  display_name,
+  media_kind,
+  mime_type,
+  extension,
+  byte_size,
+  folder_path,
+  status,
+  reconciliation_state,
+  missing_object
+)
+values (
+  '00000000-0000-0000-0000-0000000000ad',
+  'filesystem',
+  'public',
+  'images/coordination/legacy.jpg',
+  '/images/coordination/legacy.jpg',
+  'legacy.jpg',
+  'legacy.jpg',
+  'image',
+  'image/jpeg',
+  '.jpg',
+  100,
+  'images/coordination',
+  'active',
+  'synced',
+  false
+);
 
 -- Delete reservation is bound to the exact canonical identity proved by the
 -- caller; a stale path for the same asset UUID must not reserve or delete it.
@@ -229,9 +275,27 @@ select public.replace_media_references_for_entity(
   'content',
   'topic',
   'topic-a',
-  '[{"assetId":"00000000-0000-0000-0000-0000000000a1","fieldKey":"image"}]'::jsonb,
+  '[
+    {"assetId":"00000000-0000-0000-0000-0000000000a1","fieldKey":"image"},
+    {"assetId":"00000000-0000-0000-0000-0000000000ad","fieldKey":"legacy_image"}
+  ]'::jsonb,
   (select value::uuid from media_coordination_test.runtime_state where key = 'batch_lease'),
   'provisional:topic'
+);
+
+select media_coordination_test.assert_true(
+  (
+    select count(*) = 2
+    from public.media_references
+    where domain_key = 'content'
+      and entity_type = 'topic'
+      and entity_identity = 'topic-a'
+      and asset_id in (
+        '00000000-0000-0000-0000-0000000000a1'::uuid,
+        '00000000-0000-0000-0000-0000000000ad'::uuid
+      )
+  ),
+  'mixed Supabase and filesystem references did not synchronize under the managed-asset lease scope'
 );
 
 -- Completion is batch-wide and must fail until every declared target is synced.

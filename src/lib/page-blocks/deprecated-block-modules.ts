@@ -21,8 +21,20 @@ export const RETIRED_MEDIA_CENTER_LISTING_SHELL_TEMPLATE_SLUGS = [
   "media-center-site-updates-listing-shell",
 ] as const;
 
+/**
+ * Historical singleton superseded by per-Project Location Section settings.
+ * The row is retained only as migration provenance and has no active editor,
+ * assignment, loader, renderer, or mutation path.
+ */
+export const RETIRED_PROJECT_LOCATION_PRESENTATION_TEMPLATE_SLUGS = [
+  "project-details-presentation",
+] as const;
+
 const RETIRED_CONTENT_BLOCK_TEMPLATE_SLUGS = new Set<string>(
-  RETIRED_MEDIA_CENTER_LISTING_SHELL_TEMPLATE_SLUGS,
+  [
+    ...RETIRED_MEDIA_CENTER_LISTING_SHELL_TEMPLATE_SLUGS,
+    ...RETIRED_PROJECT_LOCATION_PRESENTATION_TEMPLATE_SLUGS,
+  ],
 );
 
 export function isRetiredContentBlockTemplateSlug(slug: string | null | undefined) {

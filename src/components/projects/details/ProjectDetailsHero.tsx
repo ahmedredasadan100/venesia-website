@@ -14,7 +14,6 @@ import {
 } from "../../../lib/hero/hero-content-controls";
 import type { HeroConfig } from "../../../lib/page-sections";
 import PlainTextContent from "../../content/PlainTextContent";
-import { resolveVisibleProjectLocationLabel } from "../../../lib/projects/project-location-presentation";
 
 type ProjectDetailsHeroProps = {
   project: PublicProject;
@@ -34,10 +33,9 @@ export default function ProjectDetailsHero({ project, presentation }: ProjectDet
   };
   const orderedKeys = resolvedPresentation.heroElementOrder;
   const ctaIsTrailing = orderedKeys.at(-1) === "cta";
-  const locationLabel = resolveVisibleProjectLocationLabel(
-    project.location,
-    resolvedPresentation.showEyebrow,
-  );
+  const locationLabel = resolvedPresentation.showEyebrow
+    ? project.location.label
+    : null;
 
   const contentElements: Partial<Record<HeroElementKey, ReactNode>> = {
     eyebrow: locationLabel ? (

@@ -263,6 +263,10 @@ export async function loadProjectEntry(
   return {
     ...entry,
     ...locationState,
+    location_section_presentation: {
+      show_location_label: root.show_location_label !== false,
+      show_location_tags: root.show_location_tags !== false,
+    },
     project: {
       ...entry.project,
       id: Number(root.id),
@@ -284,8 +288,6 @@ export async function loadProjectEntry(
       main_area_id: numberOrNull(root.main_area_id),
       sub_area_id: numberOrNull(root.sub_area_id),
       location_label: stringValue(root.location_label),
-      show_location_label: root.show_location_label !== false,
-      show_location_tags: root.show_location_tags !== false,
       location_description: stringValue(root.location_description),
       google_maps_url: stringValue(root.google_maps_url),
       latitude: stringValue(root.latitude),

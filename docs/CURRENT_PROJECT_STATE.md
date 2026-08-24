@@ -91,9 +91,9 @@ The 2026-08-23 authorized Project Location Presentation migration closure establ
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                                90 |
-| Production registry versions                      |                                                90 |
-| Registry SQL provenance                           | Exact repository SQL for all 90 deployed versions |
+| Repository migration files                        |                                                94 |
+| Production registry versions                      |                                                94 |
+| Registry SQL provenance                           | Exact repository SQL for all 94 deployed versions |
 | Public tables                                     |                                                56 |
 | Public tables with RLS enabled                    |                                                56 |
 | Public catalog objects with repository provenance |                                               292 |
@@ -102,7 +102,7 @@ The 2026-08-23 authorized Project Location Presentation migration closure establ
 | Parallel public function overload names           |                                                 0 |
 | Public RLS policies                               |                                                 3 |
 | Anonymous-callable application data functions     |                                                 0 |
-| Registry reconciliation audit records             |                                                14 |
+| Registry reconciliation audit records             |                                                19 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
@@ -128,6 +128,14 @@ The authorized Hero Platform Product closure applied `20260822090000_hero_platfo
 The authorized Project Location Presentation Phase 1 closure then applied `20260823114743_project_location_presentation_contract.sql` as migration 89 with exact repository SQL provenance. It adds two visible-by-default Boolean presentation decisions to the existing Project Aggregate, extends the canonical atomic save and duplicate owners in place, preserves all location data, and deliberately leaves Hero and every Public Consumer outside this phase.
 
 The authorized Project Location Presentation Phase 2 closure then applied `20260823123750_project_location_presentation_consumer_adoption.sql` as migration 90 with exact repository SQL provenance. Every visual Project-location Consumer now composes its existing local presentation decision with the Project-owned flags through one semantic selector owner. The existing bounded Project Tracking RPC is replaced in place only to carry those same decisions; no Project data, table, Runtime, Capability, function name, or second source of truth is introduced.
+
+The subsequent Product Review rejected that ownership decision: location values remain Project data, but visibility belongs to each existing Consumer presentation owner. The authorized corrective forward migration `20260823184826_retire_project_location_global_presentation.sql` was applied as migration 91 with exact repository SQL provenance. It retires both Project-level flags from the Admin writer, public read models, and Tracking response while retaining the legacy columns as inert compatibility storage.
+
+The Project Location Section then adopted the existing Content Module presentation owner through the authorized `20260823184832_project_details_location_presentation_adoption.sql`, applied as migration 92 with exact repository SQL provenance. It seeds one published, non-assigned template under the stable deployed slug `project-details-presentation`; the typed contract and only renderer adopter are scoped to the Project Location Section, where its config controls the detailed location label and hierarchy tags. Project rows, Hero, Featured, Listing, Home, Map, Tracking, Search, and JSON-LD remain outside that decision and keep their own presentation behavior. Admin Save, direct Admin Read, and bidirectional Public Rendering were verified on localhost against project I87 before restoring the template to its visible-by-default `true/true` state.
+
+The final Product clarification supersedes migration 92 as the active presentation source without rewriting its deployed history: the switches stay in each Project editor's Location tab and control that Project page's Location Section only. The authorized `20260824012105_project_location_section_presentation_scope.sql` was applied as migration 93 and now has exact repository SQL provenance. It reuses the two existing preserved Boolean columns through a sibling `location_section_presentation` payload on the canonical atomic Project writer; Project location values remain in the Project data payload, and no shared public Project model or other Consumer reads the switches. The canonical Project Admin save now uses immediate tag expiry for its existing shared Project cache group, so the first public read after a successful save observes the stored decision rather than one stale-while-revalidate response. Authenticated Admin Save/Read and the first public read after each bidirectional toggle were proved on project I87; the final stored state is visible-by-default `true/true`. Hero, Featured, Listing, Home, Tracking, Admin Search, and JSON-LD stayed outside the Location Section decision. The historical `project-details-presentation` Content template is classified as retired migration provenance with no active editor, assignment loader, renderer, or mutation path.
+
+The verification failure path exposed an existing mixed-provider Media coordination mismatch: Project reference scans retained both Supabase and filesystem Catalog assets, while the Supabase write-lease owner correctly leased only managed Supabase assets, but the database synchronizer compared that lease against every provider asset. The forward owner fix `20260824022000_media_reference_mixed_provider_lease_scope.sql` was applied as migration 94 with exact repository SQL provenance. It continues locking and persisting every Catalog reference while requiring matching write-lease coverage only for Supabase-managed assets; it creates no table, Runtime, provider, or parallel synchronization path. The two QA-created failed leases were resolved through the existing non-destructive Media Recovery workflow after a complete 17/17-provider reconciliation; no files were deleted or replaced, and subsequent Project saves completed without a media warning.
 
 ## Removed final-cleanup legacy
 

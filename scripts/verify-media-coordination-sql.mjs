@@ -9,6 +9,9 @@ const read = (relativePath) =>
 const migration = read(
   "sql/migrations/20260725180000_media_delete_reservation_saga.sql",
 );
+const mixedProviderLeaseScopeMigration = read(
+  "sql/migrations/20260824022000_media_reference_mixed_provider_lease_scope.sql",
+);
 const runner = read("scripts/verify-media-coordination-postgres.mts");
 const fixture = read(
   "scripts/fixtures/media-coordination-postgres-bootstrap.sql",
@@ -37,12 +40,12 @@ const postgresJob = qualityWorkflow.slice(
 const checks = [];
 const check = (description, condition) => checks.push({ description, condition });
 
-const functionBody = (name) => {
+const functionBody = (name, source = migration) => {
   const marker = `create or replace function public.${name}`;
-  const start = migration.indexOf(marker);
+  const start = source.indexOf(marker);
   if (start < 0) return "";
-  const end = migration.indexOf("\n$$;", start);
-  return end < 0 ? "" : migration.slice(start, end + 4);
+  const end = source.indexOf("\n$$;", start);
+  return end < 0 ? "" : source.slice(start, end + 4);
 };
 
 const acquire = functionBody("acquire_media_reference_write_lease");
@@ -58,7 +61,10 @@ const finalize = functionBody("finalize_media_asset_deletion");
 const recovery = functionBody("mark_media_asset_delete_recovery");
 const repair = functionBody("repair_media_delete_reservation");
 const providerRevision = functionBody("get_media_reference_provider_revision");
-const entitySync = functionBody("replace_media_references_for_entity");
+const entitySync = functionBody(
+  "replace_media_references_for_entity",
+  mixedProviderLeaseScopeMigration,
+);
 const providerSync = functionBody("replace_media_references_for_provider");
 
 check("write-lease table exists", migration.includes("create table if not exists public.media_reference_write_leases"));
@@ -80,6 +86,7 @@ check("failed/expired recovery requires exact provider context", resolve.include
 check("active expired leases cannot be resolved from time alone", !resolve.includes("lease.status = 'active' and lease.expires_at <= now()"));
 check("entity synchronization rejects NULL references", entitySync.includes("p_references is null") && entitySync.includes("invalid_media_reference_synchronization_input"));
 check("entity synchronization enforces the matching lease target", entitySync.includes("media_reference_write_lease_required") && entitySync.includes("media_reference_write_lease_mismatch"));
+check("entity synchronization requires leases only for Supabase-managed assets while retaining every provider reference", entitySync.includes("lease_required_asset_count") && entitySync.includes("asset.provider = 'supabase'") && entitySync.includes("locked_asset_count <> requested_asset_count"));
 check("every successful entity synchronization advances the provider revision", entitySync.includes("set revision = revision + 1") && entitySync.indexOf("set revision = revision + 1") > entitySync.indexOf("delete from public.media_references"));
 check("failed write leases order revision creation and locking before asset coordination", failLease.includes("insert into public.media_reference_provider_revisions") && failLease.includes("order by 1\n  on conflict") && failLease.includes("set revision = revision.revision + 1") && failLease.indexOf("for update;") < failLease.indexOf("perform asset.id"));
 check("provider synchronization rejects NULL references", providerSync.includes("p_references is null") && providerSync.includes("invalid_media_provider_synchronization_input"));
@@ -107,7 +114,7 @@ check("recovery function comment uses the current signature", migration.includes
 check("runner skips safely without an isolated URL", runner.includes("SKIP verify-media-coordination-postgres") && runner.includes("MEDIA_COORDINATION_DATABASE_REQUIRED"));
 check("runner requires loopback and disposable acknowledgement", runner.includes("loopbackHosts") && runner.includes("MEDIA_COORDINATION_DATABASE_DISPOSABLE"));
 check("runner restricts disposable database names", runner.includes("venesia_media_coordination_ci") && runner.includes("isolatedDatabaseName"));
-check("runner applies only the approved prerequisite migration chain", runner.includes('"sql/migrations/20250625400000_site_settings_footer.sql"') && runner.includes('"sql/migrations/20250625600000_admin_users.sql"') && runner.includes('"sql/migrations/20260725090000_media_catalog_reference_foundation.sql"') && runner.includes('"sql/migrations/20260725180000_media_delete_reservation_saga.sql"'));
+check("runner applies only the approved prerequisite migration chain", runner.includes('"sql/migrations/20250625400000_site_settings_footer.sql"') && runner.includes('"sql/migrations/20250625600000_admin_users.sql"') && runner.includes('"sql/migrations/20260725090000_media_catalog_reference_foundation.sql"') && runner.includes('"sql/migrations/20260725180000_media_delete_reservation_saga.sql"') && runner.includes('"sql/migrations/20260824022000_media_reference_mixed_provider_lease_scope.sql"'));
 check("runner starts multiple real psql connections", runner.includes("spawn(") && runner.includes("Promise.all([first.completion, second.completion])"));
 check("runner proves opposite-order batches without deadlock", runner.includes("verifyReverseOrderBatchLocking") && runner.includes("media_write_lease_conflict") && runner.includes("deadlock detected|lock timeout|statement timeout"));
 check("runner holds a reservation while stale writes race", runner.includes("MEDIA_DELETE_RESERVATION_HELD") && runner.includes("entity-rebind-against-reservation") && runner.includes("provider-rebind-against-reservation"));
@@ -122,6 +129,7 @@ check("isolated PostgreSQL job does not consume Supabase secrets", !postgresJob.
 check("fixture enforces PostgreSQL 17", fixture.includes("server_major <> 17"));
 check("fixture resets only the isolated coordination proof schemas before reruns", fixture.includes("drop schema if exists media_coordination_acl_test cascade") && fixture.includes("drop schema if exists media_coordination_test cascade"));
 check("fixture creates Supabase runtime roles", fixture.includes("create role anon") && fixture.includes("create role authenticated") && fixture.includes("create role service_role"));
+check("isolated fixture mirrors the canonical mixed-provider Catalog constraint", integration.includes("drop constraint if exists media_assets_provider_check") && integration.includes("check (provider in ('supabase', 'filesystem'))"));
 check("physical-move fixtures provision a valid Catalog folder", concurrencyFixture.includes("values ('images/coordination', 'images'") && runner.includes("'images/coordination'") && integration.includes("'images/coordination'"));
 check("runtime primary identity comes from the first actual managed target", writeLeaseRuntime.includes("primaryEntityIdentity: targets[0].entityIdentity") && !writeLeaseRuntime.includes("primaryEntityIdentity: input.scopes[0].entityIdentity"));
 check("media-empty scopes are skipped before the primary target is selected", writeLeaseRuntime.includes("if (!managed) continue;") && writeLeaseRuntime.indexOf("if (!managed) continue;") < writeLeaseRuntime.indexOf("primaryEntityIdentity: targets[0].entityIdentity"));
@@ -134,6 +142,7 @@ for (const proof of [
   "lease -> reservation",
   "reservation -> lease",
   "media_reference_write_lease_required",
+  "mixed Supabase and filesystem references",
   "media_write_lease_sync_incomplete",
   "Complete token mismatch",
   "Cancel token mismatch",

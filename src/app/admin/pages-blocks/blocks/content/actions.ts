@@ -718,6 +718,13 @@ export async function createContentBlock(
 
   if (!name) return createContentBlockFailure(revision, "اسم البلوك مطلوب.", "name");
   if (!slug) return createContentBlockFailure(revision, "اكتب slug صالحًا للبلوك.", "slug");
+  if (isRetiredContentBlockTemplateSlug(slug)) {
+    return createContentBlockFailure(
+      revision,
+      "هذا المعرّف محجوز لسجل تاريخي متقاعد ولا يقبل إنشاء موديول جديد.",
+      "slug",
+    );
+  }
   if (!(await ensureUniqueSlug(slug))) {
     return createContentBlockFailure(revision, "الـ slug مستخدم بالفعل.", "slug");
   }
@@ -806,6 +813,9 @@ export async function updateContentBlock(formData: FormData) {
     .eq("id", id)
     .maybeSingle();
   if (existingError || !existing) throw new Error(existingError?.message || "البلوك غير موجود.");
+  if (isRetiredContentBlockTemplateSlug(existing.slug)) {
+    throw new Error("هذا الموديول متقاعد ولا يملك مسار تعديل نشطًا.");
+  }
 
   // Structured content modules keep slug locked — never overwrite from request.
   const slugLocked = isStructuralContentTemplateSlug(existing.slug, existing.variant);
@@ -821,6 +831,7 @@ export async function updateContentBlock(formData: FormData) {
 
   const variantInput = cleanText(formData.get("variant")) || null;
   const variant = resolveStructuredVariant(slug, variantInput);
+  const requestedPageIds = parsePageIdsFromForm(formData);
   const nextConfig = await buildContentConfig(formData, slug, existing.config);
 
   const nextRow: TablesUpdate<"content_block_templates"> = {
@@ -852,7 +863,7 @@ export async function updateContentBlock(formData: FormData) {
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncBlockModulePageAssignments("content", id, parsePageIdsFromForm(formData), actor);
+  await syncBlockModulePageAssignments("content", id, requestedPageIds, actor);
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("content_block_template", "update"),
     entityType: "content_block_template",

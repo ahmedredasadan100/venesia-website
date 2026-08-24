@@ -7,7 +7,12 @@ import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { resolveHomeModuleSlugFromTemplate, type HomeModuleSlug } from "./home-module-slugs";
-import { asBreadcrumbConfig, asCardsConfig, asCtaConfig, resolveContentBlockConfig } from "./configs";
+import {
+  asBreadcrumbConfig,
+  asCardsConfig,
+  asCtaConfig,
+  resolveContentBlockConfig,
+} from "./configs";
 import {
   resolveBreadcrumbBlockConfigLinks,
   resolveCardsBlockConfigLinks,

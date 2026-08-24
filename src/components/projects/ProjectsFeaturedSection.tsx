@@ -12,7 +12,6 @@ import {
   ProjectCodeBadge,
   ProjectImageBottomBadges,
 } from "./ProjectCardMobileOverlays";
-import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 
 export type ProjectsFeaturedCardDisplay = {
   showProjectImage?: boolean;
@@ -193,10 +192,7 @@ function FeaturedProjectMetaRow({
   showType: boolean;
   className?: string;
 }) {
-  const locationLabel = resolveVisibleProjectLocationLabel(
-    project.location,
-    showLocation,
-  );
+  const locationLabel = showLocation ? project.location.label : null;
 
   if (!locationLabel && !showType) return null;
 
@@ -226,10 +222,9 @@ function MainFeaturedCard({
   project: PublicProject;
   display: Required<ProjectsFeaturedCardDisplay>;
 }) {
-  const locationLabel = resolveVisibleProjectLocationLabel(
-    project.location,
-    display.showProjectLocation,
-  );
+  const locationLabel = display.showProjectLocation
+    ? project.location.label
+    : null;
 
   return (
     <article

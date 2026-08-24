@@ -56,22 +56,22 @@ const foundationMigrationPath =
   "sql/migrations/20260817170332_project_construction_tracking_detail.sql";
 const paginationMigrationPath =
   "sql/migrations/20260818010000_project_tracking_public_pagination.sql";
-const locationPresentationConsumerMigrationPath =
-  "sql/migrations/20260823123750_project_location_presentation_consumer_adoption.sql";
+const consumerOwnershipCorrectionMigrationPath =
+  "sql/migrations/20260823184826_retire_project_location_global_presentation.sql";
 check(
   "Tracking foundation and corrective owner migrations exist",
   [
     foundationMigrationPath,
     paginationMigrationPath,
-    locationPresentationConsumerMigrationPath,
+    consumerOwnershipCorrectionMigrationPath,
   ].every((path) =>
     existsSync(resolve(process.cwd(), path)),
   ),
 );
 const foundationMigration = read(foundationMigrationPath);
 const paginationMigration = read(paginationMigrationPath);
-const locationPresentationConsumerMigration = read(
-  locationPresentationConsumerMigrationPath,
+const consumerOwnershipCorrectionMigration = read(
+  consumerOwnershipCorrectionMigrationPath,
 );
 const publicRoute = read("src/app/(site)/track-your-project/[slug]/page.tsx");
 const publicRead = read("src/lib/projects/tracking/public-read.ts");
@@ -123,18 +123,18 @@ check(
     !paginationMigration.includes("jsonb_agg"),
 );
 check(
-  "Project Tracking adopts Location Presentation through its existing RPC and shared application owner",
-  locationPresentationConsumerMigration.includes(
+  "Project Tracking exposes Project data while its existing presenter owns visibility",
+  consumerOwnershipCorrectionMigration.includes(
     "create or replace function public.project_tracking_public_detail_v1",
   ) &&
-    locationPresentationConsumerMigration.includes("'locationPresentation'") &&
-    locationPresentationConsumerMigration.includes("project.show_location_label") &&
-    locationPresentationConsumerMigration.includes("project.show_location_tags") &&
-    !locationPresentationConsumerMigration.includes("create table") &&
-    !locationPresentationConsumerMigration.includes("create view") &&
-    publicContract.includes("projectLocationPresentationReadSchema") &&
-    publicRead.includes("projectLocationPresentationReadSchema") &&
-    publicView.includes("resolveVisibleProjectLocationLabel"),
+    !consumerOwnershipCorrectionMigration.includes("'locationPresentation'") &&
+    !consumerOwnershipCorrectionMigration.includes("project.show_location_label") &&
+    !consumerOwnershipCorrectionMigration.includes("project.show_location_tags") &&
+    !consumerOwnershipCorrectionMigration.includes("create table") &&
+    !consumerOwnershipCorrectionMigration.includes("create view") &&
+    !publicContract.includes("projectLocationPresentationReadSchema") &&
+    !publicRead.includes("projectLocationPresentationReadSchema") &&
+    publicView.includes("detail.project.location?.trim() || null"),
 );
 check(
   "public child collections use independent stable server ranges",
