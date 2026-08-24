@@ -10,7 +10,6 @@ import RichTextContent from "../content/RichTextContent";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
 import { usePressFeedback } from "../../hooks/use-press-feedback";
 import { isHtmlContent, stripHtml } from "../../lib/rich-text/html-utils";
-import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 
 export type HomeProjectsSectionProps = {
   projects: HomepageProjectCard[];
@@ -163,10 +162,7 @@ function HomeProjectCard({
 }) {
   const { pressProps } = usePressFeedback();
   const prefetchProps = useIntentPrefetch();
-  const locationLabel = resolveVisibleProjectLocationLabel(
-    project.location,
-    showProjectLocation,
-  );
+  const locationLabel = showProjectLocation ? project.location.label : null;
 
   return (
     <div

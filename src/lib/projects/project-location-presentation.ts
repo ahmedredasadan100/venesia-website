@@ -1,54 +1,32 @@
 /**
- * Project Domain owns location data and these presentation decisions.
- * Consumers may adopt the decisions later; they must never copy the data or
- * persist a parallel visibility source.
+ * Persistence for the Project Location Section presentation is co-located with
+ * the Project row so each Project page can make an independent decision. The
+ * Location Section is the only presentation owner; Project location values and
+ * every other Consumer remain outside this contract.
  */
-export type ProjectLocationPresentationStorage = {
+export type ProjectLocationSectionPresentationStorage = {
   show_location_label: boolean;
   show_location_tags: boolean;
 };
 
-export type ProjectLocationPresentation = {
-  showDetailedAddress: boolean;
+export type ProjectLocationSectionPresentation = {
+  showLocationLabel: boolean;
   showLocationTags: boolean;
 };
 
-export const DEFAULT_PROJECT_LOCATION_PRESENTATION = {
-  showDetailedAddress: true,
+export const DEFAULT_PROJECT_LOCATION_SECTION_PRESENTATION = {
+  showLocationLabel: true,
   showLocationTags: true,
-} as const satisfies ProjectLocationPresentation;
+} as const satisfies ProjectLocationSectionPresentation;
 
-export function resolveProjectLocationPresentation(
-  source: Partial<ProjectLocationPresentationStorage> | null | undefined,
-): ProjectLocationPresentation {
+export function resolveProjectLocationSectionPresentation(
+  source:
+    | Partial<ProjectLocationSectionPresentationStorage>
+    | null
+    | undefined,
+): ProjectLocationSectionPresentation {
   return {
-    showDetailedAddress: source?.show_location_label !== false,
+    showLocationLabel: source?.show_location_label !== false,
     showLocationTags: source?.show_location_tags !== false,
   };
-}
-
-type ProjectLocationLabelSource = {
-  label: string | null | undefined;
-  presentation: ProjectLocationPresentation;
-};
-
-/**
- * Project owns the global presentation decision; an individual Consumer may
- * additionally opt out, but it cannot override a Project-level hide decision.
- */
-export function resolveVisibleProjectLocationLabel(
-  source: ProjectLocationLabelSource,
-  consumerVisible = true,
-) {
-  if (!consumerVisible || !source.presentation.showDetailedAddress) return null;
-  const label = source.label?.trim();
-  return label || null;
-}
-
-export function resolveVisibleProjectLocationTags<Item>(
-  presentation: ProjectLocationPresentation,
-  tags: readonly Item[],
-  consumerVisible = true,
-): Item[] {
-  return consumerVisible && presentation.showLocationTags ? [...tags] : [];
 }

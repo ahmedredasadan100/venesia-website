@@ -11,6 +11,7 @@ import ResidentialProjectDetails from "../../../../../components/projects/detail
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getProjectPublicationMetadata } from "../../../../../lib/admin/projects/project-publishing-capability";
 import { loadProjectForAdminPreviewResult } from "../../../../../lib/projects/load-published-projects";
+import { loadProjectLocationSectionPresentation } from "../../../../../lib/projects/load-project-location-section-presentation";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +32,9 @@ export default async function ProjectAdminPreviewPage({
   const projectId = Number(id);
   const result = await loadProjectForAdminPreviewResult(projectId);
   if (!result.project) notFound();
+
+  const locationSectionPresentation =
+    await loadProjectLocationSectionPresentation(projectId);
 
   const { project, publicationStatus } = result;
   const publication = getProjectPublicationMetadata(publicationStatus);
@@ -59,7 +63,10 @@ export default async function ProjectAdminPreviewPage({
         {project.category === "commercial" ? (
           <CommercialProjectDetails project={project} />
         ) : (
-          <ResidentialProjectDetails project={project} />
+          <ResidentialProjectDetails
+            project={project}
+            locationSectionPresentation={locationSectionPresentation}
+          />
         )}
       </div>
     </div>

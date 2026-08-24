@@ -1,5 +1,4 @@
 import type { PublicProject } from "../../lib/projects/public-types";
-import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 
 type OverlayBreakpoint = "md" | "lg";
 
@@ -39,10 +38,7 @@ export function ProjectImageBottomBadges({
   showLocation?: boolean;
   showType?: boolean;
 }) {
-  const locationLabel = resolveVisibleProjectLocationLabel(
-    project.location,
-    showLocation,
-  );
+  const locationLabel = showLocation ? project.location.label : null;
 
   if (!locationLabel && !showType) return null;
 

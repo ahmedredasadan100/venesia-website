@@ -4,7 +4,6 @@ import type { ProjectsHubHeroModuleConfig } from "../page-blocks/projects-hub-co
 import type { ProjectsHubRenderPlanModule } from "./build-projects-hub-render-plan";
 import { getProjectHref, sortProjectsByHomepageOrder } from "./public-helpers";
 import type { PublicProject } from "./public-types";
-import { resolveVisibleProjectLocationLabel } from "./project-location-presentation";
 
 type ProjectsHubHeroModule = Extract<ProjectsHubRenderPlanModule, { slug: "projects-hub-hero" }>;
 
@@ -23,9 +22,7 @@ export function adaptProjectsToHeroSlides(
       id: project.id,
       desktopImage: project.heroImage.src,
       imageAlt: project.heroImage.alt,
-      eyebrow:
-        resolveVisibleProjectLocationLabel(project.location, config.showEyebrow) ??
-        undefined,
+      eyebrow: config.showEyebrow ? project.location.label : undefined,
       title: project.englishName,
       subtitle: project.arabicName,
       description: project.shortDescription,

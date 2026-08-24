@@ -219,6 +219,9 @@ check(
     revalidation.includes("revalidateProjectsCache") &&
     publicCacheRevalidation.includes('projects: ["projects", "project"]') &&
     publicCacheRevalidation.includes(
+      "updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects)",
+    ) &&
+    !publicCacheRevalidation.includes(
       "revalidatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects)",
     ),
 );

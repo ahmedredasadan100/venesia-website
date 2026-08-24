@@ -17,13 +17,6 @@ const paginationMigration = readFileSync(
   ),
   "utf8",
 );
-const locationPresentationConsumerMigration = readFileSync(
-  resolve(
-    process.cwd(),
-    "sql/migrations/20260823123750_project_location_presentation_consumer_adoption.sql",
-  ),
-  "utf8",
-);
 const db = new PGlite({ extensions: { pgcrypto } });
 let passed = 0;
 const check = (label: string, value: unknown) => {
@@ -53,8 +46,6 @@ await db.exec(`
     arabic_name text not null,
     english_name text,
     location_label text,
-    show_location_label boolean not null default true,
-    show_location_tags boolean not null default true,
     hero_image text,
     hero_image_alt text,
     publication_status text not null default 'draft'
@@ -69,7 +60,6 @@ await db.exec(`
 
 await db.exec(migration);
 await db.exec(paginationMigration);
-await db.exec(locationPresentationConsumerMigration);
 
 const tableCount = await db.query<{ count: number }>(`
   select count(*)::integer as count
@@ -151,10 +141,6 @@ const aggregate = await db.query<{ project_tracking_public_detail_v1: {
   profile: { contractorName: string };
   project: {
     location: string;
-    locationPresentation: {
-      showDetailedAddress: boolean;
-      showLocationTags: boolean;
-    };
   };
 } }>(`select public.project_tracking_public_detail_v1('published-project')`);
 const detail = aggregate.rows[0]!.project_tracking_public_detail_v1;
@@ -170,10 +156,9 @@ check(
 check("counts and latest visual are derived in the aggregate", detail.counts.images === 1 && detail.counts.videos === 1 && detail.latestVisual === "https://example.com/update.webp");
 check("Tracking profile remains one-to-one Project detail", detail.profile.contractorName === "شركة فينيسيا للمقاولات");
 check(
-  "Tracking core carries Project-owned Location Presentation without copying location data",
+  "Tracking core carries raw Project location data without owning presentation",
   detail.project.location === "القاهرة الجديدة" &&
-    detail.project.locationPresentation.showDetailedAddress === true &&
-    detail.project.locationPresentation.showLocationTags === true,
+    !("locationPresentation" in detail.project),
 );
 
 const publicFunction = await db.query<{ definition: string }>(`
@@ -184,20 +169,6 @@ check(
   !publicFunction.rows[0]!.definition.includes("jsonb_agg") &&
     !publicFunction.rows[0]!.definition.includes("bool_and") &&
     !publicFunction.rows[0]!.definition.includes("bool_or"),
-);
-
-await db.exec(`update public.projects set show_location_label = false where id = 1`);
-const hiddenLocationAggregate = await db.query<{ project_tracking_public_detail_v1: {
-  project: {
-    location: string;
-    locationPresentation: { showDetailedAddress: boolean; showLocationTags: boolean };
-  };
-} }>(`select public.project_tracking_public_detail_v1('published-project')`);
-check(
-  "Tracking core preserves data while exposing the hidden detailed-address decision",
-  hiddenLocationAggregate.rows[0]?.project_tracking_public_detail_v1.project.location ===
-    "القاهرة الجديدة" &&
-    hiddenLocationAggregate.rows[0]?.project_tracking_public_detail_v1.project.locationPresentation.showDetailedAddress === false,
 );
 
 const unpublished = await db.query<{ project_tracking_public_detail_v1: unknown }>(`select public.project_tracking_public_detail_v1('draft-project')`);

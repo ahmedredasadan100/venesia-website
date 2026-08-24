@@ -33,7 +33,7 @@ export function revalidateFooterCache() {
 }
 
 export function revalidateProjectsCache() {
-  revalidatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects);
+  updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects);
   revalidatePath("/sitemap.xml");
 }
 

@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import PublicMediaImage from "../public/PublicMediaImage";
 import Pagination from "../Pagination";
-import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 import {
   projectTrackingStatusLabel,
   type ProjectTrackingMedia,
@@ -302,10 +301,7 @@ export default function ProjectTrackingExperience({
 
   const heroImage = detail.latestVisual ?? detail.project.heroImage;
   const latestDate = detail.latestUpdate?.occurredAt;
-  const locationLabel = resolveVisibleProjectLocationLabel({
-    label: detail.project.location,
-    presentation: detail.project.locationPresentation,
-  });
+  const locationLabel = detail.project.location?.trim() || null;
 
   return (
     <main

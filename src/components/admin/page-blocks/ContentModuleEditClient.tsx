@@ -585,7 +585,6 @@ export default function ContentModuleEditClient({
           <input type="hidden" name="config_schema" value="projects-hub-listing" />
         ) : null}
         {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
-
         {heroPlatformTabs ? (
           <ModuleEditorTabs moduleKind="hero" nowrap tabs={heroPlatformTabs} activePanelContext={activePanelContext} />
         ) : isHomeStory ? (

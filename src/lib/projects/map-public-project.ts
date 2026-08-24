@@ -6,7 +6,6 @@ import type {
 } from "./public-types";
 import type { Tables } from "../database.types";
 import { stripHtml } from "../rich-text/html-utils";
-import { resolveProjectLocationPresentation } from "./project-location-presentation";
 
 const RETIRED_DELIVERY_PRESENTATION_COPY =
   "نفس منهج فينيسيا في التنفيذ: تفاصيل واضحة، خامات مختارة، وتسليم يحترم قيمة السكن والاستثمار.";
@@ -38,8 +37,6 @@ export type PublicProjectRootRow = Pick<
   | "main_area_id"
   | "sub_area_id"
   | "location_label"
-  | "show_location_label"
-  | "show_location_tags"
   | "location_description"
   | "google_maps_url"
   | "latitude"
@@ -277,7 +274,6 @@ export function mapProjectAggregateToPublicProject(
       city: mapLocationLevel(locations, project.city_id),
       mainArea: mapLocationLevel(locations, project.main_area_id),
       subArea: mapLocationLevel(locations, project.sub_area_id),
-      presentation: resolveProjectLocationPresentation(project),
       points: rows(aggregate.locationPoints).map((item) => ({
         id: String(item.id),
         kind: requireLocationPointKind(item.kind),

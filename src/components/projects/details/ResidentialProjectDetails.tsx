@@ -1,4 +1,5 @@
 import type { PublicProject } from "../../../lib/projects/public-types";
+import type { ProjectLocationSectionPresentation } from "../../../lib/projects/project-location-presentation";
 import RichTextContent from "../../content/RichTextContent";
 import PublicMediaImage from "../../public/PublicMediaImage";
 import ProjectDeliverySpecsSection from "./ProjectDeliverySpecsSection";
@@ -11,12 +12,14 @@ type ResidentialProjectDetailsProps = {
   project: PublicProject;
   heroPresentation?: Parameters<typeof ProjectDetailsHero>[0]["presentation"];
   showProjectHero?: boolean;
+  locationSectionPresentation: ProjectLocationSectionPresentation;
 };
 
 export default function ResidentialProjectDetails({
   project,
   heroPresentation,
   showProjectHero = true,
+  locationSectionPresentation,
 }: ResidentialProjectDetailsProps) {
   const overviewImage = project.overview.mainImage ?? project.overview.images[0] ?? null;
   const tabs = [
@@ -47,6 +50,7 @@ export default function ResidentialProjectDetails({
         location={project.location}
         cardImage={project.cardImage}
         englishName={project.englishName}
+        presentation={locationSectionPresentation}
       />
 
       <section id="overview" className="scroll-mt-24 mx-auto max-w-7xl px-6 py-14">

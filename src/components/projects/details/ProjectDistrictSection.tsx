@@ -1,25 +1,24 @@
 import type { PublicProject } from "../../../lib/projects/public-types";
+import type { ProjectLocationSectionPresentation } from "../../../lib/projects/project-location-presentation";
 import RichTextContent from "../../content/RichTextContent";
 import PublicMediaImage from "../../public/PublicMediaImage";
-import {
-  resolveVisibleProjectLocationLabel,
-  resolveVisibleProjectLocationTags,
-} from "../../../lib/projects/project-location-presentation";
 
-type ProjectDistrictSectionProps = Pick<PublicProject, "location" | "cardImage" | "englishName">;
+type ProjectDistrictSectionProps = Pick<PublicProject, "location" | "cardImage" | "englishName"> & {
+  presentation: ProjectLocationSectionPresentation;
+};
 
 export default function ProjectDistrictSection({
   location,
   cardImage,
   englishName,
+  presentation,
 }: ProjectDistrictSectionProps) {
-  const locationLabel = resolveVisibleProjectLocationLabel(location);
-  const hierarchy = resolveVisibleProjectLocationTags(
-    location.presentation,
-    [location.governorate, location.city, location.mainArea, location.subArea].filter(
-      (item): item is NonNullable<typeof item> => item !== null,
-    ),
-  );
+  const hierarchy = [
+    location.governorate,
+    location.city,
+    location.mainArea,
+    location.subArea,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
 
   return (
     <section id="district" className="scroll-mt-24 border-b border-white/10 bg-[#05070B] px-6 py-16">
@@ -31,13 +30,13 @@ export default function ProjectDistrictSection({
             </h2>
           ) : null}
 
-          {locationLabel ? (
+          {presentation.showLocationLabel && location.label ? (
             <p className={`${location.title ? "mt-3" : ""} text-base font-medium text-white/80`}>
-              {locationLabel}
+              {location.label}
             </p>
           ) : null}
 
-          {hierarchy.length ? (
+          {presentation.showLocationTags && hierarchy.length ? (
             <div className="mt-4 flex flex-wrap gap-2">
               {hierarchy.map((item) => (
                 <span key={item.id} className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/65">

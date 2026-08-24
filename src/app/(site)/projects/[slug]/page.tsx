@@ -5,13 +5,13 @@ import CommercialProjectDetails from "../../../../components/projects/details/Co
 import ResidentialProjectDetails from "../../../../components/projects/details/ResidentialProjectDetails";
 import JsonLd from "../../../../components/seo/JsonLd";
 import { loadProjectBySlugResult } from "../../../../lib/projects/load-published-projects";
+import { loadProjectLocationSectionPresentation } from "../../../../lib/projects/load-project-location-section-presentation";
 import { stripHtml } from "../../../../lib/rich-text/html-utils";
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { generatePublicMetadata, loadResolvedGlobalSeo } from "../../../../lib/seo/generate-public-metadata";
 import { buildPageJsonLd } from "../../../../lib/seo/build-jsonld";
 import { getDomainBackedHeroTemplateState } from "../../../../lib/load-hero-section";
 import { getHeroConfig } from "../../../../lib/page-sections";
-import { resolveVisibleProjectLocationLabel } from "../../../../lib/projects/project-location-presentation";
 
 export const revalidate = 300;
 
@@ -78,6 +78,9 @@ export default async function ProjectDetailsPage({
     notFound();
   }
 
+  const locationSectionPresentation =
+    await loadProjectLocationSectionPresentation(Number(project.id));
+
   const globalSeo = await loadResolvedGlobalSeo();
   const pagePath = `/projects/${project.slug}`;
   const description = stripHtml(project.seo.description || project.shortDescription);
@@ -85,7 +88,6 @@ export default async function ProjectDetailsPage({
     ? getHeroConfig(projectDetailHeroState.hero)
     : undefined;
   const showProjectHero = projectDetailHeroState.visibility !== "hidden";
-  const locationLabel = resolveVisibleProjectLocationLabel(project.location);
 
   const pageJsonLd = buildPageJsonLd(
     {
@@ -97,7 +99,7 @@ export default async function ProjectDetailsPage({
         name: project.arabicName,
         description,
         image: project.seo.ogImage?.src ?? project.heroImage.src,
-        locationLabel: locationLabel ?? undefined,
+        locationLabel: project.location.label,
       },
     },
     globalSeo,
@@ -115,6 +117,7 @@ export default async function ProjectDetailsPage({
         project={project}
         heroPresentation={heroPresentation}
         showProjectHero={showProjectHero}
+        locationSectionPresentation={locationSectionPresentation}
       />
     );
 

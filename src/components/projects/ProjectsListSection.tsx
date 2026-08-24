@@ -15,7 +15,6 @@ import {
   ProjectImageBottomBadges,
 } from "./ProjectCardMobileOverlays";
 import PublicMediaImage from "../public/PublicMediaImage";
-import { resolveVisibleProjectLocationLabel } from "../../lib/projects/project-location-presentation";
 
 type ViewMode = "list" | "cards";
 
@@ -313,10 +312,9 @@ function ProjectRow({
   project: PublicProject;
   display: Required<ProjectsListCardDisplay>;
 }) {
-  const locationLabel = resolveVisibleProjectLocationLabel(
-    project.location,
-    display.showProjectLocation,
-  );
+  const locationLabel = display.showProjectLocation
+    ? project.location.label
+    : null;
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">
@@ -397,10 +395,9 @@ function ProjectCard({
   project: PublicProject;
   display: Required<ProjectsListCardDisplay>;
 }) {
-  const locationLabel = resolveVisibleProjectLocationLabel(
-    project.location,
-    display.showProjectLocation,
-  );
+  const locationLabel = display.showProjectLocation
+    ? project.location.label
+    : null;
 
   return (
     <article className="group overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition duration-300 hover:border-[#D8B87A]/35 hover:bg-white/[0.04]">

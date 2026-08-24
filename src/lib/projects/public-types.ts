@@ -1,5 +1,3 @@
-import type { ProjectLocationPresentation } from "./project-location-presentation";
-
 export type ProjectCategory = "residential" | "commercial";
 
 export type ProjectHubFilterId = "all" | ProjectCategory;
@@ -78,7 +76,6 @@ export type PublicProject = {
     city: PublicProjectLocationLevel | null;
     mainArea: PublicProjectLocationLevel | null;
     subArea: PublicProjectLocationLevel | null;
-    presentation: ProjectLocationPresentation;
     points: PublicProjectLocationPoint[];
   };
   overview: {
@@ -113,5 +110,5 @@ export type HomepageProjectCard = Pick<
   "slug" | "code" | "englishName" | "shortDescription" | "cardImage"
 > & {
   id: number;
-  location: Pick<PublicProject["location"], "label" | "presentation">;
+  location: Pick<PublicProject["location"], "label">;
 };

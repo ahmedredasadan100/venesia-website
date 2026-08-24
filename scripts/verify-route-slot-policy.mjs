@@ -16,7 +16,7 @@ import {
 } from "../src/lib/page-composition/route-slot-policy.ts";
 
 const root = resolve(process.cwd());
-const read = (path) => readFileSync(resolve(root, path), "utf8");
+const read = (path) => readFileSync(resolve(root, path), "utf8").replace(/\r\n?/gu, "\n");
 const constitution = read("AI_ARCHITECTURE_PRINCIPLES.md");
 const ownershipMap = read("docs/SYSTEMS_RUNTIMES_CAPABILITIES.md");
 

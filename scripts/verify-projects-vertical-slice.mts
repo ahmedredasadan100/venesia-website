@@ -98,10 +98,10 @@ assert.match(projectDetailHeroMigration, /hero_templates_project_detail_singleto
   "Project Detail Hero must have one canonical Hero Configuration");
 assert.match(projectDetailHeroMigration, /source_type = 'domain-backed'/,
   "Project Detail Hero content ownership must stay explicit");
-assert.match(projectDistrict, /resolveVisibleProjectLocationLabel\(location\)/,
-  "Project District detailed address must adopt the Project-owned presentation decision");
-assert.match(projectDistrict, /resolveVisibleProjectLocationTags\(/,
-  "Project District tags must adopt the Project-owned presentation decision");
+assert.match(projectDistrict, /\{location\.label\}/,
+  "Project District must read the raw Project-owned detailed address");
+assert.match(projectDistrict, /hierarchy\.map/,
+  "Project District presenter must own rendering of the location hierarchy");
 assert.doesNotMatch(projectRenderer, /showDistrictLocationLabel|showLocationLabel=/,
   "Project Detail must not retain an unmanaged parallel location decision");
 
@@ -115,8 +115,8 @@ assert.match(homeProjectsEditor, /name="show_project_location"/,
   "Home Project Cards must expose their location presentation decision in the existing editor");
 assert.match(contentActions, /showProjectLocation:\s*parseFormBoolean\(formData, "show_project_location", false\)/,
   "Home Project Cards must persist the presentation decision through the existing module config owner");
-assert.match(homeProjectsRenderer, /resolveVisibleProjectLocationLabel\([\s\S]*showProjectLocation/,
-  "Home Project Cards must compose their own decision with the Project-owned hidden-location path");
+assert.match(homeProjectsRenderer, /showProjectLocation\s*\?\s*project\.location\.label\s*:\s*null/,
+  "Home Project Cards must apply their own presentation decision to Project-owned data");
 for (const source of [listRenderer, featuredRenderer, mobileProjectOverlays]) {
   assert.match(source, /show(Project)?Location/,
     "Projects listing and featured cards must keep their existing consumer-owned location decision");

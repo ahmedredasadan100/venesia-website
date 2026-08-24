@@ -19,7 +19,6 @@ export async function loadHomepageProjects(): Promise<HomepageProjectCard[]> {
       englishName: project.englishName,
       location: {
         label: project.location.label,
-        presentation: project.location.presentation,
       },
       shortDescription: project.shortDescription,
       cardImage: project.cardImage,

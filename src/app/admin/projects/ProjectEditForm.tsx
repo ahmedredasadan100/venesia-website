@@ -574,8 +574,8 @@ export default function ProjectEditForm({
       content: (
         <div className="space-y-4">
           <SectionCard
-            title="إعدادات عرض الموقع"
-            description="تتحكم هذه الخيارات في Presentation بيانات الموقع مع بقاء القيم محفوظة داخل المشروع."
+            title="إعدادات عرض قسم الموقع"
+            description="تخص هذه الخيارات قسم «عن الموقع» داخل صفحة هذا المشروع فقط، ولا تؤثر على Hero أو Featured أو Listing أو أي Module آخر."
           >
             <div className="grid gap-4 sm:grid-cols-2">
               <AdminFormSwitch
@@ -583,7 +583,9 @@ export default function ProjectEditForm({
                 label="إظهار العنوان التفصيلي"
                 value="true"
                 uncheckedValue="false"
-                defaultChecked={bundle.project.show_location_label}
+                defaultChecked={
+                  bundle.location_section_presentation.show_location_label
+                }
                 surface
               />
               <AdminFormSwitch
@@ -591,7 +593,9 @@ export default function ProjectEditForm({
                 label="إظهار بيانات الموقع (Location Tags)"
                 value="true"
                 uncheckedValue="false"
-                defaultChecked={bundle.project.show_location_tags}
+                defaultChecked={
+                  bundle.location_section_presentation.show_location_tags
+                }
                 surface
               />
             </div>
