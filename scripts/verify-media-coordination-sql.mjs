@@ -129,6 +129,7 @@ check("isolated PostgreSQL job does not consume Supabase secrets", !postgresJob.
 check("fixture enforces PostgreSQL 17", fixture.includes("server_major <> 17"));
 check("fixture resets only the isolated coordination proof schemas before reruns", fixture.includes("drop schema if exists media_coordination_acl_test cascade") && fixture.includes("drop schema if exists media_coordination_test cascade"));
 check("fixture creates Supabase runtime roles", fixture.includes("create role anon") && fixture.includes("create role authenticated") && fixture.includes("create role service_role"));
+check("isolated fixture mirrors the canonical mixed-provider Catalog constraint", integration.includes("drop constraint if exists media_assets_provider_check") && integration.includes("check (provider in ('supabase', 'filesystem'))"));
 check("physical-move fixtures provision a valid Catalog folder", concurrencyFixture.includes("values ('images/coordination', 'images'") && runner.includes("'images/coordination'") && integration.includes("'images/coordination'"));
 check("runtime primary identity comes from the first actual managed target", writeLeaseRuntime.includes("primaryEntityIdentity: targets[0].entityIdentity") && !writeLeaseRuntime.includes("primaryEntityIdentity: input.scopes[0].entityIdentity"));
 check("media-empty scopes are skipped before the primary target is selected", writeLeaseRuntime.includes("if (!managed) continue;") && writeLeaseRuntime.indexOf("if (!managed) continue;") < writeLeaseRuntime.indexOf("primaryEntityIdentity: targets[0].entityIdentity"));

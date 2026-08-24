@@ -48,6 +48,17 @@ create table media_coordination_test.runtime_state (
   value text not null
 );
 
+-- The disposable proof loads only the minimal Media Catalog migration chain,
+-- so mirror the canonical provider constraint established by
+-- 20260813220634_legacy_project_media_canonicalization without replaying its
+-- environment-specific asset seed corpus.
+alter table public.media_assets
+  drop constraint if exists media_assets_provider_check;
+
+alter table public.media_assets
+  add constraint media_assets_provider_check
+  check (provider in ('supabase', 'filesystem'));
+
 update public.site_settings
 set value = jsonb_build_object(
   'state', 'synced',
