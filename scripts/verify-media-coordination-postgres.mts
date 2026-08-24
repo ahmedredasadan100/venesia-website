@@ -63,8 +63,8 @@ const setupSqlFiles = [
   "sql/migrations/20260725180000_media_delete_reservation_saga.sql",
   "scripts/fixtures/media-coordination-postgres-acl-before.sql",
   "sql/migrations/20260726070000_media_coordination_rpc_acl_hardening.sql",
-  "sql/migrations/20260824022000_media_reference_mixed_provider_lease_scope.sql",
   "scripts/fixtures/media-coordination-postgres-acl-after.sql",
+  "sql/migrations/20260824022000_media_reference_mixed_provider_lease_scope.sql",
   "scripts/fixtures/media-coordination-postgres-concurrency-setup.sql",
 ];
 
