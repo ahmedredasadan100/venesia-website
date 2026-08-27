@@ -16,6 +16,12 @@ const {
 } = await jiti.import<typeof import("../src/lib/media-hub-modules/parse-config.ts")>(
   "../src/lib/media-hub-modules/parse-config.ts",
 );
+const {
+  getMediaHubCollectionCapabilities,
+  getMediaHubPresentationVariantCapabilities,
+} = await jiti.import<typeof import("../src/lib/media-hub-modules/presentation-contract.ts")>(
+  "../src/lib/media-hub-modules/presentation-contract.ts",
+);
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -52,7 +58,7 @@ const presentation = {
   description: "",
   ctaText: "كل الفيديوهات",
   collectionView: {
-    layout: "list" as const,
+    layout: "editorial" as const,
     itemsPerRow: 2 as const,
     cardVariant: "default" as const,
   },
@@ -138,6 +144,139 @@ assert.deepEqual(listingConfig.listing, {
 });
 assert.equal("featuredMode" in getDefaultMediaListingPresentation("video"), false);
 
+const legacyPressFeatured = parseMediaHubModuleConfig(
+  {
+    placement: "hub",
+    source: "topics",
+    contentHierarchy: { mode: "uniform", secondaryItemCount: 3 },
+    presentation: {
+      ...presentation,
+      collectionView: {
+        layout: "carousel",
+        itemsPerRow: 4,
+        cardVariant: "default",
+      },
+    },
+  },
+  "press",
+);
+assert.equal(legacyPressFeatured.presentation.collectionView.layout, "featured");
+assert.equal(legacyPressFeatured.contentHierarchy?.mode, "uniform");
+
+const legacyHierarchyPresentation = parseMediaHubModuleConfig(
+  {
+    placement: "hub",
+    source: "topics",
+    contentHierarchy: { mode: "featured-first", secondaryItemCount: 3 },
+    presentation: {
+      ...presentation,
+      collectionView: {
+        layout: "grid",
+        itemsPerRow: 3,
+        cardVariant: "compact",
+      },
+    },
+  },
+  "videos",
+);
+assert.equal(legacyHierarchyPresentation.presentation.collectionView.layout, "editorial");
+assert.equal(legacyHierarchyPresentation.contentHierarchy?.mode, "featured-first");
+
+const authoritativeMosaicPresentation = buildMediaHubModuleConfig(
+  "gallery",
+  "topics",
+  5,
+  { mode: "featured-first", secondaryItemCount: 4 },
+  {
+    ...presentation,
+    collectionView: {
+      layout: "mosaic",
+      itemsPerRow: 3,
+      cardVariant: "default",
+    },
+  },
+);
+assert.equal(authoritativeMosaicPresentation.presentation.collectionView.layout, "mosaic");
+assert.equal(authoritativeMosaicPresentation.contentHierarchy?.mode, "featured-first");
+assert.equal(
+  parseMediaHubModuleConfig(authoritativeMosaicPresentation, "gallery")
+    .presentation.collectionView.layout,
+  "mosaic",
+);
+
+const expectedPresentationVariants = {
+  featured: ["editorial", "featured", "grid", "list"],
+  "site-updates": ["timeline", "timeline-digest", "editorial", "featured", "grid", "list"],
+  videos: ["editorial", "mosaic", "grid", "list"],
+  gallery: ["mosaic", "editorial", "grid", "list"],
+  press: ["featured", "editorial", "grid", "list"],
+} as const;
+
+for (const sectionKey of ["featured", "site-updates", "videos", "gallery", "press"] as const) {
+  const capabilities = getMediaHubCollectionCapabilities(sectionKey);
+  assert.deepEqual(capabilities.view.layouts, expectedPresentationVariants[sectionKey]);
+  assert.equal(
+    getMediaHubPresentationVariantCapabilities(sectionKey, "list").itemsPerRow,
+    false,
+  );
+  assert.equal(
+    getMediaHubPresentationVariantCapabilities(sectionKey, "editorial").contentHierarchyMode,
+    "featured-first",
+  );
+}
+for (const sectionKey of ["videos", "gallery"] as const) {
+  const capabilities = getMediaHubCollectionCapabilities(sectionKey);
+  assert.ok(capabilities.view.layouts.includes("mosaic"));
+  assert.ok(!capabilities.view.layouts.includes("featured"));
+  assert.deepEqual(
+    getMediaHubPresentationVariantCapabilities(sectionKey, "mosaic"),
+    {
+      itemsPerRow: false,
+      cardVariant: false,
+      contentHierarchyMode: "featured-first",
+    },
+  );
+}
+assert.equal(
+  getMediaHubPresentationVariantCapabilities("press", "featured").itemsPerRow,
+  true,
+);
+assert.ok(getMediaHubCollectionCapabilities("site-updates").view.layouts.includes("timeline"));
+assert.equal(
+  getMediaHubPresentationVariantCapabilities("site-updates", "timeline").cardVariant,
+  false,
+);
+assert.deepEqual(
+  getMediaHubPresentationVariantCapabilities("site-updates", "timeline-digest"),
+  {
+    itemsPerRow: false,
+    cardVariant: false,
+    contentHierarchyMode: "uniform",
+  },
+);
+
+const timelineDigestConfig = buildMediaHubModuleConfig(
+  "site-updates",
+  "topics",
+  4,
+  { mode: "featured-first", secondaryItemCount: 4 },
+  {
+    ...presentation,
+    collectionView: {
+      layout: "timeline-digest",
+      itemsPerRow: 4,
+      cardVariant: "compact",
+    },
+  },
+);
+assert.equal(timelineDigestConfig.presentation.collectionView.layout, "timeline-digest");
+assert.equal(timelineDigestConfig.contentHierarchy?.mode, "uniform");
+assert.equal(
+  parseMediaHubModuleConfig(timelineDigestConfig, "site-updates")
+    .presentation.collectionView.layout,
+  "timeline-digest",
+);
+
 for (const slug of [
   "media-center-news-listing-shell",
   "media-center-videos-listing-shell",
@@ -217,11 +356,14 @@ assert.ok(publicOwner.includes("loadPublicContentCollection"));
 assert.ok(!publicOwner.includes("fallbackResult"));
 
 const featuredComponent = read("src/components/media-center/MediaCenterHubFeatured.tsx");
-assert.ok(!featuredComponent.startsWith('"use client"'));
+assert.ok(featuredComponent.startsWith('"use client"'));
 assert.ok(featuredComponent.includes("contentHierarchy?.secondaryItemCount"));
 assert.ok(featuredComponent.includes("presentation.collectionView"));
-assert.ok(!featuredComponent.includes("useState"));
-assert.ok(!featuredComponent.includes("sideNews"));
+assert.ok(featuredComponent.includes("useState"));
+assert.ok(featuredComponent.includes("sliderEnabled"));
+assert.ok(featuredComponent.includes("data-featured-slider"));
+assert.ok(featuredComponent.includes("data-slider-news-group"));
+assert.ok(featuredComponent.includes("aria-current"));
 assert.ok(!featuredComponent.includes("latest"));
 
 const listingPage = read("src/components/media-center/MediaListingPage.tsx");
@@ -269,8 +411,7 @@ const action = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
 assert.ok(editor.includes('name="media_type"'));
 assert.ok(editor.includes('name="placement" value={parsedInitial.placement}'));
 assert.ok(editor.includes("نوع المحتوى المميز"));
-assert.ok(editor.includes("CollectionContentHierarchyFields"));
-assert.ok(editor.includes("CollectionViewFields"));
+assert.ok(editor.includes("CollectionPresentationFields"));
 assert.ok(!editor.includes("مصدر البيانات"));
 assert.ok(action.includes('placementInput === "featured"'));
 for (const retiredField of ["side_limit", "list_limit", "featured_mode", "manual_topic_id"]) {
@@ -289,6 +430,8 @@ assert.ok(hierarchyOwner.includes("secondaryItemCount"));
 assert.ok(!hierarchyOwner.includes("MediaHub"));
 assert.ok(viewOwner.includes("CollectionViewCapabilities"));
 assert.ok(viewOwner.includes("itemsPerRow"));
+assert.ok(viewOwner.includes("getCollectionViewVariantCapabilities"));
+assert.ok(viewOwner.includes("legacyLayoutAliases"));
 assert.ok(!viewOwner.includes("MediaHub"));
 assert.ok(quantityOwner.includes("parseCollectionItemLimit"));
 assert.ok(capabilityFields.includes('name="item_limit"'));
@@ -297,6 +440,11 @@ assert.ok(capabilityFields.includes('name="secondary_item_count"'));
 assert.ok(capabilityFields.includes('name="collection_layout"'));
 assert.ok(capabilityFields.includes('name="items_per_row"'));
 assert.ok(capabilityFields.includes('name="collection_card_variant"'));
+assert.ok(capabilityFields.includes('label="طريقة العرض"'));
+assert.ok(capabilityFields.includes('activeLayout === "featured"'));
+assert.ok(capabilityFields.includes('mosaic: "فسيفساء بصرية"'));
+assert.ok(capabilityFields.includes('timeline: "خط زمني بالبطاقات"'));
+assert.ok(capabilityFields.includes('"timeline-digest": "موجز زمني"'));
 for (const sectionKey of ["featured", "site-updates", "videos", "gallery", "press"]) {
   assert.ok(mediaCapabilityAdapter.includes(`${sectionKey}:`) || mediaCapabilityAdapter.includes(`"${sectionKey}":`));
 }
@@ -309,6 +457,56 @@ for (const presenterPath of [
 ]) {
   assert.ok(read(presenterPath).includes("presentation.collectionView"));
 }
+
+const mediaHubPresenter = read("src/components/media-center/renderMediaHubSections.tsx");
+const featuredCollection = read("src/components/media-center/MediaCenterHubFeaturedCollection.tsx");
+const editorialCollection = read("src/components/media-center/MediaCenterHubFeatured.tsx");
+const mosaicCollection = read("src/components/media-center/MediaCenterHubMosaic.tsx");
+const standardCollection = read("src/components/media-center/MediaCenterCollectionItems.tsx");
+const timelineCollection = read("src/components/media-center/MediaCenterHubTimeline.tsx");
+assert.ok(mediaHubPresenter.includes('layout === "featured"'));
+assert.ok(mediaHubPresenter.includes('layout === "editorial"'));
+assert.ok(mediaHubPresenter.includes('layout === "mosaic"'));
+assert.ok(mediaHubPresenter.includes('sliderEnabled={data.kind === "featured"}'));
+assert.ok(mediaHubPresenter.includes('showDateWhenAvailable={data.kind === "videos"}'));
+assert.ok(!mediaHubPresenter.includes('hierarchyMode === "featured-first"'));
+assert.ok(!mediaHubPresenter.includes('layout === "editorial" || data.kind === "featured"'));
+assert.ok(mediaHubPresenter.indexOf('layout === "editorial"') < mediaHubPresenter.indexOf('data.kind === "featured"'));
+assert.ok(featuredCollection.includes('1: "grid-cols-1"'));
+assert.ok(featuredCollection.includes('2: "grid-cols-1 @xl/slot-module:grid-cols-2"'));
+assert.ok(featuredCollection.includes('3: "grid-cols-1 @xl/slot-module:grid-cols-2"'));
+assert.ok(featuredCollection.includes('4: "grid-cols-1 @md/slot-module:grid-cols-2 @xl/slot-module:grid-cols-4"'));
+assert.ok(featuredCollection.includes("FEATURED_ACTION_LABELS"));
+assert.ok(editorialCollection.includes('@2xl/slot-module:grid-cols-[1.1fr_0.9fr]'));
+assert.ok(editorialCollection.includes('layout: "list"'));
+assert.ok(editorialCollection.includes('cardVariant: "compact"'));
+assert.ok(editorialCollection.includes('className="group block h-full"'));
+assert.ok(editorialCollection.includes('@2xl/slot-module:[&>div]:auto-rows-fr'));
+assert.ok(editorialCollection.includes("data-slider-news-group"));
+assert.ok(editorialCollection.includes("@2xl/slot-module:row-start-2"));
+assert.ok(editorialCollection.includes("showDateWhenAvailable"));
+assert.ok(standardCollection.includes("showDateWhenAvailable"));
+assert.ok(mosaicCollection.includes("contentHierarchy?.secondaryItemCount"));
+assert.ok(mosaicCollection.includes('@xl/slot-module:grid-cols-[1.05fr_0.95fr]'));
+assert.ok(mosaicCollection.includes("grid items-stretch gap-3"));
+assert.ok(mosaicCollection.includes("@xl/slot-module:auto-rows-fr"));
+assert.ok(mosaicCollection.includes("@xl/slot-module:aspect-auto"));
+assert.ok(!mosaicCollection.includes('href="/media-center/gallery"'));
+assert.ok(!mosaicCollection.includes('href="/media-center/videos"'));
+assert.ok(timelineCollection.includes('layout === "timeline-digest"'));
+assert.ok(timelineCollection.includes("data-presentation-variant={layout}"));
+assert.ok(timelineCollection.includes("grid-cols-[92px_minmax(0,1fr)]"));
+assert.ok(timelineCollection.includes('@xl/slot-module:grid-cols-[130px_1fr]'));
+assert.ok(timelineCollection.includes('"flex h-full flex-col"'));
+assert.ok(timelineCollection.includes("relative flex flex-1 flex-col gap-4"));
+assert.ok(timelineCollection.includes('isTimelineDigest ? "256px" : "160px"'));
+assert.ok(timelineCollection.includes('"mt-2 line-clamp-2 text-base font-semibold leading-7'));
+assert.ok(timelineCollection.includes('"mt-2 line-clamp-2 text-xs leading-6'));
+assert.ok(mediaHubPresenter.includes('className="h-full"'));
+assert.equal(
+  existsSync(resolve(ROOT, "src/components/media-center/MediaCenterHubTimelineDigest.tsx")),
+  false,
+);
 
 const blockLoader = read("src/lib/page-blocks/load-page-blocks.ts");
 const adminQueries = read("src/lib/page-blocks/admin-queries.ts");

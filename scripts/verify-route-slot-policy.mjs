@@ -377,6 +377,8 @@ const portableResponsiveSources = [
   "src/components/media-center/MediaCenterHubGallery.tsx",
   "src/components/media-center/MediaCenterHubSectionHeader.tsx",
   "src/components/media-center/MediaCenterHubFeatured.tsx",
+  "src/components/media-center/MediaCenterHubFeaturedCollection.tsx",
+  "src/components/media-center/MediaCenterHubMosaic.tsx",
   "src/components/media-center/RelatedMediaRail.tsx",
   "src/components/media-center/MediaDetailArticle.tsx",
 ];

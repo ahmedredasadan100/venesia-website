@@ -14,8 +14,18 @@ const GRID_COLUMNS: Record<CollectionView["itemsPerRow"], string> = {
   4: "grid-cols-1 @xl/slot-module:grid-cols-2 @5xl/slot-module:grid-cols-4",
 };
 
-function ItemMetadata({ item }: { item: MediaContentItem }) {
-  if (!item.showCategoryOnPage && !item.showSeriesOnPage && !item.showDateOnPage) {
+function ItemMetadata({
+  item,
+  showDateWhenAvailable,
+}: {
+  item: MediaContentItem;
+  showDateWhenAvailable: boolean;
+}) {
+  const showDate = Boolean(item.date) && (
+    item.showDateOnPage || showDateWhenAvailable
+  );
+
+  if (!item.showCategoryOnPage && !item.showSeriesOnPage && !showDate) {
     return null;
   }
 
@@ -25,7 +35,7 @@ function ItemMetadata({ item }: { item: MediaContentItem }) {
       {item.showSeriesOnPage && item.series ? (
         <span className="text-[#D8B87A]/75">{item.series}</span>
       ) : null}
-      {item.showDateOnPage && item.date ? <span>{item.date}</span> : null}
+      {showDate ? <span>{item.date}</span> : null}
     </div>
   );
 }
@@ -48,9 +58,11 @@ function MediaMarker({ item }: { item: MediaContentItem }) {
 function CollectionListItem({
   item,
   compact,
+  showDateWhenAvailable,
 }: {
   item: MediaContentItem;
   compact: boolean;
+  showDateWhenAvailable: boolean;
 }) {
   return (
     <Link
@@ -70,7 +82,10 @@ function CollectionListItem({
         <MediaMarker item={item} />
       </div>
       <div className="min-w-0 self-center">
-        <ItemMetadata item={item} />
+        <ItemMetadata
+          item={item}
+          showDateWhenAvailable={showDateWhenAvailable}
+        />
         <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-white transition group-hover:text-[#D8B87A]">
           {item.title}
         </h3>
@@ -85,9 +100,11 @@ function CollectionListItem({
 function CollectionGridItem({
   item,
   compact,
+  showDateWhenAvailable,
 }: {
   item: MediaContentItem;
   compact: boolean;
+  showDateWhenAvailable: boolean;
 }) {
   return (
     <Link
@@ -105,7 +122,10 @@ function CollectionGridItem({
         <MediaMarker item={item} />
       </div>
       <div className={compact ? "p-3" : "p-5"}>
-        <ItemMetadata item={item} />
+        <ItemMetadata
+          item={item}
+          showDateWhenAvailable={showDateWhenAvailable}
+        />
         <h3 className="mt-2 line-clamp-2 font-semibold leading-7 text-white transition group-hover:text-[#D8B87A]">
           {item.title}
         </h3>
@@ -120,9 +140,11 @@ function CollectionGridItem({
 export default function MediaCenterCollectionItems({
   items,
   view,
+  showDateWhenAvailable = false,
 }: {
   items: MediaContentItem[];
   view: CollectionView;
+  showDateWhenAvailable?: boolean;
 }) {
   const compact = view.cardVariant === "compact";
 
@@ -130,7 +152,12 @@ export default function MediaCenterCollectionItems({
     return (
       <div className="grid gap-3">
         {items.map((item) => (
-          <CollectionListItem key={item.id} item={item} compact={compact} />
+          <CollectionListItem
+            key={item.id}
+            item={item}
+            compact={compact}
+            showDateWhenAvailable={showDateWhenAvailable}
+          />
         ))}
       </div>
     );
@@ -139,7 +166,12 @@ export default function MediaCenterCollectionItems({
   return (
     <div className={`grid gap-4 ${GRID_COLUMNS[view.itemsPerRow]}`}>
       {items.map((item) => (
-        <CollectionGridItem key={item.id} item={item} compact={compact} />
+        <CollectionGridItem
+          key={item.id}
+          item={item}
+          compact={compact}
+          showDateWhenAvailable={showDateWhenAvailable}
+        />
       ))}
     </div>
   );

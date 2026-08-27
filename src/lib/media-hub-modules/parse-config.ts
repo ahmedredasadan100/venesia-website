@@ -11,6 +11,7 @@ import {
   buildMediaHubCollectionView,
   buildMediaHubContentHierarchy,
   getMediaHubCollectionCapabilities,
+  getMediaHubPresentationVariantCapabilities,
   parseMediaHubCollectionView,
   parseMediaHubContentHierarchy,
 } from "./presentation-contract";
@@ -316,6 +317,62 @@ function readContentHierarchy(
   });
 }
 
+function readPersistedCollectionLayout(
+  raw: Record<string, Json | undefined>,
+): unknown {
+  if (
+    !raw.presentation ||
+    typeof raw.presentation !== "object" ||
+    Array.isArray(raw.presentation)
+  ) return undefined;
+
+  const collectionView = raw.presentation.collectionView;
+  if (collectionView && typeof collectionView === "object" && !Array.isArray(collectionView)) {
+    return collectionView.layout;
+  }
+
+  const legacyCollection = raw.presentation.collection;
+  if (legacyCollection && typeof legacyCollection === "object" && !Array.isArray(legacyCollection)) {
+    return legacyCollection.layoutVariant;
+  }
+
+  return undefined;
+}
+
+function resolveAuthoritativePresentation(
+  raw: Record<string, Json | undefined>,
+  sectionKey: MediaHubSectionKey,
+  presentation: MediaHubModulePresentation,
+  contentHierarchy: CollectionContentHierarchy,
+) {
+  const persistedLayout = readPersistedCollectionLayout(raw);
+  const hasCanonicalHierarchyVariant =
+    persistedLayout === "featured" ||
+    persistedLayout === "editorial" ||
+    persistedLayout === "mosaic" ||
+    persistedLayout === "timeline-digest";
+  const layout =
+    !hasCanonicalHierarchyVariant && contentHierarchy.mode === "featured-first"
+      ? "editorial"
+      : presentation.collectionView.layout;
+  const collectionView = buildMediaHubCollectionView(sectionKey, {
+    ...presentation.collectionView,
+    layout,
+  });
+  const variantCapabilities = getMediaHubPresentationVariantCapabilities(
+    sectionKey,
+    collectionView.layout,
+  );
+
+  return {
+    presentation: { ...presentation, collectionView },
+    contentHierarchy: buildMediaHubContentHierarchy(sectionKey, {
+      mode: variantCapabilities.contentHierarchyMode,
+      secondaryItemCount: contentHierarchy.secondaryItemCount,
+    }),
+  };
+}
+
 export function parseMediaHubModuleConfig(
   raw: Json,
   sectionKey: MediaHubSectionKey,
@@ -335,12 +392,18 @@ export function parseMediaHubModuleConfig(
   }
 
   const source = raw.source === "topics" ? "topics" : fallback.source;
-  const presentation = readPresentation(
+  const parsedPresentation = readPresentation(
     raw.presentation,
     fallback.presentation,
     sectionKey,
   );
-  const contentHierarchy = readContentHierarchy(raw, sectionKey);
+  const parsedContentHierarchy = readContentHierarchy(raw, sectionKey);
+  const { presentation, contentHierarchy } = resolveAuthoritativePresentation(
+    raw,
+    sectionKey,
+    parsedPresentation,
+    parsedContentHierarchy,
+  );
   const placement = raw.placement === "listing"
     ? "listing"
     : raw.placement === "featured" && sectionKey === "featured"
@@ -415,9 +478,16 @@ export function buildMediaHubModuleConfig(
       presentation.collectionView,
     ),
   };
+  const variantCapabilities = getMediaHubPresentationVariantCapabilities(
+    sectionKey,
+    normalizedPresentation.collectionView.layout,
+  );
   const normalizedHierarchy = buildMediaHubContentHierarchy(
     sectionKey,
-    contentHierarchy,
+    {
+      mode: variantCapabilities.contentHierarchyMode,
+      secondaryItemCount: contentHierarchy.secondaryItemCount,
+    },
   );
 
   if (listingInput?.placement === "listing") {
