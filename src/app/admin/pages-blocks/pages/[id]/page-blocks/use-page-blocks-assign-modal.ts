@@ -30,7 +30,6 @@ export type PageBlocksAssignTemplates = {
 
 type UsePageBlocksAssignModalOptions = {
   pageId: number;
-  pageSlug: string;
   assignments: PageBlockAssignmentRow[];
   templates: PageBlocksAssignTemplates;
   setActionMessage: (message: string | null) => void;
@@ -39,7 +38,6 @@ type UsePageBlocksAssignModalOptions = {
 
 export function usePageBlocksAssignModal({
   pageId,
-  pageSlug,
   assignments,
   templates,
   setActionMessage,
@@ -128,8 +126,8 @@ export function usePageBlocksAssignModal({
   }, [assignments, assignModuleKind]);
 
   const slotOptions = useMemo(
-    (): PageLayoutSlot[] => getSlotOptions(assignModuleKind, pageSlug),
-    [assignModuleKind, pageSlug],
+    (): PageLayoutSlot[] => getSlotOptions(assignModuleKind),
+    [assignModuleKind],
   );
 
   const assignableTemplates = useMemo(

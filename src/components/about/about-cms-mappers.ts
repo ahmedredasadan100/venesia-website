@@ -1,6 +1,11 @@
 import type { AboutIntroModuleConfig } from "../../lib/page-blocks";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
-import { asAboutIntroConfig, asAboutIntroSingleImageConfig } from "../../lib/page-blocks/configs";
+import {
+  asAboutIntroConfig,
+  asAboutIntroSingleImageConfig,
+  resolvePageBlockTextFormattingMap,
+  type PageBlockTextFormattingMap,
+} from "../../lib/page-blocks/configs";
 import { mapAboutApproachBlock as mapAboutApproachModuleBlock } from "../modules/about-approach-mappers";
 import type { AboutApproachModuleContent } from "../modules/about-approach-mappers";
 import {
@@ -24,6 +29,7 @@ export type AboutIntroContent = {
   subtitle: string;
   /** Raw body — legacy plain text or sanitized rich HTML. */
   description: string;
+  formatting: PageBlockTextFormattingMap;
   images?: AboutIntroImages;
   button?: {
     label: string;
@@ -89,6 +95,12 @@ export function mapAboutIntroBlock(block: ResolvedPageBlock): AboutIntroContent 
     title: config.title ?? "",
     subtitle: config.subtitle ?? "",
     description: config.body ?? "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "subtitle" },
+      { field: "description" },
+    ]),
     images: mappedImages,
     button:
       buttonLabel || buttonHref
@@ -124,6 +136,12 @@ export function mapAboutIntroSingleImageBlock(block: ResolvedPageBlock) {
     title: config.title ?? "",
     subtitle: config.subtitle ?? "",
     description: config.body ?? "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "subtitle" },
+      { field: "description" },
+    ]),
     image: main,
     imageAlt: config.images?.mainAlt?.trim() || undefined,
     imagePosition: config.imagePosition === "right" ? ("right" as const) : ("left" as const),

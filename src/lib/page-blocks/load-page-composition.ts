@@ -11,18 +11,15 @@ import { loadPageBlockStateBySlug } from "./load-page-blocks";
 import type { PageLayoutSlot } from "./layout-slots";
 import type { ResolvedPageBlock } from "./types";
 import {
-  getPageLayoutModeForRoute,
-  isSlotAllowedForRoute,
-} from "../page-composition/route-slot-policy";
+  getDefaultAssignmentPosition,
+  isAssignmentPositionAllowed,
+} from "../page-composition/page-assignment-contract";
+import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
 
 function emptySlots(): Record<PageLayoutSlot, SlotEntry[]> {
-  return {
-    hero: [],
-    main: [],
-    sidebar: [],
-    bottom: [],
-    footer: [],
-  };
+  return Object.fromEntries(
+    PAGE_COMPOSITION_POSITIONS.map((position) => [position, []]),
+  ) as unknown as Record<PageLayoutSlot, SlotEntry[]>;
 }
 
 function sortEntries(entries: SlotEntry[]) {
@@ -31,10 +28,9 @@ function sortEntries(entries: SlotEntry[]) {
 
 function pushBlock(
   slots: Record<PageLayoutSlot, SlotEntry[]>,
-  pageSlug: string,
   block: ResolvedPageBlock,
 ) {
-  if (!isSlotAllowedForRoute(pageSlug, block.blockType, block.slot)) return;
+  if (!isAssignmentPositionAllowed(block.blockType, block.slot)) return;
   const slot = normalizeLayoutSlot(block.slot);
   slots[slot].push({
     kind: "block",
@@ -61,11 +57,11 @@ export async function loadPageCompositionBySlug(
   const slots = emptySlots();
 
   for (const block of blockState.blocks) {
-    pushBlock(slots, pageSlug, block);
+    pushBlock(slots, block);
   }
 
   for (const feed of feedState.modules) {
-    if (!isSlotAllowedForRoute(pageSlug, "feed", feed.slot)) continue;
+    if (!isAssignmentPositionAllowed("feed", feed.slot)) continue;
     slots[feed.slot].push({
       kind: "feed",
       assignmentId: feed.assignmentId,
@@ -76,8 +72,8 @@ export async function loadPageCompositionBySlug(
 
   for (const widget of mediaSidebarModules.widgets) {
     if (!widget.isVisible) continue;
-    if (!isSlotAllowedForRoute(pageSlug, "media-sidebar", "sidebar")) continue;
-    slots.sidebar.push({
+    if (!isAssignmentPositionAllowed("media-sidebar", widget.slot)) continue;
+    slots[widget.slot].push({
       kind: "media-sidebar",
       assignmentId: widget.assignmentId,
       sortOrder: widget.sortOrder,
@@ -85,8 +81,23 @@ export async function loadPageCompositionBySlug(
     });
   }
 
+  for (const hubModule of mediaHubModules?.modules ?? []) {
+    if (
+      !hubModule.isVisible ||
+      hubModule.config.placement === "listing" ||
+      !isAssignmentPositionAllowed("media-hub", hubModule.slot)
+    ) continue;
+    slots[hubModule.slot].push({
+      kind: "media-hub",
+      assignmentId: hubModule.assignmentId,
+      sortOrder: hubModule.sortOrder,
+      module: hubModule,
+    });
+  }
+
   if (heroState.hero && heroState.assignmentId !== null) {
-    slots.hero.push({
+    const position = getDefaultAssignmentPosition("hero");
+    if (isAssignmentPositionAllowed("hero", position)) slots[position].push({
       kind: "hero",
       assignmentId: heroState.assignmentId,
       sortOrder: 0,
@@ -118,7 +129,6 @@ export async function loadPageCompositionBySlug(
     mediaSidebarModules.sourceStatus === "error";
 
   return {
-    layoutMode: getPageLayoutModeForRoute(pageSlug),
     slots,
     blockStates: blockState.blockStates ?? [],
     heroVisibility: heroState.visibility,

@@ -813,6 +813,7 @@ export function AdminDataGridCheckbox({ checked, onChange, label, inputRef }: Ch
       checked={checked}
       onChange={onChange}
       label={label}
+      presentation="native"
     />
   );
 }

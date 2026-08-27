@@ -1,6 +1,6 @@
 import HomePageContent from "../../components/home/HomePageContent";
 import RevealAnimations from "../../components/RevealAnimations";
-import { HeroSlotContent } from "../../components/page-composition/PageSlotLayout";
+import PageSlotLayout, { HeroSlotContent } from "../../components/page-composition/PageSlotLayout";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 import { generatePublicMetadata } from "../../lib/seo/generate-public-metadata";
 
@@ -25,6 +25,8 @@ export default async function HomePage() {
       <HeroSlotContent composition={composition} />
 
       <HomePageContent composition={composition} />
+
+      <PageSlotLayout composition={composition} skipSlots={["hero", "main"]} />
     </div>
   );
 }

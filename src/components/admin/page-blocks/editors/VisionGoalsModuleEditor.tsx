@@ -7,11 +7,16 @@ import {
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
+  ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
-import type { VisionGoalsItemConfig, VisionGoalsModuleConfig } from "../../../../lib/page-blocks/configs";
+import {
+  resolvePageBlockTextFormat,
+  type VisionGoalsItemConfig,
+  type VisionGoalsModuleConfig,
+} from "../../../../lib/page-blocks/configs";
 import { MODULE_EDITOR_TERMINOLOGY } from "../../../../lib/page-blocks/module-editor-presentation-contract";
 
 type VisionGoalsModuleEditorProps = {
@@ -27,6 +32,9 @@ function padItems(items: VisionGoalsItemConfig[] | undefined, size = 3) {
 export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEditorProps) {
   const visionItems = padItems(config.vision?.items);
   const goalsItems = padItems(config.goals?.items);
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
+  const introFormat = resolvePageBlockTextFormat(config, "intro");
 
   return (
     <div className="space-y-6">
@@ -34,23 +42,27 @@ export default function VisionGoalsModuleEditor({ config }: VisionGoalsModuleEdi
 
       <ModuleEditorSection>
         <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}</span>
-          <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-        </label></ModuleEditorField>
-        <ModuleEditorField nature="short-text" span={9}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان</span>
-          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-        </label></ModuleEditorField>
-        <ModuleEditorField nature="long-content" span={12}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.longContent.labelAr} — فقرتان مفصولتان بسطر فارغ</span>
+        <ModuleEditorField nature="short-text" span={6}>
+        <ModuleEditorVisibilityAlignRow label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+          <input name="eyebrow" aria-label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr} defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+        </ModuleEditorVisibilityAlignRow>
+        </ModuleEditorField>
+        <ModuleEditorField nature="short-text" span={6}>
+        <ModuleEditorVisibilityAlignRow label="العنوان" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+          <input name="title" aria-label="العنوان" defaultValue={config.title ?? ""} className={fieldClassName()} />
+        </ModuleEditorVisibilityAlignRow>
+        </ModuleEditorField>
+        <ModuleEditorField nature="long-content" span={12}>
+        <ModuleEditorVisibilityAlignRow label={MODULE_EDITOR_TERMINOLOGY.longContent.labelAr} showName="show_intro" boldName="intro_bold" alignmentName="intro_alignment" showDefault={introFormat.visible} boldDefault={introFormat.bold} alignmentDefault={introFormat.alignment}>
           <textarea
             name="intro"
+            aria-label={MODULE_EDITOR_TERMINOLOGY.longContent.labelAr}
             defaultValue={(config.intro ?? []).join("\n\n")}
-            rows={6}
-            className={fieldClassName("resize-y leading-7")}
+            rows={2}
+            className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
           />
-        </label></ModuleEditorField>
+        </ModuleEditorVisibilityAlignRow>
+        </ModuleEditorField>
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 

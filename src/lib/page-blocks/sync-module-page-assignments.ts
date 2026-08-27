@@ -8,16 +8,10 @@ import {
   type PageModuleAssignmentTable,
 } from "./block-module-registry";
 import { revalidatePageBlocksPath } from "./admin-revalidate";
-import type { PageBlockType } from "./types";
-import { getAssignableSlotsForRoute } from "../page-composition/route-slot-policy";
+import type { PageBlockType, PageModuleKind } from "./types";
+import { getDefaultAssignmentPosition } from "../page-composition/page-assignment-contract";
 
 type AssignmentSyncActor = { id: number; username: string };
-
-function defaultSlotForBlockType(blockType: PageBlockType) {
-  if (blockType === "breadcrumb") return "hero";
-  if (blockType === "feed") return "sidebar";
-  return "main";
-}
 
 export function parsePageIdsFromForm(formData: FormData) {
   return [...new Set(formData.getAll("page_ids").map((value) => Number(value)).filter(Boolean))];
@@ -25,13 +19,14 @@ export function parsePageIdsFromForm(formData: FormData) {
 
 async function syncModulePageAssignmentsForTable(
   table: PageModuleAssignmentTable,
-  kind: string,
+  moduleKind: PageModuleKind,
+  databaseKind: string,
   templateId: number,
   pageIds: number[],
-  defaultSlot: string,
   actor: AssignmentSyncActor,
 ) {
   const targetIds = [...new Set(pageIds.filter(Boolean))];
+  const defaultPosition = getDefaultAssignmentPosition(moduleKind);
 
   const { data: current, error: currentError } = await getSupabaseAdmin()
     .from(table)
@@ -48,10 +43,10 @@ async function syncModulePageAssignmentsForTable(
     p_page_id: affectedPageIds[0],
     p_operation: "sync_template_pages",
     p_payload: {
-      kind,
+      kind: databaseKind,
       template_id: templateId,
       page_ids: targetIds,
-      default_slot: defaultSlot,
+      default_slot: defaultPosition,
     },
     p_actor_admin_user_id: actor.id,
     p_actor_username: actor.username,
@@ -67,29 +62,12 @@ export async function syncBlockModulePageAssignments(
   pageIds: number[],
   actor: AssignmentSyncActor,
 ) {
-  if (blockType === "breadcrumb" && pageIds.length) {
-    const { data: pages, error } = await getSupabaseAdmin()
-      .from("pages")
-      .select("id,slug")
-      .in("id", pageIds);
-    if (error) throw new Error(error.message);
-
-    const allowedIds = new Set(
-      (pages ?? [])
-        .filter((page) => getAssignableSlotsForRoute(page.slug, "breadcrumb").length > 0)
-        .map((page) => page.id),
-    );
-    if (allowedIds.size !== new Set(pageIds).size) {
-      throw new Error("إحدى الصفحات المحددة لا تدعم موضع عرض لمسار التنقل.");
-    }
-  }
-
   await syncModulePageAssignmentsForTable(
     BLOCK_MODULE_REGISTRY[blockType].assignmentTable,
     blockType,
+    blockType,
     templateId,
     pageIds,
-    defaultSlotForBlockType(blockType),
     actor,
   );
 }
@@ -99,7 +77,14 @@ export async function syncMediaHubModulePageAssignments(
   pageIds: number[],
   actor: AssignmentSyncActor,
 ) {
-  await syncModulePageAssignmentsForTable(MEDIA_HUB_ASSIGNMENT_TABLE, "media_hub", templateId, pageIds, "main", actor);
+  await syncModulePageAssignmentsForTable(
+    MEDIA_HUB_ASSIGNMENT_TABLE,
+    "media-hub",
+    "media_hub",
+    templateId,
+    pageIds,
+    actor,
+  );
 }
 
 export async function syncMediaSidebarModulePageAssignments(
@@ -109,10 +94,10 @@ export async function syncMediaSidebarModulePageAssignments(
 ) {
   await syncModulePageAssignmentsForTable(
     MEDIA_SIDEBAR_ASSIGNMENT_TABLE,
+    "media-sidebar",
     "media_sidebar",
     templateId,
     pageIds,
-    "sidebar",
     actor,
   );
 }

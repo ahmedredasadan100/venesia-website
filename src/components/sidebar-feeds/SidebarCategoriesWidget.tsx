@@ -7,17 +7,19 @@ type SidebarCategoriesWidgetProps = {
   items: SidebarCategoryItem[];
   eyebrow: string;
   title: string;
+  formatting?: import("../../lib/page-blocks/configs").PageBlockTextFormattingConfig;
 };
 
 export default function SidebarCategoriesWidget({
   items,
   eyebrow,
   title,
+  formatting,
 }: SidebarCategoriesWidgetProps) {
   if (!items.length) return null;
 
   return (
-    <SidebarFeedPanel eyebrow={eyebrow} title={title}>
+    <SidebarFeedPanel eyebrow={eyebrow} title={title} formatting={formatting}>
       <div className="space-y-3">
         {items.map((item) => (
           <Link

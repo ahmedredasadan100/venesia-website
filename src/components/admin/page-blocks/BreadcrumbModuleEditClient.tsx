@@ -6,12 +6,10 @@ import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorHeader,
+  ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
-  ModuleEditorSettingsComposition,
-  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
 import BreadcrumbManualItemsField from "./editors/BreadcrumbManualItemsField";
@@ -53,7 +51,14 @@ export default function BreadcrumbModuleEditClient({
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
+        <input type="hidden" name="description" value={block.description ?? ""} />
         <input type="hidden" name="style_preset" value={block.style_preset ?? "premium-dark"} />
+
+        <ModuleEditorIdentitySection
+          name={block.name}
+          status={block.status}
+          inputClassName={fieldClassName("h-11")}
+        />
 
         <ModuleEditorTabs
           moduleKind="breadcrumb"
@@ -73,6 +78,7 @@ export default function BreadcrumbModuleEditClient({
                           { value: "navigation", label: "من قائمة التنقل (تلقائي)" },
                           { value: "manual", label: "يدوي" },
                         ]}
+                        sizing="full"
                       />
                     </ModuleEditorField>
                     <ModuleEditorField nature="short-text" span={4}>
@@ -87,46 +93,18 @@ export default function BreadcrumbModuleEditClient({
                       </label>
                     </ModuleEditorField>
                     <ModuleEditorField nature="binary-state" span={4}>
-                      <AdminFormSwitch name="show_home" label="إظهار الرئيسية" value="true" defaultChecked={config.showHome !== false} surface className="h-full" />
+                      <div className="flex h-full items-end pb-1.5">
+                        <AdminFormSwitch
+                          name="show_home"
+                          label="إظهار الرئيسية"
+                          value="true"
+                          defaultChecked={config.showHome !== false}
+                        />
+                      </div>
                     </ModuleEditorField>
                   </ModuleEditorFieldGrid>
                   <BreadcrumbManualItemsField items={config.manualItems ?? []} />
                 </ModuleEditorSection>
-              ),
-            },
-            {
-              id: "settings",
-              content: (
-                <ModuleEditorSettingsComposition
-                  primary={
-                  <ModuleEditorSection>
-                    <ModuleEditorFieldGrid>
-                      <ModuleEditorField nature="standard" span={6}>
-                        <label className="block space-y-2">
-                          <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
-                          <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-                        </label>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-description" span={6}>
-                        <label className="block space-y-2">
-                          <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
-                          <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
-                        </label>
-                      </ModuleEditorField>
-                    </ModuleEditorFieldGrid>
-                  </ModuleEditorSection>
-                  }
-
-                  secondary={
-                  <ModuleEditorSection>
-                    <ModuleEditorSectionHeading intent="settings" className="text-lg">النشر</ModuleEditorSectionHeading>
-                    <ModuleEditorStatusSwitch status={block.status} />
-                    <p className="text-xs leading-6 text-white/42">
-                      الموديول المخفي أو غير المنشور لا يظهر على الموقع حتى لو كان مربوطًا بصفحة.
-                    </p>
-                  </ModuleEditorSection>
-                  }
-                />
               ),
             },
             {

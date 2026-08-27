@@ -1,7 +1,7 @@
 export {
-  PAGE_LAYOUT_SLOTS as PAGE_COMPOSITION_SLOTS,
-  type PageLayoutSlot as PageCompositionSlot,
-} from "../page-blocks/layout-slots";
+  PAGE_COMPOSITION_POSITIONS as PAGE_COMPOSITION_SLOTS,
+  type PageCompositionPosition as PageCompositionSlot,
+} from "./positions.ts";
 
 export {
   getModuleEditorHeaderMetadata,

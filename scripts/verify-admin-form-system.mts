@@ -656,11 +656,15 @@ check(
 check(
   "full-page reference forms adopt one shared presentation cadence and page surface",
   adminFormPresentation.includes(
-    'export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-7"',
+    'export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-5"',
   ) &&
+    adminFormPresentation.includes("grid gap-6 xl:grid-cols") &&
+    adminFormPresentation.includes("`${ADMIN_FORM_SECTION_SURFACE_CLASSES} p-5`") &&
+    adminFormPresentation.includes('compactHeader ? "mb-4" : "mb-5"') &&
     adminPageExperience.includes(
       'data-admin-page-surface-owner="AdminPageExperience"',
     ) &&
+    adminPageExperience.includes("flex flex-col gap-6") &&
     [articleCreate, articleEdit].every(
       (source) =>
         source.includes("<AdminPageExperience") &&
@@ -698,6 +702,10 @@ check(
 );
 
 const runtime = read("src/components/admin/ui/AdminFormRuntime.tsx");
+check(
+  "shared Admin form grids use the dense but comfortable 16px rhythm",
+  runtime.includes("grid gap-4") && !runtime.includes("grid gap-5"),
+);
 const formRuntimeContract = read("src/lib/admin/form-runtime.ts");
 const actionsSource = runtime.slice(
   runtime.indexOf("export function AdminFormActions"),

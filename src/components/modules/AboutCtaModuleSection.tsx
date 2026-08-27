@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import type { AboutCtaContact, AboutCtaModuleContent } from "./about-cta-mappers";
 import { isContactIconKey, renderContactIcon } from "../page-blocks/contact-icons";
+import { pageBlockTextAlignClass } from "../../lib/page-blocks/configs";
 
 export type AboutCtaModuleSectionProps = {
   cmsContent: AboutCtaModuleContent | null;
@@ -38,6 +39,9 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
   if (!cmsContent) return null;
 
   const content = cmsContent;
+  const eyebrowFormat = content.formatting.eyebrow!;
+  const titleFormat = content.formatting.title!;
+  const descriptionFormat = content.formatting.description!;
   const contacts = content.contacts.filter(hasContactCopy);
   const rowPadding = contactRowPadding(contacts.length);
   const imageSrc = content.image?.trim();
@@ -95,20 +99,20 @@ export default function AboutCtaModuleSection({ cmsContent }: AboutCtaModuleSect
 
             <div className="relative z-20 order-2 flex min-h-[200px] min-w-0 items-center justify-center px-6 py-9 text-center [direction:rtl] @xl/slot-module:px-7 @3xl/slot-module:min-h-[320px] @5xl/slot-module:px-10">
               <div className="max-w-xl">
-                {content.eyebrow.trim() ? (
-                  <p className="font-en text-[10px] uppercase tracking-[0.24em] text-[#D8B87A]/58">
+                {eyebrowFormat.visible && content.eyebrow.trim() ? (
+                  <p className={`font-en text-[10px] uppercase tracking-[0.24em] text-[#D8B87A]/58 ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}>
                     {content.eyebrow}
                   </p>
                 ) : null}
 
-                {content.title.trim() ? (
-                  <h2 className="mt-5 text-3xl font-bold leading-tight tracking-[-0.04em] text-white @3xl/slot-module:text-4xl @5xl/slot-module:text-5xl">
+                {titleFormat.visible && content.title.trim() ? (
+                  <h2 className={`mt-5 text-3xl leading-tight tracking-[-0.04em] text-white @3xl/slot-module:text-4xl @5xl/slot-module:text-5xl ${pageBlockTextAlignClass(titleFormat.alignment)} ${titleFormat.bold ? "font-bold" : "font-normal"}`}>
                     {content.title}
                   </h2>
                 ) : null}
 
-                {content.description.trim() ? (
-                  <p className="mt-5 text-[15px] leading-8 text-white/60 @xl/slot-module:text-[16px]">{content.description}</p>
+                {descriptionFormat.visible && content.description.trim() ? (
+                  <p className={`mt-5 text-[15px] leading-8 text-white/60 @xl/slot-module:text-[16px] ${pageBlockTextAlignClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"}`}>{content.description}</p>
                 ) : null}
 
                 {content.button.label.trim() ? (

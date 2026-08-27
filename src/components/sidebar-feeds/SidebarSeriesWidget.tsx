@@ -14,6 +14,7 @@ type SidebarSeriesWidgetProps = {
   linkText: string;
   showImage?: boolean;
   showExcerpt?: boolean;
+  formatting?: import("../../lib/page-blocks/configs").PageBlockTextFormattingConfig;
 };
 
 export default function SidebarSeriesWidget({
@@ -23,6 +24,7 @@ export default function SidebarSeriesWidget({
   linkText,
   showImage = true,
   showExcerpt = false,
+  formatting,
 }: SidebarSeriesWidgetProps) {
   const {
     activeIndex,
@@ -77,7 +79,7 @@ export default function SidebarSeriesWidget({
   const arrowPositionClassName = showImage ? "top-[5.5rem]" : "top-1/2";
 
   return (
-    <SidebarFeedPanel eyebrow={eyebrow} title={title}>
+    <SidebarFeedPanel eyebrow={eyebrow} title={title} formatting={formatting}>
       <div
         ref={containerRef}
         className="touch-pan-y"

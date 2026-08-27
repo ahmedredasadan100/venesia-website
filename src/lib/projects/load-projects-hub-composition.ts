@@ -4,6 +4,7 @@ import { unstable_cache } from "next/cache";
 
 import type { Json } from "../database.types";
 import { normalizeBoolean } from "../page-blocks/admin-utils";
+import { normalizeLayoutSlot, type PageLayoutSlot } from "../page-blocks/layout-slots";
 import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
 
@@ -12,7 +13,7 @@ export const PROJECTS_HUB_PAGE_SLUG = "projects" as const;
 export type ProjectsHubCompositionAssignment = {
   assignmentId: number;
   templateId: number;
-  slot: string;
+  slot: PageLayoutSlot;
   sortOrder: number;
   isVisible: boolean;
   templateSlug: string;
@@ -74,7 +75,7 @@ async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoad
     assignments.push({
       assignmentId: row.id,
       templateId: template.id,
-      slot: row.slot ?? "main",
+      slot: normalizeLayoutSlot(row.slot),
       sortOrder: row.sort_order ?? 0,
       isVisible: normalizeBoolean(row.is_visible, true),
       templateSlug: template.slug,

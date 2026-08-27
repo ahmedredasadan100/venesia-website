@@ -54,14 +54,18 @@ export type HeroTemplateVariant = (typeof HERO_TEMPLATE_VARIANTS)[number];
  * These variants read content from their domain while keeping presentation in
  * hero_templates.config. This is a source classification, not a second config.
  */
-export const HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS = ["project-detail"] as const satisfies readonly HeroTemplateVariant[];
+export const HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS = [
+  "project-detail",
+] as const satisfies readonly HeroTemplateVariant[];
 export type HeroDomainBackedTemplateVariant =
   (typeof HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS)[number];
 
 export function isDomainBackedHeroTemplateVariant(
   value: unknown,
 ): value is HeroDomainBackedTemplateVariant {
-  return (HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS as readonly unknown[]).includes(value);
+  return (HERO_DOMAIN_BACKED_TEMPLATE_VARIANTS as readonly unknown[]).includes(
+    value,
+  );
 }
 
 /** Semantic elements actually rendered by the Project Detail Hero variant. */
@@ -73,6 +77,51 @@ export const PROJECT_DETAIL_HERO_ELEMENT_KEYS = [
   "cta",
 ] as const satisfies readonly HeroElementKey[];
 
+export const PROJECT_HERO_ACTION_KEYS = [
+  "download",
+  "tracking",
+  "reservation",
+] as const;
+export type ProjectHeroActionKey = (typeof PROJECT_HERO_ACTION_KEYS)[number];
+
+export const PROJECT_HERO_ACTION_LABELS_AR: Record<
+  ProjectHeroActionKey,
+  string
+> = {
+  download: "تحميل ملف المشروع",
+  tracking: "متابعة مراحل الإنشاء",
+  reservation: "حجز وحدة",
+};
+
+export function normalizeProjectHeroActionOrder(
+  raw: unknown,
+): ProjectHeroActionKey[] {
+  const allowed = new Set<string>(PROJECT_HERO_ACTION_KEYS);
+  const collected: ProjectHeroActionKey[] = [];
+  const seen = new Set<ProjectHeroActionKey>();
+  const push = (value: unknown) => {
+    const key = String(value ?? "").trim() as ProjectHeroActionKey;
+    if (!allowed.has(key) || seen.has(key)) return;
+    seen.add(key);
+    collected.push(key);
+  };
+
+  if (Array.isArray(raw)) {
+    raw.forEach(push);
+  } else if (typeof raw === "string" && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (Array.isArray(parsed)) parsed.forEach(push);
+      else raw.split(/[,\s]+/).forEach(push);
+    } catch {
+      raw.split(/[,\s]+/).forEach(push);
+    }
+  }
+
+  PROJECT_HERO_ACTION_KEYS.forEach(push);
+  return collected;
+}
+
 export const HERO_VARIANT_LABELS_AR: Record<HeroVariant, string> = {
   "home-cinematic": "رئيسية سينمائية",
   "internal-page": "صفحة داخلية",
@@ -80,10 +129,12 @@ export const HERO_VARIANT_LABELS_AR: Record<HeroVariant, string> = {
   "project-detail": "تفاصيل المشروع",
 };
 
-export const HERO_TEMPLATE_VARIANT_OPTIONS_AR = HERO_TEMPLATE_VARIANTS.map((value) => ({
-  value,
-  label: HERO_VARIANT_LABELS_AR[value],
-}));
+export const HERO_TEMPLATE_VARIANT_OPTIONS_AR = HERO_TEMPLATE_VARIANTS.map(
+  (value) => ({
+    value,
+    label: HERO_VARIANT_LABELS_AR[value],
+  }),
+);
 
 export const HERO_IMAGE_COMPOSITION_OPTIONS_AR = [
   { value: "cover-center", label: "تركيز متوازن" },
@@ -100,7 +151,9 @@ const HERO_IMAGE_COMPOSITION_PRESETS = new Set<string>(
  * CMS output is always a Product preset. Raw CSS values are accepted only at
  * this compatibility boundary so already-persisted records can be migrated.
  */
-export function resolveHeroImageCompositionPreset(value: unknown): HeroImageCompositionPreset {
+export function resolveHeroImageCompositionPreset(
+  value: unknown,
+): HeroImageCompositionPreset {
   const candidate = typeof value === "string" ? value.trim() : "";
   if (HERO_IMAGE_COMPOSITION_PRESETS.has(candidate)) {
     return candidate as HeroImageCompositionPreset;
@@ -117,8 +170,12 @@ export function parseHeroTemplateVariant(value: unknown): HeroTemplateVariant {
   return normalized as HeroTemplateVariant;
 }
 
-export const DEFAULT_HERO_ELEMENT_ORDER: HeroElementKey[] = [...HERO_ELEMENT_KEYS];
-export const STANDARD_INTERNAL_HERO_ELEMENT_ORDER = [...HERO_ELEMENT_KEYS] as const;
+export const DEFAULT_HERO_ELEMENT_ORDER: HeroElementKey[] = [
+  ...HERO_ELEMENT_KEYS,
+];
+export const STANDARD_INTERNAL_HERO_ELEMENT_ORDER = [
+  ...HERO_ELEMENT_KEYS,
+] as const;
 export const STANDARD_INTERNAL_HERO_COMPOSITION_BASELINE = "topics" as const;
 
 export type HeroContentControls = {
@@ -142,7 +199,12 @@ export type HeroContentControls = {
   descriptionAlignment: HeroDescriptionAlignment;
 
   showCta: boolean;
+  ctaBold: boolean;
   ctaAlignment: HeroTextAlignment;
+  showProjectDownloadAction: boolean;
+  showProjectTrackingAction: boolean;
+  showProjectReservationAction: boolean;
+  projectActionOrder: ProjectHeroActionKey[];
 
   heroElementOrder: HeroElementKey[];
 };
@@ -178,7 +240,8 @@ export function resolveDistinctHeroDescription(
 
 export function parseOptionalBool(value: unknown): boolean | undefined {
   if (typeof value === "boolean") return value;
-  if (value === "true" || value === 1 || value === "1" || value === "on") return true;
+  if (value === "true" || value === 1 || value === "1" || value === "on")
+    return true;
   if (value === "false" || value === 0 || value === "0") return false;
   return undefined;
 }
@@ -197,7 +260,13 @@ export function parseHeroDescriptionAlignment(
   fallback: HeroDescriptionAlignment = "right",
 ): HeroDescriptionAlignment {
   const text = readText(value).toLowerCase();
-  if (text === "right" || text === "center" || text === "left" || text === "justify") return text;
+  if (
+    text === "right" ||
+    text === "center" ||
+    text === "left" ||
+    text === "justify"
+  )
+    return text;
   return fallback;
 }
 
@@ -250,8 +319,11 @@ export function normalizeHeroElementOrder(
  * Resolve content-control fields from raw JSON config with legacy-safe defaults.
  * Missing keys → show all, bold defaults as specified, alignment right, default order.
  */
-export function resolveHeroContentControls(raw: Record<string, unknown> = {}): HeroContentControls {
-  const boolOr = (value: unknown, fallback: boolean) => parseOptionalBool(value) ?? fallback;
+export function resolveHeroContentControls(
+  raw: Record<string, unknown> = {},
+): HeroContentControls {
+  const boolOr = (value: unknown, fallback: boolean) =>
+    parseOptionalBool(value) ?? fallback;
 
   // Legacy Projects Hub Explore keys are read into the canonical CTA contract.
   const showCtaResolved =
@@ -281,21 +353,45 @@ export function resolveHeroContentControls(raw: Record<string, unknown> = {}): H
     subtitleAlignment: parseHeroTextAlignment(raw.subtitleAlignment, "right"),
 
     showDescription: boolOr(raw.showDescription, true),
-    descriptionAlignment: parseHeroDescriptionAlignment(raw.descriptionAlignment, "right"),
-
-    showCta: showCtaResolved,
-    ctaAlignment: parseHeroTextAlignment(
-      raw.ctaAlignment ?? raw.cta_alignment ?? raw.exploreAlignment ?? raw.explore_alignment,
+    descriptionAlignment: parseHeroDescriptionAlignment(
+      raw.descriptionAlignment,
       "right",
     ),
 
-    heroElementOrder: normalizeHeroElementOrder(raw.heroElementOrder ?? raw.hero_element_order),
+    showCta: showCtaResolved,
+    ctaBold: boolOr(raw.ctaBold ?? raw.cta_bold, false),
+    ctaAlignment: parseHeroTextAlignment(
+      raw.ctaAlignment ??
+        raw.cta_alignment ??
+        raw.exploreAlignment ??
+        raw.explore_alignment,
+      "right",
+    ),
+    showProjectDownloadAction: boolOr(
+      raw.showProjectDownloadAction ?? raw.show_project_download_action,
+      true,
+    ),
+    showProjectTrackingAction: boolOr(
+      raw.showProjectTrackingAction ?? raw.show_project_tracking_action,
+      true,
+    ),
+    showProjectReservationAction: boolOr(
+      raw.showProjectReservationAction ?? raw.show_project_reservation_action,
+      true,
+    ),
+    projectActionOrder: normalizeProjectHeroActionOrder(
+      raw.projectActionOrder ?? raw.project_action_order,
+    ),
+
+    heroElementOrder: normalizeHeroElementOrder(
+      raw.heroElementOrder ?? raw.hero_element_order,
+    ),
   };
 }
 
 /**
- * Family B has one Design System composition. CMS content may be hidden, but
- * per-page alignment, weight, and ordering cannot fork the shared template.
+ * Family B keeps one Design System composition and element order. Typography
+ * controls remain authored through the existing shared Hero fields.
  */
 export function resolveHeroContentControlsForVariant(
   raw: Record<string, unknown> = {},
@@ -305,6 +401,7 @@ export function resolveHeroContentControlsForVariant(
   if (variant === "project-detail") {
     return {
       ...controls,
+      showCta: true,
       subtitleBold:
         parseOptionalBool(raw.subtitleBold ?? raw.subtitle_bold) ?? true,
       showHighlight: false,
@@ -320,16 +417,6 @@ export function resolveHeroContentControlsForVariant(
 
   return {
     ...controls,
-    eyebrowBold: false,
-    eyebrowAlignment: "right",
-    titleBold: true,
-    titleAlignment: "right",
-    highlightBold: false,
-    highlightAlignment: "right",
-    subtitleBold: false,
-    subtitleAlignment: "right",
-    descriptionAlignment: "right",
-    ctaAlignment: "right",
     heroElementOrder: [...STANDARD_INTERNAL_HERO_ELEMENT_ORDER],
   };
 }
@@ -376,9 +463,15 @@ export function parseHeroContentControlsFormData(
     return parseOptionalBool(submittedValue) ?? fallback;
   };
   const orderEntries = formData.getAll("hero_element_order");
-  const orderValue = orderEntries.length > 1
-    ? orderEntries
-    : (orderEntries[0] ?? defaults.heroElementOrder);
+  const orderValue =
+    orderEntries.length > 1
+      ? orderEntries
+      : (orderEntries[0] ?? defaults.heroElementOrder);
+  const projectActionOrderEntries = formData.getAll("project_action_order");
+  const projectActionOrderValue =
+    projectActionOrderEntries.length > 1
+      ? projectActionOrderEntries
+      : (projectActionOrderEntries[0] ?? defaults.projectActionOrder);
 
   return {
     showEyebrow: readBoolean("show_eyebrow", defaults.showEyebrow),
@@ -411,9 +504,25 @@ export function parseHeroContentControlsFormData(
       defaults.descriptionAlignment,
     ),
     showCta: readBoolean("show_cta", defaults.showCta),
+    ctaBold: readBoolean("cta_bold", defaults.ctaBold),
     ctaAlignment: parseHeroTextAlignment(
       formData.get("cta_alignment"),
       defaults.ctaAlignment,
+    ),
+    showProjectDownloadAction: readBoolean(
+      "show_project_download_action",
+      defaults.showProjectDownloadAction,
+    ),
+    showProjectTrackingAction: readBoolean(
+      "show_project_tracking_action",
+      defaults.showProjectTrackingAction,
+    ),
+    showProjectReservationAction: readBoolean(
+      "show_project_reservation_action",
+      defaults.showProjectReservationAction,
+    ),
+    projectActionOrder: normalizeProjectHeroActionOrder(
+      projectActionOrderValue,
     ),
     heroElementOrder: normalizeHeroElementOrder(
       orderValue,
@@ -423,7 +532,9 @@ export function parseHeroContentControlsFormData(
 }
 
 /** Physical text-align classes (not logical start/end). */
-export function heroTextAlignClass(alignment: HeroTextAlignment | HeroDescriptionAlignment): string {
+export function heroTextAlignClass(
+  alignment: HeroTextAlignment | HeroDescriptionAlignment,
+): string {
   if (alignment === "center") return "text-center";
   if (alignment === "left") return "text-left";
   if (alignment === "justify") return "text-justify";

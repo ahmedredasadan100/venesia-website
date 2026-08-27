@@ -2,7 +2,7 @@ import type {
   PageBlockAssignmentRow,
   PageLayoutSlot,
 } from "../../../../../../lib/page-blocks/types";
-import { getAssignableSlotsForRoute } from "../../../../../../lib/page-composition/route-slot-policy";
+import { getAssignablePositions } from "../../../../../../lib/page-composition/page-assignment-contract";
 
 export function assignmentRowId(row: PageBlockAssignmentRow) {
   return `${row.module_kind}:${row.id}`;
@@ -13,9 +13,9 @@ export function isManageableAssignment(row: PageBlockAssignmentRow) {
 }
 
 /**
- * Valid layout slots for a module kind on a page.
- * Delegates to the shared route-slot policy (single source of truth).
+ * Valid semantic Regions for a module kind.
+ * Delegates to the shared Page Composition contract (single source of truth).
  */
-export function getSlotOptions(kind: string, pageSlug?: string | null): PageLayoutSlot[] {
-  return getAssignableSlotsForRoute(pageSlug, kind);
+export function getSlotOptions(kind: string): PageLayoutSlot[] {
+  return getAssignablePositions(kind);
 }

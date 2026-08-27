@@ -38,10 +38,9 @@ assert(
   "legacy module hints must remain retired",
 );
 assert(
-  client.includes("usesLockedInternalSlug") &&
-    /<ModuleEditorTechnicalIdentity\s+mode="hidden"/.test(client) &&
-    client.includes("!usesLockedInternalSlug"),
-  "Vision goals internal slug must remain hidden while editable identities keep the shared field",
+  client.includes('<input type="hidden" name="slug" value={block.slug}') &&
+    !client.includes("ModuleEditorTechnicalIdentity"),
+  "Vision goals internal slug must remain preserved and hidden from Product UI",
 );
 assert(client.includes("تم حفظ موديول الرؤية والأهداف بنجاح."), "Vision goals save notice missing");
 assert(

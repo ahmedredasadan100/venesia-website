@@ -7,12 +7,14 @@ import {
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
+  ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
 import AdminMediaImageField from "../../media/AdminMediaImageField";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
+import { resolvePageBlockTextFormat } from "../../../../lib/page-blocks/configs";
 import {
   PROJECTS_HUB_DEFAULT_MAP_IMAGE,
   type ProjectsHubMapModuleConfig,
@@ -30,6 +32,7 @@ function normalizePins(pins: ProjectsHubMapPinConfig[] | undefined) {
 
 export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapModuleEditorProps) {
   const [pins, setPins] = useState<ProjectsHubMapPinConfig[]>(() => normalizePins(config.mapPins));
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
 
   const movePin = (index: number, direction: -1 | 1) => {
     const nextIndex = index + direction;
@@ -62,10 +65,9 @@ export default function ProjectsHubMapModuleEditor({ config }: ProjectsHubMapMod
         <ModuleEditorSectionHeading intent="domain">خريطة المشروعات</ModuleEditorSectionHeading>
 
         <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="short-text" span={6}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان</span>
-          <input name="title" defaultValue={config.title} className={fieldClassName()} />
-        </label></ModuleEditorField>
+        <ModuleEditorField nature="short-text" span={6}><ModuleEditorVisibilityAlignRow label="العنوان" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+          <input name="title" aria-label="العنوان" defaultValue={config.title} className={fieldClassName()} />
+        </ModuleEditorVisibilityAlignRow></ModuleEditorField>
 
         <ModuleEditorField nature="short-text" span={6}><label className="block space-y-2">
           <span className="text-xs font-semibold text-white/55">نص زر الاستكشاف</span>

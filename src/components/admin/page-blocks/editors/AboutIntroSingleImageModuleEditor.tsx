@@ -1,13 +1,13 @@
 "use client";
 
 import {
-  ModuleEditorContentGroup,
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
+  ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
@@ -15,7 +15,10 @@ import { useState } from "react";
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
-import type { AboutIntroSingleImageModuleConfig } from "../../../../lib/page-blocks/configs";
+import {
+  resolvePageBlockTextFormat,
+  type AboutIntroSingleImageModuleConfig,
+} from "../../../../lib/page-blocks/configs";
 
 type AboutIntroSingleImageModuleEditorProps = {
   config: AboutIntroSingleImageModuleConfig;
@@ -36,6 +39,10 @@ export default function AboutIntroSingleImageModuleEditor({
   );
   const mainSrc = config.images?.main ?? "";
   const mainAlt = config.images?.mainAlt ?? "";
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
+  const subtitleFormat = resolvePageBlockTextFormat(config, "subtitle");
+  const descriptionFormat = resolvePageBlockTextFormat(config, "description");
 
   return (
     <div className="space-y-4">
@@ -43,37 +50,34 @@ export default function AboutIntroSingleImageModuleEditor({
       <input type="hidden" name="image_position" value={imagePosition} />
 
       <ModuleEditorSection>
-        <ModuleEditorContentGroup kind="short">
         <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="short-text" span={3}><label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
-          <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
-        </label></ModuleEditorField>
-        <ModuleEditorField nature="short-text" span={4}><label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-white/55">العنوان</span>
-          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
-        </label></ModuleEditorField>
-        <ModuleEditorField nature="short-description" span={5}><label className="block space-y-1.5">
-          <span className="text-xs font-semibold text-white/55">العنوان الفرعي</span>
-          <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
-        </label></ModuleEditorField>
-        </ModuleEditorFieldGrid>
-        </ModuleEditorContentGroup>
-        <ModuleEditorContentGroup kind="long">
-        <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="long-content" span={12}><div>
+          <ModuleEditorField nature="short-text" span={6}>
+          <ModuleEditorVisibilityAlignRow label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+            <input name="eyebrow" aria-label="النص التمهيدي" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
+          </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
+          <ModuleEditorField nature="short-text" span={6}>
+          <ModuleEditorVisibilityAlignRow label="العنوان" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+            <input name="title" aria-label="العنوان" defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
+          </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
+          <ModuleEditorField nature="short-text" span={12}>
+          <ModuleEditorVisibilityAlignRow label="العنوان الفرعي" showName="show_subtitle" boldName="subtitle_bold" alignmentName="subtitle_alignment" showDefault={subtitleFormat.visible} boldDefault={subtitleFormat.bold} alignmentDefault={subtitleFormat.alignment}>
+            <input name="subtitle" aria-label="العنوان الفرعي" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
+          </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
+          <ModuleEditorField nature="long-content" span={12}>
+          <ModuleEditorVisibilityAlignRow label="الوصف" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
           <AdminRichTextEditor
             name="body"
             label="الوصف"
             defaultValue={config.body ?? ""}
-            toolbarMode="minimal"
-            enableTextAlign
-            minHeight={160}
-            helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
+            toolbarMode="none"
+            minHeight={72}
           />
-        </div></ModuleEditorField>
+          </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
         </ModuleEditorFieldGrid>
-        </ModuleEditorContentGroup>
       </ModuleEditorSection>
 
       <ModuleEditorSection>

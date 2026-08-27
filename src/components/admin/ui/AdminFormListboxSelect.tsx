@@ -58,7 +58,7 @@ export default function AdminFormListboxSelect({
   className = "",
   inline = false,
   dir = "rtl",
-  sizing = "full",
+  sizing = "content-relaxed",
 }: AdminFormListboxSelectProps) {
   const generatedId = useId();
   const controlId = id ?? `admin-form-listbox-${generatedId}`;

@@ -21,8 +21,13 @@ async function loadHubDataCaches(state: MediaHubModulesState): Promise<HubDataCa
       !moduleState.config.type
     ) continue;
     const current = requirements.get(moduleState.config.type) ?? { featured: false, items: false };
-    if (moduleState.sectionKey === "featured") current.featured = true;
-    else current.items = true;
+    current.items = true;
+    if (
+      moduleState.sectionKey === "featured" &&
+      moduleState.config.contentHierarchy?.mode === "featured-first"
+    ) {
+      current.featured = true;
+    }
     requirements.set(moduleState.config.type, current);
   }
 
@@ -45,13 +50,24 @@ function resolveSectionData(
 ): MediaHubSectionData | null {
   if (!config.type) return null;
   const cache = caches.get(config.type);
+  const itemLimit = config.itemLimit ?? 4;
+  const hierarchyMode = config.contentHierarchy?.mode ?? "uniform";
 
   if (sectionKey === "featured") {
-    if (!cache?.featured) return null;
+    const sourceItems = cache?.items ?? [];
+    if (hierarchyMode !== "featured-first") {
+      return { kind: "featured", items: sourceItems.slice(0, itemLimit) };
+    }
+
+    const primaryItem = cache?.featured ?? sourceItems[0];
+    if (!primaryItem) return null;
+    const secondaryItems = sourceItems
+      .filter((item) => item.id !== primaryItem.id)
+      .slice(0, Math.max(0, itemLimit - 1));
 
     return {
       kind: "featured",
-      item: cache.featured,
+      items: [primaryItem, ...secondaryItems],
     };
   }
 
@@ -60,28 +76,27 @@ function resolveSectionData(
   if (sectionKey === "site-updates") {
     return {
       kind: "site-updates",
-      items: items.slice(0, config.limit ?? 4),
+      items: items.slice(0, itemLimit),
     };
   }
 
   if (sectionKey === "videos") {
     return {
       kind: "videos",
-      items: items.slice(0, config.limit ?? 4),
+      items: items.slice(0, itemLimit),
     };
   }
 
   if (sectionKey === "gallery") {
     return {
       kind: "gallery",
-      items: items.slice(0, config.limit ?? 8),
+      items: items.slice(0, itemLimit),
     };
   }
 
-  const pressLimit = config.limit ?? items.length;
   return {
     kind: "press",
-    items: items.slice(0, pressLimit),
+    items: items.slice(0, itemLimit),
   };
 }
 

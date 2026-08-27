@@ -1,5 +1,9 @@
 import type { AboutCtaModuleConfig, CtaBlockConfig } from "../../lib/page-blocks/configs";
-import { asAboutCtaConfig } from "../../lib/page-blocks/configs";
+import {
+  asAboutCtaConfig,
+  resolvePageBlockTextFormattingMap,
+  type PageBlockTextFormattingMap,
+} from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
 export type AboutCtaContact = {
@@ -15,6 +19,7 @@ export type AboutCtaModuleContent = {
   eyebrow: string;
   title: string;
   description: string;
+  formatting: PageBlockTextFormattingMap;
   button: {
     label: string;
     href: string;
@@ -54,6 +59,11 @@ export function mapAboutCtaBlock(block: ResolvedPageBlock): AboutCtaModuleConten
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     description: config.description ?? "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     button: {
       label: config.button?.label ?? "",
       href: config.button?.href ?? "/projects",
@@ -74,6 +84,11 @@ export function mapLegacyProjectsCtaBlock(block: ResolvedPageBlock): AboutCtaMod
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     description: config.description ?? "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow", defaults: { bold: true } },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     button: {
       label: config.primaryCta?.label ?? "",
       href: config.primaryCta?.href ?? "/projects",

@@ -71,6 +71,7 @@ function resolveHomeTrustContent(content: HomeTrustContent) {
     eyebrow: content.eyebrow.trim(),
     title: content.title.trim(),
     description: hasRichTextValue(content.description) ? content.description.trim() : "",
+    formatting: content.formatting,
     eyebrowBold: content.eyebrowBold,
     eyebrowAlignment: content.eyebrowAlignment,
     titleBold: content.titleBold,
@@ -240,25 +241,29 @@ export default function HomeTrustSection({ content }: HomeTrustSectionProps) {
     <section className="mx-auto max-w-7xl px-6 py-7">
       <div className="grid gap-10 @4xl/slot-module:grid-cols-[0.8fr_1.2fr]">
         <div data-reveal="from-inline-start" data-delay="0">
-          <p
+          {resolved.formatting.eyebrow?.visible ? <p
             className={`text-sm text-[#D8B87A] ${TEXT_ALIGN_CLASS[resolved.eyebrowAlignment]}`}
             style={{ fontWeight: resolved.eyebrowBold ? 700 : 400 }}
           >
             {resolved.eyebrow}
-          </p>
+          </p> : null}
 
-          <h2
+          {resolved.formatting.title?.visible ? <h2
             className={`mt-3 text-4xl leading-tight ${TEXT_ALIGN_CLASS[resolved.titleAlignment]}`}
             style={{ fontWeight: resolved.titleBold ? 700 : 400 }}
           >
             {resolved.title}
-          </h2>
+          </h2> : null}
 
           {/*
             Scoped Home Trust intro only via .home-trust-intro in globals.css:
             muted body matching prior plain paragraph. Does not change other rich text.
           */}
-          <RichTextContent value={resolved.description} mode="rich" className="home-trust-intro" />
+          {resolved.formatting.description?.visible ? <RichTextContent
+            value={resolved.description}
+            mode="rich"
+            className={`home-trust-intro ${TEXT_ALIGN_CLASS[resolved.formatting.description.alignment]} ${resolved.formatting.description.bold ? "font-bold" : "font-normal"}`}
+          /> : null}
         </div>
 
         <div

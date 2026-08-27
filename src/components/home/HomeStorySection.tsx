@@ -9,6 +9,10 @@ import type {
   HomeStoryButtonAlignment,
   HomeStoryContent,
 } from "./home-cms-mappers";
+import {
+  pageBlockTextAlignClass,
+  pageBlockTextPlacementClass,
+} from "../../lib/page-blocks/configs";
 
 const BUTTON_ALIGN_CLASS: Record<HomeStoryButtonAlignment, string> = {
   // Section is RTL: flex-start = physical right, flex-end = physical left.
@@ -43,6 +47,7 @@ function resolveHomeStoryContent(content: HomeStoryContent) {
     eyebrow: content.eyebrow.trim(),
     title: content.title.trim(),
     body: content.body.trim(),
+    formatting: content.formatting,
     images: {
       main: content.images?.main ?? "",
       secondary: content.images?.secondary ?? "",
@@ -133,6 +138,9 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
   const resolved = resolveHomeStoryContent(content);
   const showArrow = resolved.button.icon === "arrow";
   const iconOnRight = resolved.button.iconPosition === "right";
+  const eyebrowFormat = resolved.formatting.eyebrow!;
+  const titleFormat = resolved.formatting.title!;
+  const descriptionFormat = resolved.formatting.description!;
   const { ref: mediaRef, inViewProps } = useTouchInViewReveal(0.4);
   if (!resolved.images.main || !resolved.images.secondary) return null;
 
@@ -165,19 +173,19 @@ export default function HomeStorySection({ content }: HomeStorySectionProps) {
           </div>
 
           <div data-reveal="fade-up" data-delay="120" className="home-story-reveal">
-            <p className="font-en text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70">
+            {eyebrowFormat.visible ? <p className={`font-en text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70 ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}>
               {resolved.eyebrow}
-            </p>
+            </p> : null}
 
-            <h2 className="home-story-title mt-4 max-w-xl text-4xl font-semibold leading-tight @4xl/slot-module:text-5xl">
+            {titleFormat.visible ? <h2 className={`home-story-title mt-4 max-w-xl text-4xl leading-tight @4xl/slot-module:text-5xl ${pageBlockTextAlignClass(titleFormat.alignment)} ${pageBlockTextPlacementClass(titleFormat.alignment)} ${titleFormat.bold ? "font-bold" : "font-normal"}`}>
               {resolved.title}
-            </h2>
+            </h2> : null}
 
-            <RichTextContent
+            {descriptionFormat.visible ? <RichTextContent
               value={resolved.body}
               mode="rich"
-              className="mt-6 max-w-xl text-base leading-8 text-white/60 [&_strong]:text-inherit [&_b]:text-inherit"
-            />
+              className={`mt-6 max-w-xl text-base leading-8 text-white/60 ${pageBlockTextAlignClass(descriptionFormat.alignment)} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"} [&_strong]:text-inherit [&_b]:text-inherit`}
+            /> : null}
 
             <div className={`mt-8 flex max-w-xl ${BUTTON_ALIGN_CLASS[resolved.button.alignment]}`} dir="rtl">
               <HomeStoryCta

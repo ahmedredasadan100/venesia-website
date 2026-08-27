@@ -1,4 +1,5 @@
 import type { MediaSidebarItem } from "../media-center";
+import type { PageLayoutSlot } from "../page-blocks/layout-slots";
 import type { MediaSidebarModuleConfig } from "./parse-config";
 
 export type MediaSidebarWidgetKey = "sections" | "latest" | "popular";
@@ -6,6 +7,7 @@ export type MediaSidebarWidgetKey = "sections" | "latest" | "popular";
 export type MediaSidebarWidgetState = {
   widgetKey: MediaSidebarWidgetKey;
   assignmentId: number;
+  slot: PageLayoutSlot;
   sortOrder: number;
   isVisible: boolean;
   title: string;

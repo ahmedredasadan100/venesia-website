@@ -3,13 +3,18 @@
 import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
-  ModuleEditorHeadingVisibilityRow,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
+  ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
-import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../../ui";
+import {
+  AdminFormGrid,
+  AdminFormListboxSelect,
+  AdminFormSwitch,
+} from "../../ui";
 
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
+import { resolvePageBlockTextFormat } from "../../../../lib/page-blocks/configs";
 import {
   PROJECTS_HUB_FILTER_IDS,
   PROJECTS_HUB_VIEW_MODES,
@@ -29,50 +34,96 @@ function VisibilityToggle({
   label: string;
   defaultChecked: boolean;
 }) {
-  return <AdminFormSwitch name={name} label={label} value="true" defaultChecked={defaultChecked} surface />;
+  return (
+    <AdminFormSwitch
+      name={name}
+      label={label}
+      value="true"
+      defaultChecked={defaultChecked}
+      surface
+    />
+  );
 }
 
-export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubListingModuleEditorProps) {
+export default function ProjectsHubListingModuleEditor({
+  config,
+}: ProjectsHubListingModuleEditorProps) {
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(config, "title", {
+    bold: true,
+  });
   return (
     <div className="space-y-6">
       <input type="hidden" name="config_schema" value="projects-hub-listing" />
-      <input type="hidden" name="sort" value={config.sort || "homepage_order"} />
+      <input
+        type="hidden"
+        name="sort"
+        value={config.sort || "homepage_order"}
+      />
 
       <ModuleEditorSection>
         <p className="text-xs leading-6 text-white/45">
           يتحكّم في عنوان قسم القائمة فقط، وليس في بيانات المشروعات.
         </p>
 
-        <ModuleEditorHeadingVisibilityRow
-          name="show_eyebrow"
-          label="إظهار النص التمهيدي"
-          defaultChecked={config.showEyebrow !== false}
-        >
-          <label className="block min-w-0 space-y-2">
-            <span className="text-xs font-semibold text-white/55">النص التمهيدي الحالي</span>
-            <input name="eyebrow" defaultValue={config.eyebrow} className={fieldClassName()} dir="ltr" />
-          </label>
-        </ModuleEditorHeadingVisibilityRow>
-
-        <ModuleEditorHeadingVisibilityRow
-          name="show_title"
-          label="إظهار عنوان القسم"
-          defaultChecked={config.showTitle !== false}
-        >
-          <label className="block min-w-0 space-y-2">
-            <span className="text-xs font-semibold text-white/55">عنوان القسم الحالي</span>
-            <input name="title" defaultValue={config.title} className={fieldClassName()} />
-          </label>
-        </ModuleEditorHeadingVisibilityRow>
+        <ModuleEditorFieldGrid>
+          <ModuleEditorField nature="short-text" span={6}>
+            <ModuleEditorVisibilityAlignRow
+              label="النص التمهيدي"
+              showName="show_eyebrow"
+              boldName="eyebrow_bold"
+              alignmentName="eyebrow_alignment"
+              showDefault={
+                config.showEyebrow !== false && eyebrowFormat.visible
+              }
+              boldDefault={eyebrowFormat.bold}
+              alignmentDefault={eyebrowFormat.alignment}
+            >
+              <input
+                name="eyebrow"
+                aria-label="النص التمهيدي"
+                defaultValue={config.eyebrow}
+                className={fieldClassName()}
+                dir="ltr"
+              />
+            </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
+          <ModuleEditorField nature="short-text" span={6}>
+            <ModuleEditorVisibilityAlignRow
+              label="عنوان القسم"
+              showName="show_title"
+              boldName="title_bold"
+              alignmentName="title_alignment"
+              showDefault={config.showTitle !== false && titleFormat.visible}
+              boldDefault={titleFormat.bold}
+              alignmentDefault={titleFormat.alignment}
+            >
+              <input
+                name="title"
+                aria-label="عنوان القسم"
+                defaultValue={config.title}
+                className={fieldClassName()}
+              />
+            </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="domain">فلاتر المشروعات</ModuleEditorSectionHeading>
-        <p className="text-xs leading-6 text-white/45">
-          لا تظهر شريحة لنوع لا توجد له مشروعات منشورة، حتى لو كانت مفعلة هنا.
-        </p>
+        <ModuleEditorSectionHeading
+          intent="domain"
+          actions={
+            <VisibilityToggle
+              name="show_filter_bar"
+              label="إظهار شريط الفلاتر"
+              defaultChecked={config.showFilterBar !== false}
+            />
+          }
+        >
+          فلاتر المشروعات
+        </ModuleEditorSectionHeading>
 
-        <ModuleEditorFieldGrid>
+        <ModuleEditorFieldGrid className="mt-4">
           <ModuleEditorField nature="standard" span={4}>
             <AdminFormListboxSelect
               name="default_filter"
@@ -80,7 +131,12 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
               defaultValue={config.defaultFilter}
               options={PROJECTS_HUB_FILTER_IDS.map((filter) => ({
                 value: filter,
-                label: filter === "all" ? "كل المشروعات" : filter === "residential" ? "سكني" : "تجاري",
+                label:
+                  filter === "all"
+                    ? "كل المشروعات"
+                    : filter === "residential"
+                      ? "سكني"
+                      : "تجاري",
               }))}
             />
           </ModuleEditorField>
@@ -90,7 +146,13 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
                 <AdminFormSwitch
                   key={filter}
                   name="visible_filters"
-                  label={filter === "all" ? "كل المشروعات" : filter === "residential" ? "سكني" : "تجاري"}
+                  label={
+                    filter === "all"
+                      ? "كل المشروعات"
+                      : filter === "residential"
+                        ? "سكني"
+                        : "تجاري"
+                  }
                   value={filter}
                   defaultChecked={config.visibleFilters.includes(filter)}
                   surface
@@ -99,21 +161,18 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
             </div>
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
-
-        <VisibilityToggle
-          name="show_filter_bar"
-          label="إظهار شريط الفلاتر"
-          defaultChecked={config.showFilterBar !== false}
-        />
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="domain">البيانات الظاهرة داخل بطاقة المشروع</ModuleEditorSectionHeading>
+        <ModuleEditorSectionHeading intent="domain">
+          البيانات الظاهرة داخل بطاقة المشروع
+        </ModuleEditorSectionHeading>
         <p className="text-xs leading-6 text-white/45">
-          إظهار أو إخفاء الحقول المعروضة حالياً داخل البطاقة فقط. لا يغيّر قيم المشروع في قاعدة البيانات.
+          إظهار أو إخفاء الحقول المعروضة حالياً داخل البطاقة فقط. لا يغيّر قيم
+          المشروع في قاعدة البيانات.
         </p>
 
-        <AdminFormGrid columns={3}>
+        <AdminFormGrid columns={4}>
           <VisibilityToggle
             name="show_project_image"
             label="إظهار صورة المشروع"
@@ -153,34 +212,35 @@ export default function ProjectsHubListingModuleEditor({ config }: ProjectsHubLi
       </ModuleEditorSection>
 
       <ModuleEditorSection>
-        <ModuleEditorSectionHeading intent="settings">إعدادات عرض القائمة</ModuleEditorSectionHeading>
+        <ModuleEditorSectionHeading intent="settings">
+          إعدادات عرض القائمة
+        </ModuleEditorSectionHeading>
 
-        <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="technical" span={4}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">عدد المشروعات في الصفحة</span>
-          <input
-            name="page_size"
-            type="number"
-            min={1}
-            max={48}
-            defaultValue={config.pageSize}
-            dir="ltr"
-            className={fieldClassName()}
+        <AdminFormGrid columns={5} className="mt-4">
+          <label className="block space-y-2">
+            <span className="text-xs font-semibold text-white/55">
+              عدد المشروعات في الصفحة
+            </span>
+            <input
+              name="page_size"
+              type="number"
+              min={1}
+              max={48}
+              defaultValue={config.pageSize}
+              dir="ltr"
+              className={fieldClassName()}
+            />
+          </label>
+
+          <AdminFormListboxSelect
+            name="default_view"
+            label="وضع العرض الافتراضي"
+            defaultValue={config.defaultView}
+            options={PROJECTS_HUB_VIEW_MODES.map((mode) => ({
+              value: mode,
+              label: mode === "list" ? "قائمة" : "بطاقات",
+            }))}
           />
-        </label></ModuleEditorField>
-
-        <ModuleEditorField nature="standard" span={8}><AdminFormListboxSelect
-          name="default_view"
-          label="وضع العرض الافتراضي"
-          defaultValue={config.defaultView}
-          options={PROJECTS_HUB_VIEW_MODES.map((mode) => ({
-            value: mode,
-            label: mode === "list" ? "قائمة" : "بطاقات",
-          }))}
-        /></ModuleEditorField>
-        </ModuleEditorFieldGrid>
-
-        <AdminFormGrid columns={3}>
           <VisibilityToggle
             name="show_view_toggle"
             label="إظهار زر تغيير طريقة العرض"

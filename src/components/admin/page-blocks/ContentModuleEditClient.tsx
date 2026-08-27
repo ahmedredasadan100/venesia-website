@@ -1,21 +1,19 @@
 "use client";
 
 import AdminNotice from "../AdminNotice";
-import { AdminActionButton } from "../ui";
+import { AdminActionButton, AdminFormGrid } from "../ui";
 import HeroCtaFields from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields";
 import HeroElementOrderEditor from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroElementOrderEditor";
 import {
   ModuleEditorHeader,
   ModuleEditorFeedback,
-  ModuleEditorField,
-  ModuleEditorFieldGrid,
   ModuleEditorPagesTab,
+  ModuleEditorIdentitySection,
   ModuleEditorSaveArea,
   ModuleEditorSection,
-  ModuleEditorSettingsComposition,
-  ModuleEditorStatusSwitch,
+  ModuleEditorSectionHeading,
   ModuleEditorTabs,
-  ModuleEditorTechnicalIdentity,
+  MODULE_EDITOR_CONTROL_CARD_CLASS_NAME,
 } from "./ModuleEditorPresentation";
 import AboutIntroModuleEditor from "./editors/AboutIntroModuleEditor";
 import AboutIntroSingleImageModuleEditor from "./editors/AboutIntroSingleImageModuleEditor";
@@ -48,8 +46,11 @@ import {
   PROJECTS_HUB_HERO_ELEMENT_KEYS,
 } from "../../../lib/page-blocks/projects-hub-config";
 import {
+  PROJECT_HERO_ACTION_KEYS,
+  PROJECT_HERO_ACTION_LABELS_AR,
+} from "../../../lib/hero/hero-content-controls";
+import {
   getContentModuleEditorKey,
-  isStructuralContentTemplateSlug,
   resolveModuleProductKind,
 } from "../../../lib/page-blocks/module-edit-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
@@ -67,14 +68,77 @@ type ContentModuleEditClientProps = {
   };
   config: unknown;
   assignmentContext: ModuleAssignmentContext;
+  projectDetailHeroEditorLinks: {
+    root: string;
+    buttons: string;
+  } | null;
   saved?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
 };
+
+function ProjectDetailHeroEditorLinks({
+  links,
+}: {
+  links: ContentModuleEditClientProps["projectDetailHeroEditorLinks"];
+}) {
+  return (
+    <ModuleEditorSection>
+      {links ? (
+        <>
+          <ModuleEditorSectionHeading
+            intent="cta"
+            actions={
+              <AdminActionButton href={links.root} variant="dark">
+                فتح محرر Hero التفاصيل
+              </AdminActionButton>
+            }
+          >
+            الإجراءات الثلاثة
+          </ModuleEditorSectionHeading>
+          <AdminFormGrid columns={3} className="mt-4">
+            {PROJECT_HERO_ACTION_KEYS.map((key, index) => {
+              const label = PROJECT_HERO_ACTION_LABELS_AR[key];
+              return (
+                <article
+                  key={key}
+                  data-related-project-hero-action-card={key}
+                  className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} flex min-w-0 flex-col gap-4`}
+                >
+                  <header className="flex min-w-0 items-center gap-3">
+                    <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.045] font-en text-[10px] font-semibold text-[#D8B87A]/70">
+                      {index + 1}
+                    </span>
+                    <h3 className="min-w-0 text-sm font-semibold text-white">
+                      {label}
+                    </h3>
+                  </header>
+                  <AdminActionButton
+                    href={`${links.buttons}#project-hero-action-${key}`}
+                    variant="dark"
+                    className="mt-auto w-full"
+                  >
+                    تعديل {label}
+                  </AdminActionButton>
+                </article>
+              );
+            })}
+          </AdminFormGrid>
+        </>
+      ) : (
+        <AdminNotice
+          variant="warning"
+          message="تعذر العثور على Hero تفاصيل المشروع المعتمد."
+        />
+      )}
+    </ModuleEditorSection>
+  );
+}
 
 export default function ContentModuleEditClient({
   block,
   config,
   assignmentContext,
+  projectDetailHeroEditorLinks,
   saved,
   updateAction,
 }: ContentModuleEditClientProps) {
@@ -122,74 +186,9 @@ export default function ContentModuleEditClient({
   const usesAboutStructuredChrome =
     isAboutIntro || isAboutIntroSingleImage || isVisionGoals || isAboutCta || isAboutPrinciples || isAboutApproach;
   const usesUnifiedModuleChrome = usesHomeModuleChrome || usesAboutStructuredChrome;
-  const usesInternalDescriptionField =
-    isHomeContact ||
-    isHomeStory ||
-    isHomeProjects ||
-    isHomeTrust ||
-    usesAboutStructuredChrome;
-  const usesLockedInternalSlug = isStructuralContentTemplateSlug(block.slug, block.variant);
   const hubStatus = statusMeta(block.status);
   const homeStoryConfig = isHomeStory ? (config as ReturnType<typeof asAboutIntroConfig>) : null;
   const homeContactConfig = isHomeContact ? (config as ReturnType<typeof asAboutCtaConfig>) : null;
-  const settingsFieldSpan = isProjectsHubHero ? 6 : 4;
-
-  const settingsTab = {
-    id: "settings",
-    content: (
-      <ModuleEditorSettingsComposition
-        primary={
-        <ModuleEditorSection>
-        {usesLockedInternalSlug ? (
-          <ModuleEditorTechnicalIdentity
-            mode="hidden"
-            value={block.slug}
-            inputClassName={fieldClassName()}
-          />
-        ) : null}
-        <ModuleEditorFieldGrid className={isProjectsHubHero ? "lg:grid-cols-2 xl:grid-cols-12" : ""}>
-        <ModuleEditorField nature="standard" span={settingsFieldSpan}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">
-            {usesAboutStructuredChrome ? "اسم الموديول" : "الاسم"}
-          </span>
-          <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-        </label></ModuleEditorField>
-        {!usesLockedInternalSlug ? (
-          <ModuleEditorField nature="technical" span={settingsFieldSpan}><ModuleEditorTechnicalIdentity
-            mode="editable"
-            value={block.slug}
-            inputClassName={fieldClassName()}
-          /></ModuleEditorField>
-        ) : null}
-        <ModuleEditorField nature="short-description" span={settingsFieldSpan}>
-        {usesInternalDescriptionField ? (
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
-            <input
-              name="internal_description"
-              defaultValue={block.description ?? ""}
-              className={fieldClassName()}
-            />
-            <span className="block text-xs leading-6 text-white/45">
-              ملاحظة إدارية توضّح وظيفة الموديول، ولا تظهر لزوار الموقع.
-            </span>
-          </label>
-        ) : (
-          <label className="block space-y-2">
-            <span className="text-xs font-semibold text-white/55">الوصف الداخلي</span>
-            <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
-          </label>
-        )}
-        </ModuleEditorField>
-        <ModuleEditorField nature="binary-state" span={settingsFieldSpan}>
-          <ModuleEditorStatusSwitch status={block.status} />
-        </ModuleEditorField>
-        </ModuleEditorFieldGrid>
-        </ModuleEditorSection>
-        }
-      />
-    ),
-  };
 
   const pagesTab = {
     id: "pages",
@@ -210,6 +209,7 @@ export default function ContentModuleEditClient({
                 primaryLabel={(config as ReturnType<typeof asProjectsHubHeroConfig>).primaryCtaLabel}
                 linkSource="project-domain"
                 showDefault={(config as ReturnType<typeof asProjectsHubHeroConfig>).showCta}
+                boldDefault={(config as ReturnType<typeof asProjectsHubHeroConfig>).ctaBold}
                 alignmentDefault={(config as ReturnType<typeof asProjectsHubHeroConfig>).ctaAlignment}
               />
             </ModuleEditorSection>
@@ -227,11 +227,17 @@ export default function ContentModuleEditClient({
           ),
         },
         {
+          id: "details",
+          content: (
+            <ProjectDetailHeroEditorLinks
+              links={projectDetailHeroEditorLinks}
+            />
+          ),
+        },
+        {
           id: "display",
           content: (
-            <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext}>
-              {settingsTab.content}
-            </ModuleEditorPagesTab>
+            <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />
           ),
         },
       ]
@@ -252,7 +258,6 @@ export default function ContentModuleEditClient({
           content: <AboutIntroModuleEditor config={homeStoryConfig} editorMode="home-story" section="cta" />,
         },
         pagesTab,
-        settingsTab,
       ]
     : [];
 
@@ -275,7 +280,6 @@ export default function ContentModuleEditClient({
           content: <AboutCtaModuleEditor config={homeContactConfig} editorMode="home-contact" section="contacts" />,
         },
         pagesTab,
-        settingsTab,
       ]
     : [];
 
@@ -298,7 +302,6 @@ export default function ContentModuleEditClient({
           content: <AboutCtaModuleEditor config={config as ReturnType<typeof asAboutCtaConfig>} editorMode="about-cta" section="contacts" />,
         },
         pagesTab,
-        settingsTab,
       ]
     : [];
 
@@ -528,6 +531,8 @@ export default function ContentModuleEditClient({
 
       <form key={`${block.id}:${block.updated_at}`} action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
+        <input type="hidden" name="slug" value={block.slug} />
+        <input type="hidden" name="internal_description" value={block.description ?? ""} />
         <input
           type="hidden"
           name="variant"
@@ -585,8 +590,19 @@ export default function ContentModuleEditClient({
           <input type="hidden" name="config_schema" value="projects-hub-listing" />
         ) : null}
         {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
+        <ModuleEditorIdentitySection
+          name={block.name}
+          status={block.status}
+          inputClassName={fieldClassName("h-11")}
+        />
         {heroPlatformTabs ? (
-          <ModuleEditorTabs moduleKind="hero" nowrap tabs={heroPlatformTabs} activePanelContext={activePanelContext} />
+          <ModuleEditorTabs
+            moduleKind="hero"
+            moduleSlug={presentationSlug}
+            nowrap
+            tabs={heroPlatformTabs}
+            activePanelContext={activePanelContext}
+          />
         ) : isHomeStory ? (
           <ModuleEditorTabs moduleKind="content" moduleSlug={presentationSlug} nowrap tabs={homeStoryTabs} activePanelContext={activePanelContext} />
         ) : isHomeContact ? (
@@ -641,7 +657,6 @@ export default function ContentModuleEditClient({
                     <GenericContentModuleEditor config={config as ReturnType<typeof asContentConfig>} />
                   ),
               },
-              { ...settingsTab, id: "meta" },
               pagesTab,
             ]}
           />

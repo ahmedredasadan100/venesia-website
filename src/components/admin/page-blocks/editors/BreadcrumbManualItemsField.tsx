@@ -55,10 +55,7 @@ export default function BreadcrumbManualItemsField({ items, maxItems = 8 }: Brea
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-xs leading-6 text-white/45">
-          للعناصر اليدوية فقط: اختر الرابط من النظام بدل كتابة مسار داخلي.
-        </p>
+      <div className="flex flex-wrap items-center justify-end gap-3">
         <button
           type="button"
           onClick={addItem}

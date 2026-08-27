@@ -12,6 +12,7 @@ import {
   ProjectCodeBadge,
   ProjectImageBottomBadges,
 } from "./ProjectCardMobileOverlays";
+import { pageBlockTextAlignClass, type PageBlockTextAlignment } from "../../lib/page-blocks/configs";
 
 export type ProjectsFeaturedCardDisplay = {
   showProjectImage?: boolean;
@@ -31,6 +32,10 @@ type ProjectsFeaturedSectionProps = {
   showTitle?: boolean;
   showSubtitle?: boolean;
   showSliderDots?: boolean;
+  titleBold?: boolean;
+  titleAlignment?: PageBlockTextAlignment;
+  subtitleBold?: boolean;
+  subtitleAlignment?: PageBlockTextAlignment;
 } & ProjectsFeaturedCardDisplay;
 
 const DEFAULT_TITLE = "مشروع مميز";
@@ -54,6 +59,10 @@ export default function ProjectsFeaturedSection({
   showTitle = true,
   showSubtitle = true,
   showSliderDots = true,
+  titleBold = true,
+  titleAlignment = "right",
+  subtitleBold = false,
+  subtitleAlignment = "right",
   showProjectImage = true,
   showProjectCode = true,
   showProjectName = true,
@@ -124,9 +133,9 @@ export default function ProjectsFeaturedSection({
       <div className="mx-auto max-w-7xl">
         {showHeader ? (
           <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            {showTitle ? <h2 className="text-xl font-semibold text-[#D8B87A]">{title}</h2> : null}
+            {showTitle ? <h2 className={`text-xl text-[#D8B87A] ${pageBlockTextAlignClass(titleAlignment)} ${titleBold ? "font-bold" : "font-normal"}`}>{title}</h2> : null}
 
-            {showSubtitle ? <span className="text-xs leading-6 text-white/40">{subtitle}</span> : null}
+            {showSubtitle ? <span className={`text-xs leading-6 text-white/40 ${pageBlockTextAlignClass(subtitleAlignment)} ${subtitleBold ? "font-bold" : "font-normal"}`}>{subtitle}</span> : null}
           </div>
         ) : null}
 

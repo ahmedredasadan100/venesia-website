@@ -1,19 +1,16 @@
-/**
- * Page layout positions (Joomla/WordPress-style).
- * Assignments reference a slot + sort_order within that slot.
- */
-export const PAGE_LAYOUT_SLOTS = ["hero", "main", "sidebar", "bottom", "footer"] as const;
+import {
+  isPageCompositionPosition,
+  PAGE_COMPOSITION_POSITIONS,
+  type PageCompositionPosition,
+} from "../page-composition/positions.ts";
 
-export type PageLayoutSlot = (typeof PAGE_LAYOUT_SLOTS)[number];
+export { PAGE_COMPOSITION_POSITIONS, type PageCompositionPosition };
 
-/** Render order for full-page stack layouts. */
-export const PAGE_LAYOUT_SLOT_ORDER: PageLayoutSlot[] = [
-  "hero",
-  "main",
-  "sidebar",
-  "bottom",
-  "footer",
-];
+/** @deprecated Compatibility alias; Position inventory is Page Composition-owned. */
+export const PAGE_LAYOUT_SLOTS = PAGE_COMPOSITION_POSITIONS;
+
+/** @deprecated Compatibility alias for persisted `slot` fields. */
+export type PageLayoutSlot = PageCompositionPosition;
 
 const LEGACY_SLOT_MAP: Record<string, PageLayoutSlot> = {
   top: "hero",
@@ -33,13 +30,13 @@ export function isRecognizedLayoutSlot(
   const value = (slot ?? "").trim().toLowerCase();
   return Boolean(value) && (
     Object.hasOwn(LEGACY_SLOT_MAP, value) ||
-    PAGE_LAYOUT_SLOTS.includes(value as PageLayoutSlot)
+    isPageCompositionPosition(value)
   );
 }
 
 export function normalizeLayoutSlot(slot: string | null | undefined): PageLayoutSlot {
   const value = (slot ?? "main").trim().toLowerCase();
-  return LEGACY_SLOT_MAP[value] ?? (PAGE_LAYOUT_SLOTS.includes(value as PageLayoutSlot) ? (value as PageLayoutSlot) : "main");
+  return LEGACY_SLOT_MAP[value] ?? (isPageCompositionPosition(value) ? value : "main");
 }
 
 export const LAYOUT_SLOT_LABELS: Record<PageLayoutSlot, string> = {

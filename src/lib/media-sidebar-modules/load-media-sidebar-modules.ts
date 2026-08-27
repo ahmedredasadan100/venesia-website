@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isPageModulePubliclyVisible } from "../page-blocks/admin-utils";
+import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
 import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseMediaSidebarModuleConfig } from "./parse-config";
@@ -31,9 +32,8 @@ export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaS
 
   const { data: rows, error } = await getSupabaseAdmin()
     .from("page_media_sidebar_module_assignments")
-    .select("id,sort_order,is_visible,media_sidebar_module_templates(widget_key,name,status,config)")
+    .select("id,slot,sort_order,is_visible,media_sidebar_module_templates(widget_key,name,status,config)")
     .eq("page_id", pageState.page.id)
-    .eq("slot", "sidebar")
     .order("sort_order", { ascending: true });
 
   if (error) {
@@ -57,6 +57,7 @@ export async function queryMediaSidebarModules(pageSlug: string): Promise<MediaS
     widgets.push({
       widgetKey: template.widget_key,
       assignmentId: row.id,
+      slot: normalizeLayoutSlot(row.slot),
       sortOrder: row.sort_order,
       isVisible: isPageModulePubliclyVisible(row.is_visible, template.status),
       title: template.name,

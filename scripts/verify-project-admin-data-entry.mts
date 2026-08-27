@@ -1185,7 +1185,7 @@ check(
       'data-admin-page-surface-owner="AdminPageExperience"',
     ) &&
     formPresentation.includes(
-      'export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-7"',
+      'export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-5"',
     ) &&
     form.includes("className={ADMIN_FORM_STACK_CLASS_NAME}") &&
     !form.includes('className="space-y-5"'),

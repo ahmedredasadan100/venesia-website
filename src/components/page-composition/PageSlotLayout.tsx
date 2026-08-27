@@ -3,17 +3,22 @@ import { type ReactNode } from "react";
 import DynamicHeroSection from "../sections/DynamicHeroSection";
 import FeedModuleSection from "../feed-modules/FeedModuleSection";
 import { MediaSidebarWidget } from "../media-center/MediaSidebar";
+import { renderMediaHubSections } from "../media-center/renderMediaHubSections";
 import type {
   PageComposition,
   SlotEntry,
 } from "../../lib/page-blocks/page-composition-types";
 import { getSlotEntries } from "../../lib/page-blocks/page-composition-utils";
 import {
-  PAGE_LAYOUT_SLOT_ORDER,
   type PageLayoutSlot,
 } from "../../lib/page-blocks/layout-slots";
 import type { HomepageProjectCard } from "../../lib/projects/public-types";
-import { buildSlotRenderPlan } from "./build-slot-render-plan";
+import {
+  buildSlotRenderPlan,
+  type SlotRenderPlanItem,
+} from "./build-slot-render-plan";
+import { VENISIA_THEME_REGION_RENDER_ORDER } from "./venisia-theme-regions";
+import { renderVenesiaThemeMediaHubNodes } from "./VenesiaThemeMediaHubLayout";
 
 type SlotContentOptions = {
   prefix?: ReactNode;
@@ -41,7 +46,7 @@ function SlotModuleContainer({
 
 /**
  * One renderer for every non-Hero Page Composition entry. Module renderers
- * provide presentation only; the surrounding slot owns width and geometry.
+ * provide presentation only; the surrounding Position owns width and geometry.
  */
 function renderOrderedSlotEntries(
   entries: SlotEntry[],
@@ -52,14 +57,39 @@ function renderOrderedSlotEntries(
     breadcrumbCurrentLabel: options.breadcrumbCurrentLabel,
   });
   const nodes: ReactNode[] = [];
+  let index = 0;
 
-  for (const item of plan) {
+  while (index < plan.length) {
+    const item = plan[index];
+
+    if (item.kind === "media-hub") {
+      const run: Extract<SlotRenderPlanItem, { kind: "media-hub" }>[] = [];
+      while (index < plan.length && plan[index].kind === "media-hub") {
+        run.push(
+          plan[index] as Extract<SlotRenderPlanItem, { kind: "media-hub" }>,
+        );
+        index += 1;
+      }
+      nodes.push(
+        <SlotModuleContainer
+          key={`media-hub-group-${run.map((entry) => entry.assignmentId).join("-")}`}
+          source="assignment"
+        >
+          {renderVenesiaThemeMediaHubNodes(
+            renderMediaHubSections(run.map((entry) => entry.module)),
+          )}
+        </SlotModuleContainer>,
+      );
+      continue;
+    }
+
     if (item.kind === "feed") {
       nodes.push(
         <SlotModuleContainer key={item.key} source="assignment">
           <FeedModuleSection module={item.module} />
         </SlotModuleContainer>,
       );
+      index += 1;
       continue;
     }
 
@@ -69,6 +99,7 @@ function renderOrderedSlotEntries(
           <MediaSidebarWidget widget={item.widget} />
         </SlotModuleContainer>,
       );
+      index += 1;
       continue;
     }
 
@@ -77,6 +108,7 @@ function renderOrderedSlotEntries(
         {item.node}
       </SlotModuleContainer>,
     );
+    index += 1;
   }
 
   return nodes;
@@ -187,8 +219,10 @@ export default function PageSlotLayout({
   const sidebarEntries = getSlotEntries(composition, "sidebar");
   const hasSidebarContent =
     !skip.has("sidebar") && Boolean(sidebarEntries.length || sidebarPrefix);
-  const isMainSidebar =
-    composition.layoutMode === "main-sidebar" && hasSidebarContent;
+  // Venesia Theme decision only. Page Composition exposes a semantic sidebar
+  // Region and remains unaware whether a Theme renders it as a column, drawer,
+  // stack, or any other visual treatment.
+  const isMainSidebar = hasSidebarContent;
 
   const renderSlotStack = (slot: PageLayoutSlot) => {
     if (skip.has(slot)) return null;
@@ -277,7 +311,7 @@ export default function PageSlotLayout({
           </div>
         </div>
 
-        {PAGE_LAYOUT_SLOT_ORDER.filter(
+        {VENISIA_THEME_REGION_RENDER_ORDER.filter(
           (slot) => slot === "bottom" || slot === "footer",
         ).map(renderSlotStack)}
       </div>
@@ -289,7 +323,7 @@ export default function PageSlotLayout({
       className="page-layout page-layout--stack"
       data-page-layout-contract="slot-owned"
     >
-      {PAGE_LAYOUT_SLOT_ORDER.map(renderSlotStack)}
+      {VENISIA_THEME_REGION_RENDER_ORDER.map(renderSlotStack)}
     </div>
   );
 }

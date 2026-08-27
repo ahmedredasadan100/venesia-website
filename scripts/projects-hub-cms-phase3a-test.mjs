@@ -291,7 +291,7 @@ const baseComposition = {
   assert.equal(plan.reason, "incomplete_hub_modules");
 }
 
-// 5c. Non-main slot ignored => incomplete if that drops a required module
+// 5c. Assignment Position survives independently of the current Theme layout
 {
   const nonMain = {
     ...baseComposition,
@@ -300,8 +300,11 @@ const baseComposition = {
     ),
   };
   const plan = buildProjectsHubRenderPlan(nonMain);
-  assert.equal(plan.ready, false);
-  assert.ok(plan.skipped.some((s) => s.reason === "unsupported_slot"));
+  assert.equal(plan.ready, true);
+  assert.equal(
+    plan.modules.find((module) => module.slug === "projects-hub-map")?.position,
+    "sidebar",
+  );
 }
 
 // 6. Missing assignments => not ready
@@ -411,7 +414,7 @@ console.log(
       unknownModule: true,
       invalidConfigIncomplete: true,
       singleModuleIncomplete: true,
-      nonMainSlotIncomplete: true,
+      assignmentPositionPreserved: true,
       missingComposition: true,
       noVisible: true,
       featuredLimitNoMutate: true,

@@ -112,7 +112,7 @@ check(
     pageExperience.includes(
       'data-admin-page-surface-owner="AdminPageExperience"',
     ) &&
-    pageExperience.includes("flex flex-col gap-7"),
+    pageExperience.includes("flex flex-col gap-6"),
 );
 check(
   "Shell normalizes legacy page-root cadence at the shared boundary",

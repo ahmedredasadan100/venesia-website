@@ -1,9 +1,19 @@
 import Link from "next/link";
 import type { BlockRendererProps } from "./block-registry";
-import type { CtaBlockConfig } from "../../lib/page-blocks";
+import {
+  asCtaConfig,
+  pageBlockTextAlignClass,
+  pageBlockTextPlacementClass,
+  resolvePageBlockTextFormat,
+} from "../../lib/page-blocks/configs";
 
 export default function CtaSection({ block }: BlockRendererProps) {
-  const config = block.template.config as CtaBlockConfig;
+  const config = asCtaConfig(block.template.config);
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow", { bold: true });
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
+  const highlightFormat = resolvePageBlockTextFormat(config, "highlight", { bold: true });
+  const descriptionFormat = resolvePageBlockTextFormat(config, "description");
+  const ctaFormat = resolvePageBlockTextFormat(config, "cta");
   const variant = block.template.variant ?? "band";
   const backgroundClass =
     config.backgroundStyle === "gold"
@@ -28,22 +38,22 @@ export default function CtaSection({ block }: BlockRendererProps) {
         ) : null}
 
         <div className="relative text-right" dir="rtl">
-          {config.eyebrow ? (
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#D8B87A]/70">{config.eyebrow}</p>
+          {eyebrowFormat.visible && config.eyebrow ? (
+            <p className={`text-xs uppercase tracking-[0.2em] text-[#D8B87A]/70 ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}>{config.eyebrow}</p>
           ) : null}
 
-          {config.title ? (
-            <h2 className="mt-4 text-3xl font-semibold leading-tight text-white @xl/slot-module:text-4xl">
+          {titleFormat.visible && config.title ? (
+            <h2 className={`mt-4 text-3xl leading-tight text-white @xl/slot-module:text-4xl ${pageBlockTextAlignClass(titleFormat.alignment)} ${titleFormat.bold ? "font-bold" : "font-normal"}`}>
               {config.title}
-              {config.highlight ? <span className="mt-2 block text-[#D8B87A]">{config.highlight}</span> : null}
+              {highlightFormat.visible && config.highlight ? <span className={`mt-2 block text-[#D8B87A] ${pageBlockTextAlignClass(highlightFormat.alignment)} ${highlightFormat.bold ? "font-bold" : "font-normal"}`}>{config.highlight}</span> : null}
             </h2>
           ) : null}
 
-          {config.description ? (
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-white/58 @xl/slot-module:text-base">{config.description}</p>
+          {descriptionFormat.visible && config.description ? (
+            <p className={`mt-5 max-w-2xl text-sm leading-7 text-white/58 @xl/slot-module:text-base ${pageBlockTextAlignClass(descriptionFormat.alignment)} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"}`}>{config.description}</p>
           ) : null}
 
-          <div className="mt-8 flex flex-wrap gap-3">
+          {ctaFormat.visible ? <div className={`mt-8 flex flex-wrap gap-3 ${ctaFormat.alignment === "center" ? "justify-center" : ctaFormat.alignment === "left" ? "justify-end" : "justify-start"}`}>
             {config.primaryCta?.label && config.primaryCta.href ? (
               <Link
                 href={config.primaryCta.href}
@@ -65,7 +75,7 @@ export default function CtaSection({ block }: BlockRendererProps) {
                 {config.secondaryCta.label}
               </Link>
             ) : null}
-          </div>
+          </div> : null}
         </div>
       </div>
     </section>

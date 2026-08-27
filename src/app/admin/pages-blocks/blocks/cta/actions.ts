@@ -29,7 +29,10 @@ import {
   parsePageIdsFromForm,
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
-import type { CtaBlockConfig } from "../../../../../lib/page-blocks/configs";
+import {
+  buildPageBlockTextFormattingPatch,
+  type CtaBlockConfig,
+} from "../../../../../lib/page-blocks/configs";
 import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
 
 function buildCtaLink(formData: FormData, prefix: string, labelField: string) {
@@ -44,6 +47,13 @@ function buildCtaLink(formData: FormData, prefix: string, labelField: string) {
 
 function buildCtaConfig(formData: FormData): CtaBlockConfig {
   return {
+    ...buildPageBlockTextFormattingPatch(formData, [
+      { field: "eyebrow", defaults: { bold: true } },
+      { field: "title", defaults: { bold: true } },
+      { field: "highlight", defaults: { bold: true } },
+      { field: "description" },
+      { field: "cta", bold: false },
+    ]),
     eyebrow: cleanText(formData.get("eyebrow")),
     title: cleanText(formData.get("title")),
     highlight: cleanText(formData.get("highlight")),

@@ -20,7 +20,8 @@ const homeSections = [
 ].map((file) => read(`src/components/home/${file}`));
 const compositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
 const compositionTypes = read("src/lib/page-blocks/page-composition-types.ts");
-const mediaHubConsumer = read("src/components/media-center/MediaCenterHub.tsx");
+const mediaHubConsumer = read("src/components/media-center/renderMediaHubSections.tsx");
+const venisiaMediaHubLayout = read("src/components/page-composition/VenesiaThemeMediaHubLayout.tsx");
 const mediaListingConsumer = read("src/components/media-center/MediaListingPage.tsx");
 const mediaDetailConsumer = read("src/components/media-center/MediaDetailPage.tsx");
 const mediaShell = read("src/components/media-center/MediaCenterShellLayout.tsx");
@@ -45,9 +46,17 @@ assert.ok(compositionLoader.includes("queryMediaHubModules") && compositionLoade
 for (const consumer of [mediaHubConsumer, mediaListingConsumer, mediaDetailConsumer]) {
   assert.ok(!consumer.includes("loadMediaCenterSidebarProps") && !consumer.includes("loadMediaSidebarModules"), "Parallel Media Sidebar public loader is forbidden");
 }
-assert.ok(compositionLoader.includes("slots.sidebar.push") && !compositionLoader.includes("if (!isMediaCenterPage)"), "Media Sidebar truth must enter the canonical Page Composition slot path");
+assert.ok(
+  compositionLoader.includes('isAssignmentPositionAllowed("media-sidebar", widget.slot)') &&
+    compositionLoader.includes("slots[widget.slot].push") &&
+    compositionLoader.includes('isAssignmentPositionAllowed("media-hub", hubModule.slot)') &&
+    compositionLoader.includes("slots[hubModule.slot].push") &&
+    !compositionLoader.includes("if (!isMediaCenterPage)"),
+  "Specialized Media truth must enter the canonical persisted Position path",
+);
 assert.ok(!mediaHubConsumer.includes("MediaSidebar") && !mediaListingConsumer.includes("sidebarModules=") && !mediaDetailConsumer.includes("sidebarModules="), "Media consumers must not render the specialized Sidebar in parallel");
-assert.ok(mediaHubConsumer.includes("composition.mediaHubModules") && !mediaHubConsumer.includes("loadMediaHubModules"), "Media Hub public consumer must use Page Composition");
+assert.ok(mediaHubConsumer.includes("renderMediaHubSection") && !mediaHubConsumer.includes("loadMediaHubModules"), "Media Hub Module presentation must expose Nodes without a parallel loader");
+assert.ok(venisiaMediaHubLayout.includes("renderVenesiaThemeMediaHubNodes") && !venisiaMediaHubLayout.includes("renderMediaHubSection"), "Venisia Theme must group opaque Media Hub Nodes without rendering Module content");
 assert.ok(mediaShell.includes("composition: PageComposition") && !mediaShell.includes("loadPageCompositionBySlug") && mediaShell.includes("<PageSlotLayout"), "Media shell must consume one passed composition through the shared renderer without a static hero fallback");
 
 assert.ok(cacheOwner.includes('"media-center", "media-sidebar"') && cacheOwner.includes('revalidateTag(tag, "max")'), "Page Composition cache owner must cover specialized Media tags with current Next semantics");

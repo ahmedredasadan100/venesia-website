@@ -624,7 +624,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
             initial.robotsIndex === null ? "" : String(initial.robotsIndex)
           }
           placeholder="الإعداد العام"
-          sizing="full"
+          sizing="wide"
         />
         <AdminFormListboxSelect
           id={fieldIds.robotsFollowListbox}
@@ -636,7 +636,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
             initial.robotsFollow === null ? "" : String(initial.robotsFollow)
           }
           placeholder="الإعداد العام"
-          sizing="full"
+          sizing="wide"
         />
         <SeoTextField
           id={fieldIds.canonicalUrl}

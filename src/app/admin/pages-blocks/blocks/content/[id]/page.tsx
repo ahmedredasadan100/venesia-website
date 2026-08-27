@@ -6,14 +6,23 @@ import { getModuleAssignmentContext } from "../../../../../../lib/page-blocks/mo
 import ContentModuleEditClient from "../../../../../../components/admin/page-blocks/ContentModuleEditClient";
 import { updateContentBlock } from "../actions";
 import { isRetiredContentBlockTemplateSlug } from "../../../../../../lib/page-blocks/deprecated-block-modules";
-import { resolveContentModuleEditorConfig } from "../../../../../../lib/page-blocks/module-edit-registry";
+import {
+  getContentModuleEditorKey,
+  resolveContentModuleEditorConfig,
+} from "../../../../../../lib/page-blocks/module-edit-registry";
+import { withModuleEditorReturnPageId } from "../../../../../../lib/page-blocks/admin-utils";
 
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
-  searchParams?: Promise<{ saved?: string }> | { saved?: string };
+  searchParams?:
+    | Promise<{ saved?: string; returnPageId?: string }>
+    | { saved?: string; returnPageId?: string };
 };
 
-export default async function ContentBlockEditPage({ params, searchParams }: PageProps) {
+export default async function ContentBlockEditPage({
+  params,
+  searchParams,
+}: PageProps) {
   const resolvedParams = await params;
   const resolvedSearch = searchParams ? await searchParams : {};
   const id = Number(resolvedParams.id);
@@ -32,6 +41,38 @@ export default async function ContentBlockEditPage({ params, searchParams }: Pag
     variant: block.variant,
     config: block.config,
   });
+  let projectDetailHeroEditorLinks: {
+    root: string;
+    buttons: string;
+  } | null = null;
+  if (getContentModuleEditorKey(block.slug, block.variant) === "projects-hub-hero") {
+    const { data: projectDetailHero, error: projectDetailHeroError } =
+      await getSupabaseAdmin()
+        .from("hero_templates")
+        .select("id")
+        .eq("variant", "project-detail")
+        .maybeSingle();
+
+    if (projectDetailHeroError) {
+      throw new Error(
+        `Project Detail Hero read failed: ${projectDetailHeroError.message}`,
+      );
+    }
+    if (!projectDetailHero) {
+      throw new Error("Project Detail Hero owner is missing.");
+    }
+
+    projectDetailHeroEditorLinks = {
+      root: withModuleEditorReturnPageId(
+        `/admin/pages-blocks/blocks/hero/${projectDetailHero.id}`,
+        resolvedSearch.returnPageId,
+      ),
+      buttons: withModuleEditorReturnPageId(
+        `/admin/pages-blocks/blocks/hero/${projectDetailHero.id}?tab=buttons`,
+        resolvedSearch.returnPageId,
+      ),
+    };
+  }
 
   return (
     <ContentModuleEditClient
@@ -47,6 +88,7 @@ export default async function ContentBlockEditPage({ params, searchParams }: Pag
       }}
       config={config}
       assignmentContext={assignmentContext}
+      projectDetailHeroEditorLinks={projectDetailHeroEditorLinks}
       saved={Boolean(resolvedSearch.saved)}
       updateAction={updateContentBlock}
     />

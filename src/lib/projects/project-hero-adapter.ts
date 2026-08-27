@@ -1,4 +1,5 @@
 import type { HeroDomainSlide } from "../hero/domain-backed-slides";
+import { getDefaultAssignmentPosition } from "../page-composition/page-assignment-contract";
 import type { HeroSectionData } from "../page-sections";
 import type { ProjectsHubHeroModuleConfig } from "../page-blocks/projects-hub-config";
 import type { ProjectsHubRenderPlanModule } from "./build-projects-hub-render-plan";
@@ -41,7 +42,7 @@ export function adaptProjectsHubHeroModule(
     page_id: 0,
     section_key: "projects-hub-hero",
     section_type: "hero",
-    slot: "hero",
+    slot: getDefaultAssignmentPosition("hero"),
       variant: "projects-hub",
     style_preset: "cinematic-gold",
     source_type: "domain-backed",
@@ -66,6 +67,7 @@ export function adaptProjectsHubHeroModule(
       showDescription: config.showDescription,
       descriptionAlignment: config.descriptionAlignment,
       showCta: config.showCta,
+      ctaBold: config.ctaBold,
       ctaAlignment: config.ctaAlignment,
       heroElementOrder: config.heroElementOrder,
     },

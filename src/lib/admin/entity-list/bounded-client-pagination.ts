@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import type { AdminEntityFilterDef, AdminEntityFilterValues } from "./types";
@@ -64,6 +64,7 @@ export function useAdminBoundedClientPagination<Row>({
   pageSizeOptions = ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS,
   defaultPageSize = ADMIN_ENTITY_LIST_DEFAULT_PAGE_SIZE,
 }: AdminBoundedClientPaginationOptions<Row>) {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const searchParamName = queryContract.search?.paramKey ?? "q";
   const searchMinLength = queryContract.search?.minLength ?? 0;
@@ -118,10 +119,7 @@ export function useAdminBoundedClientPagination<Row>({
   );
 
   const applyQueryPatch = useCallback(
-    (
-      patch: AdminEntityUrlPatch,
-      behavior: HistoryBehavior = "push",
-    ) => {
+    (patch: AdminEntityUrlPatch, behavior: HistoryBehavior = "push") => {
       const current = new URLSearchParams(window.location.search);
       const next = applyAdminEntityUrlPatch(current, patch, {
         resetPageParam: pageParamName,
@@ -129,11 +127,11 @@ export function useAdminBoundedClientPagination<Row>({
         defaultPageSize: String(defaultPageSize),
       });
       if (current.toString() === next.toString()) return;
-      window.history[
-        behavior === "replace" ? "replaceState" : "pushState"
-      ](window.history.state, "", currentLocationHref(next));
+      const href = currentLocationHref(next);
+      if (behavior === "replace") router.replace(href, { scroll: false });
+      else router.push(href, { scroll: false });
     },
-    [defaultPageSize, limitParamName, pageParamName],
+    [defaultPageSize, limitParamName, pageParamName, router],
   );
 
   const commit = useCallback(
@@ -146,11 +144,11 @@ export function useAdminBoundedClientPagination<Row>({
       );
       if (current.toString() === next.toString()) return;
 
-      window.history[
-        behavior === "replace" ? "replaceState" : "pushState"
-      ](window.history.state, "", currentLocationHref(next));
+      const href = currentLocationHref(next);
+      if (behavior === "replace") router.replace(href, { scroll: false });
+      else router.push(href, { scroll: false });
     },
-    [defaultPageSize, limitParamName, pageParamName],
+    [defaultPageSize, limitParamName, pageParamName, router],
   );
 
   const previousDatasetKey = useRef(resolvedDatasetKey);
@@ -169,11 +167,7 @@ export function useAdminBoundedClientPagination<Row>({
     );
     if (current.toString() === next.toString()) return;
 
-    window.history.replaceState(
-      window.history.state,
-      "",
-      currentLocationHref(next),
-    );
+    router.replace(currentLocationHref(next), { scroll: false });
   }, [
     resolvedDatasetKey,
     defaultPageSize,
@@ -181,6 +175,7 @@ export function useAdminBoundedClientPagination<Row>({
     pageParamName,
     pagination.page,
     pagination.pageSize,
+    router,
   ]);
 
   const setPage = useCallback(

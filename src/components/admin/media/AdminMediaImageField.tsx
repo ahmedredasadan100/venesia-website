@@ -173,29 +173,9 @@ export default function AdminMediaImageField({
     <div className="space-y-3" data-admin-media-image-field={name}>
       <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
-      <div className={`flex flex-wrap items-center gap-3 ${showLabel ? "justify-between" : "justify-end"}`}>
-        {showLabel ? (
-          <span className={`text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{label}</span>
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setPickerOpen(true)}
-            className="cursor-pointer rounded-2xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-sm font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15"
-          >
-            {value ? "استبدال" : "اختيار صورة"}
-          </button>
-          {value && allowRemove ? (
-            <button
-              type="button"
-              onClick={() => updateValue("")}
-              className={`cursor-pointer rounded-2xl border px-4 py-2 text-sm ${light ? "border-red-200 text-red-600 hover:bg-red-50" : "border-white/10 text-white/55 hover:bg-white/5 hover:text-white"}`}
-            >
-              إزالة
-            </button>
-          ) : null}
-        </div>
-      </div>
+      {showLabel ? (
+        <span className={`block text-xs font-semibold ${light ? "text-slate-700" : "text-white/55"}`}>{label}</span>
+      ) : null}
 
       {dimensionHint ? (
         <p className={`text-xs leading-6 ${light ? "text-[#9a6815]" : "text-[#D8B87A]/65"}`}>{DIMENSION_HINTS[dimensionHint]}</p>
@@ -203,9 +183,30 @@ export default function AdminMediaImageField({
       {helperText ? <p className={`text-xs leading-6 ${light ? "text-slate-500" : "text-white/42"}`}>{helperText}</p> : null}
 
       {value ? (
-        <div className={`relative max-w-sm overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}>
+        <div
+          className={`relative max-w-sm overflow-hidden rounded-2xl border ${light ? "border-slate-200 bg-slate-50" : "border-white/10 bg-black/25"}`}
+          data-admin-media-image-card="selected"
+        >
           <div className="relative h-44">
             <Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" />
+            <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="cursor-pointer rounded-lg border border-[#D8B87A]/35 bg-black/45 px-3 py-1.5 text-xs font-semibold text-[#F2D99B] backdrop-blur-sm hover:bg-[#D8B87A]/15"
+              >
+                استبدال
+              </button>
+              {allowRemove ? (
+                <button
+                  type="button"
+                  onClick={() => updateValue("")}
+                  className="cursor-pointer rounded-lg border border-white/15 bg-black/45 px-3 py-1.5 text-xs text-white/70 backdrop-blur-sm hover:bg-white/10 hover:text-white"
+                >
+                  إزالة
+                </button>
+              ) : null}
+            </div>
           </div>
           <p className={`truncate px-3 py-2 font-mono text-[11px] ${light ? "text-slate-500" : "text-white/45"}`} dir="ltr">
             {value}
@@ -215,9 +216,11 @@ export default function AdminMediaImageField({
         <button
           type="button"
           onClick={() => setPickerOpen(true)}
-          className={`flex h-40 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed text-sm ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"} ${showLabel ? "max-w-sm" : ""}`}
+          data-admin-media-image-card="add"
+          className={`flex h-44 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm transition ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"} ${showLabel ? "max-w-sm" : ""}`}
         >
-          لا توجد صورة محددة
+          <span aria-hidden="true" className="text-2xl leading-none">+</span>
+          <span>اختيار صورة</span>
         </button>
       )}
 

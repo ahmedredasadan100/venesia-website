@@ -3,6 +3,7 @@ import type {
   SidebarCategoryItem,
   SidebarSeriesItem,
 } from "../content-feeds/types";
+import type { PageBlockTextFormattingConfig } from "../page-blocks/configs";
 
 export const TOPICS_FEED_TYPES = ["latest", "popular", "categories", "series"] as const;
 export type TopicsFeedType = (typeof TOPICS_FEED_TYPES)[number];
@@ -27,7 +28,7 @@ export const FEED_MODULE_PRESENTATION_SUPPORT: Record<
   series: { showImage: true, showDate: false, showExcerpt: true },
 };
 
-export type FeedModulePresentation = {
+export type FeedModulePresentation = PageBlockTextFormattingConfig & {
   title: string;
   eyebrow?: string | null;
   linkText?: string | null;

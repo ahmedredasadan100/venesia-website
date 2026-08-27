@@ -4,6 +4,10 @@
 
 import type { Json } from "../database.types";
 import {
+  resolvePageBlockTextFormat,
+  type PageBlockTextFormattingConfig,
+} from "./configs";
+import {
   normalizeHeroElementOrder,
   resolveHeroContentControls,
   type HeroContentControls,
@@ -60,7 +64,7 @@ export type ProjectsHubHeroModuleConfig = {
   primaryCtaLabel: string;
 } & HeroContentControls;
 
-export type ProjectsHubFeaturedModuleConfig = {
+export type ProjectsHubFeaturedModuleConfig = PageBlockTextFormattingConfig & {
   selectionMode: ProjectsHubFeaturedSelectionMode;
   title: string;
   subtitle: string;
@@ -78,7 +82,7 @@ export type ProjectsHubFeaturedModuleConfig = {
   autoplayMs: number;
 };
 
-export type ProjectsHubListingModuleConfig = {
+export type ProjectsHubListingModuleConfig = PageBlockTextFormattingConfig & {
   eyebrow: string;
   title: string;
   showEyebrow: boolean;
@@ -102,7 +106,7 @@ export type ProjectsHubListingModuleConfig = {
   showProjectCount: boolean;
 };
 
-export type ProjectsHubMapModuleConfig = {
+export type ProjectsHubMapModuleConfig = PageBlockTextFormattingConfig & {
   title: string;
   mapImage: string;
   exploreButtonLabel: string;
@@ -132,6 +136,7 @@ export const PROJECTS_HUB_HERO_KEYS = [
   "showDescription",
   "descriptionAlignment",
   "showCta",
+  "ctaBold",
   "ctaAlignment",
   "heroElementOrder",
 ] as const;
@@ -167,6 +172,10 @@ export const PROJECTS_HUB_FEATURED_KEYS = [
   "showSliderDots",
   "limit",
   "autoplayMs",
+  "titleBold",
+  "titleAlignment",
+  "subtitleBold",
+  "subtitleAlignment",
 ] as const;
 export const PROJECTS_HUB_LISTING_KEYS = [
   "eyebrow",
@@ -189,8 +198,20 @@ export const PROJECTS_HUB_LISTING_KEYS = [
   "showViewToggle",
   "showPagination",
   "showProjectCount",
+  "eyebrowBold",
+  "eyebrowAlignment",
+  "titleBold",
+  "titleAlignment",
 ] as const;
-export const PROJECTS_HUB_MAP_KEYS = ["title", "mapImage", "exploreButtonLabel", "mapPins"] as const;
+export const PROJECTS_HUB_MAP_KEYS = [
+  "title",
+  "mapImage",
+  "exploreButtonLabel",
+  "mapPins",
+  "showTitle",
+  "titleBold",
+  "titleAlignment",
+] as const;
 
 export function isProjectsHubHeroTemplate(slug: string, variant?: string | null) {
   return slug === "projects-hub-hero" || variant === "projects-hub-hero";
@@ -285,6 +306,8 @@ export function asProjectsHubHeroConfig(raw: unknown): ProjectsHubHeroModuleConf
 export function asProjectsHubFeaturedConfig(raw: unknown): ProjectsHubFeaturedModuleConfig {
   const config = asRecord(raw);
   const selectionMode = readText(config.selectionMode);
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
+  const subtitleFormat = resolvePageBlockTextFormat(config, "subtitle");
   return {
     selectionMode: PROJECTS_HUB_FEATURED_SELECTION_MODES.includes(
       selectionMode as ProjectsHubFeaturedSelectionMode,
@@ -305,11 +328,17 @@ export function asProjectsHubFeaturedConfig(raw: unknown): ProjectsHubFeaturedMo
     showSliderDots: readShowFlag(config.showSliderDots ?? config.show_slider_dots),
     limit: readNullablePositiveInt(config.limit),
     autoplayMs: readPositiveInt(config.autoplayMs, 6000),
+    titleBold: titleFormat.bold,
+    titleAlignment: titleFormat.alignment,
+    subtitleBold: subtitleFormat.bold,
+    subtitleAlignment: subtitleFormat.alignment,
   };
 }
 
 export function asProjectsHubListingConfig(raw: unknown): ProjectsHubListingModuleConfig {
   const config = asRecord(raw);
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
   // Chips are derived from loaded project types on the public page; keep registry keys for compat.
   const visibleRaw = Array.isArray(config.visibleFilters) ? config.visibleFilters : ["all", "residential", "commercial"];
   const visibleFilters = visibleRaw
@@ -346,11 +375,16 @@ export function asProjectsHubListingConfig(raw: unknown): ProjectsHubListingModu
     showViewToggle: readShowFlag(config.showViewToggle ?? config.show_view_toggle),
     showPagination: readShowFlag(config.showPagination ?? config.show_pagination),
     showProjectCount: readShowFlag(config.showProjectCount ?? config.show_project_count),
+    eyebrowBold: eyebrowFormat.bold,
+    eyebrowAlignment: eyebrowFormat.alignment,
+    titleBold: titleFormat.bold,
+    titleAlignment: titleFormat.alignment,
   };
 }
 
 export function asProjectsHubMapConfig(raw: unknown): ProjectsHubMapModuleConfig {
   const config = asRecord(raw);
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
   const pinsRaw = Array.isArray(config.mapPins) ? config.mapPins : [];
   const mapPins = pinsRaw
     .map((item) => {
@@ -369,6 +403,9 @@ export function asProjectsHubMapConfig(raw: unknown): ProjectsHubMapModuleConfig
     mapImage: readText(config.mapImage) || PROJECTS_HUB_DEFAULT_MAP_IMAGE,
     exploreButtonLabel: readText(config.exploreButtonLabel) || "استكشف على الخريطة",
     mapPins,
+    showTitle: titleFormat.visible,
+    titleBold: titleFormat.bold,
+    titleAlignment: titleFormat.alignment,
   };
 }
 

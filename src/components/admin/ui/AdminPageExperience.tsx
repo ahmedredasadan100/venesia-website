@@ -23,7 +23,7 @@ export default function AdminPageExperience({
   return (
     <Component
       {...props}
-      className={`flex flex-col gap-7 ${className}`.trim()}
+      className={`flex flex-col gap-6 ${className}`.trim()}
       data-admin-page-experience={state}
       data-admin-page-surface-owner="AdminPageExperience"
     >

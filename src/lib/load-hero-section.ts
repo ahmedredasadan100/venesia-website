@@ -9,6 +9,7 @@ import { isPageModulePubliclyVisible } from "./page-blocks/admin-utils";
 import { getPublishedPageStateBySlug } from "./pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "./supabase-admin";
 import { logError } from "./logging";
+import { getDefaultAssignmentPosition } from "./page-composition/page-assignment-contract";
 import type { HeroDomainBackedTemplateVariant } from "./hero/hero-content-controls";
 import type {
   HeroSectionData,
@@ -81,7 +82,7 @@ function templateToDomainBackedHeroSection(
     page_id: 0,
     section_key: "hero",
     section_type: "hero",
-    slot: "top",
+    slot: getDefaultAssignmentPosition("hero"),
     variant: template.variant,
     style_preset: template.style_preset,
     source_type: "domain-backed",
@@ -173,7 +174,7 @@ function templateToHeroSection(template: HeroTemplateRecord, page: PageRecord): 
     page_id: page.id,
     section_key: "hero",
     section_type: "hero",
-    slot: "top",
+    slot: getDefaultAssignmentPosition("hero"),
     variant: template.variant,
     style_preset: template.style_preset,
     source_type: "manual" satisfies HeroSourceType,

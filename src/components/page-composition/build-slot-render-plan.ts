@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 
 import type { ResolvedFeedModule } from "../../lib/feed-modules/types";
+import type { MediaHubModuleState } from "../../lib/media-hub-modules/types";
 import type { MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
 import type { SlotEntry } from "../../lib/page-blocks/page-composition-types";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
@@ -30,6 +31,13 @@ export type SlotRenderPlanItem =
       assignmentId: number;
       sortOrder: number;
       widget: MediaSidebarWidgetState;
+    }
+  | {
+      kind: "media-hub";
+      key: string;
+      assignmentId: number;
+      sortOrder: number;
+      module: MediaHubModuleState;
     }
   | {
       kind: "module";
@@ -70,6 +78,7 @@ export function buildSlotRenderPlan(
 ): SlotRenderPlanItem[] {
   const feedItems: SlotRenderPlanItem[] = [];
   const mediaSidebarItems: SlotRenderPlanItem[] = [];
+  const mediaHubItems: SlotRenderPlanItem[] = [];
   const blocks: ResolvedPageBlock[] = [];
 
   for (const entry of entries) {
@@ -95,6 +104,17 @@ export function buildSlotRenderPlan(
       continue;
     }
 
+    if (entry.kind === "media-hub") {
+      mediaHubItems.push({
+        kind: "media-hub",
+        key: `media-hub-${entry.assignmentId}`,
+        assignmentId: entry.assignmentId,
+        sortOrder: entry.sortOrder,
+        module: entry.module,
+      });
+      continue;
+    }
+
     if (entry.kind === "block") {
       blocks.push(entry.block);
     }
@@ -107,7 +127,12 @@ export function buildSlotRenderPlan(
     node: node.node,
   }));
 
-  return [...feedItems, ...mediaSidebarItems, ...moduleItems].sort(
+  return [
+    ...feedItems,
+    ...mediaSidebarItems,
+    ...mediaHubItems,
+    ...moduleItems,
+  ].sort(
     (a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key),
   );
 }

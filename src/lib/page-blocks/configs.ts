@@ -1,7 +1,187 @@
 import type { AdminLinkValue } from "../admin/links/types";
 import { deserializeAdminLink } from "../admin/links/serialize";
 
-export type ContentBlockConfig = {
+export const PAGE_BLOCK_TEXT_ALIGNMENTS = ["right", "center", "left"] as const;
+export type PageBlockTextAlignment =
+  (typeof PAGE_BLOCK_TEXT_ALIGNMENTS)[number];
+
+export const PAGE_BLOCK_FORMATTABLE_TEXT_FIELDS = [
+  "eyebrow",
+  "title",
+  "subtitle",
+  "description",
+  "highlight",
+  "intro",
+  "cta",
+] as const;
+export type PageBlockFormattableTextField =
+  (typeof PAGE_BLOCK_FORMATTABLE_TEXT_FIELDS)[number];
+
+type CapitalizedTextField<Field extends string> = Capitalize<Field>;
+
+export type PageBlockTextFormattingConfig = Partial<
+  {
+    [
+      Field in PageBlockFormattableTextField as `show${CapitalizedTextField<Field>}`
+    ]: boolean;
+  } & {
+    [Field in PageBlockFormattableTextField as `${Field}Bold`]: boolean;
+  } & {
+    [
+      Field in PageBlockFormattableTextField as `${Field}Alignment`
+    ]: PageBlockTextAlignment;
+  }
+>;
+
+export type ResolvedPageBlockTextFormat = {
+  visible: boolean;
+  bold: boolean;
+  alignment: PageBlockTextAlignment;
+};
+
+export type PageBlockTextFormattingMap = Partial<
+  Record<PageBlockFormattableTextField, ResolvedPageBlockTextFormat>
+>;
+
+export type PageBlockTextFormatDefaults = Partial<ResolvedPageBlockTextFormat>;
+
+function formattingPropertyNames(field: PageBlockFormattableTextField) {
+  const capitalized = `${field.charAt(0).toUpperCase()}${field.slice(1)}`;
+  return {
+    visible: `show${capitalized}`,
+    bold: `${field}Bold`,
+    alignment: `${field}Alignment`,
+  } as const;
+}
+
+function readFormattingBoolean(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === "1" || value === "on") return true;
+  if (value === "false" || value === "0") return false;
+  return fallback;
+}
+
+export function resolvePageBlockTextFormat(
+  raw: unknown,
+  field: PageBlockFormattableTextField,
+  defaults: PageBlockTextFormatDefaults = {},
+): ResolvedPageBlockTextFormat {
+  const record =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const names = formattingPropertyNames(field);
+  const alignmentRaw = record[names.alignment] ?? record[`${field}_alignment`];
+
+  return {
+    visible: readFormattingBoolean(
+      record[names.visible] ?? record[`show_${field}`],
+      defaults.visible ?? true,
+    ),
+    bold: readFormattingBoolean(
+      record[names.bold] ?? record[`${field}_bold`],
+      defaults.bold ?? false,
+    ),
+    alignment: PAGE_BLOCK_TEXT_ALIGNMENTS.includes(
+      alignmentRaw as PageBlockTextAlignment,
+    )
+      ? (alignmentRaw as PageBlockTextAlignment)
+      : (defaults.alignment ?? "right"),
+  };
+}
+
+export function buildPageBlockTextFormattingPatch(
+  formData: FormData,
+  fields: ReadonlyArray<{
+    field: PageBlockFormattableTextField;
+    defaults?: PageBlockTextFormatDefaults;
+    visibility?: boolean;
+    bold?: boolean;
+    alignment?: boolean;
+  }>,
+): PageBlockTextFormattingConfig {
+  const patch: Record<string, boolean | PageBlockTextAlignment> = {};
+
+  for (const descriptor of fields) {
+    const { field, defaults = {} } = descriptor;
+    const names = formattingPropertyNames(field);
+    if (descriptor.visibility !== false) {
+      patch[names.visible] = readFormattingBoolean(
+        formData.get(`show_${field}`),
+        defaults.visible ?? true,
+      );
+    }
+    if (descriptor.bold !== false) {
+      patch[names.bold] = readFormattingBoolean(
+        formData.get(`${field}_bold`),
+        defaults.bold ?? false,
+      );
+    }
+    if (descriptor.alignment !== false) {
+      const alignment = String(formData.get(`${field}_alignment`) ?? "").trim();
+      patch[names.alignment] = PAGE_BLOCK_TEXT_ALIGNMENTS.includes(
+        alignment as PageBlockTextAlignment,
+      )
+        ? (alignment as PageBlockTextAlignment)
+        : (defaults.alignment ?? "right");
+    }
+  }
+
+  return patch as PageBlockTextFormattingConfig;
+}
+
+export function resolvePageBlockTextFormattingConfig(
+  raw: unknown,
+  fields: ReadonlyArray<{
+    field: PageBlockFormattableTextField;
+    defaults?: PageBlockTextFormatDefaults;
+  }>,
+): PageBlockTextFormattingConfig {
+  const resolved: Record<string, boolean | PageBlockTextAlignment> = {};
+
+  for (const descriptor of fields) {
+    const names = formattingPropertyNames(descriptor.field);
+    const format = resolvePageBlockTextFormat(
+      raw,
+      descriptor.field,
+      descriptor.defaults,
+    );
+    resolved[names.visible] = format.visible;
+    resolved[names.bold] = format.bold;
+    resolved[names.alignment] = format.alignment;
+  }
+
+  return resolved as PageBlockTextFormattingConfig;
+}
+
+export function resolvePageBlockTextFormattingMap(
+  raw: unknown,
+  fields: ReadonlyArray<{
+    field: PageBlockFormattableTextField;
+    defaults?: PageBlockTextFormatDefaults;
+  }>,
+): PageBlockTextFormattingMap {
+  return Object.fromEntries(
+    fields.map(({ field, defaults }) => [
+      field,
+      resolvePageBlockTextFormat(raw, field, defaults),
+    ]),
+  ) as PageBlockTextFormattingMap;
+}
+
+export function pageBlockTextAlignClass(alignment: PageBlockTextAlignment) {
+  if (alignment === "center") return "!text-center [&_*]:!text-center";
+  if (alignment === "left") return "!text-left [&_*]:!text-left";
+  return "!text-right [&_*]:!text-right";
+}
+
+export function pageBlockTextPlacementClass(alignment: PageBlockTextAlignment) {
+  if (alignment === "center") return "mx-auto";
+  if (alignment === "left") return "mr-auto ml-0";
+  return "ml-auto mr-0";
+}
+
+export type ContentBlockConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
   subtitle?: string;
@@ -51,7 +231,7 @@ export type VisionGoalsColumnConfig = {
 };
 
 /** Structured config for the Vision & Goals visual section (text + image + two columns). */
-export type VisionGoalsModuleConfig = {
+export type VisionGoalsModuleConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
   intro?: string[];
@@ -84,7 +264,7 @@ export type AboutCtaButtonConfig = {
 };
 
 /** Structured config for the About CTA band (contacts + copy + image). */
-export type AboutCtaModuleConfig = {
+export type AboutCtaModuleConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
   description?: string;
@@ -95,8 +275,13 @@ export type AboutCtaModuleConfig = {
   contacts?: AboutCtaContactConfig[];
 };
 
-export const ABOUT_PRINCIPLES_ICON_KEYS = ["land", "engineering", "timeline"] as const;
-export type AboutPrinciplesIconKey = (typeof ABOUT_PRINCIPLES_ICON_KEYS)[number];
+export const ABOUT_PRINCIPLES_ICON_KEYS = [
+  "land",
+  "engineering",
+  "timeline",
+] as const;
+export type AboutPrinciplesIconKey =
+  (typeof ABOUT_PRINCIPLES_ICON_KEYS)[number];
 
 export type AboutPrinciplesItemConfig = {
   icon?: AboutPrinciplesIconKey | string;
@@ -109,7 +294,7 @@ export type AboutPrinciplesItemConfig = {
 };
 
 /** Structured config for the About Principles section. */
-export type AboutPrinciplesModuleConfig = {
+export type AboutPrinciplesModuleConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
   /** Optional intro copy — used by home-trust; ignored by About Principles renderer. */
@@ -126,13 +311,13 @@ export type AboutPrinciplesModuleConfig = {
 };
 
 /** Structured config for the About Approach section. */
-export type AboutApproachModuleConfig = {
+export type AboutApproachModuleConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
 };
 
 /** Section copy for Home Projects — project cards remain in the projects table. */
-export type HomeProjectsModuleConfig = {
+export type HomeProjectsModuleConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
   intro?: string;
@@ -142,6 +327,8 @@ export type HomeProjectsModuleConfig = {
   showProjectLocation?: boolean;
   showFooterCta?: boolean;
   projectsLimit?: number;
+  /** Editable label rendered inside every project card CTA. */
+  cardCtaLabel?: string;
   /**
    * Physical alignment of the in-card «استكشف المشروع» CTA.
    * Default for legacy content (missing key): right — matches prior RTL inline-flex start.
@@ -168,7 +355,7 @@ export type CtaLinkConfig = {
   link?: AdminLinkValue;
 };
 
-export type CtaBlockConfig = {
+export type CtaBlockConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
   highlight?: string;
@@ -188,7 +375,7 @@ export type CardsBlockItem = {
   target?: "_self" | "_blank";
 };
 
-export type CardsBlockConfig = {
+export type CardsBlockConfig = PageBlockTextFormattingConfig & {
   eyebrow?: string;
   title?: string;
   description?: string;
@@ -261,15 +448,31 @@ export function extractPageBlockSeoText(config: unknown): string {
 }
 
 export function asContentConfig(raw: unknown): ContentBlockConfig {
-  return (raw ?? {}) as ContentBlockConfig;
+  const config = (raw ?? {}) as ContentBlockConfig;
+  const legacyAlignment = config.alignment === "center" ? "center" : "right";
+  return {
+    ...config,
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow", defaults: { alignment: legacyAlignment } },
+      { field: "title", defaults: { bold: true, alignment: legacyAlignment } },
+      { field: "subtitle", defaults: { alignment: legacyAlignment } },
+      { field: "description", defaults: { alignment: legacyAlignment } },
+    ]),
+  };
 }
 
 export function isAboutIntroTemplate(slug: string, variant?: string | null) {
   return slug === "about-intro" || variant === "about-intro";
 }
 
-export function isAboutIntroSingleImageTemplate(slug: string, variant?: string | null) {
-  return slug === "about-intro-single-image" || variant === "about-intro-single-image";
+export function isAboutIntroSingleImageTemplate(
+  slug: string,
+  variant?: string | null,
+) {
+  return (
+    slug === "about-intro-single-image" ||
+    variant === "about-intro-single-image"
+  );
 }
 
 export function isHomeStoryTemplate(slug: string, variant?: string | null) {
@@ -277,8 +480,13 @@ export function isHomeStoryTemplate(slug: string, variant?: string | null) {
 }
 
 /** Shared config shape (about-intro schema) — not the same admin module identity as about-intro. */
-export function usesAboutIntroConfigSchema(slug: string, variant?: string | null) {
-  return isAboutIntroTemplate(slug, variant) || isHomeStoryTemplate(slug, variant);
+export function usesAboutIntroConfigSchema(
+  slug: string,
+  variant?: string | null,
+) {
+  return (
+    isAboutIntroTemplate(slug, variant) || isHomeStoryTemplate(slug, variant)
+  );
 }
 
 export function isVisionGoalsTemplate(slug: string, variant?: string | null) {
@@ -294,11 +502,19 @@ export function isHomeContactTemplate(slug: string, variant?: string | null) {
 }
 
 /** Shared config shape (about-cta schema) — not the same admin module identity as about-cta. */
-export function usesAboutCtaConfigSchema(slug: string, variant?: string | null) {
-  return isAboutCtaTemplate(slug, variant) || isHomeContactTemplate(slug, variant);
+export function usesAboutCtaConfigSchema(
+  slug: string,
+  variant?: string | null,
+) {
+  return (
+    isAboutCtaTemplate(slug, variant) || isHomeContactTemplate(slug, variant)
+  );
 }
 
-export function isAboutPrinciplesTemplate(slug: string, variant?: string | null) {
+export function isAboutPrinciplesTemplate(
+  slug: string,
+  variant?: string | null,
+) {
   return slug === "about-principles" || variant === "about-principles";
 }
 
@@ -311,8 +527,14 @@ export function isHomeProjectsTemplate(slug: string, variant?: string | null) {
 }
 
 /** Shared config shape (about-principles schema) — not the same admin module identity as about-principles. */
-export function usesAboutPrinciplesConfigSchema(slug: string, variant?: string | null) {
-  return isAboutPrinciplesTemplate(slug, variant) || isHomeTrustTemplate(slug, variant);
+export function usesAboutPrinciplesConfigSchema(
+  slug: string,
+  variant?: string | null,
+) {
+  return (
+    isAboutPrinciplesTemplate(slug, variant) ||
+    isHomeTrustTemplate(slug, variant)
+  );
 }
 
 export function isAboutApproachTemplate(slug: string, variant?: string | null) {
@@ -357,44 +579,63 @@ export function resolveContentBlockConfig(template: {
 
 export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
 
   const imagesRaw = config.images as Record<string, unknown> | undefined;
   const readImage = (nestedKey: string, flatKey: string) =>
     readText(imagesRaw?.[nestedKey]) || readText(config[flatKey]) || undefined;
 
-  const images = imagesRaw || config.image_main || config.image_secondary || config.image_accent
-    ? {
-        main: readImage("main", "image_main"),
-        secondary: readImage("secondary", "image_secondary"),
-        accent: readImage("accent", "image_accent"),
-        mainAlt: readText(imagesRaw?.mainAlt ?? imagesRaw?.main_alt ?? config.image_main_alt) || undefined,
-        secondaryAlt:
-          readText(imagesRaw?.secondaryAlt ?? imagesRaw?.secondary_alt ?? config.image_secondary_alt) || undefined,
-        accentAlt: readText(imagesRaw?.accentAlt ?? imagesRaw?.accent_alt ?? config.image_accent_alt) || undefined,
-      }
-    : undefined;
+  const images =
+    imagesRaw ||
+    config.image_main ||
+    config.image_secondary ||
+    config.image_accent
+      ? {
+          main: readImage("main", "image_main"),
+          secondary: readImage("secondary", "image_secondary"),
+          accent: readImage("accent", "image_accent"),
+          mainAlt:
+            readText(
+              imagesRaw?.mainAlt ??
+                imagesRaw?.main_alt ??
+                config.image_main_alt,
+            ) || undefined,
+          secondaryAlt:
+            readText(
+              imagesRaw?.secondaryAlt ??
+                imagesRaw?.secondary_alt ??
+                config.image_secondary_alt,
+            ) || undefined,
+          accentAlt:
+            readText(
+              imagesRaw?.accentAlt ??
+                imagesRaw?.accent_alt ??
+                config.image_accent_alt,
+            ) || undefined,
+        }
+      : undefined;
 
   const beatsRaw = config.beats;
   const beats = Array.isArray(beatsRaw)
-    ? beatsRaw
-        .slice(0, 3)
-        .map((beat, index) => {
-          const row = beat as Record<string, unknown>;
-          return {
-            num: readText(row.num) || String(index + 1).padStart(2, "0"),
-            title: readText(row.title) || undefined,
-            text: readText(row.text) || undefined,
-          };
-        })
+    ? beatsRaw.slice(0, 3).map((beat, index) => {
+        const row = beat as Record<string, unknown>;
+        return {
+          num: readText(row.num) || String(index + 1).padStart(2, "0"),
+          title: readText(row.title) || undefined,
+          text: readText(row.text) || undefined,
+        };
+      })
     : undefined;
 
   const buttonRaw =
     config.button && typeof config.button === "object"
       ? (config.button as Record<string, unknown>)
       : undefined;
-  const buttonLabel = readText(buttonRaw?.label ?? config.button_label) || undefined;
-  const buttonHref = readText(buttonRaw?.href ?? config.button_href) || undefined;
+  const buttonLabel =
+    readText(buttonRaw?.label ?? config.button_label) || undefined;
+  const buttonHref =
+    readText(buttonRaw?.href ?? config.button_href) || undefined;
   const buttonLink =
     buttonRaw?.link && typeof buttonRaw.link === "object"
       ? deserializeAdminLink(buttonRaw.link)
@@ -404,10 +645,15 @@ export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
       ? (buttonRaw.target as "_blank" | "_self")
       : undefined;
   const buttonAlignment =
-    buttonRaw?.alignment === "center" || buttonRaw?.alignment === "left" || buttonRaw?.alignment === "right"
+    buttonRaw?.alignment === "center" ||
+    buttonRaw?.alignment === "left" ||
+    buttonRaw?.alignment === "right"
       ? (buttonRaw.alignment as "right" | "center" | "left")
       : undefined;
-  const buttonIcon = buttonRaw?.icon === "arrow" || buttonRaw?.icon === "none" ? (buttonRaw.icon as "none" | "arrow") : undefined;
+  const buttonIcon =
+    buttonRaw?.icon === "arrow" || buttonRaw?.icon === "none"
+      ? (buttonRaw.icon as "none" | "arrow")
+      : undefined;
   const buttonIconPosition =
     buttonRaw?.iconPosition === "left" || buttonRaw?.iconPosition === "right"
       ? (buttonRaw.iconPosition as "right" | "left")
@@ -426,6 +672,12 @@ export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
       : undefined;
 
   return {
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "subtitle" },
+      { field: "description" },
+    ]),
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
     subtitle: readText(config.subtitle) || undefined,
@@ -437,15 +689,25 @@ export function asAboutIntroConfig(raw: unknown): AboutIntroModuleConfig {
   };
 }
 
-export function asAboutIntroSingleImageConfig(raw: unknown): AboutIntroSingleImageModuleConfig {
+export function asAboutIntroSingleImageConfig(
+  raw: unknown,
+): AboutIntroSingleImageModuleConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
   const imagesRaw = config.images as Record<string, unknown> | undefined;
   const main =
-    readText(imagesRaw?.main) || readText(config.image_main) || readText(config.image) || undefined;
-  const mainAlt =
-    readText(imagesRaw?.mainAlt ?? imagesRaw?.main_alt ?? config.image_main_alt ?? config.imageAlt) ||
+    readText(imagesRaw?.main) ||
+    readText(config.image_main) ||
+    readText(config.image) ||
     undefined;
+  const mainAlt =
+    readText(
+      imagesRaw?.mainAlt ??
+        imagesRaw?.main_alt ??
+        config.image_main_alt ??
+        config.imageAlt,
+    ) || undefined;
   const beatsRaw = config.beats;
   const beats = Array.isArray(beatsRaw)
     ? beatsRaw.slice(0, 3).map((beat, index) => {
@@ -457,9 +719,17 @@ export function asAboutIntroSingleImageConfig(raw: unknown): AboutIntroSingleIma
         };
       })
     : undefined;
-  const positionRaw = readText(config.imagePosition ?? config.image_position).toLowerCase();
+  const positionRaw = readText(
+    config.imagePosition ?? config.image_position,
+  ).toLowerCase();
 
   return {
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "subtitle" },
+      { field: "description" },
+    ]),
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
     subtitle: readText(config.subtitle) || undefined,
@@ -471,15 +741,18 @@ export function asAboutIntroSingleImageConfig(raw: unknown): AboutIntroSingleIma
   };
 }
 
-function readVisionGoalsColumn(raw: unknown): VisionGoalsColumnConfig | undefined {
+function readVisionGoalsColumn(
+  raw: unknown,
+): VisionGoalsColumnConfig | undefined {
   if (!raw || typeof raw !== "object") return undefined;
 
   const column = raw as Record<string, unknown>;
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
   const itemsRaw = column.items;
 
   const items = Array.isArray(itemsRaw)
-    ? itemsRaw
+    ? (itemsRaw
         .map((item) => {
           const row = item as Record<string, unknown>;
           const title = readText(row.title);
@@ -487,7 +760,7 @@ function readVisionGoalsColumn(raw: unknown): VisionGoalsColumnConfig | undefine
           if (!title && !text) return null;
           return { title: title || undefined, text: text || undefined };
         })
-        .filter(Boolean) as VisionGoalsItemConfig[]
+        .filter(Boolean) as VisionGoalsItemConfig[])
     : undefined;
 
   const title = readText(column.title) || undefined;
@@ -497,7 +770,8 @@ function readVisionGoalsColumn(raw: unknown): VisionGoalsColumnConfig | undefine
 
 export function asVisionGoalsConfig(raw: unknown): VisionGoalsModuleConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
 
   const image =
     readText(config.image) ||
@@ -522,6 +796,11 @@ export function asVisionGoalsConfig(raw: unknown): VisionGoalsModuleConfig {
   }
 
   return {
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "intro" },
+    ]),
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
     intro,
@@ -534,7 +813,8 @@ export function asVisionGoalsConfig(raw: unknown): VisionGoalsModuleConfig {
 
 export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
   const readTarget = (value: unknown): "_self" | "_blank" | undefined =>
     value === "_blank" || value === "_self" ? value : undefined;
 
@@ -542,8 +822,10 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
     config.button && typeof config.button === "object"
       ? (config.button as Record<string, unknown>)
       : undefined;
-  const buttonLabel = readText(buttonRaw?.label) || readText(config.button_label) || undefined;
-  const buttonHref = readText(buttonRaw?.href) || readText(config.button_href) || undefined;
+  const buttonLabel =
+    readText(buttonRaw?.label) || readText(config.button_label) || undefined;
+  const buttonHref =
+    readText(buttonRaw?.href) || readText(config.button_href) || undefined;
   const buttonLink =
     buttonRaw?.link && typeof buttonRaw.link === "object"
       ? deserializeAdminLink(buttonRaw.link)
@@ -567,7 +849,7 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
 
   const contactsRaw = config.contacts;
   const contacts = Array.isArray(contactsRaw)
-    ? contactsRaw
+    ? (contactsRaw
         .slice(0, 4)
         .map((item) => {
           const row = item as Record<string, unknown>;
@@ -582,7 +864,8 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
               ? deserializeAdminLink(row.link)
               : undefined;
           const target = readTarget(row.target);
-          if (!label && !value && !secondaryValue && !href && !link) return null;
+          if (!label && !value && !secondaryValue && !href && !link)
+            return null;
           return {
             ...(label ? { label } : {}),
             ...(value ? { value } : {}),
@@ -593,13 +876,19 @@ export function asAboutCtaConfig(raw: unknown): AboutCtaModuleConfig {
             ...(target ? { target } : {}),
           };
         })
-        .filter(Boolean) as AboutCtaContactConfig[]
+        .filter(Boolean) as AboutCtaContactConfig[])
     : undefined;
 
   return {
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
-    description: readText(config.description) || readText(config.body) || undefined,
+    description:
+      readText(config.description) || readText(config.body) || undefined,
     button,
     note: readText(config.note) || undefined,
     image,
@@ -616,13 +905,16 @@ function normalizePrinciplesIcon(value: unknown): AboutPrinciplesIconKey {
   return "land";
 }
 
-export function asAboutPrinciplesConfig(raw: unknown): AboutPrinciplesModuleConfig {
+export function asAboutPrinciplesConfig(
+  raw: unknown,
+): AboutPrinciplesModuleConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
 
   const itemsRaw = config.items;
   const items = Array.isArray(itemsRaw)
-    ? itemsRaw
+    ? (itemsRaw
         .slice(0, 6)
         .map((item) => {
           const row = item as Record<string, unknown>;
@@ -640,39 +932,32 @@ export function asAboutPrinciplesConfig(raw: unknown): AboutPrinciplesModuleConf
             imageAlt: imageAlt || undefined,
           };
         })
-        .filter(Boolean) as AboutPrinciplesItemConfig[]
+        .filter(Boolean) as AboutPrinciplesItemConfig[])
     : undefined;
 
-  const readOptionalBool = (camelKey: string, snakeKey: string) => {
-    const value = config[camelKey] ?? config[snakeKey];
-    if (typeof value === "boolean") return value;
-    if (value === "false" || value === "0") return false;
-    if (value === "true" || value === "1") return true;
-    return undefined;
-  };
-
-  const readOptionalAlign = (camelKey: string, snakeKey: string) => {
-    const value = config[camelKey] ?? config[snakeKey];
-    return value === "right" || value === "left" || value === "center" ? value : undefined;
-  };
-
   return {
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
     description: readText(config.description) || undefined,
-    eyebrowBold: readOptionalBool("eyebrowBold", "eyebrow_bold"),
-    eyebrowAlignment: readOptionalAlign("eyebrowAlignment", "eyebrow_alignment"),
-    titleBold: readOptionalBool("titleBold", "title_bold"),
-    titleAlignment: readOptionalAlign("titleAlignment", "title_alignment"),
     items,
   };
 }
 
 export function asAboutApproachConfig(raw: unknown): AboutApproachModuleConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
 
   return {
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+    ]),
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
   };
@@ -680,7 +965,8 @@ export function asAboutApproachConfig(raw: unknown): AboutApproachModuleConfig {
 
 export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
   const readShowFlag = (camelKey: string, snakeKey: string) => {
     const value = config[camelKey] ?? config[snakeKey];
     if (typeof value === "boolean") return value;
@@ -700,45 +986,42 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
       : typeof limitRaw === "string" && limitRaw.trim()
         ? (() => {
             const parsed = Number(limitRaw);
-            return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+            return Number.isFinite(parsed) && parsed > 0
+              ? Math.floor(parsed)
+              : undefined;
           })()
         : undefined;
 
   const cardAlignRaw = config.cardCtaAlignment ?? config.card_cta_alignment;
   const cardCtaAlignment =
-    cardAlignRaw === "right" || cardAlignRaw === "left" || cardAlignRaw === "center"
+    cardAlignRaw === "right" ||
+    cardAlignRaw === "left" ||
+    cardAlignRaw === "center"
       ? cardAlignRaw
       : undefined;
 
-  const eyebrowBoldRaw = config.eyebrowBold ?? config.eyebrow_bold;
-  let eyebrowBold: boolean | undefined;
-  if (typeof eyebrowBoldRaw === "boolean") {
-    eyebrowBold = eyebrowBoldRaw;
-  } else if (eyebrowBoldRaw === "false" || eyebrowBoldRaw === "0") {
-    eyebrowBold = false;
-  } else if (eyebrowBoldRaw === "true" || eyebrowBoldRaw === "1") {
-    eyebrowBold = true;
-  }
-
-  const eyebrowAlignRaw = config.eyebrowAlignment ?? config.eyebrow_alignment;
-  const eyebrowAlignment =
-    eyebrowAlignRaw === "right" || eyebrowAlignRaw === "left" || eyebrowAlignRaw === "center"
-      ? eyebrowAlignRaw
-      : undefined;
-
   return {
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow", defaults: { bold: true } },
+      { field: "title", defaults: { bold: true } },
+      { field: "intro" },
+    ]),
     eyebrow: readText(config.eyebrow) || undefined,
     title: readText(config.title) || undefined,
     intro: readText(config.intro) || undefined,
     showEyebrow: readShowFlag("showEyebrow", "show_eyebrow"),
     showTitle: readShowFlag("showTitle", "show_title"),
     showIntro: readShowFlag("showIntro", "show_intro"),
-    showProjectLocation: readShowFlag("showProjectLocation", "show_project_location"),
+    showProjectLocation: readShowFlag(
+      "showProjectLocation",
+      "show_project_location",
+    ),
     showFooterCta: readShowFlag("showFooterCta", "show_footer_cta"),
     projectsLimit: parsedLimit,
+    cardCtaLabel:
+      readText(config.cardCtaLabel ?? config.card_cta_label) ||
+      "استكشف المشروع",
     cardCtaAlignment,
-    eyebrowBold,
-    eyebrowAlignment,
     footerCta: footer
       ? {
           label: readText(footer.label) || undefined,
@@ -747,9 +1030,16 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
             footer.link && typeof footer.link === "object"
               ? deserializeAdminLink(footer.link)
               : undefined,
-          target: footer.target === "_blank" ? "_blank" : footer.target === "_self" ? "_self" : undefined,
+          target:
+            footer.target === "_blank"
+              ? "_blank"
+              : footer.target === "_self"
+                ? "_self"
+                : undefined,
           alignment:
-            footer.alignment === "right" || footer.alignment === "left" || footer.alignment === "center"
+            footer.alignment === "right" ||
+            footer.alignment === "left" ||
+            footer.alignment === "center"
               ? footer.alignment
               : undefined,
         }
@@ -758,17 +1048,36 @@ export function asHomeProjectsConfig(raw: unknown): HomeProjectsModuleConfig {
 }
 
 export function asCtaConfig(raw: unknown): CtaBlockConfig {
-  return (raw ?? {}) as CtaBlockConfig;
+  const config = (raw ?? {}) as CtaBlockConfig;
+  return {
+    ...config,
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow", defaults: { bold: true } },
+      { field: "title", defaults: { bold: true } },
+      { field: "highlight", defaults: { bold: true } },
+      { field: "description" },
+      { field: "cta" },
+    ]),
+  };
 }
 
 export function asCardsConfig(raw: unknown): CardsBlockConfig {
-  return (raw ?? {}) as CardsBlockConfig;
+  const config = (raw ?? {}) as CardsBlockConfig;
+  return {
+    ...config,
+    ...resolvePageBlockTextFormattingConfig(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
+  };
 }
 
 export function asBreadcrumbConfig(raw: unknown): BreadcrumbBlockConfig {
   const config = (raw ?? {}) as Record<string, unknown>;
 
-  const readText = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+  const readText = (value: unknown) =>
+    typeof value === "string" ? value.trim() : "";
   const source = config.source === "manual" ? "manual" : "navigation";
 
   let showHome = true;
@@ -780,7 +1089,7 @@ export function asBreadcrumbConfig(raw: unknown): BreadcrumbBlockConfig {
 
   const manualRaw = config.manualItems ?? config.manual_items;
   const manualItems = Array.isArray(manualRaw)
-    ? manualRaw
+    ? (manualRaw
         .map((item) => {
           const row = item as Record<string, unknown>;
           const label = readText(row.label);
@@ -796,11 +1105,13 @@ export function asBreadcrumbConfig(raw: unknown): BreadcrumbBlockConfig {
             ...(link ? { link } : {}),
           };
         })
-        .filter(Boolean) as BreadcrumbBlockItem[]
+        .filter(Boolean) as BreadcrumbBlockItem[])
     : undefined;
 
   const currentLabelOverride =
-    readText(config.currentLabelOverride) || readText(config.current_label_override) || undefined;
+    readText(config.currentLabelOverride) ||
+    readText(config.current_label_override) ||
+    undefined;
 
   return {
     source,

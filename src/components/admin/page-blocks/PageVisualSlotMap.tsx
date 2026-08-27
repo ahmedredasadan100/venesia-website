@@ -5,18 +5,17 @@ import Link from "next/link";
 import { LAYOUT_SLOT_LABELS_AR, normalizeLayoutSlot, type PageLayoutSlot } from "../../../lib/page-blocks/layout-slots";
 import { moduleEditHref, moduleKindLabel, normalizeBoolean } from "../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../lib/page-blocks/types";
-import { PAGE_LAYOUT_SLOT_ORDER } from "../../../lib/page-blocks/layout-slots";
+import { PAGE_COMPOSITION_POSITIONS } from "../../../lib/page-blocks/layout-slots";
 import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type PageVisualSlotMapProps = {
   assignments: PageBlockAssignmentRow[];
-  pageSlug: string;
 };
 
 function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
   const groups = new Map<PageLayoutSlot, PageBlockAssignmentRow[]>();
 
-  for (const slot of PAGE_LAYOUT_SLOT_ORDER) {
+  for (const slot of PAGE_COMPOSITION_POSITIONS) {
     groups.set(slot, []);
   }
 
@@ -37,13 +36,13 @@ function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
   return groups;
 }
 
-export default function PageVisualSlotMap({ assignments, pageSlug }: PageVisualSlotMapProps) {
+export default function PageVisualSlotMap({ assignments }: PageVisualSlotMapProps) {
   const grouped = groupAssignmentsBySlot(assignments);
 
   return (
     <div>
       <div className="grid gap-4 xl:grid-cols-5">
-        {PAGE_LAYOUT_SLOT_ORDER.map((slot) => {
+        {PAGE_COMPOSITION_POSITIONS.map((slot) => {
           const rows = grouped.get(slot) ?? [];
           const isEmpty = rows.length === 0;
 
@@ -76,7 +75,7 @@ export default function PageVisualSlotMap({ assignments, pageSlug }: PageVisualS
                 <ul className="space-y-2">
                   {rows.map((row) => {
                     const visible = normalizeBoolean(row.is_publicly_visible, false);
-                    const compatibility = getSlotCompatibilityLabel(row.module_kind, pageSlug);
+                    const compatibility = getSlotCompatibilityLabel(row.module_kind);
 
                     return (
                       <li

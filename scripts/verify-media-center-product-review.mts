@@ -2,15 +2,20 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { createJiti } from "jiti";
 
 import { buildPaginationItems } from "../src/components/pagination-model.ts";
 import { resolveDistinctHeroDescription } from "../src/lib/hero/hero-content-controls.ts";
-import {
+import { isRetiredContentBlockTemplateSlug } from "../src/lib/page-blocks/deprecated-block-modules.ts";
+
+const jiti = createJiti(import.meta.url);
+const {
   buildMediaHubModuleConfig,
   getDefaultMediaListingPresentation,
   parseMediaHubModuleConfig,
-} from "../src/lib/media-hub-modules/parse-config.ts";
-import { isRetiredContentBlockTemplateSlug } from "../src/lib/page-blocks/deprecated-block-modules.ts";
+} = await jiti.import<typeof import("../src/lib/media-hub-modules/parse-config.ts")>(
+  "../src/lib/media-hub-modules/parse-config.ts",
+);
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -46,11 +51,21 @@ const presentation = {
   title: "فيديو مميز",
   description: "",
   ctaText: "كل الفيديوهات",
+  collectionView: {
+    layout: "list" as const,
+    itemsPerRow: 2 as const,
+    cardVariant: "default" as const,
+  },
+};
+const contentHierarchy = {
+  mode: "featured-first" as const,
+  secondaryItemCount: 3,
 };
 const featuredConfig = buildMediaHubModuleConfig(
   "featured",
   "topics",
-  { limit: 1 },
+  4,
+  contentHierarchy,
   presentation,
   {
     placement: "featured",
@@ -67,8 +82,8 @@ assert.deepEqual(featuredConfig, {
   placement: "featured",
   source: "topics",
   type: "video",
-  featured: true,
-  limit: 1,
+  itemLimit: 4,
+  contentHierarchy,
   presentation,
 });
 assert.equal(
@@ -90,13 +105,16 @@ const hubFeaturedConfig = parseMediaHubModuleConfig(
 );
 assert.equal(hubFeaturedConfig.placement, "hub");
 assert.equal(hubFeaturedConfig.type, "press");
+assert.equal(hubFeaturedConfig.itemLimit, 4);
+assert.deepEqual(hubFeaturedConfig.contentHierarchy, contentHierarchy);
 assert.equal("sideLimit" in hubFeaturedConfig, false);
 assert.equal("listLimit" in hubFeaturedConfig, false);
 
 const listingConfig = buildMediaHubModuleConfig(
   "videos",
   "topics",
-  {},
+  4,
+  contentHierarchy,
   presentation,
   {
     placement: "listing",
@@ -174,7 +192,7 @@ for (const source of [heroEditor, heroManager]) {
 }
 assert.match(
   heroActions,
-  /source_type: isDomainBackedHeroTemplateVariant\(variant\) \? "domain-backed" : "manual"/,
+  /source_type:\s*isDomainBackedHeroTemplateVariant\(variant\)\s*\?\s*"domain-backed"\s*:\s*"manual"/,
   "Hero template writes must classify domain-backed variants without reviving Media Center content sourcing",
 );
 assert.equal(heroActions.match(/source_type: "manual"/g)?.length, 1);
@@ -200,13 +218,20 @@ assert.ok(!publicOwner.includes("fallbackResult"));
 
 const featuredComponent = read("src/components/media-center/MediaCenterHubFeatured.tsx");
 assert.ok(!featuredComponent.startsWith('"use client"'));
-assert.ok(featuredComponent.includes("featuredItem.type"));
+assert.ok(featuredComponent.includes("contentHierarchy?.secondaryItemCount"));
+assert.ok(featuredComponent.includes("presentation.collectionView"));
 assert.ok(!featuredComponent.includes("useState"));
 assert.ok(!featuredComponent.includes("sideNews"));
 assert.ok(!featuredComponent.includes("latest"));
 
 const listingPage = read("src/components/media-center/MediaListingPage.tsx");
-assert.ok(listingPage.includes('module.config.placement === "featured"'));
+const mediaCompositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
+const slotRenderPlan = read("src/components/page-composition/build-slot-render-plan.ts");
+const venisiaMediaHubLayout = read("src/components/page-composition/VenesiaThemeMediaHubLayout.tsx");
+assert.ok(mediaCompositionLoader.includes('hubModule.config.placement === "listing"'));
+assert.ok(mediaCompositionLoader.includes("slots[hubModule.slot].push"));
+assert.ok(slotRenderPlan.includes('kind: "media-hub"'));
+assert.ok(venisiaMediaHubLayout.includes("renderVenesiaThemeMediaHubNodes"));
 assert.ok(
   !listingPage.includes("module.config.type === config.mediaType"),
   "Featured Content type must come from assigned module config, not the route config",
@@ -217,8 +242,8 @@ assert.ok(!listingPage.includes("ListingShell"));
 assert.ok(!listingPage.includes("isMediaListingShellPublished"));
 assert.ok(!listingPage.includes("featuredSelection"));
 assert.ok(
-  listingPage.indexOf("featuredNodes") < listingPage.indexOf("<MediaListingContent"),
-  "Featured Content must compose independently before Listing",
+  !listingPage.includes("featuredNodes") && !listingPage.includes("renderMediaHubSections"),
+  "Featured Content must follow its Assignment Position through the shared slot renderer",
 );
 
 const shellLayout = read("src/components/media-center/MediaCenterShellLayout.tsx");
@@ -244,10 +269,45 @@ const action = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
 assert.ok(editor.includes('name="media_type"'));
 assert.ok(editor.includes('name="placement" value={parsedInitial.placement}'));
 assert.ok(editor.includes("نوع المحتوى المميز"));
+assert.ok(editor.includes("CollectionContentHierarchyFields"));
+assert.ok(editor.includes("CollectionViewFields"));
+assert.ok(!editor.includes("مصدر البيانات"));
 assert.ok(action.includes('placementInput === "featured"'));
 for (const retiredField of ["side_limit", "list_limit", "featured_mode", "manual_topic_id"]) {
   assert.ok(!editor.includes(retiredField));
   assert.ok(!action.includes(retiredField));
+}
+
+const hierarchyOwner = read("src/lib/collection-modules/content-hierarchy.ts");
+const viewOwner = read("src/lib/collection-modules/collection-view.ts");
+const quantityOwner = read("src/lib/collection-modules/item-limit.ts");
+const capabilityFields = read("src/components/admin/page-blocks/CollectionModuleFields.tsx");
+const mediaCapabilityAdapter = read("src/lib/media-hub-modules/presentation-contract.ts");
+assert.ok(hierarchyOwner.includes('"uniform"'));
+assert.ok(hierarchyOwner.includes('"featured-first"'));
+assert.ok(hierarchyOwner.includes("secondaryItemCount"));
+assert.ok(!hierarchyOwner.includes("MediaHub"));
+assert.ok(viewOwner.includes("CollectionViewCapabilities"));
+assert.ok(viewOwner.includes("itemsPerRow"));
+assert.ok(!viewOwner.includes("MediaHub"));
+assert.ok(quantityOwner.includes("parseCollectionItemLimit"));
+assert.ok(capabilityFields.includes('name="item_limit"'));
+assert.ok(capabilityFields.includes('name="content_hierarchy_mode"'));
+assert.ok(capabilityFields.includes('name="secondary_item_count"'));
+assert.ok(capabilityFields.includes('name="collection_layout"'));
+assert.ok(capabilityFields.includes('name="items_per_row"'));
+assert.ok(capabilityFields.includes('name="collection_card_variant"'));
+for (const sectionKey of ["featured", "site-updates", "videos", "gallery", "press"]) {
+  assert.ok(mediaCapabilityAdapter.includes(`${sectionKey}:`) || mediaCapabilityAdapter.includes(`"${sectionKey}":`));
+}
+for (const presenterPath of [
+  "src/components/media-center/MediaCenterHubFeatured.tsx",
+  "src/components/media-center/MediaCenterHubTimeline.tsx",
+  "src/components/media-center/MediaCenterHubVideos.tsx",
+  "src/components/media-center/MediaCenterHubGallery.tsx",
+  "src/components/media-center/MediaCenterHubPress.tsx",
+]) {
+  assert.ok(read(presenterPath).includes("presentation.collectionView"));
 }
 
 const blockLoader = read("src/lib/page-blocks/load-page-blocks.ts");

@@ -1,13 +1,13 @@
 "use client";
 
 import {
-  ModuleEditorContentGroup,
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
+  ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
@@ -17,7 +17,11 @@ import AdminMediaImageField from "../../media/AdminMediaImageField";
 import { AdminFormListboxSelect, AdminLinkField } from "../../ui";
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
-import type { AboutIntroBeatConfig, AboutIntroModuleConfig } from "../../../../lib/page-blocks/configs";
+import {
+  resolvePageBlockTextFormat,
+  type AboutIntroBeatConfig,
+  type AboutIntroModuleConfig,
+} from "../../../../lib/page-blocks/configs";
 
 type AboutIntroEditorSection = "all" | "text" | "images" | "cta";
 
@@ -160,6 +164,10 @@ export default function AboutIntroModuleEditor({
   const showImages = section === "all" || section === "images";
   const showCta = isHomeStory && (section === "all" || section === "cta");
   const showBeats = !isHomeStory && section === "all";
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
+  const subtitleFormat = resolvePageBlockTextFormat(config, "subtitle");
+  const descriptionFormat = resolvePageBlockTextFormat(config, "description");
 
   const fieldLabels = isHomeStory
     ? {
@@ -213,39 +221,36 @@ export default function AboutIntroModuleEditor({
 
       {showText ? (
       <ModuleEditorSection>
-        <ModuleEditorContentGroup kind="short">
-          <ModuleEditorFieldGrid>
-          <ModuleEditorField nature="short-text" span={3}><label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
-            <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
-          </label></ModuleEditorField>
-          <ModuleEditorField nature="short-text" span={4}><label className="block space-y-1.5">
-            <span className="text-xs font-semibold text-white/55">{fieldLabels.title}</span>
-            <input name="title" defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
-          </label></ModuleEditorField>
+        <ModuleEditorFieldGrid>
+          <ModuleEditorField nature="short-text" span={6}>
+          <ModuleEditorVisibilityAlignRow label={fieldLabels.eyebrow} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+            <input name="eyebrow" aria-label={fieldLabels.eyebrow} defaultValue={config.eyebrow ?? ""} className={fieldClassName("h-11")} />
+          </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
+          <ModuleEditorField nature="short-text" span={6}>
+          <ModuleEditorVisibilityAlignRow label={fieldLabels.title} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+            <input name="title" aria-label={fieldLabels.title} defaultValue={config.title ?? ""} className={fieldClassName("h-11")} />
+          </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
           {!isHomeStory ? (
-            <ModuleEditorField nature="short-description" span={5}><label className="block space-y-1.5">
-              <span className="text-xs font-semibold text-white/55">{fieldLabels.subtitle}</span>
-              <input name="subtitle" defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
-            </label></ModuleEditorField>
+            <ModuleEditorField nature="short-text" span={12}>
+            <ModuleEditorVisibilityAlignRow label={fieldLabels.subtitle ?? "العنوان الفرعي"} showName="show_subtitle" boldName="subtitle_bold" alignmentName="subtitle_alignment" showDefault={subtitleFormat.visible} boldDefault={subtitleFormat.bold} alignmentDefault={subtitleFormat.alignment}>
+              <input name="subtitle" aria-label={fieldLabels.subtitle ?? "العنوان الفرعي"} defaultValue={config.subtitle ?? ""} className={fieldClassName("h-11")} />
+            </ModuleEditorVisibilityAlignRow>
+            </ModuleEditorField>
           ) : null}
-          </ModuleEditorFieldGrid>
-        </ModuleEditorContentGroup>
-        <ModuleEditorContentGroup kind="long">
-          <ModuleEditorFieldGrid>
-          <ModuleEditorField nature="long-content" span={12}><div>
+          <ModuleEditorField nature="long-content" span={12}>
+          <ModuleEditorVisibilityAlignRow label={fieldLabels.body} showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
             <AdminRichTextEditor
               name="body"
               label={fieldLabels.body}
               defaultValue={config.body ?? ""}
-              toolbarMode="minimal"
-              enableTextAlign
-              minHeight={160}
-              helperText={fieldLabels.bodyHelper}
+              toolbarMode="none"
+              minHeight={72}
             />
-          </div></ModuleEditorField>
-          </ModuleEditorFieldGrid>
-        </ModuleEditorContentGroup>
+          </ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
       ) : null}
 

@@ -4,7 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { HomepageProjectCard } from "../../lib/projects/public-types";
-import type { HomeProjectsButtonAlignment, HomeProjectsContent } from "./home-projects-mappers";
+import type {
+  HomeProjectsButtonAlignment,
+  HomeProjectsContent,
+} from "./home-projects-mappers";
 import PlainTextContent from "../content/PlainTextContent";
 import RichTextContent from "../content/RichTextContent";
 import { useSwipeSlider } from "../../hooks/use-swipe-slider";
@@ -51,10 +54,14 @@ function resolveHomeProjectsContent(content: HomeProjectsContent) {
     eyebrow: content.eyebrow.trim(),
     title: content.title.trim(),
     intro: content.intro.trim(),
+    formatting: content.formatting,
     footerCta: {
       label: content.footerCta.label.trim(),
       href: content.footerCta.href.trim(),
-      target: content.footerCta.target === "_blank" ? ("_blank" as const) : ("_self" as const),
+      target:
+        content.footerCta.target === "_blank"
+          ? ("_blank" as const)
+          : ("_self" as const),
       alignment: content.footerCta.alignment,
     },
     showEyebrow: content.showEyebrow,
@@ -63,6 +70,7 @@ function resolveHomeProjectsContent(content: HomeProjectsContent) {
     showProjectLocation: content.showProjectLocation,
     showFooterCta: content.showFooterCta,
     projectsLimit: content.projectsLimit,
+    cardCtaLabel: content.cardCtaLabel.trim() || "استكشف المشروع",
     cardCtaAlignment: content.cardCtaAlignment,
     eyebrowBold: content.eyebrowBold,
     eyebrowAlignment: content.eyebrowAlignment,
@@ -117,7 +125,10 @@ function buildProjectPages(projects: HomepageProjectCard[]) {
   return chunkProjects(projects, CARDS_PER_PAGE);
 }
 
-function getHeaderLayoutClass(hasIntroColumn: boolean, hasHeadingColumn: boolean) {
+function getHeaderLayoutClass(
+  hasIntroColumn: boolean,
+  hasHeadingColumn: boolean,
+) {
   // RTL row: first DOM child sits on the physical right. Mobile stacks heading → intro.
   if (hasIntroColumn && hasHeadingColumn) {
     return "mb-9 flex flex-col gap-6 @4xl/slot-module:mb-10 @4xl/slot-module:flex-row @4xl/slot-module:items-start @4xl/slot-module:justify-between @4xl/slot-module:gap-10";
@@ -149,12 +160,14 @@ function getProjectCardSlideClass(cardCount: number) {
 
 function HomeProjectCard({
   project,
+  cardCtaLabel,
   cardCtaAlignment,
   showProjectLocation,
   slideClass,
   revealDelay,
 }: {
   project: HomepageProjectCard;
+  cardCtaLabel: string;
   cardCtaAlignment: HomeProjectsButtonAlignment;
   showProjectLocation: boolean;
   slideClass: string;
@@ -222,9 +235,12 @@ function HomeProjectCard({
               className="mt-4 line-clamp-2 text-sm leading-7 text-white/72"
             />
 
-            <div className={`mt-6 flex ${CARD_CTA_ALIGN_CLASS[cardCtaAlignment]}`} dir="rtl">
+            <div
+              className={`mt-6 flex ${CARD_CTA_ALIGN_CLASS[cardCtaAlignment]}`}
+              dir="rtl"
+            >
               <div className="home-project-card__cta inline-flex items-center gap-2 text-sm font-medium text-[#D8B87A] transition-colors duration-300">
-                استكشف المشروع
+                {cardCtaLabel}
                 <span className="home-project-card__arrow transition-transform duration-300 group-hover:-translate-x-1">
                   ←
                 </span>
@@ -263,22 +279,39 @@ function HomeProjectsFooterCta({
   );
 }
 
-export default function HomeProjectsSection({ projects, content }: HomeProjectsSectionProps) {
+export default function HomeProjectsSection({
+  projects,
+  content,
+}: HomeProjectsSectionProps) {
   const [activePage, setActivePage] = useState(0);
   const sectionCopy = resolveHomeProjectsContent(content);
 
   const projectsLimit = resolveProjectsLimit(sectionCopy.projectsLimit);
 
-  const limitedProjects = !projectsLimit ? projects : projects.slice(0, projectsLimit);
+  const limitedProjects = !projectsLimit
+    ? projects
+    : projects.slice(0, projectsLimit);
 
   const projectPages = buildProjectPages(limitedProjects);
   const totalPages = projectPages.length;
   const hasMultiplePages = totalPages > 1;
   const safeActivePage = Math.min(activePage, Math.max(totalPages - 1, 0));
 
-  const showIntro = sectionCopy.showIntro && hasIntroContent(sectionCopy.intro);
-  const showEyebrow = sectionCopy.showEyebrow && Boolean(sectionCopy.eyebrow.trim());
-  const showTitle = sectionCopy.showTitle && Boolean(sectionCopy.title.trim());
+  const introFormat = sectionCopy.formatting.intro!;
+  const eyebrowFormat = sectionCopy.formatting.eyebrow!;
+  const titleFormat = sectionCopy.formatting.title!;
+  const showIntro =
+    sectionCopy.showIntro &&
+    introFormat.visible &&
+    hasIntroContent(sectionCopy.intro);
+  const showEyebrow =
+    sectionCopy.showEyebrow &&
+    eyebrowFormat.visible &&
+    Boolean(sectionCopy.eyebrow.trim());
+  const showTitle =
+    sectionCopy.showTitle &&
+    titleFormat.visible &&
+    Boolean(sectionCopy.title.trim());
 
   const introColumn = showIntro ? (
     <div className="flex max-w-md flex-col text-right @4xl/slot-module:max-w-sm @5xl/slot-module:max-w-md">
@@ -286,7 +319,11 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
         Scoped Home Projects intro only via .home-projects-intro in globals.css:
         muted body + gold <strong> lead line. Does not change Home Story rich text.
       */}
-      <RichTextContent value={sectionCopy.intro} mode="rich" className="home-projects-intro" />
+      <RichTextContent
+        value={sectionCopy.intro}
+        mode="rich"
+        className={`home-projects-intro ${EYEBROW_TEXT_ALIGN_CLASS[introFormat.alignment]} ${introFormat.bold ? "font-bold" : "font-normal"}`}
+      />
     </div>
   ) : null;
 
@@ -298,16 +335,19 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
       >
         {showEyebrow ? (
           <p
-            className={`m-0 text-sm leading-snug tracking-[0.26em] text-[#D8B87A] ${EYEBROW_TEXT_ALIGN_CLASS[sectionCopy.eyebrowAlignment]}`}
-            style={{ fontWeight: sectionCopy.eyebrowBold ? 700 : 400 }}
+            className={`m-0 text-sm leading-snug tracking-[0.26em] text-[#D8B87A] ${EYEBROW_TEXT_ALIGN_CLASS[eyebrowFormat.alignment]}`}
+            style={{ fontWeight: eyebrowFormat.bold ? 700 : 400 }}
           >
             {sectionCopy.eyebrow}
           </p>
         ) : null}
         {showTitle ? (
           <h2
-            className="m-0 text-right text-3xl font-bold tracking-[-0.04em] @3xl/slot-module:text-5xl"
-            style={{ lineHeight: 1.08 }}
+            className={`m-0 text-3xl tracking-[-0.04em] @3xl/slot-module:text-5xl ${EYEBROW_TEXT_ALIGN_CLASS[titleFormat.alignment]}`}
+            style={{
+              lineHeight: 1.08,
+              fontWeight: titleFormat.bold ? 700 : 400,
+            }}
           >
             {sectionCopy.title}
           </h2>
@@ -318,7 +358,10 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
   const hasIntroColumn = Boolean(introColumn);
   const hasHeadingColumn = Boolean(headingColumn);
   const showHeader = hasIntroColumn || hasHeadingColumn;
-  const headerLayoutClass = getHeaderLayoutClass(hasIntroColumn, hasHeadingColumn);
+  const headerLayoutClass = getHeaderLayoutClass(
+    hasIntroColumn,
+    hasHeadingColumn,
+  );
 
   const showFooterCta =
     sectionCopy.showFooterCta &&
@@ -362,7 +405,11 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
           </div>
         ) : null}
 
-        <div ref={containerRef} className="relative touch-pan-y" {...swipeHandlers}>
+        <div
+          ref={containerRef}
+          className="relative touch-pan-y"
+          {...swipeHandlers}
+        >
           {hasMultiplePages && (
             <>
               <button
@@ -389,7 +436,10 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
             Clip horizontal slide track only. Vertical padding + overflow-y visible
             lets card lift / shadows breathe without changing on-screen spacing.
           */}
-          <div dir="ltr" className="home-projects-slider-clip overflow-x-hidden overflow-y-visible py-3">
+          <div
+            dir="ltr"
+            className="home-projects-slider-clip overflow-x-hidden overflow-y-visible py-3"
+          >
             <div
               className="home-projects-slider-track flex transition-transform duration-[850ms] ease-out"
               style={
@@ -409,7 +459,11 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
                     key={`page-${pageIndex}-${page.map((project) => project.id).join("-")}`}
                     dir="rtl"
                     className={`${pageLayoutClass}${isActivePage ? "" : " pointer-events-none"}`}
-                    style={totalPages > 1 ? { width: `${100 / totalPages}%` } : { width: "100%" }}
+                    style={
+                      totalPages > 1
+                        ? { width: `${100 / totalPages}%` }
+                        : { width: "100%" }
+                    }
                     aria-hidden={isActivePage ? undefined : true}
                     inert={isActivePage ? undefined : true}
                   >
@@ -417,6 +471,7 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
                       <HomeProjectCard
                         key={project.id}
                         project={project}
+                        cardCtaLabel={sectionCopy.cardCtaLabel}
                         cardCtaAlignment={sectionCopy.cardCtaAlignment}
                         showProjectLocation={sectionCopy.showProjectLocation}
                         slideClass={getProjectCardSlideClass(page.length)}
@@ -449,7 +504,10 @@ export default function HomeProjectsSection({ projects, content }: HomeProjectsS
         ) : null}
 
         {showFooterCta ? (
-          <div className={`mt-10 flex ${FOOTER_ALIGN_CLASS[sectionCopy.footerCta.alignment]}`} dir="rtl">
+          <div
+            className={`mt-10 flex ${FOOTER_ALIGN_CLASS[sectionCopy.footerCta.alignment]}`}
+            dir="rtl"
+          >
             <HomeProjectsFooterCta
               href={sectionCopy.footerCta.href}
               label={sectionCopy.footerCta.label}

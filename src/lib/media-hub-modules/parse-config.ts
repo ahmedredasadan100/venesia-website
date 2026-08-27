@@ -1,5 +1,19 @@
 import type { Json } from "../database.types";
 import type { MediaHubSectionKey } from "./types";
+import {
+  resolvePageBlockTextFormattingConfig,
+  type PageBlockTextFormattingConfig,
+} from "../page-blocks/configs";
+import type { CollectionContentHierarchy } from "../collection-modules/content-hierarchy";
+import type { CollectionView } from "../collection-modules/collection-view";
+import { parseCollectionItemLimit } from "../collection-modules/item-limit";
+import {
+  buildMediaHubCollectionView,
+  buildMediaHubContentHierarchy,
+  getMediaHubCollectionCapabilities,
+  parseMediaHubCollectionView,
+  parseMediaHubContentHierarchy,
+} from "./presentation-contract";
 
 export type MediaHubMediaType = "news" | "site_update" | "video" | "gallery" | "press";
 
@@ -17,19 +31,20 @@ export type MediaListingPresentationConfig = {
   cardCtaText: string;
 };
 
-export type MediaHubModulePresentation = {
+export type MediaHubModulePresentation = PageBlockTextFormattingConfig & {
   eyebrow: string;
   title: string;
   description: string;
   ctaText: string;
+  collectionView: CollectionView;
 };
 
 export type MediaHubModuleConfig = {
   placement: MediaHubModulePlacement;
   source: "topics";
   type?: MediaHubMediaType;
-  featured?: boolean;
-  limit?: number;
+  itemLimit?: number;
+  contentHierarchy?: CollectionContentHierarchy;
   listing?: MediaListingPresentationConfig;
   presentation: MediaHubModulePresentation;
 };
@@ -78,28 +93,35 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       placement: "hub",
       source: "topics",
       type: "news",
-      featured: true,
-      limit: 1,
+      itemLimit: 4,
+      contentHierarchy:
+        getMediaHubCollectionCapabilities("featured").hierarchy.defaults,
       presentation: {
-        eyebrow: "Featured Content",
-        title: "المحتوى المميز",
+        eyebrow: "Latest News",
+        title: "آخر الأخبار",
         description: "",
-        ctaText: "استكشف القسم",
+        ctaText: "استكشف الأخبار",
+        collectionView:
+          getMediaHubCollectionCapabilities("featured").view.defaults,
       },
     },
-    defaultLimit: 1,
+    defaultLimit: 4,
   },
   "site-updates": {
     config: {
       placement: "hub",
       source: "topics",
       type: "site_update",
-      limit: 4,
+      itemLimit: 4,
+      contentHierarchy:
+        getMediaHubCollectionCapabilities("site-updates").hierarchy.defaults,
       presentation: {
         eyebrow: "Site Updates",
         title: "من أرض التنفيذ",
         description: "",
         ctaText: "استكشف القسم",
+        collectionView:
+          getMediaHubCollectionCapabilities("site-updates").view.defaults,
       },
     },
     defaultLimit: 4,
@@ -109,12 +131,16 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       placement: "hub",
       source: "topics",
       type: "video",
-      limit: 4,
+      itemLimit: 4,
+      contentHierarchy:
+        getMediaHubCollectionCapabilities("videos").hierarchy.defaults,
       presentation: {
         eyebrow: "Videos",
         title: "الفيديوهات",
         description: "",
         ctaText: "استكشف القسم",
+        collectionView:
+          getMediaHubCollectionCapabilities("videos").view.defaults,
       },
     },
     defaultLimit: 4,
@@ -124,12 +150,16 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       placement: "hub",
       source: "topics",
       type: "gallery",
-      limit: 8,
+      itemLimit: 8,
+      contentHierarchy:
+        getMediaHubCollectionCapabilities("gallery").hierarchy.defaults,
       presentation: {
         eyebrow: "Gallery",
         title: "معرض الصور",
         description: "",
         ctaText: "استكشف القسم",
+        collectionView:
+          getMediaHubCollectionCapabilities("gallery").view.defaults,
       },
     },
     defaultLimit: 8,
@@ -139,12 +169,16 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       placement: "hub",
       source: "topics",
       type: "press",
-      limit: 6,
+      itemLimit: 6,
+      contentHierarchy:
+        getMediaHubCollectionCapabilities("press").hierarchy.defaults,
       presentation: {
         eyebrow: "Press Releases",
         title: "البيانات الصحفية",
         description: "",
         ctaText: "كل البيانات",
+        collectionView:
+          getMediaHubCollectionCapabilities("press").view.defaults,
       },
     },
     defaultLimit: 6,
@@ -205,20 +239,81 @@ function readListingPresentation(
 function readPresentation(
   value: Json | undefined,
   fallback: MediaHubModulePresentation,
+  sectionKey: MediaHubSectionKey,
 ): MediaHubModulePresentation {
+  const valueRecord =
+    value && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : undefined;
+  const legacyCollectionView =
+    valueRecord?.collection &&
+    typeof valueRecord.collection === "object" &&
+    !Array.isArray(valueRecord.collection)
+      ? {
+          layout: valueRecord.collection.layoutVariant,
+          itemsPerRow: valueRecord.collection.itemsPerRow,
+          cardVariant: valueRecord.collection.cardVariant,
+        }
+      : undefined;
+  const collectionView = parseMediaHubCollectionView(
+    sectionKey,
+    valueRecord?.collectionView ?? legacyCollectionView,
+  );
+
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    return { ...fallback };
+    return { ...fallback, collectionView };
   }
 
-  const readText = (key: keyof MediaHubModulePresentation) =>
+  const readText = (key: "eyebrow" | "title" | "description" | "ctaText") =>
     typeof value[key] === "string" ? value[key].trim() : fallback[key];
 
   return {
+    ...resolvePageBlockTextFormattingConfig(value, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     eyebrow: readText("eyebrow"),
     title: readText("title"),
     description: readText("description"),
     ctaText: readText("ctaText"),
+    collectionView,
   };
+}
+
+function hasPersistedCollectionCapabilities(
+  raw: Record<string, Json | undefined>,
+) {
+  return Boolean(
+    raw.itemLimit != null ||
+      (raw.contentHierarchy &&
+        typeof raw.contentHierarchy === "object" &&
+        !Array.isArray(raw.contentHierarchy)) ||
+      (raw.presentation &&
+        typeof raw.presentation === "object" &&
+        !Array.isArray(raw.presentation) &&
+        raw.presentation.collectionView &&
+        typeof raw.presentation.collectionView === "object" &&
+        !Array.isArray(raw.presentation.collectionView)),
+  );
+}
+
+function readContentHierarchy(
+  raw: Record<string, Json | undefined>,
+  sectionKey: MediaHubSectionKey,
+) {
+  if (
+    raw.contentHierarchy &&
+    typeof raw.contentHierarchy === "object" &&
+    !Array.isArray(raw.contentHierarchy)
+  ) {
+    return parseMediaHubContentHierarchy(sectionKey, raw.contentHierarchy);
+  }
+
+  return parseMediaHubContentHierarchy(sectionKey, {
+    mode: raw.featured === true ? "featured-first" : undefined,
+    secondaryItemCount: raw.sideLimit,
+  });
 }
 
 export function parseMediaHubModuleConfig(
@@ -226,10 +321,26 @@ export function parseMediaHubModuleConfig(
   sectionKey: MediaHubSectionKey,
 ): MediaHubModuleConfig {
   const fallback = MEDIA_HUB_SECTION_DEFAULTS[sectionKey].config;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { ...fallback };
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return {
+      ...fallback,
+      contentHierarchy: fallback.contentHierarchy
+        ? { ...fallback.contentHierarchy }
+        : undefined,
+      presentation: {
+        ...fallback.presentation,
+        collectionView: { ...fallback.presentation.collectionView },
+      },
+    };
+  }
 
   const source = raw.source === "topics" ? "topics" : fallback.source;
-  const presentation = readPresentation(raw.presentation, fallback.presentation);
+  const presentation = readPresentation(
+    raw.presentation,
+    fallback.presentation,
+    sectionKey,
+  );
+  const contentHierarchy = readContentHierarchy(raw, sectionKey);
   const placement = raw.placement === "listing"
     ? "listing"
     : raw.placement === "featured" && sectionKey === "featured"
@@ -250,12 +361,15 @@ export function parseMediaHubModuleConfig(
   }
 
   if (sectionKey === "featured") {
+    const itemLimit = hasPersistedCollectionCapabilities(raw)
+      ? parseCollectionItemLimit(raw.itemLimit, fallback.itemLimit ?? 4)
+      : parseCollectionItemLimit(raw.listLimit, fallback.itemLimit ?? 4);
     return {
       placement,
       source,
       type: configuredMediaType,
-      featured: true,
-      limit: readLimit(raw.limit, fallback.limit ?? 1),
+      itemLimit,
+      contentHierarchy,
       presentation,
     };
   }
@@ -264,7 +378,11 @@ export function parseMediaHubModuleConfig(
     placement,
     source,
     type: mediaTypeForSection(sectionKey),
-    limit: readLimit(raw.limit, fallback.limit ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit ?? 4),
+    itemLimit: parseCollectionItemLimit(
+      raw.itemLimit ?? raw.limit,
+      fallback.itemLimit ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit ?? 4,
+    ),
+    contentHierarchy,
     presentation,
   };
 }
@@ -272,7 +390,8 @@ export function parseMediaHubModuleConfig(
 export function buildMediaHubModuleConfig(
   sectionKey: MediaHubSectionKey,
   dataSource: string,
-  limits: { limit?: number },
+  itemLimit: number,
+  contentHierarchy: CollectionContentHierarchy,
   presentation: MediaHubModulePresentation,
   listingInput?: {
     placement: MediaHubModulePlacement;
@@ -289,6 +408,18 @@ export function buildMediaHubModuleConfig(
     throw new Error("مصدر البيانات غير مدعوم حاليًا.");
   }
 
+  const normalizedPresentation: MediaHubModulePresentation = {
+    ...presentation,
+    collectionView: buildMediaHubCollectionView(
+      sectionKey,
+      presentation.collectionView,
+    ),
+  };
+  const normalizedHierarchy = buildMediaHubContentHierarchy(
+    sectionKey,
+    contentHierarchy,
+  );
+
   if (listingInput?.placement === "listing") {
     if (!isMediaHubMediaType(listingInput.mediaType)) {
       throw new Error("نوع محتوى القائمة غير صالح.");
@@ -299,7 +430,7 @@ export function buildMediaHubModuleConfig(
       placement: "listing",
       source: "topics",
       type: mediaType,
-      presentation,
+      presentation: normalizedPresentation,
       listing: {
         pageSize: Math.min(60, Math.max(1, Math.floor(listingInput.pageSize || defaults.pageSize))),
         layout: listingInput.layout === "vertical" ? "vertical" : "grid",
@@ -323,9 +454,12 @@ export function buildMediaHubModuleConfig(
       placement: listingInput.placement === "featured" ? "featured" : "hub",
       source: "topics",
       type: listingInput.mediaType,
-      featured: true,
-      limit: Math.max(1, limits.limit || defaults.defaultLimit || 1),
-      presentation,
+      itemLimit: parseCollectionItemLimit(
+        itemLimit,
+        defaults.defaultLimit || 4,
+      ),
+      contentHierarchy: normalizedHierarchy,
+      presentation: normalizedPresentation,
     };
   }
 
@@ -334,7 +468,11 @@ export function buildMediaHubModuleConfig(
     placement: "hub",
     source: "topics",
     type: mediaTypeForSection(sectionKey),
-    limit: Math.max(1, limits.limit || defaults.defaultLimit || 4),
-    presentation,
+    itemLimit: parseCollectionItemLimit(
+      itemLimit,
+      defaults.defaultLimit || 4,
+    ),
+    contentHierarchy: normalizedHierarchy,
+    presentation: normalizedPresentation,
   };
 }

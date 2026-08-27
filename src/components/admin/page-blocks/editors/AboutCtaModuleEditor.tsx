@@ -6,6 +6,7 @@ import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
+  ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
@@ -15,7 +16,11 @@ import { AdminFormGrid, AdminFormListboxSelect, AdminLinkField } from "../../ui"
 import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import type { AdminLinkValue } from "../../../../lib/admin/links/types";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
-import type { AboutCtaContactConfig, AboutCtaModuleConfig } from "../../../../lib/page-blocks/configs";
+import {
+  resolvePageBlockTextFormat,
+  type AboutCtaContactConfig,
+  type AboutCtaModuleConfig,
+} from "../../../../lib/page-blocks/configs";
 import {
   CONTACT_ICON_OPTIONS,
   renderContactIcon,
@@ -80,6 +85,9 @@ export default function AboutCtaModuleEditor({
   const showImage = section === "image";
   const showCta = section === "cta";
   const showContacts = section === "contacts";
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
+  const descriptionFormat = resolvePageBlockTextFormat(config, "description");
 
   function updateRow(
     uid: string,
@@ -101,33 +109,37 @@ export default function AboutCtaModuleEditor({
   const textFields = showText ? (
       <ModuleEditorSection>
       <ModuleEditorFieldGrid>
-      <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">{fieldLabels.eyebrow}</span>
-        <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-      </label></ModuleEditorField>
-      <ModuleEditorField nature="short-text" span={4}><label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">{fieldLabels.title}</span>
+      <ModuleEditorField nature="short-text" span={6}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.eyebrow} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+        <input name="eyebrow" aria-label={fieldLabels.eyebrow} defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+      </ModuleEditorVisibilityAlignRow>
+      </ModuleEditorField>
+      <ModuleEditorField nature="short-text" span={6}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.title} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
         {isHomeContact ? (
           <textarea
             name="title"
+            aria-label={fieldLabels.title}
             defaultValue={config.title ?? ""}
             rows={2}
-            placeholder="سطران مفصولان بسطر فارغ"
-            className={fieldClassName("resize-y leading-7")}
+            className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
           />
         ) : (
-          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
+          <input name="title" aria-label={fieldLabels.title} defaultValue={config.title ?? ""} className={fieldClassName()} />
         )}
-      </label></ModuleEditorField>
-      <ModuleEditorField nature="short-description" span={5}><label className="block space-y-2">
-        <span className="text-xs font-semibold text-white/55">{fieldLabels.description}</span>
+      </ModuleEditorVisibilityAlignRow>
+      </ModuleEditorField>
+      <ModuleEditorField nature="long-content" span={12}>
+      <ModuleEditorVisibilityAlignRow label={fieldLabels.description} showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
         <textarea
           name="description"
+          aria-label={fieldLabels.description}
           defaultValue={config.description ?? ""}
           rows={2}
-          className={fieldClassName("resize-y leading-7")}
+          className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
         />
-      </label></ModuleEditorField>
+      </ModuleEditorVisibilityAlignRow>
+      </ModuleEditorField>
       </ModuleEditorFieldGrid>
       </ModuleEditorSection>
   ) : null;

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { statusMeta } from "../../../lib/page-blocks/admin-utils";
 import { AdminFeedbackRegion } from "../AdminFeedbackProvider";
-import { AdminActionButton, AdminPageContextHeader, AdminStatusPill } from "../ui";
+import { AdminActionButton, AdminPageContextHeader } from "../ui";
 
 export type BlockEditorContextHeaderProps = {
   backHref: string;
@@ -35,25 +35,12 @@ export default function BlockEditorContextHeader({
       title={title}
       description={description}
       meta={
-        meta ?? (statusInfo ? (
-          <AdminStatusPill
-            tone={
-              statusInfo.tone === "green"
-                ? "green"
-                : statusInfo.tone === "gold"
-                  ? "gold"
-                  : "muted"
-            }
-          >
-            {statusInfo.label}
-          </AdminStatusPill>
-        ) : undefined)
+        meta ?? statusInfo?.label
       }
       actions={
         <>
           {actions}
           <AdminActionButton href={backHref} variant="ghost">
-            <span aria-hidden="true">→</span>
             {backLabel}
           </AdminActionButton>
         </>

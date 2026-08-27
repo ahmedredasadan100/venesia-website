@@ -2,6 +2,8 @@ import type { ChangeEventHandler, ReactNode } from "react";
 
 export const ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME =
   "rounded-xl border border-white/10 bg-black/16 px-4 py-3";
+export const ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME =
+  "h-8 min-w-20 justify-between border border-white/10 bg-white/[0.035] px-2.5 py-1.5";
 
 export type AdminFormSwitchProps = {
   id?: string;
@@ -65,10 +67,11 @@ export default function AdminFormSwitch({
   return (
     <label
       id={id}
+      data-admin-form-switch-surface={surface ? "card" : "compact"}
       className={`${surface ? "grid grid-cols-[minmax(0,1fr)_auto] gap-3" : "inline-flex gap-2"} min-w-0 cursor-pointer items-center text-xs text-white/70 ${surface || wrapLabel ? "leading-5" : "lg:whitespace-nowrap"} ${
         surface
           ? ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME
-          : "rounded-lg px-1 py-1.5"
+          : ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME
       } ${disabled ? "cursor-not-allowed opacity-55" : ""} ${className}`.trim()}
     >
       {surface ? (

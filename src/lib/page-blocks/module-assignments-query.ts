@@ -10,7 +10,7 @@ import {
 import { normalizeLayoutSlot } from "./layout-slots";
 import { normalizeBoolean } from "./admin-utils";
 import type { PageBlockType } from "./types";
-import { getAssignableSlotsForRoute } from "../page-composition/route-slot-policy";
+import { getDefaultAssignmentPosition } from "../page-composition/page-assignment-contract";
 
 export type ModuleAssignmentRow = {
   id: number;
@@ -81,21 +81,10 @@ export async function getModuleAssignmentContext(
   blockType: PageBlockType,
   templateId: number,
 ): Promise<ModuleAssignmentContext> {
-  const context = await loadModuleAssignmentContext(
+  return loadModuleAssignmentContext(
     BLOCK_MODULE_REGISTRY[blockType].assignmentTable,
     templateId,
   );
-  if (blockType !== "breadcrumb") return context;
-
-  const assignedPageIds = new Set(context.assignments.map((row) => row.page_id));
-  return {
-    ...context,
-    pages: context.pages.filter(
-      (page) =>
-        assignedPageIds.has(page.id) ||
-        getAssignableSlotsForRoute(page.slug, "breadcrumb").length > 0,
-    ),
-  };
 }
 
 export async function getMediaHubModuleAssignmentContext(templateId: number) {
@@ -137,7 +126,7 @@ export async function getHeroModuleAssignmentContext(templateId: number): Promis
       id: row.id,
       page_id: page.id,
       template_id: templateId,
-      slot: "hero",
+      slot: getDefaultAssignmentPosition("hero"),
       sort_order: row.priority ?? 0,
       is_visible: normalizeBoolean(row.is_active, true),
       page_title: page.title ?? "—",

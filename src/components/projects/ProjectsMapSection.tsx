@@ -7,6 +7,7 @@ import {
   PROJECTS_HUB_MAP_DEFAULTS,
   type ProjectsHubMapPresentationProps,
 } from "../../lib/projects/map-projects-hub-module-props";
+import type { PageBlockTextAlignment } from "../../lib/page-blocks/configs";
 
 type ProjectsMapSectionProps = {
   projects: PublicProject[];
@@ -14,6 +15,9 @@ type ProjectsMapSectionProps = {
   mapImage?: string;
   exploreButtonLabel?: string;
   mapPins?: ProjectsHubMapPresentationProps["mapPins"];
+  showTitle?: boolean;
+  titleBold?: boolean;
+  titleAlignment?: PageBlockTextAlignment;
 };
 
 export default function ProjectsMapSection({
@@ -22,6 +26,9 @@ export default function ProjectsMapSection({
   mapImage = PROJECTS_HUB_MAP_DEFAULTS.mapImage,
   exploreButtonLabel = PROJECTS_HUB_MAP_DEFAULTS.exploreButtonLabel,
   mapPins = PROJECTS_HUB_MAP_DEFAULTS.mapPins,
+  showTitle = true,
+  titleBold = true,
+  titleAlignment = "right",
 }: ProjectsMapSectionProps) {
   const residentialProjects = projects.filter(
     (project) => project.category === "residential"
@@ -49,9 +56,9 @@ export default function ProjectsMapSection({
     <section className="px-6 pt-16">
       <div className="mx-auto grid max-w-7xl gap-5 rounded-[28px] border border-[#D8B87A]/15 bg-white/[0.025] p-5 lg:grid-cols-[280px_1fr]">
         <div className="rounded-2xl border border-white/10 bg-black/20 p-6">
-          <h2 className="text-xl font-semibold text-[#D8B87A]">
+          {showTitle ? <h2 className={`text-xl text-[#D8B87A] ${titleAlignment === "center" ? "text-center" : titleAlignment === "left" ? "text-left" : "text-right"} ${titleBold ? "font-bold" : "font-normal"}`}>
             {title}
-          </h2>
+          </h2> : null}
 
           <div className="mt-6 space-y-4">
             {Object.entries(grouped).map(([area, count]) => (

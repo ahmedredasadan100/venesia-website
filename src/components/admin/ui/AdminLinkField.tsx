@@ -18,6 +18,7 @@ type AdminLinkFieldProps = {
   showAnchor?: boolean;
   chooseLinkLabel?: string;
   clearLinkLabel?: string;
+  presentation?: "card" | "inline";
   /** When set, skips hidden form inputs and uses callback state (Footer Builder, etc.). */
   onControlledChange?: (value: AdminLinkValue) => void;
   controlledValue?: AdminLinkValue;
@@ -45,8 +46,9 @@ export default function AdminLinkField({
   defaultValue,
   helperText,
   showAnchor = false,
-  chooseLinkLabel = "Choose Link",
-  clearLinkLabel = "Clear",
+  chooseLinkLabel = "اختيار الرابط",
+  clearLinkLabel = "مسح الرابط",
+  presentation = "card",
   onControlledChange,
   controlledValue,
 }: AdminLinkFieldProps) {
@@ -89,8 +91,86 @@ export default function AdminLinkField({
     });
   }
 
+  const fieldState = (
+    <>
+      {!isControlled ? (
+        <>
+          <input type="hidden" name={names.linkKind} value={serialized?.link_kind ?? "none"} />
+          <input type="hidden" name={names.linkedType} value={serialized?.linked_type ?? ""} />
+          <input type="hidden" name={names.linkedId} value={serialized?.linked_id ?? ""} />
+          <input type="hidden" name={names.href} value={serialized?.href ?? ""} />
+          <input type="hidden" name={names.anchor} value={serialized?.anchor ?? ""} />
+          <input type="hidden" name={names.target} value={serialized?.target ?? "_self"} />
+          <input type="hidden" name={names.routeKey} value={serialized?.meta?.route_key ?? ""} />
+        </>
+      ) : null}
+
+      {pickerOpen ? (
+        <AdminLinkPicker
+          open
+          initialValue={value}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(next) => {
+            setLink({
+              ...next,
+              anchor: supportsPageAnchor(next) ? value.anchor ?? next.anchor ?? null : next.anchor ?? null,
+            });
+            setPickerOpen(false);
+          }}
+        />
+      ) : null}
+    </>
+  );
+
+  if (presentation === "inline") {
+    return (
+      <div className="min-w-0" data-admin-link-field="inline">
+        <div className="flex min-w-0 items-stretch">
+          <AdminActionButton
+            variant="gold"
+            onClick={() => setPickerOpen(true)}
+            className="h-11 min-h-11 shrink-0 rounded-s-none px-3 sm:px-4"
+          >
+            <span>{chooseLinkLabel}</span>
+            {value.link_kind !== "none" ? (
+              <span aria-hidden="true" className="size-1.5 rounded-full bg-[#D8B87A]" />
+            ) : null}
+          </AdminActionButton>
+          {value.link_kind !== "none" ? (
+            <AdminActionButton
+              variant="ghost"
+              onClick={() => setLink(emptyAdminLink())}
+              className="h-11 min-h-11 shrink-0 rounded-s-none border border-s-0 border-white/10 px-3"
+            >
+              {clearLinkLabel}
+            </AdminActionButton>
+          ) : null}
+        </div>
+        <span className="sr-only" aria-live="polite">
+          {value.link_kind === "none"
+            ? `${label}: لم يتم اختيار رابط بعد.`
+            : `${label}: ${previewDisplay?.title ?? KIND_LABELS[value.link_kind]}`}
+          {helperText ? ` ${helperText}` : ""}
+        </span>
+        {canEditAnchor ? (
+          <label className="mt-2 flex min-w-0 items-center gap-2 text-xs text-white/55">
+            <span className="shrink-0">Anchor</span>
+            <input
+              value={value.anchor ?? ""}
+              onChange={(event) => updateAnchor(event.target.value)}
+              placeholder="team"
+              dir="ltr"
+              className={adminFormFieldClassName("h-9 min-w-0 py-2 text-left font-en")}
+            />
+          </label>
+        ) : null}
+        {fieldState}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
+    <div className="w-full max-w-2xl space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-white/55">{label}</p>
@@ -140,32 +220,7 @@ export default function AdminLinkField({
         </label>
       ) : null}
 
-      {!isControlled ? (
-        <>
-          <input type="hidden" name={names.linkKind} value={serialized?.link_kind ?? "none"} />
-          <input type="hidden" name={names.linkedType} value={serialized?.linked_type ?? ""} />
-          <input type="hidden" name={names.linkedId} value={serialized?.linked_id ?? ""} />
-          <input type="hidden" name={names.href} value={serialized?.href ?? ""} />
-          <input type="hidden" name={names.anchor} value={serialized?.anchor ?? ""} />
-          <input type="hidden" name={names.target} value={serialized?.target ?? "_self"} />
-          <input type="hidden" name={names.routeKey} value={serialized?.meta?.route_key ?? ""} />
-        </>
-      ) : null}
-
-      {pickerOpen ? (
-        <AdminLinkPicker
-          open
-          initialValue={value}
-          onClose={() => setPickerOpen(false)}
-          onSelect={(next) => {
-            setLink({
-              ...next,
-              anchor: supportsPageAnchor(next) ? value.anchor ?? next.anchor ?? null : next.anchor ?? null,
-            });
-            setPickerOpen(false);
-          }}
-        />
-      ) : null}
+      {fieldState}
     </div>
   );
 }

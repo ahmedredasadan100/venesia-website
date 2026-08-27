@@ -257,11 +257,13 @@ Template-library CRUD, page assignments, Hero behavior, and cache revalidation m
 
 ### Public rendering ownership
 
-Page Composition owns Display Position assignment, route slot policy, the page-level Layout, outer Container/Grid, available dimensions, and spacing between regions and modules.
+Page Composition owns one semantic Region inventory and Page Assignment Position. The inventory is independent of Slugs, page names, Templates, Themes, CSS, and current Layout. Every page exposes the platform Regions; flexible modules inherit them, while explicit Product-fixed modules may constrain Position.
 
 Module presenters own their internal visual composition, image placement and aspect ratio, content distribution, semantic flow, and visual identity. Moving a module to another supported position changes the space available to it; it does not transfer Presentation ownership to Page Composition.
 
-Reusable container-responsive adaptation belongs to the existing Shared Module Presentation Contract under the Design System/shared-component boundary. Page Composition must not style a module by kind, pass Display Position as a presentation switch, or replace the module's composition. Modules must not own slot width, page-region geometry, or assignment policy.
+Themes own the visual mapping of those Regions: Sidebar may become a left or right column, Drawer, or stacked area without changing CMS data or validation. A Theme adopts the Page Composition contract and cannot narrow it to its current shell.
+
+Reusable container-responsive adaptation belongs to the existing Shared Module Presentation Contract under the Design System/shared-component boundary. Presentation is currently derived from the module's Product contract; Page Assignment does not persist or infer it. Page Composition must not style a module by kind, pass Display Position as a presentation switch, or replace the module's composition. Modules must not own slot width, page-region geometry, or assignment policy.
 
 The shared responsive contract is bidirectional: `Wide ↔ Editorial ↔ Stack`. Each state owns a complete Presentation snapshot and neutralizes state-specific float, clear, aspect ratio, sizing, spacing, alignment, and grid placement when it is no longer active. Returning to Wide must restore the module's declared Wide identity rather than retain Editorial cascade values.
 

@@ -8,14 +8,19 @@ import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorHeader,
+  ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
-  ModuleEditorSettingsComposition,
-  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
+  ModuleEditorVisibilityAlignRow,
 } from "./ModuleEditorPresentation";
+import {
+  CollectionContentHierarchyFields,
+  CollectionItemLimitField,
+  CollectionViewFields,
+} from "./CollectionModuleFields";
 import type { Json } from "../../../lib/database.types";
 import { MEDIA_HUB_SECTION_LABELS } from "../../../lib/media-hub-modules/admin-present";
 import {
@@ -26,8 +31,10 @@ import {
   type MediaListingPresentationConfig,
 } from "../../../lib/media-hub-modules/parse-config";
 import type { MediaHubSectionKey } from "../../../lib/media-hub-modules/types";
+import { getMediaHubCollectionCapabilities } from "../../../lib/media-hub-modules/presentation-contract";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
+import { resolvePageBlockTextFormat } from "../../../lib/page-blocks/configs";
 
 type MediaHubModuleEditClientProps = {
   block: {
@@ -179,11 +186,9 @@ export default function MediaHubModuleEditClient({
   const [title, setTitle] = useState(parsedInitial.presentation.title);
   const [description, setDescription] = useState(parsedInitial.presentation.description);
   const [ctaText, setCtaText] = useState(parsedInitial.presentation.ctaText);
-  const [limit, setLimit] = useState<number | "">(
-    typeof parsedInitial.limit === "number"
-      ? parsedInitial.limit
-      : MEDIA_HUB_SECTION_DEFAULTS[initialSectionKey].defaultLimit ?? "",
-  );
+  const eyebrowFormat = resolvePageBlockTextFormat(parsedInitial.presentation, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(parsedInitial.presentation, "title", { bold: true });
+  const descriptionFormat = resolvePageBlockTextFormat(parsedInitial.presentation, "description");
   function handleSectionChange(nextSectionKey: MediaHubSectionKey) {
     setSectionKey(nextSectionKey);
     const nextPresentation = MEDIA_HUB_SECTION_DEFAULTS[nextSectionKey].config.presentation;
@@ -192,14 +197,18 @@ export default function MediaHubModuleEditClient({
     setDescription(nextPresentation.description);
     setCtaText(nextPresentation.ctaText);
 
-    if (nextSectionKey === "featured") {
-      setMediaType("news");
-      setLimit(MEDIA_HUB_SECTION_DEFAULTS.featured.defaultLimit ?? 1);
-      return;
-    }
-
-    setLimit(MEDIA_HUB_SECTION_DEFAULTS[nextSectionKey].defaultLimit ?? "");
+    if (nextSectionKey === "featured") setMediaType("news");
   }
+
+  const activeConfig = sectionKey === initialSectionKey
+    ? parsedInitial
+    : MEDIA_HUB_SECTION_DEFAULTS[sectionKey].config;
+  const activeCapabilities = getMediaHubCollectionCapabilities(sectionKey);
+  const activeHierarchy = activeConfig.contentHierarchy ?? activeCapabilities.hierarchy.defaults;
+  const activeCollectionView = activeConfig.presentation.collectionView;
+  const activeItemLimit = activeConfig.itemLimit
+    ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit
+    ?? 4;
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
@@ -214,6 +223,7 @@ export default function MediaHubModuleEditClient({
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
+        <input type="hidden" name="description" value={block.description ?? ""} />
         <input type="hidden" name="data_source" value="topics" />
         {!isListing ? <input type="hidden" name="placement" value={parsedInitial.placement} /> : null}
         {isListing || isDedicatedFeatured ? (
@@ -226,8 +236,43 @@ export default function MediaHubModuleEditClient({
             <input type="hidden" name="title" value={title} />
             <input type="hidden" name="presentation_description" value={description} />
             <input type="hidden" name="cta_text" value={ctaText} />
+            <input type="hidden" name="show_eyebrow" value={String(eyebrowFormat.visible)} />
+            <input type="hidden" name="eyebrow_bold" value={String(eyebrowFormat.bold)} />
+            <input type="hidden" name="eyebrow_alignment" value={eyebrowFormat.alignment} />
+            <input type="hidden" name="show_title" value={String(titleFormat.visible)} />
+            <input type="hidden" name="title_bold" value={String(titleFormat.bold)} />
+            <input type="hidden" name="title_alignment" value={titleFormat.alignment} />
+            <input type="hidden" name="show_description" value={String(descriptionFormat.visible)} />
+            <input type="hidden" name="description_bold" value={String(descriptionFormat.bold)} />
+            <input type="hidden" name="description_alignment" value={descriptionFormat.alignment} />
           </>
         ) : null}
+
+        <ModuleEditorIdentitySection
+          name={block.name}
+          status={block.status}
+          inputClassName={fieldClassName("h-11")}
+        >
+          {isListing || isDedicatedFeatured ? (
+            <div className="space-y-2">
+              <span className="block text-sm font-medium text-white/70">نوع السكشن</span>
+              <div className="flex h-11 items-center rounded-2xl border border-white/10 bg-[#05070B] px-4 text-sm text-white/70">
+                {MEDIA_HUB_SECTION_LABELS[initialSectionKey]}
+              </div>
+            </div>
+          ) : (
+            <AdminFormListboxSelect
+              name="section_key"
+              label="نوع السكشن"
+              value={sectionKey}
+              onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
+              options={SECTION_KEYS.map((key) => ({
+                value: key,
+                label: MEDIA_HUB_SECTION_LABELS[key],
+              }))}
+            />
+          )}
+        </ModuleEditorIdentitySection>
 
         <ModuleEditorTabs
           moduleKind="media-hub"
@@ -238,94 +283,57 @@ export default function MediaHubModuleEditClient({
             {
               id: "content",
               content: (
-                <ModuleEditorSection>
-                  <ModuleEditorFieldGrid>
-                    <ModuleEditorField nature="standard" span={4}>
-                      <label className="block space-y-2">
-                        <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
-                        <input
-                          name="name"
-                          defaultValue={block.name}
-                          required
-                          className={fieldClassName()}
-                        />
-                      </label>
-                    </ModuleEditorField>
-
-                    {isListing && parsedInitial.listing && parsedInitial.type ? (
+                isListing && parsedInitial.listing && parsedInitial.type ? (
+                  <ModuleEditorSection>
+                    <ModuleEditorFieldGrid>
                       <ListingPresentationFields
                         config={parsedInitial.listing}
                         mediaType={parsedInitial.type}
                       />
-                    ) : (
-                      <>
-                        {isDedicatedFeatured ? (
-                          <ModuleEditorField nature="standard" span={4}>
-                            <div className="space-y-2">
-                              <span className="block text-sm font-medium text-white/70">نوع الموديول</span>
-                              <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/60">
-                                {MEDIA_HUB_SECTION_LABELS.featured}
-                              </p>
-                            </div>
-                          </ModuleEditorField>
-                        ) : (
-                          <ModuleEditorField nature="standard" span={4}>
-                            <AdminFormListboxSelect
-                              name="section_key"
-                              label="نوع السكشن"
-                              value={sectionKey}
-                              onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
-                              options={SECTION_KEYS.map((key) => ({
-                                value: key,
-                                label: MEDIA_HUB_SECTION_LABELS[key],
-                              }))}
-                            />
-                          </ModuleEditorField>
-                        )}
-
-                        <ModuleEditorField nature="standard" span={4}>
-                          <div className="space-y-2">
-                            <span className="block text-sm font-medium text-white/70">مصدر البيانات</span>
-                            <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/60">
-                              المحتوى الموحّد (topics)
-                            </p>
-                          </div>
-                        </ModuleEditorField>
-
-                        <ModuleEditorField nature="short-text" span={3}>
-                          <label className="block space-y-2">
-                            <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
+                    </ModuleEditorFieldGrid>
+                  </ModuleEditorSection>
+                ) : (
+                  <div className="space-y-5">
+                    <ModuleEditorSection>
+                      <ModuleEditorSectionHeading intent="domain">
+                        محتوى السكشن
+                      </ModuleEditorSectionHeading>
+                      <ModuleEditorFieldGrid className="mt-4">
+                        <ModuleEditorField nature="short-text" span={4}>
+                          <ModuleEditorVisibilityAlignRow label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
                             <input
                               name="eyebrow"
+                              aria-label="النص التمهيدي"
                               value={eyebrow}
                               onChange={(event) => setEyebrow(event.target.value)}
                               className={fieldClassName()}
                             />
-                          </label>
+                          </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
 
-                        <ModuleEditorField nature="short-text" span={3}>
-                          <label className="block space-y-2">
-                            <span className="text-xs font-semibold text-white/55">عنوان السكشن</span>
+                        <ModuleEditorField nature="short-text" span={4}>
+                          <ModuleEditorVisibilityAlignRow label="عنوان السكشن" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
                             <input
                               name="title"
+                              aria-label="عنوان السكشن"
                               value={title}
                               onChange={(event) => setTitle(event.target.value)}
                               className={fieldClassName()}
                             />
-                          </label>
+                          </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
 
-                        <ModuleEditorField nature="short-description" span={3}>
-                          <label className="block space-y-2">
-                            <span className="text-xs font-semibold text-white/55">وصف السكشن</span>
-                            <input
+                        <ModuleEditorField nature="short-description" span={4}>
+                          <ModuleEditorVisibilityAlignRow label="وصف السكشن" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
+                            <textarea
                               name="presentation_description"
+                              aria-label="وصف السكشن"
                               value={description}
                               onChange={(event) => setDescription(event.target.value)}
-                              className={fieldClassName()}
+                              rows={2}
+                              className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
                             />
-                          </label>
+                          </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
 
                         <ModuleEditorField nature="short-text" span={3}>
@@ -353,59 +361,29 @@ export default function MediaHubModuleEditClient({
                               }))}
                               hint="يعرض الموديول محتوى منشورًا ومميزًا من النوع المختار فقط."
                             />
-                            <input type="hidden" name="limit" value="1" />
                           </ModuleEditorField>
-                        ) : (
-                          <ModuleEditorField nature="standard" span={4}>
-                            <label className="block space-y-2">
-                              <span className="text-xs font-semibold text-white/55">عدد العناصر</span>
-                              <input
-                                name="limit"
-                                type="number"
-                                min={1}
-                                value={limit}
-                                onChange={(event) => {
-                                  const next = Number(event.target.value);
-                                  setLimit(Number.isFinite(next) && next > 0 ? next : "");
-                                }}
-                                required
-                                className={fieldClassName()}
-                                dir="ltr"
-                              />
-                            </label>
-                          </ModuleEditorField>
-                        )}
-                      </>
-                    )}
-                  </ModuleEditorFieldGrid>
-                </ModuleEditorSection>
-              ),
-            },
-            {
-              id: "settings",
-              content: (
-                <ModuleEditorSettingsComposition
-                  primary={
-                    <ModuleEditorSection>
-                      <label className="block space-y-2">
-                        <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
-                        <input
-                          name="description"
-                          defaultValue={block.description ?? ""}
-                          className={fieldClassName()}
-                        />
-                      </label>
+                        ) : null}
+                      </ModuleEditorFieldGrid>
                     </ModuleEditorSection>
-                  }
-                  secondary={
+
                     <ModuleEditorSection>
-                      <ModuleEditorSectionHeading intent="settings" className="text-lg">
-                        حالة النشر
+                      <ModuleEditorSectionHeading intent="settings">
+                        تكوين عرض المحتوى
                       </ModuleEditorSectionHeading>
-                      <ModuleEditorStatusSwitch status={block.status} />
+                      <ModuleEditorFieldGrid key={sectionKey} className="mt-4">
+                        <CollectionItemLimitField value={activeItemLimit} />
+                        <CollectionContentHierarchyFields
+                          value={activeHierarchy}
+                          capabilities={activeCapabilities.hierarchy}
+                        />
+                        <CollectionViewFields
+                          value={activeCollectionView}
+                          capabilities={activeCapabilities.view}
+                        />
+                      </ModuleEditorFieldGrid>
                     </ModuleEditorSection>
-                  }
-                />
+                  </div>
+                )
               ),
             },
             {

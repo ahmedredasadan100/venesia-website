@@ -65,7 +65,9 @@ check(
 );
 check(
   "Context Row gives bulk actions priority over applied filter chips",
-  toolbar.includes('data-admin-context-mode={contextOverrideActive ? "bulk" : "filters"}') &&
+  toolbar.includes(
+    'data-admin-context-mode={contextOverrideActive ? "bulk" : "filters"}',
+  ) &&
     toolbar.includes("contextOverrideActive ? (") &&
     toolbar.includes("appliedFilters.map"),
 );
@@ -97,13 +99,17 @@ check(
   "Shared URL patch resets page and supports push/replace history behavior",
   urlState.includes("next.delete(resetPageParam)") &&
     toolbar.includes('type HistoryBehavior = "push" | "replace"') &&
-    toolbar.includes('router[behavior](href, { scroll: false })'),
+    toolbar.includes("router[behavior](href, { scroll: false })"),
 );
 check(
   "Server-page controller owns contract-normalized toolbar query patches",
   serverPageController.includes("const applyQueryPatch = useCallback") &&
-    serverPageController.includes("applyAdminEntityUrlPatch(currentParams, patch") &&
-    serverPageController.includes("normalizeAdminEntityListQuery(contract, nextParams)") &&
+    serverPageController.includes(
+      "applyAdminEntityUrlPatch(currentParams, patch",
+    ) &&
+    serverPageController.includes(
+      "normalizeAdminEntityListQuery(contract, nextParams)",
+    ) &&
     serverPageController.includes("applyQueryPatch,"),
 );
 check(
@@ -111,7 +117,9 @@ check(
   entityList.includes("<AdminEntityListFilters") &&
     entityList.includes("columnsControl={columnsControl}") &&
     entityList.includes("contextOverride={bulkBar}") &&
-    entityList.includes('className={toolbar ? "!rounded-t-none !border-t-0" : undefined}'),
+    entityList.includes(
+      'className={toolbar ? "!rounded-t-none !border-t-0" : undefined}',
+    ),
 );
 
 const normalizer = loadPureTypeScriptModule(
@@ -198,13 +206,13 @@ check(
   boundedAdopters.every((path) => !read(path).includes('<input type="search"')),
 );
 const eligibleBoundedAdopters = [
-    "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
-    "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
-    "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
-    "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
-    "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
-    "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
-    "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+  "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+  "src/app/admin/pages-blocks/menus/MenusTableClient.tsx",
+  "src/app/admin/pages-blocks/menus/MenuItemsTableClient.tsx",
+  "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+  "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+  "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+  "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
 ];
 check(
   "Bounded Collection controller owns query, filtering, membership, pagination, and URL history",
@@ -213,19 +221,27 @@ check(
     boundedClientController.includes("const resolvedDatasetKey") &&
     boundedClientController.includes("const applyQueryPatch = useCallback") &&
     boundedClientController.includes("filterValues") &&
-    boundedClientController.includes("rows: paginatedRows"),
+    boundedClientController.includes("rows: paginatedRows") &&
+    boundedClientController.includes("useRouter") &&
+    boundedClientController.includes("router.push(href, { scroll: false })") &&
+    boundedClientController.includes(
+      "router.replace(href, { scroll: false })",
+    ) &&
+    !boundedClientController.includes("window.history"),
 );
 check(
   "Eligible bounded adopters declare one contract and no local URL/query lifecycle",
   eligibleBoundedAdopters.every((path) => {
     const source = read(path);
-    return source.includes("useAdminBoundedClientPagination") &&
+    return (
+      source.includes("useAdminBoundedClientPagination") &&
       source.includes('mode: "bounded-client"') &&
       source.includes("queryContract") &&
       source.includes("onQueryPatch={pagination.applyQueryPatch}") &&
       !source.includes("useSearchParams") &&
       !source.includes("applyAdminEntityUrlPatch") &&
-      !source.includes("window.history");
+      !source.includes("window.history")
+    );
   }),
 );
 check(
@@ -233,8 +249,12 @@ check(
   !uiBarrel.includes("AdminFilterListbox") &&
     !uiBarrel.includes("AdminFiltersShell") &&
     !uiBarrel.includes("AdminToolbar") &&
-    !existsSync(resolve(ROOT, "src/components/admin/ui/AdminFilterListbox.tsx")) &&
-    !existsSync(resolve(ROOT, "src/components/admin/ui/AdminFiltersShell.tsx")) &&
+    !existsSync(
+      resolve(ROOT, "src/components/admin/ui/AdminFilterListbox.tsx"),
+    ) &&
+    !existsSync(
+      resolve(ROOT, "src/components/admin/ui/AdminFiltersShell.tsx"),
+    ) &&
     !existsSync(resolve(ROOT, "src/components/admin/ui/AdminToolbar.tsx")),
 );
 check(
@@ -248,7 +268,8 @@ check(
 check(
   "Media search maps every declared field before pagination",
   ["displayName", "originalFilename", "objectKey", "defaultAltText"].every(
-    (field) => read("src/lib/admin/media-catalog/catalog.ts").includes(`asset.${field}`),
+    (field) =>
+      read("src/lib/admin/media-catalog/catalog.ts").includes(`asset.${field}`),
   ) &&
     read("src/lib/admin/media-catalog/catalog.ts").includes(
       "adminCollectionSearchIncludes",

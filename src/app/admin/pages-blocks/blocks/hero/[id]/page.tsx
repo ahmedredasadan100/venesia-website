@@ -7,7 +7,7 @@ import { HERO_TEMPLATE_VARIANT_OPTIONS_AR } from "../../../../../../lib/hero/her
 
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
-  searchParams?: Promise<{ saved?: string; notice?: string }> | { saved?: string; notice?: string };
+  searchParams?: Promise<{ saved?: string; notice?: string; tab?: string }> | { saved?: string; notice?: string; tab?: string };
 };
 
 function imagesToTextarea(config: Record<string, unknown> | null) {
@@ -63,6 +63,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
         resolvedSearch.notice === "saved_with_media_sync_warning"
       }
       assignmentContext={assignmentContext}
+      initialTabId={resolvedSearch.tab === "buttons" ? "buttons" : undefined}
     />
   );
 }
