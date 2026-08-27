@@ -205,7 +205,7 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
 
   return (
     <div
-      className="space-y-5"
+      className="space-y-4"
       data-admin-module-tabs={variant}
       data-admin-tabs-owner="AdminModuleTabs"
     >
@@ -304,7 +304,7 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
         >
           {tab.sectionHeading ? (
             <header
-              className="mb-5 flex min-h-[84px] min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5"
+              className="mb-4 flex min-h-[76px] min-w-0 flex-wrap items-center gap-3 overflow-hidden rounded-2xl border border-[#D8B87A]/20 bg-[linear-gradient(120deg,rgba(7,10,15,0.98),rgba(24,28,33,0.9))] px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.24),0_0_22px_rgba(216,184,122,0.04)] sm:gap-4 sm:px-5"
               data-admin-tab-section-heading={tab.id}
             >
               <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#D8B87A]/[0.08] text-[#E6C98D] shadow-[inset_0_0_14px_rgba(216,184,122,0.08)] sm:size-12 [&>svg]:size-5">
@@ -336,7 +336,7 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
             </header>
           ) : null}
           {tab.id === activeId && activePanelContext ? (
-            <div className="mb-5" data-admin-active-panel-context>
+            <div className="mb-4" data-admin-active-panel-context>
               {activePanelContext}
             </div>
           ) : null}

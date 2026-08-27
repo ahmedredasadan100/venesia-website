@@ -7,16 +7,18 @@ import {
   ModuleEditorRepeaterGrid,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
+  ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 import { useState } from "react";
 
 import AdminRichTextEditor from "../../AdminRichTextEditor";
 import AdminMediaImageField from "../../media/AdminMediaImageField";
-import { AdminFormListboxSelect, AdminFormSwitch } from "../../ui";
+import { AdminFormListboxSelect } from "../../ui";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import {
   ABOUT_PRINCIPLES_ICON_KEYS,
+  resolvePageBlockTextFormat,
   type AboutPrinciplesItemConfig,
   type AboutPrinciplesModuleConfig,
 } from "../../../../lib/page-blocks/configs";
@@ -25,8 +27,6 @@ type AboutPrinciplesModuleEditorProps = {
   config: AboutPrinciplesModuleConfig;
   editorMode?: "about-principles" | "home-trust";
 };
-
-type TextAlignment = "right" | "center" | "left";
 
 const ICON_LABELS: Record<(typeof ABOUT_PRINCIPLES_ICON_KEYS)[number], string> = {
   land: "أرض / مبنى",
@@ -45,71 +45,6 @@ function padTrustItems(items: AboutPrinciplesItemConfig[] | undefined) {
   return rows;
 }
 
-function PlainTextFormatControls({
-  label,
-  boldName,
-  alignmentName,
-  boldDefault,
-  alignmentDefault,
-  helperText,
-}: {
-  label: string;
-  boldName: string;
-  alignmentName: string;
-  boldDefault: boolean;
-  alignmentDefault: TextAlignment;
-  helperText?: string;
-}) {
-  const [bold, setBold] = useState(boldDefault);
-  const [alignment, setAlignment] = useState<TextAlignment>(alignmentDefault);
-  const alignOptions: Array<{ value: TextAlignment; label: string }> = [
-    { value: "right", label: "يمين" },
-    { value: "center", label: "وسط" },
-    { value: "left", label: "يسار" },
-  ];
-
-  const toolClass = (active: boolean) =>
-    [
-      "min-w-9 cursor-pointer rounded-xl border px-2.5 py-2 text-xs font-semibold transition sm:min-w-10 sm:px-3",
-      active
-        ? "border-[#D8B87A]/40 bg-[#D8B87A]/15 text-[#F2D99B]"
-        : "border-white/10 bg-white/[0.035] text-white/70 hover:border-[#D8B87A]/30 hover:text-[#F2D99B]",
-    ].join(" ");
-
-  return (
-    <div className="space-y-2">
-      <span className="text-xs font-semibold text-white/55">{label}</span>
-      <input type="hidden" name={alignmentName} value={alignment} />
-      <div className="flex flex-wrap gap-2" role="toolbar" aria-label={label}>
-        <AdminFormSwitch
-          name={boldName}
-          label="خط عريض"
-          value="true"
-          checked={bold}
-          onChange={(event) => setBold(event.target.checked)}
-        />
-        {alignOptions.map((option) => {
-          const active = option.value === alignment;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              title={option.label}
-              aria-label={option.label}
-              aria-pressed={active}
-              onClick={() => setAlignment(option.value)}
-              className={toolClass(active)}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-      {helperText ? <p className="text-xs leading-6 text-white/45">{helperText}</p> : null}
-    </div>
-  );
-}
-
 export default function AboutPrinciplesModuleEditor({
   config,
   editorMode = "about-principles",
@@ -119,16 +54,9 @@ export default function AboutPrinciplesModuleEditor({
     isHomeTrust ? padTrustItems(config.items) : normalizeItems(config.items),
   );
 
-  const eyebrowBold = config.eyebrowBold === true;
-  const eyebrowAlignment: TextAlignment =
-    config.eyebrowAlignment === "center" || config.eyebrowAlignment === "left"
-      ? config.eyebrowAlignment
-      : "right";
-  const titleBold = config.titleBold !== false;
-  const titleAlignment: TextAlignment =
-    config.titleAlignment === "center" || config.titleAlignment === "left"
-      ? config.titleAlignment
-      : "right";
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
+  const descriptionFormat = resolvePageBlockTextFormat(config, "description");
 
   const moveItem = (index: number, direction: -1 | 1) => {
     const nextIndex = index + direction;
@@ -159,46 +87,28 @@ export default function AboutPrinciplesModuleEditor({
 
       <ModuleEditorSection>
         <ModuleEditorFieldGrid>
-        <ModuleEditorField nature="short-text" span={3}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">النص التمهيدي</span>
-          <input name="eyebrow" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
-        </label></ModuleEditorField>
-        <ModuleEditorField nature="short-text" span={9}><label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">العنوان الرئيسي</span>
-          <input name="title" defaultValue={config.title ?? ""} className={fieldClassName()} />
-        </label></ModuleEditorField>
-        </ModuleEditorFieldGrid>
+        <ModuleEditorField nature="short-text" span={6}>
+        <ModuleEditorVisibilityAlignRow label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+          <input name="eyebrow" aria-label="النص التمهيدي" defaultValue={config.eyebrow ?? ""} className={fieldClassName()} />
+        </ModuleEditorVisibilityAlignRow>
+        </ModuleEditorField>
+        <ModuleEditorField nature="short-text" span={6}>
+        <ModuleEditorVisibilityAlignRow label="العنوان الرئيسي" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+          <input name="title" aria-label="العنوان الرئيسي" defaultValue={config.title ?? ""} className={fieldClassName()} />
+        </ModuleEditorVisibilityAlignRow>
+        </ModuleEditorField>
         {isHomeTrust ? (
-          <PlainTextFormatControls
-            label="تنسيق النص التمهيدي"
-            boldName="eyebrow_bold"
-            alignmentName="eyebrow_alignment"
-            boldDefault={eyebrowBold}
-            alignmentDefault={eyebrowAlignment}
-            helperText="يؤثر على النص التمهيدي فقط."
-          />
-        ) : null}
-        {isHomeTrust ? (
-          <PlainTextFormatControls
-            label="تنسيق العنوان الرئيسي"
-            boldName="title_bold"
-            alignmentName="title_alignment"
-            boldDefault={titleBold}
-            alignmentDefault={titleAlignment}
-            helperText="العنوان يبقى نصًا بسيطًا — بدون HTML داخلي."
-          />
-        ) : null}
-        {isHomeTrust ? (
-          <ModuleEditorFieldGrid><ModuleEditorField nature="long-content"><AdminRichTextEditor
+          <ModuleEditorField nature="long-content" span={12}>
+          <ModuleEditorVisibilityAlignRow label="الفقرة التعريفية" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}><AdminRichTextEditor
             name="principles_intro"
             label="الفقرة التعريفية"
             defaultValue={config.description ?? ""}
-            toolbarMode="minimal"
-            enableTextAlign
-            minHeight={160}
-            helperText="Enter لإنشاء فقرة جديدة، وShift + Enter للنزول إلى سطر جديد داخل الفقرة."
-          /></ModuleEditorField></ModuleEditorFieldGrid>
+            toolbarMode="none"
+            minHeight={72}
+          /></ModuleEditorVisibilityAlignRow>
+          </ModuleEditorField>
         ) : null}
+        </ModuleEditorFieldGrid>
       </ModuleEditorSection>
 
       <ModuleEditorSection>

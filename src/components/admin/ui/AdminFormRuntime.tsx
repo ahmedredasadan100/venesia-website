@@ -96,23 +96,23 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     setIsDirty(nextDirty);
   }, []);
 
-  const readForm = useCallback(
-    () => resolveForm(rootRef.current),
-    [rootRef],
-  );
+  const readForm = useCallback(() => resolveForm(rootRef.current), [rootRef]);
 
-  const markClean = useCallback((submittedBaseline?: string) => {
-    const form = readForm();
-    if (submittedBaseline !== undefined) {
-      baselineRef.current = submittedBaseline;
-    } else if (form) {
-      baselineRef.current = serializeAdminForm(form);
-    }
-    allowNavigationRef.current = false;
-    updateDirty(
-      form ? serializeAdminForm(form) !== baselineRef.current : false,
-    );
-  }, [readForm, updateDirty]);
+  const markClean = useCallback(
+    (submittedBaseline?: string) => {
+      const form = readForm();
+      if (submittedBaseline !== undefined) {
+        baselineRef.current = submittedBaseline;
+      } else if (form) {
+        baselineRef.current = serializeAdminForm(form);
+      }
+      allowNavigationRef.current = false;
+      updateDirty(
+        form ? serializeAdminForm(form) !== baselineRef.current : false,
+      );
+    },
+    [readForm, updateDirty],
+  );
 
   const navigate = useCallback(
     (href: string) => {
@@ -231,7 +231,8 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
       if (
         (!dirtyRef.current && !pendingRef.current) ||
         allowNavigationRef.current
-      ) return;
+      )
+        return;
       event.preventDefault();
       event.returnValue = "";
     }
@@ -253,7 +254,11 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
         target instanceof Element
           ? target.closest<HTMLAnchorElement>("a[href]")
           : null;
-      if (!anchor || anchor.target === "_blank" || anchor.hasAttribute("download")) {
+      if (
+        !anchor ||
+        anchor.target === "_blank" ||
+        anchor.hasAttribute("download")
+      ) {
         return;
       }
       if (pendingRef.current) {
@@ -331,7 +336,9 @@ const AdminFormRuntimeContext =
 export function useAdminFormRuntime() {
   const context = useContext(AdminFormRuntimeContext);
   if (!context) {
-    throw new Error("useAdminFormRuntime must be used inside AdminFormRuntime.");
+    throw new Error(
+      "useAdminFormRuntime must be used inside AdminFormRuntime.",
+    );
   }
   return context;
 }
@@ -357,8 +364,7 @@ export type AdminFormRuntimeProps<TResult = unknown> = {
   formId?: string;
   className?: string;
   children:
-    | ReactNode
-    | ((context: AdminFormRuntimeContextValue<TResult>) => ReactNode);
+    ReactNode | ((context: AdminFormRuntimeContextValue<TResult>) => ReactNode);
 };
 
 function firstFieldError(state: AdminFormActionState) {
@@ -415,9 +421,7 @@ function revealFormError(
   focusTarget(targetId);
 }
 
-function formFeedback(
-  state: AdminFormActionState,
-): AdminActionFeedback | null {
+function formFeedback(state: AdminFormActionState): AdminActionFeedback | null {
   if (state.status === "idle") return null;
   const hasFieldErrors = Object.values(state.fieldErrors ?? {}).some(
     (messages) => messages.length > 0,
@@ -499,16 +503,13 @@ export default function AdminFormRuntime<TResult = unknown>({
           : undefined,
       onNavigate: clearFormFeedback,
     });
-  const requestClose = useCallback(
-    () => {
-      if (onClose) {
-        requestCallback(onClose);
-        return;
-      }
-      if (closeHref) requestNavigation(closeHref);
-    },
-    [closeHref, onClose, requestCallback, requestNavigation],
-  );
+  const requestClose = useCallback(() => {
+    if (onClose) {
+      requestCallback(onClose);
+      return;
+    }
+    if (closeHref) requestNavigation(closeHref);
+  }, [closeHref, onClose, requestCallback, requestNavigation]);
 
   useImperativeHandle(runtimeRef, () => ({ requestClose }), [requestClose]);
 
@@ -542,7 +543,10 @@ export default function AdminFormRuntime<TResult = unknown>({
 
     formRef.current?.dispatchEvent(
       new CustomEvent("admin-form-saved", {
-        detail: { entityId: state.entityId, savedRevision: state.savedRevision },
+        detail: {
+          entityId: state.entityId,
+          savedRevision: state.savedRevision,
+        },
       }),
     );
 
@@ -553,7 +557,8 @@ export default function AdminFormRuntime<TResult = unknown>({
           {
             variant: "danger",
             title: "تعذر الانتقال إلى وضع التعديل",
-            message: "تم رفض رابط تعديل غير آمن. حدّث الصفحة قبل الحفظ مرة أخرى.",
+            message:
+              "تم رفض رابط تعديل غير آمن. حدّث الصفحة قبل الحفظ مرة أخرى.",
             layout: "inline",
             dismissible: true,
             lifecycle: "manual",
@@ -637,7 +642,7 @@ export function AdminFormGrid({
   className = "",
 }: {
   children: ReactNode;
-  columns?: 1 | 2 | 3 | 12;
+  columns?: 1 | 2 | 3 | 4 | 5 | 12;
   className?: string;
 }) {
   const columnsClassName =
@@ -645,11 +650,15 @@ export function AdminFormGrid({
       ? "grid-cols-1"
       : columns === 12
         ? "grid-cols-1 xl:grid-cols-12"
-      : columns === 3
-        ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
-        : "grid-cols-1 md:grid-cols-2";
+        : columns === 5
+          ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"
+          : columns === 4
+            ? "grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
+            : columns === 3
+              ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+              : "grid-cols-1 md:grid-cols-2";
   return (
-    <div className={`grid gap-5 ${columnsClassName} ${className}`.trim()}>
+    <div className={`grid gap-4 ${columnsClassName} ${className}`.trim()}>
       {children}
     </div>
   );
@@ -678,7 +687,9 @@ export function AdminFormGridItem({
   className?: string;
 }) {
   return (
-    <div className={`${ADMIN_FORM_GRID_SPAN_CLASSES[span]} ${className}`.trim()}>
+    <div
+      className={`${ADMIN_FORM_GRID_SPAN_CLASSES[span]} ${className}`.trim()}
+    >
       {children}
     </div>
   );
@@ -696,8 +707,9 @@ export function AdminFormError({
   const context = useOptionalAdminFormRuntime();
   if (!context) return null;
   const { state, fieldErrors } = context;
-  const messages = name ? fieldErrors[name] ?? [] : [];
-  const content = children ??
+  const messages = name ? (fieldErrors[name] ?? []) : [];
+  const content =
+    children ??
     (messages.length ? messages.join(" ") : name ? null : state.message);
   if (!content || state.status !== "error") return null;
 

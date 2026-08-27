@@ -87,19 +87,19 @@ try {
   if (
     hub.includes("loadPageCompositionBySlug") &&
     hub.includes("PageSlotLayout") &&
-    hub.includes("MediaCenterGrid")
+    !hub.includes("MediaCenterGrid")
   ) {
-    pass("Hub delegates Page Composition Hero and body to PageSlotLayout");
+    pass("Hub delegates every assigned Region to PageSlotLayout");
   } else {
-    fail("Hub core wiring", "expected PageSlotLayout + MediaCenterGrid");
+    fail("Hub core wiring", "expected PageSlotLayout with no parallel MediaCenterGrid");
   }
   if (
     hub.includes("PageSlotLayout") &&
-    hub.includes("mainAfter={<MediaCenterGrid composition={composition} />}")
+    !hub.includes("mainAfter=")
   ) {
-    pass("Hub PageSlotLayout with composition-backed grid");
+    pass("Hub modules render from their Assignment Positions");
   } else {
-    fail("Hub PageSlotLayout", "composition-backed MediaCenterGrid missing");
+    fail("Hub PageSlotLayout", "parallel fixed-main Hub renderer remains");
   }
 } catch (error) {
   fail("Hub page", error instanceof Error ? error.message : String(error));

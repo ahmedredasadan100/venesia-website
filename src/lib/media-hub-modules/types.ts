@@ -1,11 +1,12 @@
 import type { MediaContentItem } from "../media-center";
+import type { PageLayoutSlot } from "../page-blocks/layout-slots";
 import type { MediaHubModuleConfig } from "./parse-config";
 
 export type MediaHubSectionKey = "featured" | "site-updates" | "videos" | "gallery" | "press";
 
 export type MediaHubFeaturedSectionData = {
   kind: "featured";
-  item: MediaContentItem;
+  items: MediaContentItem[];
 };
 
 export type MediaHubItemsSectionData = {
@@ -18,6 +19,7 @@ export type MediaHubSectionData = MediaHubFeaturedSectionData | MediaHubItemsSec
 export type MediaHubModuleState = {
   sectionKey: MediaHubSectionKey;
   assignmentId: number;
+  slot: PageLayoutSlot;
   sortOrder: number;
   isVisible: boolean;
   title: string;

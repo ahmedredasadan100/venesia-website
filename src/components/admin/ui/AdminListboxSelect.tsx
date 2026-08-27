@@ -75,7 +75,7 @@ export default function AdminListboxSelect({
   placeholder,
   showPlaceholderForEmptyValue = false,
   allowEmptySelection = false,
-  sizing = "full",
+  sizing = "content-relaxed",
   layerId,
   openLayerId,
   onOpenLayer,
@@ -107,22 +107,19 @@ export default function AdminListboxSelect({
     [allowEmptySelection, options, placeholder],
   );
   const compactSized = sizing !== "full";
-  const contentSized = sizing === "content" || sizing === "content-relaxed";
   const triggerSizingClassName =
     sizing === "content"
       ? "w-fit max-w-full ps-4 pe-4"
       : sizing === "content-relaxed"
-        ? "min-w-32 w-fit max-w-full ps-4 pe-4"
+        ? "w-56 max-w-full ps-4 pe-4"
         : sizing === "medium"
-          ? "min-w-60 w-full max-w-full ps-4 pe-4"
+          ? "w-60 max-w-full ps-4 pe-4"
           : sizing === "wide"
-            ? "min-w-64 w-full max-w-full ps-4 pe-4"
+            ? "w-64 max-w-full ps-4 pe-4"
             : "w-full px-4";
-  const containerSizingClassName = contentSized
+  const containerSizingClassName = compactSized
     ? "inline-block w-fit max-w-full"
-    : compactSized
-      ? "block w-full max-w-full"
-      : "";
+    : "";
 
   const isControlled = typeof openLayerId !== "undefined" && Boolean(layerId);
   const isOpen = isControlled
@@ -439,7 +436,10 @@ export default function AdminListboxSelect({
     );
 
   return (
-    <div className={`relative overflow-visible ${containerSizingClassName} ${className}`}>
+    <div
+      className={`relative overflow-visible ${containerSizingClassName} ${className}`}
+      data-admin-listbox-sizing={sizing}
+    >
       {inline ? (
         <div
           dir={dir}

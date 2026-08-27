@@ -29,7 +29,11 @@ import {
   syncBlockModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import type { TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
-import type { CardsBlockConfig, CardsBlockItem } from "../../../../../lib/page-blocks/configs";
+import {
+  buildPageBlockTextFormattingPatch,
+  type CardsBlockConfig,
+  type CardsBlockItem,
+} from "../../../../../lib/page-blocks/configs";
 import { linkFieldFromFormData, hasSavedLinkField } from "../../../../../lib/admin/links/block-save";
 
 function buildCardsItems(formData: FormData): CardsBlockItem[] {
@@ -80,6 +84,11 @@ function buildCardsConfig(formData: FormData): CardsBlockConfig {
   const normalizedColumns = columns === 2 || columns === 4 ? columns : 3;
 
   return {
+    ...buildPageBlockTextFormattingPatch(formData, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     eyebrow: cleanText(formData.get("eyebrow")),
     title: cleanText(formData.get("title")),
     description: cleanText(formData.get("description")),

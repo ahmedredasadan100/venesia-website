@@ -1,5 +1,6 @@
 import Image from "next/image";
 import type { VisionGoalsContent, VisionGoalsItem } from "./vision-goals-mappers";
+import { pageBlockTextAlignClass, pageBlockTextPlacementClass } from "../../lib/page-blocks/configs";
 
 export type VisionGoalsModuleSectionProps = {
   cmsContent: VisionGoalsContent | null;
@@ -55,13 +56,16 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
   if (!cmsContent) return null;
 
   const content = cmsContent;
+  const eyebrowFormat = content.formatting.eyebrow!;
+  const titleFormat = content.formatting.title!;
+  const introFormat = content.formatting.intro!;
   const imageSrc = content.image?.trim();
   const imageAlt = content.imageAlt || content.eyebrow || content.title || "";
   const showImage = Boolean(imageSrc);
   const showCopy = Boolean(
-    content.eyebrow.trim() ||
-      content.title.trim() ||
-      content.intro.some((paragraph) => paragraph.trim()) ||
+    (eyebrowFormat.visible && content.eyebrow.trim()) ||
+      (titleFormat.visible && content.title.trim()) ||
+      (introFormat.visible && content.intro.some((paragraph) => paragraph.trim())) ||
       content.vision.title.trim() ||
       content.goals.title.trim() ||
       content.vision.items.some(hasItemCopy) ||
@@ -106,28 +110,28 @@ export default function VisionGoalsModuleSection({ cmsContent }: VisionGoalsModu
 
           {showCopy ? (
             <div data-reveal className="slot-editorial-copy max-w-2xl">
-              {content.eyebrow.trim() ? (
-                <p className="mb-4 text-[11px] font-medium uppercase tracking-[0.22em] text-[#D8B87A]">
+              {eyebrowFormat.visible && content.eyebrow.trim() ? (
+                <p className={`mb-4 text-[11px] uppercase tracking-[0.22em] text-[#D8B87A] ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}>
                   {content.eyebrow}
                 </p>
               ) : null}
 
-              {content.title.trim() ? (
-                <h2 className="text-3xl font-bold leading-tight text-white @3xl/slot-module:text-5xl">
+              {titleFormat.visible && content.title.trim() ? (
+                <h2 className={`text-3xl leading-tight text-white @3xl/slot-module:text-5xl ${pageBlockTextAlignClass(titleFormat.alignment)} ${pageBlockTextPlacementClass(titleFormat.alignment)} ${titleFormat.bold ? "font-bold" : "font-normal"}`}>
                   {content.title}
                 </h2>
               ) : null}
 
-              {content.intro.map((paragraph) =>
+              {introFormat.visible ? content.intro.map((paragraph) =>
                 paragraph.trim() ? (
                   <p
                     key={paragraph}
-                    className="mt-6 text-[15px] leading-8 text-white/70 @xl/slot-module:text-[16px]"
+                    className={`mt-6 text-[15px] leading-8 text-white/70 @xl/slot-module:text-[16px] ${pageBlockTextAlignClass(introFormat.alignment)} ${introFormat.bold ? "font-bold" : "font-normal"}`}
                   >
                     {paragraph}
                   </p>
                 ) : null,
-              )}
+              ) : null}
 
               <div className="slot-editorial-clear mt-8 grid gap-6 @xl/slot-module:grid-cols-2">
                 <VisionGoalsColumnBlock column={content.vision} />

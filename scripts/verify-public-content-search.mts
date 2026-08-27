@@ -22,6 +22,9 @@ const topicsAdapter = read("src/lib/topics/load-public-topics.ts");
 const topicsListing = read("src/components/topics/TopicsListingContent.tsx");
 const topicsSearchPanel = read("src/components/topics/TopicsSidebarSearchPanel.tsx");
 const mediaPage = read("src/components/media-center/MediaListingPage.tsx");
+const mediaCompositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
+const mediaSlotPlan = read("src/components/page-composition/build-slot-render-plan.ts");
+const venisiaMediaHubLayout = read("src/components/page-composition/VenesiaThemeMediaHubLayout.tsx");
 const mediaListing = read("src/components/media-center/MediaListingContent.tsx");
 const mediaShell = read("src/components/media-center/MediaPageShell.tsx");
 const mediaSidebar = read("src/components/media-center/MediaSidebar.tsx");
@@ -169,10 +172,12 @@ assert.ok(topicsListing.includes("!isSearching ? <FeaturedTopic"));
 assert.ok(mediaPage.includes("getMediaListingPage"));
 assert.ok(!mediaPage.includes("getMediaItems("), "Media search must not fetch a second catalog");
 assert.ok(!mediaPage.includes("searchCatalog"));
-assert.ok(mediaPage.includes("featuredNodes"));
 assert.ok(
-  mediaPage.indexOf("featuredNodes") < mediaPage.indexOf("<MediaListingContent"),
-  "Featured Content must remain an independent page module during listing search",
+  !mediaPage.includes("featuredNodes") &&
+    mediaCompositionLoader.includes("slots[hubModule.slot].push") &&
+    mediaSlotPlan.includes('kind: "media-hub"') &&
+    venisiaMediaHubLayout.includes("renderVenesiaThemeMediaHubNodes"),
+  "Featured Content must remain an Assignment-positioned module during listing search",
 );
 assert.ok(!mediaListing.includes("children?: ReactNode"));
 assert.ok(!mediaShell.includes("createContext") && !mediaShell.includes("useMediaSearch"));

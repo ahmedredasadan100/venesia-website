@@ -15,6 +15,7 @@ type SidebarLatestArticlesWidgetProps = {
   showImage?: boolean;
   showDate?: boolean;
   showExcerpt?: boolean;
+  formatting?: import("../../lib/page-blocks/configs").PageBlockTextFormattingConfig;
 };
 
 const ITEMS_PER_SLIDE = 3;
@@ -36,6 +37,7 @@ export default function SidebarLatestArticlesWidget({
   showImage = true,
   showDate = true,
   showExcerpt = false,
+  formatting,
 }: SidebarLatestArticlesWidgetProps) {
   const slides = chunkItems(items);
   const { activeIndex, goTo, containerRef, swipeHandlers } =
@@ -49,7 +51,7 @@ export default function SidebarLatestArticlesWidget({
   const activeItems = slides[activeIndex] ?? slides[0] ?? [];
 
   return (
-    <SidebarFeedPanel eyebrow={eyebrow ?? undefined} title={title}>
+    <SidebarFeedPanel eyebrow={eyebrow ?? undefined} title={title} formatting={formatting}>
       <div
         ref={containerRef}
         className="touch-pan-y"

@@ -1,4 +1,6 @@
-import ProjectDetailsHero from "./ProjectDetailsHero";
+import ProjectDetailsHero, {
+  projectDetailsMainClassName,
+} from "./ProjectDetailsHero";
 import { type PublicProject } from "../../../lib/projects/public-types";
 
 type CommercialProjectDetailsProps = {
@@ -13,7 +15,7 @@ export default function CommercialProjectDetails({
   showProjectHero = true,
 }: CommercialProjectDetailsProps) {
   return (
-    <main className="min-h-screen bg-[#05070B] text-white" dir="rtl">
+    <main className={projectDetailsMainClassName(showProjectHero)} dir="rtl">
       {showProjectHero ? (
         <ProjectDetailsHero project={project} presentation={heroPresentation} />
       ) : null}

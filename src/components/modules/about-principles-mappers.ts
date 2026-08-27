@@ -1,5 +1,9 @@
 import type { AboutPrinciplesModuleConfig, CardsBlockConfig } from "../../lib/page-blocks/configs";
-import { asAboutPrinciplesConfig } from "../../lib/page-blocks/configs";
+import {
+  asAboutPrinciplesConfig,
+  resolvePageBlockTextFormattingMap,
+  type PageBlockTextFormattingMap,
+} from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
 export type AboutPrinciplesItem = {
@@ -12,6 +16,7 @@ export type AboutPrinciplesModuleContent = {
   eyebrow: string;
   title: string;
   description: string;
+  formatting: PageBlockTextFormattingMap;
   items: AboutPrinciplesItem[];
 };
 
@@ -32,6 +37,11 @@ export function mapAboutPrinciplesBlock(block: ResolvedPageBlock): AboutPrincipl
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     description: config.description ?? "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     items: mapItems(config.items),
   };
 }
@@ -45,6 +55,11 @@ export function mapLegacyPrinciplesCardsBlock(block: ResolvedPageBlock): AboutPr
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     description: "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     items: (config.items ?? []).map((item, index) => ({
       icon: item.icon?.trim() || iconCycle[index % iconCycle.length],
       title: item.title ?? "",

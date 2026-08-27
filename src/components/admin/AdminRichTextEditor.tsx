@@ -18,6 +18,9 @@ import {
   AdminFormError,
   useOptionalAdminFormRuntime,
 } from "./ui/AdminFormRuntime";
+import AdminTextFormatControls, {
+  type AdminTextAlignment,
+} from "./ui/AdminTextFormatControls";
 
 export { normalizeRichTextContent };
 
@@ -27,6 +30,7 @@ type AdminRichTextEditorProps = {
   defaultValue?: string;
   placeholder?: string;
   minHeight?: number;
+  maxHeight?: number;
   /** full = all tools; minimal = Bold (+ optional text align); none = content input only. */
   toolbarMode?: "full" | "minimal" | "none";
   /** Show paragraph alignment controls when the content domain owns text alignment. */
@@ -41,8 +45,6 @@ type AdminRichTextEditorProps = {
   readOnly?: boolean;
   onValueChange?: (value: string) => void;
 };
-
-type TextAlignValue = "right" | "center" | "left" | "justify";
 
 function ToolButton({
   label,
@@ -86,6 +88,7 @@ export default function AdminRichTextEditor({
   defaultValue = "",
   placeholder = "اكتب المحتوى هنا...",
   minHeight = 220,
+  maxHeight,
   toolbarMode = "full",
   enableTextAlign = false,
   helperText,
@@ -235,7 +238,7 @@ export default function AdminRichTextEditor({
     setLinkEditorOpen(false);
   }
 
-  function setAlign(alignment: TextAlignValue) {
+  function setAlign(alignment: AdminTextAlignment) {
     editor?.chain().focus().setTextAlign(alignment).run();
   }
 
@@ -249,12 +252,23 @@ export default function AdminRichTextEditor({
       role="toolbar"
       aria-label={`شريط أدوات ${label}`}
     >
-      <ToolButton
-        label="B"
-        title="خط عريض"
-        active={editor?.isActive("bold")}
-        onClick={() => editor?.chain().focus().toggleBold().run()}
+      <AdminTextFormatControls
+        ariaLabel={`التنسيق الأساسي لـ ${label}`}
+        alignmentAriaLabel={`محاذاة ${label}`}
+        alignment={
+          withTextAlign
+            ? (["right", "center", "left", "justify"].find((value) =>
+                editor?.isActive({ textAlign: value }),
+              ) as AdminTextAlignment | undefined) ?? "right"
+            : undefined
+        }
+        onAlignmentChange={withTextAlign ? setAlign : undefined}
+        bold={Boolean(editor?.isActive("bold"))}
+        onBoldChange={() => editor?.chain().focus().toggleBold().run()}
+        includeJustify={withTextAlign}
+        disabled={editorReadOnly}
         appearance={appearance}
+        embedded
       />
       {enableArticleStructure ? (
         <>
@@ -277,38 +291,6 @@ export default function AdminRichTextEditor({
             title="عنوان فرعي داخل المقال"
             active={editor?.isActive("heading", { level: 3 })}
             onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()}
-            appearance={appearance}
-          />
-        </>
-      ) : null}
-      {withTextAlign ? (
-        <>
-          <ToolButton
-            label="يمين"
-            title="محاذاة لليمين"
-            active={editor?.isActive({ textAlign: "right" })}
-            onClick={() => setAlign("right")}
-            appearance={appearance}
-          />
-          <ToolButton
-            label="وسط"
-            title="محاذاة للوسط"
-            active={editor?.isActive({ textAlign: "center" })}
-            onClick={() => setAlign("center")}
-            appearance={appearance}
-          />
-          <ToolButton
-            label="يسار"
-            title="محاذاة لليسار"
-            active={editor?.isActive({ textAlign: "left" })}
-            onClick={() => setAlign("left")}
-            appearance={appearance}
-          />
-          <ToolButton
-            label="ضبط"
-            title="ضبط النص من الجانبين"
-            active={editor?.isActive({ textAlign: "justify" })}
-            onClick={() => setAlign("justify")}
             appearance={appearance}
           />
         </>
@@ -436,7 +418,14 @@ export default function AdminRichTextEditor({
         >
           {showToolbar ? toolbar : null}
 
-          <div className="admin-rich-text-editor min-w-0 flex-1 px-4 py-4" style={{ minHeight }}>
+          <div
+            className="admin-rich-text-editor min-w-0 flex-1 px-4 py-4"
+            style={{
+              minHeight,
+              maxHeight,
+              overflowY: maxHeight === undefined ? undefined : "clip",
+            }}
+          >
             <EditorContent editor={editor} />
           </div>
         </div>

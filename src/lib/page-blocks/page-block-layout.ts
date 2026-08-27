@@ -1,7 +1,11 @@
 import type { PageLayoutSlot, ResolvedPageBlock } from "./types";
+import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
 
 function sortBlocks(a: ResolvedPageBlock, b: ResolvedPageBlock) {
-  if (a.slot !== b.slot) return a.slot.localeCompare(b.slot);
+  if (a.slot !== b.slot) {
+    return PAGE_COMPOSITION_POSITIONS.indexOf(a.slot)
+      - PAGE_COMPOSITION_POSITIONS.indexOf(b.slot);
+  }
   if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
   return a.assignmentId - b.assignmentId;
 }

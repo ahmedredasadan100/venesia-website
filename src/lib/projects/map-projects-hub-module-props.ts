@@ -4,6 +4,7 @@ import {
   PROJECTS_HUB_DEFAULT_MAP_IMAGE,
   type ProjectsHubMapPinConfig,
 } from "../page-blocks/projects-hub-config";
+import type { PageBlockTextAlignment } from "../page-blocks/configs";
 
 export type ProjectsHubFeaturedPresentationProps = {
   title: string;
@@ -21,6 +22,10 @@ export type ProjectsHubFeaturedPresentationProps = {
   autoplayMs: number;
   limit: number | null;
   selectionMode: "featured_flag";
+  titleBold: boolean;
+  titleAlignment: PageBlockTextAlignment;
+  subtitleBold: boolean;
+  subtitleAlignment: PageBlockTextAlignment;
 };
 
 export type ProjectsHubListingPresentationProps = {
@@ -44,6 +49,10 @@ export type ProjectsHubListingPresentationProps = {
   showViewToggle: boolean;
   showPagination: boolean;
   showProjectCount: boolean;
+  eyebrowBold: boolean;
+  eyebrowAlignment: PageBlockTextAlignment;
+  titleBold: boolean;
+  titleAlignment: PageBlockTextAlignment;
 };
 
 export type ProjectsHubMapPresentationProps = {
@@ -51,6 +60,9 @@ export type ProjectsHubMapPresentationProps = {
   mapImage: string;
   exploreButtonLabel: string;
   mapPins: ProjectsHubMapPinConfig[];
+  showTitle: boolean;
+  titleBold: boolean;
+  titleAlignment: PageBlockTextAlignment;
 };
 
 /** Presentation-only defaults. Project identities and map pins are database-owned. */
@@ -70,6 +82,10 @@ export const PROJECTS_HUB_FEATURED_DEFAULTS: ProjectsHubFeaturedPresentationProp
   autoplayMs: 6000,
   limit: null,
   selectionMode: "featured_flag",
+  titleBold: true,
+  titleAlignment: "right",
+  subtitleBold: false,
+  subtitleAlignment: "right",
 };
 
 export const PROJECTS_HUB_LISTING_DEFAULTS: ProjectsHubListingPresentationProps = {
@@ -93,6 +109,10 @@ export const PROJECTS_HUB_LISTING_DEFAULTS: ProjectsHubListingPresentationProps 
   showViewToggle: true,
   showPagination: true,
   showProjectCount: true,
+  eyebrowBold: false,
+  eyebrowAlignment: "right",
+  titleBold: true,
+  titleAlignment: "right",
 };
 
 export const PROJECTS_HUB_MAP_DEFAULTS: ProjectsHubMapPresentationProps = {
@@ -100,6 +120,9 @@ export const PROJECTS_HUB_MAP_DEFAULTS: ProjectsHubMapPresentationProps = {
   mapImage: PROJECTS_HUB_DEFAULT_MAP_IMAGE,
   exploreButtonLabel: "استكشف على الخريطة",
   mapPins: [],
+  showTitle: true,
+  titleBold: true,
+  titleAlignment: "right",
 };
 
 export function mapProjectsHubFeaturedProps(
@@ -121,6 +144,10 @@ export function mapProjectsHubFeaturedProps(
     showSliderDots: module.config.showSliderDots !== false,
     autoplayMs: module.config.autoplayMs || PROJECTS_HUB_FEATURED_DEFAULTS.autoplayMs,
     limit: module.config.limit,
+    titleBold: module.config.titleBold !== false,
+    titleAlignment: module.config.titleAlignment ?? "right",
+    subtitleBold: module.config.subtitleBold === true,
+    subtitleAlignment: module.config.subtitleAlignment ?? "right",
   };
 }
 
@@ -150,6 +177,10 @@ export function mapProjectsHubListingProps(
     showViewToggle: module.config.showViewToggle !== false,
     showPagination: module.config.showPagination !== false,
     showProjectCount: module.config.showProjectCount !== false,
+    eyebrowBold: module.config.eyebrowBold === true,
+    eyebrowAlignment: module.config.eyebrowAlignment ?? "right",
+    titleBold: module.config.titleBold !== false,
+    titleAlignment: module.config.titleAlignment ?? "right",
   };
 }
 
@@ -161,6 +192,9 @@ export function mapProjectsHubMapProps(
     mapImage: module.config.mapImage || PROJECTS_HUB_MAP_DEFAULTS.mapImage,
     exploreButtonLabel: module.config.exploreButtonLabel || PROJECTS_HUB_MAP_DEFAULTS.exploreButtonLabel,
     mapPins: module.config.mapPins,
+    showTitle: module.config.showTitle !== false,
+    titleBold: module.config.titleBold !== false,
+    titleAlignment: module.config.titleAlignment ?? "right",
   };
 }
 

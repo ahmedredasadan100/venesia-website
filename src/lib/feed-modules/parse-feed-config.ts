@@ -8,6 +8,10 @@ import {
   type TopicsFeedType,
 } from "./types";
 import { normalizeBoolean, parseFormBoolean } from "../page-blocks/admin-utils";
+import {
+  buildPageBlockTextFormattingPatch,
+  resolvePageBlockTextFormat,
+} from "../page-blocks/configs";
 
 const DEFAULT_PRESENTATION: FeedModulePresentation = {
   title: "",
@@ -36,6 +40,12 @@ export const feedModuleConfigSchema: z.ZodType<FeedModuleConfig> = z
         showDate: z.boolean(),
         showExcerpt: z.boolean(),
         emptyBehavior: z.literal("hide"),
+        showEyebrow: z.boolean(),
+        eyebrowBold: z.boolean(),
+        eyebrowAlignment: z.enum(["right", "center", "left"]),
+        showTitle: z.boolean(),
+        titleBold: z.boolean(),
+        titleAlignment: z.enum(["right", "center", "left"]),
       })
       .strict(),
     query: z
@@ -103,6 +113,8 @@ export function parseFeedModuleConfig(
   const limit = Number.isFinite(limitValue) && limitValue > 0 ? Math.floor(limitValue) : DEFAULT_QUERY.limit;
 
   const support = FEED_MODULE_PRESENTATION_SUPPORT[feedType];
+  const eyebrowFormat = resolvePageBlockTextFormat(presentationRaw, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(presentationRaw, "title", { bold: true });
 
   return feedModuleConfigSchema.parse({
     presentation: {
@@ -119,6 +131,12 @@ export function parseFeedModuleConfig(
         support.showExcerpt &&
         normalizeBoolean(presentationRaw.showExcerpt, DEFAULT_PRESENTATION.showExcerpt),
       emptyBehavior: "hide",
+      showEyebrow: eyebrowFormat.visible,
+      eyebrowBold: eyebrowFormat.bold,
+      eyebrowAlignment: eyebrowFormat.alignment,
+      showTitle: titleFormat.visible,
+      titleBold: titleFormat.bold,
+      titleAlignment: titleFormat.alignment,
     },
     query: {
       limit,
@@ -149,9 +167,14 @@ export function buildFeedModuleConfig(
   const categorySlugs = readFormCategorySlugs(formData);
   const seriesSlug = String(formData.get("series_slug") ?? "").trim();
   const support = FEED_MODULE_PRESENTATION_SUPPORT[feedType];
+  const formatting = buildPageBlockTextFormattingPatch(formData, [
+    { field: "eyebrow" },
+    { field: "title", defaults: { bold: true } },
+  ]);
 
   return feedModuleConfigSchema.parse({
     presentation: {
+      ...formatting,
       title,
       eyebrow: String(formData.get("eyebrow") ?? "").trim() || null,
       linkText:

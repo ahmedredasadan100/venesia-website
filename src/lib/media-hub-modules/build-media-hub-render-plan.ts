@@ -9,15 +9,3 @@ export function buildMediaHubRenderPlan(modules: MediaHubModuleState[]): MediaHu
         left.sectionKey.localeCompare(right.sectionKey),
     );
 }
-
-export function isPairedHubGridSection(key: MediaHubModuleState["sectionKey"]) {
-  return key === "site-updates" || key === "videos";
-}
-
-export function shouldRenderHubGridPair(
-  current: MediaHubModuleState["sectionKey"],
-  next?: MediaHubModuleState["sectionKey"],
-) {
-  if (!next) return false;
-  return isPairedHubGridSection(current) && isPairedHubGridSection(next);
-}

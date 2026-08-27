@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
+import { pageBlockTextAlignClass, pageBlockTextPlacementClass } from "../../lib/page-blocks/configs";
 
 type MediaCenterHubSectionHeaderProps = {
   presentation: MediaHubModulePresentation;
@@ -17,20 +18,20 @@ export default function MediaCenterHubSectionHeader({
   return (
     <div className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-white/10 pb-5">
       <div className="min-w-0">
-        {presentation.eyebrow ? (
-          <p className="text-xs font-medium uppercase tracking-[0.28em] text-[#D8B87A]/70">
+        {presentation.showEyebrow !== false && presentation.eyebrow ? (
+          <p className={`text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70 ${pageBlockTextAlignClass(presentation.eyebrowAlignment ?? "right")} ${presentation.eyebrowBold ? "font-bold" : "font-normal"}`}>
             {presentation.eyebrow}
           </p>
         ) : null}
 
-        {presentation.title ? (
-          <h2 className="mt-3 text-2xl font-semibold text-white @xl/slot-module:text-3xl">
+        {presentation.showTitle !== false && presentation.title ? (
+          <h2 className={`mt-3 text-2xl text-white @xl/slot-module:text-3xl ${pageBlockTextAlignClass(presentation.titleAlignment ?? "right")} ${presentation.titleBold === false ? "font-normal" : "font-bold"}`}>
             {presentation.title}
           </h2>
         ) : null}
 
-        {presentation.description ? (
-          <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">
+        {presentation.showDescription !== false && presentation.description ? (
+          <p className={`mt-3 max-w-2xl text-sm leading-7 text-white/55 ${pageBlockTextAlignClass(presentation.descriptionAlignment ?? "right")} ${pageBlockTextPlacementClass(presentation.descriptionAlignment ?? "right")} ${presentation.descriptionBold ? "font-bold" : "font-normal"}`}>
             {presentation.description}
           </p>
         ) : null}

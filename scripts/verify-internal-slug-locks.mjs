@@ -1,5 +1,5 @@
 /**
- * Verify structural content template slugs stay read-only in UI + server.
+ * Verify internal module slugs stay hidden in Product UI and structural slugs stay locked on the server.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -53,15 +53,15 @@ assert(
   registry.includes("export function isStructuralContentTemplateSlug"),
   "Shared slug lock helper missing",
 );
-assert(client.includes("usesLockedInternalSlug"), "UI locked slug flag missing");
 assert(
-  client.includes("isStructuralContentTemplateSlug(block.slug, block.variant)"),
-  "UI must resolve technical identity locks from the shared registry",
+  client.includes('<input type="hidden" name="slug" value={block.slug}'),
+  "Content editor must preserve its internal slug without exposing a Product control",
 );
 assert(
-  client.includes("<ModuleEditorTechnicalIdentity") &&
-    presentation.includes("معرّف بنيوي للقراءة فقط"),
-  "Read-only slug presentation must stay in the shared Module Editor owner",
+  !client.includes("ModuleEditorTechnicalIdentity") &&
+    !presentation.includes("ModuleEditorTechnicalIdentity") &&
+    !presentation.includes("data-module-editor-technical-identity"),
+  "Technical identity must not retain a visible or dead Module Editor presentation path",
 );
 assert(
   actions.includes("isStructuralContentTemplateSlug(existing.slug, existing.variant)"),

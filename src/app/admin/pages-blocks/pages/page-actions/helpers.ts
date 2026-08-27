@@ -9,9 +9,9 @@ import { type PageBlockActionResult } from "../../../../../lib/page-blocks/actio
 import type { Json } from "../../../../../lib/database.types";
 import type { PageBlockType, PageModuleKind } from "../../../../../lib/page-blocks/types";
 import {
-  getUnsupportedSlotAssignmentMessage,
-  isSlotAllowedForRoute,
-} from "../../../../../lib/page-composition/route-slot-policy";
+  getUnsupportedAssignmentPositionMessage,
+  isAssignmentPositionAllowed,
+} from "../../../../../lib/page-composition/page-assignment-contract";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type { ParsedAssignmentKey } from "./types";
 
@@ -47,21 +47,19 @@ export function isMediaHubKind(kind: string): kind is "media-hub" {
   return kind === "media-hub";
 }
 
-export async function resolvePageSlug(pageId: number): Promise<string | null> {
-  const { data, error } = await getSupabaseAdmin().from("pages").select("slug").eq("id", pageId).maybeSingle();
-  if (error) throw new Error(`Page slug read failed: ${error.message}`);
-  if (!data?.slug) return null;
-  return String(data.slug);
+export async function pageExists(pageId: number): Promise<boolean> {
+  const { data, error } = await getSupabaseAdmin().from("pages").select("id").eq("id", pageId).maybeSingle();
+  if (error) throw new Error(`Page existence read failed: ${error.message}`);
+  return Boolean(data?.id);
 }
 
-/** Returns Arabic failure result when slot is not allowed for this page + module kind. */
-export function slotPolicyFailure(
-  pageSlug: string | null,
+/** Returns Arabic failure when Position violates the platform or Product contract. */
+export function positionPolicyFailure(
   moduleKind: string,
   slot: string,
 ): PageBlockActionResult | null {
-  if (isSlotAllowedForRoute(pageSlug, moduleKind, slot)) return null;
-  return failure(getUnsupportedSlotAssignmentMessage(pageSlug, moduleKind, slot));
+  if (isAssignmentPositionAllowed(moduleKind, slot)) return null;
+  return failure(getUnsupportedAssignmentPositionMessage(moduleKind, slot));
 }
 
 export function assignmentTable(blockType: PageBlockType) {

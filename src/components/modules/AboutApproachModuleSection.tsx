@@ -1,4 +1,5 @@
 import type { AboutApproachModuleContent } from "./about-approach-mappers";
+import { pageBlockTextAlignClass } from "../../lib/page-blocks/configs";
 
 export type AboutApproachModuleSectionProps = {
   cmsContent: AboutApproachModuleContent | null;
@@ -8,8 +9,10 @@ export default function AboutApproachModuleSection({ cmsContent }: AboutApproach
   if (!cmsContent) return null;
 
   const approach = cmsContent;
+  const eyebrowFormat = approach.formatting.eyebrow!;
+  const titleFormat = approach.formatting.title!;
 
-  if (!approach.eyebrow.trim() && !approach.text.trim() && !approach.highlightedText.trim()) {
+  if (!(eyebrowFormat.visible && approach.eyebrow.trim()) && !(titleFormat.visible && (approach.text.trim() || approach.highlightedText.trim()))) {
     return null;
   }
 
@@ -21,14 +24,14 @@ export default function AboutApproachModuleSection({ cmsContent }: AboutApproach
       />
 
       <div data-reveal className="relative mx-auto max-w-3xl px-6 text-center">
-        {approach.eyebrow.trim() ? (
-          <p className="font-en text-[10px] uppercase tracking-[0.22em] text-[#D8B87A]/45">{approach.eyebrow}</p>
+        {eyebrowFormat.visible && approach.eyebrow.trim() ? (
+          <p className={`font-en text-[10px] uppercase tracking-[0.22em] text-[#D8B87A]/45 ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}>{approach.eyebrow}</p>
         ) : null}
 
-        <p className="mt-5 text-xl font-medium leading-9 text-white/80 @xl/slot-module:text-[1.35rem] @xl/slot-module:leading-9">
+        {titleFormat.visible ? <p className={`mt-5 text-xl leading-9 text-white/80 @xl/slot-module:text-[1.35rem] @xl/slot-module:leading-9 ${pageBlockTextAlignClass(titleFormat.alignment)} ${titleFormat.bold ? "font-bold" : "font-normal"}`}>
           {approach.text}
           {approach.highlightedText ? <span className="text-white/55"> {approach.highlightedText}</span> : null}
-        </p>
+        </p> : null}
       </div>
     </section>
   );

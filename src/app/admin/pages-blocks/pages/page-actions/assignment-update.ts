@@ -6,12 +6,13 @@ import { type PageBlockActionResult } from "../../../../../lib/page-blocks/actio
 import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { cleanText, parseFormBoolean, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
 import type { PageBlockType } from "../../../../../lib/page-blocks/types";
+import { getDefaultAssignmentPosition } from "../../../../../lib/page-composition/page-assignment-contract";
 import {
   databaseAssignmentKind,
   failure,
   mutatePageComposition,
-  resolvePageSlug,
-  slotPolicyFailure,
+  pageExists,
+  positionPolicyFailure,
   success,
 } from "./helpers";
 
@@ -23,13 +24,12 @@ export async function updatePageBlockAssignment(
   const pageId = parseNumber(formData.get("page_id"));
   const assignmentId = parseNumber(formData.get("assignment_id"));
   const kind = cleanText(formData.get("block_type")) as PageBlockType | "media-sidebar" | "media-hub";
-  const slot = cleanText(formData.get("slot")) || "main";
   if (!pageId || !assignmentId || (!(kind in BLOCK_MODULE_REGISTRY) && kind !== "media-sidebar" && kind !== "media-hub")) {
     return failure("بيانات الربط غير مكتملة.");
   }
-  const pageSlug = await resolvePageSlug(pageId);
-  if (!pageSlug) return failure("الصفحة غير موجودة.");
-  const slotRejection = slotPolicyFailure(pageSlug, kind, slot);
+  const slot = cleanText(formData.get("slot")) || getDefaultAssignmentPosition(kind);
+  if (!(await pageExists(pageId))) return failure("الصفحة غير موجودة.");
+  const slotRejection = positionPolicyFailure(kind, slot);
   if (slotRejection) return slotRejection;
   let updatedAt: string | undefined;
   try {
@@ -57,6 +57,12 @@ export async function updateHeroPageAssignment(
   const assignmentId = parseNumber(formData.get("assignment_id"));
   const heroId = parseNumber(formData.get("template_id"));
   if (!pageId || !assignmentId || !heroId) return failure("بيانات الربط غير مكتملة.");
+  if (!(await pageExists(pageId))) return failure("الصفحة غير موجودة.");
+  const slotRejection = positionPolicyFailure(
+    "hero",
+    getDefaultAssignmentPosition("hero"),
+  );
+  if (slotRejection) return slotRejection;
   try {
     await mutatePageComposition(pageId, "save_hero_assignment", {
       assignment_id: assignmentId,

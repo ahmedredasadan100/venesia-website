@@ -1,6 +1,11 @@
 import Link from "next/link";
 import type { BlockRendererProps } from "./block-registry";
-import type { CardsBlockConfig } from "../../lib/page-blocks";
+import {
+  asCardsConfig,
+  pageBlockTextAlignClass,
+  pageBlockTextPlacementClass,
+  resolvePageBlockTextFormat,
+} from "../../lib/page-blocks/configs";
 
 function columnsClass(columns?: number) {
   if (columns === 2) return "@xl/slot-module:grid-cols-2";
@@ -9,23 +14,26 @@ function columnsClass(columns?: number) {
 }
 
 export default function CardsSection({ block }: BlockRendererProps) {
-  const config = block.template.config as CardsBlockConfig;
+  const config = asCardsConfig(block.template.config);
+  const eyebrowFormat = resolvePageBlockTextFormat(config, "eyebrow");
+  const titleFormat = resolvePageBlockTextFormat(config, "title", { bold: true });
+  const descriptionFormat = resolvePageBlockTextFormat(config, "description");
   const variant = block.template.variant ?? "glass";
   const items = config.items ?? [];
 
   return (
     <section className="relative py-12 @xl/slot-module:py-16 @4xl/slot-module:py-20" data-block-variant={variant}>
       <div className="mx-auto max-w-7xl px-6">
-        {(config.eyebrow || config.title || config.description) && (
-          <div className="mb-10 text-right">
-            {config.eyebrow ? (
-              <p className="font-en text-[10px] uppercase tracking-[0.22em] text-[#D8B87A]/55">{config.eyebrow}</p>
+        {((eyebrowFormat.visible && config.eyebrow) || (titleFormat.visible && config.title) || (descriptionFormat.visible && config.description)) && (
+          <div className="mb-10">
+            {eyebrowFormat.visible && config.eyebrow ? (
+              <p className={`font-en text-[10px] uppercase tracking-[0.22em] text-[#D8B87A]/55 ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}>{config.eyebrow}</p>
             ) : null}
-            {config.title ? (
-              <h2 className="mt-3 text-2xl font-bold tracking-[-0.03em] text-white @xl/slot-module:text-3xl">{config.title}</h2>
+            {titleFormat.visible && config.title ? (
+              <h2 className={`mt-3 text-2xl tracking-[-0.03em] text-white @xl/slot-module:text-3xl ${pageBlockTextAlignClass(titleFormat.alignment)} ${titleFormat.bold ? "font-bold" : "font-normal"}`}>{config.title}</h2>
             ) : null}
-            {config.description ? (
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-white/55">{config.description}</p>
+            {descriptionFormat.visible && config.description ? (
+              <p className={`mt-4 max-w-2xl text-sm leading-7 text-white/55 ${pageBlockTextAlignClass(descriptionFormat.alignment)} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"}`}>{config.description}</p>
             ) : null}
           </div>
         )}

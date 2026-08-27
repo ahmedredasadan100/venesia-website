@@ -55,6 +55,7 @@ export default function AdminMediaGalleryField({
   const [prevDefaultKey, setPrevDefaultKey] = useState(defaultKey);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [replaceIndex, setReplaceIndex] = useState<number | null>(null);
+  const galleryCardHeightClass = density === "compact" ? "h-[167px]" : "min-h-[170px]";
 
   if (defaultKey !== prevDefaultKey) {
     setPrevDefaultKey(defaultKey);
@@ -96,38 +97,33 @@ export default function AdminMediaGalleryField({
     <div className="space-y-3">
       <input type="hidden" name={name} value={paths.join("\n")} />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className="text-xs font-semibold text-white/55">{label}</span>
-        <button
-          type="button"
-          onClick={openAdd}
-          className="cursor-pointer rounded-full border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-2 text-xs font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15"
-        >
-          تصفح وإضافة
-        </button>
-      </div>
+      <span className="block text-xs font-semibold text-white/55">{label}</span>
 
       <p className="text-xs leading-6 text-[#D8B87A]/65">{DIMENSION_HINTS[dimensionHint]}</p>
       {helperText ? <p className="text-xs leading-6 text-white/42">{helperText}</p> : null}
 
-      {paths.length ? (
-        <div
-          className={`grid gap-3 ${
-            density === "compact"
-              ? "grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
-              : "sm:grid-cols-2"
-          }`}
-          data-admin-media-gallery-density={density}
-        >
-          {paths.map((path, index) => (
-            <div key={`${path}-${index}`} className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+      <div
+        className={`grid gap-3 ${
+          density === "compact"
+            ? "grid-cols-2 md:grid-cols-3 xl:grid-cols-4"
+            : "sm:grid-cols-2"
+        }`}
+        data-admin-media-gallery-density={density}
+      >
+        {paths.map((path, index) => (
+          <div
+            key={`${path}-${index}`}
+            className={`relative overflow-hidden rounded-2xl border border-white/10 bg-black/25 ${galleryCardHeightClass}`}
+            data-admin-media-gallery-card="image"
+          >
               <div className="absolute left-2 top-2 z-10 flex flex-col gap-1">
                 <button
                   type="button"
                   onClick={() => moveItem(index, -1)}
                   disabled={index === 0}
                   className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-xs text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                  title="تحريك لأعلى"
+                  title={index === 0 ? "الصورة في أول الترتيب" : "تحريك الصورة لأعلى"}
+                  aria-label={index === 0 ? "الصورة في أول الترتيب ولا يمكن تحريكها لأعلى" : "تحريك الصورة لأعلى"}
                 >
                   ↑
                 </button>
@@ -136,7 +132,8 @@ export default function AdminMediaGalleryField({
                   onClick={() => moveItem(index, 1)}
                   disabled={index === paths.length - 1}
                   className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-white/15 bg-black/60 text-xs text-white/80 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
-                  title="تحريك لأسفل"
+                  title={index === paths.length - 1 ? "الصورة في آخر الترتيب" : "تحريك الصورة لأسفل"}
+                  aria-label={index === paths.length - 1 ? "الصورة في آخر الترتيب ولا يمكن تحريكها لأسفل" : "تحريك الصورة لأسفل"}
                 >
                   ↓
                 </button>
@@ -172,18 +169,25 @@ export default function AdminMediaGalleryField({
                   {DIMENSION_CARD_LABELS[dimensionHint]}
                 </p>
               </div>
-            </div>
-          ))}
-        </div>
-      ) : (
+          </div>
+        ))}
+
         <button
           type="button"
           onClick={openAdd}
-          className="flex h-36 w-full cursor-pointer flex-col items-center justify-center rounded-2xl border border-dashed border-white/15 bg-[#05070B] text-sm text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"
+          aria-label={`إضافة صورة إلى ${label}`}
+          className={`group flex w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/15 bg-[#05070B] text-sm text-white/45 transition hover:border-[#D8B87A]/35 hover:bg-[#D8B87A]/[0.035] hover:text-white/75 ${galleryCardHeightClass}`}
+          data-admin-media-gallery-card="add"
         >
-          لا توجد صور — اضغط «تصفح وإضافة» لاختيار أو رفع صورة
+          <span
+            aria-hidden="true"
+            className="flex size-9 items-center justify-center rounded-full border border-white/15 text-2xl font-light leading-none text-white/50 transition group-hover:border-[#D8B87A]/35 group-hover:text-[#D8B87A]"
+          >
+            +
+          </span>
+          <span className="font-semibold">إضافة صورة</span>
         </button>
-      )}
+      </div>
 
       <AdminMediaPickerModal
         open={pickerOpen}

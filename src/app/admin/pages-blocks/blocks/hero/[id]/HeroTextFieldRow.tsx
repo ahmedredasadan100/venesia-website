@@ -13,8 +13,8 @@ type HeroTextFieldRowProps = {
   alignmentDefault?: HeroTextAlignment;
   showDefault?: boolean;
   enableAlignment?: boolean;
+  enableBold?: boolean;
   placeholder?: string;
-  helperText?: string;
 };
 
 export default function HeroTextFieldRow({
@@ -28,8 +28,8 @@ export default function HeroTextFieldRow({
   alignmentDefault = "right",
   showDefault = true,
   enableAlignment = true,
+  enableBold = true,
   placeholder,
-  helperText,
 }: HeroTextFieldRowProps) {
   return (
     <HeroVisibilityAlignRow
@@ -40,8 +40,8 @@ export default function HeroTextFieldRow({
       alignmentDefault={alignmentDefault}
       showDefault={showDefault}
       enableAlignment={enableAlignment}
+      enableBold={enableBold}
       boldDefault={boldDefault}
-      helperText={helperText}
     >
       <input
         name={name}

@@ -1,10 +1,15 @@
-import { asAboutApproachConfig } from "../../lib/page-blocks/configs";
+import {
+  asAboutApproachConfig,
+  resolvePageBlockTextFormattingMap,
+  type PageBlockTextFormattingMap,
+} from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
 export type AboutApproachModuleContent = {
   eyebrow: string;
   text: string;
   highlightedText: string;
+  formatting: PageBlockTextFormattingMap;
 };
 
 function splitApproachTitle(title?: string) {
@@ -30,5 +35,9 @@ export function mapAboutApproachBlock(block: ResolvedPageBlock): AboutApproachMo
     eyebrow: config.eyebrow ?? "",
     text,
     highlightedText,
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+    ]),
   };
 }

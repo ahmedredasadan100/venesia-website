@@ -1,6 +1,6 @@
 import type { PageModuleKind } from "../page-blocks/types";
-import type { PageCompositionSlot } from "./slot-module-registry";
-import { getPreferredSlotsForModuleKind } from "./route-slot-policy.ts";
+import type { PageCompositionPosition } from "./positions";
+import { getAssignablePositions } from "./page-assignment-contract.ts";
 
 export type ModuleEditorIconToken =
   | "content"
@@ -37,7 +37,6 @@ export type SlotModuleSlugMetadata = {
   slug: string;
   labelAr: string;
   descriptionAr: string;
-  preferredSlot: PageCompositionSlot;
   editorSections?: ModuleEditorSections;
 };
 
@@ -88,21 +87,15 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
         icon: "content",
       },
       order: {
-        navigationLabelAr: "ترتيب العناصر",
+        navigationLabelAr: "الترتيب",
         sectionHeadingAr: "ترتيب عناصر الهيرو",
         sectionDescriptionAr: "حدّد ترتيب ظهور عناصر الهيرو للصفحات الداخلية.",
         icon: "plans",
       },
-      "media-desktop": {
-        navigationLabelAr: "صور الديسكتوب",
-        sectionHeadingAr: "صور الهيرو على الشاشات الكبيرة",
-        sectionDescriptionAr: "اختر الصور ورتّبها واضبط موضعها في عرض الديسكتوب.",
-        icon: "media",
-      },
-      "media-mobile": {
-        navigationLabelAr: "صور الموبايل",
-        sectionHeadingAr: "صور الهيرو على الموبايل",
-        sectionDescriptionAr: "أضف صورًا بديلة للموبايل أو اتركها فارغة لاستخدام صور الديسكتوب.",
+      media: {
+        navigationLabelAr: "الصور",
+        sectionHeadingAr: "صور الهيرو",
+        sectionDescriptionAr: "أدر صور سطح المكتب والهاتف المحمول وتكوين عرضها من مكان واحد.",
         icon: "media",
       },
       buttons: {
@@ -112,9 +105,9 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
         icon: "section",
       },
       display: {
-        navigationLabelAr: "العرض والربط",
-        sectionHeadingAr: "إعدادات العرض والصفحات",
-        sectionDescriptionAr: "اضبط حالة الظهور وراجع الصفحات المرتبطة بالهيرو.",
+        navigationLabelAr: "الصفحات",
+        sectionHeadingAr: "ربط الهيرو بالصفحات",
+        sectionDescriptionAr: "راجع الصفحات المرتبطة بالهيرو وحدّث التعيينات عند الحاجة.",
         icon: "settings",
         operationalRole: "visibility",
       },
@@ -238,7 +231,6 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "home-story",
     labelAr: "قصة فينيسيا",
     descriptionAr: "سرد تمهيدي للصفحة الرئيسية.",
-    preferredSlot: "main",
     editorSections: {
       text: {
         navigationLabelAr: "النص",
@@ -266,7 +258,6 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "home-trust",
     labelAr: "ثقة فينيسيا",
     descriptionAr: "شبكة مبادئ/ثقة للصفحة الرئيسية.",
-    preferredSlot: "main",
     editorSections: {
       pages: HOME_PAGES_SECTION,
     },
@@ -275,7 +266,6 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "home-projects",
     labelAr: "مشاريع الرئيسية",
     descriptionAr: "يعرض مشاريع homepage من جدول projects.",
-    preferredSlot: "main",
     editorSections: {
       pages: HOME_PAGES_SECTION,
     },
@@ -284,7 +274,6 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "home-contact",
     labelAr: "تواصل الرئيسية",
     descriptionAr: "CTA تواصل مع صورة ووسائل اتصال.",
-    preferredSlot: "main",
     editorSections: {
       text: {
         navigationLabelAr: "النص",
@@ -319,49 +308,78 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "projects-hub-hero",
     labelAr: "هيرو صفحة المشروعات",
     descriptionAr: "هيرو /projects — الشرائح من جدول projects.",
-    preferredSlot: "main",
+    editorSections: {
+      content: {
+        navigationLabelAr: "شرائح الهيرو",
+        sectionHeadingAr: "Hero صفحة المشروعات",
+        sectionDescriptionAr:
+          "تحكم في مصدر شرائح المشروعات والبيانات الظاهرة داخل كل شريحة.",
+        icon: "content",
+      },
+      buttons: {
+        navigationLabelAr: "زر التفاصيل",
+        sectionHeadingAr: "زر فتح تفاصيل المشروع",
+        sectionDescriptionAr:
+          "تحكم في نص وتنسيق الزر الذي ينقل من الشريحة إلى صفحة تفاصيل المشروع.",
+        icon: "section",
+      },
+      order: {
+        navigationLabelAr: "ترتيب البيانات",
+        sectionHeadingAr: "ترتيب بيانات شريحة المشروع",
+        sectionDescriptionAr:
+          "حدد ترتيب بيانات المشروع الظاهرة داخل شرائح Hero صفحة المشروعات.",
+        icon: "plans",
+      },
+      details: {
+        navigationLabelAr: "Hero التفاصيل",
+        sectionHeadingAr: "Hero تفاصيل المشروع",
+        sectionDescriptionAr:
+          "افتح المحرر المستقل أو انتقل مباشرة إلى أحد إجراءات Hero التفاصيل.",
+        icon: "section",
+      },
+      display: {
+        navigationLabelAr: "الصفحات",
+        sectionHeadingAr: "ظهور Hero صفحة المشروعات",
+        sectionDescriptionAr: "راجع الصفحة المرتبطة بهذا Hero.",
+        icon: "settings",
+        operationalRole: "visibility",
+      },
+    },
   },
   "projects-hub-featured": {
     slug: "projects-hub-featured",
     labelAr: "المشروعات المميزة",
     descriptionAr: "سكشن المشروعات المميزة على /projects.",
-    preferredSlot: "main",
   },
   "projects-hub-listing": {
     slug: "projects-hub-listing",
     labelAr: "قائمة المشروعات",
     descriptionAr: "فهرس المشروعات مع الفلاتر على /projects.",
-    preferredSlot: "main",
   },
   "projects-hub-map": {
     slug: "projects-hub-map",
     labelAr: "خريطة المشروعات",
     descriptionAr: "خريطة بيت الوطن وربط الدبابيس بكود المشروع.",
-    preferredSlot: "main",
   },
   "about-intro": {
     slug: "about-intro",
     labelAr: "من نحن — المقدمة",
     descriptionAr: "مقدمة بصرية لصفحة عن فينيسيا.",
-    preferredSlot: "main",
   },
   "about-intro-single-image": {
     slug: "about-intro-single-image",
     labelAr: "من نحن — محتوى وصورة واحدة",
     descriptionAr: "محتوى من نحن بصورة واحدة وموضع يمين/يسار.",
-    preferredSlot: "main",
   },
   "vision-goals": {
     slug: "vision-goals",
     labelAr: "الرؤية والأهداف",
     descriptionAr: "نصوص وصورة قسم الرؤية والأهداف في صفحة من نحن.",
-    preferredSlot: "main",
   },
   "about-cta": {
     slug: "about-cta",
     labelAr: "دعوة للتواصل",
     descriptionAr: "قسم دعوة للتواصل في صفحة من نحن مع صورة وزر ووسائل اتصال.",
-    preferredSlot: "main",
     editorSections: {
       text: {
         navigationLabelAr: "النص",
@@ -395,25 +413,21 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "about-principles",
     labelAr: "المبادئ",
     descriptionAr: "عناوين وبطاقات المبادئ في صفحة من نحن.",
-    preferredSlot: "main",
   },
   "about-approach": {
     slug: "about-approach",
     labelAr: "منهج العمل",
     descriptionAr: "عنوان ومنهج العمل في صفحة من نحن.",
-    preferredSlot: "main",
   },
   "topics-intro": {
     slug: "topics-intro",
     labelAr: "مقدمة الموضوعات",
     descriptionAr: "تمهيد لصفحة topics.",
-    preferredSlot: "main",
   },
   "topics-insight-cta": {
     slug: "topics-insight-cta",
     labelAr: "CTA موضوعات",
     descriptionAr: "دعوة لإجراء في صفحة الموضوعات.",
-    preferredSlot: "sidebar",
   },
 };
 
@@ -463,15 +477,15 @@ export function getModuleEditorSectionOrder(metadata: ModuleEditorSectionMetadat
   return 0;
 }
 
-export function getSlotCompatibilityLabel(kind: string, pageSlug?: string | null) {
-  const preferredSlots = getPreferredSlotsForModuleKind(kind, pageSlug);
-  if (!preferredSlots.length) return null;
-  const labels: Record<PageCompositionSlot, string> = {
+export function getSlotCompatibilityLabel(kind: string) {
+  const positions = getAssignablePositions(kind);
+  if (!positions.length) return null;
+  const labels: Record<PageCompositionPosition, string> = {
     hero: "الهيرو",
     main: "المحتوى الرئيسي",
     sidebar: "الشريط الجانبي",
     bottom: "أسفل الصفحة",
     footer: "قبل الفوتر",
   };
-  return preferredSlots.map((slot) => labels[slot]).join(" · ");
+  return positions.map((slot) => labels[slot]).join(" · ");
 }

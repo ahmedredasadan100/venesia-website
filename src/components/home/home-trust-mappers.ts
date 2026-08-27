@@ -1,4 +1,8 @@
-import { asAboutPrinciplesConfig } from "../../lib/page-blocks/configs";
+import {
+  asAboutPrinciplesConfig,
+  resolvePageBlockTextFormattingMap,
+  type PageBlockTextFormattingMap,
+} from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
 export type HomeTrustItem = {
@@ -18,6 +22,7 @@ export type HomeTrustContent = {
   eyebrow: string;
   title: string;
   description: string;
+  formatting: PageBlockTextFormattingMap;
   /** Plain-text eyebrow weight. Legacy default: false. */
   eyebrowBold: boolean;
   /** Eyebrow text alignment. Legacy default: right. */
@@ -41,6 +46,11 @@ export function mapHomeTrustBlock(block: ResolvedPageBlock): HomeTrustContent {
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     description: config.description ?? "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     // Legacy eyebrow was not bold (`text-sm text-[#D8B87A]` without font-bold).
     eyebrowBold: config.eyebrowBold === true,
     eyebrowAlignment: mapTextAlignment(config.eyebrowAlignment),

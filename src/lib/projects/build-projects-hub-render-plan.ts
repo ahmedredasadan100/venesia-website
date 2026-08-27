@@ -1,4 +1,4 @@
-import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
+import type { PageLayoutSlot } from "../page-blocks/layout-slots";
 import {
   asProjectsHubFeaturedConfig,
   asProjectsHubHeroConfig,
@@ -41,6 +41,7 @@ export type ProjectsHubRenderPlanModule =
       slug: "projects-hub-hero";
       sortOrder: number;
       assignmentId: number;
+      position: PageLayoutSlot;
       isVisible: true;
       config: ProjectsHubHeroModuleConfig;
     }
@@ -48,6 +49,7 @@ export type ProjectsHubRenderPlanModule =
       slug: "projects-hub-featured";
       sortOrder: number;
       assignmentId: number;
+      position: PageLayoutSlot;
       isVisible: true;
       config: ProjectsHubFeaturedModuleConfig;
     }
@@ -55,6 +57,7 @@ export type ProjectsHubRenderPlanModule =
       slug: "projects-hub-listing";
       sortOrder: number;
       assignmentId: number;
+      position: PageLayoutSlot;
       isVisible: true;
       config: ProjectsHubListingModuleConfig;
     }
@@ -62,6 +65,7 @@ export type ProjectsHubRenderPlanModule =
       slug: "projects-hub-map";
       sortOrder: number;
       assignmentId: number;
+      position: PageLayoutSlot;
       isVisible: true;
       config: ProjectsHubMapModuleConfig;
     };
@@ -110,8 +114,8 @@ function parseModuleConfig(
 
 /**
  * Readiness policy (all-or-nothing):
- * - Collect visible published supported modules with valid config on slot `main`.
- * - Skip unknown, draft, hidden, non-main slot, duplicate, and invalid-config modules.
+ * - Collect visible published supported modules with valid config in their assigned Region.
+ * - Skip unknown, draft, hidden, duplicate, and invalid-config modules.
  * - Plan is ready only when all four canonical hub modules are present.
  * - Composition load failures are handled by the caller before invoking this builder.
  */
@@ -132,15 +136,6 @@ export function buildProjectsHubRenderPlan(composition: ProjectsHubComposition):
         assignmentId: assignment.assignmentId,
         slug: assignment.templateSlug,
         reason: "unsupported_slug",
-      });
-      continue;
-    }
-
-    if (normalizeLayoutSlot(assignment.slot) !== "main") {
-      skipped.push({
-        assignmentId: assignment.assignmentId,
-        slug: supportedSlug,
-        reason: "unsupported_slot",
       });
       continue;
     }
@@ -187,6 +182,7 @@ export function buildProjectsHubRenderPlan(composition: ProjectsHubComposition):
       slug: supportedSlug,
       sortOrder: assignment.sortOrder,
       assignmentId: assignment.assignmentId,
+      position: assignment.slot,
       isVisible: true,
       config: parsed.value,
     } as ProjectsHubRenderPlanModule);

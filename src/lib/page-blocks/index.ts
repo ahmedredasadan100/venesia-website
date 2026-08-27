@@ -39,11 +39,11 @@ export {
 } from "./load-page-blocks";
 export { loadPageCompositionBySlug } from "./load-page-composition";
 export { getSlotEntries } from "./page-composition-utils";
-export type { PageComposition, PageLayoutMode, SlotEntry } from "./page-composition-types";
+export type { PageComposition, SlotEntry } from "./page-composition-types";
 export {
   LAYOUT_SLOT_LABELS,
   LAYOUT_SLOT_LABELS_AR,
-  PAGE_LAYOUT_SLOT_ORDER,
+  PAGE_COMPOSITION_POSITIONS,
   PAGE_LAYOUT_SLOTS,
   normalizeLayoutSlot,
 } from "./layout-slots";

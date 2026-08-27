@@ -325,10 +325,9 @@ function HomeDynamicHero({
       <h1
         className={`${
           usesProjectIdentityTypography
-            ? "max-w-none font-en text-xl font-bold leading-tight tracking-[-0.02em] sm:text-2xl md:text-3xl"
-            : "max-w-none text-4xl font-bold leading-[1.06] tracking-[-0.045em] sm:text-5xl md:text-6xl lg:text-7xl"
-        } text-white ${heroTextAlignClass(activeConfig.titleAlignment)}`}
-        style={usesProjectIdentityTypography ? { fontWeight: 700 } : undefined}
+            ? "max-w-none font-en text-xl leading-tight tracking-[-0.02em] sm:text-2xl md:text-3xl"
+            : "max-w-none text-4xl leading-[1.06] tracking-[-0.045em] sm:text-5xl md:text-6xl lg:text-7xl"
+        } text-white ${heroTextAlignClass(activeConfig.titleAlignment)} ${activeConfig.titleBold ? "font-bold" : "font-normal"}`}
       >
         {title}
       </h1>
@@ -336,7 +335,7 @@ function HomeDynamicHero({
     highlight: highlight && activeConfig.showHighlight ? (
       usesHomeCinematicTypography ? (
         <span
-          className={`block w-fit max-w-full bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-4xl font-semibold leading-[1.18] tracking-[-0.02em] text-transparent sm:text-5xl md:text-6xl lg:text-7xl ${heroPillAlignmentClass(activeConfig.highlightAlignment)} ${heroTextAlignClass(activeConfig.highlightAlignment)}`}
+          className={`block w-fit max-w-full bg-gradient-to-l from-[#D8B87A] to-white bg-clip-text text-4xl leading-[1.18] tracking-[-0.02em] text-transparent sm:text-5xl md:text-6xl lg:text-7xl ${heroPillAlignmentClass(activeConfig.highlightAlignment)} ${heroTextAlignClass(activeConfig.highlightAlignment)} ${activeConfig.highlightBold ? "font-semibold" : "font-normal"}`}
         >
           {highlight}
         </span>
@@ -351,14 +350,13 @@ function HomeDynamicHero({
     subtitle: subtitle && activeConfig.showSubtitle ? (
       usesHomeCinematicTypography ? (
         <div
-          className={`inline-flex w-fit max-w-full whitespace-normal rounded-full border border-[#D8B87A]/22 bg-[rgba(216,184,122,0.10)] px-3 py-3 text-xs tracking-normal text-[#E8D5A8] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-md min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide md:text-base ${heroPillAlignmentClass(activeConfig.subtitleAlignment)} ${heroTextAlignClass(activeConfig.subtitleAlignment)}`}
+          className={`inline-flex w-fit max-w-full whitespace-normal rounded-full border border-[#D8B87A]/22 bg-[rgba(216,184,122,0.10)] px-3 py-3 text-xs tracking-normal text-[#E8D5A8] shadow-[0_8px_28px_rgba(0,0,0,0.28)] backdrop-blur-md min-[361px]:px-4 min-[361px]:text-sm min-[361px]:tracking-wide md:text-base ${heroPillAlignmentClass(activeConfig.subtitleAlignment)} ${heroTextAlignClass(activeConfig.subtitleAlignment)} ${activeConfig.subtitleBold ? "font-bold" : "font-normal"}`}
         >
           {subtitle}
         </div>
       ) : (
         <p
-          className={`text-3xl font-bold leading-tight text-[#E8D5A8] sm:text-4xl md:text-5xl ${heroTextAlignClass(activeConfig.subtitleAlignment)}`}
-          style={usesProjectIdentityTypography ? { fontWeight: 700 } : undefined}
+          className={`text-3xl leading-tight text-[#E8D5A8] sm:text-4xl md:text-5xl ${heroTextAlignClass(activeConfig.subtitleAlignment)} ${activeConfig.subtitleBold ? "font-bold" : "font-normal"}`}
         >
           {subtitle}
         </p>
@@ -506,7 +504,7 @@ function HeroCtaButtons({
         {hasPrimary ? (
           <HeroPressableLink
             href={config.primaryCtaHref!}
-            className="home-pressable--hero-primary inline-flex h-11 items-center rounded-full bg-white px-6 font-medium text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7"
+            className={`home-pressable--hero-primary inline-flex h-11 items-center rounded-full bg-white px-6 text-[#05070B] shadow-[0_8px_30px_rgba(255,255,255,0.08)] transition hover:-translate-y-0.5 hover:bg-white/90 md:h-12 md:px-7 ${config.ctaBold ? "font-bold" : "font-medium"}`}
           >
             {config.primaryCtaLabel}
           </HeroPressableLink>
@@ -515,7 +513,7 @@ function HeroCtaButtons({
         {hasSecondary ? (
           <HeroPressableLink
             href={config.secondaryCtaHref!}
-            className="home-pressable--hero-secondary inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 font-medium text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7"
+            className={`home-pressable--hero-secondary inline-flex h-11 items-center rounded-full border border-white/15 bg-white/5 px-6 text-white backdrop-blur-md transition hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/10 md:h-12 md:px-7 ${config.ctaBold ? "font-bold" : "font-medium"}`}
           >
             {config.secondaryCtaLabel}
           </HeroPressableLink>
@@ -588,7 +586,13 @@ function InternalDynamicHero({
       if (!title) return null;
       const titleClass = `tracking-[-0.02em] text-white ${titleSizeClass} ${
         config.titleBold ? "font-bold" : "font-normal"
-      } ${heroTextAlignClass(config.titleAlignment)}`;
+      } ${heroTextAlignClass(config.titleAlignment)} ${
+        config.titleAlignment === "center"
+          ? "mx-auto"
+          : config.titleAlignment === "left"
+            ? "mr-auto"
+            : ""
+      }`;
 
       if (showTitle) {
         return <h1 className={titleClass}>{title}</h1>;

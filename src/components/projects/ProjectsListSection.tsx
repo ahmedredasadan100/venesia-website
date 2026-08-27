@@ -45,6 +45,10 @@ type ProjectsListSectionProps = {
   showPagination?: boolean;
   showProjectCount?: boolean;
   visibleFilters?: ProjectHubFilterId[];
+  eyebrowBold?: boolean;
+  eyebrowAlignment?: import("../../lib/page-blocks/configs").PageBlockTextAlignment;
+  titleBold?: boolean;
+  titleAlignment?: import("../../lib/page-blocks/configs").PageBlockTextAlignment;
 } & ProjectsListCardDisplay;
 
 const DEFAULT_PAGE_SIZE = 6;
@@ -118,6 +122,10 @@ export default function ProjectsListSection({
   showPagination = true,
   showProjectCount = true,
   visibleFilters,
+  eyebrowBold = false,
+  eyebrowAlignment = "right",
+  titleBold = true,
+  titleAlignment = "right",
   showProjectImage = true,
   showProjectCode = true,
   showProjectName = true,
@@ -174,13 +182,13 @@ export default function ProjectsListSection({
           <div className="mb-8 flex flex-col gap-4 sm:mb-10 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
             <div className="min-w-0">
               {showEyebrow ? (
-                <p className="mb-2 font-en text-[11px] uppercase tracking-[0.24em] text-[#D8B87A]/55">
+                <p className={`mb-2 font-en text-[11px] uppercase tracking-[0.24em] text-[#D8B87A]/55 ${eyebrowAlignment === "center" ? "text-center" : eyebrowAlignment === "left" ? "text-left" : "text-right"} ${eyebrowBold ? "font-bold" : "font-normal"}`}>
                   {eyebrow}
                 </p>
               ) : null}
 
               {showTitle || showProjectCount ? (
-                <h2 className="text-xl font-semibold text-[#D8B87A] sm:text-2xl">
+                <h2 className={`text-xl text-[#D8B87A] sm:text-2xl ${titleAlignment === "center" ? "text-center" : titleAlignment === "left" ? "text-left" : "text-right"} ${titleBold ? "font-bold" : "font-normal"}`}>
                   {showTitle ? title : null}
                   {showProjectCount ? (
                     <span className={`text-sm font-normal text-white/45 ${showTitle ? "mr-2" : ""}`}>

@@ -58,6 +58,8 @@ export type {
 } from "./AdminListboxSelect";
 export { default as AdminFormListboxSelect } from "./AdminFormListboxSelect";
 export type { AdminFormListboxSelectProps } from "./AdminFormListboxSelect";
+export { default as AdminTextFormatControls } from "./AdminTextFormatControls";
+export type { AdminTextAlignment } from "./AdminTextFormatControls";
 export { default as AdminSingleOpenAccordion } from "./AdminSingleOpenAccordion";
 export type {
   AdminSingleOpenAccordionItem,
@@ -71,6 +73,7 @@ export type {
 } from "./AdminModuleTabs";
 export {
   default as AdminFormSwitch,
+  ADMIN_FORM_SWITCH_COMPACT_SURFACE_CLASS_NAME,
   ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME,
 } from "./AdminFormSwitch";
 export type { AdminFormSwitchProps } from "./AdminFormSwitch";

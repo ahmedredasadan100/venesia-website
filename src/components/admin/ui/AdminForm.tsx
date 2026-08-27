@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-7";
+export const ADMIN_FORM_STACK_CLASS_NAME = "space-y-5";
 
 type AdminFormLayoutProps = {
   children: ReactNode;
@@ -18,11 +18,11 @@ export function AdminFormLayout({
   mobileAsideFirst = false,
 }: AdminFormLayoutProps) {
   return (
-    <section className={`grid gap-7 xl:grid-cols-[minmax(0,1fr)_380px] ${className}`.trim()}>
-      <div className="space-y-7">{children}</div>
+    <section className={`grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px] ${className}`.trim()}>
+      <div className="space-y-5">{children}</div>
       {aside ? (
         <aside
-          className={`space-y-7 ${mobileAsideFirst ? "order-first xl:order-none" : ""} ${asideClassName}`.trim()}
+          className={`space-y-5 ${mobileAsideFirst ? "order-first xl:order-none" : ""} ${asideClassName}`.trim()}
         >
           {aside}
         </aside>
@@ -35,7 +35,7 @@ const ADMIN_FORM_SECTION_SURFACE_CLASSES =
   "rounded-[28px] border border-white/10 bg-[#080B10]/92 shadow-[0_24px_80px_rgba(0,0,0,0.28)]";
 
 export const ADMIN_FORM_SECTION_CLASSES =
-  `${ADMIN_FORM_SECTION_SURFACE_CLASSES} p-6`;
+  `${ADMIN_FORM_SECTION_SURFACE_CLASSES} p-5`;
 
 const ADMIN_FORM_SECTION_COMPACT_CLASSES =
   `${ADMIN_FORM_SECTION_SURFACE_CLASSES} px-6 py-4`;
@@ -81,7 +81,7 @@ export function AdminFormSection({
   return (
     <section id={id} className={`${sectionClassName} ${className}`.trim()}>
       {hasHeader ? (
-        <div className={`flex flex-wrap items-start justify-between gap-3 ${compactHeader ? "mb-4" : "mb-6"}`}>
+        <div className={`flex flex-wrap items-start justify-between gap-3 ${compactHeader ? "mb-4" : "mb-5"}`}>
           <div>
             {eyebrow ? (
               <p className={`font-en text-xs tracking-[0.28em] ${eyebrowClassName}`}>{eyebrow}</p>
@@ -118,7 +118,7 @@ export function AdminFormField({ label, hint, error, required, children, classNa
         {required ? " *" : null}
       </span>
       {hint ? <span className="mt-1 block text-xs text-white/45">{hint}</span> : null}
-      <div className="mt-3">{children}</div>
+      <div className="mt-2.5">{children}</div>
       {error ? (
         <span role="alert" className="mt-2 block text-xs font-semibold text-red-300">
           {error}

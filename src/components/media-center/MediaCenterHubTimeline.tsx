@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
+import MediaCenterCollectionItems from "./MediaCenterCollectionItems";
 import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
 type MediaCenterHubTimelineProps = {
@@ -13,6 +14,21 @@ export default function MediaCenterHubTimeline({
   items,
   presentation,
 }: MediaCenterHubTimelineProps) {
+  if (presentation.collectionView.layout !== "timeline") {
+    return (
+      <section>
+        <MediaCenterHubSectionHeader
+          presentation={presentation}
+          href="/media-center/site-updates"
+        />
+        <MediaCenterCollectionItems
+          items={items}
+          view={presentation.collectionView}
+        />
+      </section>
+    );
+  }
+
   return (
     <section>
       <MediaCenterHubSectionHeader

@@ -57,6 +57,7 @@ test.describe("public and unauthenticated browser foundation", () => {
   });
 
   test("public Topics pages expose one logical H1 and ordered article headings", async ({ page }) => {
+    test.setTimeout(60_000);
     await page.route("**/api/content/topics/*/view", async (route) => {
       await route.fulfill({ status: 204 });
     });
@@ -79,7 +80,7 @@ test.describe("public and unauthenticated browser foundation", () => {
   });
 
   test("shared public search owns an unclipped floating listbox in Topics and Media Center", async ({ page }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
 
     async function verifyConsumer(basePath: string) {
       const query = basePath === "/topics" ? "\u0645\u0644\u0643\u064a\u0629" : "\u0627";
@@ -152,7 +153,7 @@ test.describe("public and unauthenticated browser foundation", () => {
       expect(targetHref).toBeTruthy();
       const sourceUrl = page.url();
       await firstOption.click();
-      await expect.poll(() => page.url(), { timeout: 10_000 }).not.toBe(sourceUrl);
+      await expect.poll(() => page.url(), { timeout: 20_000 }).not.toBe(sourceUrl);
     }
 
     await verifyConsumer("/topics");

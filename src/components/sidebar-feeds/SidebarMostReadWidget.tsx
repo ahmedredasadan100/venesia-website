@@ -11,6 +11,7 @@ type SidebarMostReadWidgetProps = {
   showImage?: boolean;
   showDate?: boolean;
   showExcerpt?: boolean;
+  formatting?: import("../../lib/page-blocks/configs").PageBlockTextFormattingConfig;
 };
 
 export default function SidebarMostReadWidget({
@@ -20,11 +21,12 @@ export default function SidebarMostReadWidget({
   showImage = true,
   showDate = true,
   showExcerpt = false,
+  formatting,
 }: SidebarMostReadWidgetProps) {
   if (!items.length) return null;
 
   return (
-    <SidebarFeedPanel eyebrow={eyebrow ?? undefined} title={title}>
+    <SidebarFeedPanel eyebrow={eyebrow ?? undefined} title={title} formatting={formatting}>
       <div className="space-y-4">
         {items.map((item, index) => (
           <Link

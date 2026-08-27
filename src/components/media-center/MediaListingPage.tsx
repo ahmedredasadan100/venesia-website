@@ -2,7 +2,6 @@ import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
 import { MediaSidebarSearch } from "./MediaSidebar";
-import { renderMediaHubSections } from "./renderMediaHubSections";
 import {
   getMediaHref,
   getMediaListingPage,
@@ -42,12 +41,6 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     composition.mediaHubModules,
     config.mediaType,
   );
-  const featuredModules = composition.mediaHubModules?.modules.filter(
-    (module) =>
-      module.sectionKey === "featured" &&
-      module.config.placement === "featured",
-  ) ?? [];
-  const featuredNodes = renderMediaHubSections(featuredModules);
   const listing = await getMediaListingPage({
     type: config.mediaType,
     page: presentation.paginationEnabled ? requestedPage : 1,
@@ -80,11 +73,6 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     >
       <MediaPageShell>
         <div className="space-y-10">
-          {featuredNodes.length > 0 ? (
-            <section className="space-y-10 text-right text-white" dir="rtl">
-              {featuredNodes}
-            </section>
-          ) : null}
           <MediaListingContent
             items={listing.items}
             searchQuery={searchQuery}

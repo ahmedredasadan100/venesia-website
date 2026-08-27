@@ -3,7 +3,9 @@ import type { ProjectLocationSectionPresentation } from "../../../lib/projects/p
 import RichTextContent from "../../content/RichTextContent";
 import PublicMediaImage from "../../public/PublicMediaImage";
 import ProjectDeliverySpecsSection from "./ProjectDeliverySpecsSection";
-import ProjectDetailsHero from "./ProjectDetailsHero";
+import ProjectDetailsHero, {
+  projectDetailsMainClassName,
+} from "./ProjectDetailsHero";
 import ProjectDistrictSection from "./ProjectDistrictSection";
 import ProjectPlansAndAreasSection from "./ProjectPlansAndAreasSection";
 import { ProjectMainGallery } from "./ProjectImageGalleries";
@@ -31,7 +33,7 @@ export default function ResidentialProjectDetails({
   ].filter((tab) => tab.visible);
 
   return (
-    <main className="min-h-screen bg-[#05070B] text-white" dir="rtl">
+    <main className={projectDetailsMainClassName(showProjectHero)} dir="rtl">
       {showProjectHero ? (
         <ProjectDetailsHero project={project} presentation={heroPresentation} />
       ) : null}

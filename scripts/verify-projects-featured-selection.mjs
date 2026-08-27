@@ -189,8 +189,8 @@ assert.ok(
 );
 assert.match(
   contentModuleEditorSource,
-  /<ModuleEditorStatusSwitch\b[^>]*\bstatus=\{block\.status\}/,
-  "Content module status must use the shared Page Block status switch",
+  /<ModuleEditorIdentitySection\b[\s\S]*?status=\{block\.status\}/,
+  "Content module status must use the shared Page Block identity composition",
 );
 assert.doesNotMatch(
   contentModuleEditorSource,

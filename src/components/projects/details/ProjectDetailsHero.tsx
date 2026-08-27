@@ -10,6 +10,7 @@ import {
   resolveHeroContentControlsForVariant,
   resolveHeroImageCompositionPreset,
   type HeroElementKey,
+  type ProjectHeroActionKey,
   type HeroTextAlignment,
 } from "../../../lib/hero/hero-content-controls";
 import type { HeroConfig } from "../../../lib/page-sections";
@@ -20,19 +21,31 @@ type ProjectDetailsHeroProps = {
   presentation?: HeroConfig;
 };
 
+/** Keep Project Detail composition below the fixed public header when Hero is hidden. */
+export function projectDetailsMainClassName(showProjectHero: boolean) {
+  return `min-h-screen bg-[#05070B] text-white ${showProjectHero ? "" : "pt-[106px]"}`.trim();
+}
+
 function projectHeroPrimaryTextAlignClass(alignment: HeroTextAlignment) {
   return alignment === "right"
     ? "text-center lg:text-right"
     : heroTextAlignClass(alignment);
 }
 
-export default function ProjectDetailsHero({ project, presentation }: ProjectDetailsHeroProps) {
+export default function ProjectDetailsHero({
+  project,
+  presentation,
+}: ProjectDetailsHeroProps) {
   const resolvedPresentation: HeroConfig = presentation ?? {
     imageComposition: resolveHeroImageCompositionPreset(undefined),
     ...resolveHeroContentControlsForVariant({}, "project-detail"),
   };
   const orderedKeys = resolvedPresentation.heroElementOrder;
   const ctaIsTrailing = orderedKeys.at(-1) === "cta";
+  const showProjectActions =
+    resolvedPresentation.showProjectDownloadAction ||
+    resolvedPresentation.showProjectTrackingAction ||
+    resolvedPresentation.showProjectReservationAction;
   const locationLabel = resolvedPresentation.showEyebrow
     ? project.location.label
     : null;
@@ -66,13 +79,19 @@ export default function ProjectDetailsHero({ project, presentation }: ProjectDet
         className={`max-w-2xl text-[15px] leading-7 text-white/62 ${resolvedPresentation.descriptionAlignment === "right" ? "mx-auto text-center lg:mx-0 lg:text-right" : heroTextAlignClass(resolvedPresentation.descriptionAlignment)}`}
       />
     ) : null,
-    cta: !ctaIsTrailing && resolvedPresentation.showCta ? (
-      <ProjectHeroActions
-        project={project}
-        alignment={resolvedPresentation.ctaAlignment}
-        layout="inline"
-      />
-    ) : null,
+    cta:
+      !ctaIsTrailing && showProjectActions ? (
+        <ProjectHeroActions
+          project={project}
+          alignment={resolvedPresentation.ctaAlignment}
+          bold={resolvedPresentation.ctaBold}
+          layout="inline"
+          showDownload={resolvedPresentation.showProjectDownloadAction}
+          showTracking={resolvedPresentation.showProjectTrackingAction}
+          showReservation={resolvedPresentation.showProjectReservationAction}
+          order={resolvedPresentation.projectActionOrder}
+        />
+      ) : null,
   };
 
   return (
@@ -132,13 +151,17 @@ export default function ProjectDetailsHero({ project, presentation }: ProjectDet
 
                 <div className="absolute inset-x-5 bottom-5">
                   {resolvedPresentation.showTitle ? (
-                    <p className={`font-en text-4xl text-[#D8B87A] ${heroTextAlignClass(resolvedPresentation.titleAlignment)} ${resolvedPresentation.titleBold ? "font-bold" : "font-normal"}`}>
+                    <p
+                      className={`font-en text-4xl text-[#D8B87A] ${heroTextAlignClass(resolvedPresentation.titleAlignment)} ${resolvedPresentation.titleBold ? "font-bold" : "font-normal"}`}
+                    >
                       {project.englishName}
                     </p>
                   ) : null}
 
                   {resolvedPresentation.showSubtitle ? (
-                    <p className={`mt-1 text-sm text-white/75 ${heroTextAlignClass(resolvedPresentation.subtitleAlignment)} ${resolvedPresentation.subtitleBold ? "font-bold" : "font-normal"}`}>
+                    <p
+                      className={`mt-1 text-sm text-white/75 ${heroTextAlignClass(resolvedPresentation.subtitleAlignment)} ${resolvedPresentation.subtitleBold ? "font-bold" : "font-normal"}`}
+                    >
                       {project.arabicName}
                     </p>
                   ) : null}
@@ -147,21 +170,28 @@ export default function ProjectDetailsHero({ project, presentation }: ProjectDet
 
               {resolvedPresentation.showDescription ? (
                 <div className="mt-5 border-t border-[#D8B87A]/15 pt-5">
-                <PlainTextContent
-                  value={project.shortDescription}
-                  as="p"
-                  className={`text-sm leading-7 text-white/58 ${heroTextAlignClass(resolvedPresentation.descriptionAlignment)}`}
-                />
+                  <PlainTextContent
+                    value={project.shortDescription}
+                    as="p"
+                    className={`text-sm leading-7 text-white/58 ${heroTextAlignClass(resolvedPresentation.descriptionAlignment)}`}
+                  />
                 </div>
               ) : null}
             </div>
           </div>
 
-          {ctaIsTrailing && resolvedPresentation.showCta ? (
+          {ctaIsTrailing && showProjectActions ? (
             <ProjectHeroActions
               project={project}
               alignment={resolvedPresentation.ctaAlignment}
+              bold={resolvedPresentation.ctaBold}
               layout="wide"
+              showDownload={resolvedPresentation.showProjectDownloadAction}
+              showTracking={resolvedPresentation.showProjectTrackingAction}
+              showReservation={
+                resolvedPresentation.showProjectReservationAction
+              }
+              order={resolvedPresentation.projectActionOrder}
             />
           ) : null}
         </div>
@@ -173,48 +203,92 @@ export default function ProjectDetailsHero({ project, presentation }: ProjectDet
 function ProjectHeroActions({
   project,
   alignment,
+  bold,
   layout,
+  showDownload,
+  showTracking,
+  showReservation,
+  order,
 }: {
   project: PublicProject;
   alignment: HeroTextAlignment;
+  bold: boolean;
   layout: "inline" | "wide";
+  showDownload: boolean;
+  showTracking: boolean;
+  showReservation: boolean;
+  order: ProjectHeroActionKey[];
 }) {
+  const weightClassName = bold ? "font-bold" : "font-medium";
+  const visibleActionCount = [
+    showDownload,
+    showTracking,
+    showReservation,
+  ].filter(Boolean).length;
+  const gridColumnsClassName =
+    visibleActionCount === 1
+      ? "grid-cols-1"
+      : visibleActionCount === 2
+        ? "grid-cols-2"
+        : "grid-cols-3";
+  const actions: Partial<Record<ProjectHeroActionKey, ReactNode>> = {
+    download: showDownload ? (
+      <button
+        type="button"
+        disabled
+        className={`${primaryActionClassName} ${weightClassName} cursor-not-allowed bg-[#D8B87A]/55 text-[#111]/70`}
+        data-project-hero-action="download"
+      >
+        <DownloadIcon className={actionIconClassName} />
+        <span className={actionLabelClassName}>حمّل ملف المشروع</span>
+      </button>
+    ) : null,
+    tracking: showTracking ? (
+      <Link
+        href={getProjectTrackHref(project)}
+        className={`${secondaryActionClassName} ${weightClassName}`}
+        data-project-hero-action="tracking"
+      >
+        <TrackIcon className={actionIconClassName} />
+        <span className={actionLabelClassName}>تابع مراحل الإنشاء</span>
+      </Link>
+    ) : null,
+    reservation: showReservation ? (
+      <Link
+        href="/contact"
+        className={`${secondaryActionClassName} ${weightClassName}`}
+        data-project-hero-action="reservation"
+      >
+        <ReserveIcon className={actionIconClassName} />
+        <span className={actionLabelClassName}>احجز وحدتك الآن</span>
+      </Link>
+    ) : null,
+  };
   return (
     <div
       className={`flex w-full ${layout === "wide" ? "lg:col-span-2" : ""} ${heroFlexJustifyClass(alignment)}`}
       data-hero-cta-alignment={alignment}
     >
-      <div className={`grid w-full max-w-full grid-cols-3 items-stretch gap-1 sm:gap-2 md:gap-3 lg:gap-4 ${alignment === "right" ? "" : "lg:max-w-5xl"}`}>
-      <button
-        type="button"
-        disabled
-        className={`${primaryActionClassName} cursor-not-allowed bg-[#D8B87A]/55 text-[#111]/70`}
+      <div
+        className={`grid w-full max-w-full ${gridColumnsClassName} items-stretch gap-1 sm:gap-2 md:gap-3 lg:gap-4 ${alignment === "right" ? "" : "lg:max-w-5xl"}`}
       >
-        <DownloadIcon className={actionIconClassName} />
-        <span className={actionLabelClassName}>حمّل ملف المشروع</span>
-      </button>
-
-      <Link href={getProjectTrackHref(project)} className={secondaryActionClassName}>
-        <TrackIcon className={actionIconClassName} />
-        <span className={actionLabelClassName}>تابع مراحل الإنشاء</span>
-      </Link>
-
-      <Link href="/contact" className={secondaryActionClassName}>
-        <ReserveIcon className={actionIconClassName} />
-        <span className={actionLabelClassName}>احجز وحدتك الآن</span>
-      </Link>
+        {order.map((key) => {
+          const action = actions[key];
+          return action ? <Fragment key={key}>{action}</Fragment> : null;
+        })}
       </div>
     </div>
   );
 }
 
-const actionIconClassName = "hidden h-4 w-4 shrink-0 sm:block sm:h-[18px] sm:w-[18px]";
+const actionIconClassName =
+  "hidden h-4 w-4 shrink-0 sm:block sm:h-[18px] sm:w-[18px]";
 
 const actionLabelClassName =
   "min-w-0 whitespace-normal text-center leading-snug md:whitespace-nowrap";
 
 const primaryActionClassName =
-  "inline-flex h-full min-h-11 w-full min-w-0 items-center justify-center gap-1 rounded-xl bg-[#D8B87A] px-1.5 py-2.5 text-[10px] font-medium text-[#111] transition hover:bg-[#e5c989] sm:gap-2 sm:px-3 sm:py-3 sm:text-[11px] md:gap-2.5 md:whitespace-nowrap md:px-4 md:py-3.5 md:text-sm lg:gap-3 lg:px-5";
+  "inline-flex h-full min-h-11 w-full min-w-0 items-center justify-center gap-1 rounded-xl bg-[#D8B87A] px-1.5 py-2.5 text-[10px] text-[#111] transition hover:bg-[#e5c989] sm:gap-2 sm:px-3 sm:py-3 sm:text-[11px] md:gap-2.5 md:whitespace-nowrap md:px-4 md:py-3.5 md:text-sm lg:gap-3 lg:px-5";
 
 const secondaryActionClassName =
   "inline-flex h-full min-h-11 w-full min-w-0 items-center justify-center gap-1 rounded-xl border border-[#D8B87A]/35 px-1.5 py-2.5 text-[10px] text-[#D8B87A] transition hover:border-[#D8B87A]/70 hover:bg-[#D8B87A]/10 sm:gap-2 sm:px-3 sm:py-3 sm:text-[11px] md:gap-2.5 md:whitespace-nowrap md:px-4 md:py-3.5 md:text-sm lg:gap-3 lg:px-5";

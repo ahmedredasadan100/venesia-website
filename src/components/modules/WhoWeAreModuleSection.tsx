@@ -4,6 +4,10 @@ import Image from "next/image";
 
 import type { AboutDocumentaryBeat, AboutIntroContent } from "../about/about-cms-mappers";
 import RichTextContent from "../content/RichTextContent";
+import {
+  pageBlockTextAlignClass,
+  pageBlockTextPlacementClass,
+} from "../../lib/page-blocks/configs";
 
 export type WhoWeAreModuleSectionProps = {
   cmsIntro: AboutIntroContent | null;
@@ -13,10 +17,10 @@ export type WhoWeAreModuleSectionProps = {
 function hasIntroCopy(intro: AboutIntroContent | null | undefined) {
   if (!intro) return false;
   return Boolean(
-    intro.eyebrow?.trim() ||
-      intro.title?.trim() ||
-      intro.subtitle?.trim() ||
-      intro.description?.trim(),
+    (intro.formatting.eyebrow?.visible && intro.eyebrow?.trim()) ||
+      (intro.formatting.title?.visible && intro.title?.trim()) ||
+      (intro.formatting.subtitle?.visible && intro.subtitle?.trim()) ||
+      (intro.formatting.description?.visible && intro.description?.trim()),
   );
 }
 
@@ -58,6 +62,10 @@ function ImageFrame({
 
 export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreModuleSectionProps) {
   const intro = cmsIntro;
+  const eyebrowFormat = intro?.formatting.eyebrow;
+  const titleFormat = intro?.formatting.title;
+  const subtitleFormat = intro?.formatting.subtitle;
+  const descriptionFormat = intro?.formatting.description;
   const beats = (cmsBeats ?? []).filter(hasFilledBeat);
 
   const showIntroCopy = hasIntroCopy(intro);
@@ -164,35 +172,35 @@ export default function WhoWeAreModuleSection({ cmsIntro, cmsBeats }: WhoWeAreMo
           <div className="slot-editorial-copy min-w-0 pt-1 @5xl/slot-module:flex @5xl/slot-module:flex-col @5xl/slot-module:justify-center @5xl/slot-module:py-4">
             {showIntroCopy ? (
               <>
-                <p
+                {eyebrowFormat?.visible && intro!.eyebrow?.trim() ? <p
                   data-reveal="fade-up"
                   data-delay="410"
-                  className="mb-6 flex items-center gap-3 font-en text-[10px] font-medium uppercase tracking-[0.22em] text-[#D8B87A]/58"
+                  className={`mb-6 flex items-center gap-3 font-en text-[10px] uppercase tracking-[0.22em] text-[#D8B87A]/58 ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}
                 >
                   <span className="h-px w-9 shrink-0 bg-gradient-to-r from-[#D8B87A]/60 to-transparent" />
                   {intro!.eyebrow}
-                </p>
+                </p> : null}
 
-                <div data-reveal="fade-up" data-delay="430">
-                  <h2 className="max-w-[44rem] text-[2rem] font-bold leading-[1.18] tracking-[-0.025em] text-white @xl/slot-module:text-[2.2rem]">
+                {titleFormat?.visible && intro!.title?.trim() ? <div data-reveal="fade-up" data-delay="430">
+                  <h2 className={`max-w-[44rem] text-[2rem] leading-[1.18] tracking-[-0.025em] text-white @xl/slot-module:text-[2.2rem] ${pageBlockTextAlignClass(titleFormat.alignment)} ${pageBlockTextPlacementClass(titleFormat.alignment)} ${titleFormat.bold ? "font-bold" : "font-normal"}`}>
                     {intro!.title}
                   </h2>
-                </div>
+                </div> : null}
 
-                {intro!.subtitle?.trim() ? (
+                {subtitleFormat?.visible && intro!.subtitle?.trim() ? (
                   <div data-reveal="fade-up" data-delay="440">
-                    <p className="mt-2 text-[1.02rem] font-medium leading-[1.5] text-[#D8B87A]/88">
+                    <p className={`mt-2 text-[1.02rem] leading-[1.5] text-[#D8B87A]/88 ${pageBlockTextAlignClass(subtitleFormat.alignment)} ${subtitleFormat.bold ? "font-bold" : "font-normal"}`}>
                       {intro!.subtitle}
                     </p>
                   </div>
                 ) : null}
 
-                {intro!.description?.trim() ? (
+                {descriptionFormat?.visible && intro!.description?.trim() ? (
                   <div data-reveal="fade-up" data-delay="450">
                     <RichTextContent
                       value={intro!.description}
                       mode="rich"
-                      className="mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 @xl/slot-module:text-[16px] [&_p+_p]:mt-1 [&_strong]:text-inherit [&_b]:text-inherit"
+                      className={`mt-5 max-w-[56rem] text-[15.5px] leading-8 text-white/72 @xl/slot-module:text-[16px] ${pageBlockTextAlignClass(descriptionFormat.alignment)} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"} [&_p+_p]:mt-1 [&_strong]:text-inherit [&_b]:text-inherit`}
                     />
                   </div>
                 ) : null}

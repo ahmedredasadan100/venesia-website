@@ -27,6 +27,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
         items={payload.items}
         eyebrow={presentation.eyebrow ?? "Categories"}
         title={presentation.title}
+        formatting={presentation}
       />
     );
   }
@@ -37,6 +38,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
         items={payload.items}
         eyebrow={presentation.eyebrow ?? "Series"}
         title={presentation.title}
+        formatting={presentation}
         linkText={presentation.linkText ?? "عرض كل الموضوعات"}
         showImage={presentation.showImage}
         showExcerpt={presentation.showExcerpt}
@@ -53,6 +55,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
         showImage={presentation.showImage}
         showDate={presentation.showDate}
         showExcerpt={presentation.showExcerpt}
+        formatting={presentation}
       />
     );
   }
@@ -65,6 +68,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
       showImage={presentation.showImage}
       showDate={presentation.showDate}
       showExcerpt={presentation.showExcerpt}
+      formatting={presentation}
     />
   );
 }

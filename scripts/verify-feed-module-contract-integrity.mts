@@ -60,6 +60,9 @@ const jiti = createJiti(import.meta.url);
 const moduleEditRegistry = await jiti.import<Record<string, unknown>>(
   "../src/lib/page-blocks/module-edit-registry.ts",
 );
+const pageBlockConfigs = await jiti.import<Record<string, unknown>>(
+  "../src/lib/page-blocks/configs.ts",
+);
 const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "../admin/content/content-status-metadata": {
     getContentStatusMetadata: () => ({}),
@@ -71,6 +74,7 @@ const feedConfigContract = loadTranspiledModule(
   "src/lib/feed-modules/parse-feed-config.ts",
   {
     "../page-blocks/admin-utils": adminUtils,
+    "../page-blocks/configs": pageBlockConfigs,
     "./types": feedTypes,
   },
 );

@@ -1,5 +1,6 @@
 import type { AboutPrinciplesModuleContent } from "./about-principles-mappers";
 import { PrincipleIcon } from "./about-principles-icons";
+import { pageBlockTextAlignClass, pageBlockTextPlacementClass } from "../../lib/page-blocks/configs";
 
 export type AboutPrinciplesModuleSectionProps = {
   cmsContent: AboutPrinciplesModuleContent | null;
@@ -27,9 +28,12 @@ export default function AboutPrinciplesModuleSection({ cmsContent }: AboutPrinci
   if (!cmsContent) return null;
 
   const section = cmsContent;
+  const eyebrowFormat = section.formatting.eyebrow!;
+  const titleFormat = section.formatting.title!;
+  const descriptionFormat = section.formatting.description!;
   const principles = section.items;
 
-  if (!section.eyebrow.trim() && !section.title.trim() && !principles.length) {
+  if (!(eyebrowFormat.visible && section.eyebrow.trim()) && !(titleFormat.visible && section.title.trim()) && !principles.length) {
     return null;
   }
 
@@ -40,12 +44,16 @@ export default function AboutPrinciplesModuleSection({ cmsContent }: AboutPrinci
     <section className="relative py-12 @xl/slot-module:py-16 @4xl/slot-module:py-20">
       <div className="mx-auto max-w-7xl px-6">
         <div data-reveal className="mb-3 text-center">
-          {section.eyebrow.trim() ? (
-            <p className="font-en text-[10px] uppercase tracking-[0.22em] text-[#D8B87A]/55">{section.eyebrow}</p>
+          {eyebrowFormat.visible && section.eyebrow.trim() ? (
+            <p className={`font-en text-[10px] uppercase tracking-[0.22em] text-[#D8B87A]/55 ${pageBlockTextAlignClass(eyebrowFormat.alignment)} ${eyebrowFormat.bold ? "font-bold" : "font-normal"}`}>{section.eyebrow}</p>
           ) : null}
 
-          {section.title.trim() ? (
-            <h2 className="mt-1 text-2xl font-bold tracking-[-0.03em] text-white @xl/slot-module:text-3xl">{section.title}</h2>
+          {titleFormat.visible && section.title.trim() ? (
+            <h2 className={`mt-1 text-2xl tracking-[-0.03em] text-white @xl/slot-module:text-3xl ${pageBlockTextAlignClass(titleFormat.alignment)} ${titleFormat.bold ? "font-bold" : "font-normal"}`}>{section.title}</h2>
+          ) : null}
+
+          {descriptionFormat.visible && section.description.trim() ? (
+            <p className={`mt-3 max-w-2xl text-sm leading-7 text-white/55 ${pageBlockTextAlignClass(descriptionFormat.alignment)} ${pageBlockTextPlacementClass(descriptionFormat.alignment)} ${descriptionFormat.bold ? "font-bold" : "font-normal"}`}>{section.description}</p>
           ) : null}
 
           <div className="mx-auto mt-3 h-[3px] w-20 rounded-full bg-white/80" />

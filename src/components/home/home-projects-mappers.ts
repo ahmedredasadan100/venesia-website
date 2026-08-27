@@ -1,4 +1,8 @@
 import { asHomeProjectsConfig } from "../../lib/page-blocks/configs";
+import {
+  resolvePageBlockTextFormattingMap,
+  type PageBlockTextFormattingMap,
+} from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
 export type HomeProjectsButtonAlignment = "right" | "center" | "left";
@@ -7,12 +11,14 @@ export type HomeProjectsContent = {
   eyebrow: string;
   title: string;
   intro: string;
+  formatting: PageBlockTextFormattingMap;
   showEyebrow: boolean;
   showTitle: boolean;
   showIntro: boolean;
   showProjectLocation: boolean;
   showFooterCta: boolean;
   projectsLimit?: number;
+  cardCtaLabel: string;
   /** Physical alignment of in-card CTA. Legacy default: right. */
   cardCtaAlignment: HomeProjectsButtonAlignment;
   /** Plain-text eyebrow weight. Legacy default: true. */
@@ -45,19 +51,27 @@ function mapEyebrowAlignment(value: unknown): HomeProjectsButtonAlignment {
   return "right";
 }
 
-export function mapHomeProjectsBlock(block: ResolvedPageBlock): HomeProjectsContent {
+export function mapHomeProjectsBlock(
+  block: ResolvedPageBlock,
+): HomeProjectsContent {
   const config = asHomeProjectsConfig(block.template.config);
 
   return {
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     intro: config.intro ?? "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow", defaults: { bold: true } },
+      { field: "title", defaults: { bold: true } },
+      { field: "intro" },
+    ]),
     showEyebrow: config.showEyebrow !== false,
     showTitle: config.showTitle !== false,
     showIntro: config.showIntro !== false,
     showProjectLocation: config.showProjectLocation !== false,
     showFooterCta: config.showFooterCta !== false,
     projectsLimit: config.projectsLimit,
+    cardCtaLabel: config.cardCtaLabel ?? "استكشف المشروع",
     cardCtaAlignment: mapCardCtaAlignment(config.cardCtaAlignment),
     eyebrowBold: config.eyebrowBold !== false,
     eyebrowAlignment: mapEyebrowAlignment(config.eyebrowAlignment),

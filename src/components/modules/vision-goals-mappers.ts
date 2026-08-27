@@ -1,5 +1,9 @@
 import type { VisionGoalsModuleConfig } from "../../lib/page-blocks/configs";
-import { asVisionGoalsConfig } from "../../lib/page-blocks/configs";
+import {
+  asVisionGoalsConfig,
+  resolvePageBlockTextFormattingMap,
+  type PageBlockTextFormattingMap,
+} from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
 export type VisionGoalsItem = {
@@ -16,6 +20,7 @@ export type VisionGoalsContent = {
   eyebrow: string;
   title: string;
   intro: string[];
+  formatting: PageBlockTextFormattingMap;
   image?: string;
   imageAlt: string;
   vision: VisionGoalsColumn;
@@ -48,6 +53,11 @@ export function mapVisionGoalsBlock(block: ResolvedPageBlock): VisionGoalsConten
     eyebrow: config.eyebrow ?? "",
     title: config.title ?? "",
     intro: config.intro ?? [],
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "intro" },
+    ]),
     image: normalizePublicImageSrc(config.image),
     imageAlt: config.imageAlt ?? "",
     vision: mapColumn(config.vision),

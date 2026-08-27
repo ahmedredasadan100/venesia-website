@@ -8,12 +8,10 @@ import {
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorHeader,
+  ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
-  ModuleEditorSectionHeading,
-  ModuleEditorSettingsComposition,
-  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
 } from "./ModuleEditorPresentation";
 import type { Json } from "../../../lib/database.types";
@@ -84,11 +82,26 @@ export default function MediaSidebarModuleEditClient({
 
       <form action={updateAction}>
         <input type="hidden" name="id" value={block.id} />
+        <input type="hidden" name="description" value={block.description ?? ""} />
         <input
           type="hidden"
           name="data_source"
           value={MEDIA_SIDEBAR_WIDGET_DEFAULTS[widgetKey].config.source}
         />
+
+        <ModuleEditorIdentitySection
+          name={block.name}
+          status={block.status}
+          inputClassName={fieldClassName("h-11")}
+        >
+          <AdminFormListboxSelect
+            name="widget_key"
+            label="نوع الموديول"
+            value={widgetKey}
+            onChange={(value) => handleWidgetChange(readInitialWidgetKey(value))}
+            options={WIDGET_KEYS.map((key) => ({ value: key, label: MEDIA_SIDEBAR_WIDGET_LABELS[key] }))}
+          />
+        </ModuleEditorIdentitySection>
 
         <ModuleEditorTabs
           moduleKind="media-sidebar"
@@ -99,19 +112,6 @@ export default function MediaSidebarModuleEditClient({
               content: (
                 <ModuleEditorSection>
                   <ModuleEditorFieldGrid>
-                  <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
-                    <span className="text-xs font-semibold text-white/55">اسم الموديول</span>
-                    <input name="name" defaultValue={block.name} required className={fieldClassName()} />
-                  </label></ModuleEditorField>
-
-                  <ModuleEditorField nature="standard" span={4}><AdminFormListboxSelect
-                    name="widget_key"
-                    label="نوع الموديول"
-                    value={widgetKey}
-                    onChange={(value) => handleWidgetChange(readInitialWidgetKey(value))}
-                    options={WIDGET_KEYS.map((key) => ({ value: key, label: MEDIA_SIDEBAR_WIDGET_LABELS[key] }))}
-                  /></ModuleEditorField>
-
                   <ModuleEditorField nature="standard" span={4}>
                     <div className="space-y-2">
                       <span className="block text-sm font-medium text-white/70">مصدر البيانات</span>
@@ -143,28 +143,6 @@ export default function MediaSidebarModuleEditClient({
                   )}
                   </ModuleEditorFieldGrid>
                 </ModuleEditorSection>
-              ),
-            },
-            {
-              id: "settings",
-              content: (
-                <ModuleEditorSettingsComposition
-                  primary={
-                  <ModuleEditorSection>
-                    <label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">وصف داخلي</span>
-                      <input name="description" defaultValue={block.description ?? ""} className={fieldClassName()} />
-                    </label>
-                  </ModuleEditorSection>
-                  }
-
-                  secondary={
-                  <ModuleEditorSection>
-                    <ModuleEditorSectionHeading intent="settings" className="text-lg">حالة النشر</ModuleEditorSectionHeading>
-                    <ModuleEditorStatusSwitch status={block.status} />
-                  </ModuleEditorSection>
-                  }
-                />
               ),
             },
             {

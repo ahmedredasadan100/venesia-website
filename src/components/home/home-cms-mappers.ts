@@ -1,5 +1,9 @@
 import type { AboutIntroImages } from "../about/about-cms-mappers";
-import { asAboutIntroConfig } from "../../lib/page-blocks/configs";
+import {
+  asAboutIntroConfig,
+  resolvePageBlockTextFormattingMap,
+  type PageBlockTextFormattingMap,
+} from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 
 /**
@@ -17,6 +21,7 @@ export type HomeStoryContent = {
   title: string;
   subtitle: string;
   body: string;
+  formatting: PageBlockTextFormattingMap;
   images?: AboutIntroImages;
   button?: {
     label: string;
@@ -79,6 +84,11 @@ export function mapHomeStoryBlock(block: ResolvedPageBlock): HomeStoryContent {
     title: config.title ?? "",
     subtitle: config.subtitle ?? "",
     body: config.body ?? "",
+    formatting: resolvePageBlockTextFormattingMap(config, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     images: mapImages(config.images),
     button:
       buttonLabel || buttonHref

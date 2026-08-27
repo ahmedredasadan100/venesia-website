@@ -104,7 +104,7 @@ export default function PageBlocksAssignModal({
           <AdminModalPrimaryButton
             type="submit"
             form="assign-page-block-form"
-            disabled={!assignableTemplates.length || assignPending}
+            disabled={!assignableTemplates.length || !slotOptions.length || assignPending}
           >
             ربط الموديول
           </AdminModalPrimaryButton>
@@ -205,22 +205,18 @@ export default function PageBlocksAssignModal({
         <AdminFormListboxSelect
           name="slot"
           label="موضع العرض"
-          defaultValue={
-            assignModuleKind === "breadcrumb" || assignModuleKind === "hero"
-              ? "hero"
-              : assignModuleKind === "feed" ||
-                  assignModuleKind === "media-sidebar"
-                ? "sidebar"
-                : assignModuleKind === "media-hub"
-                  ? "main"
-                  : "main"
-          }
-          disabled={assignModuleKind === "hero"}
+          defaultValue={slotOptions[0] ?? ""}
+          disabled={slotOptions.length <= 1}
           options={slotOptions.map((slot) => ({
             value: slot,
             label: slotLabels[slot] ?? slot,
           }))}
         />
+        {!slotOptions.length ? (
+          <p className="text-xs leading-6 text-amber-200/75">
+            هذا النوع لا يملك Position متوافقًا مع بنية الصفحة الحالية.
+          </p>
+        ) : null}
 
         <label className={adminFormLabelClassName()}>
           Order

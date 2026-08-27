@@ -24,9 +24,9 @@ const {
 } = await jiti.import<typeof import("../src/lib/page-blocks/admin-utils.ts")>(
   "../src/lib/page-blocks/admin-utils.ts",
 );
-const { PAGE_MODULE_KINDS } = await jiti.import<typeof import("../src/lib/page-blocks/types.ts")>(
-  "../src/lib/page-blocks/types.ts",
-);
+const { PAGE_MODULE_KINDS } = await jiti.import<
+  typeof import("../src/lib/page-blocks/types.ts")
+>("../src/lib/page-blocks/types.ts");
 const { resolveContentModuleEditorConfig } = await jiti.import<
   typeof import("../src/lib/page-blocks/module-edit-registry.ts")
 >("../src/lib/page-blocks/module-edit-registry.ts");
@@ -49,69 +49,165 @@ function rejects(run: () => unknown) {
 
 const tabsOwner = read("src/components/admin/ui/AdminModuleTabs.tsx");
 const feedbackOwner = read("src/components/admin/AdminFeedbackProvider.tsx");
-const pagesClient = read("src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx");
-const pagesHeader = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksHeader.tsx");
-const presentation = read("src/components/admin/page-blocks/ModuleEditorPresentation.tsx");
-const presentationContract = read("src/lib/page-blocks/module-editor-presentation-contract.ts");
-const blockEditorHeader = read("src/components/admin/page-blocks/BlockEditorContextHeader.tsx");
-const assignmentField = read("src/components/admin/page-blocks/ModulePageAssignmentsField.tsx");
-const crossPageUsageBanner = read("src/components/admin/page-blocks/ModuleCrossPageUsageBanner.tsx");
+const pagesClient = read(
+  "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+);
+const pagesHeader = read(
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksHeader.tsx",
+);
+const presentation = read(
+  "src/components/admin/page-blocks/ModuleEditorPresentation.tsx",
+);
+const presentationContract = read(
+  "src/lib/page-blocks/module-editor-presentation-contract.ts",
+);
+const blockEditorHeader = read(
+  "src/components/admin/page-blocks/BlockEditorContextHeader.tsx",
+);
+const heroCtaEditor = read(
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields.tsx",
+);
+const heroContentControls = read("src/lib/hero/hero-content-controls.ts");
+const dynamicHero = read("src/components/sections/DynamicHeroSection.tsx");
+const projectDetailsHero = read(
+  "src/components/projects/details/ProjectDetailsHero.tsx",
+);
+const assignmentField = read(
+  "src/components/admin/page-blocks/ModulePageAssignmentsField.tsx",
+);
+const crossPageUsageBanner = read(
+  "src/components/admin/page-blocks/ModuleCrossPageUsageBanner.tsx",
+);
 const blockStatusOwner = read("src/lib/page-blocks/admin-utils.ts");
 const formSwitchOwner = read("src/components/admin/ui/AdminFormSwitch.tsx");
 const blockTypes = read("src/lib/page-blocks/types.ts");
 const mediaOwner = read("src/components/admin/media/AdminMediaImageField.tsx");
-const routeSlotPolicy = read("src/lib/page-composition/route-slot-policy.ts");
-const compatibilityPresentation = read("src/lib/page-composition/module-registry-metadata.ts");
+const routeSlotPolicy = read("src/lib/page-composition/page-assignment-contract.ts");
+const compatibilityPresentation = read(
+  "src/lib/page-composition/module-registry-metadata.ts",
+);
 const slotMap = read("src/components/admin/page-blocks/PageVisualSlotMap.tsx");
-const serverSlotGuard = read("src/app/admin/pages-blocks/pages/page-actions/helpers.ts");
-const contentActions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
+const serverSlotGuard = read(
+  "src/app/admin/pages-blocks/pages/page-actions/helpers.ts",
+);
+const homeProjectsActions = read(
+  "src/app/admin/pages-blocks/blocks/content/actions.ts",
+);
 const cardsActions = read("src/app/admin/pages-blocks/blocks/cards/actions.ts");
-const cardsRepeater = read("src/components/admin/page-blocks/editors/AdminCardsItemsField.tsx");
-const breadcrumbRepeater = read("src/components/admin/page-blocks/editors/BreadcrumbManualItemsField.tsx");
-const breadcrumbActions = read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts");
-const breadcrumbEditor = read("src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx");
-const breadcrumbEditRoute = read("src/app/admin/pages-blocks/blocks/breadcrumb/[id]/page.tsx");
-const breadcrumbListRoute = read("src/app/admin/pages-blocks/blocks/breadcrumb/page.tsx");
+const cardsRepeater = read(
+  "src/components/admin/page-blocks/editors/AdminCardsItemsField.tsx",
+);
+const breadcrumbRepeater = read(
+  "src/components/admin/page-blocks/editors/BreadcrumbManualItemsField.tsx",
+);
+const breadcrumbActions = read(
+  "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
+);
+const breadcrumbEditor = read(
+  "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+);
+const breadcrumbEditRoute = read(
+  "src/app/admin/pages-blocks/blocks/breadcrumb/[id]/page.tsx",
+);
+const breadcrumbListRoute = read(
+  "src/app/admin/pages-blocks/blocks/breadcrumb/page.tsx",
+);
 const breadcrumbConfig = read("src/lib/page-blocks/configs.ts");
 const sharedDataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const heroPublicLoader = read("src/lib/load-hero-section.ts");
 const pageBlockPublicLoader = read("src/lib/page-blocks/load-page-blocks.ts");
 const feedPublicLoader = read("src/lib/feed-modules/load-feed-modules.ts");
-const mediaSidebarPublicLoader = read("src/lib/media-sidebar-modules/load-media-sidebar-modules.ts");
-const mediaHubPublicLoader = read("src/lib/media-hub-modules/load-media-hub-modules.ts");
-const pageCompositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
-const mediaHubRenderPlan = read("src/lib/media-hub-modules/build-media-hub-render-plan.ts");
-const publicationClosureMigration = read("sql/migrations/20260807120000_system_publication_summary_cards_closure.sql");
-const pagesListClient = read("src/app/admin/pages-blocks/pages/PagesTableClient.tsx");
+const mediaSidebarPublicLoader = read(
+  "src/lib/media-sidebar-modules/load-media-sidebar-modules.ts",
+);
+const mediaHubPublicLoader = read(
+  "src/lib/media-hub-modules/load-media-hub-modules.ts",
+);
+const pageCompositionLoader = read(
+  "src/lib/page-blocks/load-page-composition.ts",
+);
+const mediaHubRenderPlan = read(
+  "src/lib/media-hub-modules/build-media-hub-render-plan.ts",
+);
+const publicationClosureMigration = read(
+  "sql/migrations/20260807120000_system_publication_summary_cards_closure.sql",
+);
+const pagesListClient = read(
+  "src/app/admin/pages-blocks/pages/PagesTableClient.tsx",
+);
 const blocksHub = read("src/app/admin/pages-blocks/blocks/page.tsx");
-const blockManager = read("src/components/admin/page-blocks/BlockModuleManagerClient.tsx");
-const contentManager = read("src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx");
-const summaryManager = read("src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx");
-const mediaHubListRoute = read("src/app/admin/pages-blocks/blocks/media-hub/page.tsx");
-const mediaSidebarListRoute = read("src/app/admin/pages-blocks/blocks/media-sidebar/page.tsx");
-const mediaHubActions = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
-const mediaSidebarActions = read("src/app/admin/pages-blocks/blocks/media-sidebar/actions.ts");
+const blockManager = read(
+  "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+);
+const contentManager = read(
+  "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
+);
+const summaryManager = read(
+  "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
+);
+const mediaHubListRoute = read(
+  "src/app/admin/pages-blocks/blocks/media-hub/page.tsx",
+);
+const mediaSidebarListRoute = read(
+  "src/app/admin/pages-blocks/blocks/media-sidebar/page.tsx",
+);
+const mediaHubActions = read(
+  "src/app/admin/pages-blocks/blocks/media-hub/actions.ts",
+);
+const mediaSidebarActions = read(
+  "src/app/admin/pages-blocks/blocks/media-sidebar/actions.ts",
+);
 const moduleListManagers = [
   blockManager,
   contentManager,
   summaryManager,
   read("src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx"),
 ];
-const pageCompositionRoute = read("src/app/admin/pages-blocks/pages/[id]/page.tsx");
-const assignmentColumns = read("src/lib/page-blocks/admin-collection-columns.ts");
-const assignmentGrid = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx");
-const assignmentRow = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx");
+const pageCompositionRoute = read(
+  "src/app/admin/pages-blocks/pages/[id]/page.tsx",
+);
+const assignmentColumns = read(
+  "src/lib/page-blocks/admin-collection-columns.ts",
+);
+const assignmentGrid = read(
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentsGrid.tsx",
+);
+const assignmentRow = read(
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignmentRow.tsx",
+);
 const moduleEditRegistry = read("src/lib/page-blocks/module-edit-registry.ts");
-const contentEditRoute = read("src/app/admin/pages-blocks/blocks/content/[id]/page.tsx");
-const contentEditClient = read("src/components/admin/page-blocks/ContentModuleEditClient.tsx");
-const slotModuleNodes = read("src/components/page-composition/slot-module-nodes.tsx");
-const slotRenderPlan = read("src/components/page-composition/build-slot-render-plan.ts");
+const contentEditRoute = read(
+  "src/app/admin/pages-blocks/blocks/content/[id]/page.tsx",
+);
+const contentEditClient = read(
+  "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+);
+const slotModuleNodes = read(
+  "src/components/page-composition/slot-module-nodes.tsx",
+);
+const slotRenderPlan = read(
+  "src/components/page-composition/build-slot-render-plan.ts",
+);
 const adminQueries = read("src/lib/page-blocks/admin-queries.ts");
 const adminRevalidationOwner = read("src/lib/page-blocks/admin-revalidate.ts");
-const assignmentModalOwner = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/use-page-blocks-assign-modal.ts");
-const assignmentContextQuery = read("src/lib/page-blocks/module-assignments-query.ts");
-const heroDetailRoute = read("src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx");
-const adoptionManifest = read("src/lib/admin/interaction-system/adoption-manifest.ts");
+const assignmentModalOwner = read(
+  "src/app/admin/pages-blocks/pages/[id]/page-blocks/use-page-blocks-assign-modal.ts",
+);
+const assignmentContextQuery = read(
+  "src/lib/page-blocks/module-assignments-query.ts",
+);
+const heroDetailRoute = read(
+  "src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx",
+);
+const heroEditor = read(
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+);
+const heroOrderEditor = read(
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroElementOrderEditor.tsx",
+);
+const adoptionManifest = read(
+  "src/lib/admin/interaction-system/adoption-manifest.ts",
+);
 
 check(
   "all shared module managers scope visibility pending to the active row",
@@ -140,11 +236,11 @@ check(
 
 check(
   "Page Composition feedback uses the global shared location without a reserved feedback viewport",
-  pagesClient.includes('<AdminFeedbackRegion') &&
+  pagesClient.includes("<AdminFeedbackRegion") &&
     pagesClient.includes('placement="global"') &&
     feedbackOwner.includes('return placement === "inline" ? (') &&
     !feedbackOwner.includes("stabilizeLayout") &&
-    !feedbackOwner.includes('h-[72px]'),
+    !feedbackOwner.includes("h-[72px]"),
 );
 
 check(
@@ -159,14 +255,19 @@ check(
 
 check(
   "Page Composition resolves product-facing Hero classification without changing the Content persistence route",
-  moduleKindLabel("content", "projects-hub-hero", "projects-hub-hero") === "Hero" &&
-    moduleKindLabel("content", "projects-hub-listing", "projects-hub-listing") === "Content" &&
+  moduleKindLabel("content", "projects-hub-hero", "projects-hub-hero") ===
+    "Hero" &&
+    moduleKindLabel(
+      "content",
+      "projects-hub-listing",
+      "projects-hub-listing",
+    ) === "Content" &&
     moduleEditRegistry.includes("resolveModuleProductKind") &&
     pagesClient.includes("resolveModuleProductKind") &&
     pagesClient.includes("listKind: assignment.module_kind") &&
     assignmentRow.includes("row.template_slug") &&
     assignmentRow.includes("row.template_variant") &&
-    assignmentRow.includes("moduleEditHref(row.module_kind")
+    assignmentRow.includes("moduleEditHref(row.module_kind"),
 );
 
 check(
@@ -183,7 +284,6 @@ const fieldLayoutAdopters = [
   "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
   "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
   "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-  "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
@@ -204,7 +304,148 @@ const fieldLayoutAdopters = [
 
 check(
   "all eligible field-layout editors adopt the shared presentation contract",
-  fieldLayoutAdopters.every((path) => existsSync(resolve(ROOT, path)) && read(path).includes("ModuleEditorFieldGrid")),
+  fieldLayoutAdopters.every((path) => {
+    const source = read(path);
+    return (
+      existsSync(resolve(ROOT, path)) &&
+      source.includes("ModuleEditorFieldGrid")
+    );
+  }),
+);
+
+check(
+  "shared content-field adoption distinguishes paired short copy from full-width long content",
+  read(
+    "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+  ).includes('<ModuleEditorField nature="short-description" span={6}>') &&
+    read(
+      "src/components/admin/page-blocks/editors/AboutPrinciplesModuleEditor.tsx",
+    ).includes('<ModuleEditorField nature="long-content" span={12}>') &&
+    read(
+      "src/components/admin/page-blocks/editors/VisionGoalsModuleEditor.tsx",
+    ).includes('<ModuleEditorField nature="long-content" span={12}>'),
+);
+
+check(
+  "Breadcrumb adopts full-width source geometry, compact shared switch presentation, and no redundant manual-link hint",
+  breadcrumbEditor.includes('sizing="full"') &&
+    !breadcrumbEditor.includes(
+      'label="إظهار الرئيسية" value="true" defaultChecked={config.showHome !== false} surface',
+    ) &&
+    !breadcrumbRepeater.includes(
+      "للعناصر اليدوية فقط: اختر الرابط من النظام بدل كتابة مسار داخلي.",
+    ),
+);
+
+check(
+  "module editor headers use the reference meta and action density without nested status pills or a local back arrow",
+  blockEditorHeader.includes("meta ?? statusInfo?.label") &&
+    !blockEditorHeader.includes("AdminStatusPill") &&
+    !blockEditorHeader.includes('aria-hidden="true">→'),
+);
+
+check(
+  "Hero CTA adopts the shared inline Visibility Bold Alignment toolbar and persists its existing CTA element formatting",
+  presentation.indexOf("{renderControls(`إعدادات ${targetLabel}`)}") <
+    presentation.indexOf("{child}") &&
+    presentation.includes(
+      'className="flex min-w-0 items-center justify-between gap-2"',
+    ) &&
+    !presentation.includes("تنسيق الزر</span>") &&
+    heroCtaEditor.includes('boldName="cta_bold"') &&
+    heroContentControls.includes("ctaBold: boolean") &&
+    heroContentControls.includes('readBoolean("cta_bold", defaults.ctaBold)') &&
+    dynamicHero.includes('config.ctaBold ? "font-bold" : "font-medium"') &&
+    projectDetailsHero.includes("resolvedPresentation.ctaBold"),
+);
+
+check(
+  "Hero identity keeps name, display mode, and publication adjacent without stretching selection controls",
+  heroEditor.includes(
+    "xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content]",
+  ) &&
+    heroEditor.match(/className="xl:col-span-1!"/g)?.length === 3 &&
+    heroEditor.includes(
+      '<AdminFormListboxSelect\n            name="variant"',
+    ) &&
+    !heroEditor.includes(
+      '<input type="hidden" name="variant" value="project-detail"',
+    ),
+);
+
+check(
+  "Project Detail Hero adopts shared page assignment and three compact independently ordered action cards",
+  heroEditor.includes(
+    "<ModuleEditorPagesTab\n                  moduleName={hero.name}",
+  ) &&
+    !heroEditor.includes("...(!isProjectDetail") &&
+    heroOrderEditor.includes('data-project-hero-action-cards=""') &&
+    heroOrderEditor.includes("PROJECT_HERO_ACTION_VISIBILITY_FIELDS") &&
+    heroOrderEditor.includes('name="project_action_order"') &&
+    heroOrderEditor.includes('id={`project-hero-action-${key}`}') &&
+    heroOrderEditor.includes('className="grid min-w-0 gap-3 md:grid-cols-3"') &&
+    projectDetailsHero.includes("showProjectActions") &&
+    projectDetailsHero.includes("gridColumnsClassName") &&
+    projectDetailsHero.includes("order.map((key)"),
+);
+
+check(
+  "Projects Hub and Project Detail Hero remain distinct editors with shared navigation between their owners",
+  contentEditRoute.includes('.from("hero_templates")') &&
+    contentEditRoute.includes('.eq("variant", "project-detail")') &&
+    contentEditRoute.includes("withModuleEditorReturnPageId(") &&
+    contentEditRoute.includes("?tab=buttons") &&
+    contentEditClient.includes('id: "details"') &&
+    contentEditClient.includes('moduleSlug={presentationSlug}') &&
+    contentEditClient.includes("PROJECT_HERO_ACTION_KEYS.map") &&
+    contentEditClient.includes("data-related-project-hero-action-card") &&
+    contentEditClient.includes(
+      'href={`${links.buttons}#project-hero-action-${key}`}',
+    ) &&
+    contentEditClient.indexOf("<ProjectDetailHeroEditorLinks") >
+      contentEditClient.indexOf('id: "details"') &&
+    compatibilityPresentation.includes('navigationLabelAr: "شرائح الهيرو"') &&
+    compatibilityPresentation.includes('navigationLabelAr: "زر التفاصيل"') &&
+    compatibilityPresentation.includes('navigationLabelAr: "Hero التفاصيل"') &&
+    !contentEditClient.includes("show_project_download_action") &&
+    heroDetailRoute.includes('resolvedSearch.tab === "buttons"') &&
+    heroEditor.includes("initialTabId={initialTabId}"),
+);
+
+const sharedIdentityAdopters = [
+  "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+  "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+  "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+  "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+  "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+  "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+];
+check(
+  "module editors adopt the shared identity strip before tabs and preserve internal metadata without an empty Settings tab",
+  presentation.includes("export function ModuleEditorIdentitySection") &&
+    presentation.includes("data-module-editor-identity") &&
+    sharedIdentityAdopters.every((path) => {
+      const source = read(path);
+      return (
+        source.indexOf("<ModuleEditorIdentitySection") <
+          source.indexOf("<ModuleEditorTabs") &&
+        !source.includes("<ModuleEditorSettingsComposition") &&
+        !source.includes('id: "settings"') &&
+        !source.includes('id: "meta"')
+      );
+    }),
+);
+
+check(
+  "Hero image metrics eagerly read the canonical public DOM without duplicating rendering geometry",
+  heroEditor.includes('querySelector<HTMLElement>("[data-hero-family]")') &&
+    heroEditor.includes("Rendered Hero Area:") &&
+    heroEditor.includes("Safe Visible Source Area:") &&
+    heroEditor.includes("frameWindow.getComputedStyle(image)") &&
+    heroEditor.includes("hero.getBoundingClientRect()") &&
+    heroEditor.includes("data-hero-rendered-area-state={state.status}") &&
+    !heroEditor.includes('loading="lazy"') &&
+    !heroEditor.includes("h-[min(62vh,580px)]"),
 );
 
 const fieldLayoutSources = fieldLayoutAdopters.map(read).join("\n");
@@ -228,11 +469,18 @@ check(
 );
 
 check(
-  "assignment UI keeps only conditional multi-page guidance",
+  "assignment UI groups standalone and family pages in two shared cards with premium shared selection",
   !assignmentField.includes("helperText") &&
     !assignmentField.includes("اختر الصفحات التي تستخدم هذا الموديول") &&
     !assignmentField.includes("يظهر في الصفحات") &&
-    /sectionHeadingAr:\s*"الظهور في الصفحات",\s*sectionDescriptionAr:\s*null/.test(compatibilityPresentation) &&
+    assignmentField.includes('data-module-page-groups=""') &&
+    assignmentField.includes('title: "الصفحات الرئيسية"') &&
+    assignmentField.includes('title: "مجموعات الصفحات"') &&
+    assignmentField.includes("familyRootSegments") &&
+    assignmentField.includes('presentation="premium"') &&
+    /sectionHeadingAr:\s*"الظهور في الصفحات",\s*sectionDescriptionAr:\s*null/.test(
+      compatibilityPresentation,
+    ) &&
     crossPageUsageBanner.includes("if (assignments.length <= 1) return null"),
 );
 
@@ -248,26 +496,33 @@ const repeaterAdopters = [
 ];
 
 check(
-  "eligible repeaters use the shared three-column card presentation",
-  presentation.includes("lg:grid-cols-2 xl:grid-cols-3") &&
+  "eligible repeaters use the shared responsive card presentation",
+  presentation.includes("lg:grid-cols-2") &&
+    presentation.includes("columns?: 2 | 3") &&
+    presentation.includes(
+      'columns === 2 ? "xl:grid-cols-2" : "xl:grid-cols-3"',
+    ) &&
     repeaterAdopters.every((path) => {
       const source = read(path);
-      return source.includes("ModuleEditorRepeaterGrid") && source.includes("ModuleEditorRepeaterCard");
+      return (
+        source.includes("ModuleEditorRepeaterGrid") &&
+        source.includes("ModuleEditorRepeaterCard")
+      );
     }),
 );
 
 check(
   "dynamic Card and Breadcrumb repeaters preserve add, remove, reorder, and structured save wiring",
-  [cardsRepeater, breadcrumbRepeater].every((source) =>
-    source.includes("moveItem") || source.includes("moveRow"),
+  [cardsRepeater, breadcrumbRepeater].every(
+    (source) => source.includes("moveItem") || source.includes("moveRow"),
   ) &&
     cardsRepeater.includes("addItem") &&
     cardsRepeater.includes("removeItem") &&
-    cardsRepeater.includes('prefix={`item_${index}`}') &&
+    cardsRepeater.includes("prefix={`item_${index}`}") &&
     cardsActions.includes("index < 12") &&
     breadcrumbRepeater.includes("addItem") &&
     breadcrumbRepeater.includes("removeItem") &&
-    breadcrumbRepeater.includes('prefix={`manual_item_${index}`}') &&
+    breadcrumbRepeater.includes("prefix={`manual_item_${index}`}") &&
     breadcrumbActions.includes("index < 8"),
 );
 
@@ -284,7 +539,9 @@ const resolvedAboutIntroBeats = (
 ).beats;
 check(
   "Content editors receive one canonical server read model and rehydrate by persisted revision",
-  moduleEditRegistry.includes("export function resolveContentModuleEditorConfig") &&
+  moduleEditRegistry.includes(
+    "export function resolveContentModuleEditorConfig",
+  ) &&
     contentEditRoute.includes("resolveContentModuleEditorConfig({") &&
     contentEditRoute.includes("config={config}") &&
     !contentEditRoute.includes("block={block}") &&
@@ -304,10 +561,13 @@ check(
 );
 
 check(
-  "shared Settings composition aligns binary state surfaces with labeled controls",
-  presentation.includes("data-module-editor-settings") &&
-    presentation.includes("[data-module-editor-field-nature='binary-state']]:pt-6") &&
-    presentation.includes("min-h-[46px]"),
+  "shared identity composition aligns publication with naturally sized labeled controls",
+  presentation.includes("data-module-editor-identity") &&
+    presentation.includes(
+      "xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content]",
+    ) &&
+    presentation.includes("surface={false}") &&
+    presentation.includes("items-end pb-1.5"),
 );
 
 check(
@@ -317,26 +577,41 @@ check(
     breadcrumbRepeater.includes("{rows.length ? (") &&
     breadcrumbRepeater.includes("current.filter") &&
     breadcrumbEditor.includes('className="items-end"') &&
-    breadcrumbEditor.includes('surface className="h-full"') &&
+    breadcrumbEditor.includes('sizing="full"') &&
+    breadcrumbEditor.includes('className="flex h-full items-end pb-1.5"') &&
+    !breadcrumbEditor.includes('surface className="h-full"') &&
     (breadcrumbEditor.match(/span=\{4\}/g)?.length ?? 0) >= 3 &&
-    presentation.includes('className={`h-full ${className}`.trim()}') &&
+    presentation.includes("className={`h-full ${className}`.trim()}") &&
     !breadcrumbEditor.includes("ModuleEditorTechnicalIdentity") &&
-    !breadcrumbEditor.includes('name="variant"\n                      label="نمط العرض"') &&
+    !breadcrumbEditor.includes(
+      'name="variant"\n                      label="نمط العرض"',
+    ) &&
     blockManager.includes('technicalIdentityMode?: "editable" | "internal"') &&
     blockManager.includes('variantFieldMode?: "editable" | "internal"') &&
     blockManager.includes("blockSearchPlaceholder(") &&
     blockManager.includes('technicalIdentityMode === "editable"') &&
     blockManager.includes('variantFieldMode === "editable"') &&
-    !blockManager.includes('placeholder: "ابحث باسم البلوك أو المعرّف أو النمط…"') &&
+    !blockManager.includes(
+      'placeholder: "ابحث باسم البلوك أو المعرّف أو النمط…"',
+    ) &&
     blockManager.includes("slug?: string") &&
     blockManager.includes("variant?: string") &&
-    breadcrumbListRoute.includes('.select("id,name,description,status,updated_at")') &&
+    breadcrumbListRoute.includes(
+      '.select("id,name,description,status,updated_at")',
+    ) &&
     !breadcrumbListRoute.includes('select("id,name,slug') &&
-    breadcrumbEditRoute.includes('.select("id,name,description,style_preset,status,config")') &&
+    breadcrumbEditRoute.includes(
+      '.select("id,name,description,style_preset,status,config")',
+    ) &&
     !breadcrumbEditRoute.includes('.select("*")') &&
-    pagesClient.includes('placeholder: "ابحث باسم الموديول أو نوعه أو موضع العرض…"') &&
-    !pagesClient.includes("${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]} ${row.template_id}") &&
-    getModuleEditorSectionMetadata("breadcrumb", "settings")?.sectionDescriptionAr ===
+    pagesClient.includes(
+      'placeholder: "ابحث باسم الموديول أو نوعه أو موضع العرض…"',
+    ) &&
+    !pagesClient.includes(
+      "${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]} ${row.template_id}",
+    ) &&
+    getModuleEditorSectionMetadata("breadcrumb", "settings")
+      ?.sectionDescriptionAr ===
       "أدر اسم الموديول ووصفه الداخلي وحالة النشر." &&
     breadcrumbActions.includes("resolveUniqueSlug") &&
     breadcrumbActions.includes('.select("slug,variant")') &&
@@ -354,23 +629,25 @@ check(
     pagesClient.includes("reorderPageComposition("),
 );
 
-const heroVisibility = read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx");
-const heroText = read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroTextFieldRow.tsx");
-const binaryPresentationSources = [
-  heroVisibility,
-  heroText,
-  read("src/components/admin/page-blocks/editors/AboutPrinciplesModuleEditor.tsx"),
-  read("src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx"),
-].join("\n");
+const heroVisibility = read(
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx",
+);
+const heroText = read(
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroTextFieldRow.tsx",
+);
 check(
   "binary Page Block state delegates to the shared switch",
   presentation.includes("AdminFormSwitch") &&
-    heroVisibility.includes("AdminFormSwitch") &&
+    heroVisibility.includes("ModuleEditorVisibilityAlignRow as default") &&
     heroText.includes("HeroVisibilityAlignRow") &&
     !heroText.includes("AdminFormSwitch") &&
     !heroVisibility.includes("aria-pressed={show}") &&
     !heroText.includes("aria-pressed={show}") &&
-    !binaryPresentationSources.includes("aria-pressed={bold}"),
+    presentation.includes("AdminTextFormatControls") &&
+    !heroVisibility.includes("ALIGN_OPTIONS") &&
+    !heroVisibility.includes("function toolClass") &&
+    presentation.includes("name={boldName}") &&
+    presentation.includes("value={String(enableBold ? bold : boldDefault)}"),
 );
 
 const statusEditorAdopters = [
@@ -396,14 +673,19 @@ const statusActionAdopters = [
 ];
 const statusActionSources = statusActionAdopters.map(read);
 const bulkActionAdopters = [
-  ["src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts", "bulkBreadcrumbBlocks"],
+  [
+    "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
+    "bulkBreadcrumbBlocks",
+  ],
   ["src/app/admin/pages-blocks/blocks/cards/actions.ts", "bulkCardsBlocks"],
   ["src/app/admin/pages-blocks/blocks/content/actions.ts", "bulkContentBlocks"],
   ["src/app/admin/pages-blocks/blocks/cta/actions.ts", "bulkCtaBlocks"],
   ["src/app/admin/pages-blocks/blocks/feed/actions.ts", "bulkFeedModules"],
   ["src/app/admin/pages-blocks/blocks/hero/actions.ts", "bulkHeroTemplates"],
 ] as const;
-const heroManager = read("src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx");
+const heroManager = read(
+  "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
+);
 const lifecycleTables = [
   "content_block_templates",
   "cta_block_templates",
@@ -413,7 +695,8 @@ const lifecycleTables = [
   "media_sidebar_module_templates",
   "media_hub_module_templates",
 ] as const;
-const allowedStatusConstraint = "check (status in ('published', 'unpublished'))";
+const allowedStatusConstraint =
+  "check (status in ('published', 'unpublished'))";
 
 check(
   "Page Block bulk input owner accepts only supported actions and positive safe-integer ids",
@@ -444,11 +727,16 @@ check(
     const source = read(sourceFile);
     const start = source.indexOf(`export async function ${functionName}`);
     const nextExport = source.indexOf("\nexport ", start + 1);
-    const body = source.slice(start, nextExport === -1 ? undefined : nextExport);
+    const body = source.slice(
+      start,
+      nextExport === -1 ? undefined : nextExport,
+    );
     const actionValidation = body.indexOf("parsePageBlockBulkAction(");
     const idValidation = body.indexOf("parsePageBlockBulkIds(");
     const databaseWork = body.indexOf("getSupabaseAdmin()");
-    const revalidation = body.search(/revalidate(?:BlockModulePaths|HeroAdmin)\(/u);
+    const revalidation = body.search(
+      /revalidate(?:BlockModulePaths|HeroAdmin)\(/u,
+    );
     return (
       start >= 0 &&
       actionValidation >= 0 &&
@@ -463,26 +751,37 @@ check(
 
 check(
   "persisted module lifecycle is binary across database and editor contracts",
-  blockStatusOwner.includes('BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"]') &&
+  blockStatusOwner.includes(
+    'BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"]',
+  ) &&
     blockTypes.includes('PageBlockStatus = "published" | "unpublished"') &&
-    lifecycleTables.every((table) =>
-      publicationClosureMigration.includes(`update public.${table} set status = 'unpublished' where status is distinct from 'published'`) &&
-      publicationClosureMigration.includes(`constraint ${table}_status_check`) &&
-      publicationClosureMigration.includes(allowedStatusConstraint),
+    lifecycleTables.every(
+      (table) =>
+        publicationClosureMigration.includes(
+          `update public.${table} set status = 'unpublished' where status is distinct from 'published'`,
+        ) &&
+        publicationClosureMigration.includes(
+          `constraint ${table}_status_check`,
+        ) &&
+        publicationClosureMigration.includes(allowedStatusConstraint),
     ) &&
     presentation.includes("export function ModuleEditorStatusSwitch") &&
     presentation.includes('name="status"') &&
     presentation.includes('value="published"') &&
     presentation.includes('uncheckedValue="unpublished"') &&
-    formSwitchOwner.indexOf('<input type="hidden" name={name} value={uncheckedValue}') <
-      formSwitchOwner.indexOf('type="checkbox"') &&
-    blockStatusOwner.includes('formData.getAll(key).at(-1)') &&
-    statusEditorSources.every((source) =>
-      source.includes("ModuleEditorStatusSwitch"),
+    formSwitchOwner.indexOf(
+      '<input type="hidden" name={name} value={uncheckedValue}',
+    ) < formSwitchOwner.indexOf('type="checkbox"') &&
+    blockStatusOwner.includes("formData.getAll(key).at(-1)") &&
+    statusEditorSources.every(
+      (source) =>
+        source.includes("ModuleEditorStatusSwitch") ||
+        source.includes("ModuleEditorIdentitySection"),
     ) &&
-    statusEditorSources.every((source) =>
-      !source.includes("MODULE_EDITOR_STATUS_OPTIONS") &&
-      !/<AdminFormListboxSelect\b[^>]*\bname="status"/.test(source),
+    statusEditorSources.every(
+      (source) =>
+        !source.includes("MODULE_EDITOR_STATUS_OPTIONS") &&
+        !/<AdminFormListboxSelect\b[^>]*\bname="status"/.test(source),
     ) &&
     statusActionSources.every((source) =>
       source.includes("parseFormStatus(formData)"),
@@ -495,34 +794,157 @@ check(
   "compact Block Editor content tabs do not repeat their tab title in a second heading card",
   ["breadcrumb", "cards", "cta"].every((moduleKind) => {
     const metadata = getModuleEditorSectionMetadata(moduleKind, "content");
-    return metadata?.sectionChrome === "implicit" &&
+    return (
+      metadata?.sectionChrome === "implicit" &&
       metadata.sectionHeadingAr === null &&
-      metadata.sectionDescriptionAr === null;
+      metadata.sectionDescriptionAr === null
+    );
   }),
 );
 
 const groupedContentEditors = [
   "src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx",
   "src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
 ];
 check(
-  "Content editors distinguish short and long content through the shared presentation owner",
-  presentation.includes("export function ModuleEditorContentGroup") &&
-    presentation.includes("data-module-editor-content-group") &&
+  "Content editors distinguish short and long content through the shared formatting-card owner",
+  presentation.includes("export function ModuleEditorVisibilityAlignRow") &&
+    presentation.includes("data-module-editor-control-row") &&
     groupedContentEditors.every((path) => {
       const source = read(path);
-      return source.includes('<ModuleEditorContentGroup kind="short">') &&
-        source.includes('<ModuleEditorContentGroup kind="long">');
-    }),
+      return (
+        source.includes("ModuleEditorVisibilityAlignRow") &&
+        source.includes('showName="show_description"') &&
+        source.includes('boldName="description_bold"') &&
+        source.includes('alignmentName="description_alignment"') &&
+        source.includes("minHeight={72}")
+      );
+    }) &&
+    read(
+      "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+    ).includes("ModuleEditorVisibilityAlignRow"),
 );
 
-const mediaHubEditor = read("src/components/admin/page-blocks/MediaHubModuleEditClient.tsx");
-const mediaSidebarEditor = read("src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx");
-const scopedModuleEditors = [
-  ...statusEditorSources,
-  heroManager,
-].join("\n");
+const unifiedFormattingEditors = [
+  "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+  "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+  "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+  "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+  "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/VisionGoalsModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutCtaModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutPrinciplesModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/AboutApproachModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
+  "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
+  "src/components/admin/page-blocks/editors/ProjectsHubMapModuleEditor.tsx",
+];
+const formattingContract = read("src/lib/page-blocks/configs.ts");
+check(
+  "one additive Formatting Contract owns visibility, Bold, and all physical alignments across text templates",
+  formattingContract.includes(
+    'PAGE_BLOCK_TEXT_ALIGNMENTS = ["right", "center", "left"]',
+  ) &&
+    formattingContract.includes("PageBlockTextFormattingConfig") &&
+    formattingContract.includes("resolvePageBlockTextFormat") &&
+    formattingContract.includes("buildPageBlockTextFormattingPatch") &&
+    unifiedFormattingEditors.every((path) =>
+      read(path).includes("ModuleEditorVisibilityAlignRow"),
+    ) &&
+    [
+      "src/app/admin/pages-blocks/blocks/content/actions.ts",
+      "src/app/admin/pages-blocks/blocks/cta/actions.ts",
+      "src/app/admin/pages-blocks/blocks/cards/actions.ts",
+      "src/app/admin/pages-blocks/blocks/media-hub/actions.ts",
+      "src/lib/feed-modules/parse-feed-config.ts",
+    ].every((path) =>
+      read(path).includes("buildPageBlockTextFormattingPatch"),
+    ) &&
+    [
+      "src/components/sections/ContentSection.tsx",
+      "src/components/sections/CtaSection.tsx",
+      "src/components/sections/CardsSection.tsx",
+      "src/components/media-center/MediaCenterHubSectionHeader.tsx",
+      "src/components/sidebar-feeds/SidebarFeedPanel.tsx",
+    ].every(
+      (path) =>
+        read(path).includes("Alignment") ||
+        read(path).includes("pageBlockTextAlignClass"),
+    ),
+);
+
+const adminFormGridOwner = read("src/components/admin/ui/AdminFormRuntime.tsx");
+const projectsHubHeroEditor = read(
+  "src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx",
+);
+const projectsHubFeaturedEditor = read(
+  "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
+);
+const projectsHubListingEditor = read(
+  "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
+);
+const homeProjectsEditor = read(
+  "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
+);
+const homeProjectsMapper = read("src/components/home/home-projects-mappers.ts");
+const homeProjectsRenderer = read(
+  "src/components/home/HomeProjectsSection.tsx",
+);
+const contentActions = read(
+  "src/app/admin/pages-blocks/blocks/content/actions.ts",
+);
+
+check(
+  "Projects editors adopt shared Header and Grid owners without retaining product-noise hints or fixed card CTA copy",
+  adminFormGridOwner.includes("columns?: 1 | 2 | 3 | 4 | 5 | 12") &&
+    adminFormGridOwner.includes("xl:grid-cols-4") &&
+    adminFormGridOwner.includes("xl:grid-cols-5") &&
+    presentation.includes("actions?: ReactNode") &&
+    presentation.includes("data-module-editor-section-header") &&
+    projectsHubHeroEditor.includes(
+      '<ModuleEditorFieldGrid className="mt-4">',
+    ) &&
+    (projectsHubHeroEditor.match(/span=\{3\}/g)?.length ?? 0) === 3 &&
+    (projectsHubHeroEditor.match(/className="xl:col-span-2!"/g)?.length ??
+      0) === 2 &&
+    projectsHubHeroEditor.includes("<AdminFormGrid columns={2}") &&
+    !projectsHubHeroEditor.includes(
+      "النصوص والصور والروابط وترتيب المشروعات تُقرأ من Projects Domain",
+    ) &&
+    projectsHubFeaturedEditor.includes("<AdminFormGrid columns={4}") &&
+    projectsHubFeaturedEditor.includes('name="show_slider_dots"') &&
+    projectsHubFeaturedEditor.includes("actions={") &&
+    projectsHubListingEditor.includes("<AdminFormGrid columns={4}") &&
+    projectsHubListingEditor.includes("<AdminFormGrid columns={5}") &&
+    projectsHubListingEditor.includes('name="show_filter_bar"') &&
+    projectsHubListingEditor.includes("actions={") &&
+    !projectsHubListingEditor.includes(
+      "لا تظهر شريحة لنوع لا توجد له مشروعات منشورة",
+    ) &&
+    homeProjectsEditor.includes('name="card_cta_label"') &&
+    !homeProjectsEditor.includes(
+      "يُطبَّق على المشاريع حسب ترتيب الصفحة الرئيسية",
+    ) &&
+    !homeProjectsEditor.includes("موضع زر «استكشف المشروع»") &&
+    [
+      formattingContract,
+      homeProjectsActions,
+      homeProjectsMapper,
+      homeProjectsRenderer,
+    ].every((source) => source.includes("cardCtaLabel")) &&
+    formattingContract.includes("[&_*]:!text-center"),
+);
+
+const mediaHubEditor = read(
+  "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+);
+const mediaSidebarEditor = read(
+  "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+);
+const scopedModuleEditors = [...statusEditorSources, heroManager].join("\n");
 
 check(
   "module editor labels are Arabic and fixed data sources are not fake selects",
@@ -535,23 +957,32 @@ check(
     ">Limit<",
     "Image Position Class",
   ].every((staleLabel) => !scopedModuleEditors.includes(staleLabel)) &&
-    /<input\s+type="hidden"\s+name="data_source"\s+value="topics"/u.test(mediaHubEditor) &&
+    /<input\s+type="hidden"\s+name="data_source"\s+value="topics"/u.test(
+      mediaHubEditor,
+    ) &&
     mediaSidebarEditor.includes('name="data_source"') &&
-    !/<AdminFormListboxSelect\b[^>]*\bname="data_source"/u.test(mediaHubEditor) &&
-    !/<AdminFormListboxSelect\b[^>]*\bname="data_source"/u.test(mediaSidebarEditor),
+    !/<AdminFormListboxSelect\b[^>]*\bname="data_source"/u.test(
+      mediaHubEditor,
+    ) &&
+    !/<AdminFormListboxSelect\b[^>]*\bname="data_source"/u.test(
+      mediaSidebarEditor,
+    ),
 );
 
 check(
   "one shared contract resolves public visibility for every Page Module kind",
   PAGE_MODULE_KINDS.length === 8 &&
-    PAGE_MODULE_KINDS.every(() =>
-      isPageModulePubliclyVisible(true, "published") &&
-      !isPageModulePubliclyVisible(false, "published") &&
-      !isPageModulePubliclyVisible(true, "unpublished") &&
-      !isPageModulePubliclyVisible(false, "unpublished"),
+    PAGE_MODULE_KINDS.every(
+      () =>
+        isPageModulePubliclyVisible(true, "published") &&
+        !isPageModulePubliclyVisible(false, "published") &&
+        !isPageModulePubliclyVisible(true, "unpublished") &&
+        !isPageModulePubliclyVisible(false, "unpublished"),
     ) &&
-    resolvePageModuleVisibilityFields(true, "unpublished").is_visible === true &&
-    resolvePageModuleVisibilityFields(true, "unpublished").is_publicly_visible === false &&
+    resolvePageModuleVisibilityFields(true, "unpublished").is_visible ===
+      true &&
+    resolvePageModuleVisibilityFields(true, "unpublished")
+      .is_publicly_visible === false &&
     blockStatusOwner.includes("export function isPageModulePubliclyVisible") &&
     blockStatusOwner.includes("isPublishedPageBlockStatus(templateStatus)") &&
     [
@@ -561,7 +992,8 @@ check(
       mediaSidebarPublicLoader,
       mediaHubPublicLoader,
     ].every((source) => source.includes("isPageModulePubliclyVisible")) &&
-    (adminQueries.match(/\.\.\.resolvePageModuleVisibilityFields\(/g)?.length ?? 0) === 8,
+    (adminQueries.match(/\.\.\.resolvePageModuleVisibilityFields\(/g)?.length ??
+      0) === 8,
 );
 
 check(
@@ -571,7 +1003,9 @@ check(
     pagesClient.includes("row.is_publicly_visible") &&
     assignmentGrid.includes("row.is_publicly_visible") &&
     slotMap.includes("row.is_publicly_visible") &&
-    assignmentRow.includes("const templatePublished = isPublishedPageBlockStatus") &&
+    assignmentRow.includes(
+      "const templatePublished = isPublishedPageBlockStatus",
+    ) &&
     assignmentRow.includes('disabledReason: "انشر الموديول أولًا') &&
     !pagesClient.includes("router.refresh") &&
     !pagesClient.includes("forceRerender"),
@@ -602,27 +1036,42 @@ check(
     statusActionSources.every((source) =>
       source.includes("withModuleEditorReturnContextFromForm"),
     ) &&
-    read("src/app/admin/pages-blocks/pages/page-actions/assignment-duplicate.ts")
-      .includes("withModuleEditorReturnPageId"),
+    read(
+      "src/app/admin/pages-blocks/pages/page-actions/assignment-duplicate.ts",
+    ).includes("withModuleEditorReturnPageId"),
 );
 
 check(
   "Page Module mutations invalidate literal public and Admin paths with the Next 16 contract",
   adminRevalidationOwner.includes("revalidatePath(normalizedPath);") &&
-    adminRevalidationOwner.includes("revalidatePath(`/admin/pages-blocks/pages/${pageId}`);") &&
-    !adminRevalidationOwner.includes('revalidatePath(normalizedPath, "page")') &&
-    !adminRevalidationOwner.includes('revalidatePath(`/admin/pages-blocks/pages/${pageId}`, "page")'),
+    adminRevalidationOwner.includes(
+      "revalidatePath(`/admin/pages-blocks/pages/${pageId}`);",
+    ) &&
+    !adminRevalidationOwner.includes(
+      'revalidatePath(normalizedPath, "page")',
+    ) &&
+    !adminRevalidationOwner.includes(
+      'revalidatePath(`/admin/pages-blocks/pages/${pageId}`, "page")',
+    ),
 );
 
 check(
   "public rendering still requires both published template state and visible assignment state",
   blockStatusOwner.includes("export function isPublishedPageBlockStatus") &&
     blockStatusOwner.includes('return value === "published"') &&
-    pageBlockPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
-    feedPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
-    mediaSidebarPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
+    pageBlockPublicLoader.includes(
+      "isPageModulePubliclyVisible(row.is_visible, template.status)",
+    ) &&
+    feedPublicLoader.includes(
+      "isPageModulePubliclyVisible(row.is_visible, template.status)",
+    ) &&
+    mediaSidebarPublicLoader.includes(
+      "isPageModulePubliclyVisible(row.is_visible, template.status)",
+    ) &&
     pageCompositionLoader.includes("if (!widget.isVisible) continue;") &&
-    mediaHubPublicLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)") &&
+    mediaHubPublicLoader.includes(
+      "isPageModulePubliclyVisible(row.is_visible, template.status)",
+    ) &&
     mediaHubRenderPlan.includes(".filter((module) => module.isVisible)"),
 );
 
@@ -637,38 +1086,56 @@ check(
   "shared Page Block image fields own preview, replace, remove, alt text, and clear persistence",
   mediaOwner.includes("altName") &&
     mediaOwner.includes("allowRemove") &&
+    mediaOwner.includes('data-admin-media-image-card="selected"') &&
+    mediaOwner.includes('data-admin-media-image-card="add"') &&
+    mediaOwner.includes("استبدال") &&
+    mediaOwner.includes("إزالة") &&
+    !mediaOwner.includes('justify-between" : "justify-end') &&
     mediaOwner.includes('updateValue("")') &&
     mediaOwner.includes('setAltValue("")') &&
     mediaAdopters.every((path) => read(path).includes("altName=")) &&
     contentActions.includes('optionalImagePath(formData, "image_main")') &&
-    contentActions.includes('cleanText(formData.get("image_main_alt")) || undefined'),
+    contentActions.includes(
+      'cleanText(formData.get("image_main_alt")) || undefined',
+    ),
 );
 
 check(
-  "route and module compatibility is one contract used by selectors, server validation, and presentation",
-  routeSlotPolicy.includes("MODULE_SLOT_CONTRACT") &&
-    routeSlotPolicy.includes("getAssignableSlotsForRoute") &&
-    routeSlotPolicy.includes("getPreferredSlotsForModuleKind") &&
-    compatibilityPresentation.includes("getPreferredSlotsForModuleKind") &&
+  "Page Composition keeps Theme-agnostic Position as the Assignment decision and leaves Presentation module-derived",
+  routeSlotPolicy.includes("MODULE_POSITION_CAPABILITIES") &&
+    routeSlotPolicy.includes("getAssignablePositions") &&
+    routeSlotPolicy.includes('mode: "page"') &&
+    routeSlotPolicy.includes("Module Presentation remains module-derived") &&
+    routeSlotPolicy.includes("getPageCompositionPositions") &&
+    !routeSlotPolicy.includes("pageSlug") &&
+    !routeSlotPolicy.includes("AssignmentPresentation") &&
+    compatibilityPresentation.includes("getAssignablePositions") &&
     slotMap.includes("getSlotCompatibilityLabel") &&
-    serverSlotGuard.includes("isSlotAllowedForRoute"),
+    serverSlotGuard.includes("isAssignmentPositionAllowed"),
 );
 
 check(
   "Page Composition assignment feedback follows only the submitted module action",
   assignmentModalOwner.includes("const activeAssignState =") &&
     assignmentModalOwner.includes("if (activeAssignState.ok)") &&
-    assignmentModalOwner.includes("setActionMessage(activeAssignState.message)") &&
+    assignmentModalOwner.includes(
+      "setActionMessage(activeAssignState.message)",
+    ) &&
     !assignmentModalOwner.includes("assignState.ok || assignHeroState.ok"),
 );
 
-const retiredHint = resolve(ROOT, "src/components/admin/page-blocks/ModuleDependencyHintsPanel.tsx");
+const retiredHint = resolve(
+  ROOT,
+  "src/components/admin/page-blocks/ModuleDependencyHintsPanel.tsx",
+);
 const scopedPresentationSources = [
   ...fieldLayoutAdopters,
   ...repeaterAdopters,
   "src/components/admin/page-blocks/BlockEditorContextHeader.tsx",
   "src/components/admin/page-blocks/ModuleCrossPageUsageBanner.tsx",
-].map(read).join("\n");
+]
+  .map(read)
+  .join("\n");
 
 check(
   "permanent module hints and conflicting visible terminology remain retired",
@@ -682,17 +1149,23 @@ check(
   "Cards item requirements are enforced by validation instead of helper copy",
   cardsActions.includes("assertValidCardsItems") &&
     cardsActions.includes("تحتاج عنوانًا ووصفًا مختصرًا") &&
-    !read("src/components/admin/page-blocks/CardsModuleEditClient.tsx").includes("تحتاج عنوانًا ووصفًا مختصرًا"),
+    !read(
+      "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
+    ).includes("تحتاج عنوانًا ووصفًا مختصرًا"),
 );
 
 check(
   "Cards repeater keeps the shared three-column owner and a compact eyebrow-title-description field order",
-  presentation.includes("lg:grid-cols-2 xl:grid-cols-3") &&
+  presentation.includes(
+    'columns === 2 ? "xl:grid-cols-2" : "xl:grid-cols-3"',
+  ) &&
     cardsRepeater.includes("ModuleEditorRepeaterGrid") &&
     cardsRepeater.indexOf("MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr") <
       cardsRepeater.indexOf("item_${index}_title") &&
     cardsRepeater.indexOf("item_${index}_title") <
-      cardsRepeater.indexOf("MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr") &&
+      cardsRepeater.indexOf(
+        "MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr",
+      ) &&
     !cardsRepeater.includes("xl:grid-cols-1"),
 );
 
@@ -707,8 +1180,10 @@ const pageBlockCollectionHeaders = [
 ];
 check(
   "Page Blocks collection and composition headers use the shared context owner with unified Arabic eyebrows",
-  pageBlockCollectionHeaders.every((source) =>
-    source.includes("AdminPageContextHeader") && !source.includes("AdminPageHeader"),
+  pageBlockCollectionHeaders.every(
+    (source) =>
+      source.includes("AdminPageContextHeader") &&
+      !source.includes("AdminPageHeader"),
   ) &&
     !pageBlockCollectionHeaders.join("\n").includes("Admin Panel") &&
     !pageBlockCollectionHeaders.join("\n").includes("PAGES CONTROL") &&
@@ -719,28 +1194,35 @@ check(
 
 check(
   "Page Composition exposes the mandatory shared display-position contract in columns, filters, sorting, and rows",
-  assignmentColumns.includes('{ key: "slot", label: "موضع العرض", defaultVisible: true, hideable: false }') &&
-  assignmentGrid.includes('sortProps("slot")') &&
+  assignmentColumns.includes(
+    '{ key: "slot", label: "موضع العرض", defaultVisible: true, hideable: false }',
+  ) &&
+    assignmentGrid.includes('sortProps("slot")') &&
     assignmentGrid.includes(">موضع العرض</") &&
-    assignmentRow.includes("LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]") &&
+    assignmentRow.includes(
+      "LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]",
+    ) &&
     assignmentRow.includes("AdminListboxSelect") &&
     pagesClient.includes("handleDisplayPositionChange") &&
     pagesClient.includes("updatePageBlockAssignment(") &&
     pagesClient.includes("<PageVisualSlotMap assignments={instant.rows}") &&
     pagesClient.includes("reconcileSuccess:") &&
     pagesClient.includes('paramKey: "slot"') &&
-    pagesClient.includes("PAGE_LAYOUT_SLOT_ORDER.map") &&
-    pagesClient.includes('slot: (row: PageBlockAssignmentRow)') &&
-    pagesClient.includes('values={{ module_type: moduleType, slot, visibility }}'),
+    pagesClient.includes("PAGE_COMPOSITION_POSITIONS.map") &&
+    pagesClient.includes("slot: (row: PageBlockAssignmentRow)") &&
+    pagesClient.includes(
+      "values={{ module_type: moduleType, slot, visibility }}",
+    ),
 );
 
 check(
   "specialized Page Block tables retain their declared shared grid, toolbar, pagination, and row-action owners",
-  [blockManager, contentManager, summaryManager, heroManager].every((source) =>
-    source.includes("AdminDataGrid") &&
-    source.includes("AdminEntityListFilters") &&
-    source.includes("AdminTablePagination") &&
-    source.includes("AdminDataGridRowActions"),
+  [blockManager, contentManager, summaryManager, heroManager].every(
+    (source) =>
+      source.includes("AdminDataGrid") &&
+      source.includes("AdminEntityListFilters") &&
+      source.includes("AdminTablePagination") &&
+      source.includes("AdminDataGridRowActions"),
   ),
 );
 
@@ -755,12 +1237,14 @@ check(
     summaryManager.includes("AdminDataGridRowActions") &&
     mediaHubListRoute.includes("bulkMediaHubModuleStatuses") &&
     mediaSidebarListRoute.includes("bulkMediaSidebarModuleStatuses") &&
-    [mediaHubActions, mediaSidebarActions].every((source) =>
-      source.includes("PAGE_BLOCK_PUBLICATION_BULK_ACTIONS") &&
-      source.includes("parsePageBlockBulkIds") &&
-      source.includes('.in("id", ids)'),
+    [mediaHubActions, mediaSidebarActions].every(
+      (source) =>
+        source.includes("PAGE_BLOCK_PUBLICATION_BULK_ACTIONS") &&
+        source.includes("parsePageBlockBulkIds") &&
+        source.includes('.in("id", ids)'),
     ) &&
-    parsePageBlockBulkAction("publish", PAGE_BLOCK_PUBLICATION_BULK_ACTIONS) === "publish" &&
+    parsePageBlockBulkAction("publish", PAGE_BLOCK_PUBLICATION_BULK_ACTIONS) ===
+      "publish" &&
     rejects(() =>
       parsePageBlockBulkAction("delete", PAGE_BLOCK_PUBLICATION_BULK_ACTIONS),
     ) &&
@@ -793,8 +1277,14 @@ check(
     heroDetailRoute.includes("getHeroModuleAssignmentContext(heroId)") &&
     !heroDetailRoute.includes('.from("pages")') &&
     !heroDetailRoute.includes("hero_assignments(") &&
-    pageCompositionRoute.includes("const [pageResult, preference, assignmentsResult, globalSeo] = await Promise.all") &&
-    !pageCompositionRoute.includes("assignmentsData = await getPageModuleAssignmentsForAdmin"),
+    pageCompositionRoute.includes(
+      "const [pageResult, preference, assignmentsResult, globalSeo] = await Promise.all",
+    ) &&
+    !pageCompositionRoute.includes(
+      "assignmentsData = await getPageModuleAssignmentsForAdmin",
+    ),
 );
 
-console.log(`Page Block Editor Presentation verification passed (${passed} checks).`);
+console.log(
+  `Page Block Editor Presentation verification passed (${passed} checks).`,
+);

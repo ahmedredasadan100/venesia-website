@@ -26,9 +26,14 @@ import {
   parseMediaHubSectionKey,
 } from "../../../../../lib/media-hub-modules/parse-config";
 import {
+  buildMediaHubCollectionView,
+  buildMediaHubContentHierarchy,
+} from "../../../../../lib/media-hub-modules/presentation-contract";
+import {
   parsePageIdsFromForm,
   syncMediaHubModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
+import { buildPageBlockTextFormattingPatch } from "../../../../../lib/page-blocks/configs";
 
 export async function updateMediaHubModule(formData: FormData) {
   const actor = await requireAdminSession();
@@ -45,23 +50,44 @@ export async function updateMediaHubModule(formData: FormData) {
     : placementInput === "featured"
       ? "featured"
       : "hub";
-  const config = buildMediaHubModuleConfig(sectionKey, dataSource, {
-    limit: parseNumber(formData.get("limit"), 0),
-  }, {
+  const config = buildMediaHubModuleConfig(
+    sectionKey,
+    dataSource,
+    parseNumber(formData.get("item_limit"), 0),
+    buildMediaHubContentHierarchy(sectionKey, {
+      mode: cleanText(formData.get("content_hierarchy_mode")),
+      secondaryItemCount: parseNumber(
+        formData.get("secondary_item_count"),
+        0,
+      ),
+    }),
+    {
+    ...buildPageBlockTextFormattingPatch(formData, [
+      { field: "eyebrow" },
+      { field: "title", defaults: { bold: true } },
+      { field: "description" },
+    ]),
     eyebrow: cleanText(formData.get("eyebrow")),
     title: cleanText(formData.get("title")),
     description: cleanText(formData.get("presentation_description")),
     ctaText: cleanText(formData.get("cta_text")),
-  }, {
-    placement,
-    mediaType: cleanText(formData.get("media_type")),
-    pageSize: parseNumber(formData.get("page_size"), 2),
-    layout: cleanText(formData.get("listing_layout")),
-    columns: parseNumber(formData.get("listing_columns"), 2),
-    paginationEnabled: parseFormBoolean(formData, "pagination_enabled", true),
-    cardVariant: cleanText(formData.get("card_variant")),
-    cardCtaText: cleanText(formData.get("card_cta_text")),
-  });
+    collectionView: buildMediaHubCollectionView(sectionKey, {
+      layout: cleanText(formData.get("collection_layout")),
+      itemsPerRow: parseNumber(formData.get("items_per_row"), 0),
+      cardVariant: cleanText(formData.get("collection_card_variant")),
+    }),
+    },
+    {
+      placement,
+      mediaType: cleanText(formData.get("media_type")),
+      pageSize: parseNumber(formData.get("page_size"), 2),
+      layout: cleanText(formData.get("listing_layout")),
+      columns: parseNumber(formData.get("listing_columns"), 2),
+      paginationEnabled: parseFormBoolean(formData, "pagination_enabled", true),
+      cardVariant: cleanText(formData.get("card_variant")),
+      cardCtaText: cleanText(formData.get("card_cta_text")),
+    },
+  );
 
   const nextRow = {
     name,

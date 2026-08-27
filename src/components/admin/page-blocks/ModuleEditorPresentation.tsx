@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { Children, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { useSearchParams } from "next/navigation";
 
@@ -15,12 +15,14 @@ import {
   AdminFormGridItem,
   AdminFormSection,
   AdminFormSwitch,
+  AdminTextFormatControls,
   AdminPageContextHeader,
   AdminStickyFormBar,
   type AdminPageContextHeaderProps,
   type AdminModuleTab,
   type AdminModuleTabsProps,
 } from "../ui";
+import type { PageBlockTextAlignment } from "../../../lib/page-blocks/configs";
 import AdminModuleTabs from "../ui/AdminModuleTabs";
 import BlockEditorContextHeader, {
   BlockEditorSaveFeedback,
@@ -60,9 +62,15 @@ export function ModuleEditorHeader({
   ...props
 }: ModuleEditorHeaderProps) {
   const searchParams = useSearchParams();
-  const metadata = getModuleEditorHeaderMetadata(moduleKind, moduleSlug, entityName);
+  const metadata = getModuleEditorHeaderMetadata(
+    moduleKind,
+    moduleSlug,
+    entityName,
+  );
   if (!metadata) {
-    throw new Error(`Missing Module Editor header metadata for ${moduleKind}:${moduleSlug ?? "default"}`);
+    throw new Error(
+      `Missing Module Editor header metadata for ${moduleKind}:${moduleSlug ?? "default"}`,
+    );
   }
 
   const presentation = {
@@ -117,25 +125,35 @@ export function ModuleEditorTabs({
   tabs,
   ...props
 }: ModuleEditorTabsProps) {
-  const resolvedTabs = tabs.map((tab, sourceIndex) => {
-    const metadata = getModuleEditorSectionMetadata(moduleKind, tab.id, moduleSlug);
-    if (!metadata) {
-      throw new Error(`Missing Module Editor section metadata for ${moduleKind}:${moduleSlug ?? "default"}:${tab.id}`);
-    }
+  const resolvedTabs = tabs
+    .map((tab, sourceIndex) => {
+      const metadata = getModuleEditorSectionMetadata(
+        moduleKind,
+        tab.id,
+        moduleSlug,
+      );
+      if (!metadata) {
+        throw new Error(
+          `Missing Module Editor section metadata for ${moduleKind}:${moduleSlug ?? "default"}:${tab.id}`,
+        );
+      }
 
-    return {
-      sourceIndex,
-      order: getModuleEditorSectionOrder(metadata),
-      tab: {
-        ...tab,
-        navigationLabel: metadata.navigationLabelAr,
-        sectionHeading: metadata.sectionHeadingAr,
-        sectionDescription: metadata.sectionDescriptionAr,
-        icon: metadata.icon,
-      } satisfies AdminModuleTab,
-    };
-  })
-    .sort((left, right) => left.order - right.order || left.sourceIndex - right.sourceIndex)
+      return {
+        sourceIndex,
+        order: getModuleEditorSectionOrder(metadata),
+        tab: {
+          ...tab,
+          navigationLabel: metadata.navigationLabelAr,
+          sectionHeading: metadata.sectionHeadingAr,
+          sectionDescription: metadata.sectionDescriptionAr,
+          icon: metadata.icon,
+        } satisfies AdminModuleTab,
+      };
+    })
+    .sort(
+      (left, right) =>
+        left.order - right.order || left.sourceIndex - right.sourceIndex,
+    )
     .map(({ tab }) => tab);
 
   return <AdminModuleTabs {...props} tabs={resolvedTabs} />;
@@ -153,28 +171,38 @@ export function ModuleEditorSection({
 }
 
 export type ModuleEditorSectionHeadingIntent =
-  | "domain"
-  | "media-collection"
-  | "repeater"
-  | "cta"
-  | "settings";
+  "domain" | "media-collection" | "repeater" | "cta" | "settings";
 
 export function ModuleEditorSectionHeading({
   intent,
   children,
   className = "text-sm",
+  actions,
 }: {
   intent: ModuleEditorSectionHeadingIntent;
   children: ReactNode;
   className?: string;
+  actions?: ReactNode;
 }) {
-  return (
+  const heading = (
     <h2
       data-module-editor-section-heading={intent}
       className={`${className} font-semibold text-white`.trim()}
     >
       {children}
     </h2>
+  );
+
+  if (!actions) return heading;
+
+  return (
+    <div
+      data-module-editor-section-header={intent}
+      className="flex flex-wrap items-center justify-between gap-3"
+    >
+      {heading}
+      <div className="flex min-w-0 flex-wrap items-center gap-2">{actions}</div>
+    </div>
   );
 }
 
@@ -186,10 +214,7 @@ export function ModuleEditorFieldGrid({
   className?: string;
 }) {
   return (
-    <AdminFormGrid
-      columns={12}
-      className={className}
-    >
+    <AdminFormGrid columns={12} className={className}>
       {children}
     </AdminFormGrid>
   );
@@ -232,16 +257,19 @@ export function ModuleEditorContentGroup({
   children: ReactNode;
   className?: string;
 }) {
-  const label = kind === "short"
-    ? MODULE_EDITOR_TERMINOLOGY.shortContent.labelAr
-    : MODULE_EDITOR_TERMINOLOGY.longContent.labelAr;
+  const label =
+    kind === "short"
+      ? MODULE_EDITOR_TERMINOLOGY.shortContent.labelAr
+      : MODULE_EDITOR_TERMINOLOGY.longContent.labelAr;
 
   return (
     <div
       data-module-editor-content-group={kind}
       className={`space-y-3 ${kind === "long" ? "border-t border-white/10 pt-4" : ""} ${className}`.trim()}
     >
-      <ModuleEditorSectionHeading intent="domain">{label}</ModuleEditorSectionHeading>
+      <ModuleEditorSectionHeading intent="domain">
+        {label}
+      </ModuleEditorSectionHeading>
       {children}
     </div>
   );
@@ -249,15 +277,17 @@ export function ModuleEditorContentGroup({
 
 export function ModuleEditorRepeaterGrid({
   children,
+  columns = 3,
   className = "",
 }: {
   children: ReactNode;
+  columns?: 2 | 3;
   className?: string;
 }) {
   return (
     <div
       data-module-editor-repeater-grid=""
-      className={`grid gap-4 lg:grid-cols-2 xl:grid-cols-3 ${className}`.trim()}
+      className={`grid gap-4 lg:grid-cols-2 ${columns === 2 ? "xl:grid-cols-2" : "xl:grid-cols-3"} ${className}`.trim()}
     >
       {children}
     </div>
@@ -323,10 +353,12 @@ export function ModuleEditorHeadingVisibilityRow({
 export function ModuleEditorStatusSwitch({
   status,
   label = "منشور",
+  surface = true,
   className = "",
 }: {
   status: string | null | undefined;
   label?: ReactNode;
+  surface?: boolean;
   className?: string;
 }) {
   return (
@@ -336,38 +368,240 @@ export function ModuleEditorStatusSwitch({
       value="published"
       uncheckedValue="unpublished"
       defaultChecked={status === "published"}
-      surface
-      className={`min-h-[46px] ${className}`.trim()}
+      surface={surface}
+      className={`${surface ? "min-h-[46px]" : ""} ${className}`.trim()}
     />
   );
 }
 
-export function ModuleEditorSettingsComposition({
-  context,
-  primary,
-  secondary,
+export const MODULE_EDITOR_CONTROL_CARD_CLASS_NAME =
+  "rounded-2xl border border-white/10 bg-[#05070B]/72 p-4";
+
+export function ModuleEditorVisibilityAlignRow({
+  label,
+  alignmentName,
+  showName,
+  boldName,
+  alignmentDefault = "right",
+  showDefault = true,
+  boldDefault = false,
+  enableAlignment = true,
+  enableBold = true,
+  enableVisibility = true,
+  controlsPlacement = "header",
+  presentation = "card",
+  children,
+}: {
+  label: string;
+  alignmentName: string;
+  showName: string;
+  boldName?: string;
+  alignmentDefault?: PageBlockTextAlignment;
+  showDefault?: boolean;
+  boldDefault?: boolean;
+  enableAlignment?: boolean;
+  enableBold?: boolean;
+  enableVisibility?: boolean;
+  controlsPlacement?: "header" | "footer" | "cards";
+  presentation?: "card" | "plain";
+  children?: ReactNode;
+}) {
+  const [alignment, setAlignment] =
+    useState<PageBlockTextAlignment>(alignmentDefault);
+  const [show, setShow] = useState(showDefault);
+  const [bold, setBold] = useState(boldDefault);
+
+  const submittedValues = (
+    <>
+      <input
+        type="hidden"
+        name={showName}
+        value={String(enableVisibility ? show : showDefault)}
+      />
+      <input
+        type="hidden"
+        name={alignmentName}
+        value={enableAlignment ? alignment : alignmentDefault}
+      />
+      {boldName ? (
+        <input
+          type="hidden"
+          name={boldName}
+          value={String(enableBold ? bold : boldDefault)}
+        />
+      ) : null}
+    </>
+  );
+
+  const renderControls = (toolbarLabel = `إعدادات ${label}`) => (
+    <div
+      className="flex min-w-0 flex-wrap items-center gap-1.5 sm:flex-nowrap"
+      role="toolbar"
+      aria-label={toolbarLabel}
+      dir="rtl"
+    >
+      {enableVisibility ? (
+        <AdminFormSwitch
+          label={show ? "ظاهر" : "مخفي"}
+          checked={show}
+          onChange={(event) => setShow(event.target.checked)}
+          wrapLabel
+        />
+      ) : null}
+      <AdminTextFormatControls
+        ariaLabel={`تنسيق ${label}`}
+        alignmentAriaLabel={`محاذاة ${label}`}
+        alignment={enableAlignment ? alignment : undefined}
+        onAlignmentChange={
+          enableAlignment
+            ? (next) => setAlignment(next as PageBlockTextAlignment)
+            : undefined
+        }
+        bold={boldName && enableBold ? bold : undefined}
+        onBoldChange={boldName && enableBold ? setBold : undefined}
+        embedded
+      />
+    </div>
+  );
+
+  if (controlsPlacement === "cards") {
+    return (
+      <div data-module-editor-control-row="">
+        {submittedValues}
+        <div
+          className="grid min-w-0 gap-4 lg:grid-cols-2"
+          data-module-editor-cta-grid=""
+        >
+          {Children.toArray(children).map((child, index) => {
+            const targetLabel = index === 0 ? "الزر الأساسي" : "الزر الثانوي";
+            return (
+              <div
+                key={index}
+                className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} space-y-3`}
+                data-module-editor-cta-card={
+                  index === 0 ? "primary" : "secondary"
+                }
+              >
+                <div className="flex min-w-0 items-center justify-between gap-2">
+                  <span className="shrink-0 text-sm font-semibold text-white/78">
+                    {targetLabel}
+                  </span>
+                  {renderControls(`إعدادات ${targetLabel}`)}
+                </div>
+                {child}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      data-module-editor-control-row=""
+      className={
+        presentation === "card"
+          ? MODULE_EDITOR_CONTROL_CARD_CLASS_NAME
+          : undefined
+      }
+    >
+      {submittedValues}
+      {controlsPlacement === "header" ? (
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <span className="shrink-0 text-sm font-semibold text-white/78">
+            {label}
+          </span>
+          {renderControls()}
+        </div>
+      ) : null}
+      {children ? (
+        <div className={controlsPlacement === "header" ? "mt-3" : ""}>
+          {children}
+        </div>
+      ) : null}
+      {controlsPlacement === "footer" ? (
+        <div
+          className={
+            presentation === "card"
+              ? "mt-3 flex flex-col gap-3 border-t border-white/8 pt-3 sm:flex-row sm:items-center sm:justify-between"
+              : "mt-3 flex w-fit flex-col gap-3 rounded-xl border border-white/10 bg-[#05070B]/72 px-3 py-2 sm:flex-row sm:items-center"
+          }
+        >
+          <span className="shrink-0 text-sm font-semibold text-white/78">
+            {label}
+          </span>
+          {renderControls()}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function ModuleEditorIdentitySection({
+  name,
+  status,
+  children,
+  nameLabel = "اسم الموديول",
+  statusLabel = "حالة النشر",
+  inputClassName,
   className = "",
 }: {
-  context?: ReactNode;
-  primary: ReactNode;
-  secondary?: ReactNode;
+  name: string;
+  status: string | null | undefined;
+  children?: ReactNode;
+  nameLabel?: ReactNode;
+  statusLabel?: ReactNode;
+  inputClassName: string;
   className?: string;
 }) {
   return (
-    <div
-      data-module-editor-settings=""
-      className={`space-y-5 xl:[&_[data-module-editor-field-nature='binary-state']]:pt-6 ${className}`.trim()}
+    <ModuleEditorSection
+      data-module-editor-identity=""
+      className={`mb-5 ${className}`.trim()}
     >
-      {context}
-      {secondary ? (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-          {primary}
-          {secondary}
-        </div>
-      ) : (
-        primary
-      )}
-    </div>
+      <ModuleEditorFieldGrid className="md:grid-cols-2 xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content] xl:justify-start">
+        <ModuleEditorField
+          nature="standard"
+          span={3}
+          className="xl:col-span-1!"
+        >
+          <label className="block space-y-2">
+            <span className="block text-sm font-medium text-white/70">
+              {nameLabel}
+            </span>
+            <input
+              name="name"
+              defaultValue={name}
+              required
+              className={inputClassName}
+            />
+          </label>
+        </ModuleEditorField>
+        {children ? (
+          <ModuleEditorField
+            nature="standard"
+            span={3}
+            className="xl:col-span-1!"
+          >
+            {children}
+          </ModuleEditorField>
+        ) : null}
+        <ModuleEditorField
+          nature="binary-state"
+          span={3}
+          className="xl:col-span-1!"
+        >
+          <div className="flex h-full items-end pb-1.5">
+            <ModuleEditorStatusSwitch
+              status={status}
+              label={statusLabel}
+              surface={false}
+            />
+          </div>
+        </ModuleEditorField>
+      </ModuleEditorFieldGrid>
+    </ModuleEditorSection>
   );
 }
 
@@ -391,45 +625,20 @@ export function ModuleEditorPagesTab({
           {children}
           <ModulePageAssignmentsField
             pages={assignmentContext.pages}
-            assignedPageIds={assignmentContext.assignments.map((row) => row.page_id)}
+            assignedPageIds={assignmentContext.assignments.map(
+              (row) => row.page_id,
+            )}
           />
         </div>
       ) : (
         <ModulePageAssignmentsField
           pages={assignmentContext.pages}
-          assignedPageIds={assignmentContext.assignments.map((row) => row.page_id)}
+          assignedPageIds={assignmentContext.assignments.map(
+            (row) => row.page_id,
+          )}
         />
       )}
     </div>
-  );
-}
-
-export function ModuleEditorTechnicalIdentity({
-  mode,
-  value,
-  name = "slug",
-  label = "المعرّف التقني",
-  inputClassName,
-}: {
-  mode: "editable" | "hidden";
-  value: string;
-  name?: string;
-  label?: ReactNode;
-  inputClassName: string;
-}) {
-  if (mode === "hidden") return <input type="hidden" name={name} value={value} />;
-
-  return (
-    <label className="block space-y-2" data-module-editor-technical-identity={mode}>
-      <span className="text-xs font-semibold text-white/55">{label}</span>
-      <input
-        name={name}
-        defaultValue={value}
-        required
-        dir="ltr"
-        className={inputClassName}
-      />
-    </label>
   );
 }
 
@@ -438,11 +647,12 @@ export function ModuleEditorFeedback(
     | { backHref: string; saved?: boolean; children?: never }
     | { children: ReactNode; backHref?: never; saved?: never },
 ) {
-  const feedback = "children" in props ? (
-    props.children
-  ) : (
-    <BlockEditorSaveFeedback backHref={props.backHref} saved={props.saved} />
-  );
+  const feedback =
+    "children" in props ? (
+      props.children
+    ) : (
+      <BlockEditorSaveFeedback backHref={props.backHref} saved={props.saved} />
+    );
 
   return feedback ? <div data-module-editor-feedback="">{feedback}</div> : null;
 }

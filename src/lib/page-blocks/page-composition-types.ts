@@ -1,13 +1,11 @@
 import type { ResolvedFeedModule } from "../feed-modules/types";
 import type { HeroSectionVisibility } from "../load-hero-section";
-import type { MediaHubModulesState } from "../media-hub-modules/types";
+import type { MediaHubModuleState, MediaHubModulesState } from "../media-hub-modules/types";
 import type { MediaSidebarModulesState } from "../media-sidebar-modules/types";
 import type { MediaSidebarWidgetState } from "../media-sidebar-modules/types";
 import type { HeroSectionData } from "../page-sections";
 import type { PageLayoutSlot } from "./layout-slots";
 import type { PageBlockPublicState, ResolvedPageBlock } from "./types";
-
-export type PageLayoutMode = "stack" | "main-sidebar";
 
 export type HeroSlotEntry = {
   kind: "hero";
@@ -37,10 +35,21 @@ export type MediaSidebarSlotEntry = {
   widget: MediaSidebarWidgetState;
 };
 
-export type SlotEntry = HeroSlotEntry | BlockSlotEntry | FeedSlotEntry | MediaSidebarSlotEntry;
+export type MediaHubSlotEntry = {
+  kind: "media-hub";
+  assignmentId: number;
+  sortOrder: number;
+  module: MediaHubModuleState;
+};
+
+export type SlotEntry =
+  | HeroSlotEntry
+  | BlockSlotEntry
+  | FeedSlotEntry
+  | MediaSidebarSlotEntry
+  | MediaHubSlotEntry;
 
 export type PageComposition = {
-  layoutMode: PageLayoutMode;
   slots: Record<PageLayoutSlot, SlotEntry[]>;
   /** Page Block assignment/publication truth before render filtering. */
   blockStates: PageBlockPublicState[];

@@ -11,6 +11,11 @@ import { extractPageBlockSeoText } from "./configs";
 import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageBlockAssignmentRow } from "./types";
 import { isRetiredContentBlockTemplateSlug } from "./deprecated-block-modules";
+import {
+  getDefaultAssignmentPosition,
+  getProductFixedPositionReason,
+} from "../page-composition/page-assignment-contract";
+import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
 
 export { blockModuleHref, blockModuleListHref };
 
@@ -135,7 +140,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       id: row.id,
       page_id: pageId,
       template_id: template.id,
-      slot: "hero",
+      slot: getDefaultAssignmentPosition("hero"),
       sort_order: Math.max(0, 1000 - Number(row.priority ?? 1000)),
       ...resolvePageModuleVisibilityFields(row.is_active, template.status),
       updated_at: String(row.updated_at),
@@ -277,7 +282,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_status: template?.status ?? "unpublished",
       template_variant: template?.widget_key ?? "sections",
       manages_assignment_on_page: true,
-      assignment_note: "slot: sidebar — يتحكم في ظهور وترتيب لوحة الشريط الجانبي على الموقع.",
+      assignment_note: getProductFixedPositionReason("media-sidebar"),
     });
   }
 
@@ -298,13 +303,14 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_status: template?.status ?? "unpublished",
       template_variant: template?.section_key ?? "featured",
       manages_assignment_on_page: true,
-      assignment_note: "slot: main — يتحكم في ظهور وترتيب موديول المركز الإعلامي المرتبط بهذه الصفحة.",
+      assignment_note: getProductFixedPositionReason("media-hub"),
     });
   }
 
   assignments.sort((a, b) => {
-    const slotOrder = (slot: string) => slot === "hero" ? -2 : slot === "top" ? -1 : slot === "main" ? 0 : 1;
-    return slotOrder(a.slot) - slotOrder(b.slot)
+    const positionOrder = (slot: string) =>
+      PAGE_COMPOSITION_POSITIONS.indexOf(normalizeLayoutSlot(slot));
+    return positionOrder(a.slot) - positionOrder(b.slot)
       || a.sort_order - b.sort_order
       || a.module_kind.localeCompare(b.module_kind)
       || a.id - b.id;

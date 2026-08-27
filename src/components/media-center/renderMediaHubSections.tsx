@@ -6,22 +6,25 @@ import MediaCenterHubTimeline from "./MediaCenterHubTimeline";
 import MediaCenterHubVideos from "./MediaCenterHubVideos";
 import {
   buildMediaHubRenderPlan,
-  shouldRenderHubGridPair,
 } from "../../lib/media-hub-modules/build-media-hub-render-plan";
 import type { MediaHubModuleState } from "../../lib/media-hub-modules/types";
 
-function renderHubSection(module: MediaHubModuleState): ReactNode {
+export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
   const data = module.sectionData;
   if (!data) return null;
+  const hierarchyMode = module.config.contentHierarchy?.mode ?? "uniform";
+
+  if (data.kind === "featured" || hierarchyMode === "featured-first") {
+    return data.items.length ? (
+      <MediaCenterHubFeatured
+        items={data.items}
+        contentHierarchy={module.config.contentHierarchy}
+        presentation={module.config.presentation}
+      />
+    ) : null;
+  }
 
   switch (data.kind) {
-    case "featured":
-      return data.item ? (
-        <MediaCenterHubFeatured
-          featuredItem={data.item}
-          presentation={module.config.presentation}
-        />
-      ) : null;
     case "site-updates":
       return (
         <MediaCenterHubTimeline
@@ -56,51 +59,10 @@ function renderHubSection(module: MediaHubModuleState): ReactNode {
 }
 
 export function renderMediaHubSections(modules: MediaHubModuleState[]): ReactNode[] {
-  const plan = buildMediaHubRenderPlan(modules);
-  const nodes: ReactNode[] = [];
-  let index = 0;
+  return buildMediaHubRenderPlan(modules).flatMap((module) => {
+    const node = renderMediaHubSection(module);
+    if (node == null) return [];
 
-  while (index < plan.length) {
-    const current = plan[index];
-    const next = plan[index + 1];
-
-    if (shouldRenderHubGridPair(current.sectionKey, next?.sectionKey)) {
-      const timelineFirst = current.sectionKey === "site-updates";
-      nodes.push(
-        <div
-          key={`hub-grid-${current.assignmentId}-${next.assignmentId}-${index}`}
-          className="grid gap-8 @5xl/slot-module:grid-cols-[0.95fr_1.05fr]"
-        >
-          {timelineFirst ? (
-            <>
-              {renderHubSection(current)}
-              {renderHubSection(next)}
-            </>
-          ) : (
-            <>
-              {renderHubSection(next)}
-              {renderHubSection(current)}
-            </>
-          )}
-        </div>,
-      );
-      index += 2;
-      continue;
-    }
-
-    if (current.sectionKey === "site-updates" || current.sectionKey === "videos") {
-      nodes.push(
-        <div key={`hub-grid-${current.assignmentId}-${index}`} className="grid gap-8 @5xl/slot-module:grid-cols-[0.95fr_1.05fr]">
-          {renderHubSection(current)}
-        </div>,
-      );
-      index += 1;
-      continue;
-    }
-
-    nodes.push(<div key={`hub-section-${current.assignmentId}-${index}`}>{renderHubSection(current)}</div>);
-    index += 1;
-  }
-
-  return nodes;
+    return [<div key={`media-hub-${module.assignmentId}`}>{node}</div>];
+  });
 }

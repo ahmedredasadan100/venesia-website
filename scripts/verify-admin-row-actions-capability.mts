@@ -2544,7 +2544,7 @@ check(
     !entityListSource.includes("primary-section]:mt-") &&
     !read(paths.pagination).includes("className={`mt-4") &&
     read(paths.pagination).includes('data-admin-table-pagination=""') &&
-    read(paths.pageExperience).includes("flex flex-col gap-7") &&
+    read(paths.pageExperience).includes("flex flex-col gap-6") &&
     listConsumerSources.every(
       (source) =>
         source.includes("AdminEntityListTableRegion") &&
@@ -3749,9 +3749,14 @@ check(
     read(paths.boundedPagination).includes(
       "const applyQueryPatch = useCallback",
     ) &&
+    read(paths.boundedPagination).includes("useRouter") &&
     read(paths.boundedPagination).includes(
-      'behavior === "replace" ? "replaceState" : "pushState"',
+      "router.push(href, { scroll: false })",
     ) &&
+    read(paths.boundedPagination).includes(
+      "router.replace(href, { scroll: false })",
+    ) &&
+    !read(paths.boundedPagination).includes("window.history") &&
     read(paths.boundedPagination).includes("previousDatasetKey"),
 );
 

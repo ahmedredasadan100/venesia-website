@@ -1,6 +1,7 @@
 import "server-only";
 
 import { isPageModulePubliclyVisible } from "../page-blocks/admin-utils";
+import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
 import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseMediaHubModuleConfig } from "./parse-config";
@@ -34,9 +35,8 @@ export async function queryMediaHubModules(
 
   const { data: rows, error } = await getSupabaseAdmin()
     .from("page_media_hub_module_assignments")
-    .select("id,sort_order,is_visible,media_hub_module_templates(section_key,name,slug,status,config)")
+    .select("id,slot,sort_order,is_visible,media_hub_module_templates(section_key,name,slug,status,config)")
     .eq("page_id", pageState.page.id)
-    .eq("slot", "main")
     .order("sort_order", { ascending: true });
 
   if (error) {
@@ -60,6 +60,7 @@ export async function queryMediaHubModules(
     modules.push({
       sectionKey: template.section_key,
       assignmentId: row.id,
+      slot: normalizeLayoutSlot(row.slot),
       sortOrder: row.sort_order,
       isVisible: isPageModulePubliclyVisible(row.is_visible, template.status),
       title: template.name,

@@ -36,11 +36,13 @@ import {
 import { resolveModuleProductKind } from "../../../../../lib/page-blocks/module-edit-registry";
 import {
   LAYOUT_SLOT_LABELS_AR,
-  PAGE_LAYOUT_SLOT_ORDER,
+  PAGE_COMPOSITION_POSITIONS,
   type PageLayoutSlot,
   normalizeLayoutSlot,
 } from "../../../../../lib/page-blocks/layout-slots";
-import { getAssignableSlotsForRoute } from "../../../../../lib/page-composition/route-slot-policy";
+import {
+  getAssignablePositions,
+} from "../../../../../lib/page-composition/page-assignment-contract";
 import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/types";
 import { resolvePagePublicPath } from "../../../../../lib/pages/page-admin-policy";
 import {
@@ -177,7 +179,6 @@ export default function PageBlocksClient({
     assignMediaHubAction,
   } = usePageBlocksAssignModal({
     pageId: page.id,
-    pageSlug: page.slug,
     assignments,
     templates,
     setActionMessage,
@@ -189,7 +190,7 @@ export default function PageBlocksClient({
       module_kind: (row: PageBlockAssignmentRow) =>
         moduleKindLabel(row.module_kind, row.template_slug, row.template_variant),
       template_name: (row: PageBlockAssignmentRow) => row.template_name,
-      slot: (row: PageBlockAssignmentRow) => PAGE_LAYOUT_SLOT_ORDER.indexOf(normalizeLayoutSlot(row.slot)),
+      slot: (row: PageBlockAssignmentRow) => PAGE_COMPOSITION_POSITIONS.indexOf(normalizeLayoutSlot(row.slot)),
       visibility: (row: PageBlockAssignmentRow) =>
         (normalizeBoolean(row.is_publicly_visible, false) ? 0 : 1),
     }),
@@ -226,7 +227,7 @@ export default function PageBlocksClient({
         type: "single_select",
         allValue: "all",
         placeholder: "موضع العرض",
-        options: PAGE_LAYOUT_SLOT_ORDER.map((value) => ({
+        options: PAGE_COMPOSITION_POSITIONS.map((value) => ({
           value,
           label: LAYOUT_SLOT_LABELS_AR[value],
         })),
@@ -441,13 +442,14 @@ export default function PageBlocksClient({
   }
 
   function getAssignmentSiblings(row: PageBlockAssignmentRow) {
+    const position = normalizeLayoutSlot(row.slot);
     return instant.rows
-      .filter((candidate) => candidate.slot === row.slot)
+      .filter((candidate) => normalizeLayoutSlot(candidate.slot) === position)
       .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
   }
 
   function getDisplayPositionOptions(row: PageBlockAssignmentRow): PageLayoutSlot[] {
-    return getAssignableSlotsForRoute(page.slug, row.module_kind);
+    return getAssignablePositions(row.module_kind);
   }
 
   async function handleDisplayPositionChange(
@@ -468,7 +470,7 @@ export default function PageBlocksClient({
         : candidate,
     );
     const canonicalPositionByRowId = new Map<string, { slot: string; sortOrder: number }>();
-    for (const candidateSlot of PAGE_LAYOUT_SLOT_ORDER) {
+    for (const candidateSlot of PAGE_COMPOSITION_POSITIONS) {
       positionedRows
         .filter(
           (candidate) =>
@@ -718,7 +720,7 @@ export default function PageBlocksClient({
             icon: "plans",
             content: (
               <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <PageVisualSlotMap assignments={instant.rows} pageSlug={page.slug} />
+                <PageVisualSlotMap assignments={instant.rows} />
               </section>
             ),
           },
