@@ -23,6 +23,7 @@ export default function MediaCenterHubVideos({
       <MediaCenterCollectionItems
         items={items}
         view={presentation.collectionView}
+        showDateWhenAvailable
       />
     </section>
   );

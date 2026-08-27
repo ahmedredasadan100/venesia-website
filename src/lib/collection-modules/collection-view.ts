@@ -1,8 +1,13 @@
+import type { CollectionContentHierarchyMode } from "./content-hierarchy";
+
 export const COLLECTION_LAYOUTS = [
+  "featured",
+  "editorial",
+  "mosaic",
   "grid",
   "list",
   "timeline",
-  "carousel",
+  "timeline-digest",
 ] as const;
 
 export const COLLECTION_CARD_VARIANTS = ["default", "compact"] as const;
@@ -29,6 +34,17 @@ export type CollectionViewCapabilities = {
   layouts: readonly CollectionLayout[];
   itemsPerRow: readonly CollectionItemsPerRow[];
   cardVariants: readonly CollectionCardVariant[];
+  variants: Partial<
+    Record<
+      CollectionLayout,
+      {
+        itemsPerRow: boolean;
+        cardVariant: boolean;
+        contentHierarchyMode: CollectionContentHierarchyMode;
+      }
+    >
+  >;
+  legacyLayoutAliases?: Readonly<Record<string, CollectionLayout>>;
   defaults: CollectionView;
 };
 
@@ -41,13 +57,28 @@ export type CollectionViewInput = {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
+
+export function getCollectionViewVariantCapabilities(
+  capabilities: CollectionViewCapabilities,
+  layout: CollectionLayout,
+) {
+  return capabilities.variants[layout] ?? {
+    itemsPerRow: true,
+    cardVariant: true,
+    contentHierarchyMode: "uniform" as const,
+  };
+}
+
 export function parseCollectionView(
   value: unknown,
   capabilities: CollectionViewCapabilities,
 ): CollectionView {
   const raw = isRecord(value) ? value : {};
-  const layout = capabilities.layouts.includes(raw.layout as CollectionLayout)
-    ? (raw.layout as CollectionLayout)
+  const requestedLayout = typeof raw.layout === "string"
+    ? capabilities.legacyLayoutAliases?.[raw.layout] ?? raw.layout
+    : raw.layout;
+  const layout = capabilities.layouts.includes(requestedLayout as CollectionLayout)
+    ? (requestedLayout as CollectionLayout)
     : capabilities.defaults.layout;
   const itemsPerRow = capabilities.itemsPerRow.includes(
     raw.itemsPerRow as CollectionItemsPerRow,

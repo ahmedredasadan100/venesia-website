@@ -17,9 +17,8 @@ import {
   ModuleEditorVisibilityAlignRow,
 } from "./ModuleEditorPresentation";
 import {
-  CollectionContentHierarchyFields,
   CollectionItemLimitField,
-  CollectionViewFields,
+  CollectionPresentationFields,
 } from "./CollectionModuleFields";
 import type { Json } from "../../../lib/database.types";
 import { MEDIA_HUB_SECTION_LABELS } from "../../../lib/media-hub-modules/admin-present";
@@ -75,6 +74,8 @@ function ListingPresentationFields({
   config: MediaListingPresentationConfig;
   mediaType: MediaHubMediaType;
 }) {
+  const [layout, setLayout] = useState(config.layout);
+
   return (
     <>
       <input type="hidden" name="placement" value="listing" />
@@ -109,7 +110,8 @@ function ListingPresentationFields({
         <AdminFormListboxSelect
           name="listing_layout"
           label="تخطيط القائمة"
-          defaultValue={config.layout}
+          value={layout}
+          onChange={(value) => setLayout(value === "vertical" ? "vertical" : "grid")}
           options={[
             { value: "grid", label: "شبكة" },
             { value: "vertical", label: "رأسي" },
@@ -117,19 +119,22 @@ function ListingPresentationFields({
         />
       </ModuleEditorField>
 
-      <ModuleEditorField nature="standard" span={3}>
-        <AdminFormListboxSelect
-          name="listing_columns"
-          label="عدد الأعمدة"
-          defaultValue={String(config.columns)}
-          options={[
-            { value: "1", label: "عمود واحد" },
-            { value: "2", label: "عمودان" },
-            { value: "3", label: "ثلاثة أعمدة" },
-          ]}
-          hint="يطبق على تخطيط الشبكة."
-        />
-      </ModuleEditorField>
+      {layout === "grid" ? (
+        <ModuleEditorField nature="standard" span={3}>
+          <AdminFormListboxSelect
+            name="listing_columns"
+            label="عدد الأعمدة"
+            defaultValue={String(config.columns)}
+            options={[
+              { value: "1", label: "عمود واحد" },
+              { value: "2", label: "عمودان" },
+              { value: "3", label: "ثلاثة أعمدة" },
+            ]}
+          />
+        </ModuleEditorField>
+      ) : (
+        <input type="hidden" name="listing_columns" value={config.columns} />
+      )}
 
       <ModuleEditorField nature="standard" span={3}>
         <AdminFormListboxSelect
@@ -372,13 +377,11 @@ export default function MediaHubModuleEditClient({
                       </ModuleEditorSectionHeading>
                       <ModuleEditorFieldGrid key={sectionKey} className="mt-4">
                         <CollectionItemLimitField value={activeItemLimit} />
-                        <CollectionContentHierarchyFields
-                          value={activeHierarchy}
-                          capabilities={activeCapabilities.hierarchy}
-                        />
-                        <CollectionViewFields
-                          value={activeCollectionView}
-                          capabilities={activeCapabilities.view}
+                        <CollectionPresentationFields
+                          hierarchy={activeHierarchy}
+                          hierarchyCapabilities={activeCapabilities.hierarchy}
+                          view={activeCollectionView}
+                          viewCapabilities={activeCapabilities.view}
                         />
                       </ModuleEditorFieldGrid>
                     </ModuleEditorSection>
