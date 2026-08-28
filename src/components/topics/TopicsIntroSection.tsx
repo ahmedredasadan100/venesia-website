@@ -1,29 +1,19 @@
-import type { TopicsIntroContent } from "./topics-cms-mappers";
+import type { ContentBlockConfig } from "../../lib/page-blocks/configs";
+import { ContentIntroPresentation } from "../sections/ContentSection";
 
-const DEFAULT_INTRO: TopicsIntroContent = {
+const DEFAULT_INTRO: ContentBlockConfig = {
   eyebrow: "Knowledge Hub",
   title: "جميع الموضوعات",
-  description: "محتوى يجيب على أسئلتك ويوضح لك كل خطوة في رحلتك العقارية.",
+  subtitle: "محتوى يجيب على أسئلتك ويوضح لك كل خطوة في رحلتك العقارية.",
 };
 
 type TopicsIntroSectionProps = {
-  cmsContent?: TopicsIntroContent;
+  config?: ContentBlockConfig;
 };
 
-export default function TopicsIntroSection({ cmsContent }: TopicsIntroSectionProps = {}) {
-  const intro = cmsContent ?? DEFAULT_INTRO;
-
-  return (
-    <div className="text-right">
-      {intro.eyebrow ? (
-        <p className="text-xs uppercase tracking-[0.3em] text-[#D8B87A]/70">{intro.eyebrow}</p>
-      ) : null}
-
-      <h2 className="mt-3 text-3xl font-semibold text-white @xl/slot-module:text-4xl">{intro.title}</h2>
-
-      {intro.description ? (
-        <p className="mt-4 max-w-3xl leading-8 text-white/60">{intro.description}</p>
-      ) : null}
-    </div>
-  );
+/** Topics supplies fallback copy only; the shared Content owner renders Intro. */
+export default function TopicsIntroSection({
+  config = DEFAULT_INTRO,
+}: TopicsIntroSectionProps = {}) {
+  return <ContentIntroPresentation config={config} />;
 }

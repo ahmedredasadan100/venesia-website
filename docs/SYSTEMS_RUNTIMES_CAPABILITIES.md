@@ -314,6 +314,25 @@ Shared Components may own:
 - responsive behavior;
 - presentation-local open/focus/search state.
 
+Hierarchical category selects use the shared `AdminListboxSelectOption.depth`
+contract: parents retain their natural level, children receive visual indentation,
+and option labels remain the category names without repeated parent labels.
+
+Collection Module editors use one shared Admin composition in the order
+`Domain Selection -> Presentation -> Display`. Domain adapters declare the first
+control (for example Category or Content Type), Presentation declares only the supported layouts, and Display
+owns item density, limits, module-level visibility overrides, and the shared Details action text, visibility, Bold, and alignment. Topics Listing
+and Media Center Listing adopt this composition without sharing data resolution;
+their existing Public Read owners remain authoritative.
+
+Public Grid/List rendering is owned by the shared `CollectionListingPresenter`.
+Adopting domains supply already-resolved items, links, images, and neutral card
+metadata; they cannot introduce domain branches, alternate grid classes, card
+geometry, item-limit behavior, or Display resolution inside the shared presenter.
+Pagination remains page navigation outside the Listing presentation contract:
+each page consumer passes `page` and `pageSize` to its existing Public Read owner
+and renders the existing shared Pagination component after the presenter.
+
 They must not:
 
 - query entity tables;

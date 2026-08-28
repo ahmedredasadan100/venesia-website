@@ -1,12 +1,25 @@
 import type { Json } from "../database.types";
 import type { MediaHubSectionKey } from "./types";
 import {
+  DEFAULT_COLLECTION_DETAILS_ACTION,
+  resolveCollectionDetailsAction,
   resolvePageBlockTextFormattingConfig,
+  type CollectionDisplayOverrides,
   type PageBlockTextFormattingConfig,
 } from "../page-blocks/configs";
 import type { CollectionContentHierarchy } from "../collection-modules/content-hierarchy";
-import type { CollectionView } from "../collection-modules/collection-view";
-import { parseCollectionItemLimit } from "../collection-modules/item-limit";
+import {
+  COLLECTION_LISTING_ITEMS_PER_ROW,
+  COLLECTION_LISTING_LAYOUTS,
+  type CollectionListingItemsPerRow,
+  type CollectionListingLayout,
+  type CollectionView,
+} from "../collection-modules/collection-view";
+import {
+  COLLECTION_LISTING_ITEM_LIMITS,
+  parseCollectionItemLimit,
+  type CollectionListingItemLimit,
+} from "../collection-modules/item-limit";
 import {
   buildMediaHubCollectionView,
   buildMediaHubContentHierarchy,
@@ -19,17 +32,14 @@ import {
 export type MediaHubMediaType = "news" | "site_update" | "video" | "gallery" | "press";
 
 export type MediaHubModulePlacement = "hub" | "featured" | "listing";
-export type MediaListingLayout = "grid" | "vertical";
-export type MediaListingColumns = 1 | 2 | 3;
-export type MediaListingCardVariant = "default" | "compact";
+export type MediaListingLayout = CollectionListingLayout;
+export type MediaListingColumns = CollectionListingItemsPerRow;
 
 export type MediaListingPresentationConfig = {
-  pageSize: number;
-  layout: MediaListingLayout;
-  columns: MediaListingColumns;
-  paginationEnabled: boolean;
-  cardVariant: MediaListingCardVariant;
-  cardCtaText: string;
+  itemLimit: CollectionListingItemLimit;
+  presentation: MediaListingLayout;
+  itemsPerRow: MediaListingColumns;
+  display: CollectionDisplayOverrides;
 };
 
 export type MediaHubModulePresentation = PageBlockTextFormattingConfig & {
@@ -58,27 +68,20 @@ const MEDIA_HUB_MEDIA_TYPES: readonly MediaHubMediaType[] = [
   "press",
 ];
 
-const LISTING_CTA_DEFAULTS: Record<
-  MediaHubMediaType,
-  Pick<MediaListingPresentationConfig, "cardCtaText">
-> = {
-  news: { cardCtaText: "قراءة الخبر" },
-  press: { cardCtaText: "قراءة البيان" },
-  site_update: { cardCtaText: "عرض التحديث" },
-  video: { cardCtaText: "مشاهدة الفيديو" },
-  gallery: { cardCtaText: "عرض الصور" },
-};
-
-export function getDefaultMediaListingPresentation(
-  mediaType: MediaHubMediaType,
-): MediaListingPresentationConfig {
+export function getDefaultMediaListingPresentation(): MediaListingPresentationConfig {
   return {
-    pageSize: 2,
-    layout: "grid",
-    columns: 2,
-    paginationEnabled: true,
-    cardVariant: "default",
-    ...LISTING_CTA_DEFAULTS[mediaType],
+    itemLimit: 6,
+    presentation: "list",
+    itemsPerRow: 3,
+    display: {
+      title: true,
+      image: true,
+      excerpt: true,
+      date: true,
+      category: true,
+      series: true,
+      details: DEFAULT_COLLECTION_DETAILS_ACTION,
+    },
   };
 }
 
@@ -195,9 +198,11 @@ export function parseMediaHubSectionKey(value: string): MediaHubSectionKey {
   throw new Error("نوع السكشن غير صالح.");
 }
 
-function readLimit(value: Json | undefined, fallback: number) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+function readBoolean(value: Json | undefined, fallback: boolean) {
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === "1" || value === "on") return true;
+  if (value === "false" || value === "0") return false;
+  return fallback;
 }
 
 function isMediaHubMediaType(value: Json | undefined): value is MediaHubMediaType {
@@ -212,28 +217,53 @@ function mediaTypeForSection(sectionKey: MediaHubSectionKey): MediaHubMediaType 
 
 function readListingPresentation(
   value: Json | undefined,
-  mediaType: MediaHubMediaType,
 ): MediaListingPresentationConfig {
-  const fallback = getDefaultMediaListingPresentation(mediaType);
+  const fallback = getDefaultMediaListingPresentation();
   if (!value || typeof value !== "object" || Array.isArray(value)) return fallback;
 
-  const pageSize = Math.min(60, Math.max(1, Math.floor(readLimit(value.pageSize, fallback.pageSize))));
-  const columns = value.columns === 1 || value.columns === 2 || value.columns === 3
-    ? value.columns
-    : fallback.columns;
+  const rawItemLimit = Number(value.itemLimit ?? value.pageSize);
+  const itemLimit = COLLECTION_LISTING_ITEM_LIMITS.includes(
+    rawItemLimit as CollectionListingItemLimit,
+  )
+    ? (rawItemLimit as CollectionListingItemLimit)
+    : fallback.itemLimit;
+  const rawPresentation = value.presentation ?? value.layout;
+  const normalizedPresentation = rawPresentation === "vertical"
+    ? "list"
+    : rawPresentation;
+  const presentation = COLLECTION_LISTING_LAYOUTS.includes(
+    normalizedPresentation as CollectionListingLayout,
+  )
+    ? (normalizedPresentation as CollectionListingLayout)
+    : fallback.presentation;
+  const rawItemsPerRow = Number(value.itemsPerRow ?? value.columns);
+  const itemsPerRow = COLLECTION_LISTING_ITEMS_PER_ROW.includes(
+    rawItemsPerRow as CollectionListingItemsPerRow,
+  )
+    ? (rawItemsPerRow as CollectionListingItemsPerRow)
+    : fallback.itemsPerRow;
+  const rawDisplay = value.display && typeof value.display === "object" && !Array.isArray(value.display)
+    ? value.display
+    : {};
+  const legacyDetailsText = typeof value.cardCtaText === "string"
+    ? value.cardCtaText
+    : undefined;
+  const details = resolveCollectionDetailsAction(
+    rawDisplay.details ?? (legacyDetailsText ? { text: legacyDetailsText } : undefined),
+  );
   return {
-    pageSize,
-    layout: value.layout === "vertical" ? "vertical" : "grid",
-    columns,
-    paginationEnabled:
-      typeof value.paginationEnabled === "boolean"
-        ? value.paginationEnabled
-        : fallback.paginationEnabled,
-    cardVariant: value.cardVariant === "compact" ? "compact" : "default",
-    cardCtaText:
-      typeof value.cardCtaText === "string" && value.cardCtaText.trim()
-        ? value.cardCtaText.trim()
-        : fallback.cardCtaText,
+    itemLimit,
+    presentation,
+    itemsPerRow,
+    display: {
+      title: readBoolean(rawDisplay.title, fallback.display.title),
+      image: readBoolean(rawDisplay.image, fallback.display.image),
+      excerpt: readBoolean(rawDisplay.excerpt, fallback.display.excerpt),
+      date: readBoolean(rawDisplay.date, fallback.display.date),
+      category: readBoolean(rawDisplay.category, fallback.display.category),
+      series: readBoolean(rawDisplay.series, fallback.display.series),
+      details,
+    },
   };
 }
 
@@ -419,7 +449,7 @@ export function parseMediaHubModuleConfig(
       source,
       type: configuredMediaType,
       presentation,
-      listing: readListingPresentation(raw.listing, configuredMediaType),
+      listing: readListingPresentation(raw.listing),
     };
   }
 
@@ -459,12 +489,10 @@ export function buildMediaHubModuleConfig(
   listingInput?: {
     placement: MediaHubModulePlacement;
     mediaType: string;
-    pageSize: number;
-    layout: string;
-    columns: number;
-    paginationEnabled: boolean;
-    cardVariant: string;
-    cardCtaText: string;
+    itemLimit: number;
+    presentation: string;
+    itemsPerRow: number;
+    display?: CollectionDisplayOverrides;
   },
 ): MediaHubModuleConfig {
   if (dataSource !== "topics") {
@@ -495,22 +523,29 @@ export function buildMediaHubModuleConfig(
       throw new Error("نوع محتوى القائمة غير صالح.");
     }
     const mediaType = listingInput.mediaType;
-    const defaults = getDefaultMediaListingPresentation(mediaType);
+    const defaults = getDefaultMediaListingPresentation();
     return {
       placement: "listing",
       source: "topics",
       type: mediaType,
       presentation: normalizedPresentation,
       listing: {
-        pageSize: Math.min(60, Math.max(1, Math.floor(listingInput.pageSize || defaults.pageSize))),
-        layout: listingInput.layout === "vertical" ? "vertical" : "grid",
-        columns:
-          listingInput.columns === 1 || listingInput.columns === 2 || listingInput.columns === 3
-            ? listingInput.columns
-            : defaults.columns,
-        paginationEnabled: listingInput.paginationEnabled,
-        cardVariant: listingInput.cardVariant === "compact" ? "compact" : "default",
-        cardCtaText: listingInput.cardCtaText || defaults.cardCtaText,
+        itemLimit: COLLECTION_LISTING_ITEM_LIMITS.includes(
+          listingInput.itemLimit as CollectionListingItemLimit,
+        )
+          ? (listingInput.itemLimit as CollectionListingItemLimit)
+          : defaults.itemLimit,
+        presentation: COLLECTION_LISTING_LAYOUTS.includes(
+          listingInput.presentation as CollectionListingLayout,
+        )
+          ? (listingInput.presentation as CollectionListingLayout)
+          : defaults.presentation,
+        itemsPerRow: COLLECTION_LISTING_ITEMS_PER_ROW.includes(
+          listingInput.itemsPerRow as CollectionListingItemsPerRow,
+        )
+          ? (listingInput.itemsPerRow as CollectionListingItemsPerRow)
+          : defaults.itemsPerRow,
+        display: listingInput.display ?? defaults.display,
       },
     };
   }

@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import TopicFormSwitch from "./article/TopicFormSwitch";
 
 export default function ContentDisplaySettings({
@@ -8,6 +10,8 @@ export default function ContentDisplaySettings({
   showCategory = true,
   showSeries = true,
   showIntroCard = true,
+  includeIntroCard = true,
+  children,
 }: {
   showTitle?: boolean | null;
   showImage?: boolean | null;
@@ -16,6 +20,8 @@ export default function ContentDisplaySettings({
   showCategory?: boolean | null;
   showSeries?: boolean | null;
   showIntroCard?: boolean | null;
+  includeIntroCard?: boolean;
+  children?: ReactNode;
 }) {
   return (
     <div
@@ -25,11 +31,14 @@ export default function ContentDisplaySettings({
     >
       <TopicFormSwitch name="show_title_on_page" label="إظهار العنوان" defaultChecked={showTitle !== false} surface />
       <TopicFormSwitch name="show_image_on_page" label="إظهار الصورة" defaultChecked={showImage !== false} surface />
-      <TopicFormSwitch name="show_excerpt_on_page" label="إظهار المقتطف" defaultChecked={showExcerpt !== false} surface />
-      <TopicFormSwitch name="show_date_on_page" label="إظهار التاريخ" defaultChecked={showDate !== false} surface />
       <TopicFormSwitch name="show_category_on_page" label="إظهار التصنيف" defaultChecked={showCategory !== false} surface />
       <TopicFormSwitch name="show_series_on_page" label="إظهار السلسلة" defaultChecked={showSeries !== false} surface />
-      <TopicFormSwitch name="show_intro_card_on_page" label="إظهار بطاقة مقدمة الموضوع" defaultChecked={showIntroCard !== false} surface />
+      <TopicFormSwitch name="show_excerpt_on_page" label="إظهار المقتطف" defaultChecked={showExcerpt !== false} surface />
+      <TopicFormSwitch name="show_date_on_page" label="إظهار التاريخ" defaultChecked={showDate !== false} surface />
+      {includeIntroCard ? (
+        <TopicFormSwitch name="show_intro_card_on_page" label="إظهار بطاقة مقدمة الموضوع" defaultChecked={showIntroCard !== false} surface />
+      ) : null}
+      {children}
     </div>
   );
 }

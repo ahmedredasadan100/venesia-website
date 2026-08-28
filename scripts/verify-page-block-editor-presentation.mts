@@ -6,7 +6,8 @@ import { createJiti } from "jiti";
 import { getModuleEditorSectionMetadata } from "../src/lib/page-composition/module-registry-metadata.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
+const read = (path: string) =>
+  readFileSync(resolve(ROOT, path), "utf8").replace(/\r\n/gu, "\n");
 const jiti = createJiti(import.meta.url);
 const {
   HERO_BULK_ACTIONS,
@@ -30,6 +31,9 @@ const { PAGE_MODULE_KINDS } = await jiti.import<
 const { resolveContentModuleEditorConfig } = await jiti.import<
   typeof import("../src/lib/page-blocks/module-edit-registry.ts")
 >("../src/lib/page-blocks/module-edit-registry.ts");
+const { asContentConfig } = await jiti.import<
+  typeof import("../src/lib/page-blocks/configs.ts")
+>("../src/lib/page-blocks/configs.ts");
 
 let passed = 0;
 function check(label: string, condition: unknown) {
@@ -82,7 +86,9 @@ const blockStatusOwner = read("src/lib/page-blocks/admin-utils.ts");
 const formSwitchOwner = read("src/components/admin/ui/AdminFormSwitch.tsx");
 const blockTypes = read("src/lib/page-blocks/types.ts");
 const mediaOwner = read("src/components/admin/media/AdminMediaImageField.tsx");
-const routeSlotPolicy = read("src/lib/page-composition/page-assignment-contract.ts");
+const routeSlotPolicy = read(
+  "src/lib/page-composition/page-assignment-contract.ts",
+);
 const compatibilityPresentation = read(
   "src/lib/page-composition/module-registry-metadata.ts",
 );
@@ -182,6 +188,12 @@ const contentEditRoute = read(
 const contentEditClient = read(
   "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
 );
+const genericContentEditor = read(
+  "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+);
+const contentSection = read("src/components/sections/ContentSection.tsx");
+const topicsIntroSection = read("src/components/topics/TopicsIntroSection.tsx");
+const topicsCmsMappers = read("src/components/topics/topics-cms-mappers.ts");
 const slotModuleNodes = read(
   "src/components/page-composition/slot-module-nodes.tsx",
 );
@@ -326,6 +338,71 @@ check(
     ).includes('<ModuleEditorField nature="long-content" span={12}>'),
 );
 
+const normalizedIntro = asContentConfig({
+  eyebrow: "Intro",
+  title: "Title",
+  subtitle: "Subtitle",
+  body: "Description",
+  showDescription: false,
+  titleBold: false,
+  subtitleAlignment: "left",
+});
+
+check(
+  "generic Content contract owns reusable text-only Intro copy, formatting, and visibility",
+  normalizedIntro.eyebrow === "Intro" &&
+    normalizedIntro.title === "Title" &&
+    normalizedIntro.subtitle === "Subtitle" &&
+    normalizedIntro.body === "Description" &&
+    normalizedIntro.showDescription === false &&
+    normalizedIntro.titleBold === false &&
+    normalizedIntro.subtitleAlignment === "left" &&
+    !breadcrumbConfig.includes("CONTENT_INTRO_LAYOUTS") &&
+    !breadcrumbConfig.includes("CONTENT_INTRO_SPACING_PRESETS") &&
+    contentEditClient.includes('block.slug === "topics-intro"') &&
+    contentEditClient.includes('block.variant === "intro"'),
+);
+
+const genericIntroAdminProof = {
+  presentationClass: presentation.includes("className?: string"),
+  equalHeight: genericContentEditor.includes('className="h-full"'),
+  body: genericContentEditor.includes('name="body"'),
+  oneLine: genericContentEditor.includes('className={fieldClassName("h-11")}'),
+  adoption: contentEditClient.includes("introPresentation={isGenericIntro}"),
+  textOnly:
+    !genericContentEditor.includes("AdminMediaImageField") &&
+    !genericContentEditor.includes('name="image"') &&
+    !genericContentEditor.includes('name="intro_layout"') &&
+    !genericContentEditor.includes('name="intro_spacing"'),
+  saveBoundary:
+    homeProjectsActions.includes('body: cleanText(formData.get("body"))') &&
+    !homeProjectsActions.includes('formData.has("intro_layout")'),
+};
+
+check(
+  "generic Intro Admin keeps four equal-height copy cards, a one-line description, and shared formatting controls",
+  Object.values(genericIntroAdminProof).every(Boolean),
+);
+
+check(
+  "public Intro rendering is shared and binds subtitle plus description without a Topics collection consumer",
+  contentSection.includes("export function ContentIntroPresentation") &&
+    contentSection.includes("config.subtitle?.trim()") &&
+    contentSection.includes("config.body?.trim()") &&
+    contentSection.includes('data-content-intro-presentation=""') &&
+    !contentSection.includes("data-content-intro-media") &&
+    !contentSection.includes('from "next/image"') &&
+    topicsIntroSection.includes("ContentIntroPresentation") &&
+    slotModuleNodes.includes("<ContentIntroPresentation") &&
+    slotModuleNodes.includes("asContentConfig(block.template.config)") &&
+    !topicsCmsMappers.includes("mapTopicsIntroBlock") &&
+    !topicsIntroSection.includes("loadPublicTopicsListing") &&
+    !contentSection.includes("loadPublicTopicsListing") &&
+    !genericContentEditor.includes("collection_source") &&
+    !genericContentEditor.includes("item_limit") &&
+    !genericContentEditor.includes("pagination"),
+);
+
 check(
   "Breadcrumb adopts full-width source geometry, compact shared switch presentation, and no redundant manual-link hint",
   breadcrumbEditor.includes('sizing="full"') &&
@@ -382,7 +459,7 @@ check(
     heroOrderEditor.includes('data-project-hero-action-cards=""') &&
     heroOrderEditor.includes("PROJECT_HERO_ACTION_VISIBILITY_FIELDS") &&
     heroOrderEditor.includes('name="project_action_order"') &&
-    heroOrderEditor.includes('id={`project-hero-action-${key}`}') &&
+    heroOrderEditor.includes("id={`project-hero-action-${key}`}") &&
     heroOrderEditor.includes('className="grid min-w-0 gap-3 md:grid-cols-3"') &&
     projectDetailsHero.includes("showProjectActions") &&
     projectDetailsHero.includes("gridColumnsClassName") &&
@@ -396,11 +473,11 @@ check(
     contentEditRoute.includes("withModuleEditorReturnPageId(") &&
     contentEditRoute.includes("?tab=buttons") &&
     contentEditClient.includes('id: "details"') &&
-    contentEditClient.includes('moduleSlug={presentationSlug}') &&
+    contentEditClient.includes("moduleSlug={presentationSlug}") &&
     contentEditClient.includes("PROJECT_HERO_ACTION_KEYS.map") &&
     contentEditClient.includes("data-related-project-hero-action-card") &&
     contentEditClient.includes(
-      'href={`${links.buttons}#project-hero-action-${key}`}',
+      "href={`${links.buttons}#project-hero-action-${key}`}",
     ) &&
     contentEditClient.indexOf("<ProjectDetailHeroEditorLinks") >
       contentEditClient.indexOf('id: "details"') &&

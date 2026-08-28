@@ -1,4 +1,8 @@
-import { resolveContentBlockConfig } from "./configs";
+import {
+  asTopicsListingConfig,
+  isTopicsListingTemplate,
+  resolveContentBlockConfig,
+} from "./configs";
 import {
   asProjectsHubFeaturedConfig,
   asProjectsHubHeroConfig,
@@ -22,6 +26,7 @@ export type ContentModuleEditorKey =
   | "projects-hub-featured"
   | "projects-hub-listing"
   | "projects-hub-map"
+  | "topics-listing"
   | "generic";
 
 /**
@@ -43,6 +48,7 @@ export const STRUCTURAL_CONTENT_TEMPLATE_SLUGS = [
   "projects-hub-featured",
   "projects-hub-listing",
   "projects-hub-map",
+  "topics-listing",
 ] as const;
 
 export function isStructuralContentTemplateSlug(slug: string | null | undefined, variant?: string | null) {
@@ -53,6 +59,7 @@ export function isStructuralContentTemplateSlug(slug: string | null | undefined,
 }
 
 export function getContentModuleEditorKey(slug: string, variant: string): ContentModuleEditorKey {
+  if (isTopicsListingTemplate(slug, variant)) return "topics-listing";
   if (slug === "projects-hub-hero" || variant === "projects-hub-hero") return "projects-hub-hero";
   if (slug === "projects-hub-featured" || variant === "projects-hub-featured") return "projects-hub-featured";
   if (slug === "projects-hub-listing" || variant === "projects-hub-listing") return "projects-hub-listing";
@@ -84,6 +91,7 @@ export function resolveContentModuleEditorConfig(template: {
 }) {
   const editorKey = getContentModuleEditorKey(template.slug, template.variant ?? "");
 
+  if (editorKey === "topics-listing") return asTopicsListingConfig(template.config);
   if (editorKey === "projects-hub-hero") return asProjectsHubHeroConfig(template.config);
   if (editorKey === "projects-hub-featured") return asProjectsHubFeaturedConfig(template.config);
   if (editorKey === "projects-hub-listing") return asProjectsHubListingConfig(template.config);

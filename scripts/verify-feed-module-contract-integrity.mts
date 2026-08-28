@@ -63,6 +63,9 @@ const moduleEditRegistry = await jiti.import<Record<string, unknown>>(
 const pageBlockConfigs = await jiti.import<Record<string, unknown>>(
   "../src/lib/page-blocks/configs.ts",
 );
+const categoryHierarchy = await jiti.import<Record<string, unknown>>(
+  "../src/lib/admin/content/category-hierarchy.ts",
+);
 const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "../admin/content/content-status-metadata": {
     getContentStatusMetadata: () => ({}),
@@ -113,6 +116,7 @@ const topicFilterOptionsContract = loadTranspiledModule(
     "server-only": {},
     "../supabase-admin": { getSupabaseAdmin: () => ({}) },
     "../logging": { logError: () => undefined },
+    "../admin/content/category-hierarchy": categoryHierarchy,
   },
 );
 const getSeriesOptionsForCategories = topicFilterOptionsContract.getSeriesOptionsForCategories as (

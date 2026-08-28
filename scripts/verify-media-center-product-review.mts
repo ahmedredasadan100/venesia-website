@@ -22,6 +22,9 @@ const {
 } = await jiti.import<typeof import("../src/lib/media-hub-modules/presentation-contract.ts")>(
   "../src/lib/media-hub-modules/presentation-contract.ts",
 );
+const { resolveMediaListingConfig } = await jiti.import<
+  typeof import("../src/lib/media-hub-modules/listing-presentation.ts")
+>("../src/lib/media-hub-modules/listing-presentation.ts");
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -76,12 +79,9 @@ const featuredConfig = buildMediaHubModuleConfig(
   {
     placement: "featured",
     mediaType: "video",
-    pageSize: 2,
-    layout: "grid",
-    columns: 2,
-    paginationEnabled: true,
-    cardVariant: "default",
-    cardCtaText: "مشاهدة الفيديو",
+    itemLimit: 6,
+    presentation: "grid",
+    itemsPerRow: 2,
   },
 );
 assert.deepEqual(featuredConfig, {
@@ -125,24 +125,58 @@ const listingConfig = buildMediaHubModuleConfig(
   {
     placement: "listing",
     mediaType: "video",
-    pageSize: 12,
-    layout: "vertical",
-    columns: 3,
-    paginationEnabled: false,
-    cardVariant: "compact",
-    cardCtaText: "شاهد التفاصيل",
+    itemLimit: 12,
+    presentation: "list",
+    itemsPerRow: 3,
+    display: {
+      title: true,
+      image: false,
+      excerpt: true,
+      date: false,
+      category: true,
+      series: false,
+      details: {
+        text: "عرض التفاصيل",
+        visible: true,
+        bold: false,
+        alignment: "left",
+      },
+    },
   },
 );
 assert.equal(listingConfig.placement, "listing");
 assert.deepEqual(listingConfig.listing, {
-  pageSize: 12,
-  layout: "vertical",
-  columns: 3,
-  paginationEnabled: false,
-  cardVariant: "compact",
-  cardCtaText: "شاهد التفاصيل",
+  itemLimit: 12,
+  presentation: "list",
+  itemsPerRow: 3,
+  display: {
+    title: true,
+    image: false,
+    excerpt: true,
+    date: false,
+    category: true,
+    series: false,
+    details: {
+      text: "عرض التفاصيل",
+      visible: true,
+      bold: false,
+      alignment: "left",
+    },
+  },
 });
-assert.equal("featuredMode" in getDefaultMediaListingPresentation("video"), false);
+const resolvedAssignedListing = resolveMediaListingConfig(
+  {
+    modules: [{ isVisible: true, config: listingConfig }],
+  } as never,
+  "news",
+);
+assert.equal(
+  resolvedAssignedListing.contentType,
+  "video",
+  "the assigned module Content Type must override the route fallback",
+);
+assert.deepEqual(resolvedAssignedListing.presentation, listingConfig.listing);
+assert.equal("featuredMode" in getDefaultMediaListingPresentation(), false);
 
 const legacyPressFeatured = parseMediaHubModuleConfig(
   {
@@ -378,7 +412,8 @@ assert.ok(
   !listingPage.includes("module.config.type === config.mediaType"),
   "Featured Content type must come from assigned module config, not the route config",
 );
-assert.ok(listingPage.includes("resolveMediaListingPresentation"));
+assert.ok(listingPage.includes("resolveMediaListingConfig"));
+assert.ok(listingPage.includes("resolvedModule.contentType"));
 assert.ok(listingPage.includes("getMediaListingPage({"));
 assert.ok(!listingPage.includes("ListingShell"));
 assert.ok(!listingPage.includes("isMediaListingShellPublished"));
@@ -408,12 +443,46 @@ for (const retiredField of ["featuredMode", "manualTopicId", "featuredSelection"
 
 const editor = read("src/components/admin/page-blocks/MediaHubModuleEditClient.tsx");
 const action = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
+const sharedCollectionEditor = read("src/components/admin/page-blocks/editors/CollectionModuleEditor.tsx");
 assert.ok(editor.includes('name="media_type"'));
 assert.ok(editor.includes('name="placement" value={parsedInitial.placement}'));
 assert.ok(editor.includes("نوع المحتوى المميز"));
 assert.ok(editor.includes("CollectionPresentationFields"));
+assert.ok(editor.includes("CollectionModuleEditor"));
+assert.ok(editor.includes('label: "نوع المحتوى"'));
+assert.ok(editor.includes('name: "content_type"'));
+assert.ok(editor.includes('value: "list", label: "قائمة"'));
+assert.ok(!editor.includes("شكل الكروت"));
+assert.ok(!editor.includes("تفعيل ترقيم الصفحات"));
+assert.ok(!editor.includes("نص زر الكارت"));
+assert.ok(!editor.includes("نوع الموديول"));
+assert.ok(!editor.includes('name="page_size"'));
+assert.ok(!editor.includes('name="listing_layout"'));
+assert.ok(!editor.includes('name="listing_columns"'));
+assert.ok(!action.includes('formData.get("page_size")'));
+assert.ok(!action.includes('formData.get("listing_layout")'));
+assert.ok(!action.includes('formData.get("listing_columns")'));
 assert.ok(!editor.includes("مصدر البيانات"));
 assert.ok(action.includes('placementInput === "featured"'));
+for (const fieldName of [
+  "show_title_on_page",
+  "show_image_on_page",
+  "show_excerpt_on_page",
+  "show_date_on_page",
+  "show_category_on_page",
+  "show_series_on_page",
+]) {
+  assert.ok(action.includes(`\"${fieldName}\"`));
+}
+assert.ok(action.includes("buildCollectionDetailsActionFromFormData(formData)"));
+for (const detailsField of [
+  'name="details_text"',
+  'showName="show_details"',
+  'boldName="details_bold"',
+  'alignmentName="details_alignment"',
+]) {
+  assert.ok(sharedCollectionEditor.includes(detailsField));
+}
 for (const retiredField of ["side_limit", "list_limit", "featured_mode", "manual_topic_id"]) {
   assert.ok(!editor.includes(retiredField));
   assert.ok(!action.includes(retiredField));
@@ -424,6 +493,15 @@ const viewOwner = read("src/lib/collection-modules/collection-view.ts");
 const quantityOwner = read("src/lib/collection-modules/item-limit.ts");
 const capabilityFields = read("src/components/admin/page-blocks/CollectionModuleFields.tsx");
 const mediaCapabilityAdapter = read("src/lib/media-hub-modules/presentation-contract.ts");
+const mediaListingResolver = read("src/lib/media-hub-modules/listing-presentation.ts");
+const mediaListingPage = read("src/components/media-center/MediaListingPage.tsx");
+const mediaListingContent = read("src/components/media-center/MediaListingContent.tsx");
+const mediaListingCard = read("src/components/media-center/MediaContentCard.tsx");
+const topicsListingPresenter = read("src/components/topics/TopicsListingModule.tsx");
+const topicsListingCard = read("src/components/topics/TopicCard.tsx");
+const sharedListingPresenter = read(
+  "src/components/collection-modules/CollectionListingPresenter.tsx",
+);
 assert.ok(hierarchyOwner.includes('"uniform"'));
 assert.ok(hierarchyOwner.includes('"featured-first"'));
 assert.ok(hierarchyOwner.includes("secondaryItemCount"));
@@ -445,6 +523,53 @@ assert.ok(capabilityFields.includes('activeLayout === "featured"'));
 assert.ok(capabilityFields.includes('mosaic: "فسيفساء بصرية"'));
 assert.ok(capabilityFields.includes('timeline: "خط زمني بالبطاقات"'));
 assert.ok(capabilityFields.includes('"timeline-digest": "موجز زمني"'));
+assert.ok(sharedCollectionEditor.includes("ContentDisplaySettings"));
+assert.ok(
+  sharedCollectionEditor.includes(
+    "sm:col-span-2 lg:col-start-3 lg:row-start-1 lg:row-span-2",
+  ),
+);
+assert.ok(!sharedCollectionEditor.includes("additionalSettings"));
+assert.ok(mediaListingResolver.includes("resolveMediaListingConfig"));
+assert.ok(mediaListingPage.includes("resolvedModule.contentType"));
+assert.ok(mediaListingPage.includes("displayOverrides={presentation.display}"));
+assert.ok(mediaListingPage.includes("page?: string"));
+assert.ok(mediaListingPage.includes("requestedPage"));
+assert.ok(mediaListingPage.includes("currentPage={listing.currentPage}"));
+assert.ok(mediaListingPage.includes("totalPages={listing.totalPages}"));
+assert.ok(mediaListingCard.includes("displayOverrides: CollectionDisplayOverrides"));
+assert.ok(mediaListingCard.includes("<CollectionListingCard"));
+assert.ok(!mediaListingCard.includes("MediaListingCardVariant"));
+assert.ok(!mediaListingPage.includes("paginationEnabled"));
+assert.ok(!mediaListingPage.includes("cardVariant"));
+assert.ok(!mediaListingPage.includes("cardCtaText"));
+assert.ok(mediaListingContent.includes("<CollectionListingPresentation"));
+assert.ok(mediaListingContent.includes('import Pagination from "../Pagination"'));
+assert.ok(mediaListingContent.includes("currentPage={currentPage}"));
+assert.ok(mediaListingContent.includes("totalPages={totalPages}"));
+assert.ok(topicsListingPresenter.includes("<CollectionListingPresentation"));
+assert.ok(topicsListingCard.includes("<CollectionListingCard"));
+assert.ok(mediaListingCard.includes("<CollectionListingCard"));
+assert.ok(!mediaListingContent.includes("GRID_COLUMN_CLASSES"));
+assert.ok(!topicsListingPresenter.includes("GRID_COLUMNS"));
+assert.ok(!sharedListingPresenter.includes("Pagination"));
+assert.ok(sharedListingPresenter.includes("items.slice(0, itemLimit)"));
+assert.ok(sharedListingPresenter.includes("GRID_COLUMN_CLASSES[itemsPerRow]"));
+assert.ok(sharedListingPresenter.includes("display.details.visible"));
+assert.ok(sharedListingPresenter.includes("display.details.text"));
+assert.ok(!sharedListingPresenter.includes("اقرأ المزيد"));
+for (const forbiddenDomain of [
+  "topics",
+  "media",
+  "news",
+  "gallery",
+  "projects",
+]) {
+  assert.ok(
+    !sharedListingPresenter.toLowerCase().includes(forbiddenDomain),
+    `Shared Collection Presenter must not know ${forbiddenDomain}`,
+  );
+}
 for (const sectionKey of ["featured", "site-updates", "videos", "gallery", "press"]) {
   assert.ok(mediaCapabilityAdapter.includes(`${sectionKey}:`) || mediaCapabilityAdapter.includes(`"${sectionKey}":`));
 }

@@ -2,7 +2,8 @@ import Link from "next/link";
 
 import Pagination from "../Pagination";
 import FeaturedTopic from "./FeaturedTopic";
-import TopicCard from "./TopicCard";
+import TopicsListingModule from "./TopicsListingModule";
+import type { TopicsListingBlockConfig } from "../../lib/page-blocks/configs";
 import type { Topic } from "../../lib/topics/types";
 
 type TopicsListingContentProps = {
@@ -18,6 +19,7 @@ type TopicsListingContentProps = {
   seriesSlug: string;
   searchQuery?: string;
   showCompositionError?: boolean;
+  listingConfig: TopicsListingBlockConfig;
 };
 
 function buildTopicsQuery(sort: string, categorySlug: string, seriesSlug: string) {
@@ -40,6 +42,7 @@ export default function TopicsListingContent({
   seriesSlug,
   searchQuery = "",
   showCompositionError = false,
+  listingConfig,
 }: TopicsListingContentProps) {
   const isSearching = searchQuery.length > 0;
   const hasResults = isSearching ? topics.length > 0 : totalCount > 0;
@@ -103,11 +106,7 @@ export default function TopicsListingContent({
             )}
           </div>
 
-          <div className="space-y-6">
-            {topics.map((topic) => (
-              <TopicCard key={topic.id} {...topic} />
-            ))}
-          </div>
+          <TopicsListingModule topics={topics} config={listingConfig} />
 
           {!isSearching ? (
             <Pagination

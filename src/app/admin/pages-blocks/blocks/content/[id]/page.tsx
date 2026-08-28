@@ -11,6 +11,7 @@ import {
   resolveContentModuleEditorConfig,
 } from "../../../../../../lib/page-blocks/module-edit-registry";
 import { withModuleEditorReturnPageId } from "../../../../../../lib/page-blocks/admin-utils";
+import { loadTopicFilterOptionsForAdmin } from "../../../../../../lib/feed-modules/load-topic-filter-options";
 
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
@@ -41,6 +42,10 @@ export default async function ContentBlockEditPage({
     variant: block.variant,
     config: block.config,
   });
+  const topicCategoryOptions =
+    getContentModuleEditorKey(block.slug, block.variant) === "topics-listing"
+      ? (await loadTopicFilterOptionsForAdmin()).categories
+      : [];
   let projectDetailHeroEditorLinks: {
     root: string;
     buttons: string;
@@ -89,6 +94,7 @@ export default async function ContentBlockEditPage({
       config={config}
       assignmentContext={assignmentContext}
       projectDetailHeroEditorLinks={projectDetailHeroEditorLinks}
+      topicCategoryOptions={topicCategoryOptions}
       saved={Boolean(resolvedSearch.saved)}
       updateAction={updateContentBlock}
     />

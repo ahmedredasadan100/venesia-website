@@ -424,6 +424,23 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     labelAr: "مقدمة الموضوعات",
     descriptionAr: "تمهيد لصفحة topics.",
   },
+  "topics-listing": {
+    slug: "topics-listing",
+    labelAr: "قائمة الموضوعات",
+    descriptionAr:
+      "يعرض الموضوعات التي ترسلها الصفحة ويتحكم في طريقة عرضها فقط.",
+    editorSections: {
+      content: {
+        navigationLabelAr: "العرض",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
+        icon: "content",
+        sectionChrome: "implicit",
+      },
+      meta: SETTINGS_SECTION,
+      pages: PAGES_SECTION,
+    },
+  },
   "topics-insight-cta": {
     slug: "topics-insight-cta",
     labelAr: "CTA موضوعات",

@@ -12,6 +12,11 @@ import { getHeroSectionByPageSlug } from "../../../lib/load-hero-section";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { loadFeedModulesForPageSlug } from "../../../lib/feed-modules/load-feed-modules";
 import { normalizePublicContentSearchQuery } from "../../../lib/content/public-content-read";
+import {
+  asTopicsListingConfig,
+  isTopicsListingTemplate,
+} from "../../../lib/page-blocks/configs";
+import type { PageComposition } from "../../../lib/page-blocks/page-composition-types";
 
 export const revalidate = 300;
 
@@ -29,30 +34,52 @@ type TopicsPageProps = {
   }>;
 };
 
-const ITEMS_PER_PAGE = 6;
+function findTopicsListingBlock(composition: PageComposition) {
+  for (const entries of Object.values(composition.slots)) {
+    for (const entry of entries) {
+      if (
+        entry.kind === "block" &&
+        isTopicsListingTemplate(
+          entry.block.template.slug,
+          entry.block.template.variant,
+        )
+      ) {
+        return entry.block;
+      }
+    }
+  }
+  return null;
+}
 
 export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const params = await searchParams;
   const sort = params?.sort === "oldest" ? "oldest" : "latest";
-  const categorySlug = params?.category?.trim() ?? "";
+  const requestedCategorySlug = params?.category?.trim();
   const seriesSlug = params?.series?.trim() ?? "";
   const searchQuery = normalizePublicContentSearchQuery(params?.q);
   const requestedPage = Number(params?.page ?? 1);
 
-  const listingPromise = loadPublicTopicsListing({
+  const [dynamicHero, composition] = await Promise.all([
+    getHeroSectionByPageSlug("topics"),
+    loadPageCompositionBySlug("topics"),
+  ]);
+  const topicsListingBlock = findTopicsListingBlock(composition);
+  const listingConfig = asTopicsListingConfig(
+    topicsListingBlock?.template.config,
+  );
+  const configuredCategorySlug =
+    listingConfig.collection.type === "category"
+      ? listingConfig.collection.categorySlug
+      : "";
+  const categorySlug = requestedCategorySlug ?? configuredCategorySlug;
+  const listing = await loadPublicTopicsListing({
     sort,
     categorySlug: categorySlug || undefined,
     seriesSlug: seriesSlug || undefined,
     page: Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1,
-    itemsPerPage: ITEMS_PER_PAGE,
+    itemsPerPage: listingConfig.itemLimit,
     search: searchQuery,
   });
-
-  const [dynamicHero, composition, listing] = await Promise.all([
-    getHeroSectionByPageSlug("topics"),
-    loadPageCompositionBySlug("topics"),
-    listingPromise,
-  ]);
   // Presence (any assignment rows) or load failure → CMS path; never resurrect static shell.
   const useCmsLayout =
     composition.hasAnyAssignmentRows || composition.hasCompositionError;
@@ -92,6 +119,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
       seriesSlug={seriesSlug}
       searchQuery={searchQuery}
       showCompositionError={useCmsLayout && composition.hasCompositionError}
+      listingConfig={listingConfig}
     />
   );
 
@@ -120,8 +148,11 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
         <PageSlotLayout
           composition={composition}
           fallbackHero={fallbackHero}
+          topicsListingContent={
+            topicsListingBlock ? listingContent : undefined
+          }
           mainAfter={
-            useCmsLayout ? (
+            topicsListingBlock ? null : useCmsLayout ? (
               listingContent
             ) : (
               <div className="space-y-10">

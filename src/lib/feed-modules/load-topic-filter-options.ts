@@ -2,11 +2,18 @@ import "server-only";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
+import {
+  buildAdminCategoryTree,
+  flattenAdminCategoryTree,
+  type AdminContentCategory,
+} from "../admin/content/category-hierarchy";
 
 export type TopicCategoryFilterOption = {
   id: number;
   slug: string;
   name: string;
+  parentId: number | null;
+  depth: number;
 };
 
 export type TopicSeriesFilterOption = {
@@ -29,7 +36,7 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
     await Promise.all([
       supabase
         .from("topic_categories")
-        .select("id,name,slug")
+        .select("id,name,slug,parent_id,sort_order,is_active,status")
         .eq("status", "published")
         .is("deleted_at", null)
         .order("sort_order", { ascending: true })
@@ -47,8 +54,12 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
   if (categoriesError) logError("loadTopicFilterOptionsForAdmin: categories failed", categoriesError);
   if (seriesError) logError("loadTopicFilterOptionsForAdmin: series failed", seriesError);
 
+  const categoryRows = (categories ?? []) as AdminContentCategory[];
+  const orderedCategories = flattenAdminCategoryTree(
+    buildAdminCategoryTree(categoryRows),
+  );
   const categorySlugById = new Map<number, string>();
-  for (const category of categories ?? []) {
+  for (const category of orderedCategories) {
     categorySlugById.set(category.id, category.slug);
   }
 
@@ -78,10 +89,12 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
   }
 
   return {
-    categories: (categories ?? []).map((row) => ({
+    categories: orderedCategories.map((row) => ({
       id: row.id,
       slug: row.slug,
       name: row.name,
+      parentId: row.parent_id,
+      depth: row.depth,
     })),
     series,
     seriesByCategorySlug,

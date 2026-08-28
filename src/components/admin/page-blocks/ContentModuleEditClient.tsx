@@ -26,6 +26,7 @@ import ProjectsHubFeaturedModuleEditor from "./editors/ProjectsHubFeaturedModule
 import ProjectsHubHeroModuleEditor from "./editors/ProjectsHubHeroModuleEditor";
 import ProjectsHubListingModuleEditor from "./editors/ProjectsHubListingModuleEditor";
 import ProjectsHubMapModuleEditor from "./editors/ProjectsHubMapModuleEditor";
+import TopicsListingModuleEditor from "./editors/TopicsListingModuleEditor";
 import VisionGoalsModuleEditor from "./editors/VisionGoalsModuleEditor";
 import { fieldClassName, statusMeta } from "../../../lib/page-blocks/admin-utils";
 import {
@@ -36,6 +37,7 @@ import {
   asAboutPrinciplesConfig,
   asContentConfig,
   asHomeProjectsConfig,
+  asTopicsListingConfig,
   asVisionGoalsConfig,
 } from "../../../lib/page-blocks/configs";
 import {
@@ -72,6 +74,13 @@ type ContentModuleEditClientProps = {
     root: string;
     buttons: string;
   } | null;
+  topicCategoryOptions: readonly {
+    id: number;
+    slug: string;
+    name: string;
+    parentId: number | null;
+    depth: number;
+  }[];
   saved?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
 };
@@ -139,6 +148,7 @@ export default function ContentModuleEditClient({
   config,
   assignmentContext,
   projectDetailHeroEditorLinks,
+  topicCategoryOptions,
   saved,
   updateAction,
 }: ContentModuleEditClientProps) {
@@ -182,6 +192,9 @@ export default function ContentModuleEditClient({
   const isAboutCta = editorKey === "about-cta";
   const isAboutPrinciples = editorKey === "about-principles";
   const isAboutApproach = editorKey === "about-approach";
+  const isGenericIntro =
+    editorKey === "generic" &&
+    (block.slug === "topics-intro" || block.variant === "intro");
   const usesHomeModuleChrome = isHomeStory || isHomeContact || isHomeProjects || isHomeTrust;
   const usesAboutStructuredChrome =
     isAboutIntro || isAboutIntroSingleImage || isVisionGoals || isAboutCta || isAboutPrinciples || isAboutApproach;
@@ -557,8 +570,10 @@ export default function ContentModuleEditClient({
                               ? "projects-hub-featured"
                               : editorKey === "projects-hub-listing"
                                 ? "projects-hub-listing"
-                                : editorKey === "projects-hub-map"
+                              : editorKey === "projects-hub-map"
                                   ? "projects-hub-map"
+                                  : editorKey === "topics-listing"
+                                    ? "topics-listing"
                                   : block.variant ?? "default"
           }
         />
@@ -590,6 +605,9 @@ export default function ContentModuleEditClient({
           <input type="hidden" name="config_schema" value="projects-hub-listing" />
         ) : null}
         {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
+        {editorKey === "topics-listing" ? (
+          <input type="hidden" name="config_schema" value="topics-listing" />
+        ) : null}
         <ModuleEditorIdentitySection
           name={block.name}
           status={block.status}
@@ -653,8 +671,16 @@ export default function ContentModuleEditClient({
                     />
                   ) : editorKey === "projects-hub-map" ? (
                     <ProjectsHubMapModuleEditor config={config as ReturnType<typeof asProjectsHubMapConfig>} />
+                  ) : editorKey === "topics-listing" ? (
+                    <TopicsListingModuleEditor
+                      config={config as ReturnType<typeof asTopicsListingConfig>}
+                      categoryOptions={topicCategoryOptions}
+                    />
                   ) : (
-                    <GenericContentModuleEditor config={config as ReturnType<typeof asContentConfig>} />
+                    <GenericContentModuleEditor
+                      config={config as ReturnType<typeof asContentConfig>}
+                      introPresentation={isGenericIntro}
+                    />
                   ),
               },
               pagesTab,

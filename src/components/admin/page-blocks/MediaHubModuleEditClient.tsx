@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { AdminFormListboxSelect, AdminFormSwitch } from "../ui";
+import { AdminFormListboxSelect } from "../ui";
 import {
   ModuleEditorFeedback,
   ModuleEditorField,
@@ -20,6 +20,7 @@ import {
   CollectionItemLimitField,
   CollectionPresentationFields,
 } from "./CollectionModuleFields";
+import CollectionModuleEditor from "./editors/CollectionModuleEditor";
 import type { Json } from "../../../lib/database.types";
 import { MEDIA_HUB_SECTION_LABELS } from "../../../lib/media-hub-modules/admin-present";
 import {
@@ -31,6 +32,8 @@ import {
 } from "../../../lib/media-hub-modules/parse-config";
 import type { MediaHubSectionKey } from "../../../lib/media-hub-modules/types";
 import { getMediaHubCollectionCapabilities } from "../../../lib/media-hub-modules/presentation-contract";
+import { COLLECTION_LISTING_ITEMS_PER_ROW } from "../../../lib/collection-modules/collection-view";
+import { COLLECTION_LISTING_ITEM_LIMITS } from "../../../lib/collection-modules/item-limit";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import { resolvePageBlockTextFormat } from "../../../lib/page-blocks/configs";
@@ -74,102 +77,46 @@ function ListingPresentationFields({
   config: MediaListingPresentationConfig;
   mediaType: MediaHubMediaType;
 }) {
-  const [layout, setLayout] = useState(config.layout);
-
   return (
     <>
       <input type="hidden" name="placement" value="listing" />
-      <input type="hidden" name="media_type" value={mediaType} />
 
-      <ModuleEditorField nature="standard" span={4}>
-        <div className="space-y-2">
-          <span className="block text-sm font-medium text-white/70">نوع المحتوى</span>
-          <p className="rounded-2xl border border-white/10 bg-[#05070B] px-4 py-3 text-sm text-white/60">
-            {MEDIA_TYPE_LABELS[mediaType]}
-          </p>
-        </div>
-      </ModuleEditorField>
-
-      <ModuleEditorField nature="standard" span={3}>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">عدد العناصر في الصفحة</span>
-          <input
-            name="page_size"
-            type="number"
-            min={1}
-            max={60}
-            defaultValue={config.pageSize}
-            required
-            className={fieldClassName()}
-            dir="ltr"
-          />
-        </label>
-      </ModuleEditorField>
-
-      <ModuleEditorField nature="standard" span={3}>
-        <AdminFormListboxSelect
-          name="listing_layout"
-          label="تخطيط القائمة"
-          value={layout}
-          onChange={(value) => setLayout(value === "vertical" ? "vertical" : "grid")}
-          options={[
+      <CollectionModuleEditor
+        selection={{
+          name: "content_type",
+          label: "نوع المحتوى",
+          value: mediaType,
+          options: (Object.keys(MEDIA_TYPE_LABELS) as MediaHubMediaType[]).map((type) => ({
+            value: type,
+            label: MEDIA_TYPE_LABELS[type],
+          })),
+        }}
+        presentation={{
+          value: config.presentation,
+          options: [
             { value: "grid", label: "شبكة" },
-            { value: "vertical", label: "رأسي" },
-          ]}
-        />
-      </ModuleEditorField>
-
-      {layout === "grid" ? (
-        <ModuleEditorField nature="standard" span={3}>
-          <AdminFormListboxSelect
-            name="listing_columns"
-            label="عدد الأعمدة"
-            defaultValue={String(config.columns)}
-            options={[
-              { value: "1", label: "عمود واحد" },
-              { value: "2", label: "عمودان" },
-              { value: "3", label: "ثلاثة أعمدة" },
-            ]}
-          />
-        </ModuleEditorField>
-      ) : (
-        <input type="hidden" name="listing_columns" value={config.columns} />
-      )}
-
-      <ModuleEditorField nature="standard" span={3}>
-        <AdminFormListboxSelect
-          name="card_variant"
-          label="شكل الكروت"
-          defaultValue={config.cardVariant}
-          options={[
-            { value: "default", label: "افتراضي" },
-            { value: "compact", label: "مدمج" },
-          ]}
-        />
-      </ModuleEditorField>
-
-      <ModuleEditorField nature="standard" span={4}>
-        <AdminFormSwitch
-          name="pagination_enabled"
-          label="تفعيل Pagination"
-          defaultChecked={config.paginationEnabled}
-          value="true"
-          uncheckedValue="false"
-          surface
-        />
-      </ModuleEditorField>
-
-      <ModuleEditorField nature="short-text" span={4}>
-        <label className="block space-y-2">
-          <span className="text-xs font-semibold text-white/55">CTA للكروت</span>
-          <input
-            name="card_cta_text"
-            defaultValue={config.cardCtaText}
-            required
-            className={fieldClassName()}
-          />
-        </label>
-      </ModuleEditorField>
+            { value: "list", label: "قائمة" },
+          ],
+        }}
+        display={{
+          itemsPerRow: {
+            value: config.itemsPerRow,
+            options: COLLECTION_LISTING_ITEMS_PER_ROW.map((value) => ({
+              value,
+              label: String(value),
+            })),
+            supportedPresentations: ["grid"],
+          },
+          itemLimit: {
+            value: config.itemLimit,
+            options: COLLECTION_LISTING_ITEM_LIMITS.map((value) => ({
+              value,
+              label: String(value),
+            })),
+          },
+          overrides: config.display,
+        }}
+      />
     </>
   );
 }
@@ -258,14 +205,16 @@ export default function MediaHubModuleEditClient({
           status={block.status}
           inputClassName={fieldClassName("h-11")}
         >
-          {isListing || isDedicatedFeatured ? (
+          {isDedicatedFeatured ? (
             <div className="space-y-2">
-              <span className="block text-sm font-medium text-white/70">نوع السكشن</span>
+              <span className="block text-sm font-medium text-white/70">
+                نوع السكشن
+              </span>
               <div className="flex h-11 items-center rounded-2xl border border-white/10 bg-[#05070B] px-4 text-sm text-white/70">
                 {MEDIA_HUB_SECTION_LABELS[initialSectionKey]}
               </div>
             </div>
-          ) : (
+          ) : isListing ? null : (
             <AdminFormListboxSelect
               name="section_key"
               label="نوع السكشن"
@@ -289,14 +238,10 @@ export default function MediaHubModuleEditClient({
               id: "content",
               content: (
                 isListing && parsedInitial.listing && parsedInitial.type ? (
-                  <ModuleEditorSection>
-                    <ModuleEditorFieldGrid>
-                      <ListingPresentationFields
-                        config={parsedInitial.listing}
-                        mediaType={parsedInitial.type}
-                      />
-                    </ModuleEditorFieldGrid>
-                  </ModuleEditorSection>
+                  <ListingPresentationFields
+                    config={parsedInitial.listing}
+                    mediaType={parsedInitial.type}
+                  />
                 ) : (
                   <div className="space-y-5">
                     <ModuleEditorSection>

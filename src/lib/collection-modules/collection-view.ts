@@ -12,10 +12,16 @@ export const COLLECTION_LAYOUTS = [
 
 export const COLLECTION_CARD_VARIANTS = ["default", "compact"] as const;
 export const COLLECTION_ITEMS_PER_ROW = [1, 2, 3, 4] as const;
+export const COLLECTION_LISTING_LAYOUTS = ["grid", "list"] as const;
+export const COLLECTION_LISTING_ITEMS_PER_ROW = [2, 3, 4] as const;
 
 export type CollectionLayout = (typeof COLLECTION_LAYOUTS)[number];
 export type CollectionCardVariant = (typeof COLLECTION_CARD_VARIANTS)[number];
 export type CollectionItemsPerRow = (typeof COLLECTION_ITEMS_PER_ROW)[number];
+export type CollectionListingLayout =
+  (typeof COLLECTION_LISTING_LAYOUTS)[number];
+export type CollectionListingItemsPerRow =
+  (typeof COLLECTION_LISTING_ITEMS_PER_ROW)[number];
 
 /**
  * Semantic presentation of items inside one Collection Module.

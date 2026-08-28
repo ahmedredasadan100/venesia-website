@@ -9,6 +9,10 @@ import {
   type ContentType,
 } from "../../admin/content/content-types";
 import {
+  getCategoryAndDescendantIds,
+  type AdminContentCategory,
+} from "../../admin/content/category-hierarchy";
+import {
   normalizeYouTubeUrl,
   parseMediaTopicPayload,
 } from "../../admin/media-topic-payload";
@@ -218,6 +222,40 @@ function applyPublicFilters<Query extends PublicContentFilterQuery>(
   return applyPublicContentTextSearch(next, input.search);
 }
 
+async function expandPublicCategoryHierarchy(categorySlugs: readonly string[]) {
+  if (!categorySlugs.length) return [];
+
+  const { data, error } = await getSupabaseAdmin()
+    .from("topic_categories")
+    .select("id,name,slug,parent_id,sort_order,is_active,status")
+    .eq("status", "published")
+    .is("deleted_at", null);
+
+  if (error) {
+    logError("Public Content category hierarchy query failed", error, {
+      categorySlugs,
+    });
+    return [...categorySlugs];
+  }
+
+  const categories = (data ?? []) as AdminContentCategory[];
+  const selectedIds = new Set(
+    categories
+      .filter((category) => categorySlugs.includes(category.slug))
+      .map((category) => category.id),
+  );
+  const scopedIds = new Set(
+    [...selectedIds].flatMap((categoryId) =>
+      getCategoryAndDescendantIds(categories, categoryId),
+    ),
+  );
+  const resolved = categories
+    .filter((category) => scopedIds.has(category.id))
+    .map((category) => category.slug);
+
+  return [...new Set([...categorySlugs, ...resolved])];
+}
+
 function buildCollectionQuery(
   input: ReturnType<typeof normalizePublicContentCollectionInput>,
   includeCount = false,
@@ -286,7 +324,13 @@ function emptyCollection(
 async function queryPublicContentCollection(
   rawInput: PublicContentCollectionInput,
 ): Promise<PublicContentCollectionResult> {
-  const input = normalizePublicContentCollectionInput(rawInput);
+  const normalizedInput = normalizePublicContentCollectionInput(rawInput);
+  const input = {
+    ...normalizedInput,
+    categorySlugs: await expandPublicCategoryHierarchy(
+      normalizedInput.categorySlugs,
+    ),
+  };
   if (!input.contentTypes.length) return emptyCollection(input);
 
   const featured = input.featuredSelection

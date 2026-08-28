@@ -40,7 +40,11 @@ import {
   hasSavedLinkField,
 } from "../../../../../lib/admin/links/block-save";
 import {
+  buildCollectionDetailsActionFromFormData,
   buildPageBlockTextFormattingPatch,
+  TOPICS_LISTING_ITEM_LIMITS,
+  TOPICS_LISTING_ITEMS_PER_ROW,
+  TOPICS_LISTING_PRESENTATIONS,
   type PageBlockFormattableTextField,
   type PageBlockTextFormattingConfig,
   type AboutApproachModuleConfig,
@@ -50,16 +54,23 @@ import {
   type AboutPrinciplesModuleConfig,
   type ContentBlockConfig,
   type HomeProjectsModuleConfig,
+  type TopicsListingBlockConfig,
+  type TopicsListingCollection,
+  type TopicsListingItemLimit,
+  type TopicsListingItemsPerRow,
+  type TopicsListingPresentation,
   type VisionGoalsModuleConfig,
 } from "../../../../../lib/page-blocks/configs";
 import { normalizeRichTextContent } from "../../../../../lib/rich-text/html-utils";
 import { parseHeroContentControlsFormData } from "../../../../../lib/hero/hero-content-controls";
 import { isStructuralContentTemplateSlug } from "../../../../../lib/page-blocks/module-edit-registry";
 import { isRetiredContentBlockTemplateSlug } from "../../../../../lib/page-blocks/deprecated-block-modules";
+import { loadTopicFilterOptionsForAdmin } from "../../../../../lib/feed-modules/load-topic-filter-options";
 import {
   isAboutApproachTemplate,
   isAboutIntroSingleImageTemplate,
   isHomeProjectsTemplate,
+  isTopicsListingTemplate,
   isVisionGoalsTemplate,
   usesAboutIntroConfigSchema,
   usesAboutCtaConfigSchema,
@@ -109,6 +120,69 @@ function buildGenericContentConfig(formData: FormData): ContentBlockConfig {
     title: cleanText(formData.get("title")),
     subtitle: cleanText(formData.get("subtitle")),
     body: cleanText(formData.get("body")),
+  };
+}
+
+async function buildTopicsListingConfig(
+  formData: FormData,
+): Promise<TopicsListingBlockConfig> {
+  const collectionValue = cleanText(formData.get("collection"));
+  let collection: TopicsListingCollection;
+  if (collectionValue === "all-topics") {
+    collection = { type: "all" };
+  } else if (collectionValue.startsWith("category:")) {
+    const categorySlug = collectionValue.slice("category:".length).trim();
+    const filterOptions = await loadTopicFilterOptionsForAdmin();
+    if (
+      !categorySlug ||
+      !filterOptions.categories.some((category) => category.slug === categorySlug)
+    ) {
+      throw new Error("تصنيف الموضوعات المختار غير متاح.");
+    }
+    collection = { type: "category", categorySlug };
+  } else {
+    throw new Error("مجموعة الموضوعات المختارة غير مدعومة.");
+  }
+
+  const presentation = cleanText(formData.get("presentation"));
+  if (
+    !TOPICS_LISTING_PRESENTATIONS.includes(
+      presentation as TopicsListingPresentation,
+    )
+  ) {
+    throw new Error("طريقة عرض قائمة الموضوعات غير مدعومة.");
+  }
+
+  const itemsPerRow = Number(cleanText(formData.get("items_per_row")));
+  if (
+    !TOPICS_LISTING_ITEMS_PER_ROW.includes(
+      itemsPerRow as TopicsListingItemsPerRow,
+    )
+  ) {
+    throw new Error("عدد العناصر في الصف غير مدعوم.");
+  }
+
+  const itemLimit = Number(cleanText(formData.get("item_limit")));
+  if (
+    !TOPICS_LISTING_ITEM_LIMITS.includes(itemLimit as TopicsListingItemLimit)
+  ) {
+    throw new Error("عدد العناصر المعروضة غير مدعوم.");
+  }
+
+  return {
+    collection,
+    presentation: presentation as TopicsListingPresentation,
+    itemsPerRow: itemsPerRow as TopicsListingItemsPerRow,
+    itemLimit: itemLimit as TopicsListingItemLimit,
+    display: {
+      title: parseFormBoolean(formData, "show_title_on_page", false),
+      image: parseFormBoolean(formData, "show_image_on_page", false),
+      excerpt: parseFormBoolean(formData, "show_excerpt_on_page", false),
+      date: parseFormBoolean(formData, "show_date_on_page", false),
+      category: parseFormBoolean(formData, "show_category_on_page", false),
+      series: parseFormBoolean(formData, "show_series_on_page", false),
+      details: buildCollectionDetailsActionFromFormData(formData),
+    },
   };
 }
 
@@ -715,6 +789,7 @@ function resolveStructuredVariant(slug: string, variantInput: string | null) {
   if (isProjectsHubListingTemplate(slug, variantInput))
     return "projects-hub-listing";
   if (isProjectsHubMapTemplate(slug, variantInput)) return "projects-hub-map";
+  if (isTopicsListingTemplate(slug, variantInput)) return "topics-listing";
   return variantInput || "default";
 }
 
@@ -779,6 +854,13 @@ async function buildContentConfig(
       );
     }
     throw new Error("موديولات صفحة المشروعات لا يمكن حفظها عبر المحرر العام.");
+  }
+
+  if (
+    schema === "topics-listing" ||
+    isTopicsListingTemplate(resolvedSlug, variantInput)
+  ) {
+    return buildTopicsListingConfig(formData);
   }
 
   if (
