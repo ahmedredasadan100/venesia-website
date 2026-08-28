@@ -13,7 +13,7 @@ import {
 } from "../../lib/media-center/listing-page-config";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 import {
-  resolveMediaListingPresentation,
+  resolveMediaListingConfig,
 } from "../../lib/media-hub-modules/listing-presentation";
 
 type MediaListingPageProps = {
@@ -36,16 +36,19 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
   const sort = params?.sort === "oldest" ? "oldest" : "newest";
   const searchQuery = normalizePublicContentSearchQuery(params?.q);
   const rawPage = Number(params?.page ?? "1");
-  const requestedPage = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
-  const presentation = resolveMediaListingPresentation(
+  const requestedPage = Number.isFinite(rawPage) && rawPage > 0
+    ? Math.floor(rawPage)
+    : 1;
+  const resolvedModule = resolveMediaListingConfig(
     composition.mediaHubModules,
     config.mediaType,
   );
+  const presentation = resolvedModule.presentation;
   const listing = await getMediaListingPage({
-    type: config.mediaType,
-    page: presentation.paginationEnabled ? requestedPage : 1,
+    type: resolvedModule.contentType,
+    page: searchQuery ? 1 : requestedPage,
     sort,
-    pageSize: presentation.pageSize,
+    pageSize: presentation.itemLimit,
     search: searchQuery,
   });
 
@@ -83,12 +86,11 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
             basePath={config.basePath}
             emptyTitle={config.emptyTitle}
             emptyDescription={config.emptyDescription}
-            cardCtaText={presentation.cardCtaText}
             itemsLabel={config.itemsLabel}
-            layout={presentation.layout}
-            columns={presentation.columns}
-            paginationEnabled={presentation.paginationEnabled}
-            cardVariant={presentation.cardVariant}
+            presentation={presentation.presentation}
+            itemsPerRow={presentation.itemsPerRow}
+            itemLimit={presentation.itemLimit}
+            displayOverrides={presentation.display}
           />
         </div>
       </MediaPageShell>

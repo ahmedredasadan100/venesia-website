@@ -20,7 +20,8 @@ export default function ContentCategorySelect({
   const initialValue = defaultValue ? String(defaultValue) : "";
   const options = categories.map((category) => ({
     value: String(category.id),
-    label: `${"— ".repeat(category.depth)}${category.name}`,
+    label: category.name,
+    depth: category.depth,
     disabled:
       category.is_active === false && String(category.id) !== initialValue,
   }));

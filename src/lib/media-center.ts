@@ -51,7 +51,7 @@ export async function getMediaListingPage(
   },
 ) {
   const sort = input.sort === "oldest" ? "oldest" : "newest";
-  const pageSize = input.pageSize ?? getDefaultMediaListingPresentation(input.type).pageSize;
+  const pageSize = input.pageSize ?? getDefaultMediaListingPresentation().itemLimit;
   const search = normalizePublicContentSearchQuery(input.search);
 
   return unifiedGetMediaListingPage({

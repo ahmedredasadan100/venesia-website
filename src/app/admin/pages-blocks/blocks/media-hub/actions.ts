@@ -33,7 +33,10 @@ import {
   parsePageIdsFromForm,
   syncMediaHubModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
-import { buildPageBlockTextFormattingPatch } from "../../../../../lib/page-blocks/configs";
+import {
+  buildCollectionDetailsActionFromFormData,
+  buildPageBlockTextFormattingPatch,
+} from "../../../../../lib/page-blocks/configs";
 
 export async function updateMediaHubModule(formData: FormData) {
   const actor = await requireAdminSession();
@@ -79,13 +82,19 @@ export async function updateMediaHubModule(formData: FormData) {
     },
     {
       placement,
-      mediaType: cleanText(formData.get("media_type")),
-      pageSize: parseNumber(formData.get("page_size"), 2),
-      layout: cleanText(formData.get("listing_layout")),
-      columns: parseNumber(formData.get("listing_columns"), 2),
-      paginationEnabled: parseFormBoolean(formData, "pagination_enabled", true),
-      cardVariant: cleanText(formData.get("card_variant")),
-      cardCtaText: cleanText(formData.get("card_cta_text")),
+      mediaType: cleanText(formData.get("content_type")) || cleanText(formData.get("media_type")),
+      itemLimit: parseNumber(formData.get("item_limit"), 6),
+      presentation: cleanText(formData.get("presentation")),
+      itemsPerRow: parseNumber(formData.get("items_per_row"), 3),
+      display: {
+        title: parseFormBoolean(formData, "show_title_on_page", false),
+        image: parseFormBoolean(formData, "show_image_on_page", false),
+        excerpt: parseFormBoolean(formData, "show_excerpt_on_page", false),
+        date: parseFormBoolean(formData, "show_date_on_page", false),
+        category: parseFormBoolean(formData, "show_category_on_page", false),
+        series: parseFormBoolean(formData, "show_series_on_page", false),
+        details: buildCollectionDetailsActionFromFormData(formData),
+      },
     },
   );
 

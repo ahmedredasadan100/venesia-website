@@ -71,6 +71,9 @@ assert.ok(contract.includes('.replace(/[%_*]/gu, "\\\\$&")'));
 assert.ok(contract.includes("PUBLIC_CONTENT_SEARCH_FIELDS.map"));
 
 assert.ok(owner.includes('from("topics")'));
+assert.ok(owner.includes('from("topic_categories")'));
+assert.ok(owner.includes("getCategoryAndDescendantIds"));
+assert.ok(owner.includes("expandPublicCategoryHierarchy"));
 assert.ok(owner.includes('eq("status", "published")'));
 assert.ok(owner.includes('is("deleted_at", null)'));
 assert.ok(owner.includes("resolvePublicContentPath"));
@@ -166,8 +169,14 @@ assert.ok(topicsSearchPanel.includes("PublicContentSearchInput"));
 assert.ok(mediaSidebar.includes("PublicContentSearchInput"));
 assert.ok(mediaSidebar.includes("SidebarFeedPanel"));
 assert.ok(!mediaSidebar.includes("function SidebarPanel"));
-assert.ok(topicsPage.includes("listingPromise") && topicsPage.includes("Promise.all"));
-assert.ok(topicsListing.includes("topics.map"));
+assert.ok(
+  topicsPage.includes("await loadPublicTopicsListing({") &&
+    topicsPage.includes("itemsPerPage: listingConfig.itemLimit"),
+);
+assert.ok(
+  topicsListing.includes("<TopicsListingModule") &&
+    !topicsListing.includes("<TopicCard"),
+);
 assert.ok(topicsListing.includes("!isSearching ? <FeaturedTopic"));
 assert.ok(mediaPage.includes("getMediaListingPage"));
 assert.ok(!mediaPage.includes("getMediaItems("), "Media search must not fetch a second catalog");

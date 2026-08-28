@@ -628,6 +628,11 @@ check(
     ),
 );
 check(
+  "Shared Admin listbox owns the category-tree indentation presentation contract",
+  adminListboxSelect.includes("depth?: number;") &&
+    occurrenceCount(adminListboxSelect, /repeat\(option\.depth\)/g) === 2,
+);
+check(
   "CategoryForm wires create and edit modes to their correct shared-runtime actions",
   [
     'mode: "create" | "edit"',

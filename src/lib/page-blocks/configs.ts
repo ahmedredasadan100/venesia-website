@@ -1,5 +1,15 @@
 import type { AdminLinkValue } from "../admin/links/types";
 import { deserializeAdminLink } from "../admin/links/serialize";
+import {
+  COLLECTION_LISTING_ITEMS_PER_ROW,
+  COLLECTION_LISTING_LAYOUTS,
+  type CollectionListingItemsPerRow,
+  type CollectionListingLayout,
+} from "../collection-modules/collection-view";
+import {
+  COLLECTION_LISTING_ITEM_LIMITS,
+  type CollectionListingItemLimit,
+} from "../collection-modules/item-limit";
 
 export const PAGE_BLOCK_TEXT_ALIGNMENTS = ["right", "center", "left"] as const;
 export type PageBlockTextAlignment =
@@ -13,6 +23,7 @@ export const PAGE_BLOCK_FORMATTABLE_TEXT_FIELDS = [
   "highlight",
   "intro",
   "cta",
+  "details",
 ] as const;
 export type PageBlockFormattableTextField =
   (typeof PAGE_BLOCK_FORMATTABLE_TEXT_FIELDS)[number];
@@ -187,6 +198,98 @@ export type ContentBlockConfig = PageBlockTextFormattingConfig & {
   subtitle?: string;
   body?: string;
   alignment?: "start" | "center";
+};
+
+export const TOPICS_LISTING_PRESENTATIONS = COLLECTION_LISTING_LAYOUTS;
+export type TopicsListingPresentation = CollectionListingLayout;
+
+export const TOPICS_LISTING_ITEMS_PER_ROW =
+  COLLECTION_LISTING_ITEMS_PER_ROW;
+export type TopicsListingItemsPerRow = CollectionListingItemsPerRow;
+
+export const TOPICS_LISTING_ITEM_LIMITS = COLLECTION_LISTING_ITEM_LIMITS;
+export type TopicsListingItemLimit = CollectionListingItemLimit;
+
+export type TopicsListingCollection =
+  | { type: "all" }
+  | { type: "category"; categorySlug: string };
+
+export type CollectionDetailsAction = {
+  text: string;
+  visible: boolean;
+  bold: boolean;
+  alignment: PageBlockTextAlignment;
+};
+
+export const DEFAULT_COLLECTION_DETAILS_ACTION: CollectionDetailsAction = {
+  text: "اقرأ المزيد",
+  visible: true,
+  bold: true,
+  alignment: "right",
+};
+
+export function resolveCollectionDetailsAction(
+  raw: unknown,
+  defaults: CollectionDetailsAction = DEFAULT_COLLECTION_DETAILS_ACTION,
+): CollectionDetailsAction {
+  const value =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const text = typeof value.text === "string" ? value.text.trim() : "";
+  const alignment = PAGE_BLOCK_TEXT_ALIGNMENTS.includes(
+    value.alignment as PageBlockTextAlignment,
+  )
+    ? (value.alignment as PageBlockTextAlignment)
+    : defaults.alignment;
+
+  return {
+    text: text || defaults.text,
+    visible: readFormattingBoolean(value.visible, defaults.visible),
+    bold: readFormattingBoolean(value.bold, defaults.bold),
+    alignment,
+  };
+}
+
+export function buildCollectionDetailsActionFromFormData(
+  formData: FormData,
+): CollectionDetailsAction {
+  const text = String(formData.get("details_text") ?? "").trim();
+  if (!text) throw new Error("نص زر التفاصيل مطلوب.");
+
+  const formatting = buildPageBlockTextFormattingPatch(formData, [
+    {
+      field: "details",
+      defaults: DEFAULT_COLLECTION_DETAILS_ACTION,
+    },
+  ]);
+  const resolved = resolvePageBlockTextFormat(
+    formatting,
+    "details",
+    DEFAULT_COLLECTION_DETAILS_ACTION,
+  );
+
+  return { text, ...resolved };
+}
+
+export type CollectionDisplayOverrides = {
+  title: boolean;
+  image: boolean;
+  excerpt: boolean;
+  date: boolean;
+  category: boolean;
+  series: boolean;
+  details: CollectionDetailsAction;
+};
+
+export type TopicsListingDisplayOverrides = CollectionDisplayOverrides;
+
+export type TopicsListingBlockConfig = {
+  collection: TopicsListingCollection;
+  presentation: TopicsListingPresentation;
+  itemsPerRow: TopicsListingItemsPerRow;
+  itemLimit: TopicsListingItemLimit;
+  display: TopicsListingDisplayOverrides;
 };
 
 export type AboutIntroBeatConfig = {
@@ -459,6 +562,72 @@ export function asContentConfig(raw: unknown): ContentBlockConfig {
       { field: "description", defaults: { alignment: legacyAlignment } },
     ]),
   };
+}
+
+export function asTopicsListingConfig(raw: unknown): TopicsListingBlockConfig {
+  const config =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const presentation = String(config.presentation ?? "").trim();
+  const itemsPerRow = Number(config.itemsPerRow ?? config.items_per_row);
+  const itemLimit = Number(config.itemLimit ?? config.item_limit);
+  const rawCollection =
+    config.collection &&
+    typeof config.collection === "object" &&
+    !Array.isArray(config.collection)
+      ? (config.collection as Record<string, unknown>)
+      : {};
+  const collectionType = String(rawCollection.type ?? "").trim();
+  const categorySlug = String(
+    rawCollection.categorySlug ?? rawCollection.category_slug ?? "",
+  ).trim();
+  const collection: TopicsListingCollection =
+    collectionType === "category" && categorySlug
+      ? { type: "category", categorySlug }
+      : { type: "all" };
+  const rawDisplay =
+    config.display &&
+    typeof config.display === "object" &&
+    !Array.isArray(config.display)
+      ? (config.display as Record<string, unknown>)
+      : {};
+  const details = resolveCollectionDetailsAction(rawDisplay.details);
+
+  return {
+    collection,
+    presentation: TOPICS_LISTING_PRESENTATIONS.includes(
+      presentation as TopicsListingPresentation,
+    )
+      ? (presentation as TopicsListingPresentation)
+      : "list",
+    itemsPerRow: TOPICS_LISTING_ITEMS_PER_ROW.includes(
+      itemsPerRow as TopicsListingItemsPerRow,
+    )
+      ? (itemsPerRow as TopicsListingItemsPerRow)
+      : 3,
+    itemLimit: TOPICS_LISTING_ITEM_LIMITS.includes(
+      itemLimit as TopicsListingItemLimit,
+    )
+      ? (itemLimit as TopicsListingItemLimit)
+      : 6,
+    display: {
+      title: readFormattingBoolean(rawDisplay.title, true),
+      image: readFormattingBoolean(rawDisplay.image, true),
+      excerpt: readFormattingBoolean(rawDisplay.excerpt, true),
+      date: readFormattingBoolean(rawDisplay.date, true),
+      category: readFormattingBoolean(rawDisplay.category, true),
+      series: readFormattingBoolean(rawDisplay.series, true),
+      details,
+    },
+  };
+}
+
+export function isTopicsListingTemplate(
+  slug: string,
+  variant?: string | null,
+) {
+  return slug === "topics-listing" || variant === "topics-listing";
 }
 
 export function isAboutIntroTemplate(slug: string, variant?: string | null) {

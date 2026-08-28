@@ -41,8 +41,8 @@ import {
   mapContactTrustCardsBlock,
 } from "../contact/contact-cms-mappers";
 import TopicsInsightCtaSection from "../topics/TopicsInsightCtaSection";
-import TopicsIntroSection from "../topics/TopicsIntroSection";
-import { mapTopicsInsightCtaBlock, mapTopicsIntroBlock } from "../topics/topics-cms-mappers";
+import { ContentIntroPresentation } from "../sections/ContentSection";
+import { mapTopicsInsightCtaBlock } from "../topics/topics-cms-mappers";
 import { mapAboutCtaBlock, mapLegacyProjectsCtaBlock } from "../modules/about-cta-mappers";
 import { mapLegacyPrinciplesCardsBlock } from "../modules/about-principles-mappers";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
@@ -50,6 +50,7 @@ import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import { mapVisionGoalsBlock } from "../modules/vision-goals-mappers";
 import {
   asBreadcrumbConfig,
+  asContentConfig,
   isAboutApproachTemplate,
   isAboutCtaTemplate,
   isAboutIntroSingleImageTemplate,
@@ -127,6 +128,7 @@ function indexBySlug(blocks: ResolvedPageBlock[]) {
 export type SlotModuleRenderContext = {
   homepageProjects?: HomepageProjectCard[];
   breadcrumbCurrentLabel?: string;
+  topicsListingContent?: ReactNode;
 };
 
 /**
@@ -377,7 +379,25 @@ export function buildSlotModuleNodes(
 
     if (slug === "topics-intro") {
       mark(block);
-      push(`topics-intro-${block.assignmentId}`, block.sortOrder, <TopicsIntroSection cmsContent={mapTopicsIntroBlock(block)} />);
+      push(
+        `topics-intro-${block.assignmentId}`,
+        block.sortOrder,
+        <ContentIntroPresentation
+          config={asContentConfig(block.template.config)}
+        />,
+      );
+      continue;
+    }
+
+    if (slug === "topics-listing") {
+      mark(block);
+      if (context.topicsListingContent != null) {
+        push(
+          `topics-listing-${block.assignmentId}`,
+          block.sortOrder,
+          context.topicsListingContent,
+        );
+      }
       continue;
     }
 

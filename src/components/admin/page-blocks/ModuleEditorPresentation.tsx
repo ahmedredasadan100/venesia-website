@@ -390,6 +390,7 @@ export function ModuleEditorVisibilityAlignRow({
   enableVisibility = true,
   controlsPlacement = "header",
   presentation = "card",
+  className = "",
   children,
 }: {
   label: string;
@@ -404,6 +405,7 @@ export function ModuleEditorVisibilityAlignRow({
   enableVisibility?: boolean;
   controlsPlacement?: "header" | "footer" | "cards";
   presentation?: "card" | "plain";
+  className?: string;
   children?: ReactNode;
 }) {
   const [alignment, setAlignment] =
@@ -502,8 +504,8 @@ export function ModuleEditorVisibilityAlignRow({
       data-module-editor-control-row=""
       className={
         presentation === "card"
-          ? MODULE_EDITOR_CONTROL_CARD_CLASS_NAME
-          : undefined
+          ? `${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} ${className}`.trim()
+          : className || undefined
       }
     >
       {submittedValues}

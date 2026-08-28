@@ -1,15 +1,16 @@
 import Link from "next/link";
 import Pagination from "../Pagination";
+import { CollectionListingPresentation } from "../collection-modules/CollectionListingPresenter";
 import MediaContentCard from "./MediaContentCard";
 import type { MediaContentItem } from "../../lib/media-center/types";
 import type {
-  MediaListingCardVariant,
   MediaListingColumns,
   MediaListingLayout,
 } from "../../lib/media-hub-modules/parse-config";
+import type { CollectionListingItemLimit } from "../../lib/collection-modules/item-limit";
+import type { CollectionDisplayOverrides } from "../../lib/page-blocks/configs";
 
 type MediaListingContentProps = {
-  /** Current server-paginated page items (browse mode). */
   items: MediaContentItem[];
   searchQuery?: string;
   currentPage: number;
@@ -19,18 +20,11 @@ type MediaListingContentProps = {
   basePath: string;
   emptyTitle: string;
   emptyDescription: string;
-  cardCtaText: string;
   itemsLabel?: string;
-  layout: MediaListingLayout;
-  columns: MediaListingColumns;
-  paginationEnabled: boolean;
-  cardVariant: MediaListingCardVariant;
-};
-
-const GRID_COLUMN_CLASSES: Record<MediaListingColumns, string> = {
-  1: "grid-cols-1",
-  2: "grid-cols-1 @xl/slot-module:grid-cols-2",
-  3: "grid-cols-1 @xl/slot-module:grid-cols-2 @4xl/slot-module:grid-cols-3",
+  presentation: MediaListingLayout;
+  itemsPerRow: MediaListingColumns;
+  itemLimit: CollectionListingItemLimit;
+  displayOverrides: CollectionDisplayOverrides;
 };
 
 export default function MediaListingContent({
@@ -43,20 +37,15 @@ export default function MediaListingContent({
   basePath,
   emptyTitle,
   emptyDescription,
-  cardCtaText,
   itemsLabel = "عناصر",
-  layout,
-  columns,
-  paginationEnabled,
-  cardVariant,
+  presentation,
+  itemsPerRow,
+  itemLimit,
+  displayOverrides,
 }: MediaListingContentProps) {
   const isSearching = searchQuery.length > 0;
   const hasItems = items.length > 0;
   const countLabel = isSearching ? "نتائج البحث" : itemsLabel;
-  const safePage = Math.min(Math.max(currentPage, 1), Math.max(totalPages, 1));
-  const collectionClassName = layout === "vertical"
-    ? "space-y-6"
-    : `grid gap-8 ${GRID_COLUMN_CLASSES[columns]}`;
 
   return (
     <div className="space-y-10">
@@ -102,21 +91,24 @@ export default function MediaListingContent({
 
       {hasItems ? (
         <>
-          <div className={collectionClassName}>
-            {items.map((item) => (
+          <CollectionListingPresentation
+            items={items}
+            itemLimit={itemLimit}
+            presentation={presentation}
+            itemsPerRow={itemsPerRow}
+            keyForItem={(item) => item.id}
+            renderItem={(item) => (
               <MediaContentCard
-                key={item.id}
                 item={item}
-                actionLabel={cardCtaText}
-                variant={cardVariant}
+                displayOverrides={displayOverrides}
               />
-            ))}
-          </div>
+            )}
+          />
 
-          {!isSearching && paginationEnabled ? (
+          {!isSearching ? (
             <Pagination
-              currentPage={safePage}
-              totalPages={Math.max(totalPages, 1)}
+              currentPage={currentPage}
+              totalPages={totalPages}
               basePath={basePath}
               query={{ sort: sort === "oldest" ? "oldest" : undefined }}
             />

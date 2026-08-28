@@ -14,7 +14,10 @@ import {
 } from "../../../../lib/page-blocks/configs";
 import { MODULE_EDITOR_TERMINOLOGY } from "../../../../lib/page-blocks/module-editor-presentation-contract";
 
-type GenericContentModuleEditorProps = { config: ContentBlockConfig };
+type GenericContentModuleEditorProps = {
+  config: ContentBlockConfig;
+  introPresentation?: boolean;
+};
 
 function formatDefaults(
   config: ContentBlockConfig,
@@ -27,7 +30,10 @@ function formatDefaults(
   });
 }
 
-export default function GenericContentModuleEditor({ config }: GenericContentModuleEditorProps) {
+export default function GenericContentModuleEditor({
+  config,
+  introPresentation = false,
+}: GenericContentModuleEditorProps) {
   const fields = [
     { field: "eyebrow" as const, label: MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr, name: "eyebrow", value: config.eyebrow ?? "" },
     { field: "title" as const, label: "العنوان الرئيسي", name: "title", value: config.title ?? "", bold: true },
@@ -50,6 +56,7 @@ export default function GenericContentModuleEditor({ config }: GenericContentMod
               showDefault={format.visible}
               boldDefault={format.bold}
               alignmentDefault={format.alignment}
+              className="h-full"
             >
               <input
                 name={item.name}
@@ -70,14 +77,24 @@ export default function GenericContentModuleEditor({ config }: GenericContentMod
           showDefault={descriptionFormat.visible}
           boldDefault={descriptionFormat.bold}
           alignmentDefault={descriptionFormat.alignment}
+          className="h-full"
         >
-          <textarea
-            name="body"
-            defaultValue={config.body ?? ""}
-            aria-label="الوصف"
-            rows={2}
-            className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
-          />
+          {introPresentation ? (
+            <input
+              name="body"
+              defaultValue={config.body ?? ""}
+              aria-label="الوصف"
+              className={fieldClassName("h-11")}
+            />
+          ) : (
+            <textarea
+              name="body"
+              defaultValue={config.body ?? ""}
+              aria-label="الوصف"
+              rows={2}
+              className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
+            />
+          )}
         </ModuleEditorVisibilityAlignRow>
         </ModuleEditorField>
       </ModuleEditorFieldGrid>

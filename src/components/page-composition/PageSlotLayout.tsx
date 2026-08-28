@@ -25,6 +25,7 @@ type SlotContentOptions = {
   suffix?: ReactNode;
   homepageProjects?: HomepageProjectCard[];
   breadcrumbCurrentLabel?: string;
+  topicsListingContent?: ReactNode;
 };
 
 function SlotModuleContainer({
@@ -55,6 +56,7 @@ function renderOrderedSlotEntries(
   const plan = buildSlotRenderPlan(entries, {
     homepageProjects: options.homepageProjects,
     breadcrumbCurrentLabel: options.breadcrumbCurrentLabel,
+    topicsListingContent: options.topicsListingContent,
   });
   const nodes: ReactNode[] = [];
   let index = 0;
@@ -120,12 +122,14 @@ export function PageSlotContent({
   suffix,
   homepageProjects,
   breadcrumbCurrentLabel,
+  topicsListingContent,
 }: {
   entries: SlotEntry[];
 } & SlotContentOptions) {
   const nodes = renderOrderedSlotEntries(entries, {
     homepageProjects,
     breadcrumbCurrentLabel,
+    topicsListingContent,
   });
 
   if (prefix != null) {
@@ -204,6 +208,8 @@ type PageSlotLayoutProps = {
   homepageProjects?: HomepageProjectCard[];
   /** Dynamic detail label consumed by the shared Breadcrumb renderer. */
   breadcrumbCurrentLabel?: string;
+  /** Page-owned Topics results shell injected into its assigned Listing module. */
+  topicsListingContent?: ReactNode;
 };
 
 export default function PageSlotLayout({
@@ -214,6 +220,7 @@ export default function PageSlotLayout({
   skipSlots = [],
   homepageProjects,
   breadcrumbCurrentLabel,
+  topicsListingContent,
 }: PageSlotLayoutProps) {
   const skip = new Set(skipSlots);
   const sidebarEntries = getSlotEntries(composition, "sidebar");
@@ -256,6 +263,7 @@ export default function PageSlotLayout({
             suffix={suffix}
             homepageProjects={homepageProjects}
             breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+            topicsListingContent={topicsListingContent}
           />
         </div>
       </div>
@@ -290,6 +298,7 @@ export default function PageSlotLayout({
                   suffix={mainAfter}
                   homepageProjects={homepageProjects}
                   breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+                  topicsListingContent={topicsListingContent}
                 />
               </section>
             ) : null}
@@ -305,6 +314,7 @@ export default function PageSlotLayout({
                   prefix={sidebarPrefix}
                   homepageProjects={homepageProjects}
                   breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+                  topicsListingContent={topicsListingContent}
                 />
               </aside>
             ) : null}

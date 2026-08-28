@@ -91,9 +91,9 @@ The 2026-08-23 authorized Project Location Presentation migration closure establ
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                                95 |
-| Production registry versions                      |                                                95 |
-| Registry SQL provenance                           | Exact repository SQL for all 95 deployed versions |
+| Repository migration files                        |                                                96 |
+| Production registry versions                      |                                                96 |
+| Registry SQL provenance                           | Exact repository SQL for all 96 deployed versions |
 | Public tables                                     |                                                56 |
 | Public tables with RLS enabled                    |                                                56 |
 | Public catalog objects with repository provenance |                                               292 |
@@ -138,6 +138,8 @@ The final Product clarification supersedes migration 92 as the active presentati
 The verification failure path exposed an existing mixed-provider Media coordination mismatch: Project reference scans retained both Supabase and filesystem Catalog assets, while the Supabase write-lease owner correctly leased only managed Supabase assets, but the database synchronizer compared that lease against every provider asset. The forward owner fix `20260824022000_media_reference_mixed_provider_lease_scope.sql` was applied as migration 94 with exact repository SQL provenance. It continues locking and persisting every Catalog reference while requiring matching write-lease coverage only for Supabase-managed assets; it creates no table, Runtime, provider, or parallel synchronization path. The two QA-created failed leases were resolved through the existing non-destructive Media Recovery workflow after a complete 17/17-provider reconciliation; no files were deleted or replaced, and subsequent Project saves completed without a media warning.
 
 The authorized Page Composition adoption correction then applied `20260827122828_page_composition_media_position_adoption.sql` as migration 95 with exact repository SQL provenance. It removes only the legacy `main` / `sidebar` database constraints and defaults from Media Hub and Media Sidebar Assignments, preserves every existing row and Position, and lets those two module families use the same semantic Platform Regions as every flexible Page Assignment. It introduces no Capability, Runtime, persistence field, data rebuild, or Assignment model change; Hero remains the only Product-fixed Position exception.
+
+The authorized Topics Listing Presentation Phase 1 closure applied `20260828114621_topics_listing_presentation_phase_1.sql` as migration 96 with exact repository SQL provenance. It seeds one presentation-only Topics Listing template and its Topics page assignment through the existing `mutate_page_composition` write owner; it creates no table, field, Runtime, Capability, read owner, or source of truth.
 
 ## Removed final-cleanup legacy
 

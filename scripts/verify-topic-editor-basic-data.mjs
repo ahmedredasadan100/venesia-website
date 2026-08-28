@@ -94,6 +94,11 @@ check(
     categorySelect.includes('focusTargetId="content-category-listbox"') &&
     !categorySelect.includes("<select"),
 );
+check(
+  "category hierarchy delegates indentation to the shared listbox depth contract",
+  categorySelect.includes("depth: category.depth") &&
+    !categorySelect.includes('repeat(category.depth)'),
+);
 check("inactive current category remains selectable only for its record", categorySelect.includes("category.is_active === false") && categorySelect.includes("String(category.id) !== initialValue"));
 check(
   "series retains one series_id owner and stable target through the shared form listbox",
