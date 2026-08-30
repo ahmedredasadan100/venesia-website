@@ -32,7 +32,9 @@ const [
   publicLoader,
   publicContentOwner,
   topicsPage,
-  featuredTopic,
+  featuredCard,
+  featuredContract,
+  pageBlockConfigs,
   topicCard,
   topicDetail,
   topicTypes,
@@ -63,7 +65,9 @@ const [
   read("src/lib/topics/load-public-topics.ts"),
   read("src/lib/content/public-content-read/owner.ts"),
   read("src/app/(site)/topics/page.tsx"),
-  read("src/components/topics/FeaturedTopic.tsx"),
+  read("src/components/featured/FeaturedContentCard.tsx"),
+  read("src/lib/featured-modules/contract.ts"),
+  read("src/lib/page-blocks/configs.ts"),
   read("src/components/topics/TopicCard.tsx"),
   read("src/app/(site)/topics/[slug]/page.tsx"),
   read("src/lib/topics/types.ts"),
@@ -80,22 +84,25 @@ const [
   read("src/components/media-center/MediaDetailArticle.tsx"),
   read("src/lib/media-sidebar-modules/resolve-widget-items.ts"),
   read("src/components/media-center/MediaSidebar.tsx"),
-  Promise.all([
-    "../sections/DynamicHeroSection.tsx",
-    "MediaCenterHubFeatured.tsx",
-    "MediaCenterHubGallery.tsx",
-    "MediaCenterHubPress.tsx",
-    "MediaCenterHubTimeline.tsx",
-    "MediaCenterHubVideos.tsx",
-    "MediaContentCard.tsx",
-    "RelatedMediaRail.tsx",
-  ].map((file) => read(`src/components/media-center/${file}`))).then((sources) => sources.join("\n")),
+  Promise.all(
+    [
+      "../sections/DynamicHeroSection.tsx",
+      "MediaCenterHubFeatured.tsx",
+      "MediaCenterHubGallery.tsx",
+      "MediaCenterHubPress.tsx",
+      "MediaCenterHubTimeline.tsx",
+      "MediaCenterHubVideos.tsx",
+      "MediaContentCard.tsx",
+      "RelatedMediaRail.tsx",
+    ].map((file) => read(`src/components/media-center/${file}`)),
+  ).then((sources) => sources.join("\n")),
 ]);
 
 check(
   "the existing public.topics source of truth gains four backward-compatible controls",
-  fields.every((field) => migration.includes(`${field} boolean not null default true`)) &&
-    migration.includes("alter table public.topics"),
+  fields.every((field) =>
+    migration.includes(`${field} boolean not null default true`),
+  ) && migration.includes("alter table public.topics"),
 );
 
 check(
@@ -104,7 +111,8 @@ check(
     'displaySettingsOwner: "src/components/admin/content/editors/ContentDisplaySettings.tsx"',
   ) &&
     fields.every(
-      (field) => displaySettings.match(new RegExp(`name="${field}"`, "g"))?.length === 1,
+      (field) =>
+        displaySettings.match(new RegExp(`name="${field}"`, "g"))?.length === 1,
     ) &&
     !displaySettings.includes("topicMetadata") &&
     !architectureManifest.includes("topic_display_controls"),
@@ -157,7 +165,9 @@ check(
 
 check(
   "the existing SEO batch adapter preserves old visible behavior for the new controls",
-  fields.every((field) => batchImport.includes(`setBoolean(formData, "${field}", true)`)),
+  fields.every((field) =>
+    batchImport.includes(`setBoolean(formData, "${field}", true)`),
+  ),
 );
 
 check(
@@ -169,9 +179,12 @@ check(
       "showSeriesOnPage: item.display.series",
       "showIntroCardOnPage: item.display.introCard",
     ].every((token) => publicLoader.includes(token)) &&
-    ["showDateOnPage", "showCategoryOnPage", "showSeriesOnPage", "showIntroCardOnPage"].every(
-      (field) => topicTypes.includes(`${field}?: boolean`),
-    ),
+    [
+      "showDateOnPage",
+      "showCategoryOnPage",
+      "showSeriesOnPage",
+      "showIntroCardOnPage",
+    ].every((field) => topicTypes.includes(`${field}?: boolean`)),
 );
 
 check(
@@ -185,12 +198,9 @@ check(
     "showSeriesOnPage",
     "showIntroCardOnPage",
   ].every((field) => mediaPublicTypes.includes(`${field}: boolean`)) &&
-    fields.every(
-      (field) =>
-        publicContentOwner.includes(field),
-    ) &&
-    ["PUBLIC_CONTENT_COLLECTION_SELECT", "PUBLIC_CONTENT_DETAIL_SELECT"].every((token) =>
-      publicContentOwner.includes(token)
+    fields.every((field) => publicContentOwner.includes(field)) &&
+    ["PUBLIC_CONTENT_COLLECTION_SELECT", "PUBLIC_CONTENT_DETAIL_SELECT"].every(
+      (token) => publicContentOwner.includes(token),
     ) &&
     mediaAdapter.includes("item.display.date") &&
     mediaProvider.includes("loadPublicContentCollection"),
@@ -199,8 +209,12 @@ check(
 check(
   "all shared Media detail consumers respect the intro gate and every individual field",
   mediaDetailPage.includes("showTitle={item.showTitleOnPage !== false}") &&
-    mediaDetailPage.includes("showHeroImage={item.showImageOnPage !== false}") &&
-    mediaDetailPage.includes("showSubtitle={item.showExcerptOnPage !== false}") &&
+    mediaDetailPage.includes(
+      "showHeroImage={item.showImageOnPage !== false}",
+    ) &&
+    mediaDetailPage.includes(
+      "showSubtitle={item.showExcerptOnPage !== false}",
+    ) &&
     mediaDetailArticle.includes("{item.showIntroCardOnPage ? (") &&
     [
       "item.showTitleOnPage",
@@ -215,11 +229,12 @@ check(
 check(
   "Media listing hub related and sidebar metadata consumers respect date category and series controls",
   ["showDateOnPage", "showCategoryOnPage", "showSeriesOnPage"].every(
-    (field) => mediaRenderConsumers.includes(field) && mediaSidebarAdapter.includes(field),
+    (field) => mediaRenderConsumers.includes(field),
   ) &&
-    mediaSidebarAdapter.includes("seriesLabel") &&
-    mediaSidebar.includes("item.seriesLabel") &&
-    mediaSidebar.includes("item.date ?"),
+    mediaSidebarAdapter.includes("resolveContentItemDisplay") &&
+    ["date", "category", "series"].every(
+      (field) => mediaSidebar.includes(`item.display.${field}`),
+    ),
 );
 
 const filterOwner = publicContentOwner.slice(
@@ -246,11 +261,19 @@ check(
 
 check(
   "Topic cards and featured cards expose separate real category and series navigation",
-  [featuredTopic, topicCard].every(
+  [featuredCard, topicCard].every(
     (source) =>
       source.includes("/topics?category=${encodeURIComponent(") &&
       source.includes("/topics?series=${encodeURIComponent("),
   ) &&
+    featuredCard.includes("resolveFeaturedItemDisplay(display, item)") &&
+    featuredContract.includes("resolveContentItemDisplay(display, item.display") &&
+    pageBlockConfigs.includes(
+      "display[field] && itemDisplay[field] && Boolean(values[field])",
+    ) &&
+    ["title", "image", "excerpt", "date", "category", "series"].every(
+      (field) => featuredContract.includes(`${field}: item.${field}`),
+    ) &&
     topicCard.includes("showDateOnPage") &&
     topicCard.includes("showCategoryOnPage") &&
     topicCard.includes("showSeriesOnPage"),
@@ -265,8 +288,12 @@ check(
     topicDetail.includes("topic.showDateOnPage") &&
     topicDetail.includes("topic.showCategoryOnPage") &&
     topicDetail.includes("topic.showSeriesOnPage") &&
-    topicDetail.includes("/topics?category=${encodeURIComponent(topic.categorySlug)}") &&
-    topicDetail.includes("/topics?series=${encodeURIComponent(topic.seriesSlug)}"),
+    topicDetail.includes(
+      "/topics?category=${encodeURIComponent(topic.categorySlug)}",
+    ) &&
+    topicDetail.includes(
+      "/topics?series=${encodeURIComponent(topic.seriesSlug)}",
+    ),
 );
 
 check(
@@ -276,4 +303,6 @@ check(
     topicDetail.includes('className="article-rich-text"'),
 );
 
-console.log(`verify:topic-display-controls-navigation passed (${passed} assertions)`);
+console.log(
+  `verify:topic-display-controls-navigation passed (${passed} assertions)`,
+);

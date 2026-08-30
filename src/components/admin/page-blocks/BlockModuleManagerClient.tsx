@@ -76,7 +76,7 @@ export type BlockModuleRow = {
 type BlockModuleSortKey = "name" | "slug" | "variant" | "status";
 
 type BlockModuleManagerClientProps = {
-  moduleKey: "cta" | "cards" | "breadcrumb" | "feed";
+  moduleKey: "cta" | "cards" | "breadcrumb" | "feed" | "featured";
   moduleTitle: string;
   moduleDescription: string;
   rows: BlockModuleRow[];
@@ -101,6 +101,7 @@ const COLUMN_PREFERENCE_ID_BY_MODULE = {
   cards: "cardsTemplates",
   cta: "ctaTemplates",
   feed: "feedTemplates",
+  featured: "featuredTemplates",
 } as const satisfies Record<
   BlockModuleManagerClientProps["moduleKey"],
   PageCompositionColumnPreferenceId

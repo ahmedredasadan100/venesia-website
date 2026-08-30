@@ -942,6 +942,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         "cards_block_templates",
         "cta_block_templates",
         "feed_module_templates",
+        "featured_module_templates",
       ].map((entity) => ({
         entity,
         consumerSourceFile:
@@ -2463,6 +2464,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "/admin/pages-blocks/blocks/cards",
         "/admin/pages-blocks/blocks/cta",
         "/admin/pages-blocks/blocks/feed",
+        "/admin/pages-blocks/blocks/featured",
         "/admin/pages-blocks/blocks/media-hub",
         "/admin/pages-blocks/blocks/media-sidebar",
       ],
@@ -2473,6 +2475,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/pages-blocks/blocks/cards/page.tsx",
         "src/app/admin/pages-blocks/blocks/cta/page.tsx",
         "src/app/admin/pages-blocks/blocks/feed/page.tsx",
+        "src/app/admin/pages-blocks/blocks/featured/page.tsx",
         "src/app/admin/pages-blocks/blocks/media-hub/page.tsx",
         "src/app/admin/pages-blocks/blocks/media-sidebar/page.tsx",
       ],
@@ -2528,7 +2531,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           genuineExceptions: [],
           requiredAdoption: [],
         },
-        ...(["breadcrumb", "cards", "cta", "feed"] as const).map(
+        ...(["breadcrumb", "cards", "cta", "feed", "featured"] as const).map(
           (moduleKind) => ({
             id: `${moduleKind}-template-library`,
             route: `/admin/pages-blocks/blocks/${moduleKind}`,
@@ -2571,7 +2574,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       exceptionRationale:
         "Each template-library consumer proves search, filtering, sorting, selection, publication bulk actions, optional columns, pagination, Row Actions, and shared Runtime adoption independently. Unsupported Media lifecycle commands remain explicit at their two consumers.",
       rationale:
-        "All eight template libraries use bounded-client query contracts, while per-consumer evidence prevents one grouped surface from hiding adoption drift between their distinct presentation adapters.",
+        "All nine template libraries use bounded-client query contracts, while per-consumer evidence prevents one grouped surface from hiding adoption drift between their distinct presentation adapters.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
@@ -2589,6 +2592,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "/admin/pages-blocks/blocks/cards/[id]",
         "/admin/pages-blocks/blocks/cta/[id]",
         "/admin/pages-blocks/blocks/feed/[id]",
+        "/admin/pages-blocks/blocks/featured/[id]",
         "/admin/pages-blocks/blocks/media-hub/[id]",
         "/admin/pages-blocks/blocks/media-sidebar/[id]",
       ],
@@ -2599,6 +2603,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/app/admin/pages-blocks/blocks/cards/[id]/page.tsx",
         "src/app/admin/pages-blocks/blocks/cta/[id]/page.tsx",
         "src/app/admin/pages-blocks/blocks/feed/[id]/page.tsx",
+        "src/app/admin/pages-blocks/blocks/featured/[id]/page.tsx",
         "src/app/admin/pages-blocks/blocks/media-hub/[id]/page.tsx",
         "src/app/admin/pages-blocks/blocks/media-sidebar/[id]/page.tsx",
       ],
@@ -2610,6 +2615,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
         "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
         "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+        "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
         "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
         "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
       ],
@@ -4020,6 +4026,7 @@ export const PRODUCT_SURFACE_IDENTITIES = [
       "admin-content-blocks-collection",
       "admin-cta-blocks-collection",
       "admin-feed-blocks-collection",
+      "admin-featured-blocks-collection",
       "admin-hero-blocks-collection",
       "admin-media-hub-blocks-collection",
       "admin-media-sidebar-blocks-collection",
@@ -4165,6 +4172,35 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     workflowOwner: "block_template_domain",
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-feed-blocks-collection",
+    nestedChildren: [],
+  }),
+  defineProductSurfaceIdentity({
+    id: "admin-featured-blocks-collection",
+    scope: "admin_route",
+    route: "/admin/pages-blocks/blocks/featured",
+    sourceFiles: ["src/app/admin/pages-blocks/blocks/featured/page.tsx"],
+    productSurfaceKind: "management_collection",
+    workflowOwner: "block_template_domain",
+    runtimeOwners: [
+      "collection_runtime",
+      "feedback_runtime",
+      "confirmation_runtime",
+    ],
+    nestedParent: "admin-blocks-library-hub",
+    nestedChildren: [
+      "admin-featured-block-builder",
+      "admin-featured-block-create-form",
+    ],
+  }),
+  defineProductSurfaceIdentity({
+    id: "admin-featured-block-builder",
+    scope: "admin_route",
+    route: "/admin/pages-blocks/blocks/featured/[id]",
+    sourceFiles: ["src/app/admin/pages-blocks/blocks/featured/[id]/page.tsx"],
+    productSurfaceKind: "builder",
+    workflowOwner: "block_template_domain",
+    runtimeOwners: ["feedback_runtime", "confirmation_runtime"],
+    nestedParent: "admin-featured-blocks-collection",
     nestedChildren: [],
   }),
   defineProductSurfaceIdentity({
@@ -5084,6 +5120,19 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     workflowOwner: "block_template_domain",
     runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
     nestedParent: "admin-feed-blocks-collection",
+    nestedChildren: [],
+  }),
+  defineProductSurfaceIdentity({
+    id: "admin-featured-block-create-form",
+    scope: "nested_surface",
+    route: null,
+    sourceFiles: [
+      "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+    ],
+    productSurfaceKind: "form",
+    workflowOwner: "block_template_domain",
+    runtimeOwners: ["form_runtime", "feedback_runtime", "confirmation_runtime"],
+    nestedParent: "admin-featured-blocks-collection",
     nestedChildren: [],
   }),
   defineProductSurfaceIdentity({

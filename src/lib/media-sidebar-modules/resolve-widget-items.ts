@@ -1,85 +1,89 @@
 import "server-only";
 
 import {
-  getMediaHref,
-  getMediaSidebarLatest,
-  getMediaSidebarPopular,
-  type MediaContentItem,
-  type MediaSidebarItem,
-} from "../media-center";
-import { parseMediaSidebarModuleConfig, type MediaSidebarModuleConfig } from "./parse-config";
-import type { MediaSidebarModulesState } from "./types";
+  publicContentSourceContentTypes,
+  type PublicContentSummary,
+} from "../content/public-content-read/contract";
+import { loadPublicContentCollection } from "../content/public-content-read/owner";
+import { resolveContentItemDisplay } from "../page-blocks/configs";
+import {
+  parseMediaSidebarModuleConfig,
+  type MediaSidebarContentSource,
+  type MediaSidebarModuleConfig,
+} from "./parse-config";
+import type {
+  MediaSidebarContentItem,
+  MediaSidebarModulesState,
+} from "./types";
 
-function mapMediaItemToSidebarItem(item: MediaContentItem, showLabel: boolean): MediaSidebarItem {
-  return {
+type MediaSidebarContentConfig = Extract<
+  MediaSidebarModuleConfig,
+  { source: MediaSidebarContentSource }
+>;
+
+function isContentConfig(
+  config: MediaSidebarModuleConfig,
+): config is MediaSidebarContentConfig {
+  return typeof config.source === "object";
+}
+
+export function resolveMediaSidebarItems(
+  items: PublicContentSummary[],
+  config: MediaSidebarContentConfig,
+): MediaSidebarContentItem[] {
+  return items.slice(0, config.limit).map((item) => ({
+    id: item.id,
+    href: item.href,
     title: item.title,
-    ...(item.showDateOnPage && item.date ? { date: item.date } : {}),
     image: item.image,
-    href: getMediaHref(item),
-    ...(showLabel && item.showCategoryOnPage && item.category ? { label: item.category } : {}),
-    ...(showLabel && item.showSeriesOnPage && item.series ? { seriesLabel: item.series } : {}),
-  };
-}
-
-export function resolveLatestSidebarItems(
-  items: MediaContentItem[],
-  config: MediaSidebarModuleConfig,
-): MediaSidebarItem[] {
-  const limit = config.limit ?? 3;
-  return items.slice(0, limit).map((item) => mapMediaItemToSidebarItem(item, false));
-}
-
-export function resolvePopularSidebarItems(
-  items: MediaContentItem[],
-  config: MediaSidebarModuleConfig,
-): MediaSidebarItem[] {
-  const limit = config.limit ?? 4;
-  return items.slice(0, limit).map((item) => mapMediaItemToSidebarItem(item, true));
+    imageAlt: item.imageAlt,
+    category: item.category,
+    series: item.series,
+    excerpt: item.excerpt,
+    date: item.date,
+    display: resolveContentItemDisplay(config.display, item.display, {
+      title: item.title,
+      image: item.image,
+      category: item.category,
+      series: item.series,
+      excerpt: item.excerpt,
+      date: item.date,
+    }),
+  }));
 }
 
 export async function enrichMediaSidebarModules(
   state: MediaSidebarModulesState,
 ): Promise<MediaSidebarModulesState> {
-  const latestWidget = state.widgets.find(
-    (widget) => widget.isVisible && widget.widgetKey === "latest",
-  );
-  const popularWidget = state.widgets.find(
-    (widget) => widget.isVisible && widget.widgetKey === "popular",
-  );
+  const widgets = await Promise.all(
+    state.widgets.map(async (widget) => {
+      const config = parseMediaSidebarModuleConfig(
+        widget.config,
+        widget.widgetKey,
+      );
+      if (!widget.isVisible || !isContentConfig(config)) {
+        return { ...widget, config };
+      }
 
-  const latestLimit = latestWidget
-    ? parseMediaSidebarModuleConfig(latestWidget.config, "latest").limit ?? 3
-    : 0;
-  const popularLimit = popularWidget
-    ? parseMediaSidebarModuleConfig(popularWidget.config, "popular").limit ?? 4
-    : 0;
+      const result = await loadPublicContentCollection({
+        contentTypes: publicContentSourceContentTypes(config.source),
+        categorySlugs:
+          config.source.kind === "categories"
+            ? [config.source.categorySlug]
+            : [],
+        popularOnly: widget.widgetKey === "popular",
+        page: 1,
+        pageSize: config.limit,
+        sort: "newest",
+      });
 
-  const [latestItems, popularItems] = await Promise.all([
-    latestWidget ? getMediaSidebarLatest(latestLimit) : Promise.resolve([] as MediaContentItem[]),
-    popularWidget ? getMediaSidebarPopular(popularLimit) : Promise.resolve([] as MediaContentItem[]),
-  ]);
-
-  const widgets = state.widgets.map((widget) => {
-    const config = parseMediaSidebarModuleConfig(widget.config, widget.widgetKey);
-
-    if (widget.widgetKey === "latest") {
       return {
         ...widget,
         config,
-        items: resolveLatestSidebarItems(latestItems, config),
+        items: resolveMediaSidebarItems(result.items, config),
       };
-    }
-
-    if (widget.widgetKey === "popular") {
-      return {
-        ...widget,
-        config,
-        items: resolvePopularSidebarItems(popularItems, config),
-      };
-    }
-
-    return { ...widget, config };
-  });
+    }),
+  );
 
   return { ...state, widgets };
 }

@@ -96,6 +96,7 @@ const entityListTable = read(
   "src/components/admin/entity-list/AdminEntityListTable.tsx",
 );
 const publicPagination = read("src/components/Pagination.tsx");
+const publicPaginationModel = read("src/components/pagination-model.ts");
 const registry = read("src/lib/admin/entity-list/data-engine/registry.ts");
 const actions = read("src/app/admin/projects/tracking-actions.ts");
 
@@ -180,8 +181,9 @@ check(
 );
 check(
   "shared Pagination owns arbitrary page parameters while preserving selection query state",
-  publicPagination.includes("pageParam?: string") &&
-    publicPagination.includes("params.set(pageParam") &&
+  publicPaginationModel.includes("pageParam?: string") &&
+    publicPaginationModel.includes("params.set(pageParam") &&
+    publicPagination.includes("buildPublicPaginationHref") &&
     publicView.includes('pageParam="stagePage"') &&
     publicView.includes('pageParam="itemPage"') &&
     publicView.includes('pageParam="updatePage"') &&

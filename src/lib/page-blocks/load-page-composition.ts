@@ -1,6 +1,7 @@
 import "server-only";
 
 import { loadFeedModuleStateForPageSlug } from "../feed-modules/load-feed-modules";
+import { loadFeaturedModuleStateForPageSlug } from "../featured-modules/load-featured-modules";
 import { getHeroSectionState } from "../load-hero-section";
 import { isMediaCenterCmsPageSlug } from "../media-center-page-config";
 import { queryMediaHubModules } from "../media-hub-modules/load-media-hub-modules";
@@ -44,10 +45,11 @@ export async function loadPageCompositionBySlug(
   pageSlug: string,
 ): Promise<PageComposition> {
   const isMediaCenterPage = isMediaCenterCmsPageSlug(pageSlug);
-  const [heroState, blockState, feedState, mediaHubModules, mediaSidebarModules] = await Promise.all([
+  const [heroState, blockState, feedState, featuredState, mediaHubModules, mediaSidebarModules] = await Promise.all([
     getHeroSectionState(pageSlug),
     loadPageBlockStateBySlug(pageSlug),
     loadFeedModuleStateForPageSlug(pageSlug),
+    loadFeaturedModuleStateForPageSlug(pageSlug),
     isMediaCenterPage
       ? queryMediaHubModules(pageSlug)
       : null,
@@ -67,6 +69,16 @@ export async function loadPageCompositionBySlug(
       assignmentId: feed.assignmentId,
       sortOrder: feed.sortOrder,
       module: feed,
+    });
+  }
+
+  for (const featured of featuredState.modules) {
+    if (!isAssignmentPositionAllowed("featured", featured.slot)) continue;
+    slots[featured.slot].push({
+      kind: "featured",
+      assignmentId: featured.assignmentId,
+      sortOrder: featured.sortOrder,
+      module: featured,
     });
   }
 
@@ -113,18 +125,21 @@ export async function loadPageCompositionBySlug(
     heroState.hasAnyAssignmentRows ||
     blockState.hasAnyAssignmentRows ||
     feedState.hasAnyAssignmentRows ||
+    featuredState.hasAnyAssignmentRows ||
     Boolean(mediaHubModules?.hasAnyAssignmentRows) ||
     mediaSidebarModules.hasAnyAssignmentRows;
   const hasRenderableModules =
     heroState.visibility === "visible" ||
     blockState.hasRenderableModules ||
     feedState.modules.length > 0 ||
+    featuredState.modules.length > 0 ||
     Boolean(mediaHubModules?.hasRenderableModules) ||
     mediaSidebarModules.hasRenderableModules;
   const hasCompositionError =
     heroState.visibility === "error" ||
     blockState.hasCompositionError ||
     feedState.hasCompositionError ||
+    featuredState.hasCompositionError ||
     mediaHubModules?.sourceStatus === "error" ||
     mediaSidebarModules.sourceStatus === "error";
 
@@ -134,6 +149,7 @@ export async function loadPageCompositionBySlug(
     heroVisibility: heroState.visibility,
     mediaHubModules,
     mediaSidebarModules,
+    featuredModules: featuredState.modules,
     hasAnyAssignmentRows,
     hasRenderableModules,
     hasCompositionError,

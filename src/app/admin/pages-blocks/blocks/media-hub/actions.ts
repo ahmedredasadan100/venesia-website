@@ -13,7 +13,6 @@ import {
   cleanText,
   getStatus,
   PAGE_BLOCK_PUBLICATION_BULK_ACTIONS,
-  parseFormBoolean,
   parseFormStatus,
   parseNumber,
   parsePageBlockBulkAction,
@@ -34,6 +33,7 @@ import {
   syncMediaHubModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import {
+  buildContentDisplayOptionsFromFormData,
   buildCollectionDetailsActionFromFormData,
   buildPageBlockTextFormattingPatch,
 } from "../../../../../lib/page-blocks/configs";
@@ -45,54 +45,49 @@ export async function updateMediaHubModule(formData: FormData) {
 
   if (!id || !name) throw new Error("بيانات الموديول غير مكتملة.");
 
-  const sectionKey = parseMediaHubSectionKey(cleanText(formData.get("section_key")));
+  const sectionKey = parseMediaHubSectionKey(
+    cleanText(formData.get("section_key")),
+  );
+  if (sectionKey === "featured") {
+    throw new Error("المحتوى المميز يُدار من موديول Featured المستقل.");
+  }
   const dataSource = cleanText(formData.get("data_source")) || "topics";
   const placementInput = cleanText(formData.get("placement"));
-  const placement = placementInput === "listing"
-    ? "listing"
-    : placementInput === "featured"
-      ? "featured"
-      : "hub";
+  const placement = placementInput === "listing" ? "listing" : "hub";
   const config = buildMediaHubModuleConfig(
     sectionKey,
     dataSource,
     parseNumber(formData.get("item_limit"), 0),
     buildMediaHubContentHierarchy(sectionKey, {
       mode: cleanText(formData.get("content_hierarchy_mode")),
-      secondaryItemCount: parseNumber(
-        formData.get("secondary_item_count"),
-        0,
-      ),
+      secondaryItemCount: parseNumber(formData.get("secondary_item_count"), 0),
     }),
     {
-    ...buildPageBlockTextFormattingPatch(formData, [
-      { field: "eyebrow" },
-      { field: "title", defaults: { bold: true } },
-      { field: "description" },
-    ]),
-    eyebrow: cleanText(formData.get("eyebrow")),
-    title: cleanText(formData.get("title")),
-    description: cleanText(formData.get("presentation_description")),
-    ctaText: cleanText(formData.get("cta_text")),
-    collectionView: buildMediaHubCollectionView(sectionKey, {
-      layout: cleanText(formData.get("collection_layout")),
-      itemsPerRow: parseNumber(formData.get("items_per_row"), 0),
-      cardVariant: cleanText(formData.get("collection_card_variant")),
-    }),
+      ...buildPageBlockTextFormattingPatch(formData, [
+        { field: "eyebrow" },
+        { field: "title", defaults: { bold: true } },
+        { field: "description" },
+      ]),
+      eyebrow: cleanText(formData.get("eyebrow")),
+      title: cleanText(formData.get("title")),
+      description: cleanText(formData.get("presentation_description")),
+      ctaText: cleanText(formData.get("cta_text")),
+      collectionView: buildMediaHubCollectionView(sectionKey, {
+        layout: cleanText(formData.get("collection_layout")),
+        itemsPerRow: parseNumber(formData.get("items_per_row"), 0),
+        cardVariant: cleanText(formData.get("collection_card_variant")),
+      }),
     },
     {
       placement,
-      mediaType: cleanText(formData.get("content_type")) || cleanText(formData.get("media_type")),
+      mediaType:
+        cleanText(formData.get("content_type")) ||
+        cleanText(formData.get("media_type")),
       itemLimit: parseNumber(formData.get("item_limit"), 6),
       presentation: cleanText(formData.get("presentation")),
       itemsPerRow: parseNumber(formData.get("items_per_row"), 3),
       display: {
-        title: parseFormBoolean(formData, "show_title_on_page", false),
-        image: parseFormBoolean(formData, "show_image_on_page", false),
-        excerpt: parseFormBoolean(formData, "show_excerpt_on_page", false),
-        date: parseFormBoolean(formData, "show_date_on_page", false),
-        category: parseFormBoolean(formData, "show_category_on_page", false),
-        series: parseFormBoolean(formData, "show_series_on_page", false),
+        ...buildContentDisplayOptionsFromFormData(formData, false),
         details: buildCollectionDetailsActionFromFormData(formData),
       },
     },
@@ -119,26 +114,36 @@ export async function updateMediaHubModule(formData: FormData) {
         .eq("id", id)
         .select("id")
         .maybeSingle();
-      if (error || !data) throw new Error(error?.message ?? "Unable to update media hub module.");
+      if (error || !data)
+        throw new Error(error?.message ?? "Unable to update media hub module.");
       return data;
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncMediaHubModulePageAssignments(id, parsePageIdsFromForm(formData), actor);
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction("content_block_template", "update"),
-    entityType: "content_block_template",
-    entityId: id,
-    entityLabel: name,
-    metadata: { blockType: "media-hub", sectionKey, placement },
-  }, actor);
+  await syncMediaHubModulePageAssignments(
+    id,
+    parsePageIdsFromForm(formData),
+    actor,
+  );
+  await recordCmsAdminAudit(
+    {
+      action: buildCmsAuditAction("content_block_template", "update"),
+      entityType: "content_block_template",
+      entityId: id,
+      entityLabel: name,
+      metadata: { blockType: "media-hub", sectionKey, placement },
+    },
+    actor,
+  );
   await revalidateBlockModulePaths("media-hub");
   revalidatePath(`/admin/pages-blocks/blocks/media-hub/${id}`, "page");
-  redirect(withModuleEditorReturnContextFromForm(
-    `/admin/pages-blocks/blocks/media-hub/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
-    formData,
-  ));
+  redirect(
+    withModuleEditorReturnContextFromForm(
+      `/admin/pages-blocks/blocks/media-hub/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+      formData,
+    ),
+  );
 }
 
 export async function toggleMediaHubModuleStatus(
@@ -158,15 +163,18 @@ export async function toggleMediaHubModuleStatus(
     .eq("id", id);
 
   if (error) throw new Error(error.message);
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction(
-      "content_block_template",
-      normalizedStatus === "published" ? "publish" : "unpublish",
-    ),
-    entityType: "content_block_template",
-    entityId: id,
-    metadata: { blockType: "media-hub", status: normalizedStatus },
-  }, actor);
+  await recordCmsAdminAudit(
+    {
+      action: buildCmsAuditAction(
+        "content_block_template",
+        normalizedStatus === "published" ? "publish" : "unpublish",
+      ),
+      entityType: "content_block_template",
+      entityId: id,
+      metadata: { blockType: "media-hub", status: normalizedStatus },
+    },
+    actor,
+  );
   await revalidateBlockModulePaths("media-hub");
 }
 
@@ -185,14 +193,17 @@ export async function bulkMediaHubModuleStatuses(formData: FormData) {
     .in("id", ids);
   if (error) throw new Error(error.message);
 
-  await recordCmsAdminAudit({
-    action: buildCmsAuditAction(
-      "content_block_template",
-      action === "publish" ? "publish" : "unpublish",
-    ),
-    entityType: "content_block_template",
-    entityLabel: "media_hub_module_templates",
-    metadata: { blockType: "media-hub", action, ids, count: ids.length },
-  }, actor);
+  await recordCmsAdminAudit(
+    {
+      action: buildCmsAuditAction(
+        "content_block_template",
+        action === "publish" ? "publish" : "unpublish",
+      ),
+      entityType: "content_block_template",
+      entityLabel: "media_hub_module_templates",
+      metadata: { blockType: "media-hub", action, ids, count: ids.length },
+    },
+    actor,
+  );
   await revalidateBlockModulePaths("media-hub");
 }

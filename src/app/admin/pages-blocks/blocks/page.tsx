@@ -71,6 +71,15 @@ const modules: BlockModule[] = [
     examples: ["صور المشروع", "صور الموقع", "قبل وبعد"],
   },
   {
+    key: "featured",
+    titleAr: "Featured",
+    href: "/admin/pages-blocks/blocks/featured",
+    status: "active",
+    description:
+      "قسم محتوى مميز مستقل بمصدر واختيار منفصلين عن Presentation، وقابل للربط بأي صفحة.",
+    examples: ["Hero", "Editorial", "بطاقة كبيرة", "3 بطاقات", "Carousel"],
+  },
+  {
     key: "feed",
     titleAr: "خلاصة المحتوى",
     href: "/admin/pages-blocks/blocks/feed",

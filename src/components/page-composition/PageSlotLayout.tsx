@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 
 import DynamicHeroSection from "../sections/DynamicHeroSection";
 import FeedModuleSection from "../feed-modules/FeedModuleSection";
+import FeaturedModuleSection from "../featured/FeaturedModuleSection";
 import { MediaSidebarWidget } from "../media-center/MediaSidebar";
 import { renderMediaHubSections } from "../media-center/renderMediaHubSections";
 import type {
@@ -89,6 +90,16 @@ function renderOrderedSlotEntries(
       nodes.push(
         <SlotModuleContainer key={item.key} source="assignment">
           <FeedModuleSection module={item.module} />
+        </SlotModuleContainer>,
+      );
+      index += 1;
+      continue;
+    }
+
+    if (item.kind === "featured") {
+      nodes.push(
+        <SlotModuleContainer key={item.key} source="assignment">
+          <FeaturedModuleSection module={item.module} />
         </SlotModuleContainer>,
       );
       index += 1;

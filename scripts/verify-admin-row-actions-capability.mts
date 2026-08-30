@@ -2895,7 +2895,7 @@ const blockTemplateConsumerFailures =
   }) ?? ["block-template-libraries:missing_surface"];
 check(
   "each Block Template library proves its own Collection capabilities instead of inheriting a grouped claim",
-  blockTemplateLibraries?.consumerAdoptionEvidence.length === 8 &&
+  blockTemplateLibraries?.consumerAdoptionEvidence.length === 9 &&
     sameValueSet(
       blockTemplateLibraries.consumerAdoptionEvidence.map(
         (consumer) => consumer.route,

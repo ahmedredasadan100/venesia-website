@@ -583,6 +583,10 @@ check(
       source.includes("useAdminFloatingMenuPosition") &&
       /style=\{\w+\.style\}/.test(source),
   ) &&
+    listbox.includes("ADMIN_FILTER_MENU_SCROLLBAR_CLASSES") &&
+    listbox.includes('data-admin-listbox-scroll-viewport=""') &&
+    listbox.includes("min-h-0 flex-1") &&
+    listbox.includes("flex max-h-[calc(100dvh-24px)] flex-col") &&
     floatingPosition.includes('position: "fixed"') &&
     floatingPosition.includes('placement === "bottom" ? top : undefined') &&
     floatingPosition.includes('placement === "top" ? bottom : undefined') &&

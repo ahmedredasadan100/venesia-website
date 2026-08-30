@@ -52,6 +52,7 @@ const assignmentTables = new Set([
   "page_cards_block_assignments",
   "page_breadcrumb_block_assignments",
   "page_feed_module_assignments",
+  "page_featured_module_assignments",
   "page_media_sidebar_module_assignments",
   "page_media_hub_module_assignments",
   "hero_assignments",

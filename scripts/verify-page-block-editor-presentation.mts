@@ -123,6 +123,9 @@ const sharedDataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
 const heroPublicLoader = read("src/lib/load-hero-section.ts");
 const pageBlockPublicLoader = read("src/lib/page-blocks/load-page-blocks.ts");
 const feedPublicLoader = read("src/lib/feed-modules/load-feed-modules.ts");
+const featuredPublicLoader = read(
+  "src/lib/featured-modules/load-featured-modules.ts",
+);
 const mediaSidebarPublicLoader = read(
   "src/lib/media-sidebar-modules/load-media-sidebar-modules.ts",
 );
@@ -297,6 +300,7 @@ const fieldLayoutAdopters = [
   "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
   "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+  "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
@@ -323,6 +327,18 @@ check(
       source.includes("ModuleEditorFieldGrid")
     );
   }),
+);
+
+const ctaEditor = read(
+  "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
+);
+check(
+  "CTA keeps introductory and short-description copy on the shared one-line field presentation",
+  ctaEditor.includes('name="eyebrow"') &&
+    ctaEditor.includes('name="description"') &&
+    ctaEditor.includes('<ModuleEditorField nature="short-text" span={6}>') &&
+    !ctaEditor.includes('<textarea\n                        name="description"') &&
+    !ctaEditor.includes("h-[72px]"),
 );
 
 check(
@@ -494,6 +510,7 @@ const sharedIdentityAdopters = [
   "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
   "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+  "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
 ];
@@ -935,6 +952,7 @@ check(
       "src/app/admin/pages-blocks/blocks/content/actions.ts",
       "src/app/admin/pages-blocks/blocks/cta/actions.ts",
       "src/app/admin/pages-blocks/blocks/cards/actions.ts",
+      "src/lib/featured-modules/config.ts",
       "src/app/admin/pages-blocks/blocks/media-hub/actions.ts",
       "src/lib/feed-modules/parse-feed-config.ts",
     ].every((path) =>
@@ -944,7 +962,7 @@ check(
       "src/components/sections/ContentSection.tsx",
       "src/components/sections/CtaSection.tsx",
       "src/components/sections/CardsSection.tsx",
-      "src/components/media-center/MediaCenterHubSectionHeader.tsx",
+      "src/components/collection-modules/CollectionSectionHeader.tsx",
       "src/components/sidebar-feeds/SidebarFeedPanel.tsx",
     ].every(
       (path) =>
@@ -1024,7 +1042,7 @@ const mediaSidebarEditor = read(
 const scopedModuleEditors = [...statusEditorSources, heroManager].join("\n");
 
 check(
-  "module editor labels are Arabic and fixed data sources are not fake selects",
+  "module editor labels are Arabic, fixed sources stay hidden, and configurable content sources use the shared listbox",
   [
     'label="Variant"',
     'label="Source"',
@@ -1037,7 +1055,9 @@ check(
     /<input\s+type="hidden"\s+name="data_source"\s+value="topics"/u.test(
       mediaHubEditor,
     ) &&
-    mediaSidebarEditor.includes('name="data_source"') &&
+    !mediaSidebarEditor.includes('name="data_source"') &&
+    mediaSidebarEditor.includes('name="source_kind"') &&
+    mediaSidebarEditor.includes('label="مصدر المحتوى"') &&
     !/<AdminFormListboxSelect\b[^>]*\bname="data_source"/u.test(
       mediaHubEditor,
     ) &&
@@ -1048,7 +1068,7 @@ check(
 
 check(
   "one shared contract resolves public visibility for every Page Module kind",
-  PAGE_MODULE_KINDS.length === 8 &&
+  PAGE_MODULE_KINDS.length === 9 &&
     PAGE_MODULE_KINDS.every(
       () =>
         isPageModulePubliclyVisible(true, "published") &&
@@ -1066,11 +1086,12 @@ check(
       heroPublicLoader,
       pageBlockPublicLoader,
       feedPublicLoader,
+      featuredPublicLoader,
       mediaSidebarPublicLoader,
       mediaHubPublicLoader,
     ].every((source) => source.includes("isPageModulePubliclyVisible")) &&
     (adminQueries.match(/\.\.\.resolvePageModuleVisibilityFields\(/g)?.length ??
-      0) === 8,
+      0) === 9,
 );
 
 check(

@@ -75,7 +75,14 @@ assert.deepEqual(
 );
 check("replacement rewrites exact stored values inside structured fields", true);
 const registry = providerModule.validateMediaReferenceProviderRegistry();
-check("typed provider registry is unique and covers the 17 live declared domains", registry.providerCount === 17, String(registry.providerCount));
+const declaredProviderCount = JSON.parse(
+  source("src/lib/admin/media-catalog/write-adoption-manifest.json"),
+).providerRegistry.length;
+check(
+  "typed provider registry is unique and covers every live declared domain",
+  registry.providerCount === declaredProviderCount,
+  `${registry.providerCount}/${declaredProviderCount}`,
+);
 const legacyDocument = "/files/projects/document-1782017403551.pdf";
 assert.equal(providerModule.extractMediaCandidateValues(`download ${legacyDocument} now`).includes(legacyDocument), true);
 check("reference candidate extraction includes embedded legacy /images and /files paths", true);

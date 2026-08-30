@@ -652,8 +652,12 @@ assert.equal(mediaHubLoader.includes("isPublishedPageBlockStatus"), false);
 assert.ok(mediaSidebarLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
 assert.equal(mediaSidebarLoader.includes("isPublishedPageBlockStatus"), false);
 assert.ok(
-  mediaSidebarResolver.includes('widget.isVisible && widget.widgetKey === "latest"') &&
-    mediaSidebarResolver.includes('widget.isVisible && widget.widgetKey === "popular"'),
+  mediaSidebarResolver.includes(
+    'if (!widget.isVisible || !isContentConfig(config))',
+  ) &&
+    mediaSidebarResolver.indexOf(
+      'if (!widget.isVisible || !isContentConfig(config))',
+    ) < mediaSidebarResolver.indexOf("loadPublicContentCollection({"),
   "Hidden Media Sidebar assignments must not trigger public content reads",
 );
 for (const aggregateSource of [heroLoader, blockLoader, loader, mediaHubLoader, mediaSidebarLoader]) {

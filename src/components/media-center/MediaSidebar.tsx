@@ -3,63 +3,273 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAutoCarousel } from "../../hooks/use-auto-carousel";
+import type { MediaSidebarPresentation } from "../../lib/media-sidebar-modules/parse-config";
 import { usePublicNavigation } from "../PublicNavigationProvider";
+import FeedCarouselDots from "../feed-modules/FeedCarouselDots";
 import PublicContentSearchInput from "../public/PublicContentSearchInput";
 import { SidebarFeedPanel } from "../sidebar-feeds/SidebarFeedPanel";
 import type { PublicContentSearchSuggestion } from "../../lib/content/public-content-read";
-import type { MediaSidebarItem } from "../../lib/media-center/types";
-import type { MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
+import type {
+  MediaSidebarContentItem,
+  MediaSidebarWidgetState,
+} from "../../lib/media-sidebar-modules/types";
 
-function SidebarMediaList({
-  items,
-  showLabel,
+type SidebarMediaItemLayout = "list" | "feature" | "compact";
+
+function SidebarMediaItemImage({
+  item,
+  layout,
 }: {
-  items: MediaSidebarItem[];
-  showLabel?: boolean;
+  item: MediaSidebarContentItem;
+  layout: SidebarMediaItemLayout;
 }) {
+  if (!item.display.image) return null;
+
+  const containerClassName =
+    layout === "list"
+      ? "relative h-16 w-20 shrink-0 overflow-hidden rounded-xl"
+      : layout === "feature"
+        ? "relative aspect-[16/10] w-full overflow-hidden"
+        : "relative aspect-[4/3] w-full overflow-hidden rounded-xl";
+  const sizes =
+    layout === "list"
+      ? "80px"
+      : layout === "feature"
+        ? "(max-width: 1024px) 100vw, 340px"
+        : "(max-width: 1024px) 30vw, 100px";
+
   return (
-    <div className="space-y-4">
-      {items.map((item) => (
-        <Link
-          key={`${item.href}-${item.title}`}
-          href={item.href}
-          className="group flex gap-3 border-b border-white/10 pb-4 last:border-0 last:pb-0"
+    <div className={containerClassName}>
+      <Image
+        src={item.image}
+        alt={item.imageAlt || item.title}
+        fill
+        sizes={sizes}
+        className="object-cover opacity-90 transition-transform duration-700 group-hover:scale-105"
+      />
+
+      <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/55 via-transparent to-transparent" />
+    </div>
+  );
+}
+
+function SidebarMediaItemText({
+  item,
+  layout,
+}: {
+  item: MediaSidebarContentItem;
+  layout: SidebarMediaItemLayout;
+}) {
+  const metadataClassName =
+    layout === "compact"
+      ? "mb-1 text-[10px] leading-4 text-[#D8B87A]/75"
+      : "mb-1 text-[11px] text-[#D8B87A]/75";
+
+  return (
+    <>
+      {item.display.category ? (
+        <p className={metadataClassName}>{item.category}</p>
+      ) : null}
+
+      {item.display.series ? (
+        <p className={metadataClassName}>{item.series}</p>
+      ) : null}
+
+      {item.display.title ? (
+        <h4
+          className={[
+            "line-clamp-2 text-white/75 transition group-hover:text-[#D8B87A]",
+            layout === "feature"
+              ? "text-base font-semibold leading-7"
+              : "text-sm leading-6",
+          ].join(" ")}
         >
-          <div className="relative h-16 w-20 shrink-0 overflow-hidden rounded-xl">
-            <Image
-              src={item.image}
-              alt={item.title}
-              fill
-              sizes="80px"
-              className="object-cover transition-transform duration-700 group-hover:scale-105"
-            />
+          {item.title}
+        </h4>
+      ) : null}
 
-            <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/45 to-transparent" />
-          </div>
+      {item.display.excerpt ? (
+        <p
+          className={[
+            "mt-1 line-clamp-2 text-white/45",
+            layout === "feature"
+              ? "text-sm leading-6"
+              : "text-xs leading-5",
+          ].join(" ")}
+        >
+          {item.excerpt}
+        </p>
+      ) : null}
 
-          <div className="min-w-0">
-            {showLabel && item.label ? (
-              <p className="mb-1 text-[11px] text-[#D8B87A]/75">
-                {item.label}
-              </p>
-            ) : null}
+      {item.display.date ? (
+        <p className="mt-1 text-xs text-white/35">{item.date}</p>
+      ) : null}
+    </>
+  );
+}
 
-            {showLabel && item.seriesLabel ? (
-              <p className="mb-1 text-[11px] text-[#D8B87A]/75">
-                {item.seriesLabel}
-              </p>
-            ) : null}
+function SidebarMediaItem({
+  item,
+  layout,
+}: {
+  item: MediaSidebarContentItem;
+  layout: SidebarMediaItemLayout;
+}) {
+  const linkClassName =
+    layout === "list"
+      ? "group flex gap-3 border-b border-white/10 pb-4 last:border-0 last:pb-0"
+      : layout === "feature"
+        ? "group block overflow-hidden rounded-2xl border border-white/10 bg-white/[0.025] transition-[border-color,background-color,transform] duration-500 hover:-translate-y-0.5 hover:border-[#D8B87A]/35 hover:bg-[#D8B87A]/[0.05] motion-reduce:hover:translate-y-0"
+        : "group flex min-w-0 flex-col";
+  const textClassName =
+    layout === "list"
+      ? "min-w-0 flex-1"
+      : layout === "feature"
+        ? "min-w-0 p-4"
+        : item.display.image
+          ? "mt-3 min-w-0"
+          : "min-w-0";
 
-            <h4 className="line-clamp-2 text-sm leading-6 text-white/70 transition group-hover:text-[#D8B87A]">
-              {item.title}
-            </h4>
+  return (
+    <Link href={item.href} aria-label={item.title} className={linkClassName}>
+      <SidebarMediaItemImage item={item} layout={layout} />
+      <div className={textClassName}>
+        <SidebarMediaItemText item={item} layout={layout} />
+      </div>
+    </Link>
+  );
+}
 
-            {item.date ? <p className="mt-1 text-xs text-white/35">{item.date}</p> : null}
-          </div>
-        </Link>
+function SidebarMediaList({ items }: { items: MediaSidebarContentItem[] }) {
+  return (
+    <div className="space-y-4" data-media-sidebar-presentation="list">
+      {items.map((item) => (
+        <SidebarMediaItem key={item.id} item={item} layout="list" />
       ))}
     </div>
   );
+}
+
+function SidebarMediaSingleCarousel({
+  items,
+  title,
+}: {
+  items: MediaSidebarContentItem[];
+  title: string;
+}) {
+  const { activeIndex, canAdvance, goTo, containerRef, swipeHandlers } =
+    useAutoCarousel<HTMLDivElement>({ itemCount: items.length, intervalMs: 7600 });
+  const item = items[activeIndex] ?? items[0];
+
+  if (!item) return null;
+
+  return (
+    <div
+      ref={containerRef}
+      className="touch-pan-y"
+      role="region"
+      aria-roledescription="carousel"
+      aria-label={title}
+      data-media-sidebar-presentation="single-carousel"
+      {...swipeHandlers}
+    >
+      <div
+        key={item.id}
+        role="group"
+        aria-roledescription="slide"
+        aria-label={`${activeIndex + 1} من ${items.length}`}
+        className="motion-safe:animate-[feedCarouselFade_500ms_ease-out]"
+      >
+        <SidebarMediaItem item={item} layout="feature" />
+      </div>
+
+      {canAdvance ? (
+        <FeedCarouselDots
+          count={items.length}
+          activeIndex={activeIndex}
+          onSelect={goTo}
+          itemLabel={`أخبار ${title}`}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+const MEDIA_SIDEBAR_GROUP_SIZE = 3;
+
+function chunkSidebarMediaItems(items: MediaSidebarContentItem[]) {
+  const slides: MediaSidebarContentItem[][] = [];
+  for (let index = 0; index < items.length; index += MEDIA_SIDEBAR_GROUP_SIZE) {
+    slides.push(items.slice(index, index + MEDIA_SIDEBAR_GROUP_SIZE));
+  }
+  return slides;
+}
+
+function SidebarMediaGroupCarousel({
+  items,
+  title,
+}: {
+  items: MediaSidebarContentItem[];
+  title: string;
+}) {
+  const slides = chunkSidebarMediaItems(items);
+  const { activeIndex, canAdvance, goTo, containerRef, swipeHandlers } =
+    useAutoCarousel<HTMLDivElement>({ itemCount: slides.length, intervalMs: 7600 });
+  const activeItems = slides[activeIndex] ?? slides[0] ?? [];
+
+  if (!activeItems.length) return null;
+
+  return (
+    <div
+      ref={containerRef}
+      className="touch-pan-y"
+      role="region"
+      aria-roledescription="carousel"
+      aria-label={title}
+      data-media-sidebar-presentation="group-carousel"
+      {...swipeHandlers}
+    >
+      <div
+        key={activeIndex}
+        className="grid grid-cols-3 gap-3 motion-safe:animate-[feedCarouselFade_450ms_ease-out]"
+        role="group"
+        aria-roledescription="slide"
+        aria-label={`مجموعة ${activeIndex + 1} من ${slides.length}`}
+      >
+        {activeItems.map((item) => (
+          <SidebarMediaItem key={item.id} item={item} layout="compact" />
+        ))}
+      </div>
+
+      {canAdvance ? (
+        <FeedCarouselDots
+          count={slides.length}
+          activeIndex={activeIndex}
+          onSelect={goTo}
+          itemLabel={`مجموعات ${title}`}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function SidebarMediaPresentation({
+  items,
+  presentation,
+  title,
+}: {
+  items: MediaSidebarContentItem[];
+  presentation: MediaSidebarPresentation;
+  title: string;
+}) {
+  if (presentation === "single-carousel") {
+    return <SidebarMediaSingleCarousel items={items} title={title} />;
+  }
+  if (presentation === "group-carousel") {
+    return <SidebarMediaGroupCarousel items={items} title={title} />;
+  }
+  return <SidebarMediaList items={items} />;
 }
 
 function SectionsPanel({
@@ -150,6 +360,7 @@ function renderWidgetPanel(
 ) {
   switch (widget.widgetKey) {
     case "sections": {
+      if (widget.config.source !== "navigation") return null;
       const menuParent = widget.config.menuParent ?? "/media-center";
       const mediaItems = props.navItems.find((item) => item.href === menuParent)?.submenu ?? [];
 
@@ -162,17 +373,19 @@ function renderWidgetPanel(
       );
     }
     case "latest":
+    case "popular": {
+      if (widget.config.source === "navigation") return null;
+      const title = widget.widgetKey === "latest" ? "الأحدث" : "الأكثر قراءة";
       return (
-        <SidebarFeedPanel key={`latest-${widget.assignmentId}`} title="أحدث الأخبار">
-          <SidebarMediaList items={widget.items ?? []} />
+        <SidebarFeedPanel key={`${widget.widgetKey}-${widget.assignmentId}`} title={title}>
+          <SidebarMediaPresentation
+            items={widget.items ?? []}
+            presentation={widget.config.presentation}
+            title={title}
+          />
         </SidebarFeedPanel>
       );
-    case "popular":
-      return (
-        <SidebarFeedPanel key={`popular-${widget.assignmentId}`} title="الأكثر قراءة">
-          <SidebarMediaList items={widget.items ?? []} showLabel />
-        </SidebarFeedPanel>
-      );
+    }
     default:
       return null;
   }

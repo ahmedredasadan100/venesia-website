@@ -118,6 +118,7 @@ export async function loadPublicTopicsListing(
     page: number;
     itemsPerPage: number;
     search?: string;
+    excludeIds?: number[];
   },
 ) {
   const result = await loadPublicContentCollection({
@@ -128,13 +129,10 @@ export async function loadPublicTopicsListing(
     search: params.search,
     categorySlugs: params.categorySlug ? [params.categorySlug] : [],
     seriesSlug: params.seriesSlug,
-    featuredSelection: params.search ? undefined : { mode: "automatic" },
+    excludeIds: params.excludeIds,
   });
 
   return {
-    featuredTopic: result.featured
-      ? adaptPublicContentSummaryToTopic(result.featured)
-      : undefined,
     visibleTopics: result.items.map(adaptPublicContentSummaryToTopic),
     totalRegularTopics: result.totalCount,
     currentPage: result.page,

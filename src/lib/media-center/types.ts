@@ -45,15 +45,6 @@ export type MediaContentItem = {
 
 export type MediaNewsItem = MediaContentItem;
 
-export type MediaSidebarItem = {
-  title: string;
-  date?: string;
-  image: string;
-  href: string;
-  label?: string;
-  seriesLabel?: string;
-};
-
 export const MEDIA_TYPE_PATHS: Record<MediaContentType, string> = {
   news: "news",
   video: "videos",

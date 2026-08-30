@@ -203,16 +203,14 @@ export type ContentBlockConfig = PageBlockTextFormattingConfig & {
 export const TOPICS_LISTING_PRESENTATIONS = COLLECTION_LISTING_LAYOUTS;
 export type TopicsListingPresentation = CollectionListingLayout;
 
-export const TOPICS_LISTING_ITEMS_PER_ROW =
-  COLLECTION_LISTING_ITEMS_PER_ROW;
+export const TOPICS_LISTING_ITEMS_PER_ROW = COLLECTION_LISTING_ITEMS_PER_ROW;
 export type TopicsListingItemsPerRow = CollectionListingItemsPerRow;
 
 export const TOPICS_LISTING_ITEM_LIMITS = COLLECTION_LISTING_ITEM_LIMITS;
 export type TopicsListingItemLimit = CollectionListingItemLimit;
 
 export type TopicsListingCollection =
-  | { type: "all" }
-  | { type: "category"; categorySlug: string };
+  { type: "all" } | { type: "category"; categorySlug: string };
 
 export type CollectionDetailsAction = {
   text: string;
@@ -272,13 +270,77 @@ export function buildCollectionDetailsActionFromFormData(
   return { text, ...resolved };
 }
 
-export type CollectionDisplayOverrides = {
-  title: boolean;
-  image: boolean;
-  excerpt: boolean;
-  date: boolean;
-  category: boolean;
-  series: boolean;
+export const CONTENT_DISPLAY_FIELDS = [
+  "title",
+  "image",
+  "excerpt",
+  "date",
+  "category",
+  "series",
+] as const;
+export type ContentDisplayField = (typeof CONTENT_DISPLAY_FIELDS)[number];
+
+export type ContentDisplayOptions = Record<ContentDisplayField, boolean>;
+
+export const CONTENT_DISPLAY_FORM_FIELDS: Record<ContentDisplayField, string> =
+  {
+    title: "show_title_on_page",
+    image: "show_image_on_page",
+    category: "show_category_on_page",
+    series: "show_series_on_page",
+    excerpt: "show_excerpt_on_page",
+    date: "show_date_on_page",
+  };
+
+export function resolveContentDisplayOptions(
+  raw: unknown,
+  fallback: boolean | ContentDisplayOptions = true,
+): ContentDisplayOptions {
+  const value =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+
+  return Object.fromEntries(
+    CONTENT_DISPLAY_FIELDS.map((field) => [
+      field,
+      readFormattingBoolean(
+        value[field],
+        typeof fallback === "boolean" ? fallback : fallback[field],
+      ),
+    ]),
+  ) as ContentDisplayOptions;
+}
+
+export function buildContentDisplayOptionsFromFormData(
+  formData: FormData,
+  fallback: boolean | ContentDisplayOptions = true,
+): ContentDisplayOptions {
+  return Object.fromEntries(
+    CONTENT_DISPLAY_FIELDS.map((field) => [
+      field,
+      readFormattingBoolean(
+        formData.get(CONTENT_DISPLAY_FORM_FIELDS[field]),
+        typeof fallback === "boolean" ? fallback : fallback[field],
+      ),
+    ]),
+  ) as ContentDisplayOptions;
+}
+
+export function resolveContentItemDisplay(
+  display: ContentDisplayOptions,
+  itemDisplay: ContentDisplayOptions,
+  values: Record<ContentDisplayField, string>,
+): ContentDisplayOptions {
+  return Object.fromEntries(
+    CONTENT_DISPLAY_FIELDS.map((field) => [
+      field,
+      display[field] && itemDisplay[field] && Boolean(values[field]),
+    ]),
+  ) as ContentDisplayOptions;
+}
+
+export type CollectionDisplayOverrides = ContentDisplayOptions & {
   details: CollectionDetailsAction;
 };
 
@@ -612,21 +674,13 @@ export function asTopicsListingConfig(raw: unknown): TopicsListingBlockConfig {
       ? (itemLimit as TopicsListingItemLimit)
       : 6,
     display: {
-      title: readFormattingBoolean(rawDisplay.title, true),
-      image: readFormattingBoolean(rawDisplay.image, true),
-      excerpt: readFormattingBoolean(rawDisplay.excerpt, true),
-      date: readFormattingBoolean(rawDisplay.date, true),
-      category: readFormattingBoolean(rawDisplay.category, true),
-      series: readFormattingBoolean(rawDisplay.series, true),
+      ...resolveContentDisplayOptions(rawDisplay),
       details,
     },
   };
 }
 
-export function isTopicsListingTemplate(
-  slug: string,
-  variant?: string | null,
-) {
+export function isTopicsListingTemplate(slug: string, variant?: string | null) {
   return slug === "topics-listing" || variant === "topics-listing";
 }
 

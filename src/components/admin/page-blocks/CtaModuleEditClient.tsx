@@ -127,7 +127,7 @@ export default function CtaModuleEditClient({
                       />
                     </ModuleEditorVisibilityAlignRow>
                     </ModuleEditorField>
-                    <ModuleEditorField nature="short-description" span={6}>
+                    <ModuleEditorField nature="short-text" span={6}>
                     <ModuleEditorVisibilityAlignRow
                       label={MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}
                       showName="show_description"
@@ -137,12 +137,11 @@ export default function CtaModuleEditClient({
                       boldDefault={format("description").bold}
                       alignmentDefault={format("description").alignment}
                     >
-                      <textarea
+                      <input
                         name="description"
                         defaultValue={config.description ?? ""}
                         aria-label={MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}
-                        rows={2}
-                        className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
+                        className={fieldClassName("h-11")}
                       />
                     </ModuleEditorVisibilityAlignRow>
                     </ModuleEditorField>

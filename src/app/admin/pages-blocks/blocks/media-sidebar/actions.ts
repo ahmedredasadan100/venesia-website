@@ -22,6 +22,7 @@ import {
 import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   buildMediaSidebarModuleConfig,
+  isPersistedMediaSidebarModuleConfigEqual,
   parseMediaSidebarWidgetKey,
 } from "../../../../../lib/media-sidebar-modules/parse-config";
 import {
@@ -37,9 +38,7 @@ export async function updateMediaSidebarModule(formData: FormData) {
   if (!id || !name) throw new Error("بيانات الموديول غير مكتملة.");
 
   const widgetKey = parseMediaSidebarWidgetKey(cleanText(formData.get("widget_key")));
-  const dataSource = cleanText(formData.get("data_source"));
-  const limit = parseNumber(formData.get("limit"), 0);
-  const config = buildMediaSidebarModuleConfig(widgetKey, dataSource, limit);
+  const config = buildMediaSidebarModuleConfig(widgetKey, formData);
 
   const nextRow = {
     name,
@@ -60,13 +59,24 @@ export async function updateMediaSidebarModule(formData: FormData) {
         .from("media_sidebar_module_templates")
         .update(nextRow)
         .eq("id", id)
-        .select("id")
+        .select("id,config")
         .maybeSingle();
       if (error || !data) throw new Error(error?.message ?? "Unable to update media sidebar module.");
       return data;
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
+  if (
+    !isPersistedMediaSidebarModuleConfigEqual(
+      coordinated.value.config,
+      widgetKey,
+      config,
+    )
+  ) {
+    throw new Error(
+      "قراءة إعدادات الشريط الجانبي المحفوظة لم تطابق الطلب.",
+    );
+  }
 
   await syncMediaSidebarModulePageAssignments(id, parsePageIdsFromForm(formData), actor);
   await recordCmsAdminAudit({

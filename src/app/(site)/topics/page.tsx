@@ -79,6 +79,9 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
     page: Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1,
     itemsPerPage: listingConfig.itemLimit,
     search: searchQuery,
+    excludeIds: searchQuery
+      ? []
+      : composition.featuredModules.flatMap((module) => module.items.map((item) => item.id)),
   });
   // Presence (any assignment rows) or load failure → CMS path; never resurrect static shell.
   const useCmsLayout =
@@ -87,7 +90,6 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const sidebarFeeds = useCmsLayout ? [] : await loadFeedModulesForPageSlug("topics");
 
   const {
-    featuredTopic,
     visibleTopics,
     totalRegularTopics,
     currentPage,
@@ -107,7 +109,6 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
 
   const listingContent = (
     <TopicsListingContent
-      featuredTopic={featuredTopic}
       topics={visibleTopics}
       totalCount={totalRegularTopics}
       currentPage={currentPage}

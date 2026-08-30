@@ -15,6 +15,11 @@ import {
   ProjectImageBottomBadges,
 } from "./ProjectCardMobileOverlays";
 import PublicMediaImage from "../public/PublicMediaImage";
+import {
+  getPublicPaginationNavigationClassName,
+  getPublicPaginationPageClassName,
+  PUBLIC_PAGINATION_PRESENTATION,
+} from "../Pagination";
 
 type ViewMode = "list" | "cards";
 
@@ -269,12 +274,18 @@ export default function ProjectsListSection({
         )}
 
         {showPagination && totalPages > 1 ? (
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
+          <nav
+            aria-label="Pagination"
+            dir="rtl"
+            className={PUBLIC_PAGINATION_PRESENTATION.root}
+          >
             <button
               type="button"
               disabled={currentPage === 1}
               onClick={() => goToPage(Math.max(1, currentPage - 1))}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-35"
+              className={getPublicPaginationNavigationClassName(
+                currentPage === 1,
+              )}
             >
               السابق
             </button>
@@ -287,11 +298,10 @@ export default function ProjectsListSection({
                   key={page}
                   type="button"
                   onClick={() => goToPage(page)}
-                  className={`h-10 min-w-10 rounded-xl border px-3 text-sm transition ${
-                    currentPage === page
-                      ? "border-[#D8B87A] bg-[#D8B87A] text-[#111]"
-                      : "border-white/10 text-white/55 hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
-                  }`}
+                  aria-current={currentPage === page ? "page" : undefined}
+                  className={getPublicPaginationPageClassName(
+                    currentPage === page,
+                  )}
                 >
                   {page}
                 </button>
@@ -302,11 +312,13 @@ export default function ProjectsListSection({
               type="button"
               disabled={currentPage === totalPages}
               onClick={() => goToPage(Math.min(totalPages, currentPage + 1))}
-              className="rounded-xl border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A] disabled:cursor-not-allowed disabled:opacity-35"
+              className={getPublicPaginationNavigationClassName(
+                currentPage === totalPages,
+              )}
             >
               التالي
             </button>
-          </div>
+          </nav>
         ) : null}
       </div>
     </section>

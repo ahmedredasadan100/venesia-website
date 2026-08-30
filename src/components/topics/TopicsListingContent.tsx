@@ -1,13 +1,11 @@
 import Link from "next/link";
 
-import Pagination from "../Pagination";
-import FeaturedTopic from "./FeaturedTopic";
+import PublicPagination from "../Pagination";
 import TopicsListingModule from "./TopicsListingModule";
 import type { TopicsListingBlockConfig } from "../../lib/page-blocks/configs";
 import type { Topic } from "../../lib/topics/types";
 
 type TopicsListingContentProps = {
-  featuredTopic?: Topic;
   topics: Topic[];
   totalCount: number;
   currentPage: number;
@@ -30,7 +28,6 @@ function buildTopicsQuery(sort: string, categorySlug: string, seriesSlug: string
 }
 
 export default function TopicsListingContent({
-  featuredTopic,
   topics,
   totalCount,
   currentPage,
@@ -61,8 +58,6 @@ export default function TopicsListingContent({
           تعذر تحميل بعض أقسام الصفحة حاليًا. المحتوى الأساسي متاح أدناه.
         </p>
       ) : null}
-
-      {!isSearching ? <FeaturedTopic topic={featuredTopic} /> : null}
 
       {hasResults ? (
         <>
@@ -109,7 +104,7 @@ export default function TopicsListingContent({
           <TopicsListingModule topics={topics} config={listingConfig} />
 
           {!isSearching ? (
-            <Pagination
+            <PublicPagination
               currentPage={currentPage}
               totalPages={totalPages}
               basePath="/topics"

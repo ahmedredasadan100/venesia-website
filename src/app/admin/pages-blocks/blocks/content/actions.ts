@@ -40,6 +40,7 @@ import {
   hasSavedLinkField,
 } from "../../../../../lib/admin/links/block-save";
 import {
+  buildContentDisplayOptionsFromFormData,
   buildCollectionDetailsActionFromFormData,
   buildPageBlockTextFormattingPatch,
   TOPICS_LISTING_ITEM_LIMITS,
@@ -135,7 +136,9 @@ async function buildTopicsListingConfig(
     const filterOptions = await loadTopicFilterOptionsForAdmin();
     if (
       !categorySlug ||
-      !filterOptions.categories.some((category) => category.slug === categorySlug)
+      !filterOptions.categories.some(
+        (category) => category.slug === categorySlug,
+      )
     ) {
       throw new Error("تصنيف الموضوعات المختار غير متاح.");
     }
@@ -175,12 +178,7 @@ async function buildTopicsListingConfig(
     itemsPerRow: itemsPerRow as TopicsListingItemsPerRow,
     itemLimit: itemLimit as TopicsListingItemLimit,
     display: {
-      title: parseFormBoolean(formData, "show_title_on_page", false),
-      image: parseFormBoolean(formData, "show_image_on_page", false),
-      excerpt: parseFormBoolean(formData, "show_excerpt_on_page", false),
-      date: parseFormBoolean(formData, "show_date_on_page", false),
-      category: parseFormBoolean(formData, "show_category_on_page", false),
-      series: parseFormBoolean(formData, "show_series_on_page", false),
+      ...buildContentDisplayOptionsFromFormData(formData, false),
       details: buildCollectionDetailsActionFromFormData(formData),
     },
   };

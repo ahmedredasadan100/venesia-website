@@ -173,6 +173,7 @@ export function moduleKindLabel(kind: string, slug?: string | null, variant?: st
   if (kind === "cta") return "CTA";
   if (kind === "cards") return "Cards";
   if (kind === "feed") return "Feed";
+  if (kind === "featured") return "Featured";
   if (kind === "media-sidebar") return "Media Sidebar";
   if (kind === "media-hub") return "Media Hub";
   return kind;

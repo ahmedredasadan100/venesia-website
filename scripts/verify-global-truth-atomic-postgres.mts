@@ -160,10 +160,10 @@ try {
   `, [[
     "projects","menus","menu_items","pages","hero_assignments",
     "page_content_block_assignments","page_cta_block_assignments","page_cards_block_assignments",
-    "page_breadcrumb_block_assignments","page_feed_module_assignments",
+    "page_breadcrumb_block_assignments","page_feed_module_assignments","page_featured_module_assignments",
     "page_media_sidebar_module_assignments","page_media_hub_module_assignments",
   ]]);
-  check(rls.rows.length === 12 && rls.rows.every((row: { relrowsecurity: boolean }) => row.relrowsecurity), "Affected tables must retain RLS.");
+  check(rls.rows.length === 13 && rls.rows.every((row: { relrowsecurity: boolean }) => row.relrowsecurity), "Affected tables must retain RLS.");
   const writePolicies = await client.query(`
     select count(*)::integer as count from pg_policies
     where schemaname='public' and tablename=any($1) and cmd <> 'SELECT'
@@ -177,7 +177,7 @@ try {
   `);
   const triggerMap = new Map(triggerCounts.rows.map((row: { tgname: string; count: number | string }) => [row.tgname, Number(row.count)]));
   check(triggerMap.get("menu_item_atomic_contract_guard") === 1, "Menu atomic trigger guard count drifted.");
-  check(triggerMap.get("page_composition_atomic_guard") === 8, "Page Composition trigger guard count drifted.");
+  check(triggerMap.get("page_composition_atomic_guard") === 9, "Page Composition trigger guard count drifted.");
 
   const diagnostics = await client.query(`
     select

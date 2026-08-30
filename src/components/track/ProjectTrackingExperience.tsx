@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 
 import PublicMediaImage from "../public/PublicMediaImage";
-import Pagination from "../Pagination";
+import PublicPagination from "../Pagination";
 import {
   projectTrackingStatusLabel,
   type ProjectTrackingMedia,
@@ -492,7 +492,7 @@ export default function ProjectTrackingExperience({
                       );
                     })}
                   </nav>
-                  <Pagination
+                  <PublicPagination
                     currentPage={detail.pagination.stages.page}
                     totalPages={detail.pagination.stages.totalPages}
                     basePath={basePath}
@@ -646,7 +646,7 @@ export default function ProjectTrackingExperience({
                         لا توجد بنود مرئية في هذه المرحلة.
                       </p>
                     )}
-                    <Pagination
+                    <PublicPagination
                       currentPage={detail.pagination.items.page}
                       totalPages={detail.pagination.items.totalPages}
                       basePath={basePath}
@@ -721,7 +721,7 @@ export default function ProjectTrackingExperience({
                     ))}
                   </div>
                 ) : null}
-                <Pagination
+                <PublicPagination
                   currentPage={detail.pagination.updates.page}
                   totalPages={detail.pagination.updates.totalPages}
                   basePath={basePath}
@@ -741,7 +741,7 @@ export default function ProjectTrackingExperience({
                   key={`${activeUpdate?.id ?? "empty"}:${detail.pagination.media.page}`}
                   media={activeUpdate?.media ?? []}
                 />
-                <Pagination
+                <PublicPagination
                   currentPage={detail.pagination.media.page}
                   totalPages={detail.pagination.media.totalPages}
                   basePath={basePath}
@@ -785,7 +785,7 @@ export default function ProjectTrackingExperience({
                   لا توجد تحديثات منشورة بعد.
                 </p>
               )}
-              <Pagination
+              <PublicPagination
                 currentPage={detail.pagination.history.page}
                 totalPages={detail.pagination.history.totalPages}
                 basePath={basePath}

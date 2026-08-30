@@ -347,10 +347,10 @@ export default function AdminListboxSelect({
         data-admin-listbox-popover=""
         data-placement={menuPosition.placement}
         style={menuPosition.style}
-        className={`${ADMIN_FILTER_MENU_PANEL_CLASSES} overflow-hidden p-1.5`}
+        className={`${ADMIN_FILTER_MENU_PANEL_CLASSES} flex max-h-[calc(100dvh-24px)] flex-col overflow-hidden p-1.5`}
       >
         {searchable ? (
-          <div className="p-1 pb-2">
+          <div className="shrink-0 p-1 pb-2">
             <input
               ref={searchInputRef}
               type="search"
@@ -375,7 +375,8 @@ export default function AdminListboxSelect({
           id={`${controlId}-listbox`}
           role="listbox"
           aria-labelledby={resolvedTriggerId}
-          className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} p-0.5`}
+          data-admin-listbox-scroll-viewport=""
+          className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} min-h-0 flex-1 p-0.5`}
         >
           {visibleOptions.length ? (
             visibleOptions.map((option) => {
@@ -472,6 +473,7 @@ export default function AdminListboxSelect({
             aria-labelledby={ariaLabelledBy}
             aria-describedby={ariaDescribedBy}
             aria-invalid={ariaInvalid || undefined}
+            data-admin-listbox-scroll-viewport=""
             className={`${ADMIN_FILTER_MENU_SCROLLBAR_CLASSES} max-h-44 overflow-y-auto p-0.5`}
           >
             {visibleOptions.length ? (

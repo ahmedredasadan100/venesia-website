@@ -1,6 +1,7 @@
 import { type ReactNode } from "react";
 
 import type { ResolvedFeedModule } from "../../lib/feed-modules/types";
+import type { ResolvedFeaturedModule } from "../../lib/featured-modules/contract";
 import type { MediaHubModuleState } from "../../lib/media-hub-modules/types";
 import type { MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
 import type { SlotEntry } from "../../lib/page-blocks/page-composition-types";
@@ -31,6 +32,13 @@ export type SlotRenderPlanItem =
       assignmentId: number;
       sortOrder: number;
       widget: MediaSidebarWidgetState;
+    }
+  | {
+      kind: "featured";
+      key: string;
+      assignmentId: number;
+      sortOrder: number;
+      module: ResolvedFeaturedModule;
     }
   | {
       kind: "media-hub";
@@ -77,6 +85,7 @@ export function buildSlotRenderPlan(
   context: SlotModuleRenderContext = {},
 ): SlotRenderPlanItem[] {
   const feedItems: SlotRenderPlanItem[] = [];
+  const featuredItems: SlotRenderPlanItem[] = [];
   const mediaSidebarItems: SlotRenderPlanItem[] = [];
   const mediaHubItems: SlotRenderPlanItem[] = [];
   const blocks: ResolvedPageBlock[] = [];
@@ -86,6 +95,17 @@ export function buildSlotRenderPlan(
       feedItems.push({
         kind: "feed",
         key: `feed-${entry.assignmentId}`,
+        assignmentId: entry.assignmentId,
+        sortOrder: entry.sortOrder,
+        module: entry.module,
+      });
+      continue;
+    }
+
+    if (entry.kind === "featured") {
+      featuredItems.push({
+        kind: "featured",
+        key: `featured-${entry.assignmentId}`,
         assignmentId: entry.assignmentId,
         sortOrder: entry.sortOrder,
         module: entry.module,
@@ -129,6 +149,7 @@ export function buildSlotRenderPlan(
 
   return [
     ...feedItems,
+    ...featuredItems,
     ...mediaSidebarItems,
     ...mediaHubItems,
     ...moduleItems,

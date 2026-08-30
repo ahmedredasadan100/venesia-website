@@ -6,12 +6,10 @@ import { createJiti } from "jiti";
 import ts from "typescript";
 
 const jiti = createJiti(import.meta.url);
-const {
-  STRUCTURAL_CONTENT_TEMPLATE_SLUGS,
-  resolveModuleProductKind,
-} = await jiti.import<typeof import("../src/lib/page-blocks/module-edit-registry.ts")>(
-  "../src/lib/page-blocks/module-edit-registry.ts",
-);
+const { STRUCTURAL_CONTENT_TEMPLATE_SLUGS, resolveModuleProductKind } =
+  await jiti.import<
+    typeof import("../src/lib/page-blocks/module-edit-registry.ts")
+  >("../src/lib/page-blocks/module-edit-registry.ts");
 import {
   getModuleEditorHeaderMetadata,
   getModuleEditorSectionOrder,
@@ -45,6 +43,7 @@ const moduleEditorRoots = [
   "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
   "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+  "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
   "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
@@ -60,6 +59,7 @@ const specializedConsumers = [
   "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
   "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+  "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
   "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
@@ -326,13 +326,19 @@ check(
   "one Design System toolbar owns Bold and icon-only alignment across reference and specialized editors",
   sharedTextFormatControls.includes('data-admin-text-format-controls=""') &&
     sharedTextFormatControls.includes('data-admin-text-format-bold=""') &&
-    sharedTextFormatControls.includes("data-admin-text-alignment={option.value}") &&
-    sharedTextFormatControls.includes('aria-pressed={active}') &&
+    sharedTextFormatControls.includes(
+      "data-admin-text-alignment={option.value}",
+    ) &&
+    sharedTextFormatControls.includes("aria-pressed={active}") &&
     sharedRichTextEditor.includes("AdminTextFormatControls") &&
     sharedModuleEditorPresentation.includes("AdminTextFormatControls") &&
-    heroTextFormatConsumer.includes("ModuleEditorVisibilityAlignRow as default") &&
+    heroTextFormatConsumer.includes(
+      "ModuleEditorVisibilityAlignRow as default",
+    ) &&
     homeProjectsTextFormatConsumer.includes("ModuleEditorVisibilityAlignRow") &&
-    aboutPrinciplesTextFormatConsumer.includes("ModuleEditorVisibilityAlignRow") &&
+    aboutPrinciplesTextFormatConsumer.includes(
+      "ModuleEditorVisibilityAlignRow",
+    ) &&
     [
       sharedModuleEditorPresentation,
       homeProjectsTextFormatConsumer,
@@ -733,8 +739,12 @@ check(
         !source.includes('id: "settings"') &&
         !source.includes('id: "meta"'),
     ) &&
-    moduleEditorPresentation.includes("export function ModuleEditorIdentitySection") &&
-    !moduleEditorPresentation.includes("export function ModuleEditorSettingsComposition"),
+    moduleEditorPresentation.includes(
+      "export function ModuleEditorIdentitySection",
+    ) &&
+    !moduleEditorPresentation.includes(
+      "export function ModuleEditorSettingsComposition",
+    ),
 );
 
 check(
@@ -777,12 +787,12 @@ check(
 check(
   "technical identity and internal descriptions stay preserved but hidden from product editors",
   !moduleEditorPresentation.includes('"read-only"') &&
-    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes(
-      '<input type="hidden" name="slug" value={block.slug}',
-    ) &&
-    read("src/components/admin/page-blocks/ContentModuleEditClient.tsx").includes(
-      '<input type="hidden" name="internal_description"',
-    ) &&
+    read(
+      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+    ).includes('<input type="hidden" name="slug" value={block.slug}') &&
+    read(
+      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+    ).includes('<input type="hidden" name="internal_description"') &&
     read("src/app/admin/pages-blocks/blocks/content/actions.ts").includes(
       "slugLocked ? existing.slug : requestedSlug",
     ) &&
@@ -799,15 +809,18 @@ check(
       "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
     ].every((path) => {
       const source = read(path);
-      return source.includes('<input type="hidden" name="slug" value={block.slug}') &&
-        !source.includes('mode="editable"');
+      return (
+        source.includes(
+          '<input type="hidden" name="slug" value={block.slug}',
+        ) && !source.includes('mode="editable"')
+      );
     }) &&
     !read(
       "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
     ).includes("ModuleEditorTechnicalIdentity") &&
-    read("src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx").includes(
-      '<input type="hidden" name="description"',
-    ) &&
+    read(
+      "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+    ).includes('<input type="hidden" name="description"') &&
     read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts").includes(
       '.select("slug,variant")',
     ) &&
@@ -823,20 +836,21 @@ check(
     "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
     "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
     "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-      "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-      "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
-      "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
+    "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+    "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
+    "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
+    "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+    "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
     "src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx",
     "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
     "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
   ].every((path) => read(path).includes("AdminFormListboxSelect")) &&
-    read("src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx").includes(
-      "ModuleEditorVisibilityAlignRow",
-    ) &&
-    !read("src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx").includes(
-      'alignmentOptions={["right", "center"]}',
-    ) &&
+    read(
+      "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+    ).includes("ModuleEditorVisibilityAlignRow") &&
+    !read(
+      "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
+    ).includes('alignmentOptions={["right", "center"]}') &&
     [
       "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
       "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
@@ -844,13 +858,23 @@ check(
       "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
     ].every((path) => read(path).includes("AdminFormSwitch")) &&
-    read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx").includes("HeroTextFieldRow") &&
-    read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields.tsx").includes("HeroVisibilityAlignRow") &&
-    read("src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx").includes("ModuleEditorVisibilityAlignRow as default") &&
+    read(
+      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
+    ).includes("ContentDisplaySettings") &&
+    read(
+      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+    ).includes("HeroTextFieldRow") &&
+    read(
+      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields.tsx",
+    ).includes("HeroVisibilityAlignRow") &&
+    read(
+      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx",
+    ).includes("ModuleEditorVisibilityAlignRow as default") &&
     sharedModuleEditorPresentation.includes("AdminFormSwitch") &&
     [
       "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
       "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
       "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
       "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",

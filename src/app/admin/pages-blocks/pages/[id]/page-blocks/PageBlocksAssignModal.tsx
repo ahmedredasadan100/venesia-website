@@ -40,6 +40,7 @@ const ASSIGNABLE_MODULE_KINDS = [
   "cta",
   "cards",
   "feed",
+  "featured",
   "media-sidebar",
   "media-hub",
 ] as const satisfies readonly AssignableModuleKind[];

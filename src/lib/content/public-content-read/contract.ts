@@ -1,8 +1,32 @@
 import {
   CONTENT_TYPES,
+  MEDIA_EDITABLE_CONTENT_TYPES,
   isContentType,
   type ContentType,
+  type MediaEditableContentType,
 } from "../../admin/content/content-types";
+
+export const PUBLIC_CONTENT_SOURCE_KINDS = [
+  "categories",
+  "media-center",
+] as const;
+export type PublicContentSourceKind =
+  (typeof PUBLIC_CONTENT_SOURCE_KINDS)[number];
+
+export type PublicContentSource<
+  MediaType extends MediaEditableContentType | "all" = MediaEditableContentType,
+> =
+  | { kind: "categories"; categorySlug: string }
+  | { kind: "media-center"; contentType: MediaType };
+
+export function publicContentSourceContentTypes(
+  source: PublicContentSource<MediaEditableContentType | "all">,
+): readonly ContentType[] {
+  if (source.kind === "categories") return ["article"];
+  return source.contentType === "all"
+    ? MEDIA_EDITABLE_CONTENT_TYPES
+    : [source.contentType];
+}
 
 export const PUBLIC_CONTENT_SEARCH_MAX_LENGTH = 120;
 export const PUBLIC_CONTENT_SEARCH_DEBOUNCE_MS = 350;
@@ -42,6 +66,8 @@ export type PublicContentCollectionInput = {
   featured?: "none" | "only";
   featuredSelection?: PublicContentFeaturedSelection;
   popularOnly?: boolean;
+  /** Restrict a collection read to explicit persisted identities. */
+  includeIds?: readonly number[];
   excludeIds?: readonly number[];
   relatedTo?: {
     categorySlug?: string;
@@ -146,6 +172,7 @@ export function normalizePublicContentCollectionInput(
     categorySlugs: string[];
     seriesSlug: string;
     seriesSlugs: string[];
+    includeIds: number[];
     excludeIds: number[];
     featuredSelection: PublicContentFeaturedSelection | undefined;
     relatedTo: { categorySlug: string; seriesSlug: string };
@@ -185,6 +212,7 @@ export function normalizePublicContentCollectionInput(
     featured: search ? "none" : input.featured ?? "none",
     featuredSelection,
     popularOnly: Boolean(input.popularOnly),
+    includeIds: normalizePositiveIdList(input.includeIds),
     excludeIds: [...new Set((input.excludeIds ?? []).filter(Number.isInteger))],
     relatedTo: {
       categorySlug: normalizeSlug(input.relatedTo?.categorySlug),
@@ -199,4 +227,10 @@ function normalizeSlug(value: unknown) {
 
 function normalizeSlugList(values: readonly string[] | undefined) {
   return [...new Set((values ?? []).map(normalizeSlug).filter(Boolean))];
+}
+
+function normalizePositiveIdList(values: readonly number[] | undefined) {
+  return [...new Set((values ?? []).filter(
+    (value) => Number.isSafeInteger(value) && value > 0,
+  ))];
 }

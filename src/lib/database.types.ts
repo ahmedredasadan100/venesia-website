@@ -398,6 +398,42 @@ export type Database = {
         }
         Relationships: []
       }
+      featured_module_templates: {
+        Row: {
+          config: Json
+          created_at: string
+          description: string | null
+          id: number
+          name: string
+          slug: string
+          sort_order: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          config?: Json
+          created_at?: string
+          description?: string | null
+          id?: number
+          name: string
+          slug: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          config?: Json
+          created_at?: string
+          description?: string | null
+          id?: number
+          name?: string
+          slug?: string
+          sort_order?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       hero_assignments: {
         Row: {
           created_at: string
@@ -1779,6 +1815,54 @@ export type Database = {
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "feed_module_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      page_featured_module_assignments: {
+        Row: {
+          created_at: string
+          id: number
+          is_visible: boolean
+          page_id: number
+          slot: string
+          sort_order: number
+          template_id: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          is_visible?: boolean
+          page_id: number
+          slot?: string
+          sort_order?: number
+          template_id: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          is_visible?: boolean
+          page_id?: number
+          slot?: string
+          sort_order?: number
+          template_id?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "page_featured_module_assignments_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "page_featured_module_assignments_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "featured_module_templates"
             referencedColumns: ["id"]
           },
         ]

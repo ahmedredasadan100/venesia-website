@@ -188,6 +188,28 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
       pages: PAGES_SECTION,
     },
   },
+  featured: {
+    kind: "featured",
+    labelAr: "Featured",
+    descriptionAr: "قسم محتوى مميز مستقل يقرأ من المحتوى العام ويُرتّب عبر Page Composition.",
+    editorSections: {
+      content: {
+        navigationLabelAr: "المصدر والاختيار",
+        sectionHeadingAr: "مصدر المحتوى المميز",
+        sectionDescriptionAr: "حدّد المصدر وطريقة الاختيار دون ربطها بطريقة العرض.",
+        icon: "content",
+      },
+      presentation: {
+        navigationLabelAr: "العرض",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
+        icon: "media",
+        sectionChrome: "implicit",
+      },
+      settings: SETTINGS_SECTION,
+      pages: PAGES_SECTION,
+    },
+  },
   "media-sidebar": {
     kind: "media-sidebar",
     labelAr: "شريط إعلامي جانبي",
@@ -196,7 +218,7 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
       content: {
         navigationLabelAr: "المحتوى",
         sectionHeadingAr: "إعدادات الشريط الجانبي",
-        sectionDescriptionAr: "حدّد نوع الـwidget ومصدر البيانات وعدد العناصر المعروضة.",
+        sectionDescriptionAr: "حدّد مصدر المحتوى وطريقة الاختيار وعدد العناصر المعروضة.",
         icon: "media",
       },
       settings: {
@@ -209,7 +231,7 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
   "media-hub": {
     kind: "media-hub",
     labelAr: "موديولات المركز الإعلامي",
-    descriptionAr: "محتوى مميز مستقل، وأقسام Hub، وإعدادات عرض القوائم باستخدام مالك الموديولات الحالي.",
+    descriptionAr: "أقسام Hub وإعدادات عرض قوائم المركز الإعلامي باستخدام مالك الموديولات الحالي.",
     editorSections: {
       content: {
         navigationLabelAr: "المحتوى",

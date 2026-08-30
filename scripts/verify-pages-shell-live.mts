@@ -91,6 +91,7 @@ try {
       union all select page_id from public.page_cards_block_assignments
       union all select page_id from public.page_breadcrumb_block_assignments
       union all select page_id from public.page_feed_module_assignments
+      union all select page_id from public.page_featured_module_assignments
       union all select page_id from public.page_media_sidebar_module_assignments
       union all select page_id from public.page_media_hub_module_assignments
       union all
