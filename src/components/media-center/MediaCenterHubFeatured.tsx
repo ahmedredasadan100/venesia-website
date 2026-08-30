@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
 
+import { useAutoCarousel } from "../../hooks/use-auto-carousel";
 import type { CollectionContentHierarchy } from "../../lib/collection-modules/content-hierarchy";
 import {
   getMediaHref,
@@ -11,6 +11,7 @@ import {
   type MediaContentItem,
 } from "../../lib/media-center/types";
 import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
+import FeedCarouselDots from "../feed-modules/FeedCarouselDots";
 import MediaCenterCollectionItems from "./MediaCenterCollectionItems";
 import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
@@ -100,18 +101,22 @@ export default function MediaCenterHubFeatured({
   showDateWhenAvailable = false,
 }: MediaCenterHubFeaturedProps) {
   const [primaryItem, ...remainingItems] = items;
-  const [activeSliderIndex, setActiveSliderIndex] = useState(0);
-  if (!primaryItem) return null;
-
   const hierarchyMode = contentHierarchy?.mode ?? "uniform";
   const secondaryItems = remainingItems.slice(
     0,
     contentHierarchy?.secondaryItemCount ?? remainingItems.length,
   );
-  const normalizedSliderIndex = secondaryItems.length
-    ? activeSliderIndex % secondaryItems.length
-    : 0;
-  const activeSliderItem = secondaryItems[normalizedSliderIndex] ?? primaryItem;
+  const {
+    activeIndex: activeSliderIndex,
+    goTo,
+  } = useAutoCarousel<HTMLDivElement>({
+    itemCount: secondaryItems.length,
+    enabled: sliderEnabled,
+    autoplay: false,
+  });
+  if (!primaryItem) return null;
+
+  const activeSliderItem = secondaryItems[activeSliderIndex] ?? primaryItem;
 
   return (
     <section className="relative">
@@ -136,7 +141,7 @@ export default function MediaCenterHubFeatured({
             data-slider-news-group=""
           >
             {secondaryItems.map((item, index) => {
-              const isActive = normalizedSliderIndex === index;
+              const isActive = activeSliderIndex === index;
               const showDate = Boolean(item.date) && (
                 item.showDateOnPage || showDateWhenAvailable
               );
@@ -145,8 +150,8 @@ export default function MediaCenterHubFeatured({
                 <Link
                   key={item.id}
                   href={getMediaHref(item)}
-                  onMouseEnter={() => setActiveSliderIndex(index)}
-                  onFocus={() => setActiveSliderIndex(index)}
+                  onMouseEnter={() => goTo(index)}
+                  onFocus={() => goTo(index)}
                   aria-current={isActive ? "true" : undefined}
                   className="group block h-full"
                 >
@@ -199,27 +204,14 @@ export default function MediaCenterHubFeatured({
           </div>
 
           <div
-            className="order-3 flex justify-center gap-1.5 @2xl/slot-module:col-start-1 @2xl/slot-module:row-start-2"
-            aria-label="التنقل بين الأخبار"
+            className="order-3 @2xl/slot-module:col-start-1 @2xl/slot-module:row-start-2 [&>div]:mt-0"
           >
-            {secondaryItems.map((item, index) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setActiveSliderIndex(index)}
-                aria-label={`عرض الخبر ${index + 1}`}
-                aria-current={normalizedSliderIndex === index ? "true" : undefined}
-                className="group inline-flex h-8 min-w-8 items-center justify-center"
-              >
-                <span
-                  className={`block h-1.5 rounded-full transition-all duration-300 motion-reduce:transition-none ${
-                    normalizedSliderIndex === index
-                      ? "w-7 bg-[#D8B87A]"
-                      : "w-2 bg-[#D8B87A]/25 group-hover:bg-[#D8B87A]/55"
-                  }`}
-                />
-              </button>
-            ))}
+            <FeedCarouselDots
+              count={secondaryItems.length}
+              activeIndex={activeSliderIndex}
+              onSelect={goTo}
+              itemLabel="الأخبار"
+            />
           </div>
 
           <FeaturedPrimaryCard

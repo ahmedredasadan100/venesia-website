@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
+import { useAutoCarousel } from "../../hooks/use-auto-carousel";
 import {
   getMediaHref,
   type MediaContentItem,
@@ -45,8 +46,17 @@ export default function MediaCenterHubFeaturedCollection({
   presentation,
   href,
 }: MediaCenterHubFeaturedCollectionProps) {
-  const [startIndex, setStartIndex] = useState(0);
   const itemsPerView = presentation.collectionView.itemsPerRow;
+  const {
+    activeIndex: startIndex,
+    canAdvance: canSlide,
+    goToNext,
+    goToPrevious,
+  } = useAutoCarousel<HTMLDivElement>({
+    itemCount: items.length,
+    enabled: items.length > itemsPerView,
+    autoplay: false,
+  });
   const visibleItems = useMemo(() => {
     if (items.length <= itemsPerView) return items;
 
@@ -54,17 +64,6 @@ export default function MediaCenterHubFeaturedCollection({
       items[(startIndex + index) % items.length]
     ));
   }, [items, itemsPerView, startIndex]);
-  const canSlide = items.length > itemsPerView;
-
-  function goNext() {
-    if (!canSlide) return;
-    setStartIndex((current) => (current + 1) % items.length);
-  }
-
-  function goPrevious() {
-    if (!canSlide) return;
-    setStartIndex((current) => (current - 1 + items.length) % items.length);
-  }
 
   return (
     <section className="relative">
@@ -75,7 +74,7 @@ export default function MediaCenterHubFeaturedCollection({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={goPrevious}
+              onClick={goToPrevious}
               aria-label="العنصر السابق"
               className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
             >
@@ -83,7 +82,7 @@ export default function MediaCenterHubFeaturedCollection({
             </button>
             <button
               type="button"
-              onClick={goNext}
+              onClick={goToNext}
               aria-label="العنصر التالي"
               className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.035] text-white/70 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]"
             >
