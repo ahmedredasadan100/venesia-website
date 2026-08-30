@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-23
+**Updated:** 2026-08-29
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -42,7 +42,8 @@ Current `main` remains the only official entering baseline. Product Surface Iden
 
 - Unified Content owns administrative article, news, press, site-update, video, and gallery records through `public.topics`.
 - The public content read owner under `src/lib/content/public-content-read/` owns current public Topic/media listing and detail query contracts. Public search consumers adopt it and do not create entity-specific public search runtimes.
-- The same public content read owner owns Featured selection. `automatic` means published content of the requested `content_type` with `is_featured = true`; it has no Latest fallback, so absence returns no Hero. All Media Center listing pages and the hub Featured section adopt that contract, while the CMS declares the same behavior.
+- The Public Pagination Platform Owner under `src/components/Pagination.tsx` and `src/components/pagination-model.ts` owns only page-navigation UI, the bounded page-window model, and URL page destinations. Topics Listing, Media Listing, and Project Tracking adopt the complete owner; Projects Listing adopts its presentation contract only while retaining local state and smooth-scroll behavior. Public Content and Project Tracking read owners retain page data truth, Listing retains content presentation, and all public pagination surfaces now share one visual contract.
+- Public Content Read owns Featured data eligibility and reads. The independent Featured Page Module owns source scope, automatic featured-only or ordered manual selection, and its Hero, Editorial, Large Card, 3 Cards, and Carousel presentations. Page Composition owns only assignment, position, and order. Media Hub no longer authors or resolves non-listing Featured content, and Topics Listing no longer owns the visual between Intro and Listing.
 - Projects use the database as their only project truth and persist the aggregate through the Project domain RPC owners.
 - Project create/edit delegates generic lifecycle, dirty protection, feedback, validation focus, and Create-to-Edit handoff to the current Form Runtime; Project validation and aggregate persistence remain domain-owned.
 - Media writes use the Media coordination contract; the global writer-adoption manifest is closed and contains no unadopted tooling owner.
@@ -91,18 +92,19 @@ The 2026-08-23 authorized Project Location Presentation migration closure establ
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                                96 |
-| Production registry versions                      |                                                96 |
-| Registry SQL provenance                           | Exact repository SQL for all 96 deployed versions |
-| Public tables                                     |                                                56 |
-| Public tables with RLS enabled                    |                                                56 |
-| Public catalog objects with repository provenance |                                               292 |
+| Repository migration files                        |                                                97 |
+| Production registry versions                      |                                                97 |
+| Registry SQL provenance                           | Exact repository SQL for all 97 deployed versions |
+| Public tables                                     |                                                58 |
+| Public tables with RLS enabled                    |                                                58 |
+| Public catalog objects with repository provenance |                                               297 |
 | Invalid, unready, or non-live indexes             |                                                 0 |
 | Unvalidated public constraints                    |                                                 0 |
 | Parallel public function overload names           |                                                 0 |
 | Public RLS policies                               |                                                 3 |
+
 | Anonymous-callable application data functions     |                                                 0 |
-| Registry reconciliation audit records             |                                                20 |
+| Registry reconciliation audit records             |                                                21 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
@@ -140,6 +142,8 @@ The verification failure path exposed an existing mixed-provider Media coordinat
 The authorized Page Composition adoption correction then applied `20260827122828_page_composition_media_position_adoption.sql` as migration 95 with exact repository SQL provenance. It removes only the legacy `main` / `sidebar` database constraints and defaults from Media Hub and Media Sidebar Assignments, preserves every existing row and Position, and lets those two module families use the same semantic Platform Regions as every flexible Page Assignment. It introduces no Capability, Runtime, persistence field, data rebuild, or Assignment model change; Hero remains the only Product-fixed Position exception.
 
 The authorized Topics Listing Presentation Phase 1 closure applied `20260828114621_topics_listing_presentation_phase_1.sql` as migration 96 with exact repository SQL provenance. It seeds one presentation-only Topics Listing template and its Topics page assignment through the existing `mutate_page_composition` write owner; it creates no table, field, Runtime, Capability, read owner, or source of truth.
+
+The authorized Featured Page Module closure applied `20260828233733_featured_page_composition_module.sql` as migration 97 and registered that version once with exact repository SQL provenance. It creates the independent Featured template and Assignment stores under RLS, adopts the existing atomic Page Composition owner, transfers non-listing Media Featured assignments, and seeds the Topics Featured assignment without moving Public Content Read or Placement ownership.
 
 ## Removed final-cleanup legacy
 

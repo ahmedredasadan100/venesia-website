@@ -26,7 +26,7 @@ type AdoptionRow = {
 const ROOT = process.cwd();
 
 function read(relativePath: string) {
-  return readFileSync(path.join(ROOT, relativePath), "utf8");
+  return readFileSync(path.join(ROOT, relativePath), "utf8").replace(/\r\n/gu, "\n");
 }
 
 function sourceFilesBelow(relativeDirectory: string): string[] {
@@ -123,6 +123,18 @@ const ADOPTION_MATRIX = {
     publicMarker: 'isAssignmentPositionAllowed("feed", feed.slot)',
     rendererSource: "src/components/page-composition/PageSlotLayout.tsx",
     rendererMarker: "FeedModuleSection",
+  },
+  featured: {
+    assignmentStore: "page_featured_module_assignments",
+    policy: "platform-flexible",
+    editorSource: "src/app/admin/pages-blocks/blocks/featured/[id]/page.tsx",
+    editorMarker: 'getModuleAssignmentContext("featured"',
+    syncSource: "src/app/admin/pages-blocks/blocks/featured/actions.ts",
+    syncMarker: 'syncBlockModulePageAssignments("featured"',
+    publicSource: "src/lib/page-blocks/load-page-composition.ts",
+    publicMarker: 'isAssignmentPositionAllowed("featured", featured.slot)',
+    rendererSource: "src/components/page-composition/PageSlotLayout.tsx",
+    rendererMarker: "FeaturedModuleSection",
   },
   "media-sidebar": {
     assignmentStore: "page_media_sidebar_module_assignments",

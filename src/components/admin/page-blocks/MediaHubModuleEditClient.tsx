@@ -53,7 +53,8 @@ type MediaHubModuleEditClientProps = {
   updateAction: (formData: FormData) => void | Promise<void>;
 };
 
-const SECTION_KEYS = Object.keys(MEDIA_HUB_SECTION_LABELS) as MediaHubSectionKey[];
+const SECTION_KEYS = (Object.keys(MEDIA_HUB_SECTION_LABELS) as MediaHubSectionKey[])
+  .filter((key) => key !== "featured");
 const MEDIA_TYPE_LABELS: Record<MediaHubMediaType, string> = {
   news: "أخبار",
   video: "فيديوهات",
@@ -66,7 +67,7 @@ function readInitialSectionKey(value: string): MediaHubSectionKey {
   try {
     return parseMediaHubSectionKey(value);
   } catch {
-    return "featured";
+    return "site-updates";
   }
 }
 
@@ -130,10 +131,8 @@ export default function MediaHubModuleEditClient({
   const initialSectionKey = readInitialSectionKey(block.section_key);
   const parsedInitial = parseMediaHubModuleConfig(block.config ?? {}, initialSectionKey);
   const isListing = parsedInitial.placement === "listing" && Boolean(parsedInitial.listing && parsedInitial.type);
-  const isDedicatedFeatured = parsedInitial.placement === "featured";
 
   const [sectionKey, setSectionKey] = useState<MediaHubSectionKey>(initialSectionKey);
-  const [mediaType, setMediaType] = useState<MediaHubMediaType>(parsedInitial.type ?? "news");
   const [eyebrow, setEyebrow] = useState(parsedInitial.presentation.eyebrow);
   const [title, setTitle] = useState(parsedInitial.presentation.title);
   const [description, setDescription] = useState(parsedInitial.presentation.description);
@@ -149,7 +148,6 @@ export default function MediaHubModuleEditClient({
     setDescription(nextPresentation.description);
     setCtaText(nextPresentation.ctaText);
 
-    if (nextSectionKey === "featured") setMediaType("news");
   }
 
   const activeConfig = sectionKey === initialSectionKey
@@ -178,7 +176,7 @@ export default function MediaHubModuleEditClient({
         <input type="hidden" name="description" value={block.description ?? ""} />
         <input type="hidden" name="data_source" value="topics" />
         {!isListing ? <input type="hidden" name="placement" value={parsedInitial.placement} /> : null}
-        {isListing || isDedicatedFeatured ? (
+        {isListing ? (
           <input type="hidden" name="section_key" value={initialSectionKey} />
         ) : null}
 
@@ -205,16 +203,7 @@ export default function MediaHubModuleEditClient({
           status={block.status}
           inputClassName={fieldClassName("h-11")}
         >
-          {isDedicatedFeatured ? (
-            <div className="space-y-2">
-              <span className="block text-sm font-medium text-white/70">
-                نوع السكشن
-              </span>
-              <div className="flex h-11 items-center rounded-2xl border border-white/10 bg-[#05070B] px-4 text-sm text-white/70">
-                {MEDIA_HUB_SECTION_LABELS[initialSectionKey]}
-              </div>
-            </div>
-          ) : isListing ? null : (
+          {isListing ? null : (
             <AdminFormListboxSelect
               name="section_key"
               label="نوع السكشن"
@@ -298,21 +287,6 @@ export default function MediaHubModuleEditClient({
                           </label>
                         </ModuleEditorField>
 
-                        {sectionKey === "featured" ? (
-                          <ModuleEditorField nature="standard" span={4}>
-                            <AdminFormListboxSelect
-                              name="media_type"
-                              label="نوع المحتوى المميز"
-                              value={mediaType}
-                              onChange={(value) => setMediaType(value as MediaHubMediaType)}
-                              options={(Object.keys(MEDIA_TYPE_LABELS) as MediaHubMediaType[]).map((type) => ({
-                                value: type,
-                                label: MEDIA_TYPE_LABELS[type],
-                              }))}
-                              hint="يعرض الموديول محتوى منشورًا ومميزًا من النوع المختار فقط."
-                            />
-                          </ModuleEditorField>
-                        ) : null}
                       </ModuleEditorFieldGrid>
                     </ModuleEditorSection>
 

@@ -2,47 +2,60 @@
 
 import Link from "next/link";
 import { useLayoutEffect, useRef } from "react";
-import { buildPaginationItems } from "./pagination-model";
+import {
+  buildPublicPaginationHref,
+  buildPublicPaginationItems,
+  type PublicPaginationContract,
+} from "./pagination-model";
 
-type PaginationProps = {
-  currentPage: number;
-  totalPages: number;
-  basePath: string;
-  query?: Record<string, string | number | undefined>;
-  pageParam?: string;
-  previousLabel?: string;
-  nextLabel?: string;
-  ariaLabel?: string;
-};
+/**
+ * The single Public Pagination presentation contract.
+ *
+ * URL-driven consumers render through this file. Public consumers that retain
+ * domain-local page state may reuse these presentation helpers without moving
+ * their state or navigation behavior into the Platform owner.
+ */
+export const PUBLIC_PAGINATION_PRESENTATION = Object.freeze({
+  root: "mt-8 flex w-full flex-wrap items-center justify-center gap-2",
+  navigationControl:
+    "inline-flex shrink-0 items-center justify-center whitespace-nowrap rounded-xl border px-4 py-2 text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070B] motion-reduce:transition-none",
+  navigationInteractive:
+    "border-white/10 bg-transparent text-white/60 hover:border-[#D8B87A]/35 hover:text-[#D8B87A]",
+  navigationDisabled:
+    "cursor-not-allowed border-white/10 bg-transparent text-white/60 opacity-35",
+  pageControl:
+    "inline-flex h-10 min-w-10 shrink-0 items-center justify-center rounded-xl border px-3 text-sm transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70 focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070B] motion-reduce:transition-none",
+  pageActive:
+    "border-[#D8B87A] bg-[#D8B87A] text-[#111]",
+  pageInteractive:
+    "border-white/10 bg-transparent text-white/55 hover:border-[#D8B87A]/35 hover:text-[#D8B87A]",
+  ellipsis:
+    "inline-flex h-10 min-w-6 shrink-0 select-none items-center justify-center text-sm font-medium leading-none text-white/40 sm:min-w-8",
+});
 
-function buildHref(
-  basePath: string,
-  page: number,
-  query?: Record<string, string | number | undefined>,
-  pageParam = "page",
-) {
-  const params = new URLSearchParams();
-
-  if (query) {
-    Object.entries(query).forEach(([key, value]) => {
-      if (value !== undefined && value !== "") {
-        params.set(key, String(value));
-      }
-    });
-  }
-
-  if (page > 1) {
-    params.set(pageParam, String(page));
-  } else {
-    params.delete(pageParam);
-  }
-
-  const queryString = params.toString();
-
-  return queryString ? `${basePath}?${queryString}` : basePath;
+export function getPublicPaginationNavigationClassName(disabled: boolean) {
+  return `${PUBLIC_PAGINATION_PRESENTATION.navigationControl} ${
+    disabled
+      ? PUBLIC_PAGINATION_PRESENTATION.navigationDisabled
+      : PUBLIC_PAGINATION_PRESENTATION.navigationInteractive
+  }`;
 }
 
-export default function Pagination({
+export function getPublicPaginationPageClassName(isActive: boolean) {
+  return `${PUBLIC_PAGINATION_PRESENTATION.pageControl} ${
+    isActive
+      ? PUBLIC_PAGINATION_PRESENTATION.pageActive
+      : PUBLIC_PAGINATION_PRESENTATION.pageInteractive
+  }`;
+}
+
+/**
+ * Canonical Public Pagination UI and URL-navigation owner.
+ *
+ * Page data, totals, filtering, search, and Listing presentation remain owned
+ * by the supplying consumer and its read/presentation contracts.
+ */
+export default function PublicPagination({
   currentPage,
   totalPages,
   basePath,
@@ -51,7 +64,7 @@ export default function Pagination({
   previousLabel = "السابق",
   nextLabel = "التالي",
   ariaLabel = "Pagination",
-}: PaginationProps) {
+}: PublicPaginationContract) {
   const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
 
   const navigationRef = useRef<HTMLElement>(null);
@@ -85,34 +98,36 @@ export default function Pagination({
   const previousPage = Math.max(safeCurrentPage - 1, 1);
   const nextPage = Math.min(safeCurrentPage + 1, totalPages);
 
-  const paginationItems = buildPaginationItems(safeCurrentPage, totalPages);
-
-  const navigationClassName =
-    "rounded-full border border-white/10 px-4 py-2 text-sm text-white/60 transition hover:border-[#D8B87A]/40 hover:text-[#D8B87A]";
-  const pageClassName = (isActive: boolean) =>
-    `flex h-10 w-10 items-center justify-center rounded-full border text-sm transition ${
-      isActive
-        ? "border-[#D8B87A]/50 bg-[#D8B87A]/10 text-[#D8B87A]"
-        : "border-white/10 text-white/55 hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
-    }`;
+  const paginationItems = buildPublicPaginationItems(
+    safeCurrentPage,
+    totalPages,
+  );
 
   return (
     <nav
       ref={navigationRef}
       aria-label={ariaLabel}
       dir="rtl"
-      className="mt-10 flex flex-wrap items-center justify-center gap-2"
+      className={PUBLIC_PAGINATION_PRESENTATION.root}
     >
       {safeCurrentPage === 1 ? (
-        <span className="rounded-full border border-white/5 px-4 py-2 text-sm text-white/25">
+        <span
+          aria-disabled="true"
+          className={getPublicPaginationNavigationClassName(true)}
+        >
           {previousLabel}
         </span>
       ) : (
         <Link
-          href={buildHref(basePath, previousPage, query, pageParam)}
+          href={buildPublicPaginationHref(
+            basePath,
+            previousPage,
+            query,
+            pageParam,
+          )}
           scroll={false}
           onNavigate={retainViewportPosition}
-          className={navigationClassName}
+          className={getPublicPaginationNavigationClassName(false)}
         >
           {previousLabel}
         </Link>
@@ -124,7 +139,7 @@ export default function Pagination({
             <span
               key={`ellipsis-${item.position}`}
               aria-hidden="true"
-              className="flex h-10 min-w-8 items-center justify-center text-sm text-white/40"
+              className={PUBLIC_PAGINATION_PRESENTATION.ellipsis}
             >
               &hellip;
             </span>
@@ -137,11 +152,16 @@ export default function Pagination({
         return (
           <Link
             key={page}
-            href={buildHref(basePath, page, query, pageParam)}
+            href={buildPublicPaginationHref(
+              basePath,
+              page,
+              query,
+              pageParam,
+            )}
             scroll={false}
             onNavigate={retainViewportPosition}
             aria-current={isActive ? "page" : undefined}
-            className={pageClassName(isActive)}
+            className={getPublicPaginationPageClassName(isActive)}
           >
             {page}
           </Link>
@@ -149,15 +169,23 @@ export default function Pagination({
       })}
 
       {safeCurrentPage === totalPages ? (
-        <span className="rounded-full border border-white/5 px-4 py-2 text-sm text-white/25">
+        <span
+          aria-disabled="true"
+          className={getPublicPaginationNavigationClassName(true)}
+        >
           {nextLabel}
         </span>
       ) : (
         <Link
-          href={buildHref(basePath, nextPage, query, pageParam)}
+          href={buildPublicPaginationHref(
+            basePath,
+            nextPage,
+            query,
+            pageParam,
+          )}
           scroll={false}
           onNavigate={retainViewportPosition}
-          className={navigationClassName}
+          className={getPublicPaginationNavigationClassName(false)}
         >
           {nextLabel}
         </Link>

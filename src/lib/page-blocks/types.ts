@@ -3,7 +3,7 @@ import type { PageLayoutSlot } from "./layout-slots";
 
 export { PAGE_LAYOUT_SLOTS, type PageLayoutSlot } from "./layout-slots";
 
-export const PAGE_BLOCK_TYPES = ["content", "cta", "cards", "breadcrumb", "feed"] as const;
+export const PAGE_BLOCK_TYPES = ["content", "cta", "cards", "breadcrumb", "feed", "featured"] as const;
 /** Assignable block types — Slider was never included; use Hero instead (see deprecated-block-modules.ts). */
 export type PageBlockType = (typeof PAGE_BLOCK_TYPES)[number];
 

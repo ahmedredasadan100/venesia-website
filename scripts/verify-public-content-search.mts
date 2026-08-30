@@ -177,7 +177,12 @@ assert.ok(
   topicsListing.includes("<TopicsListingModule") &&
     !topicsListing.includes("<TopicCard"),
 );
-assert.ok(topicsListing.includes("!isSearching ? <FeaturedTopic"));
+assert.ok(!topicsListing.includes("FeaturedTopic"));
+assert.ok(
+  topicsPage.includes("composition.featuredModules") &&
+    topicsPage.includes("excludeIds: searchQuery"),
+  "Topics Search/Listing must not own Featured while non-search listing results avoid assigned Featured identities",
+);
 assert.ok(mediaPage.includes("getMediaListingPage"));
 assert.ok(!mediaPage.includes("getMediaItems("), "Media search must not fetch a second catalog");
 assert.ok(!mediaPage.includes("searchCatalog"));

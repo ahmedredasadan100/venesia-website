@@ -26,6 +26,7 @@ function functionSection(source: string, functionName: string) {
 }
 
 const migration = read("sql/migrations/20260807120000_system_publication_summary_cards_closure.sql");
+const featuredMigration = read("sql/migrations/20260828233733_featured_page_composition_module.sql");
 const metricCard = read("src/components/admin/ui/AdminMetricCard.tsx");
 const metricGrid = read("src/components/admin/ui/AdminMetricCardsGrid.tsx");
 const topics = read("src/components/admin/content/TopicsListClient.tsx");
@@ -74,6 +75,7 @@ const statusTables = [
   "cards_block_templates",
   "cta_block_templates",
   "feed_module_templates",
+  "featured_module_templates",
   "media_hub_module_templates",
   "media_sidebar_module_templates",
   "hero_templates",
@@ -190,7 +192,10 @@ check(
 check(
   "migration maps every status table and installs binary constraints",
   statusTables.every((table) =>
-    migration.includes(`alter table public.${table} add constraint ${table}_status_check check (status in ('published', 'unpublished'))`),
+    migration.includes(`alter table public.${table} add constraint ${table}_status_check check (status in ('published', 'unpublished'))`) ||
+      (table === "featured_module_templates" &&
+        featuredMigration.includes("constraint featured_module_templates_status_check") &&
+        featuredMigration.includes("check (status in ('published', 'unpublished'))")),
   ) &&
     migration.includes("set publication_status = 'unpublished'") &&
     migration.includes("projects_publication_status_check check (publication_status in ('published', 'unpublished'))"),

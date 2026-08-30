@@ -1,8 +1,21 @@
-import type { MediaSidebarItem } from "../media-center";
+import type { ContentDisplayOptions } from "../page-blocks/configs";
 import type { PageLayoutSlot } from "../page-blocks/layout-slots";
 import type { MediaSidebarModuleConfig } from "./parse-config";
 
 export type MediaSidebarWidgetKey = "sections" | "latest" | "popular";
+
+export type MediaSidebarContentItem = {
+  id: number;
+  href: string;
+  title: string;
+  image: string;
+  imageAlt: string;
+  category: string;
+  series: string;
+  excerpt: string;
+  date: string;
+  display: ContentDisplayOptions;
+};
 
 export type MediaSidebarWidgetState = {
   widgetKey: MediaSidebarWidgetKey;
@@ -12,7 +25,7 @@ export type MediaSidebarWidgetState = {
   isVisible: boolean;
   title: string;
   config: MediaSidebarModuleConfig;
-  items?: MediaSidebarItem[];
+  items?: MediaSidebarContentItem[];
 };
 
 export type MediaSidebarModulesState = {

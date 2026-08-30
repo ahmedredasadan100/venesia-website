@@ -1,4 +1,4 @@
-import type { MediaContentItem, MediaContentType, MediaSidebarItem } from "./media-center/types";
+import type { MediaContentItem, MediaContentType } from "./media-center/types";
 import {
   getMediaHref,
   MEDIA_CONTENT_TYPES,
@@ -15,25 +15,12 @@ import { normalizePublicContentSearchQuery } from "./content/public-content-read
 import type { PublicContentFeaturedSelection } from "./content/public-content-read/contract";
 import { getDefaultMediaListingPresentation } from "./media-hub-modules/parse-config";
 
-export type { MediaContentItem, MediaContentType, MediaNewsItem, MediaSidebarItem };
+export type { MediaContentItem, MediaContentType, MediaNewsItem };
 export { getMediaHref, MEDIA_TYPE_PATHS, MEDIA_CONTENT_TYPES };
 
 /** Media remains a presentation facade over Unified Content's Public Collection owner. */
 export async function getMediaItems(type?: MediaContentType) {
   return unifiedGetMediaItems(type);
-}
-
-/** Featured Content modules read Unified Content through the existing public owner. */
-export async function getFeaturedMediaItems(
-  type: MediaContentType,
-  limit = 1,
-): Promise<MediaContentItem[]> {
-  return unifiedGetMediaItemsLimited({
-    type,
-    limit: Math.max(1, limit),
-    featuredOnly: true,
-    sort: "newest",
-  });
 }
 
 export async function getMediaItemBySlug(type: MediaContentType, slug: string) {
@@ -61,22 +48,6 @@ export async function getMediaListingPage(
     sort,
     featuredSelection: search ? undefined : input.featuredSelection,
     search,
-  });
-}
-
-export async function getMediaSidebarLatest(limit = 3): Promise<MediaContentItem[]> {
-  return unifiedGetMediaItemsLimited({
-    type: "news",
-    limit: Math.max(1, limit),
-    sort: "newest",
-  });
-}
-
-export async function getMediaSidebarPopular(limit = 4): Promise<MediaContentItem[]> {
-  return unifiedGetMediaItemsLimited({
-    limit: Math.max(1, limit),
-    popularOnly: true,
-    sort: "newest",
   });
 }
 

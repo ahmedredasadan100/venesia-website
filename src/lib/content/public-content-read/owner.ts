@@ -188,6 +188,7 @@ function mapCollectionRows(
 
 interface PublicContentFilterQuery extends PublicContentTextSearchQuery {
   in(column: "content_type", values: readonly ContentType[]): this;
+  in(column: "id", values: readonly number[]): this;
   in(column: "category_slug" | "series_slug", values: readonly string[]): this;
   eq(column: "status" | "series_slug", value: string): this;
   eq(column: "is_featured" | "is_popular", value: boolean): this;
@@ -207,6 +208,7 @@ function applyPublicFilters<Query extends PublicContentFilterQuery>(
     .not("slug", "like", "e2e-test%");
 
   if (input.categorySlugs.length) next = next.in("category_slug", input.categorySlugs);
+  if (input.includeIds.length) next = next.in("id", input.includeIds);
   if (input.seriesSlug) next = next.eq("series_slug", input.seriesSlug);
   if (input.seriesSlugs.length) next = next.in("series_slug", input.seriesSlugs);
   if (input.featured === "only") next = next.eq("is_featured", true);

@@ -3,6 +3,7 @@ export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 
 import MediaSidebarModuleEditClient from "../../../../../../components/admin/page-blocks/MediaSidebarModuleEditClient";
+import { loadTopicFilterOptionsForAdmin } from "../../../../../../lib/feed-modules/load-topic-filter-options";
 import { getSupabaseAdmin } from "../../../../../../lib/supabase-admin";
 import { getMediaSidebarModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
 import { updateMediaSidebarModule } from "../actions";
@@ -18,9 +19,10 @@ export default async function MediaSidebarModuleEditPage({ params, searchParams 
   const id = Number(resolvedParams.id);
   if (!id) notFound();
 
-  const [{ data: block, error }, assignmentContext] = await Promise.all([
+  const [{ data: block, error }, assignmentContext, filterOptions] = await Promise.all([
     getSupabaseAdmin().from("media_sidebar_module_templates").select("*").eq("id", id).maybeSingle(),
     getMediaSidebarModuleAssignmentContext(id),
+    loadTopicFilterOptionsForAdmin(),
   ]);
 
   if (error) throw new Error(`Media Sidebar template read failed: ${error.message}`);
@@ -29,6 +31,7 @@ export default async function MediaSidebarModuleEditPage({ params, searchParams 
   return (
     <MediaSidebarModuleEditClient
       block={block}
+      categories={filterOptions.categories}
       assignmentContext={assignmentContext}
       saved={Boolean(resolvedSearch.saved)}
       updateAction={updateMediaSidebarModule}

@@ -16,6 +16,7 @@ const [
   migration,
   correctiveMigration,
   searchMigration,
+  featuredMigration,
   company,
   settings,
   contracts,
@@ -35,6 +36,7 @@ const [
   read("sql/migrations/20260720060000_admin_pages_list_read_model.sql"),
   read("sql/migrations/20260720100000_admin_pages_list_read_model_page_normalization.sql"),
   read("sql/migrations/20260805120000_admin_pages_search_read_model.sql"),
+  read("sql/migrations/20260828233733_featured_page_composition_module.sql"),
   read("src/lib/admin/shell/company-config.ts"),
   read("src/app/admin/settings/general/actions.ts"),
   read("src/lib/admin/entity-list/data-engine/contracts.ts"),
@@ -111,7 +113,7 @@ assert.match(readModelBoundary, /z\.coerce\.number\(\)\.int\(\)\.nonnegative\(\)
 assert.doesNotMatch(readModelBoundary, /Number\(readModel\.total_count\)/);
 assert.match(adapter, /PagesEntityListDatabaseError/);
 assert.match(readModelBoundary, /page:\s*z\.number\(\)\.int\(\)\.positive\(\)/);
-for (const table of ["page_content_block_assignments", "page_cta_block_assignments", "page_cards_block_assignments", "page_breadcrumb_block_assignments", "page_feed_module_assignments", "page_media_sidebar_module_assignments", "page_media_hub_module_assignments", "hero_assignments"]) assert.ok(migration.includes(table), table);
+for (const table of ["page_content_block_assignments", "page_cta_block_assignments", "page_cards_block_assignments", "page_breadcrumb_block_assignments", "page_feed_module_assignments", "page_featured_module_assignments", "page_media_sidebar_module_assignments", "page_media_hub_module_assignments", "hero_assignments"]) assert.ok(`${migration}\n${correctiveMigration}\n${searchMigration}\n${featuredMigration}`.includes(table), table);
 assert.match(correctiveMigration, /normalized_state/);
 assert.match(correctiveMigration, /'page', \(select page from normalized_state\)/);
 assert.match(searchMigration, /p_search text default ''/);

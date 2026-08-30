@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.4.1
-> **Effective date:** 2026-08-23
+> **Version:** 3.5.2
+> **Effective date:** 2026-08-29
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** _Venesia CMS — Official Architecture Principle (Version 1.0)_ and every shorter or conflicting architecture summary
@@ -976,6 +976,7 @@ The following current paths are architecture evidence, not permanent folder-law:
 | Admin Shell contracts           | `src/lib/admin/shell/`                                              |
 | Admin navigation configuration  | `src/config/admin/`                                                 |
 | Admin Shell UI                  | `src/components/admin/AdminShell.tsx`                               |
+| Public Pagination contract/model/UI | `src/components/pagination-model.ts` and `src/components/Pagination.tsx` |
 | Admin collection UI             | `src/components/admin/entity-list/`                                 |
 | Data Runtime                    | `src/lib/admin/entity-list/data-engine/`                            |
 | Entity List adapters            | `src/lib/admin/**/entity-list-adapter*` and content adapter folders |
@@ -1673,11 +1674,68 @@ These workflows MUST NOT be forced into generic contracts without a security rev
 
 ---
 
+## 7.14 Public Pagination Owner
+
+### Type
+
+Platform UI owner and pure navigation model. It is not a Runtime, Data Owner, Listing Owner, Search Owner, or Link System.
+
+### Owns
+
+- the `PublicPaginationContract` required by current public consumers;
+- one canonical Public Pagination design for colors, spacing, borders, radius, typography, control sizes, previous/next, numbered pages, ellipsis, hover, active, disabled, focus, and responsive behavior;
+- accessible previous, next, numbered-page, and ellipsis presentation;
+- the bounded page-window model;
+- URL construction for the supplied base path, query values, and page parameter;
+- client-side `Link` navigation and local viewport-position retention.
+
+The canonical evidence is `src/components/Pagination.tsx` and `src/components/pagination-model.ts`.
+
+### Current Adoption Boundary
+
+Topics Listing, Media Listing, and Project Tracking adopt the complete owner. Listing presentation remains outside it. Project Tracking proves that the owner is not limited to Listing Modules. Projects Listing adopts the presentation contract only: its existing local page state, page count, and smooth-scroll behavior remain domain-specific, and it does not adopt URL page navigation.
+
+### Must Not Own
+
+- data reads, counts, ranges, page-size policy, filtering, sorting, or search;
+- Listing layout, cards, collection selection, or presentation configuration;
+- Project Tracking selection or domain state;
+- Infinite Scroll, Load More, cursor pagination, Admin Pagination, Navigation System, or Link System behavior.
+
+---
+
+## 7.15 Featured Page Module
+
+### Type
+
+Portable Page Composition module and domain owner for Featured selection and presentation. It is not a Runtime, Listing owner, Public Content read owner, or placement owner.
+
+### Owns
+
+- the Featured configuration contract: content source, source scope, selection mode, item limit, and presentation;
+- automatic featured-only selection and ordered manual identity selection over Public Content Read results;
+- Hero, Editorial, Large Card, 3 Cards, and Carousel presentations from the same selection contract;
+- the CMS editor for those decisions.
+
+### Boundaries
+
+- Public Content Read owns public eligibility, filtering, and data reads.
+- Page Composition owns page assignment, semantic Position, and module order only.
+- Listing remains independent and cannot select or render Featured.
+- Media Hub cannot author, resolve, or persist a second non-listing Featured owner.
+- Source scopes MUST come from the canonical taxonomy and content-type owners rather than module-local inventories.
+
+The canonical evidence is `src/lib/featured-modules/`, `src/components/featured/`, and the registered `featured` Page Module kind.
+
+---
+
 # 8. Runtime Boundary Matrix
 
 | Owner                 | Primary responsibility                                 |                Owns state? |             May know Entity details? |           May access database/storage? |                   May render UI? | Must not own                       |
 | --------------------- | ------------------------------------------------------ | -------------------------: | -----------------------------------: | -------------------------------------: | -------------------------------: | ---------------------------------- |
 | Design System         | Visual language and accessible primitives              |    Local presentation only |                                   No |                                     No |                              Yes | Domain and persistence logic       |
+| Public Pagination     | Public page-navigation UI, page window, and URL targets | Local viewport retention only | No | No | Yes | Reads, Listing, search, domain state |
+| Featured Page Module  | Featured selection and presentation over public content | No independent runtime state | Source scope and presentation only | Through Public Content Read only | Yes | Placement, Listing, direct domain reads |
 | Admin Shell System    | Admin frame and navigation                             |             Shell UI state |        Navigation configuration only | Company config through server boundary |                              Yes | Form/list/domain lifecycle         |
 | Collection Runtime    | Search/filter/sort/page/selection/columns interactions |                        Yes |           Generic labels/config only |                                     No | Via shared collection components | Fetch/cache/domain mutation        |
 | Data Runtime          | Fetch/cache/cancel/optimistic/rollback/invalidate      |                        Yes | Only entity key and adapter contract |        Through server endpoint/adapter |       No direct visual ownership | Domain validation and layout       |
@@ -5507,6 +5565,24 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.5.2 — 2026-08-29
+
+- Registered Featured as an independent, portable Page Composition module.
+- Assigned Featured source scope, selection, and presentation to one owner while retaining Public Content Read and Page Composition boundaries.
+- Retired Topics Listing and Media Hub as parallel non-listing Featured owners.
+
+## 3.5.1 — 2026-08-29
+
+- Closed Public Pagination Phase 1 with one canonical presentation contract across Topics Listing, Media Listing, Projects Listing, and Project Tracking.
+- Kept Projects Listing local pagination behavior unchanged while moving its visual decisions to the Public Pagination UI owner.
+- Added executable proof for presentation completeness, unique ownership, and the absence of alternate Public Pagination styling.
+
+## 3.5.0 — 2026-08-29
+
+- Declared Public Pagination as a small Platform UI owner rather than a Runtime, Data Owner, or Listing Owner.
+- Limited its contract to page-navigation UI, the bounded page-window model, and URL page navigation.
+- Recorded Topics Listing, Media Listing, and Project Tracking adoption while preserving Projects Hub as the unchanged Phase 1 exclusion.
 
 ## 3.4.1 — 2026-08-23
 

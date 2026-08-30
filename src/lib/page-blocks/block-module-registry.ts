@@ -8,6 +8,10 @@ import {
   MEDIA_SIDEBAR_ASSIGNMENT_TABLE,
   MEDIA_SIDEBAR_TEMPLATE_TABLE,
 } from "../media-sidebar-modules/registry";
+import {
+  FEATURED_ASSIGNMENT_TABLE,
+  FEATURED_TEMPLATE_TABLE,
+} from "../featured-modules/registry";
 
 type DatabaseTable = keyof Database["public"]["Tables"];
 
@@ -31,6 +35,10 @@ export const BLOCK_MODULE_REGISTRY = {
   feed: {
     assignmentTable: "page_feed_module_assignments",
     templateTable: "feed_module_templates",
+  },
+  featured: {
+    assignmentTable: FEATURED_ASSIGNMENT_TABLE,
+    templateTable: FEATURED_TEMPLATE_TABLE,
   },
 } satisfies Record<
   PageBlockType,

@@ -121,6 +121,14 @@ export const PAGE_COMPOSITION_COLUMN_PREFERENCES = {
     ],
     boundedClientPagination: true,
   },
+  featuredTemplates: {
+    viewKey: "page-composition:featured-templates",
+    columns: blockTemplateColumns,
+    consumerSourceFiles: [
+      "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
+    ],
+    boundedClientPagination: true,
+  },
   mediaHubTemplates: {
     viewKey: "page-composition:media-hub-templates",
     columns: blockSummaryColumns,

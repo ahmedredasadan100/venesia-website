@@ -1,5 +1,5 @@
 import Link from "next/link";
-import Pagination from "../Pagination";
+import PublicPagination from "../Pagination";
 import { CollectionListingPresentation } from "../collection-modules/CollectionListingPresenter";
 import MediaContentCard from "./MediaContentCard";
 import type { MediaContentItem } from "../../lib/media-center/types";
@@ -106,7 +106,7 @@ export default function MediaListingContent({
           />
 
           {!isSearching ? (
-            <Pagination
+            <PublicPagination
               currentPage={currentPage}
               totalPages={totalPages}
               basePath={basePath}

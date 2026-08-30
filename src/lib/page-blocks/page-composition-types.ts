@@ -1,4 +1,5 @@
 import type { ResolvedFeedModule } from "../feed-modules/types";
+import type { ResolvedFeaturedModule } from "../featured-modules/contract";
 import type { HeroSectionVisibility } from "../load-hero-section";
 import type { MediaHubModuleState, MediaHubModulesState } from "../media-hub-modules/types";
 import type { MediaSidebarModulesState } from "../media-sidebar-modules/types";
@@ -28,6 +29,13 @@ export type FeedSlotEntry = {
   module: ResolvedFeedModule;
 };
 
+export type FeaturedSlotEntry = {
+  kind: "featured";
+  assignmentId: number;
+  sortOrder: number;
+  module: ResolvedFeaturedModule;
+};
+
 export type MediaSidebarSlotEntry = {
   kind: "media-sidebar";
   assignmentId: number;
@@ -46,6 +54,7 @@ export type SlotEntry =
   | HeroSlotEntry
   | BlockSlotEntry
   | FeedSlotEntry
+  | FeaturedSlotEntry
   | MediaSidebarSlotEntry
   | MediaHubSlotEntry;
 
@@ -56,6 +65,7 @@ export type PageComposition = {
   heroVisibility: HeroSectionVisibility;
   mediaHubModules: MediaHubModulesState | null;
   mediaSidebarModules: MediaSidebarModulesState | null;
+  featuredModules: ResolvedFeaturedModule[];
   /** Assignment rows exist before visibility/publication filters. */
   hasAnyAssignmentRows: boolean;
   /** Visible and published modules exposed by the canonical composition, including specialized Media modules. */

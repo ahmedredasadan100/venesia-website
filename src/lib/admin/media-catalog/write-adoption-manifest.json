@@ -83,6 +83,11 @@
       "mediaFields": ["config"]
     },
     {
+      "domainKey": "featured_module_templates",
+      "table": "featured_module_templates",
+      "mediaFields": ["config"]
+    },
+    {
       "domainKey": "media_sidebar_module_templates",
       "table": "media_sidebar_module_templates",
       "mediaFields": ["config"]
@@ -237,7 +242,8 @@
         "cta_block_templates",
         "cards_block_templates",
         "breadcrumb_block_templates",
-        "feed_module_templates"
+        "feed_module_templates",
+        "featured_module_templates"
       ],
       "mediaFields": [
         "hero_templates.config",
@@ -245,7 +251,8 @@
         "cta_block_templates.config",
         "cards_block_templates.config",
         "breadcrumb_block_templates.config",
-        "feed_module_templates.config"
+        "feed_module_templates.config",
+        "featured_module_templates.config"
       ],
       "acquiresWriteLease": true,
       "completesReferenceSync": true,
@@ -256,7 +263,8 @@
         "src/app/admin/pages-blocks/blocks/cta/actions.ts",
         "src/app/admin/pages-blocks/blocks/cards/actions.ts",
         "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
-        "src/app/admin/pages-blocks/blocks/feed/actions.ts"
+        "src/app/admin/pages-blocks/blocks/feed/actions.ts",
+        "src/app/admin/pages-blocks/blocks/featured/actions.ts"
       ],
       "rationale": "Template create, update, and duplicate commands derive write scopes from the final config and coordinate reference synchronization; status-only branches are reference-neutral."
     },
@@ -269,7 +277,8 @@
         "cta_block_templates",
         "cards_block_templates",
         "breadcrumb_block_templates",
-        "feed_module_templates"
+        "feed_module_templates",
+        "featured_module_templates"
       ],
       "mediaFields": [],
       "acquiresWriteLease": false,
@@ -282,7 +291,8 @@
         "src/app/admin/pages-blocks/blocks/cta/actions.ts",
         "src/app/admin/pages-blocks/blocks/cards/actions.ts",
         "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
-        "src/app/admin/pages-blocks/blocks/feed/actions.ts"
+        "src/app/admin/pages-blocks/blocks/feed/actions.ts",
+        "src/app/admin/pages-blocks/blocks/featured/actions.ts"
       ],
       "mutationPaths": [
         {
@@ -356,6 +366,18 @@
           "exportName": "bulkFeedModules",
           "domainKey": "feed_module_templates",
           "contract": "explicit_empty_bulk_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/featured/actions.ts",
+          "exportName": "deleteFeaturedModule",
+          "domainKey": "featured_module_templates",
+          "contract": "explicit_empty_delete"
+        },
+        {
+          "sourceFile": "src/app/admin/pages-blocks/blocks/featured/actions.ts",
+          "exportName": "bulkFeaturedModules",
+          "domainKey": "featured_module_templates",
+          "contract": "explicit_empty_bulk_delete"
         }
       ],
       "rationale": "Single and bulk removal commands capture provider identities before one atomic Domain delete, then perform retry-safe entity-scoped explicit-empty cleanup for every requested identity without a write lease; the shared cleanup owner marks non-empty or failed proof uncertain and each action surfaces a structured post-commit warning."
@@ -390,6 +412,7 @@
         "cards_block_templates",
         "breadcrumb_block_templates",
         "feed_module_templates",
+        "featured_module_templates",
         "media_sidebar_module_templates",
         "media_hub_module_templates"
       ],
@@ -400,6 +423,7 @@
         "cards_block_templates.config",
         "breadcrumb_block_templates.config",
         "feed_module_templates.config",
+        "featured_module_templates.config",
         "media_sidebar_module_templates.config",
         "media_hub_module_templates.config"
       ],

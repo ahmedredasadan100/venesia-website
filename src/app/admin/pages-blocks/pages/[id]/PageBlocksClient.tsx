@@ -88,6 +88,7 @@ type PageBlocksClientProps = {
     cards: TemplateOption[];
     breadcrumb: TemplateOption[];
     feed: TemplateOption[];
+    featured: TemplateOption[];
     hero: TemplateOption[];
     mediaSidebar: TemplateOption[];
     mediaHub: TemplateOption[];

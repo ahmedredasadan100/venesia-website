@@ -9,6 +9,7 @@ type UseAutoCarouselOptions = {
   itemCount: number;
   intervalMs?: number;
   enabled?: boolean;
+  autoplay?: boolean;
 };
 
 const DEFAULT_INTERVAL_MS = 7500;
@@ -17,6 +18,7 @@ export function useAutoCarousel<T extends HTMLElement = HTMLElement>({
   itemCount,
   intervalMs = DEFAULT_INTERVAL_MS,
   enabled = true,
+  autoplay = true,
 }: UseAutoCarouselOptions) {
   const count = Math.max(0, Math.floor(itemCount));
   const resolvedIntervalMs = intervalMs > 0 ? intervalMs : DEFAULT_INTERVAL_MS;
@@ -52,14 +54,21 @@ export function useAutoCarousel<T extends HTMLElement = HTMLElement>({
   }, [canAdvance, count, restartAutoplay]);
 
   useEffect(() => {
-    if (!canAdvance || reducedMotion) return;
+    if (!canAdvance || !autoplay || reducedMotion) return;
 
     const timer = window.setInterval(() => {
       setActiveIndex((current) => (current + 1) % count);
     }, resolvedIntervalMs);
 
     return () => window.clearInterval(timer);
-  }, [autoplayRevision, canAdvance, count, reducedMotion, resolvedIntervalMs]);
+  }, [
+    autoplay,
+    autoplayRevision,
+    canAdvance,
+    count,
+    reducedMotion,
+    resolvedIntervalMs,
+  ]);
 
   const { containerRef, swipeHandlers } = useSwipeSlider<T>({
     enabled: canAdvance,

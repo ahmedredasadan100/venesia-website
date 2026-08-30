@@ -342,6 +342,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "cards:create",
       "cta:create",
       "feed:create",
+      "featured:create",
     ],
     rationale:
       "All generic template-create modals delegate form lifecycle, validation feedback, dirty confirmation, and Create-to-Edit handoff to AdminFormRuntime while schema editors retain their specialized owners.",
@@ -371,6 +372,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
       "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
       "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
       "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
       "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
     ],

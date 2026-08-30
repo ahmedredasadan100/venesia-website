@@ -11,6 +11,7 @@ const read = (path: string) =>
 const jiti = createJiti(import.meta.url);
 
 const {
+  CONTENT_DISPLAY_FORM_FIELDS,
   TOPICS_LISTING_ITEM_LIMITS,
   TOPICS_LISTING_ITEMS_PER_ROW,
   TOPICS_LISTING_PRESENTATIONS,
@@ -61,24 +62,19 @@ const sharedPresenter = read(
 const listingShell = read("src/components/topics/TopicsListingContent.tsx");
 const topicsPage = read("src/app/(site)/topics/page.tsx");
 const publicTopicsAdapter = read("src/lib/topics/load-public-topics.ts");
-const publicContentOwner = read(
-  "src/lib/content/public-content-read/owner.ts",
-);
-const slotNodes = read(
-  "src/components/page-composition/slot-module-nodes.tsx",
-);
-const slotLayout = read(
-  "src/components/page-composition/PageSlotLayout.tsx",
-);
+const publicContentOwner = read("src/lib/content/public-content-read/owner.ts");
+const slotNodes = read("src/components/page-composition/slot-module-nodes.tsx");
+const slotLayout = read("src/components/page-composition/PageSlotLayout.tsx");
 const intro = read("src/components/topics/TopicsIntroSection.tsx");
-const featured = read("src/components/topics/FeaturedTopic.tsx");
+const featured = read("src/components/featured/FeaturedModuleSection.tsx");
 const migration = read(
   "sql/migrations/20260828114621_topics_listing_presentation_phase_1.sql",
 );
 
 check(
   "presentation contract is limited to Grid and List",
-  JSON.stringify(TOPICS_LISTING_PRESENTATIONS) === JSON.stringify(["grid", "list"]),
+  JSON.stringify(TOPICS_LISTING_PRESENTATIONS) ===
+    JSON.stringify(["grid", "list"]),
 );
 check(
   "items-per-row contract is limited to 2, 3, and 4",
@@ -89,9 +85,30 @@ check(
   JSON.stringify(TOPICS_LISTING_ITEM_LIMITS) === JSON.stringify([6, 9, 12, 24]),
 );
 const hierarchyFixture = [
-  { id: 1, name: "الأب", slug: "parent", parent_id: null, sort_order: 0, is_active: true },
-  { id: 2, name: "الابن الأول", slug: "child-a", parent_id: 1, sort_order: 0, is_active: true },
-  { id: 3, name: "الابن الثاني", slug: "child-b", parent_id: 1, sort_order: 1, is_active: true },
+  {
+    id: 1,
+    name: "الأب",
+    slug: "parent",
+    parent_id: null,
+    sort_order: 0,
+    is_active: true,
+  },
+  {
+    id: 2,
+    name: "الابن الأول",
+    slug: "child-a",
+    parent_id: 1,
+    sort_order: 0,
+    is_active: true,
+  },
+  {
+    id: 3,
+    name: "الابن الثاني",
+    slug: "child-b",
+    parent_id: 1,
+    sort_order: 1,
+    is_active: true,
+  },
 ];
 check(
   "existing hierarchy owner resolves a parent to itself and every descendant",
@@ -125,51 +142,57 @@ check(
         },
       },
     }),
-  ) === JSON.stringify({
-    collection: { type: "all" },
-    presentation: "grid",
-    itemsPerRow: 4,
-    itemLimit: 24,
-    display: {
-      title: false,
-      image: true,
-      excerpt: false,
-      date: true,
-      category: false,
-      series: true,
-      details: {
-        text: "تفاصيل الموضوع",
-        visible: false,
-        bold: false,
-        alignment: "center",
+  ) ===
+    JSON.stringify({
+      collection: { type: "all" },
+      presentation: "grid",
+      itemsPerRow: 4,
+      itemLimit: 24,
+      display: {
+        title: false,
+        image: true,
+        excerpt: false,
+        date: true,
+        category: false,
+        series: true,
+        details: {
+          text: "تفاصيل الموضوع",
+          visible: false,
+          bold: false,
+          alignment: "center",
+        },
       },
-    },
-  }),
+    }),
 );
 check(
   "invalid listing config resolves to safe Phase 1 defaults",
   JSON.stringify(
-    asTopicsListingConfig({ presentation: "carousel", itemsPerRow: 8, itemLimit: 99 }),
-  ) === JSON.stringify({
-    collection: { type: "all" },
-    presentation: "list",
-    itemsPerRow: 3,
-    itemLimit: 6,
-    display: {
-      title: true,
-      image: true,
-      excerpt: true,
-      date: true,
-      category: true,
-      series: true,
-      details: {
-        text: "اقرأ المزيد",
-        visible: true,
-        bold: true,
-        alignment: "right",
+    asTopicsListingConfig({
+      presentation: "carousel",
+      itemsPerRow: 8,
+      itemLimit: 99,
+    }),
+  ) ===
+    JSON.stringify({
+      collection: { type: "all" },
+      presentation: "list",
+      itemsPerRow: 3,
+      itemLimit: 6,
+      display: {
+        title: true,
+        image: true,
+        excerpt: true,
+        date: true,
+        category: true,
+        series: true,
+        details: {
+          text: "اقرأ المزيد",
+          visible: true,
+          bold: true,
+          alignment: "right",
+        },
       },
-    },
-  }),
+    }),
 );
 check(
   "category collection is normalized inside the existing Listing config contract",
@@ -180,26 +203,27 @@ check(
       itemsPerRow: 3,
       itemLimit: 6,
     }),
-  ) === JSON.stringify({
-    collection: { type: "category", categorySlug: "topics" },
-    presentation: "list",
-    itemsPerRow: 3,
-    itemLimit: 6,
-    display: {
-      title: true,
-      image: true,
-      excerpt: true,
-      date: true,
-      category: true,
-      series: true,
-      details: {
-        text: "اقرأ المزيد",
-        visible: true,
-        bold: true,
-        alignment: "right",
+  ) ===
+    JSON.stringify({
+      collection: { type: "category", categorySlug: "topics" },
+      presentation: "list",
+      itemsPerRow: 3,
+      itemLimit: 6,
+      display: {
+        title: true,
+        image: true,
+        excerpt: true,
+        date: true,
+        category: true,
+        series: true,
+        details: {
+          text: "اقرأ المزيد",
+          visible: true,
+          bold: true,
+          alignment: "right",
+        },
       },
-    },
-  }),
+    }),
 );
 check(
   "listing template identity resolves through the existing content-module registry",
@@ -214,26 +238,27 @@ check(
       variant: "topics-listing",
       config: { presentation: "grid", itemsPerRow: 2, itemLimit: 12 },
     }),
-  ) === JSON.stringify({
-    collection: { type: "all" },
-    presentation: "grid",
-    itemsPerRow: 2,
-    itemLimit: 12,
-    display: {
-      title: true,
-      image: true,
-      excerpt: true,
-      date: true,
-      category: true,
-      series: true,
-      details: {
-        text: "اقرأ المزيد",
-        visible: true,
-        bold: true,
-        alignment: "right",
+  ) ===
+    JSON.stringify({
+      collection: { type: "all" },
+      presentation: "grid",
+      itemsPerRow: 2,
+      itemLimit: 12,
+      display: {
+        title: true,
+        image: true,
+        excerpt: true,
+        date: true,
+        category: true,
+        series: true,
+        details: {
+          text: "اقرأ المزيد",
+          visible: true,
+          bold: true,
+          alignment: "right",
+        },
       },
-    },
-  }),
+    }),
 );
 
 const editorFieldNames = Array.from(
@@ -274,8 +299,9 @@ check(
   collectionEditor.match(/<ModuleEditorSection>/gu)?.length === 2 &&
     collectionEditor.includes('className="space-y-6"') &&
     collectionEditor.includes("<ModuleEditorSectionHeading") &&
-    collectionEditor.includes('<AdminFormGrid columns={4}') &&
-    collectionEditor.match(/MODULE_EDITOR_CONTROL_CARD_CLASS_NAME/gu)?.length === 5 &&
+    collectionEditor.includes("<AdminFormGrid columns={4}") &&
+    collectionEditor.match(/MODULE_EDITOR_CONTROL_CARD_CLASS_NAME/gu)
+      ?.length === 5 &&
     !collectionEditor.includes("ModuleEditorFieldGrid") &&
     !collectionEditor.includes("data-collection-editor-layer") &&
     !collectionEditor.includes("eyebrow="),
@@ -363,15 +389,15 @@ check(
   /return\s*\{\s*collection,[\s\S]*presentation:[\s\S]*itemsPerRow:[\s\S]*itemLimit:[\s\S]*display:[\s\S]*\};/u.test(
     listingAction,
   ) &&
-    [
-      "show_title_on_page",
-      "show_image_on_page",
-      "show_excerpt_on_page",
-      "show_date_on_page",
-      "show_category_on_page",
-      "show_series_on_page",
-    ].every((name) => listingAction.includes(`"${name}"`)) &&
-    listingAction.includes("buildCollectionDetailsActionFromFormData(formData)") &&
+    listingAction.includes(
+      "buildContentDisplayOptionsFromFormData(formData, false)",
+    ) &&
+    Object.values(CONTENT_DISPLAY_FORM_FIELDS).every((name) =>
+      contentDisplaySettings.includes(`name="${name}"`),
+    ) &&
+    listingAction.includes(
+      "buildCollectionDetailsActionFromFormData(formData)",
+    ) &&
     !/(featured|latest|manual|search|pagination|carousel|masonry)/iu.test(
       listingAction,
     ),
@@ -424,7 +450,9 @@ check(
     contentDisplaySettings.indexOf('name="show_series_on_page"') <
       contentDisplaySettings.indexOf('name="show_date_on_page"') &&
     contentDisplaySettings.includes("{children}") &&
-    collectionEditor.includes("sm:col-span-2 lg:col-start-3 lg:row-start-1 lg:row-span-2"),
+    collectionEditor.includes(
+      "sm:col-span-2 lg:col-start-3 lg:row-start-1 lg:row-span-2",
+    ),
 );
 check(
   "module display values override Topic defaults while non-Listing cards keep existing defaults",
@@ -434,7 +462,9 @@ check(
     topicCard.includes("displayOverrides?.date ?? showDateOnPage") &&
     topicCard.includes("displayOverrides?.category ?? showCategoryOnPage") &&
     topicCard.includes("displayOverrides?.series ?? showSeriesOnPage") &&
-    topicCard.includes("displayOverrides?.details ?? DEFAULT_COLLECTION_DETAILS_ACTION") &&
+    topicCard.includes(
+      "displayOverrides?.details ?? DEFAULT_COLLECTION_DETAILS_ACTION",
+    ) &&
     sharedPresenter.includes("display.title") &&
     sharedPresenter.includes("display.excerpt") &&
     sharedPresenter.includes("display.image"),
@@ -472,8 +502,9 @@ check(
 );
 check(
   "card copy uses compact natural spacing in both Grid and List",
-  sharedPresenter.includes('className="flex min-w-0 flex-1 flex-col gap-1.5"') &&
-    sharedPresenter.includes("grid h-full min-h-[430px] gap-5 p-5"),
+  sharedPresenter.includes(
+    'className="flex min-w-0 flex-1 flex-col gap-1.5"',
+  ) && sharedPresenter.includes("grid h-full min-h-[430px] gap-5 p-5"),
 );
 check(
   "existing page shell delegates topic-card mapping to the pure Listing presenter",
@@ -481,9 +512,10 @@ check(
     !listingShell.includes("<TopicCard"),
 );
 check(
-  "existing Featured and Pagination consumers remain outside the pure Listing presenter",
-  listingShell.includes('import Pagination from "../Pagination"') &&
-    listingShell.includes('import FeaturedTopic from "./FeaturedTopic"') &&
+  "Pagination remains outside the pure Listing presenter and Featured is an independent Page Module",
+  listingShell.includes('import PublicPagination from "../Pagination"') &&
+    !listingShell.includes("FeaturedTopic") &&
+    topicsPage.includes("composition.featuredModules") &&
     !presenter.includes("Pagination") &&
     !presenter.includes("FeaturedTopic"),
 );
@@ -503,7 +535,9 @@ check(
 check(
   "persisted Collection supplies the default category to the existing public read owner",
   topicsPage.includes('listingConfig.collection.type === "category"') &&
-    topicsPage.includes("const categorySlug = requestedCategorySlug ?? configuredCategorySlug") &&
+    topicsPage.includes(
+      "const categorySlug = requestedCategorySlug ?? configuredCategorySlug",
+    ) &&
     topicsPage.includes("categorySlug: categorySlug || undefined"),
 );
 check(
@@ -562,4 +596,6 @@ check(
     ),
 );
 
-console.log(`Topics Listing Presentation Phase 1 verification passed (${passed} checks).`);
+console.log(
+  `Topics Listing Presentation Phase 1 verification passed (${passed} checks).`,
+);

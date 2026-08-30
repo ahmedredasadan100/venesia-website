@@ -530,6 +530,16 @@ const PROVIDER_CONFIGS = [
     editHref: (row) => `/admin/pages-blocks/blocks/feed/${row.id}`,
   },
   {
+    domainKey: "featured_module_templates",
+    table: "featured_module_templates",
+    entityType: "featured_module_template",
+    labelField: "name",
+    fields: ["config"],
+    jsonFields: ["config"],
+    stateFields: ["status"],
+    editHref: (row) => `/admin/pages-blocks/blocks/featured/${row.id}`,
+  },
+  {
     domainKey: "media_sidebar_module_templates",
     table: "media_sidebar_module_templates",
     entityType: "media_sidebar_module_template",
