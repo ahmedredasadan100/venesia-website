@@ -466,7 +466,13 @@ const featuredComponent = read(
 assert.ok(featuredComponent.startsWith('"use client"'));
 assert.ok(featuredComponent.includes("contentHierarchy?.secondaryItemCount"));
 assert.ok(featuredComponent.includes("presentation.collectionView"));
-assert.ok(featuredComponent.includes("useState"));
+assert.ok(featuredComponent.includes('from "../../hooks/use-auto-carousel"'));
+assert.ok(featuredComponent.includes('from "../feed-modules/FeedCarouselDots"'));
+assert.ok(featuredComponent.includes("useAutoCarousel<HTMLDivElement>"));
+assert.ok(featuredComponent.includes("<FeedCarouselDots"));
+assert.ok(featuredComponent.includes("autoplay: false"));
+assert.ok(!featuredComponent.includes("useState"));
+assert.ok(!featuredComponent.includes("setActiveSliderIndex"));
 assert.ok(featuredComponent.includes("sliderEnabled"));
 assert.ok(featuredComponent.includes("data-featured-slider"));
 assert.ok(featuredComponent.includes("data-slider-news-group"));
@@ -780,6 +786,14 @@ assert.ok(
   ),
 );
 assert.ok(featuredCollection.includes("FEATURED_ACTION_LABELS"));
+assert.ok(featuredCollection.includes('from "../../hooks/use-auto-carousel"'));
+assert.ok(featuredCollection.includes("useAutoCarousel<HTMLDivElement>"));
+assert.ok(featuredCollection.includes("autoplay: false"));
+assert.ok(featuredCollection.includes("onClick={goToPrevious}"));
+assert.ok(featuredCollection.includes("onClick={goToNext}"));
+assert.ok(!featuredCollection.includes("useState"));
+assert.ok(!featuredCollection.includes("setStartIndex"));
+assert.ok(!featuredCollection.includes("setInterval"));
 assert.ok(
   editorialCollection.includes("@2xl/slot-module:grid-cols-[1.1fr_0.9fr]"),
 );
