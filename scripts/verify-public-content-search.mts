@@ -18,10 +18,11 @@ const adminScrollbarAlias = read(
 );
 const globalStyles = read("src/app/globals.css");
 const topicsPage = read("src/app/(site)/topics/page.tsx");
+const topicsDetailPage = read("src/app/(site)/topics/[slug]/page.tsx");
 const topicsAdapter = read("src/lib/topics/load-public-topics.ts");
 const topicsListing = read("src/components/topics/TopicsListingContent.tsx");
-const topicsSearchPanel = read("src/components/topics/TopicsSidebarSearchPanel.tsx");
 const mediaPage = read("src/components/media-center/MediaListingPage.tsx");
+const mediaDetailPage = read("src/components/media-center/MediaDetailPage.tsx");
 const mediaCompositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
 const mediaSlotPlan = read("src/components/page-composition/build-slot-render-plan.ts");
 const venisiaMediaHubLayout = read("src/components/page-composition/VenesiaThemeMediaHubLayout.tsx");
@@ -34,6 +35,17 @@ const hero = read("src/lib/load-hero-section.ts");
 const feed = read("src/lib/feed-modules/resolve-topics-feed.ts");
 const sitemap = read("src/lib/seo/generate-sitemap-entries.ts");
 const cacheTags = read("src/lib/cache/revalidate-public-cache-tags.ts");
+const searchConfig = read("src/lib/page-blocks/search-platform-config.ts");
+const searchModule = read("src/components/search-platform/SearchPlatformModule.tsx");
+const searchEditor = read("src/components/admin/page-blocks/editors/SearchPlatformModuleEditor.tsx");
+const contentActions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
+const moduleRegistry = read("src/lib/page-blocks/module-edit-registry.ts");
+const slotRenderer = read("src/components/page-composition/slot-module-nodes.tsx");
+const dynamicPage = read("src/app/(site)/[...slug]/page.tsx");
+const migration = read("sql/migrations/20260830232134_search_platform_module.sql");
+const architecture = read("AI_ARCHITECTURE_PRINCIPLES.md");
+const currentState = read("docs/CURRENT_PROJECT_STATE.md");
+const systems = read("docs/SYSTEMS_RUNTIMES_CAPABILITIES.md");
 
 assert.equal(
   (contract.match(/export type PublicContentCollectionInput\b/g) ?? []).length,
@@ -136,6 +148,7 @@ assert.ok(sitemap.includes("loadPublicContentSitemapRows"));
 assert.ok(!sitemap.includes('.from("topics")'));
 
 assert.ok(input.includes('router.replace(href, { scroll: false })'));
+assert.ok(input.includes("persistentParams"));
 assert.ok(input.includes("PUBLIC_CONTENT_SEARCH_DEBOUNCE_MS"));
 assert.ok(input.includes("maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}"));
 assert.ok(input.includes('role="combobox"'));
@@ -165,10 +178,16 @@ for (const forbidden of ["router.refresh", "window.location.reload", "fetch("]) 
   assert.ok(!input.includes(forbidden), `Shared search input must not use ${forbidden}`);
 }
 
-assert.ok(topicsSearchPanel.includes("PublicContentSearchInput"));
-assert.ok(mediaSidebar.includes("PublicContentSearchInput"));
 assert.ok(mediaSidebar.includes("SidebarFeedPanel"));
 assert.ok(!mediaSidebar.includes("function SidebarPanel"));
+assert.ok(!topicsPage.includes("PublicContentSearchInput"));
+assert.ok(!topicsPage.includes("TopicsSidebarSearchPanel"));
+assert.ok(!topicsDetailPage.includes("TopicsSidebarSearchPanel"));
+assert.ok(topicsDetailPage.includes("<PageSlotContent"));
+assert.ok(!mediaPage.includes("MediaSidebarSearch"));
+assert.ok(!mediaDetailPage.includes("MediaSidebarSearch"));
+assert.ok(mediaDetailPage.includes("publicPath={pagePath}"));
+assert.ok(!mediaSidebar.includes("PublicContentSearchInput"));
 assert.ok(
   topicsPage.includes("await loadPublicTopicsListing({") &&
     topicsPage.includes("itemsPerPage: listingConfig.itemLimit"),
@@ -202,6 +221,43 @@ for (const route of ["news", "videos", "gallery", "press", "site-updates"]) {
   assert.ok(routePage.includes("q?: string"), `${route} must expose the shared search query contract`);
 }
 
+assert.ok(searchConfig.includes('SEARCH_PLATFORM_TEMPLATE_SLUG = "search-platform"'));
+assert.ok(searchConfig.includes('"compact"') && searchConfig.includes('"full-list"') && searchConfig.includes('"full-grid"'));
+assert.ok(searchConfig.includes('"content-type"') && searchConfig.includes('"category"') && searchConfig.includes('"series"'));
+assert.ok(moduleRegistry.includes('"search-platform"'));
+assert.ok(slotRenderer.includes("<SearchPlatformModule"));
+assert.ok(dynamicPage.includes("publicPath={page.path}") && dynamicPage.includes("searchParams={resolvedSearchParams}"));
+assert.ok(searchModule.includes('basePath="/search"'));
+assert.ok(searchModule.includes("loadPublicContentCollection"));
+assert.ok(searchModule.includes("loadPublicContentFilterOptions"));
+assert.ok(searchModule.includes("<PublicPagination"));
+assert.ok(searchModule.includes('action="/search"'));
+assert.ok(!searchModule.includes("pg_trgm") && !searchModule.includes("highlight"));
+assert.ok(!searchModule.includes('.from("topics")') && !searchModule.includes("getSupabaseAdmin"));
+assert.ok(searchEditor.includes('name="search_scope"'));
+assert.ok(searchEditor.includes('name="content_types"'));
+assert.ok(searchEditor.includes('name="result_limit"'));
+assert.ok(searchEditor.includes('name="search_presentation"'));
+assert.ok(searchEditor.includes('name="search_filters"'));
+assert.ok(searchEditor.includes('name="default_sort"'));
+assert.ok(contentActions.includes("buildSearchPlatformConfig"));
+assert.ok(migration.includes("'search',\n  '/search'"));
+assert.ok(migration.includes("'search-platform'"));
+assert.ok(migration.includes("mutate_page_composition"));
+assert.ok(!migration.includes("create table") && !migration.includes("create extension") && !migration.includes("pg_trgm"));
+assert.ok(
+  !migration.includes("menu_items") &&
+    !migration.includes("navigation_menu") &&
+    !migration.includes("footer_settings") &&
+    !migration.includes("footer_links"),
+);
+assert.ok(contract.includes("page: Math.max(1, Math.floor(Number(input.page ?? 1)) || 1)"));
+assert.ok(contract.includes("input.pageSize ?? (search ? PUBLIC_CONTENT_SEARCH_RESULT_LIMIT : 12)"));
+assert.ok(architecture.includes("## 7.16 Search Platform Module"));
+assert.ok(architecture.includes("Public Content Read remains the only search data"));
+assert.ok(currentState.includes("Search is a portable Page Composition Content Module"));
+assert.ok(systems.includes("| Search Platform Module"));
+
 console.log(
-  "PASS Public Content: one Unified Content Public Collection owner and contract; Topics, Media, Feed, Featured Content, and Sitemap adopt it while Hero remains presentation-only; autocomplete reuses loaded results; projections remain bounded.",
+  "PASS Search Platform: one Unified Content Public Collection owner and contract; CMS Search uses Content assignments and /search without a parallel runtime, engine, source of truth, navigation, footer, or performance extension.",
 );

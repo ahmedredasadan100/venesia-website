@@ -463,6 +463,23 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
       pages: PAGES_SECTION,
     },
   },
+  "search-platform": {
+    slug: "search-platform",
+    labelAr: "منصة البحث",
+    descriptionAr:
+      "بحث موحد في المحتوى العام؛ مصدر النتائج يبقى Public Content Read والظهور مملوكًا لتعيينات الصفحات.",
+    editorSections: {
+      content: {
+        navigationLabelAr: "إعدادات البحث",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
+        icon: "content",
+        sectionChrome: "implicit",
+      },
+      meta: SETTINGS_SECTION,
+      pages: PAGES_SECTION,
+    },
+  },
   "topics-insight-cta": {
     slug: "topics-insight-cta",
     labelAr: "CTA موضوعات",

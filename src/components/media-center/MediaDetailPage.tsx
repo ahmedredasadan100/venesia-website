@@ -14,7 +14,6 @@ import { buildPageJsonLd } from "../../lib/seo/build-jsonld";
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 import MediaDetailArticle from "./MediaDetailArticle";
 import MediaPageShell from "./MediaPageShell";
-import { MediaSidebarSearch } from "./MediaSidebar";
 
 type MediaDetailPageProps = {
   configKey: MediaDetailPageKey;
@@ -88,7 +87,7 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
         composition={composition}
         skipSlots={["hero"]}
         breadcrumbCurrentLabel={item.title}
-        sidebarPrefix={<MediaSidebarSearch searchBasePath={config.basePath} />}
+        publicPath={pagePath}
         mainAfter={
           <>
             {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}

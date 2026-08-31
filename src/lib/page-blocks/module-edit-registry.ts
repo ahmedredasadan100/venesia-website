@@ -9,6 +9,11 @@ import {
   asProjectsHubListingConfig,
   asProjectsHubMapConfig,
 } from "./projects-hub-config";
+import {
+  asSearchPlatformConfig,
+  isSearchPlatformTemplate,
+  SEARCH_PLATFORM_TEMPLATE_SLUG,
+} from "./search-platform-config";
 
 /** Maps module slugs / variants to structured admin editor keys. */
 export type ContentModuleEditorKey =
@@ -27,6 +32,7 @@ export type ContentModuleEditorKey =
   | "projects-hub-listing"
   | "projects-hub-map"
   | "topics-listing"
+  | "search-platform"
   | "generic";
 
 /**
@@ -49,6 +55,7 @@ export const STRUCTURAL_CONTENT_TEMPLATE_SLUGS = [
   "projects-hub-listing",
   "projects-hub-map",
   "topics-listing",
+  SEARCH_PLATFORM_TEMPLATE_SLUG,
 ] as const;
 
 export function isStructuralContentTemplateSlug(slug: string | null | undefined, variant?: string | null) {
@@ -59,6 +66,7 @@ export function isStructuralContentTemplateSlug(slug: string | null | undefined,
 }
 
 export function getContentModuleEditorKey(slug: string, variant: string): ContentModuleEditorKey {
+  if (isSearchPlatformTemplate(slug, variant)) return "search-platform";
   if (isTopicsListingTemplate(slug, variant)) return "topics-listing";
   if (slug === "projects-hub-hero" || variant === "projects-hub-hero") return "projects-hub-hero";
   if (slug === "projects-hub-featured" || variant === "projects-hub-featured") return "projects-hub-featured";
@@ -91,6 +99,7 @@ export function resolveContentModuleEditorConfig(template: {
 }) {
   const editorKey = getContentModuleEditorKey(template.slug, template.variant ?? "");
 
+  if (editorKey === "search-platform") return asSearchPlatformConfig(template.config);
   if (editorKey === "topics-listing") return asTopicsListingConfig(template.config);
   if (editorKey === "projects-hub-hero") return asProjectsHubHeroConfig(template.config);
   if (editorKey === "projects-hub-featured") return asProjectsHubFeaturedConfig(template.config);

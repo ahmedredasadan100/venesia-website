@@ -7,9 +7,7 @@ import { useAutoCarousel } from "../../hooks/use-auto-carousel";
 import type { MediaSidebarPresentation } from "../../lib/media-sidebar-modules/parse-config";
 import { usePublicNavigation } from "../PublicNavigationProvider";
 import FeedCarouselDots from "../feed-modules/FeedCarouselDots";
-import PublicContentSearchInput from "../public/PublicContentSearchInput";
 import { SidebarFeedPanel } from "../sidebar-feeds/SidebarFeedPanel";
-import type { PublicContentSearchSuggestion } from "../../lib/content/public-content-read";
 import type {
   MediaSidebarContentItem,
   MediaSidebarWidgetState,
@@ -53,7 +51,6 @@ function SidebarMediaItemImage({
     </div>
   );
 }
-
 function SidebarMediaItemText({
   item,
   layout,
@@ -344,13 +341,6 @@ function SectionsPanel({
   );
 }
 
-type MediaSidebarSearchProps = {
-  searchBasePath?: string;
-  searchQuery?: string;
-  searchSuggestions?: readonly PublicContentSearchSuggestion[];
-  searchResultCount?: number;
-};
-
 function renderWidgetPanel(
   widget: MediaSidebarWidgetState,
   props: {
@@ -396,27 +386,4 @@ export function MediaSidebarWidget({ widget }: { widget: MediaSidebarWidgetState
   const navItems = usePublicNavigation();
 
   return renderWidgetPanel(widget, { navItems, pathname });
-}
-
-export function MediaSidebarSearch({
-  searchBasePath,
-  searchQuery = "",
-  searchSuggestions = [],
-  searchResultCount = 0,
-}: MediaSidebarSearchProps) {
-  if (!searchBasePath) return null;
-
-  return (
-    <SidebarFeedPanel eyebrow="Search" title="ابحث في المركز الإعلامي">
-      <PublicContentSearchInput
-        basePath={searchBasePath}
-        query={searchQuery}
-        suggestions={searchSuggestions}
-        resultCount={searchResultCount}
-        placeholder="اكتب كلمة البحث..."
-        ariaLabel="ابحث داخل القسم الحالي من المركز الإعلامي"
-        helpText="البحث يعمل داخل القسم الحالي فقط."
-      />
-    </SidebarFeedPanel>
-  );
 }

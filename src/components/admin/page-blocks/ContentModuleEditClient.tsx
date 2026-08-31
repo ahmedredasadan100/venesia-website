@@ -27,6 +27,7 @@ import ProjectsHubHeroModuleEditor from "./editors/ProjectsHubHeroModuleEditor";
 import ProjectsHubListingModuleEditor from "./editors/ProjectsHubListingModuleEditor";
 import ProjectsHubMapModuleEditor from "./editors/ProjectsHubMapModuleEditor";
 import TopicsListingModuleEditor from "./editors/TopicsListingModuleEditor";
+import SearchPlatformModuleEditor from "./editors/SearchPlatformModuleEditor";
 import VisionGoalsModuleEditor from "./editors/VisionGoalsModuleEditor";
 import { fieldClassName, statusMeta } from "../../../lib/page-blocks/admin-utils";
 import {
@@ -56,6 +57,7 @@ import {
   resolveModuleProductKind,
 } from "../../../lib/page-blocks/module-edit-registry";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
+import { asSearchPlatformConfig } from "../../../lib/page-blocks/search-platform-config";
 
 type ContentModuleEditClientProps = {
   block: {
@@ -574,6 +576,8 @@ export default function ContentModuleEditClient({
                                   ? "projects-hub-map"
                                   : editorKey === "topics-listing"
                                     ? "topics-listing"
+                                    : editorKey === "search-platform"
+                                      ? "search-platform"
                                   : block.variant ?? "default"
           }
         />
@@ -607,6 +611,9 @@ export default function ContentModuleEditClient({
         {editorKey === "projects-hub-map" ? <input type="hidden" name="config_schema" value="projects-hub-map" /> : null}
         {editorKey === "topics-listing" ? (
           <input type="hidden" name="config_schema" value="topics-listing" />
+        ) : null}
+        {editorKey === "search-platform" ? (
+          <input type="hidden" name="config_schema" value="search-platform" />
         ) : null}
         <ModuleEditorIdentitySection
           name={block.name}
@@ -675,6 +682,10 @@ export default function ContentModuleEditClient({
                     <TopicsListingModuleEditor
                       config={config as ReturnType<typeof asTopicsListingConfig>}
                       categoryOptions={topicCategoryOptions}
+                    />
+                  ) : editorKey === "search-platform" ? (
+                    <SearchPlatformModuleEditor
+                      config={config as ReturnType<typeof asSearchPlatformConfig>}
                     />
                   ) : (
                     <GenericContentModuleEditor

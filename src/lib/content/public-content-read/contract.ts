@@ -181,9 +181,9 @@ export function normalizePublicContentCollectionInput(
     input.contentTypes.some((candidate) => candidate === contentType && isContentType(candidate)),
   );
   const search = normalizePublicContentSearchQuery(input.search);
-  const requestedPageSize = search
-    ? PUBLIC_CONTENT_SEARCH_RESULT_LIMIT
-    : Math.floor(Number(input.pageSize ?? 12));
+  const requestedPageSize = Math.floor(Number(
+    input.pageSize ?? (search ? PUBLIC_CONTENT_SEARCH_RESULT_LIMIT : 12),
+  ));
   const manualTopicId = input.featuredSelection?.mode === "manual"
     ? Number(input.featuredSelection.topicId)
     : Number.NaN;
@@ -200,7 +200,7 @@ export function normalizePublicContentCollectionInput(
     ...input,
     contentTypes,
     sort: input.sort === "oldest" ? "oldest" : "newest",
-    page: search ? 1 : Math.max(1, Math.floor(Number(input.page ?? 1)) || 1),
+    page: Math.max(1, Math.floor(Number(input.page ?? 1)) || 1),
     pageSize: Math.max(1, Math.min(
       Number.isFinite(requestedPageSize) ? requestedPageSize : 12,
       PUBLIC_CONTENT_COLLECTION_MAX_PAGE_SIZE,

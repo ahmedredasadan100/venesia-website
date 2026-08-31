@@ -7,6 +7,7 @@ type MediaCenterShellLayoutProps = {
   composition: PageComposition;
   breadcrumbCurrentLabel?: string;
   sidebarPrefix?: React.ReactNode;
+  publicPath?: string;
   children: React.ReactNode;
 };
 
@@ -16,6 +17,7 @@ export default function MediaCenterShellLayout({
   composition,
   breadcrumbCurrentLabel,
   sidebarPrefix,
+  publicPath,
   children,
 }: MediaCenterShellLayoutProps) {
   return (
@@ -31,6 +33,7 @@ export default function MediaCenterShellLayout({
           mainAfter={children}
           sidebarPrefix={sidebarPrefix}
           breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+          publicPath={publicPath}
         />
       </main>
     </div>

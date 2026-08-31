@@ -13,6 +13,7 @@ export const revalidate = 300;
 
 type DynamicCmsPageProps = {
   params: Promise<{ slug: string[] }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 async function resolveDynamicCmsPage(params: Promise<{ slug: string[] }>) {
@@ -45,8 +46,11 @@ export async function generateMetadata({ params }: DynamicCmsPageProps) {
   });
 }
 
-export default async function DynamicCmsPage({ params }: DynamicCmsPageProps) {
-  const page = await resolveDynamicCmsPage(params);
+export default async function DynamicCmsPage({ params, searchParams }: DynamicCmsPageProps) {
+  const [page, resolvedSearchParams] = await Promise.all([
+    resolveDynamicCmsPage(params),
+    searchParams ?? Promise.resolve({}),
+  ]);
 
   if (!page) {
     notFound();
@@ -58,7 +62,11 @@ export default async function DynamicCmsPage({ params }: DynamicCmsPageProps) {
     <div className="min-h-screen overflow-x-hidden bg-[#05070B] text-white">
       <div aria-hidden className="venesia-grain pointer-events-none fixed inset-0 z-[4]" />
       <main className="relative z-10">
-        <PageSlotLayout composition={composition} />
+        <PageSlotLayout
+          composition={composition}
+          publicPath={page.path}
+          searchParams={resolvedSearchParams}
+        />
       </main>
       <RevealAnimations />
     </div>

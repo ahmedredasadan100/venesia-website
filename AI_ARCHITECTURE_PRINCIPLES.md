@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.5.2
-> **Effective date:** 2026-08-29
+> **Version:** 3.6.0
+> **Effective date:** 2026-08-31
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** _Venesia CMS — Official Architecture Principle (Version 1.0)_ and every shorter or conflicting architecture summary
@@ -1729,6 +1729,32 @@ The canonical evidence is `src/lib/featured-modules/`, `src/components/featured/
 
 ---
 
+## 7.16 Search Platform Module
+
+### Type
+
+Portable Page Composition Content Module and public search presentation owner. It is not a Search Runtime, Search Engine, public read owner, page owner, or placement owner.
+
+### Owns
+
+- the CMS-managed Search presentation schema: title, description, placeholder, help text, source scope, content types, result limit, filters, default sort, and presentation;
+- the launcher experience used by assigned modules throughout the site;
+- projection of the existing public search state into the canonical `/search` URL;
+- results, empty-state, filter, and pagination presentation over existing Public Content Read and Public Pagination owners.
+
+### Boundaries
+
+- Public Content Read remains the only search data, eligibility, filtering, sorting, count, and pagination read owner.
+- Public Pagination remains the only public page-navigation UI and URL paging owner.
+- Page Composition owns assignment, semantic Position, visibility, and order only; Search remains an ordinary Content Module.
+- `/search` remains an ordinary published Page with Hero, Breadcrumb, and module assignments. Navigation and Footer do not infer or create links from page existence.
+- Search route and detail consumers MUST NOT restore local search boxes, entity-specific engines, direct public reads, parallel URL state, or a second source of truth.
+- Relevance ranking, analytics, highlighting, and new indexing or performance extensions require separate measured Product scope.
+
+The canonical evidence is `src/lib/page-blocks/search-platform-config.ts`, `src/components/search-platform/SearchPlatformModule.tsx`, and `src/lib/content/public-content-read/`.
+
+---
+
 # 8. Runtime Boundary Matrix
 
 | Owner                 | Primary responsibility                                 |                Owns state? |             May know Entity details? |           May access database/storage? |                   May render UI? | Must not own                       |
@@ -1736,6 +1762,7 @@ The canonical evidence is `src/lib/featured-modules/`, `src/components/featured/
 | Design System         | Visual language and accessible primitives              |    Local presentation only |                                   No |                                     No |                              Yes | Domain and persistence logic       |
 | Public Pagination     | Public page-navigation UI, page window, and URL targets | Local viewport retention only | No | No | Yes | Reads, Listing, search, domain state |
 | Featured Page Module  | Featured selection and presentation over public content | No independent runtime state | Source scope and presentation only | Through Public Content Read only | Yes | Placement, Listing, direct domain reads |
+| Search Platform Module | CMS search configuration, `/search` URL projection, and results presentation | Local input/listbox state only | Content-type scope only | Through Public Content Read only | Yes | Search engine, reads, placement, navigation/footer links |
 | Admin Shell System    | Admin frame and navigation                             |             Shell UI state |        Navigation configuration only | Company config through server boundary |                              Yes | Form/list/domain lifecycle         |
 | Collection Runtime    | Search/filter/sort/page/selection/columns interactions |                        Yes |           Generic labels/config only |                                     No | Via shared collection components | Fetch/cache/domain mutation        |
 | Data Runtime          | Fetch/cache/cancel/optimistic/rollback/invalidate      |                        Yes | Only entity key and adapter contract |        Through server endpoint/adapter |       No direct visual ownership | Domain validation and layout       |
@@ -5565,6 +5592,12 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.6.0 — 2026-08-31
+
+- Registered Search as a portable Page Composition Content Module with CMS-managed configuration and presentation.
+- Kept Public Content Read, Public Pagination, and Page Composition as the only data, pagination, and placement owners.
+- Established `/search` as an ordinary CMS Page and prohibited route-local search boxes or parallel search engines.
 
 ## 3.5.2 — 2026-08-29
 

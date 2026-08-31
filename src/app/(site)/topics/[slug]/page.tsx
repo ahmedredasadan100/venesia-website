@@ -4,14 +4,14 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import InternalPageLayout from "../../../../components/InternalPageLayout";
-import FeedModulesStack from "../../../../components/feed-modules/FeedModulesStack";
-import TopicsSidebarSearchPanel from "../../../../components/topics/TopicsSidebarSearchPanel";
+import { PageSlotContent } from "../../../../components/page-composition/PageSlotLayout";
 import TopicCard from "../../../../components/topics/TopicCard";
 import TopicViewTracker from "../../../../components/content/TopicViewTracker";
 import JsonLd from "../../../../components/seo/JsonLd";
 import RichTextContent from "../../../../components/content/RichTextContent";
 
-import { loadFeedModulesForPageSlug } from "../../../../lib/feed-modules/load-feed-modules";
+import { loadPageCompositionBySlug } from "../../../../lib/page-blocks/load-page-composition";
+import { getSlotEntries } from "../../../../lib/page-blocks/page-composition-utils";
 import {
   loadPublicTopicBySlug,
   loadRelatedPublicTopics,
@@ -75,9 +75,9 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
 
   if (!topic) notFound();
 
-  const [relatedTopics, sidebarFeeds, globalSeo] = await Promise.all([
+  const [relatedTopics, composition, globalSeo] = await Promise.all([
     loadRelatedPublicTopics(topic),
-    loadFeedModulesForPageSlug("topics"),
+    loadPageCompositionBySlug("topics"),
     loadResolvedGlobalSeo(),
   ]);
   const pagePath = `/topics/${topic.slug}`;
@@ -224,8 +224,10 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
         </main>
 
         <aside dir="rtl" className="space-y-6 text-right">
-          <TopicsSidebarSearchPanel />
-          <FeedModulesStack modules={sidebarFeeds} slot="sidebar" />
+          <PageSlotContent
+            entries={getSlotEntries(composition, "sidebar")}
+            publicPath={pagePath}
+          />
         </aside>
       </div>
     </InternalPageLayout>

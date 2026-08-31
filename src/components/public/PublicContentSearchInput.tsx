@@ -23,6 +23,7 @@ import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";
 
 type PublicContentSearchInputProps = {
   basePath: string;
+  persistentParams?: Readonly<Record<string, string | undefined>>;
   query?: string;
   suggestions?: readonly PublicContentSearchSuggestion[];
   resultCount?: number;
@@ -41,6 +42,7 @@ type FloatingListboxPosition = {
 const FLOATING_LISTBOX_GAP = 9;
 const FLOATING_LISTBOX_VIEWPORT_MARGIN = 12;
 const FLOATING_LISTBOX_MAX_HEIGHT = 360;
+const EMPTY_PERSISTENT_PARAMS: Readonly<Record<string, string | undefined>> = {};
 
 function resolveFloatingListboxPosition(anchor: DOMRect): FloatingListboxPosition {
   const availableWidth = Math.max(0, window.innerWidth - FLOATING_LISTBOX_VIEWPORT_MARGIN * 2);
@@ -75,6 +77,7 @@ function resolveFloatingListboxPosition(anchor: DOMRect): FloatingListboxPositio
 
 export default function PublicContentSearchInput({
   basePath,
+  persistentParams = EMPTY_PERSISTENT_PARAMS,
   query = "",
   suggestions = [],
   resultCount = 0,
@@ -143,6 +146,11 @@ export default function PublicContentSearchInput({
         ? new URLSearchParams(currentUrl.search)
         : new URLSearchParams();
 
+      for (const [key, value] of Object.entries(persistentParams)) {
+        if (value) params.set(key, value);
+        else params.delete(key);
+      }
+
       params.delete("page");
       if (normalized) params.set("q", normalized);
       else params.delete("q");
@@ -151,7 +159,7 @@ export default function PublicContentSearchInput({
       const href = queryString ? `${basePath}?${queryString}` : basePath;
       startTransition(() => router.replace(href, { scroll: false }));
     },
-    [basePath, router],
+    [basePath, persistentParams, router],
   );
 
   useLayoutEffect(() => {

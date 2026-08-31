@@ -223,10 +223,11 @@ assert.ok(projectsRenderer.includes("modulesByPosition") && projectsRenderer.inc
 const mediaPageShell = read("src/components/media-center/MediaPageShell.tsx");
 const mediaSidebar = read("src/components/media-center/MediaSidebar.tsx");
 const mediaListing = read("src/components/media-center/MediaListingPage.tsx");
+const slotModuleNodes = read("src/components/page-composition/slot-module-nodes.tsx");
 const globalStyles = read("src/app/globals.css");
 assert.ok(!mediaPageShell.includes("MediaSidebar") && !mediaPageShell.includes("grid-cols-[320px_1fr]"), "MediaPageShell must not own a parallel sidebar layout");
-assert.ok(mediaSidebar.includes("export function MediaSidebarWidget") && mediaSidebar.includes("export function MediaSidebarSearch"), "Media sidebar presentation must expose thin slot consumers");
-assert.ok(mediaListing.includes("sidebarPrefix={") && mediaListing.includes("<MediaSidebarSearch"), "Media search must compose through the shared sidebar prefix contract");
+assert.ok(mediaSidebar.includes("export function MediaSidebarWidget") && !mediaSidebar.includes("MediaSidebarSearch"), "Media sidebar presentation must expose only its thin widget slot consumer");
+assert.ok(!mediaListing.includes("MediaSidebarSearch") && slotModuleNodes.includes("<SearchPlatformModule"), "Media search must compose through the assigned Search Platform module");
 
 assert.ok(!layout.includes("slot-editorial-flow"), "Page layout must not decide a module's visual composition");
 assert.ok(globalStyles.includes(".slot-editorial-flow"), "shared editorial-flow presentation contract missing");
