@@ -1,9 +1,7 @@
 import MediaCenterShellLayout from "./MediaCenterShellLayout";
 import MediaListingContent from "./MediaListingContent";
 import MediaPageShell from "./MediaPageShell";
-import { MediaSidebarSearch } from "./MediaSidebar";
 import {
-  getMediaHref,
   getMediaListingPage,
 } from "../../lib/media-center";
 import { normalizePublicContentSearchQuery } from "../../lib/content/public-content-read";
@@ -52,27 +50,11 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
     search: searchQuery,
   });
 
-  const searchSuggestions = searchQuery
-    ? listing.items.slice(0, 8).map((item) => ({
-        id: `${item.type}:${item.id}`,
-        title: item.title,
-        href: getMediaHref(item),
-        meta: [item.category, item.series].filter(Boolean).join(" · ") || undefined,
-      }))
-    : [];
-
   return (
     <MediaCenterShellLayout
       cmsPageSlug={config.cmsPageSlug}
       composition={composition}
-      sidebarPrefix={
-        <MediaSidebarSearch
-          searchBasePath={config.basePath}
-          searchQuery={searchQuery}
-          searchSuggestions={searchSuggestions}
-          searchResultCount={listing.totalRegular}
-        />
-      }
+      publicPath={config.basePath}
     >
       <MediaPageShell>
         <div className="space-y-10">

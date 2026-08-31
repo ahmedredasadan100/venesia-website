@@ -370,7 +370,7 @@ check(
 
 const listingActionStart = actions.indexOf("function buildTopicsListingConfig");
 const listingActionEnd = actions.indexOf(
-  "const CONTENT_FORMATTING_FIELDS",
+  "function buildSearchPlatformConfig",
   listingActionStart,
 );
 const listingAction = actions.slice(listingActionStart, listingActionEnd);

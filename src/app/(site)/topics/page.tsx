@@ -1,4 +1,3 @@
-import TopicsSidebarSearchPanel from "../../../components/topics/TopicsSidebarSearchPanel";
 import FeedModulesStack from "../../../components/feed-modules/FeedModulesStack";
 import TopicsListingContent from "../../../components/topics/TopicsListingContent";
 import PageSlotLayout from "../../../components/page-composition/PageSlotLayout";
@@ -98,15 +97,6 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
     endIndex,
   } = listing;
 
-  const searchSuggestions = searchQuery
-    ? visibleTopics.slice(0, 8).map((topic) => ({
-        id: `article:${topic.id}`,
-        title: topic.title,
-        href: `/topics/${topic.slug}`,
-        meta: [topic.category, topic.series].filter(Boolean).join(" · ") || undefined,
-      }))
-    : [];
-
   const listingContent = (
     <TopicsListingContent
       topics={visibleTopics}
@@ -121,14 +111,6 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
       searchQuery={searchQuery}
       showCompositionError={useCmsLayout && composition.hasCompositionError}
       listingConfig={listingConfig}
-    />
-  );
-
-  const searchPanel = (
-    <TopicsSidebarSearchPanel
-      query={searchQuery}
-      suggestions={searchSuggestions}
-      resultCount={totalRegularTopics}
     />
   );
 
@@ -148,6 +130,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
       <main className="relative z-10 min-h-[50vh] pb-20">
         <PageSlotLayout
           composition={composition}
+          publicPath="/topics"
           fallbackHero={fallbackHero}
           topicsListingContent={
             topicsListingBlock ? listingContent : undefined
@@ -163,11 +146,8 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
             )
           }
           sidebarPrefix={
-            useCmsLayout ? (
-              searchPanel
-            ) : (
+            useCmsLayout ? null : (
               <>
-                {searchPanel}
                 <FeedModulesStack modules={sidebarFeeds} slot="sidebar" />
                 <TopicsInsightCtaSection />
               </>

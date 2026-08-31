@@ -20,6 +20,7 @@ import {
 } from "./build-slot-render-plan";
 import { VENISIA_THEME_REGION_RENDER_ORDER } from "./venisia-theme-regions";
 import { renderVenesiaThemeMediaHubNodes } from "./VenesiaThemeMediaHubLayout";
+import type { SearchPlatformSearchParams } from "../search-platform/SearchPlatformModule";
 
 type SlotContentOptions = {
   prefix?: ReactNode;
@@ -27,6 +28,8 @@ type SlotContentOptions = {
   homepageProjects?: HomepageProjectCard[];
   breadcrumbCurrentLabel?: string;
   topicsListingContent?: ReactNode;
+  publicPath?: string;
+  searchParams?: SearchPlatformSearchParams;
 };
 
 function SlotModuleContainer({
@@ -58,6 +61,8 @@ function renderOrderedSlotEntries(
     homepageProjects: options.homepageProjects,
     breadcrumbCurrentLabel: options.breadcrumbCurrentLabel,
     topicsListingContent: options.topicsListingContent,
+    publicPath: options.publicPath,
+    searchParams: options.searchParams,
   });
   const nodes: ReactNode[] = [];
   let index = 0;
@@ -134,6 +139,8 @@ export function PageSlotContent({
   homepageProjects,
   breadcrumbCurrentLabel,
   topicsListingContent,
+  publicPath,
+  searchParams,
 }: {
   entries: SlotEntry[];
 } & SlotContentOptions) {
@@ -141,6 +148,8 @@ export function PageSlotContent({
     homepageProjects,
     breadcrumbCurrentLabel,
     topicsListingContent,
+    publicPath,
+    searchParams,
   });
 
   if (prefix != null) {
@@ -221,6 +230,10 @@ type PageSlotLayoutProps = {
   breadcrumbCurrentLabel?: string;
   /** Page-owned Topics results shell injected into its assigned Listing module. */
   topicsListingContent?: ReactNode;
+  /** Exact public path consumed by structural modules such as Search. */
+  publicPath?: string;
+  /** Request URL state consumed by structural modules without changing Composition. */
+  searchParams?: SearchPlatformSearchParams;
 };
 
 export default function PageSlotLayout({
@@ -232,6 +245,8 @@ export default function PageSlotLayout({
   homepageProjects,
   breadcrumbCurrentLabel,
   topicsListingContent,
+  publicPath,
+  searchParams,
 }: PageSlotLayoutProps) {
   const skip = new Set(skipSlots);
   const sidebarEntries = getSlotEntries(composition, "sidebar");
@@ -275,6 +290,8 @@ export default function PageSlotLayout({
             homepageProjects={homepageProjects}
             breadcrumbCurrentLabel={breadcrumbCurrentLabel}
             topicsListingContent={topicsListingContent}
+            publicPath={publicPath}
+            searchParams={searchParams}
           />
         </div>
       </div>
@@ -310,6 +327,8 @@ export default function PageSlotLayout({
                   homepageProjects={homepageProjects}
                   breadcrumbCurrentLabel={breadcrumbCurrentLabel}
                   topicsListingContent={topicsListingContent}
+                  publicPath={publicPath}
+                  searchParams={searchParams}
                 />
               </section>
             ) : null}
@@ -326,6 +345,8 @@ export default function PageSlotLayout({
                   homepageProjects={homepageProjects}
                   breadcrumbCurrentLabel={breadcrumbCurrentLabel}
                   topicsListingContent={topicsListingContent}
+                  publicPath={publicPath}
+                  searchParams={searchParams}
                 />
               </aside>
             ) : null}

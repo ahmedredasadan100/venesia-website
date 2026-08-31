@@ -125,6 +125,67 @@ export type PublicContentSitemapRow = {
   robotsIndex: boolean | null;
 };
 
+export type PublicContentFilterOption = {
+  slug: string;
+  name: string;
+};
+
+export type PublicContentFilterOptions = {
+  categories: PublicContentFilterOption[];
+  series: PublicContentFilterOption[];
+};
+
+export async function loadPublicContentFilterOptions(): Promise<PublicContentFilterOptions> {
+  return unstable_cache(async () => {
+    const supabase = getSupabaseAdmin();
+    const [categoriesResult, seriesResult] = await Promise.all([
+      supabase
+        .from("topic_categories")
+        .select("slug,name")
+        .eq("status", "published")
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
+      supabase
+        .from("topic_series")
+        .select("slug,name")
+        .eq("status", "published")
+        .is("deleted_at", null)
+        .order("sort_order", { ascending: true })
+        .order("name", { ascending: true }),
+    ]);
+
+    if (categoriesResult.error) {
+      logError(
+        "Public Content category filter options query failed",
+        categoriesResult.error,
+      );
+    }
+    if (seriesResult.error) {
+      logError(
+        "Public Content series filter options query failed",
+        seriesResult.error,
+      );
+    }
+
+    const normalizeOptions = (
+      rows: readonly { slug: string | null; name: string | null }[] | null,
+    ) => (rows ?? []).flatMap((row) => {
+      const slug = row.slug?.trim() ?? "";
+      const name = row.name?.trim() ?? "";
+      return slug && name ? [{ slug, name }] : [];
+    });
+
+    return {
+      categories: normalizeOptions(categoriesResult.data),
+      series: normalizeOptions(seriesResult.data),
+    };
+  }, ["public-content-filter-options"], {
+    revalidate: 300,
+    tags: [PUBLIC_CONTENT_CACHE_TAG],
+  })();
+}
+
 function mapCollectionRow(row: PublicContentRow): PublicContentSummary | null {
   if (!isContentType(row.content_type)) return null;
   const id = Number(row.id);

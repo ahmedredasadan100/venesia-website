@@ -79,85 +79,97 @@ test.describe("public and unauthenticated browser foundation", () => {
     expect(await page.locator("article .article-rich-text h2, article .article-rich-text h3, article .article-rich-text h4").count()).toBeGreaterThan(0);
   });
 
-  test("shared public search owns an unclipped floating listbox in Topics and Media Center", async ({ page }) => {
+  test("Search Platform launchers converge on /search and the central listbox remains unclipped", async ({ page }) => {
     test.setTimeout(90_000);
 
-    async function verifyConsumer(basePath: string) {
-      const query = basePath === "/topics" ? "\u0645\u0644\u0643\u064a\u0629" : "\u0627";
-      let input = page.locator('input[role="combobox"]');
-      let listbox = page.locator('[data-public-content-search-listbox]');
-      await page.goto(`${basePath}?q=${encodeURIComponent(query)}`, { waitUntil: "domcontentloaded" });
-      input = page.locator('input[role="combobox"]');
+    async function verifyLauncher(basePath: string, expectedScope: string) {
+      await page.goto(basePath, { waitUntil: "domcontentloaded" });
+      const launcher = page.locator('[data-search-platform-module="launcher"]');
+      await expect(launcher).toBeVisible();
+      const input = launcher.locator('input[role="combobox"]');
       await expect(input).toBeVisible();
-      const documentHeightBefore = await page.evaluate(() => document.documentElement.scrollHeight);
-      await input.focus();
-      listbox = page.locator('[data-public-content-search-listbox]');
-
-      await expect
-        .poll(
-          async () => {
-            await input.press("ArrowDown");
-            return listbox.count();
-          },
-          { timeout: 15_000 },
-        )
-        .toBe(1);
-      await expect(listbox).toBeVisible();
-      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(documentHeightBefore);
-      const floatingTruth = await listbox.evaluate((node) => {
-        const element = node as HTMLElement;
-        const rect = element.getBoundingClientRect();
-        const sampleYs = [rect.top + 8, rect.top + rect.height / 2, rect.bottom - 8]
-          .filter((value) => value >= 0 && value <= window.innerHeight - 1);
-        return {
-          parentIsBody: element.parentElement === document.body,
-          position: getComputedStyle(element).position,
-          insideViewport:
-            rect.left >= 0 &&
-            rect.right <= window.innerWidth &&
-            rect.top >= 0 &&
-            rect.bottom <= window.innerHeight,
-          ownsHitTargets: sampleYs.every((y) => {
-            const target = document.elementFromPoint(rect.left + rect.width / 2, y);
-            return Boolean(target && element.contains(target));
-          }),
-        };
-      });
-      expect(floatingTruth).toEqual({
-        parentIsBody: true,
-        position: "fixed",
-        insideViewport: true,
-        ownsHitTargets: true,
-      });
-
-      const activeDescendant = await input.getAttribute("aria-activedescendant");
-      expect(activeDescendant).toBeTruthy();
-      const activeOption = page.locator('[role="option"][aria-selected="true"]');
-      await expect(activeOption).toHaveAttribute("id", activeDescendant!);
-
-      await input.press("Escape");
-      await expect(listbox).toHaveCount(0);
-      await expect(input).toBeFocused();
-
-      await input.press("ArrowDown");
-      await expect(page.locator('[data-public-content-search-listbox]')).toBeVisible();
-      await page.locator("h1").click();
-      await expect(page.locator('[data-public-content-search-listbox]')).toHaveCount(0);
-
-      await input.focus();
-      await expect(page.locator('[data-public-content-search-listbox]')).toBeVisible();
-      const firstOption = page.locator('[data-public-content-search-listbox] [role="option"]').first();
-      const targetHref = await firstOption.evaluate((option) =>
-        (option as HTMLButtonElement).textContent?.trim() ?? "",
-      );
-      expect(targetHref).toBeTruthy();
-      const sourceUrl = page.url();
-      await firstOption.click();
-      await expect.poll(() => page.url(), { timeout: 20_000 }).not.toBe(sourceUrl);
+      await page.waitForLoadState("networkidle");
+      await input.fill("\u0641\u064a\u0646\u064a\u0633\u064a\u0627");
+      await input.press("Enter");
+      await expect.poll(() => new URL(page.url()).pathname, { timeout: 20_000 }).toBe("/search");
+      const destination = new URL(page.url());
+      expect(destination.searchParams.get("q")).toBe("\u0641\u064a\u0646\u064a\u0633\u064a\u0627");
+      expect(destination.searchParams.get("types")).toBe(expectedScope);
     }
 
-    await verifyConsumer("/topics");
-    await verifyConsumer("/media-center/news");
+    await verifyLauncher("/topics", "article");
+    await verifyLauncher("/media-center/news", "news");
+
+    await page.goto(`/search?q=${encodeURIComponent("\u0645\u0644\u0643\u064a\u0629")}`, {
+      waitUntil: "domcontentloaded",
+    });
+    await expect(page.locator('[data-search-platform-module="results"]')).toBeVisible();
+    const input = page.locator('input[role="combobox"]');
+    await expect(input).toBeVisible();
+    const documentHeightBefore = await page.evaluate(() => document.documentElement.scrollHeight);
+    await input.focus();
+    let listbox = page.locator('[data-public-content-search-listbox]');
+
+    await expect
+      .poll(
+        async () => {
+          await input.press("ArrowDown");
+          return listbox.count();
+        },
+        { timeout: 15_000 },
+      )
+      .toBe(1);
+    await expect(listbox).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBe(documentHeightBefore);
+    const floatingTruth = await listbox.evaluate((node) => {
+      const element = node as HTMLElement;
+      const rect = element.getBoundingClientRect();
+      const sampleYs = [rect.top + 8, rect.top + rect.height / 2, rect.bottom - 8]
+        .filter((value) => value >= 0 && value <= window.innerHeight - 1);
+      return {
+        parentIsBody: element.parentElement === document.body,
+        position: getComputedStyle(element).position,
+        insideViewport:
+          rect.left >= 0 &&
+          rect.right <= window.innerWidth &&
+          rect.top >= 0 &&
+          rect.bottom <= window.innerHeight,
+        ownsHitTargets: sampleYs.every((y) => {
+          const target = document.elementFromPoint(rect.left + rect.width / 2, y);
+          return Boolean(target && element.contains(target));
+        }),
+      };
+    });
+    expect(floatingTruth).toEqual({
+      parentIsBody: true,
+      position: "fixed",
+      insideViewport: true,
+      ownsHitTargets: true,
+    });
+
+    const activeDescendant = await input.getAttribute("aria-activedescendant");
+    expect(activeDescendant).toBeTruthy();
+    const activeOption = page.locator('[role="option"][aria-selected="true"]');
+    await expect(activeOption).toHaveAttribute("id", activeDescendant!);
+
+    await input.press("Escape");
+    await expect(listbox).toHaveCount(0);
+    await expect(input).toBeFocused();
+
+    await input.press("ArrowDown");
+    await expect(page.locator('[data-public-content-search-listbox]')).toBeVisible();
+    await page.locator("h1").click();
+    await expect(page.locator('[data-public-content-search-listbox]')).toHaveCount(0);
+
+    await input.focus();
+    listbox = page.locator('[data-public-content-search-listbox]');
+    await expect(listbox).toBeVisible();
+    const firstOption = listbox.locator('[role="option"]').first();
+    const targetText = await firstOption.textContent();
+    expect(targetText?.trim()).toBeTruthy();
+    const sourceUrl = page.url();
+    await firstOption.click();
+    await expect.poll(() => page.url(), { timeout: 20_000 }).not.toBe(sourceUrl);
   });
 
   test("public mobile rendering remains RTL and free of document overflow", async ({ page }) => {

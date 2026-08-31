@@ -45,6 +45,7 @@ const owner = read("src/components/Pagination.tsx");
 const model = read("src/components/pagination-model.ts");
 const topics = read("src/components/topics/TopicsListingContent.tsx");
 const media = read("src/components/media-center/MediaListingContent.tsx");
+const searchPlatform = read("src/components/search-platform/SearchPlatformModule.tsx");
 const tracking = read("src/components/track/ProjectTrackingExperience.tsx");
 const trackingRoute = read("src/app/(site)/track-your-project/[slug]/page.tsx");
 const projectsRenderer = read("src/components/projects/ProjectsHubModulesRenderer.tsx");
@@ -201,11 +202,12 @@ const consumerFiles = productionSources
   .sort();
 const expectedConsumers = [
   "src/components/media-center/MediaListingContent.tsx",
+  "src/components/search-platform/SearchPlatformModule.tsx",
   "src/components/topics/TopicsListingContent.tsx",
   "src/components/track/ProjectTrackingExperience.tsx",
 ].sort();
 check(
-  "all and only the three approved consumers adopt the canonical owner",
+  "all and only the four approved consumers adopt the canonical owner",
   JSON.stringify(consumerFiles) === JSON.stringify(expectedConsumers),
 );
 check(
@@ -220,6 +222,12 @@ check(
     (media.match(/<PublicPagination/gu)?.length ?? 0) === 1,
 );
 check(
+  "Search Platform adopts once as a URL-driven results consumer",
+  searchPlatform.includes("loadPublicContentCollection") &&
+    (searchPlatform.match(/<PublicPagination/gu)?.length ?? 0) === 1 &&
+    searchPlatform.includes('basePath="/search"'),
+);
+check(
   "Project Tracking adopts five times as a true non-Listing consumer",
   (tracking.match(/<PublicPagination/gu)?.length ?? 0) === 5 &&
     !/(CollectionListingPresentation|TopicsListingModule|ProjectsHubModulesRenderer)/u.test(
@@ -232,7 +240,7 @@ check(
 );
 check(
   "adopted consumers contain no parallel page-window or page-state owner",
-  [topics, media, tracking].every(
+  [topics, media, searchPlatform, tracking].every(
     (source) =>
       !source.includes("buildPublicPaginationItems") &&
       !source.includes("Array.from({ length: totalPages") &&

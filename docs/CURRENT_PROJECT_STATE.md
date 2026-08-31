@@ -42,6 +42,7 @@ Current `main` remains the only official entering baseline. Product Surface Iden
 
 - Unified Content owns administrative article, news, press, site-update, video, and gallery records through `public.topics`.
 - The public content read owner under `src/lib/content/public-content-read/` owns current public Topic/media listing and detail query contracts. Public search consumers adopt it and do not create entity-specific public search runtimes.
+- Search is a portable Page Composition Content Module whose CMS schema owns title, description, placeholder, help text, scope, content types, result count, filters, default sort, and presentation. Every assigned launcher targets the ordinary CMS Page `/search`; that Page composes Hero, Breadcrumb, and Search through existing assignments and is not inferred into Navigation or Footer. Public Content Read remains the sole search read owner and Public Pagination remains the paging UI owner; no Search Runtime, engine, source of truth, or route-local search box exists.
 - The Public Pagination Platform Owner under `src/components/Pagination.tsx` and `src/components/pagination-model.ts` owns only page-navigation UI, the bounded page-window model, and URL page destinations. Topics Listing, Media Listing, and Project Tracking adopt the complete owner; Projects Listing adopts its presentation contract only while retaining local state and smooth-scroll behavior. Public Content and Project Tracking read owners retain page data truth, Listing retains content presentation, and all public pagination surfaces now share one visual contract.
 - Public Content Read owns Featured data eligibility and reads. The independent Featured Page Module owns source scope, automatic featured-only or ordered manual selection, and its Hero, Editorial, Large Card, 3 Cards, and Carousel presentations. Page Composition owns only assignment, position, and order. Media Hub no longer authors or resolves non-listing Featured content, and Topics Listing no longer owns the visual between Intro and Listing.
 - Projects use the database as their only project truth and persist the aggregate through the Project domain RPC owners.
@@ -92,9 +93,9 @@ The 2026-08-23 authorized Project Location Presentation migration closure establ
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                                97 |
-| Production registry versions                      |                                                97 |
-| Registry SQL provenance                           | Exact repository SQL for all 97 deployed versions |
+| Repository migration files                        |                                                98 |
+| Production registry versions                      |                                                98 |
+| Registry SQL provenance                           | Exact repository SQL for all 98 deployed versions |
 | Public tables                                     |                                                58 |
 | Public tables with RLS enabled                    |                                                58 |
 | Public catalog objects with repository provenance |                                               297 |
@@ -144,6 +145,8 @@ The authorized Page Composition adoption correction then applied `20260827122828
 The authorized Topics Listing Presentation Phase 1 closure applied `20260828114621_topics_listing_presentation_phase_1.sql` as migration 96 with exact repository SQL provenance. It seeds one presentation-only Topics Listing template and its Topics page assignment through the existing `mutate_page_composition` write owner; it creates no table, field, Runtime, Capability, read owner, or source of truth.
 
 The authorized Featured Page Module closure applied `20260828233733_featured_page_composition_module.sql` as migration 97 and registered that version once with exact repository SQL provenance. It creates the independent Featured template and Assignment stores under RLS, adopts the existing atomic Page Composition owner, transfers non-listing Media Featured assignments, and seeds the Topics Featured assignment without moving Public Content Read or Placement ownership.
+
+The authorized Search Platform closure applied `20260830232134_search_platform_module.sql` as migration 98 with exact repository SQL provenance. It creates only ordinary Page, Hero, Breadcrumb, Content Template, and Page Assignment data through existing stores and the atomic Page Composition owner. It adds `/search` without adding Navigation or Footer membership, assigns scoped launchers to Topics and Media pages, and introduces no table, field, Runtime, engine, Source of Truth, or performance extension.
 
 ## Removed final-cleanup legacy
 

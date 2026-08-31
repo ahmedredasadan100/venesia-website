@@ -63,6 +63,10 @@ import {
   isVisionGoalsTemplate,
 } from "../../lib/page-blocks/configs";
 import SectionRenderer from "../sections/SectionRenderer";
+import SearchPlatformModule, {
+  type SearchPlatformSearchParams,
+} from "../search-platform/SearchPlatformModule";
+import { isSearchPlatformTemplate } from "../../lib/page-blocks/search-platform-config";
 
 function isWhoWeAreContentBlock(block: ResolvedPageBlock) {
   return block.blockType === "content" && isAboutIntroTemplate(block.template.slug, block.template.variant);
@@ -129,6 +133,8 @@ export type SlotModuleRenderContext = {
   homepageProjects?: HomepageProjectCard[];
   breadcrumbCurrentLabel?: string;
   topicsListingContent?: ReactNode;
+  publicPath?: string;
+  searchParams?: SearchPlatformSearchParams;
 };
 
 /**
@@ -398,6 +404,23 @@ export function buildSlotModuleNodes(
           context.topicsListingContent,
         );
       }
+      continue;
+    }
+
+    if (
+      block.blockType === "content" &&
+      isSearchPlatformTemplate(block.template.slug, block.template.variant)
+    ) {
+      mark(block);
+      push(
+        `search-platform-${block.assignmentId}`,
+        block.sortOrder,
+        <SearchPlatformModule
+          block={block}
+          publicPath={context.publicPath}
+          searchParams={context.searchParams}
+        />,
+      );
       continue;
     }
 

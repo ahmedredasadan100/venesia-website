@@ -10,6 +10,11 @@ import {
   COLLECTION_LISTING_ITEM_LIMITS,
   type CollectionListingItemLimit,
 } from "../collection-modules/item-limit";
+import {
+  asSearchPlatformConfig,
+  isSearchPlatformTemplate,
+  type SearchPlatformConfig,
+} from "./search-platform-config";
 
 export const PAGE_BLOCK_TEXT_ALIGNMENTS = ["right", "center", "left"] as const;
 export type PageBlockTextAlignment =
@@ -775,7 +780,11 @@ export function resolveContentBlockConfig(template: {
   | AboutCtaModuleConfig
   | AboutPrinciplesModuleConfig
   | AboutApproachModuleConfig
-  | HomeProjectsModuleConfig {
+  | HomeProjectsModuleConfig
+  | SearchPlatformConfig {
+  if (isSearchPlatformTemplate(template.slug, template.variant)) {
+    return asSearchPlatformConfig(template.config);
+  }
   if (usesAboutIntroConfigSchema(template.slug, template.variant)) {
     return asAboutIntroConfig(template.config);
   }

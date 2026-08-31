@@ -114,6 +114,22 @@ import {
   type ProjectsHubSortMode,
   type ProjectsHubViewMode,
 } from "../../../../../lib/page-blocks/projects-hub-config";
+import {
+  SEARCH_PLATFORM_FILTERS,
+  SEARCH_PLATFORM_PRESENTATIONS,
+  SEARCH_PLATFORM_RESULT_LIMITS,
+  SEARCH_PLATFORM_SCOPES,
+  isSearchPlatformTemplate,
+  type SearchPlatformConfig,
+  type SearchPlatformFilter,
+  type SearchPlatformPresentation,
+  type SearchPlatformResultLimit,
+  type SearchPlatformScope,
+} from "../../../../../lib/page-blocks/search-platform-config";
+import {
+  isContentType,
+  type ContentType,
+} from "../../../../../lib/admin/content/content-types";
 
 function buildGenericContentConfig(formData: FormData): ContentBlockConfig {
   return {
@@ -184,6 +200,65 @@ async function buildTopicsListingConfig(
   };
 }
 
+function buildSearchPlatformConfig(formData: FormData): SearchPlatformConfig {
+  const scope = cleanText(formData.get("search_scope")) as SearchPlatformScope;
+  if (!SEARCH_PLATFORM_SCOPES.includes(scope)) {
+    throw new Error("نطاق البحث المختار غير مدعوم.");
+  }
+
+  const contentTypes = formData
+    .getAll("content_types")
+    .map((value) => cleanText(value))
+    .filter((value): value is ContentType => isContentType(value));
+  if (scope === "selected" && !contentTypes.length) {
+    throw new Error("اختر نوع محتوى واحدًا على الأقل للنطاق المحدد.");
+  }
+
+  const resultLimit = Number(cleanText(formData.get("result_limit")));
+  if (!SEARCH_PLATFORM_RESULT_LIMITS.includes(resultLimit as SearchPlatformResultLimit)) {
+    throw new Error("عدد نتائج البحث في الصفحة غير مدعوم.");
+  }
+
+  const presentation = cleanText(
+    formData.get("search_presentation"),
+  ) as SearchPlatformPresentation;
+  if (!SEARCH_PLATFORM_PRESENTATIONS.includes(presentation)) {
+    throw new Error("طريقة عرض البحث غير مدعومة.");
+  }
+
+  const filters = formData
+    .getAll("search_filters")
+    .map((value) => cleanText(value))
+    .filter((value): value is SearchPlatformFilter =>
+      SEARCH_PLATFORM_FILTERS.includes(value as SearchPlatformFilter),
+    );
+  const defaultSort = cleanText(formData.get("default_sort"));
+  if (defaultSort !== "newest" && defaultSort !== "oldest") {
+    throw new Error("الترتيب الافتراضي للبحث غير مدعوم.");
+  }
+
+  const title = cleanText(formData.get("title"));
+  const description = cleanText(formData.get("description"));
+  const placeholder = cleanText(formData.get("placeholder"));
+  const helpText = cleanText(formData.get("help_text"));
+  if (!title || !description || !placeholder || !helpText) {
+    throw new Error("أكمل عنوان ووصف ونصوص واجهة البحث.");
+  }
+
+  return {
+    title,
+    description,
+    placeholder,
+    helpText,
+    scope,
+    contentTypes,
+    resultLimit: resultLimit as SearchPlatformResultLimit,
+    presentation,
+    filters,
+    defaultSort,
+  };
+}
+
 const CONTENT_FORMATTING_FIELDS: readonly PageBlockFormattableTextField[] = [
   "eyebrow",
   "title",
@@ -235,7 +310,8 @@ function readTemplateInternalDescription(formData: FormData) {
     schema === "about-intro" ||
     schema === "about-intro-single-image" ||
     schema === "vision-goals" ||
-    schema === "home-projects"
+    schema === "home-projects" ||
+    schema === "search-platform"
   ) {
     return null;
   }
@@ -787,6 +863,7 @@ function resolveStructuredVariant(slug: string, variantInput: string | null) {
   if (isProjectsHubListingTemplate(slug, variantInput))
     return "projects-hub-listing";
   if (isProjectsHubMapTemplate(slug, variantInput)) return "projects-hub-map";
+  if (isSearchPlatformTemplate(slug, variantInput)) return "search-platform";
   if (isTopicsListingTemplate(slug, variantInput)) return "topics-listing";
   return variantInput || "default";
 }
@@ -852,6 +929,13 @@ async function buildContentConfig(
       );
     }
     throw new Error("موديولات صفحة المشروعات لا يمكن حفظها عبر المحرر العام.");
+  }
+
+  if (
+    schema === "search-platform" ||
+    isSearchPlatformTemplate(resolvedSlug, variantInput)
+  ) {
+    return buildSearchPlatformConfig(formData);
   }
 
   if (
