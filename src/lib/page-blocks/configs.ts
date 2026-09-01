@@ -20,6 +20,15 @@ export const PAGE_BLOCK_TEXT_ALIGNMENTS = ["right", "center", "left"] as const;
 export type PageBlockTextAlignment =
   (typeof PAGE_BLOCK_TEXT_ALIGNMENTS)[number];
 
+export const CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS = [
+  "category",
+  "series",
+  "excerpt",
+  "date",
+] as const;
+export type ContentDisplayFormattableTextField =
+  (typeof CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS)[number];
+
 export const PAGE_BLOCK_FORMATTABLE_TEXT_FIELDS = [
   "eyebrow",
   "title",
@@ -32,6 +41,9 @@ export const PAGE_BLOCK_FORMATTABLE_TEXT_FIELDS = [
 ] as const;
 export type PageBlockFormattableTextField =
   (typeof PAGE_BLOCK_FORMATTABLE_TEXT_FIELDS)[number];
+export type PageBlockTextFormattingField =
+  | PageBlockFormattableTextField
+  | ContentDisplayFormattableTextField;
 
 type CapitalizedTextField<Field extends string> = Capitalize<Field>;
 
@@ -41,10 +53,10 @@ export type PageBlockTextFormattingConfig = Partial<
       Field in PageBlockFormattableTextField as `show${CapitalizedTextField<Field>}`
     ]: boolean;
   } & {
-    [Field in PageBlockFormattableTextField as `${Field}Bold`]: boolean;
+    [Field in PageBlockTextFormattingField as `${Field}Bold`]: boolean;
   } & {
     [
-      Field in PageBlockFormattableTextField as `${Field}Alignment`
+      Field in PageBlockTextFormattingField as `${Field}Alignment`
     ]: PageBlockTextAlignment;
   }
 >;
@@ -56,18 +68,26 @@ export type ResolvedPageBlockTextFormat = {
 };
 
 export type PageBlockTextFormattingMap = Partial<
-  Record<PageBlockFormattableTextField, ResolvedPageBlockTextFormat>
+  Record<PageBlockTextFormattingField, ResolvedPageBlockTextFormat>
 >;
 
 export type PageBlockTextFormatDefaults = Partial<ResolvedPageBlockTextFormat>;
 
-function formattingPropertyNames(field: PageBlockFormattableTextField) {
+function formattingPropertyNames(field: PageBlockTextFormattingField) {
   const capitalized = `${field.charAt(0).toUpperCase()}${field.slice(1)}`;
   return {
     visible: `show${capitalized}`,
     bold: `${field}Bold`,
     alignment: `${field}Alignment`,
   } as const;
+}
+
+function ownsFormattingVisibility(
+  field: PageBlockTextFormattingField,
+): field is PageBlockFormattableTextField {
+  return PAGE_BLOCK_FORMATTABLE_TEXT_FIELDS.includes(
+    field as PageBlockFormattableTextField,
+  );
 }
 
 function readFormattingBoolean(value: unknown, fallback: boolean) {
@@ -79,7 +99,7 @@ function readFormattingBoolean(value: unknown, fallback: boolean) {
 
 export function resolvePageBlockTextFormat(
   raw: unknown,
-  field: PageBlockFormattableTextField,
+  field: PageBlockTextFormattingField,
   defaults: PageBlockTextFormatDefaults = {},
 ): ResolvedPageBlockTextFormat {
   const record =
@@ -90,10 +110,12 @@ export function resolvePageBlockTextFormat(
   const alignmentRaw = record[names.alignment] ?? record[`${field}_alignment`];
 
   return {
-    visible: readFormattingBoolean(
-      record[names.visible] ?? record[`show_${field}`],
-      defaults.visible ?? true,
-    ),
+    visible: ownsFormattingVisibility(field)
+      ? readFormattingBoolean(
+          record[names.visible] ?? record[`show_${field}`],
+          defaults.visible ?? true,
+        )
+      : (defaults.visible ?? true),
     bold: readFormattingBoolean(
       record[names.bold] ?? record[`${field}_bold`],
       defaults.bold ?? false,
@@ -109,7 +131,7 @@ export function resolvePageBlockTextFormat(
 export function buildPageBlockTextFormattingPatch(
   formData: FormData,
   fields: ReadonlyArray<{
-    field: PageBlockFormattableTextField;
+    field: PageBlockTextFormattingField;
     defaults?: PageBlockTextFormatDefaults;
     visibility?: boolean;
     bold?: boolean;
@@ -121,7 +143,7 @@ export function buildPageBlockTextFormattingPatch(
   for (const descriptor of fields) {
     const { field, defaults = {} } = descriptor;
     const names = formattingPropertyNames(field);
-    if (descriptor.visibility !== false) {
+    if (ownsFormattingVisibility(field) && descriptor.visibility !== false) {
       patch[names.visible] = readFormattingBoolean(
         formData.get(`show_${field}`),
         defaults.visible ?? true,
@@ -149,7 +171,7 @@ export function buildPageBlockTextFormattingPatch(
 export function resolvePageBlockTextFormattingConfig(
   raw: unknown,
   fields: ReadonlyArray<{
-    field: PageBlockFormattableTextField;
+    field: PageBlockTextFormattingField;
     defaults?: PageBlockTextFormatDefaults;
   }>,
 ): PageBlockTextFormattingConfig {
@@ -162,7 +184,9 @@ export function resolvePageBlockTextFormattingConfig(
       descriptor.field,
       descriptor.defaults,
     );
-    resolved[names.visible] = format.visible;
+    if (ownsFormattingVisibility(descriptor.field)) {
+      resolved[names.visible] = format.visible;
+    }
     resolved[names.bold] = format.bold;
     resolved[names.alignment] = format.alignment;
   }
@@ -173,7 +197,7 @@ export function resolvePageBlockTextFormattingConfig(
 export function resolvePageBlockTextFormattingMap(
   raw: unknown,
   fields: ReadonlyArray<{
-    field: PageBlockFormattableTextField;
+    field: PageBlockTextFormattingField;
     defaults?: PageBlockTextFormatDefaults;
   }>,
 ): PageBlockTextFormattingMap {

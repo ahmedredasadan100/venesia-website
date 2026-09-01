@@ -277,6 +277,14 @@ displayForm.set("description_alignment", "center");
 displayForm.set("show_title_on_page", "on");
 displayForm.set("show_category_on_page", "on");
 displayForm.set("show_excerpt_on_page", "on");
+displayForm.set("category_bold", "true");
+displayForm.set("category_alignment", "left");
+displayForm.set("series_bold", "false");
+displayForm.set("series_alignment", "center");
+displayForm.set("excerpt_bold", "true");
+displayForm.set("excerpt_alignment", "center");
+displayForm.set("date_bold", "true");
+displayForm.set("date_alignment", "left");
 const builtConfig = buildFeaturedModuleConfig(displayForm);
 const builtDisplay = builtConfig.display;
 checkEqual(
@@ -304,6 +312,40 @@ checkEqual(
     alignment: builtConfig.presentation.descriptionAlignment,
   },
   { visible: false, bold: true, alignment: "center" },
+);
+checkEqual(
+  "Featured content display formatting saves through the shared text contract without duplicate visibility keys",
+  {
+    category: {
+      bold: builtConfig.presentation.categoryBold,
+      alignment: builtConfig.presentation.categoryAlignment,
+    },
+    series: {
+      bold: builtConfig.presentation.seriesBold,
+      alignment: builtConfig.presentation.seriesAlignment,
+    },
+    excerpt: {
+      bold: builtConfig.presentation.excerptBold,
+      alignment: builtConfig.presentation.excerptAlignment,
+    },
+    date: {
+      bold: builtConfig.presentation.dateBold,
+      alignment: builtConfig.presentation.dateAlignment,
+    },
+    duplicateVisibility: [
+      "showCategory",
+      "showSeries",
+      "showExcerpt",
+      "showDate",
+    ].map((key) => Object.hasOwn(builtConfig.presentation, key)),
+  },
+  {
+    category: { bold: true, alignment: "left" },
+    series: { bold: false, alignment: "center" },
+    excerpt: { bold: true, alignment: "center" },
+    date: { bold: true, alignment: "left" },
+    duplicateVisibility: [false, false, false, false],
+  },
 );
 
 const legacyDisplay = parseFeaturedModuleConfig({
@@ -346,6 +388,33 @@ checkEqual(
     selection: { mode: "automatic" },
     variant: "carousel",
     itemLimit: 4,
+  },
+);
+checkEqual(
+  "legacy Featured content formatting resolves to backward-compatible defaults without migration",
+  {
+    category: {
+      bold: legacyCarouselConfig.presentation.categoryBold,
+      alignment: legacyCarouselConfig.presentation.categoryAlignment,
+    },
+    series: {
+      bold: legacyCarouselConfig.presentation.seriesBold,
+      alignment: legacyCarouselConfig.presentation.seriesAlignment,
+    },
+    excerpt: {
+      bold: legacyCarouselConfig.presentation.excerptBold,
+      alignment: legacyCarouselConfig.presentation.excerptAlignment,
+    },
+    date: {
+      bold: legacyCarouselConfig.presentation.dateBold,
+      alignment: legacyCarouselConfig.presentation.dateAlignment,
+    },
+  },
+  {
+    category: { bold: false, alignment: "right" },
+    series: { bold: false, alignment: "right" },
+    excerpt: { bold: false, alignment: "right" },
+    date: { bold: false, alignment: "right" },
   },
 );
 
@@ -454,6 +523,14 @@ check(
     'showName="show_cta"',
     'boldName="cta_bold"',
     'alignmentName="cta_alignment"',
+    'boldName="category_bold"',
+    'alignmentName="category_alignment"',
+    'boldName="series_bold"',
+    'alignmentName="series_alignment"',
+    'boldName="excerpt_bold"',
+    'alignmentName="excerpt_alignment"',
+    'boldName="date_bold"',
+    'alignmentName="date_alignment"',
     'className="mt-4 grid items-start gap-4 md:grid-cols-3"',
     'name="show_title_on_page"',
     'value={String(config.display.title)}',
@@ -469,7 +546,7 @@ check(
         (position === 0 || index > indexes[position - 1]),
     ) &&
     (editor.match(/<ModuleEditorVisibilityAlignRow/g) ?? []).length === 9 &&
-    (editor.match(/controlMode="visibility-only"/g) ?? []).length === 5 &&
+    (editor.match(/controlMode="visibility-only"/g) ?? []).length === 1 &&
     !editor.includes("<ContentDisplaySettings") &&
     !editor.includes("FeaturedDisplayVisibility") &&
     !editor.includes("AdminFormSwitch") &&
@@ -510,6 +587,59 @@ check(
     contentCard.includes("ctaFormat.visible") &&
     contentCard.includes("ctaFormat.bold") &&
     contentCard.includes("ctaFormat.alignment"),
+);
+check(
+  "Featured extends the shared text-formatting contract to category, series, excerpt, and date",
+  sharedDisplayContract.includes(
+    "CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS",
+  ) &&
+    sharedDisplayContract.includes("ContentDisplayFormattableTextField") &&
+    sharedDisplayContract.includes(
+      "Field in PageBlockFormattableTextField as `show${CapitalizedTextField<Field>}`",
+    ) &&
+    ["category", "series", "excerpt", "date"].every(
+      (field) =>
+        sharedDisplayContract.includes(`"${field}"`) &&
+        new RegExp(
+          `resolvePageBlockTextFormat\\(\\s*presentationRaw,\\s*"${field}"`,
+          "u",
+        ).test(config),
+    ) &&
+    [
+      "categoryBold: z.boolean()",
+      'categoryAlignment: z.enum(["right", "center", "left"])',
+      "seriesBold: z.boolean()",
+      'seriesAlignment: z.enum(["right", "center", "left"])',
+      "excerptBold: z.boolean()",
+      'excerptAlignment: z.enum(["right", "center", "left"])',
+      "dateBold: z.boolean()",
+      'dateAlignment: z.enum(["right", "center", "left"])',
+      "visibility: false",
+    ].every((token) => config.includes(token)) &&
+    ![
+      "showCategory: z.boolean()",
+      "showSeries: z.boolean()",
+      "showExcerpt: z.boolean()",
+      "showDate: z.boolean()",
+    ].some((token) => config.includes(token)),
+);
+check(
+  "every Featured public presentation applies content formatting through the two canonical card paths",
+  ["category", "series", "excerpt", "date"].every(
+    (field) =>
+      contentCard.includes(
+        `resolvePageBlockTextFormat(presentation, "${field}")`,
+      ) &&
+      component.includes(
+        `resolvePageBlockTextFormat(presentation, "${field}")`,
+      ),
+  ) &&
+    contentCard.includes("pageBlockTextAlignClass") &&
+    contentCard.includes("pageBlockTextPlacementClass") &&
+    component.includes("pageBlockTextAlignClass") &&
+    component.includes("pageBlockTextPlacementClass") &&
+    component.includes("presentation={presentation}") &&
+    carousel.includes("presentation={presentation}"),
 );
 check(
   "CMS category choices come from actual taxonomy owner",

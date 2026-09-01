@@ -4,9 +4,15 @@ import Link from "next/link";
 import type { PublicContentSummary } from "../../lib/content/public-content-read/contract";
 import {
   resolveFeaturedItemDisplay,
+  type FeaturedPresentation,
   type ResolvedFeaturedModule,
 } from "../../lib/featured-modules/contract";
-import type { ContentDisplayOptions } from "../../lib/page-blocks/configs";
+import {
+  type ContentDisplayOptions,
+  pageBlockTextAlignClass,
+  pageBlockTextPlacementClass,
+  resolvePageBlockTextFormat,
+} from "../../lib/page-blocks/configs";
 import CollectionSectionHeader from "../collection-modules/CollectionSectionHeader";
 import FeaturedCarousel from "./FeaturedCarousel";
 import FeaturedContentCard from "./FeaturedContentCard";
@@ -14,13 +20,19 @@ import FeaturedContentCard from "./FeaturedContentCard";
 function FeaturedEditorialSecondaryCard({
   item,
   display,
+  presentation,
 }: {
   item: PublicContentSummary;
   display: ContentDisplayOptions;
+  presentation: FeaturedPresentation;
 }) {
   const resolvedDisplay = resolveFeaturedItemDisplay(display, item);
   const showMetadata =
     resolvedDisplay.category || resolvedDisplay.series || resolvedDisplay.date;
+  const categoryFormat = resolvePageBlockTextFormat(presentation, "category");
+  const seriesFormat = resolvePageBlockTextFormat(presentation, "series");
+  const excerptFormat = resolvePageBlockTextFormat(presentation, "excerpt");
+  const dateFormat = resolvePageBlockTextFormat(presentation, "date");
 
   return (
     <Link href={item.href} className="group block h-full">
@@ -47,12 +59,26 @@ function FeaturedEditorialSecondaryCard({
           {showMetadata ? (
             <div className="flex flex-wrap items-center gap-2 text-xs text-white/38">
               {resolvedDisplay.category ? (
-                <span className="text-[#D8B87A]/75">{item.category}</span>
+                <span
+                  className={`text-[#D8B87A]/75 ${categoryFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(categoryFormat.alignment)} ${categoryFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
+                >
+                  {item.category}
+                </span>
               ) : null}
               {resolvedDisplay.series ? (
-                <span className="text-[#D8B87A]/75">{item.series}</span>
+                <span
+                  className={`text-[#D8B87A]/75 ${seriesFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(seriesFormat.alignment)} ${seriesFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
+                >
+                  {item.series}
+                </span>
               ) : null}
-              {resolvedDisplay.date ? <span>{item.date}</span> : null}
+              {resolvedDisplay.date ? (
+                <span
+                  className={`${dateFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(dateFormat.alignment)} ${dateFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
+                >
+                  {item.date}
+                </span>
+              ) : null}
             </div>
           ) : null}
           {resolvedDisplay.title ? (
@@ -61,7 +87,9 @@ function FeaturedEditorialSecondaryCard({
             </h3>
           ) : null}
           {resolvedDisplay.excerpt ? (
-            <p className="mt-2 line-clamp-2 text-xs leading-5 text-white/48">
+            <p
+              className={`mt-2 line-clamp-2 text-xs leading-5 text-white/48 ${excerptFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(excerptFormat.alignment)} ${pageBlockTextPlacementClass(excerptFormat.alignment)}`}
+            >
               {item.excerpt}
             </p>
           ) : null}
@@ -98,6 +126,7 @@ export default function FeaturedModuleSection({
                     key={item.id}
                     item={item}
                     display={module.display}
+                    presentation={presentation}
                   />
                 ))}
               </div>
