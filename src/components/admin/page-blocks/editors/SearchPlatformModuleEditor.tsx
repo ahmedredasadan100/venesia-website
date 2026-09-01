@@ -37,32 +37,20 @@ function TextField({
   label,
   name,
   defaultValue,
-  multiline = false,
 }: {
   label: string;
   name: string;
   defaultValue: string;
-  multiline?: boolean;
 }) {
   return (
     <label className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} block h-full space-y-2`}>
       <span className="block text-sm font-medium text-white/70">{label}</span>
-      {multiline ? (
-        <textarea
-          name={name}
-          defaultValue={defaultValue}
-          rows={4}
-          required
-          className={fieldClassName("min-h-28 resize-y")}
-        />
-      ) : (
-        <input
-          name={name}
-          defaultValue={defaultValue}
-          required
-          className={fieldClassName("h-11")}
-        />
-      )}
+      <input
+        name={name}
+        defaultValue={defaultValue}
+        required
+        className={fieldClassName("h-11")}
+      />
     </label>
   );
 }
@@ -79,17 +67,17 @@ export default function SearchPlatformModuleEditor({
           محتوى واجهة البحث
         </ModuleEditorSectionHeading>
         <ModuleEditorFieldGrid className="mt-4">
-          <ModuleEditorField nature="short-text" span={6}>
+          <ModuleEditorField nature="short-text" span={3}>
             <TextField label="العنوان" name="title" defaultValue={config.title} />
           </ModuleEditorField>
-          <ModuleEditorField nature="short-description" span={6}>
-            <TextField label="الوصف" name="description" defaultValue={config.description} multiline />
+          <ModuleEditorField nature="short-text" span={3}>
+            <TextField label="الوصف" name="description" defaultValue={config.description} />
           </ModuleEditorField>
-          <ModuleEditorField nature="short-text" span={6}>
-            <TextField label="Placeholder" name="placeholder" defaultValue={config.placeholder} />
+          <ModuleEditorField nature="short-text" span={3}>
+            <TextField label="النص داخل حقل البحث" name="placeholder" defaultValue={config.placeholder} />
           </ModuleEditorField>
-          <ModuleEditorField nature="short-description" span={6}>
-            <TextField label="Help Text" name="help_text" defaultValue={config.helpText} multiline />
+          <ModuleEditorField nature="short-text" span={3}>
+            <TextField label="النص المساعد" name="help_text" defaultValue={config.helpText} />
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>
@@ -99,11 +87,11 @@ export default function SearchPlatformModuleEditor({
           النطاق والعرض
         </ModuleEditorSectionHeading>
         <ModuleEditorFieldGrid className="mt-4">
-          <ModuleEditorField nature="standard" span={4}>
+          <ModuleEditorField nature="standard" span={3}>
             <div className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}>
               <AdminFormListboxSelect
                 name="search_scope"
-                label="Search Scope"
+                label="نطاق البحث"
                 defaultValue={config.scope}
                 options={SEARCH_PLATFORM_SCOPES.map((scope) => ({
                   value: scope,
@@ -113,7 +101,7 @@ export default function SearchPlatformModuleEditor({
               />
             </div>
           </ModuleEditorField>
-          <ModuleEditorField nature="standard" span={4}>
+          <ModuleEditorField nature="standard" span={3}>
             <div className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}>
               <AdminFormListboxSelect
                 name="result_limit"
@@ -127,11 +115,11 @@ export default function SearchPlatformModuleEditor({
               />
             </div>
           </ModuleEditorField>
-          <ModuleEditorField nature="standard" span={4}>
+          <ModuleEditorField nature="standard" span={3}>
             <div className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}>
               <AdminFormListboxSelect
                 name="search_presentation"
-                label="Presentation"
+                label="طريقة العرض"
                 defaultValue={config.presentation}
                 options={SEARCH_PLATFORM_PRESENTATIONS.map((presentation) => ({
                   value: presentation,
@@ -141,11 +129,11 @@ export default function SearchPlatformModuleEditor({
               />
             </div>
           </ModuleEditorField>
-          <ModuleEditorField nature="standard" span={4}>
+          <ModuleEditorField nature="standard" span={3}>
             <div className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}>
               <AdminFormListboxSelect
                 name="default_sort"
-                label="Default Sort"
+                label="الترتيب الافتراضي"
                 defaultValue={config.defaultSort}
                 options={[
                   { value: "newest", label: "الأحدث" },
@@ -158,43 +146,55 @@ export default function SearchPlatformModuleEditor({
         </ModuleEditorFieldGrid>
 
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <fieldset className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} space-y-3`}>
-            <legend className="text-sm font-semibold text-white">Content Types</legend>
-            <p className="text-xs leading-5 text-white/40">
-              تُستخدم عند اختيار نطاق «أنواع محددة» وتظل داخل Unified Content فقط.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {CONTENT_TYPES.map((contentType) => (
-                <label key={contentType} className="flex items-center gap-3 text-sm text-white/65">
-                  <AdminCheckbox
-                    name="content_types"
-                    value={contentType}
-                    defaultChecked={config.contentTypes.includes(contentType)}
-                    label={getContentTypeLabel(contentType)}
-                  />
-                  <span>{getContentTypeLabel(contentType)}</span>
-                </label>
-              ))}
+          <fieldset className="min-w-0">
+            <legend className="sr-only">أنواع المحتوى</legend>
+            <div
+              data-search-platform-option-group="content-types"
+              className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full space-y-3`}
+            >
+              <div className="text-sm font-semibold text-white">أنواع المحتوى</div>
+              <p className="text-xs leading-5 text-white/40">
+                تُستخدم عند اختيار نطاق «أنواع محددة» وتظل داخل المحتوى الموحّد فقط.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {CONTENT_TYPES.map((contentType) => (
+                  <label key={contentType} className="flex items-center gap-3 text-sm text-white/65">
+                    <AdminCheckbox
+                      name="content_types"
+                      value={contentType}
+                      defaultChecked={config.contentTypes.includes(contentType)}
+                      label={getContentTypeLabel(contentType)}
+                    />
+                    <span>{getContentTypeLabel(contentType)}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </fieldset>
 
-          <fieldset className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} space-y-3`}>
-            <legend className="text-sm font-semibold text-white">الفلاتر المتاحة</legend>
-            <p className="text-xs leading-5 text-white/40">
-              تُعرض الفلاتر المختارة داخل صفحة النتائج فقط.
-            </p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {SEARCH_PLATFORM_FILTERS.map((filter) => (
-                <label key={filter} className="flex items-center gap-3 text-sm text-white/65">
-                  <AdminCheckbox
-                    name="search_filters"
-                    value={filter}
-                    defaultChecked={config.filters.includes(filter)}
-                    label={FILTER_LABELS[filter]}
-                  />
-                  <span>{FILTER_LABELS[filter]}</span>
-                </label>
-              ))}
+          <fieldset className="min-w-0">
+            <legend className="sr-only">الفلاتر المتاحة</legend>
+            <div
+              data-search-platform-option-group="filters"
+              className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full space-y-3`}
+            >
+              <div className="text-sm font-semibold text-white">الفلاتر المتاحة</div>
+              <p className="text-xs leading-5 text-white/40">
+                تُعرض الفلاتر المختارة داخل صفحة النتائج فقط.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {SEARCH_PLATFORM_FILTERS.map((filter) => (
+                  <label key={filter} className="flex items-center gap-3 text-sm text-white/65">
+                    <AdminCheckbox
+                      name="search_filters"
+                      value={filter}
+                      defaultChecked={config.filters.includes(filter)}
+                      label={FILTER_LABELS[filter]}
+                    />
+                    <span>{FILTER_LABELS[filter]}</span>
+                  </label>
+                ))}
+              </div>
             </div>
           </fieldset>
         </div>

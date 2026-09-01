@@ -339,74 +339,80 @@ export default function PublicContentSearchInput({
     : null;
 
   return (
-    <div ref={anchorRef} className="relative">
-      <input
-        ref={inputRef}
-        type="search"
-        role="combobox"
-        value={draftQuery}
-        onChange={(event) => {
-          const nextDraft = event.currentTarget.value;
-          draftQueryRef.current = nextDraft;
-          setDraftQuery(nextDraft);
-          setListboxOpen(true);
-          setActiveSuggestion(-1);
-        }}
-        onFocus={() => setListboxOpen(true)}
-        onBlur={(event) => {
-          if (!event.currentTarget.parentElement?.contains(event.relatedTarget)) {
-            setListboxOpen(false);
-            setActiveSuggestion(-1);
-          }
-        }}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        aria-label={ariaLabel}
-        aria-autocomplete="list"
-        aria-controls={showSuggestions ? listboxId : undefined}
-        aria-expanded={showSuggestions}
-        aria-haspopup="listbox"
-        aria-activedescendant={
-          showSuggestions && activeSuggestion >= 0
-            ? `${listboxId}-${activeSuggestion}`
-            : undefined
-        }
-        aria-describedby={statusId}
-        aria-busy={isPending || normalizedDraft !== committedQuery}
-        autoComplete="off"
-        maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}
-        className="w-full rounded-full border border-white/10 bg-black/20 py-3 pe-12 ps-12 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:bg-black/30 focus:ring-2 focus:ring-[#D8B87A]/10"
-      />
-
-      <button
-        type="button"
-        onClick={() => submitSearch(normalizedDraft)}
-        aria-label="تنفيذ البحث"
-        className="absolute start-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-[#D8B87A] text-[#111] transition hover:bg-[#E4C98F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70"
+    <div>
+      <div
+        ref={anchorRef}
+        data-public-content-search-field=""
+        className="relative"
       >
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          className="h-4 w-4"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-        >
-          <circle cx="11" cy="11" r="6" />
-          <path d="m16 16 4 4" />
-        </svg>
-      </button>
+        <input
+          ref={inputRef}
+          type="search"
+          role="combobox"
+          value={draftQuery}
+          onChange={(event) => {
+            const nextDraft = event.currentTarget.value;
+            draftQueryRef.current = nextDraft;
+            setDraftQuery(nextDraft);
+            setListboxOpen(true);
+            setActiveSuggestion(-1);
+          }}
+          onFocus={() => setListboxOpen(true)}
+          onBlur={(event) => {
+            if (!event.currentTarget.parentElement?.contains(event.relatedTarget)) {
+              setListboxOpen(false);
+              setActiveSuggestion(-1);
+            }
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          aria-label={ariaLabel}
+          aria-autocomplete="list"
+          aria-controls={showSuggestions ? listboxId : undefined}
+          aria-expanded={showSuggestions}
+          aria-haspopup="listbox"
+          aria-activedescendant={
+            showSuggestions && activeSuggestion >= 0
+              ? `${listboxId}-${activeSuggestion}`
+              : undefined
+          }
+          aria-describedby={statusId}
+          aria-busy={isPending || normalizedDraft !== committedQuery}
+          autoComplete="off"
+          maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}
+          className="w-full rounded-full border border-white/10 bg-black/20 py-3 pe-12 ps-12 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:bg-black/30 focus:ring-2 focus:ring-[#D8B87A]/10 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
+        />
 
-      {normalizedDraft ? (
         <button
           type="button"
-          onClick={clearSearch}
-          aria-label="مسح البحث"
-          className="absolute end-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-xs text-white/45 transition hover:border-[#D8B87A]/30 hover:text-[#D8B87A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
+          onClick={() => submitSearch(normalizedDraft)}
+          aria-label="تنفيذ البحث"
+          className="absolute end-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-[#D8B87A] text-[#111] transition hover:bg-[#E4C98F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70"
         >
-          ×
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            className="h-4 w-4"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <circle cx="11" cy="11" r="6" />
+            <path d="m16 16 4 4" />
+          </svg>
         </button>
-      ) : null}
+
+        {normalizedDraft ? (
+          <button
+            type="button"
+            onClick={clearSearch}
+            aria-label="مسح البحث"
+            className="absolute start-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-xs text-white/45 transition hover:border-[#D8B87A]/30 hover:text-[#D8B87A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/55"
+          >
+            ×
+          </button>
+        ) : null}
+      </div>
 
       {listbox}
 

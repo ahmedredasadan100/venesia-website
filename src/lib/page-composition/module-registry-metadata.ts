@@ -467,7 +467,7 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
     slug: "search-platform",
     labelAr: "منصة البحث",
     descriptionAr:
-      "بحث موحد في المحتوى العام؛ مصدر النتائج يبقى Public Content Read والظهور مملوكًا لتعيينات الصفحات.",
+      "بحث موحّد في المحتوى العام؛ مصدر النتائج هو نظام قراءة المحتوى العام، والظهور مملوك لتعيينات الصفحات.",
     editorSections: {
       content: {
         navigationLabelAr: "إعدادات البحث",

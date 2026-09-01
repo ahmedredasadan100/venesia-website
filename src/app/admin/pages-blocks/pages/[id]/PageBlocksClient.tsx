@@ -65,6 +65,7 @@ import PageCompositionTableSurface from "./page-blocks/PageCompositionTableSurfa
 import {
   assignmentRowId,
   isManageableAssignment,
+  orderPageCompositionRowsForDisplay,
 } from "./page-blocks/page-blocks-utils";
 import { usePageBlocksAssignModal } from "./page-blocks/use-page-blocks-assign-modal";
 
@@ -198,8 +199,13 @@ export default function PageBlocksClient({
     [],
   );
 
+  const pageDisplayRows = useMemo(
+    () => orderPageCompositionRowsForDisplay(instant.rows),
+    [instant.rows],
+  );
+
   const table = useAdminTable<PageBlockAssignmentRow, SortKey>({
-    initialRows: instant.rows,
+    initialRows: pageDisplayRows,
     getRowId: (row) => assignmentRowId(row),
     sortAccessors,
   });
@@ -315,8 +321,8 @@ export default function PageBlocksClient({
   const { setRows } = table;
 
   useEffect(() => {
-    setRows(instant.rows);
-  }, [instant.rows, setRows]);
+    setRows(pageDisplayRows);
+  }, [pageDisplayRows, setRows]);
 
   async function handleToggleVisibility(row: PageBlockAssignmentRow) {
     if (!isManageableAssignment(row)) return;
