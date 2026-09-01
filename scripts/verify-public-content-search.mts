@@ -242,6 +242,7 @@ assert.ok(dynamicPage.includes("publicPath={page.path}") && dynamicPage.includes
 assert.ok(searchModule.includes("basePath={publicPath}"));
 assert.ok(searchModule.includes('submitPath="/search"'));
 assert.ok(searchModule.includes("submitPersistentParams={{ types: scopeParam }}"));
+assert.ok(searchModule.includes('data-search-platform-scope={scopeParam ?? ""}'));
 assert.ok(searchModule.includes("pageSize: 8"));
 assert.ok(searchModule.includes("suggestions={suggestions}"));
 assert.ok(searchModule.includes("loadPublicContentCollection"));

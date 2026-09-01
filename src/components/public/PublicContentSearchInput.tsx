@@ -179,6 +179,10 @@ export default function PublicContentSearchInput({
 
   const submitSearch = useCallback(
     (nextQuery: string) => {
+      const normalized = normalizePublicContentSearchQuery(nextQuery);
+      requestedQueryRef.current = normalized;
+      draftQueryRef.current = normalized;
+      hasPendingNavigationRef.current = true;
       if (searchTimerRef.current !== null) {
         window.clearTimeout(searchTimerRef.current);
         searchTimerRef.current = null;
@@ -187,7 +191,7 @@ export default function PublicContentSearchInput({
       setActiveSuggestion(-1);
       const href = buildSearchHref(
         submitPath,
-        nextQuery,
+        normalized,
         submitPersistentParams,
       );
       startTransition(() => router.push(href));

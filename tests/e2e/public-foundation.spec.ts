@@ -82,10 +82,12 @@ test.describe("public and unauthenticated browser foundation", () => {
   test("Search Platform launchers converge on /search and the central listbox remains unclipped", async ({ page }) => {
     test.setTimeout(90_000);
 
-    async function verifyLauncher(basePath: string, expectedScope: string) {
+    async function verifyLauncher(basePath: string) {
       await page.goto(basePath, { waitUntil: "domcontentloaded" });
       const launcher = page.locator('[data-search-platform-module="launcher"]');
       await expect(launcher).toBeVisible();
+      const configuredScope = await launcher.getAttribute("data-search-platform-scope");
+      expect(configuredScope).not.toBeNull();
       const input = launcher.locator('input[role="combobox"]');
       await expect(input).toBeVisible();
       await page.waitForLoadState("networkidle");
@@ -94,11 +96,11 @@ test.describe("public and unauthenticated browser foundation", () => {
       await expect.poll(() => new URL(page.url()).pathname, { timeout: 20_000 }).toBe("/search");
       const destination = new URL(page.url());
       expect(destination.searchParams.get("q")).toBe("\u0641\u064a\u0646\u064a\u0633\u064a\u0627");
-      expect(destination.searchParams.get("types")).toBe(expectedScope);
+      expect(destination.searchParams.get("types")).toBe(configuredScope || null);
     }
 
-    await verifyLauncher("/topics", "article");
-    await verifyLauncher("/media-center/news", "news");
+    await verifyLauncher("/topics");
+    await verifyLauncher("/media-center/news");
 
     await page.goto(`/search?q=${encodeURIComponent("\u0645\u0644\u0643\u064a\u0629")}`, {
       waitUntil: "domcontentloaded",

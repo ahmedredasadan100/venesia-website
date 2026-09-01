@@ -167,6 +167,7 @@ function SearchLauncher({
       ].join(" ")}
       dir="rtl"
       data-search-platform-module="launcher"
+      data-search-platform-scope={scopeParam ?? ""}
     >
       <p className="text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70">Search</p>
       <h2 className={`${compact ? "mt-2 text-xl" : "mt-3 text-3xl"} font-semibold text-white`}>
