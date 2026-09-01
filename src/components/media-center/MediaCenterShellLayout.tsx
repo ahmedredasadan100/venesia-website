@@ -1,4 +1,5 @@
 import PageSlotLayout from "../page-composition/PageSlotLayout";
+import type { SearchPlatformSearchParams } from "../search-platform/SearchPlatformModule";
 import type { PageComposition } from "../../lib/page-blocks/page-composition-types";
 import type { MediaCenterCmsPageSlug } from "../../lib/media-center-page-config";
 
@@ -8,6 +9,7 @@ type MediaCenterShellLayoutProps = {
   breadcrumbCurrentLabel?: string;
   sidebarPrefix?: React.ReactNode;
   publicPath?: string;
+  searchParams?: SearchPlatformSearchParams;
   children: React.ReactNode;
 };
 
@@ -18,6 +20,7 @@ export default function MediaCenterShellLayout({
   breadcrumbCurrentLabel,
   sidebarPrefix,
   publicPath,
+  searchParams,
   children,
 }: MediaCenterShellLayoutProps) {
   return (
@@ -34,6 +37,7 @@ export default function MediaCenterShellLayout({
           sidebarPrefix={sidebarPrefix}
           breadcrumbCurrentLabel={breadcrumbCurrentLabel}
           publicPath={publicPath}
+          searchParams={searchParams}
         />
       </main>
     </div>

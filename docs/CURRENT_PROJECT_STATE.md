@@ -93,9 +93,9 @@ The 2026-08-23 authorized Project Location Presentation migration closure establ
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                                98 |
-| Production registry versions                      |                                                98 |
-| Registry SQL provenance                           | Exact repository SQL for all 98 deployed versions |
+| Repository migration files                        |                                                99 |
+| Production registry versions                      |                                                99 |
+| Registry SQL provenance                           | Exact repository SQL for all 99 deployed versions |
 | Public tables                                     |                                                58 |
 | Public tables with RLS enabled                    |                                                58 |
 | Public catalog objects with repository provenance |                                               297 |
@@ -147,6 +147,8 @@ The authorized Topics Listing Presentation Phase 1 closure applied `202608281146
 The authorized Featured Page Module closure applied `20260828233733_featured_page_composition_module.sql` as migration 97 and registered that version once with exact repository SQL provenance. It creates the independent Featured template and Assignment stores under RLS, adopts the existing atomic Page Composition owner, transfers non-listing Media Featured assignments, and seeds the Topics Featured assignment without moving Public Content Read or Placement ownership.
 
 The authorized Search Platform closure applied `20260830232134_search_platform_module.sql` as migration 98 with exact repository SQL provenance. It creates only ordinary Page, Hero, Breadcrumb, Content Template, and Page Assignment data through existing stores and the atomic Page Composition owner. It adds `/search` without adding Navigation or Footer membership, assigns scoped launchers to Topics and Media pages, and introduces no table, field, Runtime, engine, Source of Truth, or performance extension.
+
+The authorized corrective migration `20260831202338_search_platform_autocomplete_regression.sql` is applied as migration 99 with exact repository SQL provenance. It changes only the canonical `/search` Content Template configuration (`content_block_templates.id = 182`, `slug = 'search-platform'`, `variant = 'search-platform'`) so general search defaults to the content-type filter and no longer exposes Topics-only category/series filters. Live pre/post assertions proved all other configuration keys and the six scoped Search templates unchanged; the migration is strictly idempotent and its second isolated execution leaves `updated_at` unchanged.
 
 ## Removed final-cleanup legacy
 

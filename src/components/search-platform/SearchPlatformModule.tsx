@@ -144,10 +144,18 @@ function SearchResultCard({
 
 function SearchLauncher({
   config,
+  publicPath,
   scopeParam,
+  query,
+  suggestions,
+  resultCount,
 }: {
   config: SearchPlatformConfig;
+  publicPath: string;
   scopeParam?: string;
+  query: string;
+  suggestions: readonly PublicContentSearchSuggestion[];
+  resultCount: number;
 }) {
   const compact = config.presentation === "compact";
 
@@ -159,6 +167,7 @@ function SearchLauncher({
       ].join(" ")}
       dir="rtl"
       data-search-platform-module="launcher"
+      data-search-platform-scope={scopeParam ?? ""}
     >
       <p className="text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70">Search</p>
       <h2 className={`${compact ? "mt-2 text-xl" : "mt-3 text-3xl"} font-semibold text-white`}>
@@ -169,8 +178,12 @@ function SearchLauncher({
       ) : null}
       <div className="mt-5">
         <PublicContentSearchInput
-          basePath="/search"
-          persistentParams={{ types: scopeParam }}
+          basePath={publicPath}
+          submitPath="/search"
+          submitPersistentParams={{ types: scopeParam }}
+          query={query}
+          suggestions={suggestions}
+          resultCount={resultCount}
           placeholder={config.placeholder}
           ariaLabel={config.title}
           helpText={config.helpText}
@@ -287,12 +300,39 @@ export default async function SearchPlatformModule({
   const scopeParam = activeScope.length === CONTENT_TYPES.length
     ? undefined
     : activeScope.join(",");
+  const query = normalizePublicContentSearchQuery(firstParam(searchParams.q));
 
   if (publicPath !== "/search" || config.presentation === "compact") {
-    return <SearchLauncher config={config} scopeParam={scopeParam} />;
+    const listing = query
+      ? await loadPublicContentCollection({
+          contentTypes: activeScope.length ? activeScope : configuredScope,
+          search: query,
+          page: 1,
+          pageSize: 8,
+          sort: config.defaultSort,
+        })
+      : EMPTY_RESULT;
+    const suggestions: PublicContentSearchSuggestion[] = listing.items.map((item) => ({
+      id: `${item.contentType}:${item.id}`,
+      title: item.title,
+      href: item.href,
+      meta: [getContentTypeLabel(item.contentType), item.category, item.series]
+        .filter(Boolean)
+        .join(" · "),
+    }));
+
+    return (
+      <SearchLauncher
+        config={config}
+        publicPath={publicPath || "/search"}
+        scopeParam={scopeParam}
+        query={query}
+        suggestions={suggestions}
+        resultCount={listing.totalCount}
+      />
+    );
   }
 
-  const query = normalizePublicContentSearchQuery(firstParam(searchParams.q));
   const scope = resolveScopedContentTypes(config, searchParams);
   const selectedType = firstParam(searchParams.type);
   const selectedCategory = config.filters.includes("category")
