@@ -415,8 +415,22 @@ check(
     editor.includes("presentationOptions.map") &&
     editor.includes("FEATURED_PRESENTATION_LABELS_AR[value]"),
 );
+const featuredDisplaySettingsIndex = editor.indexOf(
+  'data-featured-display-settings=""',
+);
+const featuredDisplayCardIndexes = [
+  'showName="show_eyebrow"',
+  'showName="show_title"',
+  'showName="show_description"',
+  'showName="show_image_on_page"',
+  'showName="show_category_on_page"',
+  'showName="show_series_on_page"',
+  'showName="show_excerpt_on_page"',
+  'showName="show_date_on_page"',
+  'showName="show_cta"',
+].map((token) => editor.indexOf(token, featuredDisplaySettingsIndex));
 check(
-  "CMS editor adopts the shared Listing card language without changing form fields",
+  "CMS editor adopts nine ordered shared display-control cards and delegates item-title visibility to the item contract",
   [
     "MODULE_EDITOR_CONTROL_CARD_CLASS_NAME",
     "<AdminFormGrid columns={4}",
@@ -425,6 +439,12 @@ check(
     "إعدادات العرض",
     'name="presentation_variant"',
     'name="presentation_description"',
+    'showName="show_eyebrow"',
+    'boldName="eyebrow_bold"',
+    'alignmentName="eyebrow_alignment"',
+    'showName="show_title"',
+    'boldName="title_bold"',
+    'alignmentName="title_alignment"',
     'showName="show_description"',
     'boldName="description_bold"',
     'alignmentName="description_alignment"',
@@ -434,16 +454,31 @@ check(
     'showName="show_cta"',
     'boldName="cta_bold"',
     'alignmentName="cta_alignment"',
-    "<ContentDisplaySettings",
-    "showTitle={config.display.title}",
-    "showImage={config.display.image}",
-    "showCategory={config.display.category}",
-    "showSeries={config.display.series}",
-    "showExcerpt={config.display.excerpt}",
-    "showDate={config.display.date}",
-    "includeIntroCard={false}",
-    'className="h-full sm:col-span-2 lg:col-start-3 lg:row-start-1 lg:row-span-2"',
+    'className="mt-4 grid items-start gap-4 md:grid-cols-3"',
+    'name="show_title_on_page"',
+    'value={String(config.display.title)}',
+    "<ModuleEditorVisibilityAlignRow",
+    'name="eyebrow"',
+    'name="title"',
+    'name="cta_text"',
   ].every((token) => editor.includes(token)) &&
+    featuredDisplaySettingsIndex >= 0 &&
+    featuredDisplayCardIndexes.every(
+      (index, position, indexes) =>
+        index > featuredDisplaySettingsIndex &&
+        (position === 0 || index > indexes[position - 1]),
+    ) &&
+    (editor.match(/<ModuleEditorVisibilityAlignRow/g) ?? []).length === 9 &&
+    (editor.match(/controlMode="visibility-only"/g) ?? []).length === 5 &&
+    !editor.includes("<ContentDisplaySettings") &&
+    !editor.includes("FeaturedDisplayVisibility") &&
+    !editor.includes("AdminFormSwitch") &&
+    !editor.includes('alignmentName="display_') &&
+    !editor.includes("min-h-36") &&
+    /<input\s+type="hidden"\s+name="show_title_on_page"\s+value=\{String\(config\.display\.title\)\}/u.test(
+      editor,
+    ) &&
+    !editor.includes("<textarea") &&
     !editor.includes('<textarea name="presentation_description"') &&
     !editor.includes(">\n                      Presentation\n"),
 );

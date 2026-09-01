@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 
 import { AdminCheckbox, AdminFormGrid, AdminFormListboxSelect } from "../ui";
-import ContentDisplaySettings from "../content/editors/ContentDisplaySettings";
 import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../../venesia-scrollbar-styles";
 import {
   getContentTypeLabel,
@@ -349,67 +348,6 @@ export default function FeaturedModuleEditClient({
                           />
                         </div>
                       </ModuleEditorField>
-                      <ModuleEditorField nature="short-text" span={4}>
-                        <ModuleEditorVisibilityAlignRow
-                          label={MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}
-                          showName="show_title"
-                          boldName="title_bold"
-                          alignmentName="title_alignment"
-                          showDefault={titleFormat.visible}
-                          boldDefault={titleFormat.bold}
-                          alignmentDefault={titleFormat.alignment}
-                          className="h-full"
-                        >
-                          <input
-                            name="title"
-                            aria-label={
-                              MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr
-                            }
-                            defaultValue={config.presentation.title}
-                            className={fieldClassName()}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-text" span={4}>
-                        <ModuleEditorVisibilityAlignRow
-                          label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
-                          showName="show_eyebrow"
-                          boldName="eyebrow_bold"
-                          alignmentName="eyebrow_alignment"
-                          showDefault={eyebrowFormat.visible}
-                          boldDefault={eyebrowFormat.bold}
-                          alignmentDefault={eyebrowFormat.alignment}
-                          className="h-full"
-                        >
-                          <input
-                            name="eyebrow"
-                            aria-label={
-                              MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr
-                            }
-                            defaultValue={config.presentation.eyebrow ?? ""}
-                            className={fieldClassName()}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                      <ModuleEditorField nature="short-text" span={4}>
-                        <ModuleEditorVisibilityAlignRow
-                          label="الوصف"
-                          showName="show_description"
-                          boldName="description_bold"
-                          alignmentName="description_alignment"
-                          showDefault={descriptionFormat.visible}
-                          boldDefault={descriptionFormat.bold}
-                          alignmentDefault={descriptionFormat.alignment}
-                          className="h-full"
-                        >
-                          <input
-                            name="presentation_description"
-                            aria-label="الوصف"
-                            defaultValue={config.presentation.description}
-                            className={fieldClassName("h-11")}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
                     </ModuleEditorFieldGrid>
                   </ModuleEditorSection>
 
@@ -417,34 +355,111 @@ export default function FeaturedModuleEditClient({
                     <ModuleEditorSectionHeading intent="settings">
                       إعدادات العرض
                     </ModuleEditorSectionHeading>
-                    <div className="mt-4">
-                      <ContentDisplaySettings
-                        showTitle={config.display.title}
-                        showImage={config.display.image}
-                        showCategory={config.display.category}
-                        showSeries={config.display.series}
-                        showExcerpt={config.display.excerpt}
-                        showDate={config.display.date}
-                        includeIntroCard={false}
+                    <div
+                      className="mt-4 grid items-start gap-4 md:grid-cols-3"
+                      data-featured-display-settings=""
+                    >
+                      <input
+                        type="hidden"
+                        name="show_title_on_page"
+                        value={String(config.display.title)}
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
+                        showName="show_eyebrow"
+                        boldName="eyebrow_bold"
+                        alignmentName="eyebrow_alignment"
+                        showDefault={eyebrowFormat.visible}
+                        boldDefault={eyebrowFormat.bold}
+                        alignmentDefault={eyebrowFormat.alignment}
                       >
-                        <ModuleEditorVisibilityAlignRow
-                          label="نص الإجراء"
-                          showName="show_cta"
-                          boldName="cta_bold"
-                          alignmentName="cta_alignment"
-                          showDefault={ctaFormat.visible}
-                          boldDefault={ctaFormat.bold}
-                          alignmentDefault={ctaFormat.alignment}
-                          className="h-full sm:col-span-2 lg:col-start-3 lg:row-start-1 lg:row-span-2"
-                        >
-                          <input
-                            name="cta_text"
-                            aria-label="نص الإجراء"
-                            defaultValue={config.presentation.ctaText}
-                            className={fieldClassName("h-10")}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ContentDisplaySettings>
+                        <input
+                          name="eyebrow"
+                          aria-label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
+                          defaultValue={config.presentation.eyebrow ?? ""}
+                          className={fieldClassName("h-10")}
+                        />
+                      </ModuleEditorVisibilityAlignRow>
+                      <ModuleEditorVisibilityAlignRow
+                        label="العنوان"
+                        showName="show_title"
+                        boldName="title_bold"
+                        alignmentName="title_alignment"
+                        showDefault={titleFormat.visible}
+                        boldDefault={titleFormat.bold}
+                        alignmentDefault={titleFormat.alignment}
+                      >
+                        <input
+                          name="title"
+                          aria-label={
+                            MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr
+                          }
+                          defaultValue={config.presentation.title}
+                          className={fieldClassName("h-10")}
+                        />
+                      </ModuleEditorVisibilityAlignRow>
+                      <ModuleEditorVisibilityAlignRow
+                        label="الوصف"
+                        showName="show_description"
+                        boldName="description_bold"
+                        alignmentName="description_alignment"
+                        showDefault={descriptionFormat.visible}
+                        boldDefault={descriptionFormat.bold}
+                        alignmentDefault={descriptionFormat.alignment}
+                      >
+                        <input
+                          name="presentation_description"
+                          aria-label="الوصف"
+                          defaultValue={config.presentation.description}
+                          className={fieldClassName("h-10")}
+                        />
+                      </ModuleEditorVisibilityAlignRow>
+                      <ModuleEditorVisibilityAlignRow
+                        label="الصورة"
+                        showName="show_image_on_page"
+                        showDefault={config.display.image}
+                        controlMode="visibility-only"
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="التصنيف"
+                        showName="show_category_on_page"
+                        showDefault={config.display.category}
+                        controlMode="visibility-only"
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="السلسلة"
+                        showName="show_series_on_page"
+                        showDefault={config.display.series}
+                        controlMode="visibility-only"
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="المقتطف"
+                        showName="show_excerpt_on_page"
+                        showDefault={config.display.excerpt}
+                        controlMode="visibility-only"
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="التاريخ"
+                        showName="show_date_on_page"
+                        showDefault={config.display.date}
+                        controlMode="visibility-only"
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="نص الإجراء"
+                        showName="show_cta"
+                        boldName="cta_bold"
+                        alignmentName="cta_alignment"
+                        showDefault={ctaFormat.visible}
+                        boldDefault={ctaFormat.bold}
+                        alignmentDefault={ctaFormat.alignment}
+                      >
+                        <input
+                          name="cta_text"
+                          aria-label="نص الإجراء"
+                          defaultValue={config.presentation.ctaText}
+                          className={fieldClassName("h-10")}
+                        />
+                      </ModuleEditorVisibilityAlignRow>
                     </div>
                   </ModuleEditorSection>
                 </div>

@@ -764,7 +764,17 @@ check(
     !heroVisibility.includes("ALIGN_OPTIONS") &&
     !heroVisibility.includes("function toolClass") &&
     presentation.includes("name={boldName}") &&
-    presentation.includes("value={String(enableBold ? bold : boldDefault)}"),
+    presentation.includes("value={String(hasBoldControl ? bold : boldDefault)}"),
+);
+
+check(
+  "shared formatting row owns a payload-clean visibility-only mode",
+  presentation.includes('controlMode?: "text"') &&
+    presentation.includes('controlMode: "visibility-only"') &&
+    presentation.includes("alignmentName?: never") &&
+    presentation.includes("data-module-editor-control-mode={controlMode}") &&
+    presentation.includes("{alignmentName ? (") &&
+    presentation.includes("hasAlignmentControl || hasBoldControl"),
 );
 
 const statusEditorAdopters = [

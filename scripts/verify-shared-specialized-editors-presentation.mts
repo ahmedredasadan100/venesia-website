@@ -858,9 +858,21 @@ check(
       "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
     ].every((path) => read(path).includes("AdminFormSwitch")) &&
-    read(
+    [
+      "ModuleEditorVisibilityAlignRow",
+      'controlMode="visibility-only"',
+      "md:grid-cols-3",
+    ].every((token) =>
+      read(
+        "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
+      ).includes(token),
+    ) &&
+    !read(
       "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-    ).includes("ContentDisplaySettings") &&
+    ).includes("FeaturedDisplayVisibility") &&
+    !read(
+      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
+    ).includes('alignmentName="display_') &&
     read(
       "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
     ).includes("HeroTextFieldRow") &&
