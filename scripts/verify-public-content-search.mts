@@ -41,6 +41,9 @@ const searchModule = read("src/components/search-platform/SearchPlatformModule.t
 const searchEditor = read("src/components/admin/page-blocks/editors/SearchPlatformModuleEditor.tsx");
 const contentActions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
 const moduleRegistry = read("src/lib/page-blocks/module-edit-registry.ts");
+const moduleRegistryMetadata = read(
+  "src/lib/page-composition/module-registry-metadata.ts",
+);
 const slotRenderer = read("src/components/page-composition/slot-module-nodes.tsx");
 const dynamicPage = read("src/app/(site)/[...slug]/page.tsx");
 const migration = read("sql/migrations/20260830232134_search_platform_module.sql");
@@ -173,6 +176,10 @@ assert.ok(input.includes("window.clearTimeout(searchTimerRef.current)"));
 assert.ok(input.includes("navigateToQuery(normalizedDraft)"));
 assert.ok(input.includes("submitSearch(normalizedDraft)"));
 assert.ok(input.includes('aria-label="تنفيذ البحث"'));
+assert.ok(input.includes('data-public-content-search-field=""'));
+assert.ok(input.includes('className="absolute end-2.5 top-1/2'));
+assert.ok(input.includes('className="absolute start-3 top-1/2'));
+assert.ok(input.includes("[&::-webkit-search-cancel-button]:hidden"));
 assert.ok(input.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
 assert.ok(input.includes('from "../venesia-scrollbar-styles"'));
 assert.ok(!input.includes("admin-scrollbar"));
@@ -257,6 +264,39 @@ assert.ok(searchEditor.includes('name="result_limit"'));
 assert.ok(searchEditor.includes('name="search_presentation"'));
 assert.ok(searchEditor.includes('name="search_filters"'));
 assert.ok(searchEditor.includes('name="default_sort"'));
+assert.equal(
+  searchEditor.match(/span=\{3\}/gu)?.length,
+  8,
+  "Search interface and scope controls must remain four equal cards per desktop row",
+);
+assert.ok(
+  !searchEditor.includes("<textarea") && !searchEditor.includes("multiline"),
+  "Search description and Help Text must remain single-line controls",
+);
+assert.ok(searchEditor.includes('<legend className="sr-only">أنواع المحتوى</legend>'));
+assert.ok(searchEditor.includes('<legend className="sr-only">الفلاتر المتاحة</legend>'));
+assert.ok(searchEditor.includes('data-search-platform-option-group="content-types"'));
+assert.ok(searchEditor.includes('data-search-platform-option-group="filters"'));
+for (const englishProductCopy of [
+  'label="Placeholder"',
+  'label="Help Text"',
+  'label="Search Scope"',
+  'label="Presentation"',
+  'label="Default Sort"',
+  ">Content Types<",
+  "Unified Content",
+]) {
+  assert.ok(
+    !searchEditor.includes(englishProductCopy),
+    `Search editor must not expose English product copy: ${englishProductCopy}`,
+  );
+}
+assert.ok(
+  moduleRegistryMetadata.includes(
+    "مصدر النتائج هو نظام قراءة المحتوى العام، والظهور مملوك لتعيينات الصفحات",
+  ) && !moduleRegistryMetadata.includes("Public Content Read"),
+  "Search editor header copy must remain product-facing Arabic without changing the runtime owner",
+);
 assert.ok(contentActions.includes("buildSearchPlatformConfig"));
 assert.ok(/'search',\r?\n\s*'\/search'/u.test(migration));
 assert.ok(migration.includes("'search-platform'"));

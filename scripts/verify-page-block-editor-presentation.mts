@@ -34,6 +34,11 @@ const { resolveContentModuleEditorConfig } = await jiti.import<
 const { asContentConfig } = await jiti.import<
   typeof import("../src/lib/page-blocks/configs.ts")
 >("../src/lib/page-blocks/configs.ts");
+const { orderPageCompositionRowsForDisplay } = await jiti.import<
+  typeof import("../src/app/admin/pages-blocks/pages/[id]/page-blocks/page-blocks-utils.ts")
+>(
+  "../src/app/admin/pages-blocks/pages/[id]/page-blocks/page-blocks-utils.ts",
+);
 
 let passed = 0;
 function check(label: string, condition: unknown) {
@@ -721,6 +726,24 @@ check(
     assignmentGrid.includes("onDrop") &&
     pagesClient.includes("handleReorderAssignment") &&
     pagesClient.includes("reorderPageComposition("),
+);
+
+check(
+  "Page Composition presents the page structure top-to-bottom without reversing persisted row order",
+  orderPageCompositionRowsForDisplay([
+    { module_kind: "content" },
+    { module_kind: "feed" },
+    { module_kind: "hero" },
+    { module_kind: "breadcrumb" },
+    { module_kind: "cards" },
+  ])
+    .map((row) => row.module_kind)
+    .join(",") === "hero,breadcrumb,content,feed,cards" &&
+    pagesClient.includes(
+      "orderPageCompositionRowsForDisplay(instant.rows)",
+    ) &&
+    pagesClient.includes("initialRows: pageDisplayRows") &&
+    pagesClient.includes("setRows(pageDisplayRows)"),
 );
 
 const heroVisibility = read(
