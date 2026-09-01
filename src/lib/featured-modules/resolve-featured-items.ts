@@ -27,7 +27,7 @@ export async function resolveFeaturedItems(
     sort: "newest",
   });
 
-  if (config.selection.mode === "automatic") return result.items;
+  if (config.selection.mode !== "manual") return result.items;
   const byId = new Map(result.items.map((item) => [item.id, item]));
   return (manualIds ?? [])
     .flatMap((id) => byId.get(id) ?? [])

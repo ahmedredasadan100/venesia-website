@@ -140,6 +140,15 @@ check(
     !resolver.includes("FeaturedCarousel"),
 );
 check(
+  "latest and popular return Public Content Read results instead of falling through manual selection",
+  resolver.includes(
+    'if (config.selection.mode !== "manual") return result.items;',
+  ) &&
+    !resolver.includes(
+      'if (config.selection.mode === "automatic") return result.items;',
+    ),
+);
+check(
   "manual selection uses canonical includeIds, applies authored priority before the read limit, and restores order",
   resolver.includes("config.selection.topicIds.slice(0, config.itemLimit)") &&
     resolver.includes("includeIds: manualIds") &&
