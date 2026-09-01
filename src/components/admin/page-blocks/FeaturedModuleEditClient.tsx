@@ -121,6 +121,19 @@ export default function FeaturedModuleEditClient({
     "description",
   );
   const ctaFormat = resolvePageBlockTextFormat(config.presentation, "cta");
+  const categoryFormat = resolvePageBlockTextFormat(
+    config.presentation,
+    "category",
+  );
+  const seriesFormat = resolvePageBlockTextFormat(
+    config.presentation,
+    "series",
+  );
+  const excerptFormat = resolvePageBlockTextFormat(
+    config.presentation,
+    "excerpt",
+  );
+  const dateFormat = resolvePageBlockTextFormat(config.presentation, "date");
 
   function toggleManualItem(id: number, checked: boolean) {
     setManualIds((current) =>
@@ -423,26 +436,38 @@ export default function FeaturedModuleEditClient({
                       <ModuleEditorVisibilityAlignRow
                         label="التصنيف"
                         showName="show_category_on_page"
+                        boldName="category_bold"
+                        alignmentName="category_alignment"
                         showDefault={config.display.category}
-                        controlMode="visibility-only"
+                        boldDefault={categoryFormat.bold}
+                        alignmentDefault={categoryFormat.alignment}
                       />
                       <ModuleEditorVisibilityAlignRow
                         label="السلسلة"
                         showName="show_series_on_page"
+                        boldName="series_bold"
+                        alignmentName="series_alignment"
                         showDefault={config.display.series}
-                        controlMode="visibility-only"
+                        boldDefault={seriesFormat.bold}
+                        alignmentDefault={seriesFormat.alignment}
                       />
                       <ModuleEditorVisibilityAlignRow
                         label="المقتطف"
                         showName="show_excerpt_on_page"
+                        boldName="excerpt_bold"
+                        alignmentName="excerpt_alignment"
                         showDefault={config.display.excerpt}
-                        controlMode="visibility-only"
+                        boldDefault={excerptFormat.bold}
+                        alignmentDefault={excerptFormat.alignment}
                       />
                       <ModuleEditorVisibilityAlignRow
                         label="التاريخ"
                         showName="show_date_on_page"
+                        boldName="date_bold"
+                        alignmentName="date_alignment"
                         showDefault={config.display.date}
-                        controlMode="visibility-only"
+                        boldDefault={dateFormat.bold}
+                        alignmentDefault={dateFormat.alignment}
                       />
                       <ModuleEditorVisibilityAlignRow
                         label="نص الإجراء"

@@ -29,6 +29,10 @@ export default function FeaturedContentCard({
   const showMetadata =
     resolvedDisplay.category || resolvedDisplay.series || resolvedDisplay.date;
   const isArticle = item.contentType === "article";
+  const categoryFormat = resolvePageBlockTextFormat(presentation, "category");
+  const seriesFormat = resolvePageBlockTextFormat(presentation, "series");
+  const excerptFormat = resolvePageBlockTextFormat(presentation, "excerpt");
+  const dateFormat = resolvePageBlockTextFormat(presentation, "date");
   const ctaFormat = resolvePageBlockTextFormat(presentation, "cta");
 
   return (
@@ -56,28 +60,46 @@ export default function FeaturedContentCard({
         {showMetadata ? (
           <div className="flex flex-wrap items-center gap-3 text-xs text-white/55">
             {resolvedDisplay.category ? (
-              <PublicGoldPill
-                href={
-                  isArticle
-                    ? `/topics?category=${encodeURIComponent(item.categorySlug)}`
-                    : undefined
-                }
+              <span
+                className={`${pageBlockTextAlignClass(categoryFormat.alignment)} ${categoryFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
               >
-                {item.category}
-              </PublicGoldPill>
+                <PublicGoldPill
+                  href={
+                    isArticle
+                      ? `/topics?category=${encodeURIComponent(item.categorySlug)}`
+                      : undefined
+                  }
+                >
+                  <span className={categoryFormat.bold ? "font-bold" : undefined}>
+                    {item.category}
+                  </span>
+                </PublicGoldPill>
+              </span>
             ) : null}
             {resolvedDisplay.series ? (
-              <PublicGoldPill
-                href={
-                  isArticle
-                    ? `/topics?series=${encodeURIComponent(item.seriesSlug)}`
-                    : undefined
-                }
+              <span
+                className={`${pageBlockTextAlignClass(seriesFormat.alignment)} ${seriesFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
               >
-                {item.series}
-              </PublicGoldPill>
+                <PublicGoldPill
+                  href={
+                    isArticle
+                      ? `/topics?series=${encodeURIComponent(item.seriesSlug)}`
+                      : undefined
+                  }
+                >
+                  <span className={seriesFormat.bold ? "font-bold" : undefined}>
+                    {item.series}
+                  </span>
+                </PublicGoldPill>
+              </span>
             ) : null}
-            {resolvedDisplay.date ? <span>{item.date}</span> : null}
+            {resolvedDisplay.date ? (
+              <span
+                className={`${pageBlockTextAlignClass(dateFormat.alignment)} ${dateFormat.bold ? "font-bold" : "font-normal"} ${dateFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
+              >
+                {item.date}
+              </span>
+            ) : null}
           </div>
         ) : null}
         {resolvedDisplay.title ? (
@@ -93,7 +115,9 @@ export default function FeaturedContentCard({
           </h3>
         ) : null}
         {resolvedDisplay.excerpt ? (
-          <p className="mt-4 line-clamp-2 max-w-2xl text-sm leading-7 text-white/65">
+          <p
+            className={`mt-4 line-clamp-2 max-w-2xl text-sm leading-7 text-white/65 ${excerptFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(excerptFormat.alignment)} ${pageBlockTextPlacementClass(excerptFormat.alignment)}`}
+          >
             {item.excerpt}
           </p>
         ) : null}

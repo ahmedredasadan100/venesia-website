@@ -7,6 +7,7 @@ import {
 import {
   buildContentDisplayOptionsFromFormData,
   buildPageBlockTextFormattingPatch,
+  CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS,
   resolveContentDisplayOptions,
   resolvePageBlockTextFormat,
 } from "../page-blocks/configs";
@@ -82,6 +83,14 @@ export const featuredModuleConfigSchema: z.ZodType<FeaturedModuleConfig> = z
         showCta: z.boolean(),
         ctaBold: z.boolean(),
         ctaAlignment: z.enum(["right", "center", "left"]),
+        categoryBold: z.boolean(),
+        categoryAlignment: z.enum(["right", "center", "left"]),
+        seriesBold: z.boolean(),
+        seriesAlignment: z.enum(["right", "center", "left"]),
+        excerptBold: z.boolean(),
+        excerptAlignment: z.enum(["right", "center", "left"]),
+        dateBold: z.boolean(),
+        dateAlignment: z.enum(["right", "center", "left"]),
       })
       .strict(),
   })
@@ -159,6 +168,16 @@ export function parseFeaturedModuleConfig(
     "description",
   );
   const ctaFormat = resolvePageBlockTextFormat(presentationRaw, "cta");
+  const categoryFormat = resolvePageBlockTextFormat(
+    presentationRaw,
+    "category",
+  );
+  const seriesFormat = resolvePageBlockTextFormat(presentationRaw, "series");
+  const excerptFormat = resolvePageBlockTextFormat(
+    presentationRaw,
+    "excerpt",
+  );
+  const dateFormat = resolvePageBlockTextFormat(presentationRaw, "date");
 
   return featuredModuleConfigSchema.parse({
     source:
@@ -212,6 +231,14 @@ export function parseFeaturedModuleConfig(
       showCta: ctaFormat.visible,
       ctaBold: ctaFormat.bold,
       ctaAlignment: ctaFormat.alignment,
+      categoryBold: categoryFormat.bold,
+      categoryAlignment: categoryFormat.alignment,
+      seriesBold: seriesFormat.bold,
+      seriesAlignment: seriesFormat.alignment,
+      excerptBold: excerptFormat.bold,
+      excerptAlignment: excerptFormat.alignment,
+      dateBold: dateFormat.bold,
+      dateAlignment: dateFormat.alignment,
     },
   });
 }
@@ -265,6 +292,10 @@ export function buildFeaturedModuleConfig(
     { field: "title", defaults: { bold: true } },
     { field: "description" },
     { field: "cta" },
+    ...CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS.map((field) => ({
+      field,
+      visibility: false,
+    })),
   ]);
 
   return featuredModuleConfigSchema.parse({
