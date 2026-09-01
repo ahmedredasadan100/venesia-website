@@ -22,6 +22,7 @@ const topicsDetailPage = read("src/app/(site)/topics/[slug]/page.tsx");
 const topicsAdapter = read("src/lib/topics/load-public-topics.ts");
 const topicsListing = read("src/components/topics/TopicsListingContent.tsx");
 const mediaPage = read("src/components/media-center/MediaListingPage.tsx");
+const mediaCenterShell = read("src/components/media-center/MediaCenterShellLayout.tsx");
 const mediaDetailPage = read("src/components/media-center/MediaDetailPage.tsx");
 const mediaCompositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
 const mediaSlotPlan = read("src/components/page-composition/build-slot-render-plan.ts");
@@ -43,6 +44,9 @@ const moduleRegistry = read("src/lib/page-blocks/module-edit-registry.ts");
 const slotRenderer = read("src/components/page-composition/slot-module-nodes.tsx");
 const dynamicPage = read("src/app/(site)/[...slug]/page.tsx");
 const migration = read("sql/migrations/20260830232134_search_platform_module.sql");
+const regressionMigration = read(
+  "sql/migrations/20260831202338_search_platform_autocomplete_regression.sql",
+);
 const architecture = read("AI_ARCHITECTURE_PRINCIPLES.md");
 const currentState = read("docs/CURRENT_PROJECT_STATE.md");
 const systems = read("docs/SYSTEMS_RUNTIMES_CAPABILITIES.md");
@@ -149,6 +153,9 @@ assert.ok(!sitemap.includes('.from("topics")'));
 
 assert.ok(input.includes('router.replace(href, { scroll: false })'));
 assert.ok(input.includes("persistentParams"));
+assert.ok(input.includes("submitPath"));
+assert.ok(input.includes("submitPersistentParams"));
+assert.ok(input.includes("router.push(href)"));
 assert.ok(input.includes("PUBLIC_CONTENT_SEARCH_DEBOUNCE_MS"));
 assert.ok(input.includes("maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}"));
 assert.ok(input.includes('role="combobox"'));
@@ -161,9 +168,11 @@ assert.ok(input.includes("window.addEventListener(\"scroll\", updateFloatingPosi
 assert.ok(!input.includes("z-[9999]") && !input.includes("zIndex: 9999"));
 assert.ok(input.includes('aria-live="polite"'));
 assert.ok(input.includes("ArrowDown") && input.includes("ArrowUp") && input.includes("Escape"));
-assert.ok(input.includes('event.key === "Enter" && normalizedDraft !== committedQuery'));
+assert.ok(input.includes('event.key === "Enter"'));
 assert.ok(input.includes("window.clearTimeout(searchTimerRef.current)"));
-assert.ok(input.includes("navigateToSearch(normalizedDraft)"));
+assert.ok(input.includes("navigateToQuery(normalizedDraft)"));
+assert.ok(input.includes("submitSearch(normalizedDraft)"));
+assert.ok(input.includes('aria-label="تنفيذ البحث"'));
 assert.ok(input.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
 assert.ok(input.includes('from "../venesia-scrollbar-styles"'));
 assert.ok(!input.includes("admin-scrollbar"));
@@ -192,6 +201,7 @@ assert.ok(
   topicsPage.includes("await loadPublicTopicsListing({") &&
     topicsPage.includes("itemsPerPage: listingConfig.itemLimit"),
 );
+assert.ok(topicsPage.includes("searchParams={params}"));
 assert.ok(
   topicsListing.includes("<TopicsListingModule") &&
     !topicsListing.includes("<TopicCard"),
@@ -203,6 +213,8 @@ assert.ok(
   "Topics Search/Listing must not own Featured while non-search listing results avoid assigned Featured identities",
 );
 assert.ok(mediaPage.includes("getMediaListingPage"));
+assert.ok(mediaPage.includes("searchParams={params}"));
+assert.ok(mediaCenterShell.includes("searchParams={searchParams}"));
 assert.ok(!mediaPage.includes("getMediaItems("), "Media search must not fetch a second catalog");
 assert.ok(!mediaPage.includes("searchCatalog"));
 assert.ok(
@@ -227,7 +239,11 @@ assert.ok(searchConfig.includes('"content-type"') && searchConfig.includes('"cat
 assert.ok(moduleRegistry.includes('"search-platform"'));
 assert.ok(slotRenderer.includes("<SearchPlatformModule"));
 assert.ok(dynamicPage.includes("publicPath={page.path}") && dynamicPage.includes("searchParams={resolvedSearchParams}"));
-assert.ok(searchModule.includes('basePath="/search"'));
+assert.ok(searchModule.includes("basePath={publicPath}"));
+assert.ok(searchModule.includes('submitPath="/search"'));
+assert.ok(searchModule.includes("submitPersistentParams={{ types: scopeParam }}"));
+assert.ok(searchModule.includes("pageSize: 8"));
+assert.ok(searchModule.includes("suggestions={suggestions}"));
 assert.ok(searchModule.includes("loadPublicContentCollection"));
 assert.ok(searchModule.includes("loadPublicContentFilterOptions"));
 assert.ok(searchModule.includes("<PublicPagination"));
@@ -241,10 +257,19 @@ assert.ok(searchEditor.includes('name="search_presentation"'));
 assert.ok(searchEditor.includes('name="search_filters"'));
 assert.ok(searchEditor.includes('name="default_sort"'));
 assert.ok(contentActions.includes("buildSearchPlatformConfig"));
-assert.ok(migration.includes("'search',\n  '/search'"));
+assert.ok(/'search',\r?\n\s*'\/search'/u.test(migration));
 assert.ok(migration.includes("'search-platform'"));
 assert.ok(migration.includes("mutate_page_composition"));
 assert.ok(!migration.includes("create table") && !migration.includes("create extension") && !migration.includes("pg_trgm"));
+assert.ok(searchConfig.includes('filters: ["content-type"]'));
+assert.ok(regressionMigration.includes("update public.content_block_templates"));
+assert.ok(regressionMigration.includes("'[\"content-type\"]'::jsonb"));
+assert.ok(regressionMigration.includes("where slug = 'search-platform'"));
+assert.ok(regressionMigration.includes("variant = 'search-platform'"));
+assert.ok(regressionMigration.includes("for update"));
+assert.ok(regressionMigration.includes("is distinct from"));
+assert.ok(!/(create\s+table|alter\s+table|create\s+extension|pg_trgm)/iu.test(regressionMigration));
+assert.ok(!/(create\s+index|alter\s+column|owner\s+to|grant\s+|revoke\s+)/iu.test(regressionMigration));
 assert.ok(
   !migration.includes("menu_items") &&
     !migration.includes("navigation_menu") &&

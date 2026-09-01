@@ -46,12 +46,12 @@ export const DEFAULT_SEARCH_PLATFORM_CONFIG: SearchPlatformConfig = {
   description:
     "اكتشف المقالات والأخبار والبيانات الصحفية وتحديثات التنفيذ والمواد المرئية من مكان واحد.",
   placeholder: "اكتب كلمة البحث...",
-  helpText: "ابحث بالعنوان أو الملخص أو التصنيف أو السلسلة.",
+  helpText: "ابحث بالعنوان أو الملخص أو الرابط.",
   scope: "all",
   contentTypes: [...CONTENT_TYPES],
   resultLimit: 12,
   presentation: "full-grid",
-  filters: [...SEARCH_PLATFORM_FILTERS],
+  filters: ["content-type"],
   defaultSort: "newest",
 };
 

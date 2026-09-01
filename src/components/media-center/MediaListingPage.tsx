@@ -55,6 +55,7 @@ export default async function MediaListingPage({ configKey, searchParams }: Medi
       cmsPageSlug={config.cmsPageSlug}
       composition={composition}
       publicPath={config.basePath}
+      searchParams={params}
     >
       <MediaPageShell>
         <div className="space-y-10">

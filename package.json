@@ -59,7 +59,7 @@
     "verify:featured-module": "node --experimental-strip-types scripts/verify-featured-module.mts",
     "verify:featured-module-postgres": "node --experimental-strip-types scripts/verify-featured-module-postgres.mts",
     "qa:media-center-featured-toggle": "node tests/e2e/qa-media-center-featured-toggle.mjs",
-    "verify:public-content-search": "node --experimental-strip-types scripts/verify-public-content-search.mts",
+    "verify:public-content-search": "node --experimental-strip-types scripts/verify-public-content-search.mts && node --experimental-strip-types scripts/verify-search-platform-regression-postgres.mts",
     "verify:public-pagination": "node --experimental-strip-types scripts/verify-public-pagination-owner.mts",
     "verify:pr-82-delta-recovery": "node --experimental-strip-types scripts/verify-pr-82-delta-recovery.mts",
     "verify:public-media-truth-db": "node scripts/verify-public-media-truth-db.mjs",

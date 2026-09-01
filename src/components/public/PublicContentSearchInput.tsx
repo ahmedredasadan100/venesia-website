@@ -24,6 +24,8 @@ import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";
 type PublicContentSearchInputProps = {
   basePath: string;
   persistentParams?: Readonly<Record<string, string | undefined>>;
+  submitPath?: string;
+  submitPersistentParams?: Readonly<Record<string, string | undefined>>;
   query?: string;
   suggestions?: readonly PublicContentSearchSuggestion[];
   resultCount?: number;
@@ -78,6 +80,8 @@ function resolveFloatingListboxPosition(anchor: DOMRect): FloatingListboxPositio
 export default function PublicContentSearchInput({
   basePath,
   persistentParams = EMPTY_PERSISTENT_PARAMS,
+  submitPath = basePath,
+  submitPersistentParams = persistentParams,
   query = "",
   suggestions = [],
   resultCount = 0,
@@ -135,18 +139,19 @@ export default function PublicContentSearchInput({
     };
   }, [showSuggestions, updateFloatingPosition]);
 
-  const navigateToSearch = useCallback(
-    (nextQuery: string) => {
+  const buildSearchHref = useCallback(
+    (
+      path: string,
+      nextQuery: string,
+      paramsToPersist: Readonly<Record<string, string | undefined>>,
+    ) => {
       const normalized = normalizePublicContentSearchQuery(nextQuery);
-      requestedQueryRef.current = normalized;
-      hasPendingNavigationRef.current = true;
-
       const currentUrl = new URL(window.location.href);
-      const params = currentUrl.pathname === basePath
+      const params = currentUrl.pathname === path
         ? new URLSearchParams(currentUrl.search)
         : new URLSearchParams();
 
-      for (const [key, value] of Object.entries(persistentParams)) {
+      for (const [key, value] of Object.entries(paramsToPersist)) {
         if (value) params.set(key, value);
         else params.delete(key);
       }
@@ -156,10 +161,38 @@ export default function PublicContentSearchInput({
       else params.delete("q");
 
       const queryString = params.toString();
-      const href = queryString ? `${basePath}?${queryString}` : basePath;
+      return queryString ? `${path}?${queryString}` : path;
+    },
+    [],
+  );
+
+  const navigateToQuery = useCallback(
+    (nextQuery: string) => {
+      const normalized = normalizePublicContentSearchQuery(nextQuery);
+      requestedQueryRef.current = normalized;
+      hasPendingNavigationRef.current = true;
+      const href = buildSearchHref(basePath, normalized, persistentParams);
       startTransition(() => router.replace(href, { scroll: false }));
     },
-    [basePath, persistentParams, router],
+    [basePath, buildSearchHref, persistentParams, router],
+  );
+
+  const submitSearch = useCallback(
+    (nextQuery: string) => {
+      if (searchTimerRef.current !== null) {
+        window.clearTimeout(searchTimerRef.current);
+        searchTimerRef.current = null;
+      }
+      setListboxOpen(false);
+      setActiveSuggestion(-1);
+      const href = buildSearchHref(
+        submitPath,
+        nextQuery,
+        submitPersistentParams,
+      );
+      startTransition(() => router.push(href));
+    },
+    [buildSearchHref, router, submitPath, submitPersistentParams],
   );
 
   useLayoutEffect(() => {
@@ -186,7 +219,7 @@ export default function PublicContentSearchInput({
 
     searchTimerRef.current = window.setTimeout(() => {
       searchTimerRef.current = null;
-      navigateToSearch(normalizedDraft);
+      navigateToQuery(normalizedDraft);
     }, PUBLIC_CONTENT_SEARCH_DEBOUNCE_MS);
 
     return () => {
@@ -195,7 +228,7 @@ export default function PublicContentSearchInput({
         searchTimerRef.current = null;
       }
     };
-  }, [navigateToSearch, normalizedDraft]);
+  }, [navigateToQuery, normalizedDraft]);
 
   function selectSuggestion(index: number) {
     const suggestion = suggestions[index];
@@ -206,15 +239,13 @@ export default function PublicContentSearchInput({
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "Enter" && normalizedDraft !== committedQuery) {
+    if (event.key === "Enter") {
       event.preventDefault();
-      if (searchTimerRef.current !== null) {
-        window.clearTimeout(searchTimerRef.current);
-        searchTimerRef.current = null;
+      if (showSuggestions && activeSuggestion >= 0) {
+        selectSuggestion(activeSuggestion);
+      } else {
+        submitSearch(normalizedDraft);
       }
-      setListboxOpen(false);
-      setActiveSuggestion(-1);
-      navigateToSearch(normalizedDraft);
       return;
     }
 
@@ -239,12 +270,6 @@ export default function PublicContentSearchInput({
       return;
     }
 
-    if (event.key === "Enter" && activeSuggestion >= 0) {
-      event.preventDefault();
-      selectSuggestion(activeSuggestion);
-      return;
-    }
-
     if (event.key === "Escape") {
       event.preventDefault();
       setListboxOpen(false);
@@ -258,7 +283,7 @@ export default function PublicContentSearchInput({
     setDraftQuery("");
     setListboxOpen(false);
     setActiveSuggestion(-1);
-    navigateToSearch("");
+    navigateToQuery("");
     window.requestAnimationFrame(() => inputRef.current?.focus());
   }
 
@@ -346,8 +371,27 @@ export default function PublicContentSearchInput({
         aria-busy={isPending || normalizedDraft !== committedQuery}
         autoComplete="off"
         maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}
-        className="w-full rounded-full border border-white/10 bg-black/20 py-3 pe-12 ps-5 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:bg-black/30 focus:ring-2 focus:ring-[#D8B87A]/10"
+        className="w-full rounded-full border border-white/10 bg-black/20 py-3 pe-12 ps-12 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:bg-black/30 focus:ring-2 focus:ring-[#D8B87A]/10"
       />
+
+      <button
+        type="button"
+        onClick={() => submitSearch(normalizedDraft)}
+        aria-label="تنفيذ البحث"
+        className="absolute start-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-[#D8B87A] text-[#111] transition hover:bg-[#E4C98F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70"
+      >
+        <svg
+          aria-hidden="true"
+          viewBox="0 0 24 24"
+          className="h-4 w-4"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <circle cx="11" cy="11" r="6" />
+          <path d="m16 16 4 4" />
+        </svg>
+      </button>
 
       {normalizedDraft ? (
         <button

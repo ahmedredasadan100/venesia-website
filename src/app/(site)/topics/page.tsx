@@ -131,6 +131,7 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
         <PageSlotLayout
           composition={composition}
           publicPath="/topics"
+          searchParams={params}
           fallbackHero={fallbackHero}
           topicsListingContent={
             topicsListingBlock ? listingContent : undefined
