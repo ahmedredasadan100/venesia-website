@@ -377,11 +377,46 @@ export function ModuleEditorStatusSwitch({
 export const MODULE_EDITOR_CONTROL_CARD_CLASS_NAME =
   "rounded-2xl border border-white/10 bg-[#05070B]/72 p-4";
 
+type ModuleEditorVisibilityAlignRowBaseProps = {
+  label: string;
+  showName: string;
+  showDefault?: boolean;
+  enableVisibility?: boolean;
+  controlsPlacement?: "header" | "footer" | "cards";
+  presentation?: "card" | "plain";
+  className?: string;
+  children?: ReactNode;
+};
+
+type ModuleEditorVisibilityAlignRowProps =
+  ModuleEditorVisibilityAlignRowBaseProps &
+    (
+      | {
+          controlMode?: "text";
+          alignmentName: string;
+          boldName?: string;
+          alignmentDefault?: PageBlockTextAlignment;
+          boldDefault?: boolean;
+          enableAlignment?: boolean;
+          enableBold?: boolean;
+        }
+      | {
+          controlMode: "visibility-only";
+          alignmentName?: never;
+          boldName?: never;
+          alignmentDefault?: never;
+          boldDefault?: never;
+          enableAlignment?: never;
+          enableBold?: never;
+        }
+    );
+
 export function ModuleEditorVisibilityAlignRow({
   label,
   alignmentName,
   showName,
   boldName,
+  controlMode = "text",
   alignmentDefault = "right",
   showDefault = true,
   boldDefault = false,
@@ -392,26 +427,15 @@ export function ModuleEditorVisibilityAlignRow({
   presentation = "card",
   className = "",
   children,
-}: {
-  label: string;
-  alignmentName: string;
-  showName: string;
-  boldName?: string;
-  alignmentDefault?: PageBlockTextAlignment;
-  showDefault?: boolean;
-  boldDefault?: boolean;
-  enableAlignment?: boolean;
-  enableBold?: boolean;
-  enableVisibility?: boolean;
-  controlsPlacement?: "header" | "footer" | "cards";
-  presentation?: "card" | "plain";
-  className?: string;
-  children?: ReactNode;
-}) {
+}: ModuleEditorVisibilityAlignRowProps) {
   const [alignment, setAlignment] =
     useState<PageBlockTextAlignment>(alignmentDefault);
   const [show, setShow] = useState(showDefault);
   const [bold, setBold] = useState(boldDefault);
+  const hasAlignmentControl =
+    controlMode === "text" && enableAlignment && Boolean(alignmentName);
+  const hasBoldControl =
+    controlMode === "text" && enableBold && Boolean(boldName);
 
   const submittedValues = (
     <>
@@ -420,16 +444,18 @@ export function ModuleEditorVisibilityAlignRow({
         name={showName}
         value={String(enableVisibility ? show : showDefault)}
       />
-      <input
-        type="hidden"
-        name={alignmentName}
-        value={enableAlignment ? alignment : alignmentDefault}
-      />
+      {alignmentName ? (
+        <input
+          type="hidden"
+          name={alignmentName}
+          value={hasAlignmentControl ? alignment : alignmentDefault}
+        />
+      ) : null}
       {boldName ? (
         <input
           type="hidden"
           name={boldName}
-          value={String(enableBold ? bold : boldDefault)}
+          value={String(hasBoldControl ? bold : boldDefault)}
         />
       ) : null}
     </>
@@ -450,25 +476,30 @@ export function ModuleEditorVisibilityAlignRow({
           wrapLabel
         />
       ) : null}
-      <AdminTextFormatControls
-        ariaLabel={`تنسيق ${label}`}
-        alignmentAriaLabel={`محاذاة ${label}`}
-        alignment={enableAlignment ? alignment : undefined}
-        onAlignmentChange={
-          enableAlignment
-            ? (next) => setAlignment(next as PageBlockTextAlignment)
-            : undefined
-        }
-        bold={boldName && enableBold ? bold : undefined}
-        onBoldChange={boldName && enableBold ? setBold : undefined}
-        embedded
-      />
+      {hasAlignmentControl || hasBoldControl ? (
+        <AdminTextFormatControls
+          ariaLabel={`تنسيق ${label}`}
+          alignmentAriaLabel={`محاذاة ${label}`}
+          alignment={hasAlignmentControl ? alignment : undefined}
+          onAlignmentChange={
+            hasAlignmentControl
+              ? (next) => setAlignment(next as PageBlockTextAlignment)
+              : undefined
+          }
+          bold={hasBoldControl ? bold : undefined}
+          onBoldChange={hasBoldControl ? setBold : undefined}
+          embedded
+        />
+      ) : null}
     </div>
   );
 
   if (controlsPlacement === "cards") {
     return (
-      <div data-module-editor-control-row="">
+      <div
+        data-module-editor-control-row=""
+        data-module-editor-control-mode={controlMode}
+      >
         {submittedValues}
         <div
           className="grid min-w-0 gap-4 lg:grid-cols-2"
@@ -502,6 +533,7 @@ export function ModuleEditorVisibilityAlignRow({
   return (
     <div
       data-module-editor-control-row=""
+      data-module-editor-control-mode={controlMode}
       className={
         presentation === "card"
           ? `${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} ${className}`.trim()
