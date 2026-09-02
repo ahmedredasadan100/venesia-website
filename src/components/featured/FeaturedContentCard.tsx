@@ -26,18 +26,25 @@ export default function FeaturedContentCard({
   size?: "standard" | "large";
 }) {
   const resolvedDisplay = resolveFeaturedItemDisplay(display, item);
+  const showTaxonomy = resolvedDisplay.category || resolvedDisplay.series;
   const showMetadata =
-    resolvedDisplay.category || resolvedDisplay.series || resolvedDisplay.date;
+    showTaxonomy || resolvedDisplay.date;
   const isArticle = item.contentType === "article";
   const categoryFormat = resolvePageBlockTextFormat(presentation, "category");
   const seriesFormat = resolvePageBlockTextFormat(presentation, "series");
   const excerptFormat = resolvePageBlockTextFormat(presentation, "excerpt");
   const dateFormat = resolvePageBlockTextFormat(presentation, "date");
   const ctaFormat = resolvePageBlockTextFormat(presentation, "cta");
+  const cardMinHeightClass =
+    size === "large"
+      ? "min-h-[360px] @2xl/slot-module:min-h-[480px]"
+      : "min-h-[290px]";
+  const seriesMetadataClass =
+    `block w-fit max-w-full text-sm leading-5 text-[#D8B87A] drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] transition hover:text-[#E7CC98] ${seriesFormat.bold ? "font-bold" : "font-medium"} ${pageBlockTextAlignClass(seriesFormat.alignment)} ${pageBlockTextPlacementClass(seriesFormat.alignment)}`.trim();
 
   return (
     <article
-      className={`group relative h-full overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.035] ${size === "large" ? "min-h-[360px] @2xl/slot-module:min-h-[480px]" : "min-h-[290px]"}`}
+      className={`group relative flex h-full flex-col overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.035] ${cardMinHeightClass}`}
     >
       {resolvedDisplay.image ? (
         <Image
@@ -56,46 +63,55 @@ export default function FeaturedContentCard({
         aria-hidden="true"
         className="absolute inset-0 bg-gradient-to-t from-[#05070B] via-[#05070B]/50 to-transparent"
       />
-      <div className="absolute inset-x-0 bottom-0 p-6 @xl/slot-module:p-8">
+      <div
+        className={`relative z-10 mt-auto flex w-full flex-col justify-end p-6 @xl/slot-module:p-8 ${cardMinHeightClass}`}
+      >
         {showMetadata ? (
-          <div className="flex flex-wrap items-center gap-3 text-xs text-white/55">
-            {resolvedDisplay.category ? (
-              <span
-                className={`${pageBlockTextAlignClass(categoryFormat.alignment)} ${categoryFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
+          <div
+            data-featured-metadata-area=""
+            className="grid gap-1.5 text-sm font-medium leading-5 text-white/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+          >
+            {showTaxonomy ? (
+              <div
+                data-featured-taxonomy-stack=""
+                className="grid -translate-y-2 gap-1"
               >
-                <PublicGoldPill
-                  href={
-                    isArticle
-                      ? `/topics?category=${encodeURIComponent(item.categorySlug)}`
-                      : undefined
-                  }
-                >
-                  <span className={categoryFormat.bold ? "font-bold" : undefined}>
-                    {item.category}
+                {resolvedDisplay.category ? (
+                  <span
+                    className={`block w-full ${pageBlockTextAlignClass(categoryFormat.alignment)}`}
+                  >
+                    <PublicGoldPill
+                      href={
+                        isArticle
+                          ? `/topics?category=${encodeURIComponent(item.categorySlug)}`
+                          : undefined
+                      }
+                    >
+                      <span
+                        className={`text-sm leading-5 ${categoryFormat.bold ? "font-bold" : "font-medium"}`}
+                      >
+                        {item.category}
+                      </span>
+                    </PublicGoldPill>
                   </span>
-                </PublicGoldPill>
-              </span>
-            ) : null}
-            {resolvedDisplay.series ? (
-              <span
-                className={`${pageBlockTextAlignClass(seriesFormat.alignment)} ${seriesFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
-              >
-                <PublicGoldPill
-                  href={
-                    isArticle
-                      ? `/topics?series=${encodeURIComponent(item.seriesSlug)}`
-                      : undefined
-                  }
-                >
-                  <span className={seriesFormat.bold ? "font-bold" : undefined}>
-                    {item.series}
-                  </span>
-                </PublicGoldPill>
-              </span>
+                ) : null}
+                {resolvedDisplay.series ? (
+                  isArticle ? (
+                    <Link
+                      href={`/topics?series=${encodeURIComponent(item.seriesSlug)}`}
+                      className={seriesMetadataClass}
+                    >
+                      {item.series}
+                    </Link>
+                  ) : (
+                    <span className={seriesMetadataClass}>{item.series}</span>
+                  )
+                ) : null}
+              </div>
             ) : null}
             {resolvedDisplay.date ? (
               <span
-                className={`${pageBlockTextAlignClass(dateFormat.alignment)} ${dateFormat.bold ? "font-bold" : "font-normal"} ${dateFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
+                className={`block w-full ${showTaxonomy ? "border-t border-white/10 pt-1.5" : ""} ${pageBlockTextAlignClass(dateFormat.alignment)} ${dateFormat.bold ? "font-bold" : "font-normal"}`.trim()}
               >
                 {item.date}
               </span>
@@ -104,7 +120,7 @@ export default function FeaturedContentCard({
         ) : null}
         {resolvedDisplay.title ? (
           <h3
-            className={`${size === "large" ? "text-2xl @xl/slot-module:text-4xl" : "text-xl"} mt-3 font-semibold leading-tight text-white`}
+            className={`${size === "large" ? "text-2xl @xl/slot-module:text-4xl" : "min-h-12 text-xl"} mt-2 line-clamp-2 font-semibold leading-tight text-white`}
           >
             <Link
               href={item.href}
@@ -116,7 +132,7 @@ export default function FeaturedContentCard({
         ) : null}
         {resolvedDisplay.excerpt ? (
           <p
-            className={`mt-4 line-clamp-2 max-w-2xl text-sm leading-7 text-white/65 ${excerptFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(excerptFormat.alignment)} ${pageBlockTextPlacementClass(excerptFormat.alignment)}`}
+            className={`mt-4 max-w-2xl text-sm leading-7 text-white/65 ${size === "large" ? "min-h-14 line-clamp-2" : "min-h-7 line-clamp-1"} ${excerptFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(excerptFormat.alignment)} ${pageBlockTextPlacementClass(excerptFormat.alignment)}`}
           >
             {item.excerpt}
           </p>

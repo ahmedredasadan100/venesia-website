@@ -14,6 +14,7 @@ import {
   resolvePageBlockTextFormat,
 } from "../../lib/page-blocks/configs";
 import CollectionSectionHeader from "../collection-modules/CollectionSectionHeader";
+import PublicGoldPill from "../public/PublicGoldPill";
 import FeaturedCarousel from "./FeaturedCarousel";
 import FeaturedContentCard from "./FeaturedContentCard";
 
@@ -27,8 +28,9 @@ function FeaturedEditorialSecondaryCard({
   presentation: FeaturedPresentation;
 }) {
   const resolvedDisplay = resolveFeaturedItemDisplay(display, item);
+  const showTaxonomy = resolvedDisplay.category || resolvedDisplay.series;
   const showMetadata =
-    resolvedDisplay.category || resolvedDisplay.series || resolvedDisplay.date;
+    showTaxonomy || resolvedDisplay.date;
   const categoryFormat = resolvePageBlockTextFormat(presentation, "category");
   const seriesFormat = resolvePageBlockTextFormat(presentation, "series");
   const excerptFormat = resolvePageBlockTextFormat(presentation, "excerpt");
@@ -57,24 +59,40 @@ function FeaturedEditorialSecondaryCard({
 
         <div className="min-w-0 self-center">
           {showMetadata ? (
-            <div className="flex flex-wrap items-center gap-2 text-xs text-white/38">
-              {resolvedDisplay.category ? (
-                <span
-                  className={`text-[#D8B87A]/75 ${categoryFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(categoryFormat.alignment)} ${categoryFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
+            <div
+              data-featured-metadata-area=""
+              className="grid gap-1.5 text-sm font-medium leading-5 text-white/70 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]"
+            >
+              {showTaxonomy ? (
+                <div
+                  data-featured-taxonomy-stack=""
+                  className="grid -translate-y-2 gap-1"
                 >
-                  {item.category}
-                </span>
-              ) : null}
-              {resolvedDisplay.series ? (
-                <span
-                  className={`text-[#D8B87A]/75 ${seriesFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(seriesFormat.alignment)} ${seriesFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
-                >
-                  {item.series}
-                </span>
+                  {resolvedDisplay.category ? (
+                    <span
+                      className={`block w-full ${pageBlockTextAlignClass(categoryFormat.alignment)}`}
+                    >
+                      <PublicGoldPill>
+                        <span
+                          className={`text-sm leading-5 ${categoryFormat.bold ? "font-bold" : "font-medium"}`}
+                        >
+                          {item.category}
+                        </span>
+                      </PublicGoldPill>
+                    </span>
+                  ) : null}
+                  {resolvedDisplay.series ? (
+                    <span
+                      className={`block w-full text-sm leading-5 text-[#D8B87A] ${seriesFormat.bold ? "font-bold" : "font-medium"} ${pageBlockTextAlignClass(seriesFormat.alignment)}`.trim()}
+                    >
+                      {item.series}
+                    </span>
+                  ) : null}
+                </div>
               ) : null}
               {resolvedDisplay.date ? (
                 <span
-                  className={`${dateFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(dateFormat.alignment)} ${dateFormat.alignment === "right" ? "" : "basis-full w-full"}`.trim()}
+                  className={`block w-full ${showTaxonomy ? "border-t border-white/10 pt-1.5" : ""} leading-5 ${dateFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(dateFormat.alignment)}`.trim()}
                 >
                   {item.date}
                 </span>
@@ -82,13 +100,13 @@ function FeaturedEditorialSecondaryCard({
             </div>
           ) : null}
           {resolvedDisplay.title ? (
-            <h3 className="mt-2 line-clamp-2 text-sm font-semibold leading-6 text-white transition group-hover:text-[#D8B87A]">
+            <h3 className="mt-2 min-h-12 line-clamp-2 text-sm font-semibold leading-6 text-white transition group-hover:text-[#D8B87A]">
               {item.title}
             </h3>
           ) : null}
           {resolvedDisplay.excerpt ? (
             <p
-              className={`mt-2 line-clamp-2 text-xs leading-5 text-white/48 ${excerptFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(excerptFormat.alignment)} ${pageBlockTextPlacementClass(excerptFormat.alignment)}`}
+              className={`mt-2 min-h-10 line-clamp-2 text-xs leading-5 text-white/48 ${excerptFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(excerptFormat.alignment)} ${pageBlockTextPlacementClass(excerptFormat.alignment)}`}
             >
               {item.excerpt}
             </p>
