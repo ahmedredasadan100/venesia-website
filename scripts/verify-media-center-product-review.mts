@@ -25,6 +25,14 @@ const {
 const { resolveMediaListingConfig } = await jiti.import<
   typeof import("../src/lib/media-hub-modules/listing-presentation.ts")
 >("../src/lib/media-hub-modules/listing-presentation.ts");
+const {
+  COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY,
+  DEFAULT_COLLECTION_DETAILS_ACTION,
+  buildCollectionModuleDisplayFormattingFromFormData,
+  resolveCollectionModuleDisplayFormatting,
+} = await jiti.import<typeof import("../src/lib/page-blocks/configs.ts")>(
+  "../src/lib/page-blocks/configs.ts",
+);
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -95,6 +103,7 @@ assert.deepEqual(featuredConfig, {
   type: "video",
   itemLimit: 4,
   contentHierarchy,
+  display: resolveCollectionModuleDisplayFormatting({}),
   presentation,
 });
 assert.equal(
@@ -121,6 +130,30 @@ assert.deepEqual(hubFeaturedConfig.contentHierarchy, contentHierarchy);
 assert.equal("sideLimit" in hubFeaturedConfig, false);
 assert.equal("listLimit" in hubFeaturedConfig, false);
 
+const listingDisplay = resolveCollectionModuleDisplayFormatting({
+  title: true,
+  image: false,
+  excerpt: true,
+  date: false,
+  category: true,
+  series: false,
+  titleBold: false,
+  titleAlignment: "center",
+  categoryBold: true,
+  categoryAlignment: "left",
+  seriesBold: true,
+  seriesAlignment: "center",
+  excerptBold: true,
+  excerptAlignment: "left",
+  dateBold: true,
+  dateAlignment: "center",
+  details: {
+    text: "عرض التفاصيل",
+    visible: true,
+    bold: false,
+    alignment: "left",
+  },
+});
 const listingConfig = buildMediaHubModuleConfig(
   "videos",
   "topics",
@@ -133,20 +166,7 @@ const listingConfig = buildMediaHubModuleConfig(
     itemLimit: 12,
     presentation: "list",
     itemsPerRow: 3,
-    display: {
-      title: true,
-      image: false,
-      excerpt: true,
-      date: false,
-      category: true,
-      series: false,
-      details: {
-        text: "عرض التفاصيل",
-        visible: true,
-        bold: false,
-        alignment: "left",
-      },
-    },
+    display: listingDisplay,
   },
 );
 assert.equal(listingConfig.placement, "listing");
@@ -154,20 +174,7 @@ assert.deepEqual(listingConfig.listing, {
   itemLimit: 12,
   presentation: "list",
   itemsPerRow: 3,
-  display: {
-    title: true,
-    image: false,
-    excerpt: true,
-    date: false,
-    category: true,
-    series: false,
-    details: {
-      text: "عرض التفاصيل",
-      visible: true,
-      bold: false,
-      alignment: "left",
-    },
-  },
+  display: listingDisplay,
 });
 const resolvedAssignedListing = resolveMediaListingConfig(
   {
@@ -182,6 +189,73 @@ assert.equal(
 );
 assert.deepEqual(resolvedAssignedListing.presentation, listingConfig.listing);
 assert.equal("featuredMode" in getDefaultMediaListingPresentation(), false);
+assert.deepEqual(
+  getDefaultMediaListingPresentation().display,
+  resolveCollectionModuleDisplayFormatting({}),
+);
+assert.deepEqual(DEFAULT_COLLECTION_DETAILS_ACTION, {
+  text: "اقرأ المزيد",
+  visible: true,
+  bold: false,
+  alignment: "right",
+});
+assert.equal(
+  COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY.id,
+  "collection-module-display-formatting",
+);
+assert.equal(
+  Object.keys(COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY.fields).length,
+  7,
+);
+
+const formattingFormData = new FormData();
+for (const field of ["title", "image", "category", "series", "excerpt", "date"]) {
+  formattingFormData.set(`show_${field}_on_page`, "true");
+}
+for (const field of ["title", "category", "series", "excerpt", "date"]) {
+  formattingFormData.set(`${field}_bold`, field === "title" ? "true" : "false");
+  formattingFormData.set(`${field}_alignment`, field === "series" ? "left" : "right");
+}
+formattingFormData.set("details_text", "عرض التفاصيل");
+formattingFormData.set("show_details", "true");
+formattingFormData.set("details_bold", "false");
+formattingFormData.set("details_alignment", "center");
+const savedFormatting = buildCollectionModuleDisplayFormattingFromFormData(
+  formattingFormData,
+);
+assert.equal(savedFormatting.seriesAlignment, "left");
+assert.equal(savedFormatting.details.alignment, "center");
+
+const parsedListingFormatting = parseMediaHubModuleConfig(
+  {
+    placement: "listing",
+    source: "topics",
+    type: "news",
+    presentation,
+    listing: {
+      itemLimit: 6,
+      presentation: "list",
+      itemsPerRow: 3,
+      display: savedFormatting,
+    },
+  },
+  "site-updates",
+).listing?.display;
+assert.equal(parsedListingFormatting?.seriesAlignment, "left");
+assert.equal(parsedListingFormatting?.details.alignment, "center");
+const parsedHubFormatting = parseMediaHubModuleConfig(
+  {
+    placement: "hub",
+    source: "topics",
+    type: "video",
+    itemLimit: 4,
+    display: savedFormatting,
+    presentation,
+  },
+  "videos",
+).display;
+assert.equal(parsedHubFormatting?.seriesAlignment, "left");
+assert.equal(parsedHubFormatting?.details.alignment, "center");
 
 const legacyPressFeatured = parseMediaHubModuleConfig(
   {
@@ -581,7 +655,17 @@ assert.ok(!editor.includes("مصدر البيانات"));
 assert.ok(!action.includes('placementInput === "featured"'));
 assert.ok(action.includes('sectionKey === "featured"'));
 assert.ok(
-  action.includes("buildContentDisplayOptionsFromFormData(formData, false)"),
+  action.includes("buildCollectionModuleDisplayFormattingFromFormData(formData)"),
+);
+assert.ok(!action.includes("buildContentDisplayOptionsFromFormData("));
+assert.ok(!action.includes("buildCollectionDetailsActionFromFormData("));
+assert.ok(
+  sharedDisplayContract.includes(
+    "COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY",
+  ),
+);
+assert.ok(
+  sharedDisplayContract.includes("resolveCollectionModuleDisplayFormatting"),
 );
 for (const fieldName of [
   "show_title_on_page",
@@ -593,9 +677,6 @@ for (const fieldName of [
 ]) {
   assert.ok(sharedDisplayContract.includes(`\"${fieldName}\"`));
 }
-assert.ok(
-  action.includes("buildCollectionDetailsActionFromFormData(formData)"),
-);
 for (const detailsField of [
   'name="details_text"',
   'showName="show_details"',
@@ -604,6 +685,20 @@ for (const detailsField of [
 ]) {
   assert.ok(sharedCollectionEditor.includes(detailsField));
 }
+for (const textField of ["title", "category", "series", "excerpt", "date"]) {
+  assert.ok(sharedCollectionEditor.includes(`boldName="${textField}_bold"`));
+  assert.ok(
+    sharedCollectionEditor.includes(
+      `alignmentName="${textField}_alignment"`,
+    ),
+  );
+}
+assert.ok(sharedCollectionEditor.includes('controlMode="visibility-only"'));
+assert.equal(
+  sharedCollectionEditor.match(/<ModuleEditorVisibilityAlignRow/gu)?.length,
+  7,
+);
+assert.ok(editor.includes("CollectionModuleDisplayFormattingFields"));
 for (const retiredField of [
   "side_limit",
   "list_limit",
@@ -635,6 +730,15 @@ const mediaListingContent = read(
 const mediaListingCard = read(
   "src/components/media-center/MediaContentCard.tsx",
 );
+const mediaDisplayAdapter = read(
+  "src/lib/media-center/collection-display-adapter.ts",
+);
+const mediaParseConfig = read(
+  "src/lib/media-hub-modules/parse-config.ts",
+);
+const mediaHubRenderer = read(
+  "src/components/media-center/renderMediaHubSections.tsx",
+);
 const topicsListingPresenter = read(
   "src/components/topics/TopicsListingModule.tsx",
 );
@@ -663,10 +767,12 @@ assert.ok(capabilityFields.includes('activeLayout === "featured"'));
 assert.ok(capabilityFields.includes('mosaic: "فسيفساء بصرية"'));
 assert.ok(capabilityFields.includes('timeline: "خط زمني بالبطاقات"'));
 assert.ok(capabilityFields.includes('"timeline-digest": "موجز زمني"'));
-assert.ok(sharedCollectionEditor.includes("ContentDisplaySettings"));
+assert.ok(
+  sharedCollectionEditor.includes("CollectionModuleDisplayFormattingFields"),
+);
 assert.ok(
   sharedCollectionEditor.includes(
-    "sm:col-span-2 lg:col-start-3 lg:row-start-1 lg:row-span-2",
+    'data-collection-display-formatting-capability=""',
   ),
 );
 assert.ok(!sharedCollectionEditor.includes("additionalSettings"));
@@ -681,6 +787,28 @@ assert.ok(
   mediaListingCard.includes("displayOverrides: CollectionDisplayOverrides"),
 );
 assert.ok(mediaListingCard.includes("<CollectionListingCard"));
+assert.ok(mediaListingCard.includes("resolveMediaCollectionItemDisplay"));
+assert.ok(mediaListingCard.includes("display={display}"));
+assert.ok(mediaDisplayAdapter.includes("resolveCollectionModuleItemDisplay"));
+assert.ok(!mediaDisplayAdapter.includes("DEFAULT_COLLECTION"));
+assert.ok(!mediaDisplayAdapter.includes("FormData"));
+assert.ok(mediaParseConfig.includes("resolveCollectionModuleDisplayFormatting"));
+assert.ok(mediaParseConfig.includes("display?: ResolvedCollectionModuleDisplayFormatting"));
+assert.ok(mediaHubRenderer.includes("module.config.display"));
+assert.ok(mediaHubRenderer.includes("display={display}"));
+for (const hubPresenter of [
+  "src/components/media-center/MediaCenterCollectionItems.tsx",
+  "src/components/media-center/MediaCenterHubFeatured.tsx",
+  "src/components/media-center/MediaCenterHubFeaturedCollection.tsx",
+  "src/components/media-center/MediaCenterHubMosaic.tsx",
+  "src/components/media-center/MediaCenterHubTimeline.tsx",
+]) {
+  const source = read(hubPresenter);
+  assert.ok(source.includes("CollectionDisplayOverrides"), hubPresenter);
+  assert.ok(source.includes("display"), hubPresenter);
+  assert.ok(source.includes("resolveMediaCollectionItemDisplay"), hubPresenter);
+  assert.ok(source.includes("pageBlockTextAlignClass"), hubPresenter);
+}
 assert.ok(!mediaListingCard.includes("MediaListingCardVariant"));
 assert.ok(!mediaListingPage.includes("paginationEnabled"));
 assert.ok(!mediaListingPage.includes("cardVariant"));
@@ -823,12 +951,10 @@ assert.ok(timelineCollection.includes("@xl/slot-module:grid-cols-[130px_1fr]"));
 assert.ok(timelineCollection.includes('"flex h-full flex-col"'));
 assert.ok(timelineCollection.includes("relative flex flex-1 flex-col gap-4"));
 assert.ok(timelineCollection.includes('isTimelineDigest ? "256px" : "160px"'));
-assert.ok(
-  timelineCollection.includes(
-    '"mt-2 line-clamp-2 text-base font-semibold leading-7',
-  ),
-);
-assert.ok(timelineCollection.includes('"mt-2 line-clamp-2 text-xs leading-6'));
+assert.ok(timelineCollection.includes("formatting.titleBold"));
+assert.ok(timelineCollection.includes("formatting.titleAlignment"));
+assert.ok(timelineCollection.includes("formatting.excerptBold"));
+assert.ok(timelineCollection.includes("formatting.excerptAlignment"));
 assert.ok(mediaHubPresenter.includes('className="h-full"'));
 assert.equal(
   existsSync(

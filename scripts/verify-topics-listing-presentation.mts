@@ -12,11 +12,16 @@ const jiti = createJiti(import.meta.url);
 
 const {
   CONTENT_DISPLAY_FORM_FIELDS,
+  COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY,
+  DEFAULT_COLLECTION_DETAILS_ACTION,
   TOPICS_LISTING_ITEM_LIMITS,
   TOPICS_LISTING_ITEMS_PER_ROW,
   TOPICS_LISTING_PRESENTATIONS,
   asTopicsListingConfig,
+  buildCollectionModuleDisplayFormattingFromFormData,
+  buildCollectionDisplayTextFormattingFromFormData,
   isTopicsListingTemplate,
+  resolveCollectionDisplayTextFormatting,
 } = await jiti.import<typeof import("../src/lib/page-blocks/configs.ts")>(
   "../src/lib/page-blocks/configs.ts",
 );
@@ -41,9 +46,6 @@ const topicsEditor = read(
 const collectionEditor = read(
   "src/components/admin/page-blocks/editors/CollectionModuleEditor.tsx",
 );
-const contentDisplaySettings = read(
-  "src/components/admin/content/editors/ContentDisplaySettings.tsx",
-);
 const editorClient = read(
   "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
 );
@@ -54,6 +56,7 @@ const topicFilterOptionsOwner = read(
   "src/lib/feed-modules/load-topic-filter-options.ts",
 );
 const actions = read("src/app/admin/pages-blocks/blocks/content/actions.ts");
+const configOwner = read("src/lib/page-blocks/configs.ts");
 const presenter = read("src/components/topics/TopicsListingModule.tsx");
 const topicCard = read("src/components/topics/TopicCard.tsx");
 const sharedPresenter = read(
@@ -83,6 +86,78 @@ check(
 check(
   "item-limit contract is limited to 6, 9, 12, and 24",
   JSON.stringify(TOPICS_LISTING_ITEM_LIMITS) === JSON.stringify([6, 9, 12, 24]),
+);
+const defaultCollectionTextFormatting = {
+  titleBold: true,
+  titleAlignment: "right",
+  categoryBold: false,
+  categoryAlignment: "right",
+  seriesBold: false,
+  seriesAlignment: "right",
+  excerptBold: false,
+  excerptAlignment: "right",
+  dateBold: false,
+  dateAlignment: "right",
+} as const;
+const customCollectionTextFormatting = {
+  titleBold: false,
+  titleAlignment: "left",
+  categoryBold: true,
+  categoryAlignment: "center",
+  seriesBold: true,
+  seriesAlignment: "left",
+  excerptBold: true,
+  excerptAlignment: "center",
+  dateBold: true,
+  dateAlignment: "left",
+} as const;
+check(
+  "Listing text-format defaults preserve RTL presentation without a migration",
+  JSON.stringify(resolveCollectionDisplayTextFormatting({})) ===
+    JSON.stringify(defaultCollectionTextFormatting),
+);
+check(
+  "Collection Details follows the shared visible, non-Bold, RTL default",
+  JSON.stringify(DEFAULT_COLLECTION_DETAILS_ACTION) ===
+    JSON.stringify({
+      text: "اقرأ المزيد",
+      visible: true,
+      bold: false,
+      alignment: "right",
+    }),
+);
+const displayFormattingFormData = new FormData();
+displayFormattingFormData.set("title_bold", "false");
+displayFormattingFormData.set("title_alignment", "left");
+displayFormattingFormData.set("category_bold", "true");
+displayFormattingFormData.set("category_alignment", "center");
+displayFormattingFormData.set("series_bold", "true");
+displayFormattingFormData.set("series_alignment", "left");
+displayFormattingFormData.set("excerpt_bold", "true");
+displayFormattingFormData.set("excerpt_alignment", "center");
+displayFormattingFormData.set("date_bold", "true");
+displayFormattingFormData.set("date_alignment", "left");
+check(
+  "Listing Admin form fields build the persisted display-format payload",
+  JSON.stringify(
+    buildCollectionDisplayTextFormattingFromFormData(displayFormattingFormData),
+  ) === JSON.stringify(customCollectionTextFormatting),
+);
+const capabilityFormData = displayFormattingFormData;
+for (const name of Object.values(CONTENT_DISPLAY_FORM_FIELDS)) {
+  capabilityFormData.set(name, "true");
+}
+capabilityFormData.set("details_text", "عرض التفاصيل");
+capabilityFormData.set("show_details", "true");
+capabilityFormData.set("details_bold", "false");
+capabilityFormData.set("details_alignment", "left");
+check(
+  "Collection Modules capability builds all seven persisted display fields",
+  COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY.id ===
+    "collection-module-display-formatting" &&
+    Object.keys(COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY.fields).length === 7 &&
+    buildCollectionModuleDisplayFormattingFromFormData(capabilityFormData)
+      .details.alignment === "left",
 );
 const hierarchyFixture = [
   {
@@ -134,6 +209,7 @@ check(
         date: true,
         category: false,
         series: true,
+        ...customCollectionTextFormatting,
         details: {
           text: "تفاصيل الموضوع",
           visible: false,
@@ -155,6 +231,7 @@ check(
         date: true,
         category: false,
         series: true,
+        ...customCollectionTextFormatting,
         details: {
           text: "تفاصيل الموضوع",
           visible: false,
@@ -185,10 +262,11 @@ check(
         date: true,
         category: true,
         series: true,
+        ...defaultCollectionTextFormatting,
         details: {
           text: "اقرأ المزيد",
           visible: true,
-          bold: true,
+          bold: false,
           alignment: "right",
         },
       },
@@ -216,10 +294,11 @@ check(
         date: true,
         category: true,
         series: true,
+        ...defaultCollectionTextFormatting,
         details: {
           text: "اقرأ المزيد",
           visible: true,
-          bold: true,
+          bold: false,
           alignment: "right",
         },
       },
@@ -251,10 +330,11 @@ check(
         date: true,
         category: true,
         series: true,
+        ...defaultCollectionTextFormatting,
         details: {
           text: "اقرأ المزيد",
           visible: true,
-          bold: true,
+          bold: false,
           alignment: "right",
         },
       },
@@ -296,7 +376,7 @@ check(
 );
 check(
   "Collection editor uses standard sections and keeps its controls in a fixed four-column Admin card grid",
-  collectionEditor.match(/<ModuleEditorSection>/gu)?.length === 2 &&
+  collectionEditor.match(/<ModuleEditorSection(?:\s|>)/gu)?.length === 2 &&
     collectionEditor.includes('className="space-y-6"') &&
     collectionEditor.includes("<ModuleEditorSectionHeading") &&
     collectionEditor.includes("<AdminFormGrid columns={4}") &&
@@ -322,23 +402,30 @@ check(
   collectionEditor.includes("depth?: number;"),
 );
 check(
-  "Listing reuses the exact Topic display-settings card owner for six overrides",
-  collectionEditor.includes(
-    'from "../../content/editors/ContentDisplaySettings"',
-  ) &&
-    collectionEditor.includes("<ContentDisplaySettings") &&
-    collectionEditor.includes("includeIntroCard={false}") &&
-    collectionEditor.includes("إعدادات العرض") &&
-    contentDisplaySettings.includes("sm:grid-cols-2 lg:grid-cols-4") &&
-    contentDisplaySettings.includes("<TopicFormSwitch") &&
+  "Listing adopts seven uniform shared Module Editor display cards",
+  collectionEditor.match(/<ModuleEditorVisibilityAlignRow/gu)?.length === 7 &&
+    collectionEditor.includes('data-collection-display-settings=""') &&
+    collectionEditor.includes("md:grid-cols-3") &&
+    !collectionEditor.includes("ContentDisplaySettings") &&
     [
       "show_title_on_page",
       "show_image_on_page",
-      "show_excerpt_on_page",
-      "show_date_on_page",
       "show_category_on_page",
       "show_series_on_page",
-    ].every((name) => contentDisplaySettings.includes(`name="${name}"`)),
+      "show_excerpt_on_page",
+      "show_date_on_page",
+      "show_details",
+    ].every((name) => collectionEditor.includes(`showName="${name}"`)) &&
+    collectionEditor.includes('label="الصورة"') &&
+    collectionEditor.includes('controlMode="visibility-only"'),
+);
+check(
+  "every Listing text card delegates Bold and alignment to the shared row",
+  ["title", "category", "series", "excerpt", "date", "details"].every(
+    (field) =>
+      collectionEditor.includes(`boldName="${field}_bold"`) &&
+      collectionEditor.includes(`alignmentName="${field}_alignment"`),
+  ),
 );
 check(
   "Collection options reuse the existing published Topics hierarchy owner",
@@ -390,17 +477,27 @@ check(
     listingAction,
   ) &&
     listingAction.includes(
-      "buildContentDisplayOptionsFromFormData(formData, false)",
+      "buildCollectionModuleDisplayFormattingFromFormData(formData)",
     ) &&
     Object.values(CONTENT_DISPLAY_FORM_FIELDS).every((name) =>
-      contentDisplaySettings.includes(`name="${name}"`),
+      collectionEditor.includes(`showName="${name}"`),
     ) &&
-    listingAction.includes(
-      "buildCollectionDetailsActionFromFormData(formData)",
-    ) &&
+    !listingAction.includes("buildContentDisplayOptionsFromFormData(") &&
+    !listingAction.includes("buildCollectionDetailsActionFromFormData(") &&
     !/(featured|latest|manual|search|pagination|carousel|masonry)/iu.test(
       listingAction,
     ),
+);
+check(
+  "Listing formatting uses the shared config owner without duplicate visibility keys",
+    configOwner.includes("COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS") &&
+    configOwner.includes("COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY") &&
+    configOwner.includes("resolveCollectionModuleDisplayFormatting") &&
+    configOwner.includes("resolveCollectionDisplayTextFormatting") &&
+    configOwner.includes("buildCollectionDisplayTextFormattingFromFormData") &&
+    configOwner.includes('field: "title"') &&
+    configOwner.includes("visibility: false") &&
+    !listingAction.includes("showTitle"),
 );
 check(
   "unsupported collection values cannot be persisted",
@@ -444,15 +541,19 @@ check(
     !sharedPresenter.includes("اقرأ المزيد"),
 );
 check(
-  "Display cards keep the approved hierarchy and Details occupies the adjacent two-row slot",
-  contentDisplaySettings.indexOf('name="show_category_on_page"') <
-    contentDisplaySettings.indexOf('name="show_excerpt_on_page"') &&
-    contentDisplaySettings.indexOf('name="show_series_on_page"') <
-      contentDisplaySettings.indexOf('name="show_date_on_page"') &&
-    contentDisplaySettings.includes("{children}") &&
-    collectionEditor.includes(
-      "sm:col-span-2 lg:col-start-3 lg:row-start-1 lg:row-span-2",
-    ),
+  "Display cards keep the natural hierarchy and Details is last",
+  collectionEditor.indexOf('showName="show_title_on_page"') <
+    collectionEditor.indexOf('showName="show_image_on_page"') &&
+    collectionEditor.indexOf('showName="show_image_on_page"') <
+      collectionEditor.indexOf('showName="show_category_on_page"') &&
+    collectionEditor.indexOf('showName="show_category_on_page"') <
+      collectionEditor.indexOf('showName="show_series_on_page"') &&
+    collectionEditor.indexOf('showName="show_series_on_page"') <
+      collectionEditor.indexOf('showName="show_excerpt_on_page"') &&
+    collectionEditor.indexOf('showName="show_excerpt_on_page"') <
+      collectionEditor.indexOf('showName="show_date_on_page"') &&
+    collectionEditor.indexOf('showName="show_date_on_page"') <
+      collectionEditor.indexOf('showName="show_details"'),
 );
 check(
   "module display values override Topic defaults while non-Listing cards keep existing defaults",
@@ -462,12 +563,22 @@ check(
     topicCard.includes("displayOverrides?.date ?? showDateOnPage") &&
     topicCard.includes("displayOverrides?.category ?? showCategoryOnPage") &&
     topicCard.includes("displayOverrides?.series ?? showSeriesOnPage") &&
-    topicCard.includes(
-      "displayOverrides?.details ?? DEFAULT_COLLECTION_DETAILS_ACTION",
-    ) &&
+    topicCard.includes("resolveCollectionDisplayTextFormatting(") &&
+    topicCard.includes("...textFormatting") &&
+    topicCard.includes("DEFAULT_COLLECTION_DETAILS_ACTION") &&
     sharedPresenter.includes("display.title") &&
     sharedPresenter.includes("display.excerpt") &&
     sharedPresenter.includes("display.image"),
+);
+check(
+  "CollectionListingCard resolves and applies every Listing text format",
+  sharedPresenter.includes("resolveCollectionDisplayTextFormatting(display)") &&
+    ["title", "category", "series", "excerpt", "date"].every(
+      (field) =>
+        sharedPresenter.includes(`textFormatting.${field}Bold`) &&
+        sharedPresenter.includes(`textFormatting.${field}Alignment`),
+    ) &&
+    sharedPresenter.includes("pageBlockTextAlignClass"),
 );
 check(
   "every desktop items-per-row value maps directly to its requested column count",
@@ -479,18 +590,19 @@ check(
 check(
   "Grid cards stretch equally while title and excerpt lengths are clamped without reserved blank lines",
   sharedPresenter.includes("grid grid-cols-1 items-stretch gap-6") &&
-    sharedPresenter.includes("grid h-full min-h-[430px]") &&
+    sharedPresenter.includes("grid h-full min-h-[390px]") &&
     sharedPresenter.includes("@2xl/collection-listing-card:min-h-0") &&
-    sharedPresenter.includes('className="line-clamp-2 text-2xl') &&
-    sharedPresenter.includes('className="line-clamp-3 leading-7') &&
+    sharedPresenter.includes("line-clamp-2 text-2xl") &&
+    sharedPresenter.includes("line-clamp-3 leading-7") &&
     !sharedPresenter.includes("line-clamp-2 min-h-") &&
     !sharedPresenter.includes("line-clamp-3 min-h-"),
 );
 check(
   "card metadata and media keep stable visual positions",
-  sharedPresenter.includes("mb-2 flex min-h-7") &&
+  sharedPresenter.includes("mb-2 flex w-full flex-col gap-1 overflow-hidden") &&
+    !sharedPresenter.includes("[&>*]:max-w-[48%]") &&
     sharedPresenter.includes("flex min-h-5 w-full items-center") &&
-    sharedPresenter.includes('className="relative mt-auto block h-[180px]'),
+    sharedPresenter.includes('className="relative mt-auto block h-[170px]'),
 );
 check(
   "Details stays inside the existing metadata row without increasing card height",
@@ -504,7 +616,10 @@ check(
   "card copy uses compact natural spacing in both Grid and List",
   sharedPresenter.includes(
     'className="flex min-w-0 flex-1 flex-col gap-1.5"',
-  ) && sharedPresenter.includes("grid h-full min-h-[430px] gap-5 p-5"),
+  ) &&
+    sharedPresenter.includes(
+      "grid h-full min-h-[390px] gap-4 px-3 py-2.5",
+    ),
 );
 check(
   "existing page shell delegates topic-card mapping to the pure Listing presenter",

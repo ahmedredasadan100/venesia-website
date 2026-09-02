@@ -13,6 +13,7 @@ import {
 } from "../../lib/media-hub-modules/build-media-hub-render-plan";
 import type { MediaHubModuleState } from "../../lib/media-hub-modules/types";
 import { MEDIA_TYPE_PATHS } from "../../lib/media-center/types";
+import { resolveCollectionModuleDisplayFormatting } from "../../lib/page-blocks/configs";
 
 function getMediaHubSectionHref(module: MediaHubModuleState) {
   const kind = module.sectionData?.kind;
@@ -31,12 +32,15 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
   const data = module.sectionData;
   if (!data) return null;
   const layout = module.config.presentation.collectionView.layout;
+  const display = module.config.display
+    ?? resolveCollectionModuleDisplayFormatting({});
 
   if (layout === "featured") {
     return data.items.length ? (
       <MediaCenterHubFeaturedCollection
         items={data.items}
         presentation={module.config.presentation}
+        display={display}
         href={getMediaHubSectionHref(module)}
       />
     ) : null;
@@ -48,6 +52,7 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
         items={data.items}
         contentHierarchy={module.config.contentHierarchy}
         presentation={module.config.presentation}
+        display={display}
         sliderEnabled={data.kind === "featured"}
         showDateWhenAvailable={data.kind === "videos"}
       />
@@ -60,6 +65,7 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
         items={data.items}
         contentHierarchy={module.config.contentHierarchy}
         presentation={module.config.presentation}
+        display={display}
         href={getMediaHubSectionHref(module)}
         showDateWhenAvailable={data.kind === "videos"}
       />
@@ -76,6 +82,7 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
         <MediaCenterCollectionItems
           items={data.items}
           view={module.config.presentation.collectionView}
+          display={display}
         />
       </section>
     ) : null;
@@ -87,6 +94,7 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
         <MediaCenterHubTimeline
           items={data.items}
           presentation={module.config.presentation}
+          display={display}
         />
       );
     case "videos":
@@ -94,6 +102,7 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
         <MediaCenterHubVideos
           items={data.items}
           presentation={module.config.presentation}
+          display={display}
         />
       );
     case "gallery":
@@ -101,6 +110,7 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
         <MediaCenterHubGallery
           items={data.items}
           presentation={module.config.presentation}
+          display={display}
         />
       );
     case "press":
@@ -108,6 +118,7 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
         <MediaCenterHubPress
           items={data.items}
           presentation={module.config.presentation}
+          display={display}
         />
       );
     default:

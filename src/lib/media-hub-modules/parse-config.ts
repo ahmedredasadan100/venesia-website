@@ -1,11 +1,11 @@
 import type { Json } from "../database.types";
 import type { MediaHubSectionKey } from "./types";
 import {
-  DEFAULT_COLLECTION_DETAILS_ACTION,
-  resolveCollectionDetailsAction,
+  resolveCollectionModuleDisplayFormatting,
   resolvePageBlockTextFormattingConfig,
   type CollectionDisplayOverrides,
   type PageBlockTextFormattingConfig,
+  type ResolvedCollectionModuleDisplayFormatting,
 } from "../page-blocks/configs";
 import type { CollectionContentHierarchy } from "../collection-modules/content-hierarchy";
 import {
@@ -39,7 +39,7 @@ export type MediaListingPresentationConfig = {
   itemLimit: CollectionListingItemLimit;
   presentation: MediaListingLayout;
   itemsPerRow: MediaListingColumns;
-  display: CollectionDisplayOverrides;
+  display: ResolvedCollectionModuleDisplayFormatting;
 };
 
 export type MediaHubModulePresentation = PageBlockTextFormattingConfig & {
@@ -56,6 +56,7 @@ export type MediaHubModuleConfig = {
   type?: MediaHubMediaType;
   itemLimit?: number;
   contentHierarchy?: CollectionContentHierarchy;
+  display?: ResolvedCollectionModuleDisplayFormatting;
   listing?: MediaListingPresentationConfig;
   presentation: MediaHubModulePresentation;
 };
@@ -73,15 +74,7 @@ export function getDefaultMediaListingPresentation(): MediaListingPresentationCo
     itemLimit: 6,
     presentation: "list",
     itemsPerRow: 3,
-    display: {
-      title: true,
-      image: true,
-      excerpt: true,
-      date: true,
-      category: true,
-      series: true,
-      details: DEFAULT_COLLECTION_DETAILS_ACTION,
-    },
+    display: resolveCollectionModuleDisplayFormatting({}),
   };
 }
 
@@ -100,6 +93,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       itemLimit: 4,
       contentHierarchy:
         getMediaHubCollectionCapabilities("featured").hierarchy.defaults,
+      display: resolveCollectionModuleDisplayFormatting({}),
       presentation: {
         eyebrow: "Latest News",
         title: "آخر الأخبار",
@@ -119,6 +113,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       itemLimit: 4,
       contentHierarchy:
         getMediaHubCollectionCapabilities("site-updates").hierarchy.defaults,
+      display: resolveCollectionModuleDisplayFormatting({}),
       presentation: {
         eyebrow: "Site Updates",
         title: "من أرض التنفيذ",
@@ -138,6 +133,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       itemLimit: 4,
       contentHierarchy:
         getMediaHubCollectionCapabilities("videos").hierarchy.defaults,
+      display: resolveCollectionModuleDisplayFormatting({}),
       presentation: {
         eyebrow: "Videos",
         title: "الفيديوهات",
@@ -157,6 +153,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       itemLimit: 8,
       contentHierarchy:
         getMediaHubCollectionCapabilities("gallery").hierarchy.defaults,
+      display: resolveCollectionModuleDisplayFormatting({}),
       presentation: {
         eyebrow: "Gallery",
         title: "معرض الصور",
@@ -176,6 +173,7 @@ export const MEDIA_HUB_SECTION_DEFAULTS: Record<
       itemLimit: 6,
       contentHierarchy:
         getMediaHubCollectionCapabilities("press").hierarchy.defaults,
+      display: resolveCollectionModuleDisplayFormatting({}),
       presentation: {
         eyebrow: "Press Releases",
         title: "البيانات الصحفية",
@@ -196,13 +194,6 @@ export function isMediaHubSectionKey(value: string): value is MediaHubSectionKey
 export function parseMediaHubSectionKey(value: string): MediaHubSectionKey {
   if (isMediaHubSectionKey(value)) return value;
   throw new Error("نوع السكشن غير صالح.");
-}
-
-function readBoolean(value: Json | undefined, fallback: boolean) {
-  if (typeof value === "boolean") return value;
-  if (value === "true" || value === "1" || value === "on") return true;
-  if (value === "false" || value === "0") return false;
-  return fallback;
 }
 
 function isMediaHubMediaType(value: Json | undefined): value is MediaHubMediaType {
@@ -248,22 +239,16 @@ function readListingPresentation(
   const legacyDetailsText = typeof value.cardCtaText === "string"
     ? value.cardCtaText
     : undefined;
-  const details = resolveCollectionDetailsAction(
-    rawDisplay.details ?? (legacyDetailsText ? { text: legacyDetailsText } : undefined),
-  );
   return {
     itemLimit,
     presentation,
     itemsPerRow,
-    display: {
-      title: readBoolean(rawDisplay.title, fallback.display.title),
-      image: readBoolean(rawDisplay.image, fallback.display.image),
-      excerpt: readBoolean(rawDisplay.excerpt, fallback.display.excerpt),
-      date: readBoolean(rawDisplay.date, fallback.display.date),
-      category: readBoolean(rawDisplay.category, fallback.display.category),
-      series: readBoolean(rawDisplay.series, fallback.display.series),
-      details,
-    },
+    display: resolveCollectionModuleDisplayFormatting({
+      ...rawDisplay,
+      details:
+        rawDisplay.details ??
+        (legacyDetailsText ? { text: legacyDetailsText } : undefined),
+    }),
   };
 }
 
@@ -442,6 +427,7 @@ export function parseMediaHubModuleConfig(
   const configuredMediaType = isMediaHubMediaType(raw.type)
     ? raw.type
     : mediaTypeForSection(sectionKey);
+  const display = resolveCollectionModuleDisplayFormatting(raw.display);
 
   if (placement === "listing") {
     return {
@@ -463,6 +449,7 @@ export function parseMediaHubModuleConfig(
       type: configuredMediaType,
       itemLimit,
       contentHierarchy,
+      display,
       presentation,
     };
   }
@@ -476,6 +463,7 @@ export function parseMediaHubModuleConfig(
       fallback.itemLimit ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit ?? 4,
     ),
     contentHierarchy,
+    display,
     presentation,
   };
 }
@@ -545,7 +533,9 @@ export function buildMediaHubModuleConfig(
         )
           ? (listingInput.itemsPerRow as CollectionListingItemsPerRow)
           : defaults.itemsPerRow,
-        display: listingInput.display ?? defaults.display,
+        display: resolveCollectionModuleDisplayFormatting(
+          listingInput.display ?? defaults.display,
+        ),
       },
     };
   }
@@ -564,6 +554,9 @@ export function buildMediaHubModuleConfig(
         defaults.defaultLimit || 4,
       ),
       contentHierarchy: normalizedHierarchy,
+      display: resolveCollectionModuleDisplayFormatting(
+        listingInput.display,
+      ),
       presentation: normalizedPresentation,
     };
   }
@@ -578,6 +571,9 @@ export function buildMediaHubModuleConfig(
       defaults.defaultLimit || 4,
     ),
     contentHierarchy: normalizedHierarchy,
+    display: resolveCollectionModuleDisplayFormatting(
+      listingInput?.display,
+    ),
     presentation: normalizedPresentation,
   };
 }

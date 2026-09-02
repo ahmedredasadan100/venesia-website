@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useMemo } from "react";
 
@@ -10,11 +11,18 @@ import {
   type MediaContentType,
 } from "../../lib/media-center/types";
 import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
+import { resolveMediaCollectionItemDisplay } from "../../lib/media-center/collection-display-adapter";
+import {
+  pageBlockTextAlignClass,
+  resolveCollectionDisplayTextFormatting,
+  type CollectionDisplayOverrides,
+} from "../../lib/page-blocks/configs";
 import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
 type MediaCenterHubFeaturedCollectionProps = {
   items: MediaContentItem[];
   presentation: MediaHubModulePresentation;
+  display: CollectionDisplayOverrides;
   href: string;
 };
 
@@ -44,6 +52,7 @@ const FEATURED_MARKERS: Record<MediaContentType, string> = {
 export default function MediaCenterHubFeaturedCollection({
   items,
   presentation,
+  display,
   href,
 }: MediaCenterHubFeaturedCollectionProps) {
   const itemsPerView = presentation.collectionView.itemsPerRow;
@@ -93,46 +102,65 @@ export default function MediaCenterHubFeaturedCollection({
       />
 
       <div className={`grid gap-4 ${FEATURED_GRID_COLUMNS[itemsPerView]}`}>
-        {visibleItems.map((item) => (
+        {visibleItems.map((item) => {
+          const itemDisplay = resolveMediaCollectionItemDisplay(display, item);
+          const formatting = resolveCollectionDisplayTextFormatting(itemDisplay);
+
+          return (
           <Link key={item.id} href={getMediaHref(item)} className="group block">
             <article
               className={`flex h-full flex-col rounded-[1.4rem] border border-white/10 bg-white/[0.035] transition duration-500 hover:-translate-y-1 hover:border-[#D8B87A]/35 ${
                 presentation.collectionView.cardVariant === "compact" ? "p-4" : "p-5"
               }`}
             >
-              <div
-                aria-hidden="true"
-                className="mb-5 flex h-11 w-11 items-center justify-center rounded-2xl border border-[#D8B87A]/25 bg-[#D8B87A]/10 text-[#D8B87A]"
-              >
-                {FEATURED_MARKERS[item.type]}
-              </div>
-
-              {item.showDateOnPage || item.showCategoryOnPage || item.showSeriesOnPage ? (
-                <div className="flex flex-wrap items-center gap-2 text-xs text-white/35">
-                  {item.showCategoryOnPage && item.category ? <span>{item.category}</span> : null}
-                  {item.showSeriesOnPage && item.series ? <span>{item.series}</span> : null}
-                  {item.showDateOnPage && item.date ? <span>{item.date}</span> : null}
+              {itemDisplay.image ? (
+                <div className="relative mb-4 aspect-[16/10] overflow-hidden rounded-[1rem]">
+                  <Image
+                    src={item.image}
+                    alt={item.imageAlt || item.title}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 25vw"
+                    className="object-cover transition duration-700 group-hover:scale-105"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-xl border border-[#D8B87A]/25 bg-[#05070B]/70 text-[#D8B87A] backdrop-blur"
+                  >
+                    {FEATURED_MARKERS[item.type]}
+                  </span>
                 </div>
               ) : null}
 
-              <h3 className="mt-3 min-h-[56px] line-clamp-2 text-base font-semibold leading-7 text-white transition group-hover:text-[#D8B87A]">
-                {item.title}
-              </h3>
+              {itemDisplay.date || itemDisplay.category || itemDisplay.series ? (
+                <div className="flex w-full flex-col gap-1 text-xs text-white/35">
+                  {itemDisplay.category ? <span className={`block w-full ${formatting.categoryBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(formatting.categoryAlignment)}`}>{item.category}</span> : null}
+                  {itemDisplay.series ? <span className={`block w-full ${formatting.seriesBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(formatting.seriesAlignment)}`}>{item.series}</span> : null}
+                  {itemDisplay.date ? <span className={`block w-full ${formatting.dateBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(formatting.dateAlignment)}`}>{item.date}</span> : null}
+                </div>
+              ) : null}
+
+              {itemDisplay.title ? (
+                <h3 className={`mt-3 min-h-[56px] line-clamp-2 text-base leading-7 text-white transition group-hover:text-[#D8B87A] ${formatting.titleBold ? "font-semibold" : "font-normal"} ${pageBlockTextAlignClass(formatting.titleAlignment)}`}>
+                  {item.title}
+                </h3>
+              ) : null}
 
               {presentation.collectionView.cardVariant !== "compact" &&
-              item.showExcerptOnPage &&
-              item.excerpt ? (
-                <p className="mt-3 min-h-[72px] line-clamp-3 text-xs leading-6 text-white/48">
+              itemDisplay.excerpt ? (
+                <p className={`mt-3 min-h-[72px] line-clamp-3 text-xs leading-6 text-white/48 ${formatting.excerptBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(formatting.excerptAlignment)}`}>
                   {item.excerpt}
                 </p>
               ) : null}
 
-              <span className="mt-auto inline-flex pt-5 text-xs font-medium text-[#D8B87A]">
-                {FEATURED_ACTION_LABELS[item.type]} ←
-              </span>
+              {itemDisplay.details.visible ? (
+                <span className={`mt-auto block w-full pt-5 text-xs text-[#D8B87A] ${itemDisplay.details.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(itemDisplay.details.alignment)}`}>
+                  {itemDisplay.details.text || FEATURED_ACTION_LABELS[item.type]} ←
+                </span>
+              ) : null}
             </article>
           </Link>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

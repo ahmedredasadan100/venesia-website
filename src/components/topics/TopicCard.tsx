@@ -1,5 +1,6 @@
 import {
   DEFAULT_COLLECTION_DETAILS_ACTION,
+  resolveCollectionDisplayTextFormatting,
   type TopicsListingDisplayOverrides,
 } from "../../lib/page-blocks/configs";
 import { CollectionListingCard } from "../collection-modules/CollectionListingPresenter";
@@ -39,6 +40,9 @@ export default function TopicCard({
   displayOverrides,
 }: TopicCardProps) {
   const href = `/topics/${slug}`;
+  const textFormatting = resolveCollectionDisplayTextFormatting(
+    displayOverrides,
+  );
 
   return (
     <CollectionListingCard
@@ -70,7 +74,9 @@ export default function TopicCard({
         date: displayOverrides?.date ?? showDateOnPage,
         category: displayOverrides?.category ?? showCategoryOnPage,
         series: displayOverrides?.series ?? showSeriesOnPage,
-        details: displayOverrides?.details ?? DEFAULT_COLLECTION_DETAILS_ACTION,
+        ...textFormatting,
+        details:
+          displayOverrides?.details ?? DEFAULT_COLLECTION_DETAILS_ACTION,
       }}
       image={
         <TopicImage

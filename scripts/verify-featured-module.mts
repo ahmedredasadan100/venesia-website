@@ -651,6 +651,49 @@ check(
     carousel.includes("presentation={presentation}"),
 );
 check(
+  "Featured metadata stays in a padded flow with stacked taxonomy and independent date across both card paths",
+  contentCard.includes('data-featured-metadata-area=""') &&
+    contentCard.includes('data-featured-taxonomy-stack=""') &&
+    contentCard.includes('className="grid -translate-y-2 gap-1"') &&
+    contentCard.includes(
+      "relative z-10 mt-auto flex w-full flex-col justify-end",
+    ) &&
+    contentCard.includes("mt-2 line-clamp-2") &&
+    contentCard.includes(
+      'size === "large" ? "min-h-14 line-clamp-2" : "min-h-7 line-clamp-1"',
+    ) &&
+    contentCard.includes(
+      '"min-h-[360px] @2xl/slot-module:min-h-[480px]"',
+    ) &&
+    contentCard.includes('"min-h-[290px]"') &&
+    !contentCard.includes("min-h-[420px]") &&
+    !contentCard.includes('bg-[#05070B]/75') &&
+    contentCard.includes("<PublicGoldPill") &&
+    contentCard.includes("? `/topics?category=${encodeURIComponent") &&
+    contentCard.includes("text-sm leading-5") &&
+    contentCard.includes(
+      "text-sm font-medium leading-5 text-white/80 drop-shadow-",
+    ) &&
+    !contentCard.includes('className="absolute inset-x-0 bottom-0') &&
+    component.includes('data-featured-metadata-area=""') &&
+    component.includes('data-featured-taxonomy-stack=""') &&
+    component.includes('className="grid -translate-y-2 gap-1"') &&
+    component.includes("mt-2 min-h-12 line-clamp-2") &&
+    component.includes("mt-2 min-h-10 line-clamp-2") &&
+    component.includes(
+      "text-sm font-medium leading-5 text-white/70 drop-shadow-",
+    ) &&
+    component.includes("<PublicGoldPill>") &&
+    component.includes("text-sm leading-5 text-[#D8B87A]") &&
+    !component.includes('bg-[#05070B]/45') &&
+    !contentCard.includes(
+      'className="flex flex-wrap items-center gap-3 text-xs text-white/55"',
+    ) &&
+    !component.includes(
+      'className="flex flex-wrap items-center gap-2 text-xs text-white/38"',
+    ),
+);
+check(
   "CMS category choices come from actual taxonomy owner",
   editorOptions.includes("loadTopicFilterOptionsForAdmin"),
 );

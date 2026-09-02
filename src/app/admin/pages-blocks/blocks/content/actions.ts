@@ -40,8 +40,7 @@ import {
   hasSavedLinkField,
 } from "../../../../../lib/admin/links/block-save";
 import {
-  buildContentDisplayOptionsFromFormData,
-  buildCollectionDetailsActionFromFormData,
+  buildCollectionModuleDisplayFormattingFromFormData,
   buildPageBlockTextFormattingPatch,
   TOPICS_LISTING_ITEM_LIMITS,
   TOPICS_LISTING_ITEMS_PER_ROW,
@@ -193,10 +192,7 @@ async function buildTopicsListingConfig(
     presentation: presentation as TopicsListingPresentation,
     itemsPerRow: itemsPerRow as TopicsListingItemsPerRow,
     itemLimit: itemLimit as TopicsListingItemLimit,
-    display: {
-      ...buildContentDisplayOptionsFromFormData(formData, false),
-      details: buildCollectionDetailsActionFromFormData(formData),
-    },
+    display: buildCollectionModuleDisplayFormattingFromFormData(formData),
   };
 }
 

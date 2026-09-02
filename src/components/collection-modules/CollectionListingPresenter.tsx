@@ -6,7 +6,11 @@ import type {
   CollectionListingLayout,
 } from "../../lib/collection-modules/collection-view";
 import type { CollectionListingItemLimit } from "../../lib/collection-modules/item-limit";
-import type { CollectionDisplayOverrides } from "../../lib/page-blocks/configs";
+import {
+  pageBlockTextAlignClass,
+  resolveCollectionDisplayTextFormatting,
+  type CollectionDisplayOverrides,
+} from "../../lib/page-blocks/configs";
 import PublicGoldPill from "../public/PublicGoldPill";
 
 const GRID_COLUMN_CLASSES: Record<CollectionListingItemsPerRow, string> = {
@@ -101,6 +105,7 @@ export function CollectionListingCard({
   const showDate = display.date && Boolean(date);
   const showSupplementalMeta = Boolean(supplementalMeta);
   const showDetails = display.details.visible && Boolean(display.details.text);
+  const textFormatting = resolveCollectionDisplayTextFormatting(display);
   const hasTaxonomy = showCategory || showSeries;
   const hasLinkedCopy =
     showTitle || showExcerpt || showDate || showSupplementalMeta || showDetails;
@@ -127,7 +132,7 @@ export function CollectionListingCard({
     <article className="group @container/collection-listing-card block h-full overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.03] transition-all duration-500 hover:-translate-y-0.5 hover:border-[#D8B87A]/30 hover:bg-white/[0.04]">
       <div
         dir="ltr"
-        className={`grid h-full min-h-[430px] gap-5 p-5 @2xl/collection-listing-card:min-h-0 @2xl/collection-listing-card:items-center ${
+        className={`grid h-full min-h-[390px] gap-4 px-3 py-2.5 @2xl/collection-listing-card:min-h-0 @2xl/collection-listing-card:items-center ${
           hasTextColumn && showImage
             ? "@2xl/collection-listing-card:grid-cols-[minmax(0,1fr)_250px]"
             : "grid-cols-1"
@@ -136,35 +141,47 @@ export function CollectionListingCard({
         {hasTextColumn ? (
           <div dir="rtl" className="flex min-w-0 flex-col text-right">
             {hasTaxonomy ? (
-              <div className="mb-2 flex min-h-7 items-center justify-between gap-3 overflow-hidden [&>*]:max-w-[48%] [&>*]:min-w-0 [&>*]:truncate [&>*]:whitespace-nowrap">
+              <div className="mb-2 flex w-full flex-col gap-1 overflow-hidden [&>*]:min-w-0 [&>*]:truncate [&>*]:whitespace-nowrap">
                 {showCategory ? (
-                  <PublicGoldPill href={category?.href}>
-                    {category?.label}
-                  </PublicGoldPill>
-                ) : (
-                  <span aria-hidden="true" />
-                )}
+                  <span
+                    className={`block w-full ${pageBlockTextAlignClass(textFormatting.categoryAlignment)}`}
+                  >
+                    <PublicGoldPill href={category?.href}>
+                      <span className={textFormatting.categoryBold ? "font-bold" : undefined}>
+                        {category?.label}
+                      </span>
+                    </PublicGoldPill>
+                  </span>
+                ) : null}
 
                 {showSeries ? (
-                  <PublicGoldPill href={series?.href}>
-                    {series?.label}
-                  </PublicGoldPill>
-                ) : (
-                  <span aria-hidden="true" />
-                )}
+                  <span
+                    className={`block w-full ${pageBlockTextAlignClass(textFormatting.seriesAlignment)}`}
+                  >
+                    <PublicGoldPill href={series?.href}>
+                      <span className={textFormatting.seriesBold ? "font-bold" : undefined}>
+                        {series?.label}
+                      </span>
+                    </PublicGoldPill>
+                  </span>
+                ) : null}
               </div>
             ) : null}
 
             {hasLinkedCopy ? (
               <Link href={href} className="flex min-w-0 flex-1 flex-col gap-1.5">
                 {showTitle ? (
-                  <h2 className="line-clamp-2 text-2xl font-semibold leading-8 text-white transition-colors duration-300 group-hover:text-[#D8B87A] md:text-[1.25rem]">
+                  <h2
+                    className={`line-clamp-2 text-2xl leading-8 text-white transition-colors duration-300 group-hover:text-[#D8B87A] md:text-[1.25rem] ${textFormatting.titleBold ? "font-semibold" : "font-normal"} ${pageBlockTextAlignClass(textFormatting.titleAlignment)}`}
+                  >
                     {title}
                   </h2>
                 ) : null}
 
                 {showExcerpt ? (
-                  <p className="line-clamp-3 leading-7 text-white/60">
+                  <p
+                    className={`line-clamp-3 leading-7 text-white/60 ${textFormatting.excerptBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(textFormatting.excerptAlignment)}`}
+                  >
                     {excerpt}
                   </p>
                 ) : null}
@@ -173,8 +190,14 @@ export function CollectionListingCard({
                   <div className="flex min-h-5 w-full items-center gap-3 text-sm text-white/45">
                     {display.details.alignment !== "left" ? detailsAction : null}
                     {showDate || showSupplementalMeta ? (
-                      <span className="inline-flex shrink-0 items-center gap-3">
-                        {showDate ? <span>{date}</span> : null}
+                      <span
+                        className={`block min-w-0 flex-1 ${showDate ? pageBlockTextAlignClass(textFormatting.dateAlignment) : "text-right"}`}
+                      >
+                        {showDate ? (
+                          <span className={textFormatting.dateBold ? "font-bold" : "font-normal"}>
+                            {date}
+                          </span>
+                        ) : null}
                         {showDate && showSupplementalMeta ? <span>•</span> : null}
                         {showSupplementalMeta ? <span>{supplementalMeta}</span> : null}
                       </span>
@@ -191,7 +214,7 @@ export function CollectionListingCard({
           <Link
             href={href}
             aria-label={`فتح ${title}`}
-            className="relative mt-auto block h-[180px] overflow-hidden rounded-[1.5rem] @2xl/collection-listing-card:mt-0"
+            className="relative mt-auto block h-[170px] overflow-hidden rounded-[1.5rem] @2xl/collection-listing-card:mt-0"
           >
             {image}
             {imageOverlay}

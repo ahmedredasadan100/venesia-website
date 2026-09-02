@@ -33,8 +33,7 @@ import {
   syncMediaHubModulePageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import {
-  buildContentDisplayOptionsFromFormData,
-  buildCollectionDetailsActionFromFormData,
+  buildCollectionModuleDisplayFormattingFromFormData,
   buildPageBlockTextFormattingPatch,
 } from "../../../../../lib/page-blocks/configs";
 
@@ -86,10 +85,7 @@ export async function updateMediaHubModule(formData: FormData) {
       itemLimit: parseNumber(formData.get("item_limit"), 6),
       presentation: cleanText(formData.get("presentation")),
       itemsPerRow: parseNumber(formData.get("items_per_row"), 3),
-      display: {
-        ...buildContentDisplayOptionsFromFormData(formData, false),
-        details: buildCollectionDetailsActionFromFormData(formData),
-      },
+      display: buildCollectionModuleDisplayFormattingFromFormData(formData),
     },
   );
 

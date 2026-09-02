@@ -20,7 +20,9 @@ import {
   CollectionItemLimitField,
   CollectionPresentationFields,
 } from "./CollectionModuleFields";
-import CollectionModuleEditor from "./editors/CollectionModuleEditor";
+import CollectionModuleEditor, {
+  CollectionModuleDisplayFormattingFields,
+} from "./editors/CollectionModuleEditor";
 import type { Json } from "../../../lib/database.types";
 import { MEDIA_HUB_SECTION_LABELS } from "../../../lib/media-hub-modules/admin-present";
 import {
@@ -36,7 +38,10 @@ import { COLLECTION_LISTING_ITEMS_PER_ROW } from "../../../lib/collection-module
 import { COLLECTION_LISTING_ITEM_LIMITS } from "../../../lib/collection-modules/item-limit";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
-import { resolvePageBlockTextFormat } from "../../../lib/page-blocks/configs";
+import {
+  resolveCollectionModuleDisplayFormatting,
+  resolvePageBlockTextFormat,
+} from "../../../lib/page-blocks/configs";
 
 type MediaHubModuleEditClientProps = {
   block: {
@@ -159,6 +164,8 @@ export default function MediaHubModuleEditClient({
   const activeItemLimit = activeConfig.itemLimit
     ?? MEDIA_HUB_SECTION_DEFAULTS[sectionKey].defaultLimit
     ?? 4;
+  const activeDisplay = activeConfig.display
+    ?? resolveCollectionModuleDisplayFormatting({});
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
@@ -304,6 +311,10 @@ export default function MediaHubModuleEditClient({
                         />
                       </ModuleEditorFieldGrid>
                     </ModuleEditorSection>
+
+                    <CollectionModuleDisplayFormattingFields
+                      display={activeDisplay}
+                    />
                   </div>
                 )
               ),

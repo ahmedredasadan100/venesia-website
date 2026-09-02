@@ -1,6 +1,9 @@
 import Image from "next/image";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
-import type { CollectionDisplayOverrides } from "../../lib/page-blocks/configs";
+import {
+  type CollectionDisplayOverrides,
+} from "../../lib/page-blocks/configs";
+import { resolveMediaCollectionItemDisplay } from "../../lib/media-center/collection-display-adapter";
 import { CollectionListingCard } from "../collection-modules/CollectionListingPresenter";
 
 type MediaContentCardProps = {
@@ -15,6 +18,7 @@ export default function MediaContentCard({
   displayOverrides,
 }: MediaContentCardProps) {
   const finalHref = href ?? getMediaHref(item);
+  const display = resolveMediaCollectionItemDisplay(displayOverrides, item);
 
   return (
     <CollectionListingCard
@@ -24,7 +28,7 @@ export default function MediaContentCard({
       date={item.date}
       category={item.category ? { label: item.category } : undefined}
       series={item.series ? { label: item.series } : undefined}
-      display={displayOverrides}
+      display={display}
       image={
         <Image
           src={item.image}
