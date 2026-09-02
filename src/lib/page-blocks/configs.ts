@@ -20,6 +20,26 @@ export const PAGE_BLOCK_TEXT_ALIGNMENTS = ["right", "center", "left"] as const;
 export type PageBlockTextAlignment =
   (typeof PAGE_BLOCK_TEXT_ALIGNMENTS)[number];
 
+/**
+ * Display Formatting Capability for Collection Modules.
+ *
+ * Collection Listing/Card consumers adopt this exact field inventory. Image
+ * owns visibility only; every other field owns visibility, weight, and text
+ * alignment through the shared Admin, parser, and public presentation owners.
+ */
+export const COLLECTION_MODULE_DISPLAY_FORMATTING_CAPABILITY = {
+  id: "collection-module-display-formatting",
+  fields: {
+    title: "text",
+    image: "visibility-only",
+    category: "text",
+    series: "text",
+    excerpt: "text",
+    date: "text",
+    details: "text",
+  },
+} as const;
+
 export const CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS = [
   "category",
   "series",
@@ -248,10 +268,108 @@ export type CollectionDetailsAction = {
   alignment: PageBlockTextAlignment;
 };
 
+export const COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS = {
+  title: { bold: true, alignment: "right" },
+  category: { bold: false, alignment: "right" },
+  series: { bold: false, alignment: "right" },
+  excerpt: { bold: false, alignment: "right" },
+  date: { bold: false, alignment: "right" },
+} as const satisfies Record<
+  "title" | ContentDisplayFormattableTextField,
+  PageBlockTextFormatDefaults
+>;
+
+export type ResolvedCollectionDisplayTextFormatting = {
+  titleBold: boolean;
+  titleAlignment: PageBlockTextAlignment;
+  categoryBold: boolean;
+  categoryAlignment: PageBlockTextAlignment;
+  seriesBold: boolean;
+  seriesAlignment: PageBlockTextAlignment;
+  excerptBold: boolean;
+  excerptAlignment: PageBlockTextAlignment;
+  dateBold: boolean;
+  dateAlignment: PageBlockTextAlignment;
+};
+
+export type CollectionDisplayTextFormatting =
+  Partial<ResolvedCollectionDisplayTextFormatting>;
+
+export function resolveCollectionDisplayTextFormatting(
+  raw: unknown,
+): ResolvedCollectionDisplayTextFormatting {
+  const title = resolvePageBlockTextFormat(
+    raw,
+    "title",
+    COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.title,
+  );
+  const category = resolvePageBlockTextFormat(
+    raw,
+    "category",
+    COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.category,
+  );
+  const series = resolvePageBlockTextFormat(
+    raw,
+    "series",
+    COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.series,
+  );
+  const excerpt = resolvePageBlockTextFormat(
+    raw,
+    "excerpt",
+    COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.excerpt,
+  );
+  const date = resolvePageBlockTextFormat(
+    raw,
+    "date",
+    COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.date,
+  );
+
+  return {
+    titleBold: title.bold,
+    titleAlignment: title.alignment,
+    categoryBold: category.bold,
+    categoryAlignment: category.alignment,
+    seriesBold: series.bold,
+    seriesAlignment: series.alignment,
+    excerptBold: excerpt.bold,
+    excerptAlignment: excerpt.alignment,
+    dateBold: date.bold,
+    dateAlignment: date.alignment,
+  };
+}
+
+export function buildCollectionDisplayTextFormattingFromFormData(
+  formData: FormData,
+): ResolvedCollectionDisplayTextFormatting {
+  return buildPageBlockTextFormattingPatch(formData, [
+    {
+      field: "title",
+      visibility: false,
+      defaults: COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.title,
+    },
+    {
+      field: "category",
+      defaults: COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.category,
+    },
+    {
+      field: "series",
+      defaults: COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.series,
+    },
+    {
+      field: "excerpt",
+      defaults: COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.excerpt,
+    },
+    {
+      field: "date",
+      defaults: COLLECTION_DISPLAY_TEXT_FORMAT_DEFAULTS.date,
+    },
+  ]) as ResolvedCollectionDisplayTextFormatting;
+}
+
 export const DEFAULT_COLLECTION_DETAILS_ACTION: CollectionDetailsAction = {
   text: "اقرأ المزيد",
   visible: true,
-  bold: true,
+  bold: false,
   alignment: "right",
 };
 
@@ -280,6 +398,7 @@ export function resolveCollectionDetailsAction(
 
 export function buildCollectionDetailsActionFromFormData(
   formData: FormData,
+  defaults: CollectionDetailsAction = DEFAULT_COLLECTION_DETAILS_ACTION,
 ): CollectionDetailsAction {
   const text = String(formData.get("details_text") ?? "").trim();
   if (!text) throw new Error("نص زر التفاصيل مطلوب.");
@@ -287,13 +406,13 @@ export function buildCollectionDetailsActionFromFormData(
   const formatting = buildPageBlockTextFormattingPatch(formData, [
     {
       field: "details",
-      defaults: DEFAULT_COLLECTION_DETAILS_ACTION,
+      defaults,
     },
   ]);
   const resolved = resolvePageBlockTextFormat(
     formatting,
     "details",
-    DEFAULT_COLLECTION_DETAILS_ACTION,
+    defaults,
   );
 
   return { text, ...resolved };
@@ -369,11 +488,58 @@ export function resolveContentItemDisplay(
   ) as ContentDisplayOptions;
 }
 
-export type CollectionDisplayOverrides = ContentDisplayOptions & {
-  details: CollectionDetailsAction;
-};
+export type CollectionDisplayOverrides = ContentDisplayOptions &
+  CollectionDisplayTextFormatting & {
+    details: CollectionDetailsAction;
+  };
 
-export type TopicsListingDisplayOverrides = CollectionDisplayOverrides;
+export type ResolvedCollectionModuleDisplayFormatting =
+  CollectionDisplayOverrides & ResolvedCollectionDisplayTextFormatting;
+
+export type TopicsListingDisplayOverrides =
+  ResolvedCollectionModuleDisplayFormatting;
+
+export function resolveCollectionModuleDisplayFormatting(
+  raw: unknown,
+): ResolvedCollectionModuleDisplayFormatting {
+  const value =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+
+  return {
+    ...resolveContentDisplayOptions(value),
+    ...resolveCollectionDisplayTextFormatting(value),
+    details: resolveCollectionDetailsAction(value.details),
+  };
+}
+
+export function resolveCollectionModuleItemDisplay(
+  display: CollectionDisplayOverrides,
+  itemDisplay: ContentDisplayOptions,
+  values: Record<ContentDisplayField, string>,
+): ResolvedCollectionModuleDisplayFormatting {
+  const resolved = resolveCollectionModuleDisplayFormatting(display);
+
+  return {
+    ...resolved,
+    ...resolveContentItemDisplay(resolved, itemDisplay, values),
+    details: {
+      ...resolved.details,
+      visible: resolved.details.visible && Boolean(resolved.details.text),
+    },
+  };
+}
+
+export function buildCollectionModuleDisplayFormattingFromFormData(
+  formData: FormData,
+): ResolvedCollectionModuleDisplayFormatting {
+  return {
+    ...buildContentDisplayOptionsFromFormData(formData, false),
+    ...buildCollectionDisplayTextFormattingFromFormData(formData),
+    details: buildCollectionDetailsActionFromFormData(formData),
+  };
+}
 
 export type TopicsListingBlockConfig = {
   collection: TopicsListingCollection;
@@ -683,8 +849,6 @@ export function asTopicsListingConfig(raw: unknown): TopicsListingBlockConfig {
     !Array.isArray(config.display)
       ? (config.display as Record<string, unknown>)
       : {};
-  const details = resolveCollectionDetailsAction(rawDisplay.details);
-
   return {
     collection,
     presentation: TOPICS_LISTING_PRESENTATIONS.includes(
@@ -702,10 +866,7 @@ export function asTopicsListingConfig(raw: unknown): TopicsListingBlockConfig {
     )
       ? (itemLimit as TopicsListingItemLimit)
       : 6,
-    display: {
-      ...resolveContentDisplayOptions(rawDisplay),
-      details,
-    },
+    display: resolveCollectionModuleDisplayFormatting(rawDisplay),
   };
 }
 
