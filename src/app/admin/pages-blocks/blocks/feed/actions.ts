@@ -35,7 +35,7 @@ import {
   isPersistedFeedModuleConfigEqual,
 } from "../../../../../lib/feed-modules/parse-feed-config";
 import {
-  isSeriesAllowedForCategories,
+  filterSeriesSlugsForCategories,
   loadTopicFilterOptionsForAdmin,
 } from "../../../../../lib/feed-modules/load-topic-filter-options";
 import { TOPICS_FEED_TYPES, type TopicsFeedType } from "../../../../../lib/feed-modules/types";
@@ -47,15 +47,17 @@ function readFeedType(value: FormDataEntryValue | null): TopicsFeedType | null {
 
 async function sanitizeFeedModuleConfig(config: ReturnType<typeof buildFeedModuleConfig>) {
   if (!config.query.categorySlugs.length) {
-    config.query.seriesSlug = null;
+    config.query.seriesSlugs = [];
     return config;
   }
 
-  if (config.query.seriesSlug) {
+  if (config.query.seriesSlugs.length) {
     const filterOptions = await loadTopicFilterOptionsForAdmin();
-    if (!isSeriesAllowedForCategories(filterOptions, config.query.categorySlugs, config.query.seriesSlug)) {
-      config.query.seriesSlug = null;
-    }
+    config.query.seriesSlugs = filterSeriesSlugsForCategories(
+      filterOptions,
+      config.query.categorySlugs,
+      config.query.seriesSlugs,
+    );
   }
 
   return config;

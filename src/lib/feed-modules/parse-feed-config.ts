@@ -26,7 +26,7 @@ const DEFAULT_PRESENTATION: FeedModulePresentation = {
 const DEFAULT_QUERY: FeedModuleQueryConfig = {
   limit: 3,
   categorySlugs: [],
-  seriesSlug: null,
+  seriesSlugs: [],
 };
 
 export const feedModuleConfigSchema: z.ZodType<FeedModuleConfig> = z
@@ -52,7 +52,7 @@ export const feedModuleConfigSchema: z.ZodType<FeedModuleConfig> = z
       .object({
         limit: z.number().int().min(1),
         categorySlugs: z.array(z.string().min(1)),
-        seriesSlug: z.string().nullable(),
+        seriesSlugs: z.array(z.string().min(1)),
       })
       .strict(),
   })
@@ -98,6 +98,15 @@ function readFormCategorySlugs(formData: FormData) {
     .filter((slug) => slug !== "__all__");
 }
 
+function readPersistedSeriesSlugs(queryRaw: Record<string, unknown>) {
+  if (Array.isArray(queryRaw.seriesSlugs)) {
+    return normalizeSlugList(queryRaw.seriesSlugs);
+  }
+
+  const legacySeriesSlug = readOptionalSlug(queryRaw.seriesSlug);
+  return legacySeriesSlug ? [legacySeriesSlug] : [];
+}
+
 export function parseFeedModuleConfig(
   raw: Record<string, unknown> | null | undefined,
   feedType: TopicsFeedType,
@@ -141,7 +150,7 @@ export function parseFeedModuleConfig(
     query: {
       limit,
       categorySlugs: readPersistedCategorySlugs(queryRaw),
-      seriesSlug: readOptionalSlug(queryRaw.seriesSlug),
+      seriesSlugs: readPersistedSeriesSlugs(queryRaw),
     },
   });
 }
@@ -160,12 +169,12 @@ export function buildFeedModuleConfig(
   if (!/^\d+$/u.test(rawLimit) || !Number.isInteger(limit) || limit < 1) {
     throw new FeedModuleConfigValidationError(
       "limit",
-      "عدد النتائج يجب أن يكون رقمًا صحيحًا أكبر من أو يساوي 1.",
+      "عدد العناصر المعروضة يجب أن يكون رقمًا صحيحًا أكبر من أو يساوي 1.",
     );
   }
 
   const categorySlugs = readFormCategorySlugs(formData);
-  const seriesSlug = String(formData.get("series_slug") ?? "").trim();
+  const seriesSlugs = normalizeSlugList(formData.getAll("series_slugs"));
   const support = FEED_MODULE_PRESENTATION_SUPPORT[feedType];
   const formatting = buildPageBlockTextFormattingPatch(formData, [
     { field: "eyebrow" },
@@ -187,7 +196,7 @@ export function buildFeedModuleConfig(
     query: {
       limit,
       categorySlugs,
-      seriesSlug: seriesSlug && seriesSlug !== "__all__" ? seriesSlug : null,
+      seriesSlugs,
     },
   });
 }

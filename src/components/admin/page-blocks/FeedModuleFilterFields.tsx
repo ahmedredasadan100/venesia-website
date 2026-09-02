@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
+import { AdminCheckbox, AdminFormSwitch } from "../ui";
 import type { FeedModuleConfig } from "../../../lib/feed-modules/types";
 import type { TopicFilterOptions } from "../../../lib/feed-modules/load-topic-filter-options";
 
@@ -25,29 +25,29 @@ function getSeriesOptions(
   );
 }
 
-export default function FeedModuleFilterFields({ config, filterOptions }: FeedModuleFilterFieldsProps) {
-  const [filters, setFilters] = useState(() => {
-    const initialSeries = config.query.seriesSlug ?? "__all__";
-    const initialSeriesOptions = getSeriesOptions(
-      config.query.categorySlugs,
-      filterOptions.seriesByCategorySlug,
-    );
-    const initialSeriesValid =
-      initialSeries === "__all__" || initialSeriesOptions.some((item) => item.slug === initialSeries);
+function getInitialSeriesSlugs(
+  config: FeedModuleConfig,
+  filterOptions: TopicFilterOptions,
+) {
+  const initialSeriesOptions = getSeriesOptions(
+    config.query.categorySlugs,
+    filterOptions.seriesByCategorySlug,
+  );
+  const allowedSlugs = new Set(initialSeriesOptions.map((item) => item.slug));
+  return config.query.seriesSlugs.filter((slug) => allowedSlugs.has(slug));
+}
 
-    return {
-      categorySlugs: config.query.categorySlugs,
-      seriesSlug: initialSeriesValid ? initialSeries : "__all__",
-    };
-  });
-  const { categorySlugs, seriesSlug } = filters;
+export default function FeedModuleFilterFields({ config, filterOptions }: FeedModuleFilterFieldsProps) {
+  const [filters, setFilters] = useState(() => ({
+    categorySlugs: config.query.categorySlugs,
+    seriesSlugs: getInitialSeriesSlugs(config, filterOptions),
+  }));
+  const { categorySlugs, seriesSlugs } = filters;
 
   const seriesOptions = useMemo(
     () => getSeriesOptions(categorySlugs, filterOptions.seriesByCategorySlug),
     [categorySlugs, filterOptions.seriesByCategorySlug],
   );
-
-  const seriesDisabled = categorySlugs.length === 0;
 
   function toggleCategory(categorySlug: string, checked: boolean) {
     setFilters((current) => {
@@ -56,26 +56,42 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
           ? current.categorySlugs
           : [...current.categorySlugs, categorySlug]
         : current.categorySlugs.filter((slug) => slug !== categorySlug);
-      const seriesStillAllowed =
-        current.seriesSlug === "__all__" ||
+      const allowedSeriesSlugs = new Set(
         getSeriesOptions(nextCategorySlugs, filterOptions.seriesByCategorySlug)
-          .some((item) => item.slug === current.seriesSlug);
+          .map((item) => item.slug),
+      );
 
       return {
         categorySlugs: nextCategorySlugs,
-        seriesSlug: seriesStillAllowed ? current.seriesSlug : "__all__",
+        seriesSlugs: current.seriesSlugs.filter((slug) => allowedSeriesSlugs.has(slug)),
       };
     });
   }
 
+  function toggleSeries(seriesSlug: string) {
+    setFilters((current) => ({
+      ...current,
+      seriesSlugs: current.seriesSlugs.includes(seriesSlug)
+        ? current.seriesSlugs.filter((slug) => slug !== seriesSlug)
+        : [...current.seriesSlugs, seriesSlug],
+    }));
+  }
+
   return (
-    <AdminFormGrid>
-      <fieldset className="space-y-3 rounded-2xl border border-white/10 bg-[#05070B] p-4">
-        <legend className="px-1 text-sm font-medium text-white/70">تصفية حسب التصنيفات</legend>
-        <p className="text-xs leading-5 text-white/40">
-          اختر تصنيفًا أو أكثر. عدم اختيار أي تصنيف يعرض كل التصنيفات.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
+    <section
+      aria-labelledby="feed-content-scope-title"
+      data-feed-content-scope=""
+      className="space-y-5 rounded-3xl border border-white/10 bg-[#05070B]/72 p-5 md:p-6"
+    >
+      <h3 id="feed-content-scope-title" className="text-lg font-semibold text-[#E5C98F]">
+        نطاق المحتوى
+      </h3>
+
+      <div className="space-y-4 rounded-2xl border border-white/10 bg-black/15 p-4 md:p-5">
+        <h4 className="border-r-2 border-[#D5A640] pr-3 text-sm font-semibold text-white">
+          التصنيفات
+        </h4>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {filterOptions.categories.map((category) => (
             <AdminFormSwitch
               key={category.id}
@@ -91,27 +107,61 @@ export default function FeedModuleFilterFields({ config, filterOptions }: FeedMo
         {!filterOptions.categories.length ? (
           <p className="text-xs text-white/45">لا توجد تصنيفات منشورة متاحة.</p>
         ) : null}
-      </fieldset>
-
-      <div>
-        {seriesDisabled ? <input type="hidden" name="series_slug" value="__all__" /> : null}
-        <AdminFormListboxSelect
-          name="series_slug"
-          label="تصفية حسب السلسلة"
-          value={seriesDisabled ? "__all__" : seriesSlug}
-          onChange={(nextSeriesSlug) =>
-            setFilters((current) => ({ ...current, seriesSlug: nextSeriesSlug }))
-          }
-          disabled={seriesDisabled}
-          options={[
-            { value: "__all__", label: "الكل" },
-            ...seriesOptions.map((item) => ({ value: item.slug, label: item.name })),
-          ]}
-          hint={seriesDisabled
-            ? "اختر تصنيفًا أولًا لعرض السلاسل التابعة له."
-            : "يُحمَّل من Topics Series Admin ضمن التصنيف المختار."}
-        />
       </div>
-    </AdminFormGrid>
+
+      <div className="space-y-4 rounded-2xl border border-white/10 bg-black/15 p-4 md:p-5">
+        <h4 className="border-r-2 border-[#D5A640] pr-3 text-sm font-semibold text-white">
+          السلاسل
+        </h4>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label
+            className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition focus-within:ring-2 focus-within:ring-[#E2B84F] ${
+              seriesSlugs.length === 0
+                ? "border-[#D5A640] bg-[#D5A640]/15 text-[#F1D49A]"
+                : "border-white/15 bg-white/[0.025] text-white/70 hover:border-white/25 hover:text-white"
+            }`}
+          >
+            <AdminCheckbox
+              label="كل السلاسل"
+              presentation="native"
+              data-feed-series-all=""
+              checked={seriesSlugs.length === 0}
+              onChange={() => setFilters((current) => ({ ...current, seriesSlugs: [] }))}
+              className="sr-only"
+            />
+            {seriesSlugs.length === 0 ? <span aria-hidden="true">✓</span> : null}
+            <span>كل السلاسل</span>
+          </label>
+
+          {seriesOptions.map((series) => {
+            const selected = seriesSlugs.includes(series.slug);
+
+            return (
+              <label
+                key={series.id}
+                className={`inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition focus-within:ring-2 focus-within:ring-[#E2B84F] ${
+                  selected
+                    ? "border-[#D5A640] bg-[#D5A640]/15 text-[#F1D49A]"
+                    : "border-white/15 bg-white/[0.025] text-white/70 hover:border-white/25 hover:text-white"
+                }`}
+              >
+                <AdminCheckbox
+                  label={series.name}
+                  presentation="native"
+                  name="series_slugs"
+                  data-feed-series-option={series.slug}
+                  value={series.slug}
+                  checked={selected}
+                  onChange={(event) => toggleSeries(event.currentTarget.value)}
+                  className="sr-only"
+                />
+                {selected ? <span aria-hidden="true">✓</span> : null}
+                <span>{series.name}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    </section>
   );
 }
