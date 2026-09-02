@@ -135,6 +135,7 @@ export type SlotModuleRenderContext = {
   topicsListingContent?: ReactNode;
   publicPath?: string;
   searchParams?: SearchPlatformSearchParams;
+  suppressFeaturedDuringSearch?: boolean;
 };
 
 /**

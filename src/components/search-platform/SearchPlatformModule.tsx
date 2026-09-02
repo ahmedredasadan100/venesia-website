@@ -21,6 +21,10 @@ import {
   asSearchPlatformConfig,
   type SearchPlatformConfig,
 } from "../../lib/page-blocks/search-platform-config";
+import {
+  pageBlockTextAlignClass,
+  pageBlockTextPlacementClass,
+} from "../../lib/page-blocks/configs";
 import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
 import PublicPagination from "../Pagination";
 import PublicContentSearchInput from "../public/PublicContentSearchInput";
@@ -158,6 +162,7 @@ function SearchLauncher({
   resultCount: number;
 }) {
   const compact = config.presentation === "compact";
+  const display = config.interfaceDisplay;
 
   return (
     <section
@@ -168,13 +173,24 @@ function SearchLauncher({
       dir="rtl"
       data-search-platform-module="launcher"
       data-search-platform-scope={scopeParam ?? ""}
+      data-search-interface-display-formatting=""
     >
       <p className="text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70">Search</p>
-      <h2 className={`${compact ? "mt-2 text-xl" : "mt-3 text-3xl"} font-semibold text-white`}>
-        {config.title}
-      </h2>
-      {config.description ? (
-        <p className="mt-3 leading-7 text-white/50">{config.description}</p>
+      {display.title.visible ? (
+        <h2
+          className={`${compact ? "mt-2 text-xl" : "mt-3 text-3xl"} text-white ${display.title.bold ? "font-semibold" : "font-normal"} ${pageBlockTextAlignClass(display.title.alignment)}`}
+          data-search-interface-element="title"
+        >
+          {config.title}
+        </h2>
+      ) : null}
+      {display.description.visible && config.description ? (
+        <p
+          className={`mt-3 leading-7 text-white/50 ${display.description.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(display.description.alignment)} ${pageBlockTextPlacementClass(display.description.alignment)}`}
+          data-search-interface-element="description"
+        >
+          {config.description}
+        </p>
       ) : null}
       <div className="mt-5">
         <PublicContentSearchInput
@@ -187,6 +203,8 @@ function SearchLauncher({
           placeholder={config.placeholder}
           ariaLabel={config.title}
           helpText={config.helpText}
+          helpTextDisplay={display.helpText}
+          showSearchAction={display.searchAction.visible}
         />
       </div>
     </section>
@@ -381,13 +399,33 @@ export default async function SearchPlatformModule({
     sort: selectedSort,
   };
   const presentation = config.presentation === "full-list" ? "full-list" : "full-grid";
+  const display = config.interfaceDisplay;
 
   return (
-    <section className="space-y-7 py-4 text-right" dir="rtl" data-search-platform-module="results">
+    <section
+      className="space-y-7 py-4 text-right"
+      dir="rtl"
+      data-search-platform-module="results"
+      data-search-interface-display-formatting=""
+    >
       <header className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-7 md:p-10">
         <p className="text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70">Search Platform</p>
-        <h2 className="mt-3 text-3xl font-semibold text-white md:text-4xl">{config.title}</h2>
-        {config.description ? <p className="mt-4 max-w-3xl leading-8 text-white/55">{config.description}</p> : null}
+        {display.title.visible ? (
+          <h2
+            className={`mt-3 text-3xl text-white md:text-4xl ${display.title.bold ? "font-semibold" : "font-normal"} ${pageBlockTextAlignClass(display.title.alignment)}`}
+            data-search-interface-element="title"
+          >
+            {config.title}
+          </h2>
+        ) : null}
+        {display.description.visible && config.description ? (
+          <p
+            className={`mt-4 max-w-3xl leading-8 text-white/55 ${display.description.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(display.description.alignment)} ${pageBlockTextPlacementClass(display.description.alignment)}`}
+            data-search-interface-element="description"
+          >
+            {config.description}
+          </p>
+        ) : null}
         <div className="mt-6 max-w-3xl">
           <PublicContentSearchInput
             basePath="/search"
@@ -398,6 +436,8 @@ export default async function SearchPlatformModule({
             placeholder={config.placeholder}
             ariaLabel={config.title}
             helpText={config.helpText}
+            helpTextDisplay={display.helpText}
+            showSearchAction={display.searchAction.visible}
           />
         </div>
       </header>
@@ -420,10 +460,14 @@ export default async function SearchPlatformModule({
       {query ? (
         listing.items.length ? (
           <>
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.25rem] border border-white/10 bg-white/[0.025] px-5 py-4 text-sm text-white/50">
-              <span>عرض {listing.startIndex + 1}-{listing.endIndex} من {listing.totalCount} نتيجة</span>
-              <span className="text-[#D8B87A]/75">البحث عن: {query}</span>
-            </div>
+            {display.resultsTitle.visible ? (
+              <div
+                className={`rounded-[1.25rem] border border-white/10 bg-white/[0.025] px-5 py-4 text-sm text-white/50 ${display.resultsTitle.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(display.resultsTitle.alignment)}`}
+                data-search-interface-element="results-title"
+              >
+                عرض {listing.startIndex + 1}-{listing.endIndex} من {listing.totalCount} نتيجة للبحث عن: {query}
+              </div>
+            ) : null}
             <div className={presentation === "full-list" ? "space-y-5" : "grid gap-6 md:grid-cols-2 xl:grid-cols-3"}>
               {listing.items.map((item) => (
                 <SearchResultCard key={`${item.contentType}:${item.id}`} item={item} presentation={presentation} />
@@ -438,10 +482,13 @@ export default async function SearchPlatformModule({
             />
           </>
         ) : (
-          <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-10 text-center">
+          <div
+            className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-10 text-center"
+            data-search-interface-element="empty-results"
+          >
             <p className="text-xs uppercase tracking-[0.3em] text-[#D8B87A]/70">Search Results</p>
-            <h2 className="mt-4 text-2xl font-semibold text-white">لا توجد نتائج مطابقة</h2>
-            <p className="mx-auto mt-4 max-w-xl leading-8 text-white/55">جرّب كلمة مختلفة أو خفّف الفلاتر الحالية.</p>
+            <h2 className="mt-4 text-2xl font-semibold text-white">{display.emptyResults.title}</h2>
+            <p className="mx-auto mt-4 max-w-xl leading-8 text-white/55">{display.emptyResults.description}</p>
           </div>
         )
       ) : (

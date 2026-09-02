@@ -21,6 +21,7 @@ import {
 import { VENISIA_THEME_REGION_RENDER_ORDER } from "./venisia-theme-regions";
 import { renderVenesiaThemeMediaHubNodes } from "./VenesiaThemeMediaHubLayout";
 import type { SearchPlatformSearchParams } from "../search-platform/SearchPlatformModule";
+import { isSearchPlatformTemplate } from "../../lib/page-blocks/search-platform-config";
 
 type SlotContentOptions = {
   prefix?: ReactNode;
@@ -30,6 +31,7 @@ type SlotContentOptions = {
   topicsListingContent?: ReactNode;
   publicPath?: string;
   searchParams?: SearchPlatformSearchParams;
+  suppressFeaturedDuringSearch?: boolean;
 };
 
 function SlotModuleContainer({
@@ -63,6 +65,7 @@ function renderOrderedSlotEntries(
     topicsListingContent: options.topicsListingContent,
     publicPath: options.publicPath,
     searchParams: options.searchParams,
+    suppressFeaturedDuringSearch: options.suppressFeaturedDuringSearch,
   });
   const nodes: ReactNode[] = [];
   let index = 0;
@@ -141,6 +144,7 @@ export function PageSlotContent({
   topicsListingContent,
   publicPath,
   searchParams,
+  suppressFeaturedDuringSearch,
 }: {
   entries: SlotEntry[];
 } & SlotContentOptions) {
@@ -150,6 +154,7 @@ export function PageSlotContent({
     topicsListingContent,
     publicPath,
     searchParams,
+    suppressFeaturedDuringSearch,
   });
 
   if (prefix != null) {
@@ -174,12 +179,14 @@ type HeroSlotContentProps = {
   composition: PageComposition;
   fallbackHero?: ReactNode;
   breadcrumbCurrentLabel?: string;
+  suppressFeaturedDuringSearch?: boolean;
 };
 
 export function HeroSlotContent({
   composition,
   fallbackHero,
   breadcrumbCurrentLabel,
+  suppressFeaturedDuringSearch,
 }: HeroSlotContentProps) {
   const heroEntry = composition.slots.hero.find((entry) => entry.kind === "hero");
   const heroEntries = getSlotEntries(composition, "hero");
@@ -187,6 +194,7 @@ export function HeroSlotContent({
     <PageSlotContent
       entries={heroEntries}
       breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+      suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
     />
   ) : null;
 
@@ -236,6 +244,26 @@ type PageSlotLayoutProps = {
   searchParams?: SearchPlatformSearchParams;
 };
 
+function hasActiveSearchPlatformQuery(
+  composition: PageComposition,
+  searchParams: SearchPlatformSearchParams | undefined,
+) {
+  const rawQuery = searchParams?.q;
+  const query = Array.isArray(rawQuery) ? rawQuery[0] : rawQuery;
+  if (!query?.trim()) return false;
+
+  return Object.values(composition.slots).some((entries) =>
+    entries.some(
+      (entry) =>
+        entry.kind === "block" &&
+        isSearchPlatformTemplate(
+          entry.block.template.slug,
+          entry.block.template.variant,
+        ),
+    ),
+  );
+}
+
 export default function PageSlotLayout({
   composition,
   fallbackHero,
@@ -249,6 +277,10 @@ export default function PageSlotLayout({
   searchParams,
 }: PageSlotLayoutProps) {
   const skip = new Set(skipSlots);
+  const suppressFeaturedDuringSearch = hasActiveSearchPlatformQuery(
+    composition,
+    searchParams,
+  );
   const sidebarEntries = getSlotEntries(composition, "sidebar");
   const hasSidebarContent =
     !skip.has("sidebar") && Boolean(sidebarEntries.length || sidebarPrefix);
@@ -267,6 +299,7 @@ export default function PageSlotLayout({
           composition={composition}
           fallbackHero={fallbackHero}
           breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+          suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
         />
       );
     }
@@ -292,6 +325,7 @@ export default function PageSlotLayout({
             topicsListingContent={topicsListingContent}
             publicPath={publicPath}
             searchParams={searchParams}
+            suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
           />
         </div>
       </div>
@@ -309,6 +343,7 @@ export default function PageSlotLayout({
             composition={composition}
             fallbackHero={fallbackHero}
             breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+            suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
           />
         ) : null}
 
@@ -329,6 +364,7 @@ export default function PageSlotLayout({
                   topicsListingContent={topicsListingContent}
                   publicPath={publicPath}
                   searchParams={searchParams}
+                  suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
                 />
               </section>
             ) : null}
@@ -347,6 +383,7 @@ export default function PageSlotLayout({
                   topicsListingContent={topicsListingContent}
                   publicPath={publicPath}
                   searchParams={searchParams}
+                  suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
                 />
               </aside>
             ) : null}
