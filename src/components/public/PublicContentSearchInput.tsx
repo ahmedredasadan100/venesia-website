@@ -19,7 +19,17 @@ import {
   PUBLIC_CONTENT_SEARCH_MAX_LENGTH,
   type PublicContentSearchSuggestion,
 } from "../../lib/content/public-content-read";
+import {
+  pageBlockTextAlignClass,
+  type PageBlockTextAlignment,
+} from "../../lib/page-blocks/configs";
 import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";
+
+type PublicContentSearchTextDisplay = {
+  visible: boolean;
+  bold: boolean;
+  alignment: PageBlockTextAlignment;
+};
 
 type PublicContentSearchInputProps = {
   basePath: string;
@@ -32,6 +42,8 @@ type PublicContentSearchInputProps = {
   placeholder: string;
   ariaLabel: string;
   helpText: string;
+  helpTextDisplay?: PublicContentSearchTextDisplay;
+  showSearchAction?: boolean;
 };
 
 type FloatingListboxPosition = {
@@ -88,6 +100,8 @@ export default function PublicContentSearchInput({
   placeholder,
   ariaLabel,
   helpText,
+  helpTextDisplay,
+  showSearchAction = true,
 }: PublicContentSearchInputProps) {
   const router = useRouter();
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -380,27 +394,30 @@ export default function PublicContentSearchInput({
           aria-busy={isPending || normalizedDraft !== committedQuery}
           autoComplete="off"
           maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}
-          className="w-full rounded-full border border-white/10 bg-black/20 py-3 pe-12 ps-12 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:bg-black/30 focus:ring-2 focus:ring-[#D8B87A]/10 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
+          className={`w-full rounded-full border border-white/10 bg-black/20 py-3 ps-12 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:bg-black/30 focus:ring-2 focus:ring-[#D8B87A]/10 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden ${showSearchAction ? "pe-12" : "pe-4"}`}
         />
 
-        <button
-          type="button"
-          onClick={() => submitSearch(normalizedDraft)}
-          aria-label="تنفيذ البحث"
-          className="absolute end-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-[#D8B87A] text-[#111] transition hover:bg-[#E4C98F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70"
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 24 24"
-            className="h-4 w-4"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
+        {showSearchAction ? (
+          <button
+            type="button"
+            onClick={() => submitSearch(normalizedDraft)}
+            aria-label="تنفيذ البحث"
+            data-public-content-search-action=""
+            className="absolute end-2.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-[#D8B87A] text-[#111] transition hover:bg-[#E4C98F] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70"
           >
-            <circle cx="11" cy="11" r="6" />
-            <path d="m16 16 4 4" />
-          </svg>
-        </button>
+            <svg
+              aria-hidden="true"
+              viewBox="0 0 24 24"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="6" />
+              <path d="m16 16 4 4" />
+            </svg>
+          </button>
+        ) : null}
 
         {normalizedDraft ? (
           <button
@@ -424,7 +441,14 @@ export default function PublicContentSearchInput({
             : helpText}
       </p>
 
-      <p className="mt-3 text-xs leading-6 text-white/35">{helpText}</p>
+      {helpTextDisplay?.visible !== false ? (
+        <p
+          className={`mt-3 text-xs leading-6 text-white/35 ${helpTextDisplay?.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(helpTextDisplay?.alignment ?? "right")}`}
+          data-public-content-search-help=""
+        >
+          {helpText}
+        </p>
+      ) : null}
     </div>
   );
 }

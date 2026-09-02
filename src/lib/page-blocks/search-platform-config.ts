@@ -3,6 +3,7 @@ import {
   isContentType,
   type ContentType,
 } from "../admin/content/content-types";
+import type { PageBlockTextAlignment } from "./configs";
 
 export const SEARCH_PLATFORM_TEMPLATE_SLUG = "search-platform";
 
@@ -28,6 +29,24 @@ export const SEARCH_PLATFORM_RESULT_LIMITS = [6, 9, 12, 24] as const;
 export type SearchPlatformResultLimit =
   (typeof SEARCH_PLATFORM_RESULT_LIMITS)[number];
 
+export type SearchPlatformTextDisplay = {
+  visible: boolean;
+  bold: boolean;
+  alignment: PageBlockTextAlignment;
+};
+
+export type SearchPlatformInterfaceDisplay = {
+  title: SearchPlatformTextDisplay;
+  description: SearchPlatformTextDisplay;
+  helpText: SearchPlatformTextDisplay;
+  searchAction: { visible: boolean };
+  resultsTitle: SearchPlatformTextDisplay;
+  emptyResults: {
+    title: string;
+    description: string;
+  };
+};
+
 export type SearchPlatformConfig = {
   title: string;
   description: string;
@@ -39,6 +58,19 @@ export type SearchPlatformConfig = {
   presentation: SearchPlatformPresentation;
   filters: SearchPlatformFilter[];
   defaultSort: "newest" | "oldest";
+  interfaceDisplay: SearchPlatformInterfaceDisplay;
+};
+
+export const DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY: SearchPlatformInterfaceDisplay = {
+  title: { visible: true, bold: true, alignment: "right" },
+  description: { visible: true, bold: false, alignment: "right" },
+  helpText: { visible: true, bold: false, alignment: "right" },
+  searchAction: { visible: true },
+  resultsTitle: { visible: true, bold: false, alignment: "right" },
+  emptyResults: {
+    title: "لا توجد نتائج مطابقة",
+    description: "جرّب كلمة مختلفة أو خفّف الفلاتر الحالية.",
+  },
 };
 
 export const DEFAULT_SEARCH_PLATFORM_CONFIG: SearchPlatformConfig = {
@@ -53,6 +85,7 @@ export const DEFAULT_SEARCH_PLATFORM_CONFIG: SearchPlatformConfig = {
   presentation: "full-grid",
   filters: ["content-type"],
   defaultSort: "newest",
+  interfaceDisplay: DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY,
 };
 
 function asRecord(raw: unknown): Record<string, unknown> {
@@ -64,6 +97,140 @@ function asRecord(raw: unknown): Record<string, unknown> {
 function cleanText(value: unknown, fallback: string) {
   const text = String(value ?? "").trim();
   return text || fallback;
+}
+
+function readBoolean(value: unknown, fallback: boolean) {
+  if (typeof value === "boolean") return value;
+  if (value === "true" || value === "1" || value === "on") return true;
+  if (value === "false" || value === "0") return false;
+  return fallback;
+}
+
+function readAlignment(
+  value: unknown,
+  fallback: PageBlockTextAlignment,
+): PageBlockTextAlignment {
+  return value === "right" || value === "center" || value === "left"
+    ? value
+    : fallback;
+}
+
+function resolveTextDisplay(
+  raw: unknown,
+  fallback: SearchPlatformTextDisplay,
+): SearchPlatformTextDisplay {
+  const value = asRecord(raw);
+  return {
+    visible: readBoolean(value.visible, fallback.visible),
+    bold: readBoolean(value.bold, fallback.bold),
+    alignment: readAlignment(value.alignment, fallback.alignment),
+  };
+}
+
+function buildTextDisplayFromFormData(
+  formData: FormData,
+  field: string,
+  fallback: SearchPlatformTextDisplay,
+): SearchPlatformTextDisplay {
+  return {
+    visible: readBoolean(formData.get(`show_${field}`), fallback.visible),
+    bold: readBoolean(formData.get(`${field}_bold`), fallback.bold),
+    alignment: readAlignment(
+      formData.get(`${field}_alignment`),
+      fallback.alignment,
+    ),
+  };
+}
+
+export function resolveSearchPlatformInterfaceDisplay(
+  raw: unknown,
+): SearchPlatformInterfaceDisplay {
+  const value = asRecord(raw);
+  const searchAction = asRecord(value.searchAction ?? value.search_action);
+  const emptyResults = asRecord(value.emptyResults ?? value.empty_results);
+
+  return {
+    title: resolveTextDisplay(
+      value.title,
+      DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.title,
+    ),
+    description: resolveTextDisplay(
+      value.description,
+      DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.description,
+    ),
+    helpText: resolveTextDisplay(
+      value.helpText ?? value.help_text,
+      DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.helpText,
+    ),
+    searchAction: {
+      visible: readBoolean(
+        searchAction.visible,
+        DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.searchAction.visible,
+      ),
+    },
+    resultsTitle: resolveTextDisplay(
+      value.resultsTitle ?? value.results_title,
+      DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.resultsTitle,
+    ),
+    emptyResults: {
+      title: cleanText(
+        emptyResults.title,
+        DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.emptyResults.title,
+      ),
+      description: cleanText(
+        emptyResults.description,
+        DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.emptyResults.description,
+      ),
+    },
+  };
+}
+
+export function buildSearchPlatformInterfaceDisplayFromFormData(
+  formData: FormData,
+): SearchPlatformInterfaceDisplay {
+  const emptyResultsTitle = String(
+    formData.get("empty_results_title") ?? "",
+  ).trim();
+  const emptyResultsDescription = String(
+    formData.get("empty_results_description") ?? "",
+  ).trim();
+
+  if (!emptyResultsTitle || !emptyResultsDescription) {
+    throw new Error("أكمل عنوان ووصف حالة عدم وجود نتائج.");
+  }
+
+  return {
+    title: buildTextDisplayFromFormData(
+      formData,
+      "search_title",
+      DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.title,
+    ),
+    description: buildTextDisplayFromFormData(
+      formData,
+      "search_description",
+      DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.description,
+    ),
+    helpText: buildTextDisplayFromFormData(
+      formData,
+      "search_help_text",
+      DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.helpText,
+    ),
+    searchAction: {
+      visible: readBoolean(
+        formData.get("show_search_action"),
+        DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.searchAction.visible,
+      ),
+    },
+    resultsTitle: buildTextDisplayFromFormData(
+      formData,
+      "search_results_title",
+      DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY.resultsTitle,
+    ),
+    emptyResults: {
+      title: emptyResultsTitle,
+      description: emptyResultsDescription,
+    },
+  };
 }
 
 export function asSearchPlatformConfig(raw: unknown): SearchPlatformConfig {
@@ -92,6 +259,9 @@ export function asSearchPlatformConfig(raw: unknown): SearchPlatformConfig {
         SEARCH_PLATFORM_FILTERS.includes(value as SearchPlatformFilter),
       )
     : DEFAULT_SEARCH_PLATFORM_CONFIG.filters;
+  const interfaceDisplay = resolveSearchPlatformInterfaceDisplay(
+    config.interfaceDisplay ?? config.interface_display,
+  );
 
   return {
     title: cleanText(config.title, DEFAULT_SEARCH_PLATFORM_CONFIG.title),
@@ -119,6 +289,7 @@ export function asSearchPlatformConfig(raw: unknown): SearchPlatformConfig {
     defaultSort: config.defaultSort === "oldest" || config.default_sort === "oldest"
       ? "oldest"
       : "newest",
+    interfaceDisplay,
   };
 }
 

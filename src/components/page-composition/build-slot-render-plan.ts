@@ -103,6 +103,7 @@ export function buildSlotRenderPlan(
     }
 
     if (entry.kind === "featured") {
+      if (context.suppressFeaturedDuringSearch) continue;
       featuredItems.push({
         kind: "featured",
         key: `featured-${entry.assignmentId}`,

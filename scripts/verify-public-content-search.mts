@@ -3,8 +3,19 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createJiti } from "jiti";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
+const jiti = createJiti(import.meta.url);
+const {
+  DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY,
+  asSearchPlatformConfig,
+  buildSearchPlatformInterfaceDisplayFromFormData,
+  resolveSearchPlatformInterfaceDisplay,
+} = await jiti.import<
+  typeof import("../src/lib/page-blocks/search-platform-config.ts")
+>("../src/lib/page-blocks/search-platform-config.ts");
 
 const contract = read("src/lib/content/public-content-read/contract.ts");
 const owner = read("src/lib/content/public-content-read/owner.ts");
@@ -26,6 +37,7 @@ const mediaCenterShell = read("src/components/media-center/MediaCenterShellLayou
 const mediaDetailPage = read("src/components/media-center/MediaDetailPage.tsx");
 const mediaCompositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
 const mediaSlotPlan = read("src/components/page-composition/build-slot-render-plan.ts");
+const pageSlotLayout = read("src/components/page-composition/PageSlotLayout.tsx");
 const venisiaMediaHubLayout = read("src/components/page-composition/VenesiaThemeMediaHubLayout.tsx");
 const mediaListing = read("src/components/media-center/MediaListingContent.tsx");
 const mediaShell = read("src/components/media-center/MediaPageShell.tsx");
@@ -179,6 +191,13 @@ assert.ok(input.includes('aria-label="تنفيذ البحث"'));
 assert.ok(input.includes('data-public-content-search-field=""'));
 assert.ok(input.includes('className="absolute end-2.5 top-1/2'));
 assert.ok(input.includes('className="absolute start-3 top-1/2'));
+assert.ok(input.includes("helpTextDisplay"));
+assert.ok(input.includes("showSearchAction"));
+assert.ok(input.includes('data-public-content-search-help=""'));
+assert.ok(input.includes('data-public-content-search-action=""'));
+assert.ok(input.includes("pageBlockTextAlignClass"));
+assert.ok(!input.includes("pageBlockTextPlacementClass"));
+assert.ok(!input.includes("searchAction.text"));
 assert.ok(input.includes("[&::-webkit-search-cancel-button]:hidden"));
 assert.ok(input.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES"));
 assert.ok(input.includes('from "../venesia-scrollbar-styles"'));
@@ -229,7 +248,7 @@ assert.ok(
     mediaCompositionLoader.includes("slots[hubModule.slot].push") &&
     mediaSlotPlan.includes('kind: "media-hub"') &&
     venisiaMediaHubLayout.includes("renderVenesiaThemeMediaHubNodes"),
-  "Featured Content must remain an Assignment-positioned module during listing search",
+  "Featured Content must remain an Assignment-positioned module in the shared render plan",
 );
 assert.ok(!mediaListing.includes("children?: ReactNode"));
 assert.ok(!mediaShell.includes("createContext") && !mediaShell.includes("useMediaSearch"));
@@ -243,6 +262,9 @@ for (const route of ["news", "videos", "gallery", "press", "site-updates"]) {
 assert.ok(searchConfig.includes('SEARCH_PLATFORM_TEMPLATE_SLUG = "search-platform"'));
 assert.ok(searchConfig.includes('"compact"') && searchConfig.includes('"full-list"') && searchConfig.includes('"full-grid"'));
 assert.ok(searchConfig.includes('"content-type"') && searchConfig.includes('"category"') && searchConfig.includes('"series"'));
+assert.ok(searchConfig.includes("DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY"));
+assert.ok(searchConfig.includes("resolveSearchPlatformInterfaceDisplay"));
+assert.ok(searchConfig.includes("buildSearchPlatformInterfaceDisplayFromFormData"));
 assert.ok(moduleRegistry.includes('"search-platform"'));
 assert.ok(slotRenderer.includes("<SearchPlatformModule"));
 assert.ok(dynamicPage.includes("publicPath={page.path}") && dynamicPage.includes("searchParams={resolvedSearchParams}"));
@@ -256,6 +278,17 @@ assert.ok(searchModule.includes("loadPublicContentCollection"));
 assert.ok(searchModule.includes("loadPublicContentFilterOptions"));
 assert.ok(searchModule.includes("<PublicPagination"));
 assert.ok(searchModule.includes('action="/search"'));
+assert.ok(searchModule.includes('data-search-interface-display-formatting=""'));
+for (const element of ["title", "description", "results-title", "empty-results"]) {
+  assert.ok(
+    searchModule.includes(`data-search-interface-element="${element}"`),
+    `Public Search interface must apply ${element} formatting`,
+  );
+}
+assert.ok(searchModule.includes("helpTextDisplay={display.helpText}"));
+assert.ok(searchModule.includes("showSearchAction={display.searchAction.visible}"));
+assert.ok(searchModule.includes("display.emptyResults.title"));
+assert.ok(searchModule.includes("display.emptyResults.description"));
 assert.ok(!searchModule.includes("pg_trgm") && !searchModule.includes("highlight"));
 assert.ok(!searchModule.includes('.from("topics")') && !searchModule.includes("getSupabaseAdmin"));
 assert.ok(searchEditor.includes('name="search_scope"'));
@@ -264,11 +297,46 @@ assert.ok(searchEditor.includes('name="result_limit"'));
 assert.ok(searchEditor.includes('name="search_presentation"'));
 assert.ok(searchEditor.includes('name="search_filters"'));
 assert.ok(searchEditor.includes('name="default_sort"'));
+assert.ok(searchEditor.includes('data-search-interface-display-formatting=""'));
+for (const field of [
+  "search_title",
+  "search_description",
+  "search_help_text",
+  "search_results_title",
+]) {
+  assert.ok(searchEditor.includes(`showName="show_${field}"`));
+  assert.ok(searchEditor.includes(`boldName="${field}_bold"`));
+  assert.ok(searchEditor.includes(`alignmentName="${field}_alignment"`));
+}
+assert.ok(searchEditor.includes('label="أيقونة البحث"'));
+assert.ok(searchEditor.includes('showName="show_search_action"'));
+assert.ok(searchEditor.includes('controlMode="visibility-only"'));
+for (const field of ["placeholder", "empty_results_title", "empty_results_description"]) {
+  assert.ok(searchEditor.includes(`name="${field}"`));
+}
+assert.equal(
+  searchEditor.match(/span=\{4\}/gu)?.length,
+  8,
+  "Search interface controls must remain three equal cards per desktop row",
+);
 assert.equal(
   searchEditor.match(/span=\{3\}/gu)?.length,
-  8,
-  "Search interface and scope controls must remain four equal cards per desktop row",
+  4,
+  "Search settings controls must remain four equal cards per desktop row",
 );
+assert.equal(
+  searchEditor.match(/^\s+hideLabel\r?$/gmu)?.length,
+  3,
+  "Title, description, and help text must keep accessible labels without repeating them visually",
+);
+for (const removedSearchActionControl of [
+  'name="search_action_text"',
+  'boldName="search_action_bold"',
+  'alignmentName="search_action_alignment"',
+  'label="نص زر البحث"',
+]) {
+  assert.ok(!searchEditor.includes(removedSearchActionControl));
+}
 assert.ok(
   !searchEditor.includes("<textarea") && !searchEditor.includes("multiline"),
   "Search description and Help Text must remain single-line controls",
@@ -298,6 +366,82 @@ assert.ok(
   "Search editor header copy must remain product-facing Arabic without changing the runtime owner",
 );
 assert.ok(contentActions.includes("buildSearchPlatformConfig"));
+assert.ok(
+  contentActions.includes("buildSearchPlatformInterfaceDisplayFromFormData") &&
+    contentActions.includes("interfaceDisplay: buildSearchPlatformInterfaceDisplayFromFormData("),
+  "Search save must map interface formatting through the Search Platform owner",
+);
+assert.ok(pageSlotLayout.includes("hasActiveSearchPlatformQuery"));
+assert.ok(pageSlotLayout.includes("isSearchPlatformTemplate"));
+assert.ok(pageSlotLayout.includes("suppressFeaturedDuringSearch"));
+assert.ok(!pageSlotLayout.includes('"/topics"'));
+assert.ok(
+  mediaSlotPlan.includes("if (context.suppressFeaturedDuringSearch) continue;"),
+  "Active Search Platform results must project Featured assignments out of the shared render plan",
+);
+assert.ok(
+  slotRenderer.includes("suppressFeaturedDuringSearch?: boolean"),
+  "The shared slot-render context must own the search-mode projection flag",
+);
+
+const interfaceForm = new FormData();
+interfaceForm.set("show_search_title", "false");
+interfaceForm.set("search_title_bold", "false");
+interfaceForm.set("search_title_alignment", "left");
+interfaceForm.set("show_search_description", "true");
+interfaceForm.set("search_description_bold", "true");
+interfaceForm.set("search_description_alignment", "center");
+interfaceForm.set("show_search_help_text", "false");
+interfaceForm.set("search_help_text_bold", "true");
+interfaceForm.set("search_help_text_alignment", "left");
+interfaceForm.set("show_search_action", "true");
+interfaceForm.set("show_search_results_title", "false");
+interfaceForm.set("search_results_title_bold", "true");
+interfaceForm.set("search_results_title_alignment", "left");
+interfaceForm.set("empty_results_title", "لا شيء هنا");
+interfaceForm.set("empty_results_description", "جرّب صياغة أخرى.");
+
+const savedInterfaceDisplay =
+  buildSearchPlatformInterfaceDisplayFromFormData(interfaceForm);
+assert.deepEqual(savedInterfaceDisplay, {
+  title: { visible: false, bold: false, alignment: "left" },
+  description: { visible: true, bold: true, alignment: "center" },
+  helpText: { visible: false, bold: true, alignment: "left" },
+  searchAction: { visible: true },
+  resultsTitle: { visible: false, bold: true, alignment: "left" },
+  emptyResults: {
+    title: "لا شيء هنا",
+    description: "جرّب صياغة أخرى.",
+  },
+});
+assert.deepEqual(
+  resolveSearchPlatformInterfaceDisplay(savedInterfaceDisplay),
+  savedInterfaceDisplay,
+  "Search parser must preserve every saved interface control",
+);
+assert.deepEqual(
+  asSearchPlatformConfig({ interfaceDisplay: savedInterfaceDisplay })
+    .interfaceDisplay,
+  savedInterfaceDisplay,
+  "Search config must carry saved interface formatting to Public UI",
+);
+assert.deepEqual(
+  resolveSearchPlatformInterfaceDisplay(undefined),
+  DEFAULT_SEARCH_PLATFORM_INTERFACE_DISPLAY,
+  "Existing Search modules must receive backward-compatible formatting defaults",
+);
+assert.deepEqual(
+  resolveSearchPlatformInterfaceDisplay({
+    searchAction: {
+      visible: false,
+      text: "Legacy label",
+      bold: true,
+      alignment: "center",
+    },
+  }).searchAction,
+  { visible: false },
+  "Legacy Search action formatting must resolve safely to the icon visibility contract",
+);
 assert.ok(/'search',\r?\n\s*'\/search'/u.test(migration));
 assert.ok(migration.includes("'search-platform'"));
 assert.ok(migration.includes("mutate_page_composition"));

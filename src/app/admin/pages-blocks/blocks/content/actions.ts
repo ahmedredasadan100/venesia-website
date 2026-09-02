@@ -118,6 +118,7 @@ import {
   SEARCH_PLATFORM_PRESENTATIONS,
   SEARCH_PLATFORM_RESULT_LIMITS,
   SEARCH_PLATFORM_SCOPES,
+  buildSearchPlatformInterfaceDisplayFromFormData,
   isSearchPlatformTemplate,
   type SearchPlatformConfig,
   type SearchPlatformFilter,
@@ -252,6 +253,9 @@ function buildSearchPlatformConfig(formData: FormData): SearchPlatformConfig {
     presentation,
     filters,
     defaultSort,
+    interfaceDisplay: buildSearchPlatformInterfaceDisplayFromFormData(
+      formData,
+    ),
   };
 }
 

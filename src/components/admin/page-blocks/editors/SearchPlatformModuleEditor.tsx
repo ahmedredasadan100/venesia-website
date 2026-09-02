@@ -19,6 +19,7 @@ import {
   ModuleEditorFieldGrid,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
+  ModuleEditorVisibilityAlignRow,
 } from "../ModuleEditorPresentation";
 
 const PRESENTATION_LABELS: Record<SearchPlatformPresentation, string> = {
@@ -37,14 +38,26 @@ function TextField({
   label,
   name,
   defaultValue,
+  surface = true,
+  hideLabel = false,
 }: {
   label: string;
   name: string;
   defaultValue: string;
+  surface?: boolean;
+  hideLabel?: boolean;
 }) {
   return (
-    <label className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} block h-full space-y-2`}>
-      <span className="block text-sm font-medium text-white/70">{label}</span>
+    <label
+      className={`${surface ? MODULE_EDITOR_CONTROL_CARD_CLASS_NAME : ""} block h-full space-y-2`.trim()}
+    >
+      <span
+        className={
+          hideLabel ? "sr-only" : "block text-sm font-medium text-white/70"
+        }
+      >
+        {label}
+      </span>
       <input
         name={name}
         defaultValue={defaultValue}
@@ -66,20 +79,116 @@ export default function SearchPlatformModuleEditor({
         <ModuleEditorSectionHeading intent="domain">
           محتوى واجهة البحث
         </ModuleEditorSectionHeading>
-        <ModuleEditorFieldGrid className="mt-4">
-          <ModuleEditorField nature="short-text" span={3}>
-            <TextField label="العنوان" name="title" defaultValue={config.title} />
-          </ModuleEditorField>
-          <ModuleEditorField nature="short-text" span={3}>
-            <TextField label="الوصف" name="description" defaultValue={config.description} />
-          </ModuleEditorField>
-          <ModuleEditorField nature="short-text" span={3}>
-            <TextField label="النص داخل حقل البحث" name="placeholder" defaultValue={config.placeholder} />
-          </ModuleEditorField>
-          <ModuleEditorField nature="short-text" span={3}>
-            <TextField label="النص المساعد" name="help_text" defaultValue={config.helpText} />
-          </ModuleEditorField>
-        </ModuleEditorFieldGrid>
+        <div data-search-interface-display-formatting="">
+          <ModuleEditorFieldGrid className="mt-4">
+            <ModuleEditorField nature="short-text" span={4}>
+              <ModuleEditorVisibilityAlignRow
+                label="العنوان"
+                showName="show_search_title"
+                boldName="search_title_bold"
+                alignmentName="search_title_alignment"
+                showDefault={config.interfaceDisplay.title.visible}
+                boldDefault={config.interfaceDisplay.title.bold}
+                alignmentDefault={config.interfaceDisplay.title.alignment}
+                className="h-full"
+              >
+                <TextField
+                  label="نص العنوان"
+                  name="title"
+                  defaultValue={config.title}
+                  surface={false}
+                  hideLabel
+                />
+              </ModuleEditorVisibilityAlignRow>
+            </ModuleEditorField>
+            <ModuleEditorField nature="short-text" span={4}>
+              <ModuleEditorVisibilityAlignRow
+                label="الوصف"
+                showName="show_search_description"
+                boldName="search_description_bold"
+                alignmentName="search_description_alignment"
+                showDefault={config.interfaceDisplay.description.visible}
+                boldDefault={config.interfaceDisplay.description.bold}
+                alignmentDefault={config.interfaceDisplay.description.alignment}
+                className="h-full"
+              >
+                <TextField
+                  label="نص الوصف"
+                  name="description"
+                  defaultValue={config.description}
+                  surface={false}
+                  hideLabel
+                />
+              </ModuleEditorVisibilityAlignRow>
+            </ModuleEditorField>
+            <ModuleEditorField nature="short-text" span={4}>
+              <ModuleEditorVisibilityAlignRow
+                label="النص المساعد"
+                showName="show_search_help_text"
+                boldName="search_help_text_bold"
+                alignmentName="search_help_text_alignment"
+                showDefault={config.interfaceDisplay.helpText.visible}
+                boldDefault={config.interfaceDisplay.helpText.bold}
+                alignmentDefault={config.interfaceDisplay.helpText.alignment}
+                className="h-full"
+              >
+                <TextField
+                  label="نص المساعدة"
+                  name="help_text"
+                  defaultValue={config.helpText}
+                  surface={false}
+                  hideLabel
+                />
+              </ModuleEditorVisibilityAlignRow>
+            </ModuleEditorField>
+            <ModuleEditorField nature="short-text" span={4}>
+              <TextField
+                label="النص داخل حقل البحث"
+                name="placeholder"
+                defaultValue={config.placeholder}
+              />
+            </ModuleEditorField>
+            <ModuleEditorField nature="standard" span={4}>
+              <ModuleEditorVisibilityAlignRow
+                label="أيقونة البحث"
+                showName="show_search_action"
+                controlMode="visibility-only"
+                showDefault={config.interfaceDisplay.searchAction.visible}
+                className="h-full"
+              />
+            </ModuleEditorField>
+            <ModuleEditorField nature="standard" span={4}>
+              <ModuleEditorVisibilityAlignRow
+                label="عنوان النتائج"
+                showName="show_search_results_title"
+                boldName="search_results_title_bold"
+                alignmentName="search_results_title_alignment"
+                showDefault={config.interfaceDisplay.resultsTitle.visible}
+                boldDefault={config.interfaceDisplay.resultsTitle.bold}
+                alignmentDefault={config.interfaceDisplay.resultsTitle.alignment}
+                className="h-full"
+              >
+                <p className="text-xs leading-5 text-white/40">
+                  يعرض عدد النتائج وكلمة البحث الحالية تلقائيًا.
+                </p>
+              </ModuleEditorVisibilityAlignRow>
+            </ModuleEditorField>
+            <ModuleEditorField nature="short-text" span={4}>
+              <TextField
+                label="عنوان حالة عدم وجود نتائج"
+                name="empty_results_title"
+                defaultValue={config.interfaceDisplay.emptyResults.title}
+              />
+            </ModuleEditorField>
+            <ModuleEditorField nature="short-text" span={4}>
+              <TextField
+                label="وصف حالة عدم وجود نتائج"
+                name="empty_results_description"
+                defaultValue={config.interfaceDisplay.emptyResults.description}
+              />
+            </ModuleEditorField>
+          </ModuleEditorFieldGrid>
+        </div>
       </ModuleEditorSection>
 
       <ModuleEditorSection>
