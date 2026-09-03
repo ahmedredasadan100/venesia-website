@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { AdminFormGrid, AdminFormListboxSelect, AdminFormSwitch } from "../ui";
+import { AdminFormListboxSelect } from "../ui";
 import FeedModuleFilterFields from "./FeedModuleFilterFields";
 import {
   ModuleEditorFeedback,
@@ -13,6 +13,7 @@ import {
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
+  ModuleEditorSectionHeading,
   ModuleEditorTabs,
   ModuleEditorVisibilityAlignRow,
 } from "./ModuleEditorPresentation";
@@ -20,7 +21,11 @@ import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
 import type { FeedModuleConfig, TopicsFeedType } from "../../../lib/feed-modules/types";
 import {
-  FEED_MODULE_PRESENTATION_SUPPORT,
+  DEFAULT_FEED_ARTICLE_CARD_PRESENTATION,
+  DEFAULT_FEED_CATEGORY_CARD_PRESENTATION,
+  DEFAULT_FEED_SERIES_CARD_PRESENTATION,
+  DEFAULT_FEED_SERIES_LINK_TEXT,
+  FEED_MODULE_DISPLAY_FORMATTING_CAPABILITY,
   TOPICS_FEED_TYPE_LABELS_AR,
   TOPICS_FEED_TYPES,
 } from "../../../lib/feed-modules/types";
@@ -53,10 +58,18 @@ export default function FeedModuleEditClient({
   updateAction,
 }: FeedModuleEditClientProps) {
   const [feedType, setFeedType] = useState<TopicsFeedType>(block.feed_type);
-  const presentationSupport = FEED_MODULE_PRESENTATION_SUPPORT[feedType];
-  const hasPresentationControls = Object.values(presentationSupport).some(Boolean);
+  const displayCapability = FEED_MODULE_DISPLAY_FORMATTING_CAPABILITY.variants[feedType];
+  const isArticleVariant = feedType === "latest" || feedType === "popular";
+  const isCategoryVariant = feedType === "categories";
+  const isSeriesVariant = feedType === "series";
   const eyebrowFormat = resolvePageBlockTextFormat(config.presentation, "eyebrow");
   const titleFormat = resolvePageBlockTextFormat(config.presentation, "title", { bold: true });
+  const articleCard =
+    config.presentation.articleCard ?? DEFAULT_FEED_ARTICLE_CARD_PRESENTATION;
+  const categoryCard =
+    config.presentation.categoryCard ?? DEFAULT_FEED_CATEGORY_CARD_PRESENTATION;
+  const seriesCard =
+    config.presentation.seriesCard ?? DEFAULT_FEED_SERIES_CARD_PRESENTATION;
 
   return (
     <div className="space-y-6 pb-10" dir="rtl">
@@ -136,49 +149,113 @@ export default function FeedModuleEditClient({
 
                   <FeedModuleFilterFields config={config} filterOptions={filterOptions} />
 
-                  {hasPresentationControls ? (
-                    <AdminFormGrid columns={3}>
-                      {presentationSupport.showImage ? (
-                        <AdminFormSwitch
-                          name="show_image"
-                          label="عرض الصورة"
-                          value="true"
-                          uncheckedValue="false"
-                          defaultChecked={config.presentation.showImage}
-                          surface
-                        />
-                      ) : null}
-                      {presentationSupport.showDate ? (
-                        <AdminFormSwitch
-                          name="show_date"
-                          label="عرض التاريخ"
-                          value="true"
-                          uncheckedValue="false"
-                          defaultChecked={config.presentation.showDate}
-                          surface
-                        />
-                      ) : null}
-                      {presentationSupport.showExcerpt ? (
-                        <AdminFormSwitch
-                          name="show_excerpt"
-                          label="عرض الوصف"
-                          value="true"
-                          uncheckedValue="false"
-                          defaultChecked={config.presentation.showExcerpt}
-                          surface
-                        />
-                      ) : null}
-                    </AdminFormGrid>
-                  ) : null}
+                  <div className="mt-6 space-y-3">
+                    <ModuleEditorSectionHeading intent="settings">
+                      تنسيق عناصر الـFeed
+                    </ModuleEditorSectionHeading>
+                    <div className="grid gap-4 xl:grid-cols-2">
+                      <ModuleEditorVisibilityAlignRow
+                        label="الصورة"
+                        className={"image" in displayCapability ? "" : "hidden"}
+                        showName="show_image"
+                        showDefault={config.presentation.showImage}
+                        controlMode="visibility-only"
+                      />
 
-                  <AdminFormGrid>
-                    {feedType === "series" ? (
-                      <label className="block space-y-2">
-                        <span className="text-xs font-semibold text-white/55">نص رابط السلسلة</span>
-                        <input name="link_text" defaultValue={config.presentation.linkText ?? ""} className={fieldClassName()} />
-                      </label>
-                    ) : null}
-                  </AdminFormGrid>
+                      <ModuleEditorVisibilityAlignRow
+                        label="عنوان الموضوع"
+                        className={isArticleVariant ? "" : "hidden"}
+                        showName="show_article_title"
+                        boldName="article_title_bold"
+                        alignmentName="article_title_alignment"
+                        showDefault={articleCard.showTitle}
+                        boldDefault={articleCard.titleBold}
+                        alignmentDefault={articleCard.titleAlignment}
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="المقتطف"
+                        className={isArticleVariant ? "" : "hidden"}
+                        showName="show_article_excerpt"
+                        boldName="article_excerpt_bold"
+                        alignmentName="article_excerpt_alignment"
+                        showDefault={articleCard.showExcerpt}
+                        boldDefault={articleCard.excerptBold}
+                        alignmentDefault={articleCard.excerptAlignment}
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="التاريخ"
+                        className={isArticleVariant ? "" : "hidden"}
+                        showName="show_article_date"
+                        boldName="article_date_bold"
+                        alignmentName="article_date_alignment"
+                        showDefault={articleCard.showDate}
+                        boldDefault={articleCard.dateBold}
+                        alignmentDefault={articleCard.dateAlignment}
+                      />
+
+                      <ModuleEditorVisibilityAlignRow
+                        label="اسم التصنيف"
+                        className={isCategoryVariant ? "" : "hidden"}
+                        showName="show_category"
+                        boldName="category_bold"
+                        alignmentName="category_alignment"
+                        showDefault={categoryCard.showCategory}
+                        boldDefault={categoryCard.categoryBold}
+                        alignmentDefault={categoryCard.categoryAlignment}
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="عدد الموضوعات"
+                        className={isCategoryVariant ? "" : "hidden"}
+                        showName="show_count"
+                        boldName="count_bold"
+                        alignmentName="count_alignment"
+                        showDefault={categoryCard.showCount}
+                        boldDefault={categoryCard.countBold}
+                        alignmentDefault={categoryCard.countAlignment}
+                      />
+
+                      <ModuleEditorVisibilityAlignRow
+                        label="اسم السلسلة"
+                        className={isSeriesVariant ? "" : "hidden"}
+                        showName="show_series"
+                        boldName="series_bold"
+                        alignmentName="series_alignment"
+                        showDefault={seriesCard.showSeries}
+                        boldDefault={seriesCard.seriesBold}
+                        alignmentDefault={seriesCard.seriesAlignment}
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="الوصف"
+                        className={isSeriesVariant ? "self-start" : "hidden"}
+                        showName="show_description"
+                        boldName="description_bold"
+                        alignmentName="description_alignment"
+                        showDefault={seriesCard.showDescription}
+                        boldDefault={seriesCard.descriptionBold}
+                        alignmentDefault={seriesCard.descriptionAlignment}
+                      />
+                      <ModuleEditorVisibilityAlignRow
+                        label="زر عرض كل الموضوعات"
+                        className={isSeriesVariant ? "" : "hidden"}
+                        showName="show_details"
+                        boldName="details_bold"
+                        alignmentName="details_alignment"
+                        showDefault={seriesCard.showDetails}
+                        boldDefault={seriesCard.detailsBold}
+                        alignmentDefault={seriesCard.detailsAlignment}
+                      >
+                        <input
+                          name="link_text"
+                          aria-label="نص زر عرض كل الموضوعات"
+                          defaultValue={
+                            config.presentation.linkText ??
+                            DEFAULT_FEED_SERIES_LINK_TEXT
+                          }
+                          className={fieldClassName()}
+                        />
+                      </ModuleEditorVisibilityAlignRow>
+                    </div>
+                  </div>
 
                 </ModuleEditorSection>
               ),

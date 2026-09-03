@@ -4,6 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 
 import type { SidebarArticleItem } from "../../lib/content-feeds/types";
+import {
+  DEFAULT_FEED_ARTICLE_CARD_PRESENTATION,
+  type FeedArticleCardPresentation,
+} from "../../lib/feed-modules/types";
+import { pageBlockTextAlignClass } from "../../lib/page-blocks/configs";
 import { useAutoCarousel } from "../../hooks/use-auto-carousel";
 import FeedCarouselDots from "../feed-modules/FeedCarouselDots";
 import { SidebarFeedPanel } from "./SidebarFeedPanel";
@@ -15,6 +20,7 @@ type SidebarLatestArticlesWidgetProps = {
   showImage?: boolean;
   showDate?: boolean;
   showExcerpt?: boolean;
+  cardFormatting?: FeedArticleCardPresentation;
   formatting?: import("../../lib/page-blocks/configs").PageBlockTextFormattingConfig;
 };
 
@@ -37,6 +43,7 @@ export default function SidebarLatestArticlesWidget({
   showImage = true,
   showDate = true,
   showExcerpt = false,
+  cardFormatting,
   formatting,
 }: SidebarLatestArticlesWidgetProps) {
   const slides = chunkItems(items);
@@ -49,6 +56,18 @@ export default function SidebarLatestArticlesWidget({
   if (!items.length) return null;
 
   const activeItems = slides[activeIndex] ?? slides[0] ?? [];
+  const resolvedCardFormatting = cardFormatting ?? {
+    ...DEFAULT_FEED_ARTICLE_CARD_PRESENTATION,
+    showDate,
+    showExcerpt,
+  };
+  const hasRenderableItems =
+    showImage ||
+    resolvedCardFormatting.showTitle ||
+    (resolvedCardFormatting.showDate && items.some((item) => Boolean(item.date?.trim()))) ||
+    (resolvedCardFormatting.showExcerpt &&
+      items.some((item) => Boolean(item.excerpt?.trim())));
+  if (!hasRenderableItems) return null;
 
   return (
     <SidebarFeedPanel eyebrow={eyebrow ?? undefined} title={title} formatting={formatting}>
@@ -67,44 +86,70 @@ export default function SidebarLatestArticlesWidget({
           aria-roledescription="slide"
           aria-label={`مجموعة ${activeIndex + 1} من ${slides.length}`}
         >
-          {activeItems.map((item) => (
-            <Link
-              key={`${item.href}-${item.title}`}
-              href={item.href}
-              className="group flex min-w-0 flex-col"
-            >
-              {showImage ? (
-                <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl">
-                  <Image
-                    src={item.image}
-                    alt={item.title}
-                    fill
-                    sizes="(max-width: 1024px) 30vw, 100px"
-                    className="object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                </div>
-              ) : null}
+          {activeItems.map((item) => {
+            const hasDate =
+              resolvedCardFormatting.showDate && Boolean(item.date?.trim());
+            const hasExcerpt =
+              resolvedCardFormatting.showExcerpt && Boolean(item.excerpt?.trim());
+            const hasText =
+              resolvedCardFormatting.showTitle || hasDate || hasExcerpt;
+            if (!showImage && !hasText) return null;
 
-              <div className={showImage ? "mt-3 min-w-0 w-full" : "min-w-0 w-full"}>
-                <h4
-                  className="line-clamp-2 text-sm text-white/70 transition group-hover:text-[#D8B87A]"
-                  style={{ lineHeight: 1.75 }}
-                >
-                  {item.title}
-                </h4>
-
-                {showDate && item.date ? (
-                  <p className="mt-1 text-xs text-white/35">{item.date}</p>
+            return (
+              <Link
+                key={`${item.href}-${item.title}`}
+                href={item.href}
+                className="group flex min-w-0 flex-col"
+                data-feed-article-card="latest"
+              >
+                {showImage ? (
+                  <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl">
+                    <Image
+                      src={item.image}
+                      alt={item.title}
+                      fill
+                      sizes="(max-width: 1024px) 30vw, 100px"
+                      className="object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                  </div>
                 ) : null}
 
-                {showExcerpt && item.excerpt ? (
-                  <p className="mt-1 line-clamp-2 text-xs leading-6 text-white/45">
-                    {item.excerpt}
-                  </p>
+                {hasText ? (
+                  <div
+                    className={`${showImage ? "mt-3" : ""} min-w-0 w-full space-y-1`.trim()}
+                  >
+                    {resolvedCardFormatting.showTitle ? (
+                      <h4
+                        className={`line-clamp-2 text-sm text-white/70 transition group-hover:text-[#D8B87A] ${resolvedCardFormatting.titleBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(resolvedCardFormatting.titleAlignment)}`.trim()}
+                        style={{ lineHeight: 1.75 }}
+                        data-feed-article-title=""
+                      >
+                        {item.title}
+                      </h4>
+                    ) : null}
+
+                    {hasDate ? (
+                      <p
+                        className={`text-xs text-white/35 ${resolvedCardFormatting.dateBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(resolvedCardFormatting.dateAlignment)}`.trim()}
+                        data-feed-article-date=""
+                      >
+                        {item.date}
+                      </p>
+                    ) : null}
+
+                    {hasExcerpt ? (
+                      <p
+                        className={`line-clamp-2 text-xs leading-6 text-white/45 ${resolvedCardFormatting.excerptBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(resolvedCardFormatting.excerptAlignment)}`.trim()}
+                        data-feed-article-excerpt=""
+                      >
+                        {item.excerpt}
+                      </p>
+                    ) : null}
+                  </div>
                 ) : null}
-              </div>
-            </Link>
-          ))}
+              </Link>
+            );
+          })}
         </div>
 
         <FeedCarouselDots
