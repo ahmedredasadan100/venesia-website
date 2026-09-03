@@ -174,39 +174,169 @@ function createFeedForm() {
 const enabledForm = createFeedForm();
 enabledForm.append("show_image", "false");
 enabledForm.append("show_image", "true");
-enabledForm.append("show_date", "false");
-enabledForm.append("show_date", "true");
-enabledForm.append("show_excerpt", "false");
-enabledForm.append("show_excerpt", "true");
+enabledForm.append("show_article_title", "false");
+enabledForm.append("show_article_title", "true");
+enabledForm.set("article_title_bold", "true");
+enabledForm.set("article_title_alignment", "center");
+enabledForm.append("show_article_date", "false");
+enabledForm.append("show_article_date", "true");
+enabledForm.set("article_date_bold", "true");
+enabledForm.set("article_date_alignment", "left");
+enabledForm.append("show_article_excerpt", "false");
+enabledForm.append("show_article_excerpt", "true");
+enabledForm.set("article_excerpt_bold", "true");
+enabledForm.set("article_excerpt_alignment", "right");
 const enabledConfig = buildFeedModuleConfig(enabledForm, "latest");
 assert.equal(enabledConfig.presentation.showImage, true);
 assert.equal(enabledConfig.presentation.showDate, true);
 assert.equal(enabledConfig.presentation.showExcerpt, true);
+assert.deepEqual(enabledConfig.presentation.articleCard, {
+  showTitle: true,
+  titleBold: true,
+  titleAlignment: "center",
+  showExcerpt: true,
+  excerptBold: true,
+  excerptAlignment: "right",
+  showDate: true,
+  dateBold: true,
+  dateAlignment: "left",
+});
 
 const disabledForm = createFeedForm();
 disabledForm.set("show_image", "false");
-disabledForm.set("show_date", "false");
-disabledForm.set("show_excerpt", "false");
+disabledForm.set("show_article_title", "false");
+disabledForm.set("show_article_date", "false");
+disabledForm.set("show_article_excerpt", "false");
 const disabledConfig = buildFeedModuleConfig(disabledForm, "latest");
 assert.equal(disabledConfig.presentation.showImage, false);
 assert.equal(disabledConfig.presentation.showDate, false);
 assert.equal(disabledConfig.presentation.showExcerpt, false);
+assert.equal(disabledConfig.presentation.articleCard?.showTitle, false);
+assert.equal(disabledConfig.presentation.articleCard?.showDate, false);
+assert.equal(disabledConfig.presentation.articleCard?.showExcerpt, false);
 
 const seriesForm = createFeedForm();
 seriesForm.set("link_text", "عرض السلسلة");
 seriesForm.set("show_image", "false");
-seriesForm.set("show_date", "true");
-seriesForm.set("show_excerpt", "true");
+seriesForm.set("show_series", "true");
+seriesForm.set("series_bold", "false");
+seriesForm.set("series_alignment", "center");
+seriesForm.set("show_description", "true");
+seriesForm.set("description_bold", "true");
+seriesForm.set("description_alignment", "left");
+seriesForm.set("show_details", "true");
+seriesForm.set("details_bold", "true");
+seriesForm.set("details_alignment", "right");
 const seriesConfig = buildFeedModuleConfig(seriesForm, "series");
 assert.equal(seriesConfig.presentation.showImage, false);
 assert.equal(seriesConfig.presentation.showDate, false);
 assert.equal(seriesConfig.presentation.showExcerpt, true);
 assert.equal(seriesConfig.presentation.linkText, "عرض السلسلة");
+assert.deepEqual(seriesConfig.presentation.seriesCard, {
+  showSeries: true,
+  seriesBold: false,
+  seriesAlignment: "center",
+  showDescription: true,
+  descriptionBold: true,
+  descriptionAlignment: "left",
+  showDetails: true,
+  detailsBold: true,
+  detailsAlignment: "right",
+});
 
-const categoryConfig = buildFeedModuleConfig(createFeedForm(), "categories");
-assert.equal(categoryConfig.presentation.showImage, false);
+const hiddenSeriesCardForm = createFeedForm();
+hiddenSeriesCardForm.set("show_image", "false");
+hiddenSeriesCardForm.set("show_series", "false");
+hiddenSeriesCardForm.set("show_description", "false");
+hiddenSeriesCardForm.set("show_details", "false");
+const hiddenSeriesCardConfig = buildFeedModuleConfig(hiddenSeriesCardForm, "series");
+assert.equal(hiddenSeriesCardConfig.presentation.showImage, false);
+assert.equal(hiddenSeriesCardConfig.presentation.seriesCard?.showSeries, false);
+assert.equal(hiddenSeriesCardConfig.presentation.seriesCard?.showDescription, false);
+assert.equal(hiddenSeriesCardConfig.presentation.seriesCard?.showDetails, false);
+
+const categoryForm = createFeedForm();
+categoryForm.set("show_category", "true");
+categoryForm.set("category_bold", "true");
+categoryForm.set("category_alignment", "center");
+categoryForm.set("show_count", "false");
+categoryForm.set("count_bold", "true");
+categoryForm.set("count_alignment", "left");
+const categoryConfig = buildFeedModuleConfig(categoryForm, "categories");
+assert.equal(categoryConfig.presentation.showImage, true);
 assert.equal(categoryConfig.presentation.showDate, false);
 assert.equal(categoryConfig.presentation.showExcerpt, false);
+assert.deepEqual(categoryConfig.presentation.categoryCard, {
+  showCategory: true,
+  categoryBold: true,
+  categoryAlignment: "center",
+  showCount: false,
+  countBold: true,
+  countAlignment: "left",
+});
+
+const preservedVariantForm = createFeedForm();
+preservedVariantForm.set("show_image", "false");
+preservedVariantForm.set("show_article_title", "false");
+preservedVariantForm.set("article_title_bold", "true");
+preservedVariantForm.set("article_title_alignment", "left");
+preservedVariantForm.set("show_article_excerpt", "true");
+preservedVariantForm.set("article_excerpt_bold", "true");
+preservedVariantForm.set("article_excerpt_alignment", "center");
+preservedVariantForm.set("show_article_date", "false");
+preservedVariantForm.set("article_date_bold", "true");
+preservedVariantForm.set("article_date_alignment", "right");
+preservedVariantForm.set("show_category", "false");
+preservedVariantForm.set("category_bold", "true");
+preservedVariantForm.set("category_alignment", "center");
+preservedVariantForm.set("show_count", "true");
+preservedVariantForm.set("count_bold", "true");
+preservedVariantForm.set("count_alignment", "right");
+preservedVariantForm.set("show_series", "true");
+preservedVariantForm.set("series_bold", "false");
+preservedVariantForm.set("series_alignment", "left");
+preservedVariantForm.set("show_description", "true");
+preservedVariantForm.set("description_bold", "true");
+preservedVariantForm.set("description_alignment", "center");
+preservedVariantForm.set("show_details", "false");
+preservedVariantForm.set("details_bold", "true");
+preservedVariantForm.set("details_alignment", "right");
+preservedVariantForm.set("link_text", "نص السلسلة المحفوظ");
+
+const latestVariantConfig = buildFeedModuleConfig(preservedVariantForm, "latest");
+const categoryVariantConfig = buildFeedModuleConfig(preservedVariantForm, "categories");
+const seriesVariantConfig = buildFeedModuleConfig(preservedVariantForm, "series");
+for (const config of [latestVariantConfig, categoryVariantConfig, seriesVariantConfig]) {
+  assert.deepEqual(config.presentation.articleCard, latestVariantConfig.presentation.articleCard);
+  assert.deepEqual(config.presentation.categoryCard, latestVariantConfig.presentation.categoryCard);
+  assert.deepEqual(config.presentation.seriesCard, latestVariantConfig.presentation.seriesCard);
+  assert.equal(config.presentation.linkText, "نص السلسلة المحفوظ");
+  assert.equal(config.presentation.showImage, false);
+}
+assert.equal(latestVariantConfig.presentation.showExcerpt, true);
+assert.equal(latestVariantConfig.presentation.showDate, false);
+assert.equal(categoryVariantConfig.presentation.showExcerpt, false);
+assert.equal(categoryVariantConfig.presentation.showDate, false);
+assert.equal(seriesVariantConfig.presentation.showExcerpt, true);
+assert.equal(seriesVariantConfig.presentation.showDate, false);
+
+const latestConfigReparsedAsSeries = parseFeedModuleConfig(
+  latestVariantConfig as unknown as Record<string, unknown>,
+  "series",
+);
+assert.deepEqual(
+  latestConfigReparsedAsSeries.presentation.articleCard,
+  latestVariantConfig.presentation.articleCard,
+);
+assert.deepEqual(
+  latestConfigReparsedAsSeries.presentation.categoryCard,
+  latestVariantConfig.presentation.categoryCard,
+);
+assert.deepEqual(
+  latestConfigReparsedAsSeries.presentation.seriesCard,
+  latestVariantConfig.presentation.seriesCard,
+);
+assert.equal(latestConfigReparsedAsSeries.presentation.showExcerpt, true);
 
 const multiCategoryForm = createFeedForm();
 multiCategoryForm.append("category_slugs", "bait-al-watan");
@@ -258,6 +388,17 @@ const legacyConfig = parseFeedModuleConfig(
 assert.equal(legacyConfig.presentation.showImage, false);
 assert.equal(legacyConfig.presentation.showDate, true);
 assert.equal(legacyConfig.presentation.showExcerpt, false);
+assert.deepEqual(legacyConfig.presentation.articleCard, {
+  showTitle: true,
+  titleBold: false,
+  titleAlignment: "right",
+  showExcerpt: false,
+  excerptBold: false,
+  excerptAlignment: "right",
+  showDate: true,
+  dateBold: false,
+  dateAlignment: "right",
+});
 assert.equal(legacyConfig.query.limit, 3);
 assert.deepEqual(legacyConfig.query.categorySlugs, ["bait-al-watan"]);
 assert.deepEqual(
@@ -285,6 +426,21 @@ assert.deepEqual(
   ).query.seriesSlugs,
   [],
 );
+const legacySeriesPresentation = parseFeedModuleConfig(
+  {
+    presentation: {
+      title: "سلاسل المحتوى",
+      linkText: "عرض كل الموضوعات",
+      showImage: true,
+      showExcerpt: true,
+    },
+  },
+  "series",
+);
+assert.equal(legacySeriesPresentation.presentation.seriesCard?.showSeries, true);
+assert.equal(legacySeriesPresentation.presentation.seriesCard?.showDescription, true);
+assert.equal(legacySeriesPresentation.presentation.seriesCard?.showDetails, true);
+assert.equal(legacySeriesPresentation.presentation.seriesCard?.detailsAlignment, "left");
 assert.equal(isPersistedFeedModuleConfigEqual(disabledConfig, disabledConfig), true);
 assert.equal(
   isPersistedFeedModuleConfigEqual(
@@ -336,6 +492,61 @@ try {
       "latest",
     ),
     disabledConfig,
+  );
+
+  const insertedSeries = await db.query<{ id: number; config: unknown }>(
+    "insert into feed_module_templates(feed_type,config) values ($1,$2::jsonb) returning id,config",
+    ["series", JSON.stringify(seriesConfig)],
+  );
+  assert.equal(
+    isPersistedFeedModuleConfigEqual(
+      insertedSeries.rows[0]?.config,
+      seriesConfig,
+    ),
+    true,
+  );
+  assert.deepEqual(
+    parseFeedModuleConfig(
+      insertedSeries.rows[0]?.config as Record<string, unknown>,
+      "series",
+    ).presentation.seriesCard,
+    seriesConfig.presentation.seriesCard,
+  );
+
+  const insertedVariantState = await db.query<{ id: number; config: unknown }>(
+    "insert into feed_module_templates(feed_type,config) values ($1,$2::jsonb) returning id,config",
+    ["latest", JSON.stringify(latestVariantConfig)],
+  );
+  const variantStateId = Number(insertedVariantState.rows[0]?.id);
+  const savedAsCategory = await db.query<{ config: unknown }>(
+    "update feed_module_templates set feed_type=$1,config=$2::jsonb where id=$3 returning config",
+    ["categories", JSON.stringify(categoryVariantConfig), variantStateId],
+  );
+  assert.equal(
+    isPersistedFeedModuleConfigEqual(savedAsCategory.rows[0]?.config, categoryVariantConfig),
+    true,
+  );
+  assert.deepEqual(
+    parseFeedModuleConfig(
+      savedAsCategory.rows[0]?.config as Record<string, unknown>,
+      "categories",
+    ).presentation.seriesCard,
+    latestVariantConfig.presentation.seriesCard,
+  );
+  const savedAsSeries = await db.query<{ config: unknown }>(
+    "update feed_module_templates set feed_type=$1,config=$2::jsonb where id=$3 returning config",
+    ["series", JSON.stringify(seriesVariantConfig), variantStateId],
+  );
+  assert.equal(
+    isPersistedFeedModuleConfigEqual(savedAsSeries.rows[0]?.config, seriesVariantConfig),
+    true,
+  );
+  assert.deepEqual(
+    parseFeedModuleConfig(
+      savedAsSeries.rows[0]?.config as Record<string, unknown>,
+      "series",
+    ).presentation.articleCard,
+    latestVariantConfig.presentation.articleCard,
   );
 } finally {
   await db.close();
@@ -720,6 +931,10 @@ const editor = readFileSync(
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
   "utf8",
 );
+const feedConfigSource = readFileSync(
+  "src/lib/feed-modules/parse-feed-config.ts",
+  "utf8",
+);
 const filters = readFileSync(
   "src/components/admin/page-blocks/FeedModuleFilterFields.tsx",
   "utf8",
@@ -761,6 +976,10 @@ const popular = readFileSync(
   "src/components/sidebar-feeds/SidebarMostReadWidget.tsx",
   "utf8",
 );
+const categories = readFileSync(
+  "src/components/sidebar-feeds/SidebarCategoriesWidget.tsx",
+  "utf8",
+);
 const series = readFileSync(
   "src/components/sidebar-feeds/SidebarSeriesWidget.tsx",
   "utf8",
@@ -774,14 +993,64 @@ const legacyStack = readFileSync(
   "utf8",
 );
 
-for (const label of ["عرض الصورة", "عرض التاريخ", "عرض الوصف", "نوع موديول المحتوى"]) {
+for (const label of [
+  "نوع موديول المحتوى",
+  "تنسيق عناصر الـFeed",
+  "الصورة",
+  "عنوان الموضوع",
+  "المقتطف",
+  "التاريخ",
+  "اسم التصنيف",
+  "عدد الموضوعات",
+  "اسم السلسلة",
+  "الوصف",
+  "زر عرض كل الموضوعات",
+  "نص زر عرض كل الموضوعات",
+]) {
   assert.ok(editor.includes(label), `missing Arabic Feed editor label: ${label}`);
+}
+assert.ok(editor.includes("FEED_MODULE_DISPLAY_FORMATTING_CAPABILITY.variants[feedType]"));
+assert.deepEqual(feedTypes.TOPICS_FEED_TYPES, ["latest", "popular", "categories", "series"]);
+assert.ok(editor.includes("value={feedType}"));
+assert.ok(editor.includes("setFeedType(nextFeedType as TopicsFeedType)"));
+assert.ok(editor.includes('feedType === "latest" || feedType === "popular"'));
+assert.ok(editor.includes('feedType === "categories"'));
+assert.ok(editor.includes('feedType === "series"'));
+assert.ok(editor.includes('showName="show_article_title"'));
+assert.ok(editor.includes('showName="show_article_excerpt"'));
+assert.ok(editor.includes('showName="show_article_date"'));
+assert.ok(editor.includes('showName="show_category"'));
+assert.ok(editor.includes('showName="show_count"'));
+assert.ok(editor.includes('showName="show_series"'));
+assert.ok(editor.includes('showName="show_description"'));
+assert.ok(editor.includes('showName="show_details"'));
+assert.ok(
+  editor.includes('className={isSeriesVariant ? "self-start" : "hidden"}'),
+  "Series description formatting must stay compact beside the taller action control",
+);
+for (const variantVisibility of [
+  'className={isArticleVariant ? "" : "hidden"}',
+  'className={isCategoryVariant ? "" : "hidden"}',
+  'className={isSeriesVariant ? "" : "hidden"}',
+]) {
+  assert.ok(
+    editor.includes(variantVisibility),
+    `Feed editor must retain hidden variant state while showing only matching controls: ${variantVisibility}`,
+  );
+}
+for (const persistedCardBuilder of [
+  "const articleCard = buildArticleCardPresentation(formData);",
+  "const categoryCard = buildCategoryCardPresentation(formData);",
+  "const seriesCard = buildSeriesCardPresentation(formData);",
+]) {
+  assert.ok(
+    feedConfigSource.includes(persistedCardBuilder),
+    `Feed save must preserve every variant card contract: ${persistedCardBuilder}`,
+  );
 }
 for (const staleLabel of ["Show Image", "Show Date", "Show Excerpt", "Feed Type", "Series Link Text"]) {
   assert.equal(editor.includes(staleLabel), false, `stale English Feed editor label: ${staleLabel}`);
 }
-assert.equal((editor.match(/uncheckedValue="false"/gu) ?? []).length, 3);
-assert.ok(editor.includes("FEED_MODULE_PRESENTATION_SUPPORT[feedType]"));
 assert.ok(editor.includes("عدد العناصر المعروضة"));
 assert.equal(editor.includes("عدد النتائج"), false);
 for (const label of ["نطاق المحتوى", "التصنيفات", "السلاسل", "كل السلاسل"]) {
@@ -899,10 +1168,65 @@ assert.ok(moduleAssignmentLoader.includes("Hero assignment read failed"));
 assert.ok(section.includes("showImage={presentation.showImage}"));
 assert.ok(section.includes("showDate={presentation.showDate}"));
 assert.ok(section.includes("showExcerpt={presentation.showExcerpt}"));
+assert.ok(section.includes('if (payload.kind === "categories")'));
+assert.ok(section.includes("<SidebarCategoriesWidget"));
+assert.ok(section.includes('if (payload.kind === "series")'));
+assert.ok(section.includes("<SidebarSeriesWidget"));
+assert.ok(section.includes('if (feedType === "popular")'));
+assert.ok(section.includes("<SidebarMostReadWidget"));
+assert.ok(section.includes("<SidebarLatestArticlesWidget"));
+assert.equal(
+  (section.match(/cardFormatting=\{presentation\.articleCard\}/gu) ?? []).length,
+  2,
+);
+assert.ok(section.includes("cardFormatting={presentation.categoryCard}"));
+assert.ok(section.includes("cardFormatting={presentation.seriesCard}"));
 assert.ok(latest.includes("eyebrow={eyebrow ?? undefined}"));
-assert.ok(popular.includes("showDate && item.date"));
-assert.ok(series.includes("showImage ? ("));
-assert.ok(series.includes("showExcerpt && item.subtitle"));
+for (const articlePresenter of [latest, popular]) {
+  assert.ok(articlePresenter.includes("resolvedCardFormatting.showTitle"));
+  assert.ok(articlePresenter.includes("resolvedCardFormatting.showDate"));
+  assert.ok(articlePresenter.includes("resolvedCardFormatting.showExcerpt"));
+  assert.ok(articlePresenter.includes("pageBlockTextAlignClass"));
+  assert.ok(articlePresenter.includes("data-feed-article-title"));
+  assert.ok(articlePresenter.includes("data-feed-article-date"));
+  assert.ok(articlePresenter.includes("data-feed-article-excerpt"));
+}
+assert.ok(latest.includes("if (!hasRenderableItems) return null"));
+assert.ok(categories.includes("resolvedCardFormatting.showCategory"));
+assert.ok(categories.includes("resolvedCardFormatting.showCount"));
+assert.ok(categories.includes("data-feed-category-name"));
+assert.ok(categories.includes("data-feed-category-count"));
+assert.ok(series.includes("showImage ? image"));
+assert.ok(series.includes("resolvedCardFormatting.showDescription"));
+assert.ok(series.includes("resolvedCardFormatting.showSeries"));
+assert.ok(series.includes("resolvedCardFormatting.showDetails"));
+assert.ok(series.includes("pageBlockTextAlignClass"));
+assert.ok(series.includes('data-feed-series-card=""'));
+assert.ok(series.includes('data-feed-series-title=""'));
+assert.ok(series.includes('data-feed-series-description=""'));
+assert.ok(series.includes('data-feed-series-image-frame=""'));
+assert.ok(series.includes('data-feed-series-navigation=""'));
+assert.ok(series.includes('data-feed-series-action-bar=""'));
+assert.ok(series.includes('data-feed-series-details=""'));
+assert.ok(series.includes("!showImage && !hasContent && !showDetails && !canAdvance"));
+const seriesImageFrameIndex = series.indexOf('data-feed-series-image-frame=""');
+const seriesImageControlsMountIndex = series.indexOf(
+  "{carouselControls}",
+  seriesImageFrameIndex,
+);
+const seriesActionBarIndex = series.indexOf('data-feed-series-action-bar=""');
+assert.ok(
+  seriesImageFrameIndex >= 0 &&
+    seriesImageControlsMountIndex > seriesImageFrameIndex &&
+    seriesImageControlsMountIndex < seriesActionBarIndex,
+  "Series navigation must render over the image before the separate action bar",
+);
+assert.equal(series.includes("min-h-44"), false);
+assert.equal(series.includes("mt-auto"), false);
+assert.ok(series.includes("absolute inset-x-0 top-1/2"));
+assert.ok(series.includes("translate-x-1/2"));
+assert.ok(series.includes("-translate-x-1/2"));
+assert.equal(series.includes("group relative overflow-hidden rounded-2xl"), false);
 assert.ok(pageLayout.includes("<FeedModuleSection"));
 assert.ok(legacyStack.includes("<FeedModuleSection"));
 

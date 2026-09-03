@@ -312,6 +312,14 @@ const sharedRichTextEditor = read(
 const sharedModuleEditorPresentation = read(
   "src/components/admin/page-blocks/ModuleEditorPresentation.tsx",
 );
+const moduleEditorVisibilityAlignRowSource = sharedModuleEditorPresentation.slice(
+  sharedModuleEditorPresentation.indexOf(
+    "export function ModuleEditorVisibilityAlignRow",
+  ),
+  sharedModuleEditorPresentation.indexOf(
+    "export function ModuleEditorIdentitySection",
+  ),
+);
 const heroTextFormatConsumer = read(
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx",
 );
@@ -853,11 +861,14 @@ check(
     ).includes('alignmentOptions={["right", "center"]}') &&
     [
       "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
-      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
       "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
     ].every((path) => read(path).includes("AdminFormSwitch")) &&
+    read(
+      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
+    ).includes("ModuleEditorVisibilityAlignRow") &&
+    moduleEditorVisibilityAlignRowSource.includes("<AdminFormSwitch") &&
     [
       "ModuleEditorVisibilityAlignRow",
       'controlMode="visibility-only"',
