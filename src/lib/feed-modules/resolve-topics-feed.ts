@@ -28,7 +28,7 @@ async function resolveLatestOrPopular(
   const result = await loadPublicContentCollection({
     contentTypes: ["article"],
     categorySlugs: config.query.categorySlugs,
-    seriesSlug: config.query.seriesSlug ?? undefined,
+    seriesSlugs: config.query.seriesSlugs,
     popularOnly: feedType === "popular",
     page: 1,
     pageSize: config.query.limit,
@@ -47,25 +47,31 @@ async function resolveLatestOrPopular(
   };
 }
 
-async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePayload> {
-  let seriesCategoryId: number | null = null;
-
-  if (config.query.seriesSlug) {
-    const { data: seriesRow, error: seriesError } = await getSupabaseAdmin()
+async function resolveCategories(
+  config: FeedModuleConfig,
+): Promise<FeedModulePayload> {
+  let selectedSeriesCategoryIds: number[] = [];
+  if (config.query.seriesSlugs.length) {
+    const { data: seriesRows, error: seriesError } = await getSupabaseAdmin()
       .from("topic_series")
       .select("category_id")
-      .eq("slug", config.query.seriesSlug)
+      .in("slug", config.query.seriesSlugs)
       .eq("status", "published")
-      .is("deleted_at", null)
-      .maybeSingle();
+      .is("deleted_at", null);
 
     if (seriesError) {
       logError("resolveTopicsFeed: series lookup for categories failed", seriesError);
       return { kind: "categories", items: [] };
     }
 
-    if (!seriesRow?.category_id) return { kind: "categories", items: [] };
-    seriesCategoryId = seriesRow.category_id;
+    selectedSeriesCategoryIds = [
+      ...new Set(
+        (seriesRows ?? [])
+          .map((row) => row.category_id)
+          .filter((id): id is number => id !== null),
+      ),
+    ];
+    if (!selectedSeriesCategoryIds.length) return { kind: "categories", items: [] };
   }
 
   let categoriesQuery = getSupabaseAdmin()
@@ -82,8 +88,9 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
     categoriesQuery = categoriesQuery.in("slug", config.query.categorySlugs);
   }
 
-  if (seriesCategoryId !== null) {
-    categoriesQuery = categoriesQuery.eq("id", seriesCategoryId);
+  if (selectedSeriesCategoryIds.length) {
+    categoriesQuery = categoriesQuery.in("id", selectedSeriesCategoryIds);
+    categoriesQuery = categoriesQuery.in("topics.series_slug", config.query.seriesSlugs);
   }
 
   const { data: categories, error: categoriesError } = await categoriesQuery
@@ -105,11 +112,13 @@ async function resolveCategories(config: FeedModuleConfig): Promise<FeedModulePa
 
       const rawCount = Array.isArray(row.topics_count) ? (row.topics_count[0]?.count ?? 0) : 0;
       const parsedCount = Number(rawCount);
+      const filteredCount = Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0;
 
       return [{
         name,
         href: getCategoryFilterHref(slug),
-        count: Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0,
+        // The category badge represents the items this Feed exposes, not the uncapped source total.
+        count: Math.min(filteredCount, config.query.limit),
       }];
     }),
   };
@@ -127,7 +136,9 @@ async function loadTopicImagesBySeriesSlug(seriesSlugs: string[]) {
   return result.items;
 }
 
-async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayload> {
+async function resolveSeries(
+  config: FeedModuleConfig,
+): Promise<FeedModulePayload> {
   let query = getSupabaseAdmin()
     .from("topic_series")
     .select("id, name, slug, description, status, sort_order, category_id")
@@ -155,8 +166,8 @@ async function resolveSeries(config: FeedModuleConfig): Promise<FeedModulePayloa
     query = query.in("category_id", categoryIds);
   }
 
-  if (config.query.seriesSlug) {
-    query = query.eq("slug", config.query.seriesSlug);
+  if (config.query.seriesSlugs.length) {
+    query = query.in("slug", config.query.seriesSlugs);
   }
 
   const { data: seriesRows, error: seriesError } = await query.limit(config.query.limit);

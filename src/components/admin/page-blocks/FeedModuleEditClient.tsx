@@ -123,7 +123,7 @@ export default function FeedModuleEditClient({
                     </ModuleEditorField>
 
                     <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">عدد النتائج</span>
+                      <span className="text-xs font-semibold text-white/55">عدد العناصر المعروضة</span>
                       <input
                         name="limit"
                         type="number"

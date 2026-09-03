@@ -41,7 +41,7 @@ export type FeedModulePresentation = PageBlockTextFormattingConfig & {
 export type FeedModuleQueryConfig = {
   limit: number;
   categorySlugs: string[];
-  seriesSlug: string | null;
+  seriesSlugs: string[];
 };
 
 export type FeedModuleConfig = {

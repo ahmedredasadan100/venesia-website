@@ -115,12 +115,15 @@ export function getSeriesOptionsForCategories(
   );
 }
 
-export function isSeriesAllowedForCategories(
+export function filterSeriesSlugsForCategories(
   options: TopicFilterOptions,
   categorySlugs: readonly string[],
-  seriesSlug: string | null | undefined,
+  seriesSlugs: readonly string[],
 ) {
-  if (!seriesSlug) return true;
-  if (!categorySlugs.length) return false;
-  return getSeriesOptionsForCategories(options, categorySlugs).some((item) => item.slug === seriesSlug);
+  if (!categorySlugs.length || !seriesSlugs.length) return [];
+
+  const allowedSlugs = new Set(
+    getSeriesOptionsForCategories(options, categorySlugs).map((item) => item.slug),
+  );
+  return [...new Set(seriesSlugs)].filter((slug) => allowedSlugs.has(slug));
 }

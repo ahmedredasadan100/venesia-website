@@ -125,11 +125,11 @@ const getSeriesOptionsForCategories = topicFilterOptionsContract.getSeriesOption
   },
   categorySlugs: readonly string[],
 ) => Array<{ id: number; slug: string }>;
-const isSeriesAllowedForCategories = topicFilterOptionsContract.isSeriesAllowedForCategories as (
+const filterSeriesSlugsForCategories = topicFilterOptionsContract.filterSeriesSlugsForCategories as (
   options: Parameters<typeof getSeriesOptionsForCategories>[0],
   categorySlugs: readonly string[],
-  seriesSlug: string | null,
-) => boolean;
+  seriesSlugs: readonly string[],
+) => string[];
 
 const seriesFilterFixture = {
   seriesByCategorySlug: {
@@ -144,11 +144,15 @@ assert.deepEqual(
   getSeriesOptionsForCategories(seriesFilterFixture, ["bait-al-watan", "real-estate"]).map((item) => item.slug),
   ["district-guide", "buying-guide"],
 );
-assert.equal(
-  isSeriesAllowedForCategories(seriesFilterFixture, ["bait-al-watan", "real-estate"], "buying-guide"),
-  true,
+assert.deepEqual(
+  filterSeriesSlugsForCategories(
+    seriesFilterFixture,
+    ["bait-al-watan", "real-estate"],
+    ["buying-guide", "district-guide", "missing", "buying-guide"],
+  ),
+  ["buying-guide", "district-guide"],
 );
-assert.equal(isSeriesAllowedForCategories(seriesFilterFixture, [], "buying-guide"), false);
+assert.deepEqual(filterSeriesSlugsForCategories(seriesFilterFixture, [], ["district-guide"]), []);
 
 const checkedStatusForm = new FormData();
 checkedStatusForm.append("status", "unpublished");
@@ -163,7 +167,6 @@ function createFeedForm() {
   const formData = new FormData();
   formData.set("widget_title", "أحدث الموضوعات");
   formData.set("limit", "3");
-  formData.set("series_slug", "__all__");
   formData.set("eyebrow", "مختارات");
   return formData;
 }
@@ -212,6 +215,14 @@ multiCategoryForm.append("category_slugs", "bait-al-watan");
 const multiCategoryConfig = buildFeedModuleConfig(multiCategoryForm, "latest");
 assert.deepEqual(multiCategoryConfig.query.categorySlugs, ["bait-al-watan", "real-estate"]);
 
+const multiSeriesForm = createFeedForm();
+multiSeriesForm.append("category_slugs", "bait-al-watan");
+multiSeriesForm.append("series_slugs", "district-guide");
+multiSeriesForm.append("series_slugs", "market-updates");
+multiSeriesForm.append("series_slugs", "district-guide");
+const multiSeriesConfig = buildFeedModuleConfig(multiSeriesForm, "latest");
+assert.deepEqual(multiSeriesConfig.query.seriesSlugs, ["district-guide", "market-updates"]);
+
 const legacyCategoryForm = createFeedForm();
 legacyCategoryForm.set("category_slug", "bait-al-watan");
 assert.deepEqual(
@@ -223,7 +234,7 @@ const invalidLimitForm = createFeedForm();
 invalidLimitForm.set("limit", "0");
 assert.throws(
   () => buildFeedModuleConfig(invalidLimitForm, "latest"),
-  /عدد النتائج/u,
+  /عدد العناصر المعروضة/u,
 );
 const missingTitleForm = createFeedForm();
 missingTitleForm.set("widget_title", " ");
@@ -255,6 +266,24 @@ assert.deepEqual(
     "latest",
   ).query.categorySlugs,
   ["bait-al-watan", "real-estate"],
+);
+assert.deepEqual(
+  parseFeedModuleConfig(
+    { query: { seriesSlugs: ["district-guide", "market-updates", "district-guide"] } },
+    "latest",
+  ).query.seriesSlugs,
+  ["district-guide", "market-updates"],
+);
+assert.deepEqual(
+  parseFeedModuleConfig({ query: { seriesSlug: "legacy-series" } }, "latest").query.seriesSlugs,
+  ["legacy-series"],
+);
+assert.deepEqual(
+  parseFeedModuleConfig(
+    { query: { seriesSlugs: [], seriesSlug: "legacy-series" } },
+    "latest",
+  ).query.seriesSlugs,
+  [],
 );
 assert.equal(isPersistedFeedModuleConfigEqual(disabledConfig, disabledConfig), true);
 assert.equal(
@@ -318,6 +347,12 @@ type CategoryResolverRow = {
   slug: string | null;
   status: string;
   topics_count: Array<{ count: number | string | null }>;
+  topics?: Array<{
+    status: string;
+    content_type: string;
+    deleted_at: string | null;
+    series_slug: string | null;
+  }>;
 };
 
 type SeriesResolverRow = {
@@ -373,6 +408,9 @@ class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
   }
 
   is(column: string, value: unknown) {
+    if (column.includes(".")) {
+      this.filters.push([column, value]);
+    }
     if (this.table === "topic_categories") {
       resolverFixture.categoryFilters.push([column, value]);
     }
@@ -415,12 +453,33 @@ class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
   }
 
   private resolveResult(): ResolverQueryResult {
-    if (this.table !== "topic_categories") return { data: [], error: null };
-    if (resolverFixture.categoryError) {
+    if (this.table === "topic_categories" && resolverFixture.categoryError) {
       return { data: null, error: resolverFixture.categoryError };
     }
 
-    const rows = this.applyFilters(resolverFixture.categories);
+    const sourceRows: object[] = this.table === "topic_categories"
+      ? resolverFixture.categories
+      : this.table === "topic_series"
+        ? resolverFixture.series
+        : [];
+    const rows = this.applyFilters(sourceRows).map((row) => {
+      if (this.table !== "topic_categories") return row;
+
+      const category = row as CategoryResolverRow;
+      if (!category.topics) return category;
+
+      const topics = this.filters.reduce((filtered, [column, value]) => {
+        if (!column.startsWith("topics.")) return filtered;
+        const topicColumn = column.slice("topics.".length);
+        return filtered.filter((topic) =>
+          Array.isArray(value)
+            ? value.includes(topic[topicColumn as keyof typeof topic])
+            : topic[topicColumn as keyof typeof topic] === value,
+        );
+      }, category.topics);
+
+      return { ...category, topics_count: [{ count: topics.length }] };
+    });
     return {
       data: this.resultLimit === null ? rows : rows.slice(0, this.resultLimit),
       error: null,
@@ -428,6 +487,7 @@ class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
   }
 }
 
+const publicCollectionInputs: Array<Record<string, unknown>> = [];
 const resolverContract = loadTranspiledModule(
   "src/lib/feed-modules/resolve-topics-feed.ts",
   {
@@ -438,7 +498,10 @@ const resolverContract = loadTranspiledModule(
       }),
     },
     "../content/public-content-read/owner": {
-      loadPublicContentCollection: async () => ({ items: [] }),
+      loadPublicContentCollection: async (input: Record<string, unknown>) => {
+        publicCollectionInputs.push(input);
+        return { items: [] };
+      },
     },
     "../logging": { logError: () => undefined },
     "../content-dates": { formatArabicContentDate: () => "" },
@@ -456,6 +519,25 @@ const resolveTopicsFeedModule = resolverContract.resolveTopicsFeedModule as (
   items: Array<{ name: string; href: string; count: number }>;
 }>;
 
+publicCollectionInputs.length = 0;
+await resolveTopicsFeedModule(
+  { feed_type: "latest" },
+  {
+    ...enabledConfig,
+    query: {
+      ...enabledConfig.query,
+      categorySlugs: ["bait-al-watan"],
+      seriesSlugs: ["district-guide", "market-updates"],
+    },
+  },
+);
+assert.deepEqual(publicCollectionInputs.at(-1)?.seriesSlugs, [
+  "district-guide",
+  "market-updates",
+]);
+assert.deepEqual(publicCollectionInputs.at(-1)?.categorySlugs, ["bait-al-watan"]);
+assert.equal(publicCollectionInputs.at(-1)?.pageSize, enabledConfig.query.limit);
+
 resolverFixture.categories = [
   { id: 1, name: "ØªØµÙ†ÙŠÙ Ø¢Ø®Ø±", slug: "other", status: "published", topics_count: [{ count: 4 }] },
   { id: 2, name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", slug: "bait-al-watan", status: "published", topics_count: [{ count: "260" }] },
@@ -465,13 +547,27 @@ const selectedCategoryPayload = await resolveTopicsFeedModule(
   { feed_type: "categories" },
   {
     ...categoryConfig,
-    query: { ...categoryConfig.query, limit: 1, categorySlugs: ["bait-al-watan"] },
+    query: { ...categoryConfig.query, limit: 20, categorySlugs: ["bait-al-watan"] },
   },
 );
 assert.deepEqual(selectedCategoryPayload, {
   kind: "categories",
-  items: [{ name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", href: "/topics?category=bait-al-watan", count: 260 }],
+  items: [{ name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", href: "/topics?category=bait-al-watan", count: 20 }],
 });
+
+resolverFixture.categories = [
+  { id: 2, name: "بيت الوطن", slug: "bait-al-watan", status: "published", topics_count: [{ count: 10 }] },
+];
+const belowLimitCategoryPayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  {
+    ...categoryConfig,
+    query: { ...categoryConfig.query, limit: 20, categorySlugs: ["bait-al-watan"] },
+  },
+);
+assert.deepEqual(belowLimitCategoryPayload.items, [
+  { name: "بيت الوطن", href: "/topics?category=bait-al-watan", count: 10 },
+]);
 assert.ok(
   resolverFixture.categoryFilters.some(
     ([column, value]) => column === "slug" && Array.isArray(value) && value.includes("bait-al-watan"),
@@ -501,12 +597,12 @@ const multiCategoryPayload = await resolveTopicsFeedModule(
   { feed_type: "categories" },
   {
     ...categoryConfig,
-    query: { ...categoryConfig.query, limit: 2, categorySlugs: ["other", "bait-al-watan"] },
+    query: { ...categoryConfig.query, limit: 20, categorySlugs: ["other", "bait-al-watan"] },
   },
 );
 assert.deepEqual(multiCategoryPayload.items, [
   { name: "تصنيف آخر", href: "/topics?category=other", count: 4 },
-  { name: "بيت الوطن", href: "/topics?category=bait-al-watan", count: 260 },
+  { name: "بيت الوطن", href: "/topics?category=bait-al-watan", count: 20 },
 ]);
 assert.ok(
   resolverFixture.categoryFilters.some(
@@ -517,6 +613,75 @@ assert.ok(
       value.includes("bait-al-watan"),
   ),
   "multiple categories must be applied as one OR source filter before limit",
+);
+
+resolverFixture.categories = [{
+  id: 2,
+  name: "بيت الوطن",
+  slug: "bait-al-watan",
+  status: "published",
+  topics_count: [{ count: 6 }],
+  topics: [
+    { status: "published", content_type: "article", deleted_at: null, series_slug: "district-guide" },
+    { status: "published", content_type: "article", deleted_at: null, series_slug: "district-guide" },
+    { status: "published", content_type: "article", deleted_at: null, series_slug: "market-updates" },
+    { status: "published", content_type: "article", deleted_at: null, series_slug: "other-series" },
+    { status: "unpublished", content_type: "article", deleted_at: null, series_slug: "district-guide" },
+    { status: "published", content_type: "video", deleted_at: null, series_slug: "district-guide" },
+  ],
+}];
+resolverFixture.series = [
+  { slug: "district-guide", status: "published", category_id: 2 },
+  { slug: "market-updates", status: "published", category_id: 2 },
+];
+resolverFixture.categoryFilters = [];
+const allSeriesCategoryPayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  {
+    ...categoryConfig,
+    query: { ...categoryConfig.query, limit: 20, categorySlugs: ["bait-al-watan"], seriesSlugs: [] },
+  },
+);
+assert.equal(allSeriesCategoryPayload.items[0]?.count, 4);
+
+resolverFixture.categoryFilters = [];
+const oneSeriesCategoryPayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  {
+    ...categoryConfig,
+    query: {
+      ...categoryConfig.query,
+      limit: 20,
+      categorySlugs: ["bait-al-watan"],
+      seriesSlugs: ["district-guide"],
+    },
+  },
+);
+assert.equal(oneSeriesCategoryPayload.items[0]?.count, 2);
+
+resolverFixture.categoryFilters = [];
+const multipleSeriesCategoryPayload = await resolveTopicsFeedModule(
+  { feed_type: "categories" },
+  {
+    ...categoryConfig,
+    query: {
+      ...categoryConfig.query,
+      limit: 20,
+      categorySlugs: ["bait-al-watan"],
+      seriesSlugs: ["district-guide", "market-updates"],
+    },
+  },
+);
+assert.equal(multipleSeriesCategoryPayload.items[0]?.count, 3);
+assert.ok(
+  resolverFixture.categoryFilters.some(
+    ([column, value]) =>
+      column === "topics.series_slug" &&
+      Array.isArray(value) &&
+      value.includes("district-guide") &&
+      value.includes("market-updates"),
+  ),
+  "category counters must apply the selected series to the embedded topics aggregate",
 );
 
 resolverFixture.categories = [
@@ -546,7 +711,7 @@ const unpublishedSeriesPayload = await resolveTopicsFeedModule(
   { feed_type: "categories" },
   {
     ...categoryConfig,
-    query: { ...categoryConfig.query, seriesSlug: "hidden-series" },
+    query: { ...categoryConfig.query, seriesSlugs: ["hidden-series"] },
   },
 );
 assert.deepEqual(unpublishedSeriesPayload, { kind: "categories", items: [] });
@@ -565,6 +730,10 @@ const actions = readFileSync(
 );
 const loader = readFileSync("src/lib/feed-modules/load-feed-modules.ts", "utf8");
 const resolver = readFileSync("src/lib/feed-modules/resolve-topics-feed.ts", "utf8");
+const publicContentReadOwner = readFileSync(
+  "src/lib/content/public-content-read/owner.ts",
+  "utf8",
+);
 const adminUtilsSource = readFileSync("src/lib/page-blocks/admin-utils.ts", "utf8");
 const blockLoader = readFileSync("src/lib/page-blocks/load-page-blocks.ts", "utf8");
 const compositionLoader = readFileSync("src/lib/page-blocks/load-page-composition.ts", "utf8");
@@ -613,16 +782,32 @@ for (const staleLabel of ["Show Image", "Show Date", "Show Excerpt", "Feed Type"
 }
 assert.equal((editor.match(/uncheckedValue="false"/gu) ?? []).length, 3);
 assert.ok(editor.includes("FEED_MODULE_PRESENTATION_SUPPORT[feedType]"));
-assert.ok(filters.includes("تصفية حسب التصنيفات"));
-assert.ok(filters.includes('label="تصفية حسب السلسلة"'));
-assert.equal(filters.includes('label="All"'), false);
+assert.ok(editor.includes("عدد العناصر المعروضة"));
+assert.equal(editor.includes("عدد النتائج"), false);
+for (const label of ["نطاق المحتوى", "التصنيفات", "السلاسل", "كل السلاسل"]) {
+  assert.ok(filters.includes(label), `missing Feed content-scope label: ${label}`);
+}
+for (const removedCopy of [
+  "تصفية حسب التصنيفات",
+  "اختر تصنيفًا أو أكثر. عدم اختيار أي تصنيف يعرض كل التصنيفات.",
+  "يُحمَّل من Topics Series Admin ضمن التصنيف المختار.",
+]) {
+  assert.equal(filters.includes(removedCopy), false, `stale Feed filter copy: ${removedCopy}`);
+}
 assert.ok(filters.includes('name="category_slugs"'));
+assert.ok(filters.includes('name="series_slugs"'));
 assert.ok(filters.includes("AdminFormSwitch"));
+assert.ok(filters.includes("AdminCheckbox"));
+assert.equal(filters.includes('type="checkbox"'), false);
+assert.ok(filters.includes("lg:grid-cols-4"));
+assert.ok(filters.includes("checked={seriesSlugs.length === 0}"));
+assert.equal(filters.includes('type="hidden" name="series_slugs"'), false);
+assert.equal(filters.includes("AdminFormListboxSelect"), false);
 assert.equal(filters.includes('name="category_slug"'), false);
 
 assert.ok(actions.includes('.select("id,config")'));
 assert.ok(actions.includes("isPersistedFeedModuleConfigEqual"));
-assert.ok(actions.includes("isSeriesAllowedForCategories"));
+assert.ok(actions.includes("filterSeriesSlugsForCategories"));
 assert.ok(actions.includes("if (!feedType)"));
 assert.equal(actions.includes('? (feedType as TopicsFeedType) : "latest"'), false);
 assert.ok(
@@ -641,8 +826,18 @@ assert.ok(resolver.includes('categoriesQuery = categoriesQuery.in("slug", config
 assert.ok(resolver.includes('.eq("topics.status", "published")'));
 assert.ok(resolver.includes('.eq("topics.content_type", "article")'));
 assert.ok(resolver.includes('.is("topics.deleted_at", null)'));
+assert.ok(resolver.includes('categoriesQuery = categoriesQuery.in("topics.series_slug", config.query.seriesSlugs)'));
+assert.ok(resolver.includes("count: Math.min(filteredCount, config.query.limit)"));
 assert.ok(resolver.includes("categorySlugs: config.query.categorySlugs"));
+assert.ok(resolver.includes("seriesSlugs: config.query.seriesSlugs"));
+assert.ok(
+  publicContentReadOwner.includes(
+    'if (input.seriesSlugs.length) next = next.in("series_slug", input.seriesSlugs)',
+  ),
+  "Public Content Read must apply the Feed seriesSlugs array without a duplicate Feed reader",
+);
 assert.ok(resolver.includes('query = query.in("category_id", categoryIds)'));
+assert.ok(resolver.includes('query = query.in("slug", config.query.seriesSlugs)'));
 assert.ok(resolver.includes('if (!name || !slug) return []'));
 assert.ok(adminUtilsSource.includes("export function isPageModulePubliclyVisible"));
 assert.ok(blockLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
