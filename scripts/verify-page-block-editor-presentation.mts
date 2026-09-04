@@ -34,6 +34,9 @@ const { resolveContentModuleEditorConfig } = await jiti.import<
 const { asContentConfig } = await jiti.import<
   typeof import("../src/lib/page-blocks/configs.ts")
 >("../src/lib/page-blocks/configs.ts");
+const { parseHeroContentControlsFormData } = await jiti.import<
+  typeof import("../src/lib/hero/hero-content-controls.ts")
+>("../src/lib/hero/hero-content-controls.ts");
 const { orderPageCompositionRowsForDisplay } = await jiti.import<
   typeof import("../src/app/admin/pages-blocks/pages/[id]/page-blocks/page-blocks-utils.ts")
 >(
@@ -222,6 +225,9 @@ const heroDetailRoute = read(
 const heroEditor = read(
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
 );
+const heroText = read(
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroTextFieldRow.tsx",
+);
 const heroOrderEditor = read(
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroElementOrderEditor.tsx",
 );
@@ -337,6 +343,11 @@ check(
 const ctaEditor = read(
   "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
 );
+const heroDescriptionFormatForm = new FormData();
+heroDescriptionFormatForm.set("description_bold", "true");
+const heroDescriptionFormatControls = parseHeroContentControlsFormData(
+  heroDescriptionFormatForm,
+);
 check(
   "CTA keeps introductory and short-description copy on the shared one-line field presentation",
   ctaEditor.includes('name="eyebrow"') &&
@@ -344,6 +355,31 @@ check(
     ctaEditor.includes('<ModuleEditorField nature="short-text" span={6}>') &&
     !ctaEditor.includes('<textarea\n                        name="description"') &&
     !ctaEditor.includes("h-[72px]"),
+);
+
+check(
+  "Hero description uses the shared one-line field and persists Bold through the public Hero contract",
+  heroEditor.includes(
+    '<ModuleEditorField nature="short-description" span={6}>',
+  ) &&
+    heroEditor.includes('name="description"') &&
+    heroEditor.split('boldName="description_bold"').length - 1 === 2 &&
+    heroEditor.includes("boldDefault={controls.descriptionBold}") &&
+    !heroEditor.includes("AdminRichTextEditor") &&
+    heroText.includes("<input") &&
+    !heroText.includes("<textarea") &&
+    heroContentControls.includes("descriptionBold: boolean") &&
+    heroContentControls.includes('readBoolean(\n      "description_bold"') &&
+    heroDescriptionFormatControls.descriptionBold === true &&
+    dynamicHero.includes(
+      'activeConfig.descriptionBold ? "font-bold" : "font-normal"',
+    ) &&
+    dynamicHero.includes(
+      'config.descriptionBold ? "font-bold" : "font-normal"',
+    ) &&
+    projectDetailsHero.includes(
+      'resolvedPresentation.descriptionBold ? "font-bold" : "font-normal"',
+    ),
 );
 
 check(
@@ -459,12 +495,14 @@ check(
 
 check(
   "Hero identity keeps name, display mode, and publication adjacent without stretching selection controls",
-  heroEditor.includes(
-    "xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content]",
-  ) &&
-    heroEditor.match(/className="xl:col-span-1!"/g)?.length === 3 &&
+  heroEditor.includes("<ModuleEditorIdentitySection") &&
+    heroEditor.includes('nameLabel="اسم الهيرو"') &&
+    heroEditor.includes("status={hero.status}") &&
     heroEditor.includes(
-      '<AdminFormListboxSelect\n            name="variant"',
+      '<AdminFormListboxSelect\n          name="variant"',
+    ) &&
+    !heroEditor.includes(
+      "xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content]",
     ) &&
     !heroEditor.includes(
       '<input type="hidden" name="variant" value="project-detail"',
@@ -518,6 +556,8 @@ const sharedIdentityAdopters = [
   "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+  "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
 ];
 check(
   "module editors adopt the shared identity strip before tabs and preserve internal metadata without an empty Settings tab",
@@ -660,13 +700,21 @@ check(
 );
 
 check(
-  "shared identity composition aligns publication with naturally sized labeled controls",
+  "shared identity composition keeps the module name inline and aligns publication with naturally sized controls",
   presentation.includes("data-module-editor-identity") &&
+    presentation.includes('data-module-editor-name-field=""') &&
+    presentation.includes('data-module-editor-identity-control=""') &&
     presentation.includes(
-      "xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content]",
+      'className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-3"',
+    ) &&
+    presentation.includes(
+      "[&>[data-admin-form-listbox]]:grid-cols-[max-content_minmax(0,1fr)]",
+    ) &&
+    presentation.includes(
+      "xl:grid-cols-[minmax(20rem,26rem)_max-content_max-content]",
     ) &&
     presentation.includes("surface={false}") &&
-    presentation.includes("items-end pb-1.5"),
+    presentation.includes('className="flex h-full items-center"'),
 );
 
 check(
@@ -748,9 +796,6 @@ check(
 
 const heroVisibility = read(
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx",
-);
-const heroText = read(
-  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroTextFieldRow.tsx",
 );
 check(
   "binary Page Block state delegates to the shared switch",

@@ -2,18 +2,17 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AdminNotice from "../../../../../../components/admin/AdminNotice";
-import AdminRichTextEditor from "../../../../../../components/admin/AdminRichTextEditor";
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
 import {
   ModuleEditorHeader,
   ModuleEditorFeedback,
   ModuleEditorField,
   ModuleEditorFieldGrid,
+  ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
-  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
 } from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
 import { AdminFormListboxSelect } from "../../../../../../components/admin/ui";
@@ -26,6 +25,7 @@ import {
 } from "../../../../../../lib/hero/hero-content-controls";
 import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
+import { stripHtml } from "../../../../../../lib/rich-text/html-utils";
 import { resolveSafeInternalPath } from "../../../../../../lib/security/safe-internal-path";
 import { updateHeroTemplateDetails } from "../actions";
 import HeroCtaFields from "./HeroCtaFields";
@@ -524,57 +524,26 @@ export default function HeroEditClient({
   const previewPath = heroMeasurementPath(assignmentContext);
 
   const heroIdentityRow = (
-    <ModuleEditorSection className="mb-5">
-      <ModuleEditorFieldGrid className="md:grid-cols-2 xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content] xl:justify-start">
-        <ModuleEditorField
-          nature="standard"
-          span={3}
-          className="xl:col-span-1!"
-        >
-          <label className="space-y-2">
-            <span className="block text-sm font-medium text-white/70">
-              اسم الهيرو
-            </span>
-            <input
-              name="name"
-              defaultValue={hero.name}
-              required
-              className={fieldClassName("h-11")}
-            />
-          </label>
-        </ModuleEditorField>
-        <input
-          type="hidden"
-          name="template_description"
-          value={hero.description ?? ""}
+    <>
+      <input
+        type="hidden"
+        name="template_description"
+        value={hero.description ?? ""}
+      />
+      <ModuleEditorIdentitySection
+        name={hero.name}
+        nameLabel="اسم الهيرو"
+        status={hero.status}
+        inputClassName={fieldClassName("h-11")}
+      >
+        <AdminFormListboxSelect
+          name="variant"
+          label="نمط العرض"
+          defaultValue={hero.variant}
+          options={variantOptions}
         />
-        <ModuleEditorField
-          nature="standard"
-          span={3}
-          className="xl:col-span-1!"
-        >
-          <AdminFormListboxSelect
-            name="variant"
-            label="نمط العرض"
-            defaultValue={hero.variant}
-            options={variantOptions}
-          />
-        </ModuleEditorField>
-        <ModuleEditorField
-          nature="binary-state"
-          span={3}
-          className="xl:col-span-1!"
-        >
-          <div className="flex h-full items-end pb-1.5">
-            <ModuleEditorStatusSwitch
-              status={hero.status}
-              label="حالة النشر"
-              surface={false}
-            />
-          </div>
-        </ModuleEditorField>
-      </ModuleEditorFieldGrid>
-    </ModuleEditorSection>
+      </ModuleEditorIdentitySection>
+    </>
   );
 
   const contentTab = isProjectDetail ? (
@@ -622,11 +591,13 @@ export default function HeroEditClient({
               label="وصف المشروع"
               alignmentName="description_alignment"
               showName="show_description"
+              boldName="description_bold"
               alignmentDefault={
                 controls.descriptionAlignment === "justify"
                   ? "right"
                   : controls.descriptionAlignment
               }
+              boldDefault={controls.descriptionBold}
               showDefault={controls.showDescription}
             />
           </ModuleEditorField>
@@ -693,28 +664,26 @@ export default function HeroEditClient({
             />
           </ModuleEditorField>
 
-          <ModuleEditorField nature="long-content" span={6}>
-            <HeroVisibilityAlignRow
+          <ModuleEditorField nature="short-description" span={6}>
+            <HeroTextFieldRow
               label="الوصف"
+              name="description"
+              defaultValue={stripHtml(String(config.description ?? "")).replace(
+                /\s+/gu,
+                " ",
+              )}
+              boldName="description_bold"
               alignmentName="description_alignment"
               showName="show_description"
+              boldDefault={controls.descriptionBold}
               alignmentDefault={
                 controls.descriptionAlignment === "justify"
                   ? "right"
                   : controls.descriptionAlignment
               }
               showDefault={controls.showDescription}
-            >
-              <AdminRichTextEditor
-                name="description"
-                label="الوصف"
-                defaultValue={String(config.description ?? "")}
-                toolbarMode="none"
-                minHeight={56}
-                maxHeight={88}
-                placeholder="اكتب وصف الهيرو..."
-              />
-            </HeroVisibilityAlignRow>
+              placeholder="اكتب وصف الهيرو..."
+            />
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>

@@ -12,7 +12,13 @@ const { buildFeaturedModuleConfig, parseFeaturedModuleConfig } =
   await jiti.import<typeof import("../src/lib/featured-modules/config.ts")>(
     "../src/lib/featured-modules/config.ts",
   );
-const { resolveFeaturedItemDisplay } = await jiti.import<
+const {
+  FEATURED_PRESENTATION_PROFILES,
+  featuredPresentationProfile,
+  resolveFeaturedItemDisplay,
+  resolveFeaturedItemsPerView,
+  resolveFeaturedNavigation,
+} = await jiti.import<
   typeof import("../src/lib/featured-modules/contract.ts")
 >("../src/lib/featured-modules/contract.ts");
 let passed = 0;
@@ -76,12 +82,15 @@ const mediaHeader = read(
 );
 
 check(
-  "Featured contract separates source, selection, item limit, and presentation",
+  "Featured contract separates source, selection, total limit, per-view count, formatting, navigation, and presentation",
   [
     "FeaturedSource",
     "FeaturedSelection",
     "FeaturedPresentation",
     "itemLimit",
+    "itemsPerView",
+    "displayFormatting",
+    "navigation",
   ].every((marker) => contract.includes(marker)) &&
     !/FeaturedModuleConfig[\s\S]{0,400}\bplacement\b/u.test(contract),
 );
@@ -119,6 +128,55 @@ check(
   config.includes("presentationVariant") &&
     config.includes("selectionMode") &&
     config.includes("featuredModuleConfigSchema"),
+);
+checkEqual(
+  "Featured presentation profiles keep total selection independent from per-view policy",
+  {
+    hero: resolveFeaturedItemsPerView("hero", 4, 8),
+    editorial: resolveFeaturedItemsPerView("editorial", 3, 8),
+    largeCard: resolveFeaturedItemsPerView("large-card", 4, 8),
+    cards: resolveFeaturedItemsPerView("three-cards", 1, 8),
+    cardsDefault: resolveFeaturedItemsPerView("three-cards", undefined, 8),
+    list: resolveFeaturedItemsPerView("list", 1, 8),
+    listDefault: resolveFeaturedItemsPerView("list", undefined, 8),
+    group: resolveFeaturedItemsPerView("group-carousel", 4, 8),
+    editorialShortSource: resolveFeaturedItemsPerView("editorial", 4, 1),
+    threeCardsShortSource: resolveFeaturedItemsPerView("three-cards", 3, 2),
+  },
+  {
+    hero: 1,
+    editorial: 3,
+    largeCard: 1,
+    cards: 1,
+    cardsDefault: 3,
+    list: 1,
+    listDefault: 8,
+    group: 4,
+    editorialShortSource: 1,
+    threeCardsShortSource: 2,
+  },
+);
+checkEqual(
+  "Featured navigation is profile-bound and never leaves a navigable variant without a handle",
+  {
+    list: resolveFeaturedNavigation("list", {
+      showArrows: true,
+      showDots: true,
+      autoplay: true,
+    }),
+    hero: resolveFeaturedNavigation("hero", {
+      showArrows: false,
+      showDots: false,
+      autoplay: false,
+    }),
+    groupDefaults: featuredPresentationProfile("group-carousel")
+      .defaultNavigation,
+  },
+  {
+    list: { showArrows: false, showDots: false, autoplay: false },
+    hero: { showArrows: false, showDots: true, autoplay: false },
+    groupDefaults: { showArrows: false, showDots: true, autoplay: true },
+  },
 );
 
 check(
@@ -184,30 +242,47 @@ check(
   "public renderer exposes all presentations from one owner",
   component.includes("data-featured-presentation") &&
     component.includes("FeaturedCarousel") &&
-    component.includes('presentation.variant === "three-cards"') &&
     component.includes('presentation.variant === "list"') &&
     component.includes('presentation.variant === "single-carousel"') &&
-    component.includes('presentation.variant === "group-carousel"'),
+    component.includes('presentation.variant === "group-carousel"') &&
+    component.includes('mode="editorial"') &&
+    component.includes("displayFormatting={module.displayFormatting}") &&
+    component.includes("navigation={module.navigation}") &&
+    component.includes("itemsPerView={module.itemsPerView}"),
 );
 check(
-  "Featured motion presentations directly reuse the shared carousel capability",
+  "Featured motion presentations extend the existing shared carousel capability",
   carousel.includes('from "../../hooks/use-auto-carousel"') &&
     carousel.includes('from "../feed-modules/FeedCarouselDots"') &&
     carousel.includes("useAutoCarousel<HTMLDivElement>") &&
     carousel.includes("<FeedCarouselDots") &&
-    carousel.includes('autoplay: mode !== "legacy"') &&
+    carousel.includes("autoplay: navigation.autoplay") &&
+    carousel.includes("data-featured-items-per-view") &&
+    !carousel.includes("data-featured-visible-count") &&
+    !carousel.includes("firstVisibleItem") &&
+    !carousel.includes("lastVisibleItem") &&
     !carousel.includes("useState") &&
     !carousel.includes("setInterval"),
 );
 check(
-  "legacy Featured carousel keeps manual navigation while new motion variants use shared dots",
-  component.includes('mode="legacy"') &&
-    component.includes('mode="single"') &&
-    component.includes('mode="group"') &&
-    carousel.includes('mode === "legacy"') &&
+  "Featured navigation controls drive arrows, dots, and autoplay in the one public presenter",
+  component.includes('presentation.variant === "carousel"') &&
+    component.includes('? "legacy"') &&
     carousel.includes("onClick={goToPrevious}") &&
     carousel.includes("onClick={goToNext}") &&
+    carousel.includes("navigation.showArrows") &&
+    carousel.includes("navigation.showDots") &&
+    carousel.includes("navigation.autoplay") &&
     carousel.includes("<FeedCarouselDots"),
+);
+
+check(
+  "Featured owns compact navigation and following-module spacing without changing Page Composition",
+  carousel.includes(
+    'className="mt-3 grid justify-items-center gap-3 [&>div]:mt-0"',
+  ) &&
+    component.includes('className="relative pb-6 pt-12"') &&
+    component.includes('className="relative pb-4 pt-8"'),
 );
 
 check(
@@ -246,11 +321,12 @@ check(
   "all Featured presentations use one effective item display resolver",
   contract.includes("resolveFeaturedItemDisplay") &&
     contentCard.includes("resolveFeaturedItemDisplay(display, item)") &&
-    component.includes("resolveFeaturedItemDisplay(display, item)") &&
+    carousel.includes("resolveFeaturedItemDisplay(display, item)") &&
     loader.includes("display: config.display") &&
+    loader.includes("displayFormatting: config.displayFormatting") &&
     carousel.includes("display={display}") &&
     !contentCard.includes("item.display.") &&
-    !component.includes("item.display."),
+    !carousel.includes("item.display."),
 );
 check(
   "searchable category selection scrolls only through the shared themed listbox viewport",
@@ -266,6 +342,9 @@ check(
 check(
   "manual Featured selection adopts the canonical system scrollbar visuals",
   editor.includes('data-featured-manual-items-scroll=""') &&
+    editor.includes('<legend className="sr-only">') &&
+    editor.includes('data-featured-manual-heading=""') &&
+    editor.includes('className="mb-2 text-sm font-semibold text-white"') &&
     editor.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES") &&
     editor.includes("max-h-[28rem]") &&
     editor.includes("overflow-y-auto") &&
@@ -279,6 +358,10 @@ displayForm.set("category_slug", "reference-category");
 displayForm.set("selection_mode", "popular");
 displayForm.set("item_limit", "4");
 displayForm.set("presentation_variant", "editorial");
+displayForm.set("items_per_view", "3");
+displayForm.set("show_navigation_arrows", "false");
+displayForm.set("show_navigation_dots", "true");
+displayForm.set("navigation_autoplay", "true");
 displayForm.set("presentation_description", "Reference description");
 displayForm.set("show_description", "false");
 displayForm.set("description_bold", "true");
@@ -286,20 +369,32 @@ displayForm.set("description_alignment", "center");
 displayForm.set("show_title_on_page", "on");
 displayForm.set("show_category_on_page", "on");
 displayForm.set("show_excerpt_on_page", "on");
-displayForm.set("category_bold", "true");
-displayForm.set("category_alignment", "left");
-displayForm.set("series_bold", "false");
-displayForm.set("series_alignment", "center");
-displayForm.set("excerpt_bold", "true");
-displayForm.set("excerpt_alignment", "center");
-displayForm.set("date_bold", "true");
-displayForm.set("date_alignment", "left");
+displayForm.set("display_title_bold", "false");
+displayForm.set("display_title_alignment", "center");
+displayForm.set("display_category_bold", "true");
+displayForm.set("display_category_alignment", "left");
+displayForm.set("display_series_bold", "false");
+displayForm.set("display_series_alignment", "center");
+displayForm.set("display_excerpt_bold", "true");
+displayForm.set("display_excerpt_alignment", "center");
+displayForm.set("display_date_bold", "true");
+displayForm.set("display_date_alignment", "left");
 const builtConfig = buildFeaturedModuleConfig(displayForm);
 const builtDisplay = builtConfig.display;
 checkEqual(
   "Featured save preserves selection strategy independently from presentation",
-  builtConfig.selection,
-  { mode: "popular" },
+  {
+    selection: builtConfig.selection,
+    itemLimit: builtConfig.itemLimit,
+    itemsPerView: builtConfig.itemsPerView,
+    navigation: builtConfig.navigation,
+  },
+  {
+    selection: { mode: "popular" },
+    itemLimit: 4,
+    itemsPerView: 3,
+    navigation: { showArrows: false, showDots: true, autoplay: true },
+  },
 );
 checkEqual(
   "Featured save maps checked and unchecked CMS controls through the shared display contract",
@@ -325,21 +420,25 @@ checkEqual(
 checkEqual(
   "Featured content display formatting saves through the shared text contract without duplicate visibility keys",
   {
+    title: {
+      bold: builtConfig.displayFormatting.titleBold,
+      alignment: builtConfig.displayFormatting.titleAlignment,
+    },
     category: {
-      bold: builtConfig.presentation.categoryBold,
-      alignment: builtConfig.presentation.categoryAlignment,
+      bold: builtConfig.displayFormatting.categoryBold,
+      alignment: builtConfig.displayFormatting.categoryAlignment,
     },
     series: {
-      bold: builtConfig.presentation.seriesBold,
-      alignment: builtConfig.presentation.seriesAlignment,
+      bold: builtConfig.displayFormatting.seriesBold,
+      alignment: builtConfig.displayFormatting.seriesAlignment,
     },
     excerpt: {
-      bold: builtConfig.presentation.excerptBold,
-      alignment: builtConfig.presentation.excerptAlignment,
+      bold: builtConfig.displayFormatting.excerptBold,
+      alignment: builtConfig.displayFormatting.excerptAlignment,
     },
     date: {
-      bold: builtConfig.presentation.dateBold,
-      alignment: builtConfig.presentation.dateAlignment,
+      bold: builtConfig.displayFormatting.dateBold,
+      alignment: builtConfig.displayFormatting.dateAlignment,
     },
     duplicateVisibility: [
       "showCategory",
@@ -349,6 +448,7 @@ checkEqual(
     ].map((key) => Object.hasOwn(builtConfig.presentation, key)),
   },
   {
+    title: { bold: false, alignment: "center" },
     category: { bold: true, alignment: "left" },
     series: { bold: false, alignment: "center" },
     excerpt: { bold: true, alignment: "center" },
@@ -384,7 +484,11 @@ const legacyCarouselConfig = parseFeaturedModuleConfig({
   source: { kind: "categories", categorySlug: "reference-category" },
   selection: { mode: "automatic" },
   itemLimit: 4,
-  presentation: { variant: "carousel" },
+  presentation: {
+    variant: "carousel",
+    categoryBold: true,
+    categoryAlignment: "left",
+  },
 });
 checkEqual(
   "legacy Featured carousel config remains readable without migration or behavior remapping",
@@ -392,35 +496,44 @@ checkEqual(
     selection: legacyCarouselConfig.selection,
     variant: legacyCarouselConfig.presentation.variant,
     itemLimit: legacyCarouselConfig.itemLimit,
+    itemsPerView: legacyCarouselConfig.itemsPerView,
+    navigation: legacyCarouselConfig.navigation,
   },
   {
     selection: { mode: "automatic" },
     variant: "carousel",
     itemLimit: 4,
+    itemsPerView: 1,
+    navigation: { showArrows: true, showDots: false, autoplay: false },
   },
 );
 checkEqual(
   "legacy Featured content formatting resolves to backward-compatible defaults without migration",
   {
+    title: {
+      bold: legacyCarouselConfig.displayFormatting.titleBold,
+      alignment: legacyCarouselConfig.displayFormatting.titleAlignment,
+    },
     category: {
-      bold: legacyCarouselConfig.presentation.categoryBold,
-      alignment: legacyCarouselConfig.presentation.categoryAlignment,
+      bold: legacyCarouselConfig.displayFormatting.categoryBold,
+      alignment: legacyCarouselConfig.displayFormatting.categoryAlignment,
     },
     series: {
-      bold: legacyCarouselConfig.presentation.seriesBold,
-      alignment: legacyCarouselConfig.presentation.seriesAlignment,
+      bold: legacyCarouselConfig.displayFormatting.seriesBold,
+      alignment: legacyCarouselConfig.displayFormatting.seriesAlignment,
     },
     excerpt: {
-      bold: legacyCarouselConfig.presentation.excerptBold,
-      alignment: legacyCarouselConfig.presentation.excerptAlignment,
+      bold: legacyCarouselConfig.displayFormatting.excerptBold,
+      alignment: legacyCarouselConfig.displayFormatting.excerptAlignment,
     },
     date: {
-      bold: legacyCarouselConfig.presentation.dateBold,
-      alignment: legacyCarouselConfig.presentation.dateAlignment,
+      bold: legacyCarouselConfig.displayFormatting.dateBold,
+      alignment: legacyCarouselConfig.displayFormatting.dateAlignment,
     },
   },
   {
-    category: { bold: false, alignment: "right" },
+    title: { bold: true, alignment: "right" },
+    category: { bold: true, alignment: "left" },
     series: { bold: false, alignment: "right" },
     excerpt: { bold: false, alignment: "right" },
     date: { bold: false, alignment: "right" },
@@ -457,25 +570,25 @@ const effectiveDisplay = resolveFeaturedItemDisplay(
     mediaKind: null,
     mediaDuration: "",
     display: {
-      title: true,
-      image: true,
-      excerpt: true,
-      date: true,
+      title: false,
+      image: false,
+      excerpt: false,
+      date: false,
       category: false,
-      series: true,
+      series: false,
       introCard: true,
     },
   },
 );
 checkEqual(
-  "Featured render intersects module choice, public item eligibility, and available values",
+  "Featured module visibility is authoritative across every card field while real payload values remain required",
   effectiveDisplay,
   {
     title: true,
     image: true,
     excerpt: false,
     date: true,
-    category: false,
+    category: true,
     series: false,
   },
 );
@@ -484,7 +597,21 @@ check(
   "CMS source choice is first and second choice is dependent",
   editor.indexOf('name="source_kind"') <
     editor.indexOf('name="category_slug"') &&
-    editor.includes('name="content_type"'),
+    editor.includes('name="content_type"') &&
+    editor.includes("value={sourceKind}") &&
+    editor.includes('sourceKind === "categories"') &&
+    config.includes("kind === \"categories\" ? { kind, categorySlug } : { kind, contentType }") &&
+    resolver.includes("featuredSourceContentTypes(config.source)"),
+);
+check(
+  "every current Featured presentation exposes the complete card payload controls",
+  Object.values(FEATURED_PRESENTATION_PROFILES).every(
+    (profile) =>
+      profile.displayFields.length === 6 &&
+      (["image", "title", "excerpt", "date", "category", "series"] as const).every(
+        (field) => profile.displayFields.includes(field),
+      ),
+  ),
 );
 check(
   "CMS exposes every Featured selection strategy and presentation variant from the owner registries",
@@ -497,9 +624,7 @@ const featuredDisplaySettingsIndex = editor.indexOf(
   'data-featured-display-settings=""',
 );
 const featuredDisplayCardIndexes = [
-  'showName="show_eyebrow"',
-  'showName="show_title"',
-  'showName="show_description"',
+  'showName="show_title_on_page"',
   'showName="show_image_on_page"',
   'showName="show_category_on_page"',
   'showName="show_series_on_page"',
@@ -508,14 +633,28 @@ const featuredDisplayCardIndexes = [
   'showName="show_cta"',
 ].map((token) => editor.indexOf(token, featuredDisplaySettingsIndex));
 check(
-  "CMS editor adopts nine ordered shared display-control cards and delegates item-title visibility to the item contract",
+  "CMS editor separates profile controls, module heading, and seven ordered payload controls",
   [
     "MODULE_EDITOR_CONTROL_CARD_CLASS_NAME",
     "<AdminFormGrid columns={4}",
     "مصدر المحتوى",
     "طريقة العرض",
-    "إعدادات العرض",
+    "العدد المسموح به",
+    "إعدادات النمط المختار",
+    "عنوان الموديول",
+    "تنسيق عناصر المحتوى",
     'name="presentation_variant"',
+    'data-featured-variant-settings={presentationVariant}',
+    'data-featured-items-per-view-control={',
+    'name="items_per_view"',
+    'aria-label="العناصر الظاهرة"',
+    "ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME",
+    'className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4"',
+    'className="min-h-16"',
+    "presentationProfile.supportsNavigation",
+    'name="show_navigation_arrows"',
+    'name="show_navigation_dots"',
+    'name="navigation_autoplay"',
     'name="presentation_description"',
     'showName="show_eyebrow"',
     'boldName="eyebrow_bold"',
@@ -532,17 +671,18 @@ check(
     'showName="show_cta"',
     'boldName="cta_bold"',
     'alignmentName="cta_alignment"',
-    'boldName="category_bold"',
-    'alignmentName="category_alignment"',
-    'boldName="series_bold"',
-    'alignmentName="series_alignment"',
-    'boldName="excerpt_bold"',
-    'alignmentName="excerpt_alignment"',
-    'boldName="date_bold"',
-    'alignmentName="date_alignment"',
+    'showName="show_title_on_page"',
+    'boldName="display_title_bold"',
+    'alignmentName="display_title_alignment"',
+    'boldName="display_category_bold"',
+    'alignmentName="display_category_alignment"',
+    'boldName="display_series_bold"',
+    'alignmentName="display_series_alignment"',
+    'boldName="display_excerpt_bold"',
+    'alignmentName="display_excerpt_alignment"',
+    'boldName="display_date_bold"',
+    'alignmentName="display_date_alignment"',
     'className="mt-4 grid items-start gap-4 md:grid-cols-3"',
-    'name="show_title_on_page"',
-    'value={String(config.display.title)}',
     "<ModuleEditorVisibilityAlignRow",
     'name="eyebrow"',
     'name="title"',
@@ -554,16 +694,12 @@ check(
         index > featuredDisplaySettingsIndex &&
         (position === 0 || index > indexes[position - 1]),
     ) &&
-    (editor.match(/<ModuleEditorVisibilityAlignRow/g) ?? []).length === 9 &&
+    (editor.match(/<ModuleEditorVisibilityAlignRow/g) ?? []).length === 10 &&
     (editor.match(/controlMode="visibility-only"/g) ?? []).length === 1 &&
     !editor.includes("<ContentDisplaySettings") &&
     !editor.includes("FeaturedDisplayVisibility") &&
-    !editor.includes("AdminFormSwitch") &&
-    !editor.includes('alignmentName="display_') &&
     !editor.includes("min-h-36") &&
-    /<input\s+type="hidden"\s+name="show_title_on_page"\s+value=\{String\(config\.display\.title\)\}/u.test(
-      editor,
-    ) &&
+    !/<input\s+type="hidden"\s+name="show_title_on_page"/u.test(editor) &&
     !editor.includes("<textarea") &&
     !editor.includes('<textarea name="presentation_description"') &&
     !editor.includes(">\n                      Presentation\n"),
@@ -598,23 +734,21 @@ check(
     contentCard.includes("ctaFormat.alignment"),
 );
 check(
-  "Featured extends the shared text-formatting contract to category, series, excerpt, and date",
+  "Featured adopts shared payload formatting for title, category, series, excerpt, and date",
   sharedDisplayContract.includes(
     "CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS",
   ) &&
     sharedDisplayContract.includes("ContentDisplayFormattableTextField") &&
-    sharedDisplayContract.includes(
-      "Field in PageBlockFormattableTextField as `show${CapitalizedTextField<Field>}`",
-    ) &&
-    ["category", "series", "excerpt", "date"].every(
-      (field) =>
-        sharedDisplayContract.includes(`"${field}"`) &&
-        new RegExp(
-          `resolvePageBlockTextFormat\\(\\s*presentationRaw,\\s*"${field}"`,
-          "u",
-        ).test(config),
+    sharedDisplayContract.includes("ResolvedCollectionDisplayTextFormatting") &&
+    config.includes("resolveCollectionDisplayTextFormatting") &&
+    config.includes("displayFormattingRaw") &&
+    config.includes("presentationRaw.categoryBold") &&
+    contract.includes(
+      "displayFormatting: ResolvedCollectionDisplayTextFormatting",
     ) &&
     [
+      "titleBold: z.boolean()",
+      'titleAlignment: z.enum(["right", "center", "left"])',
       "categoryBold: z.boolean()",
       'categoryAlignment: z.enum(["right", "center", "left"])',
       "seriesBold: z.boolean()",
@@ -623,7 +757,6 @@ check(
       'excerptAlignment: z.enum(["right", "center", "left"])',
       "dateBold: z.boolean()",
       'dateAlignment: z.enum(["right", "center", "left"])',
-      "visibility: false",
     ].every((token) => config.includes(token)) &&
     ![
       "showCategory: z.boolean()",
@@ -634,25 +767,45 @@ check(
 );
 check(
   "every Featured public presentation applies content formatting through the two canonical card paths",
-  ["category", "series", "excerpt", "date"].every(
+  ["title", "category", "series", "excerpt", "date"].every(
     (field) =>
-      contentCard.includes(
-        `resolvePageBlockTextFormat(presentation, "${field}")`,
-      ) &&
-      component.includes(
-        `resolvePageBlockTextFormat(presentation, "${field}")`,
-      ),
+      contentCard.includes(`displayFormatting.${field}`) &&
+      carousel.includes(`displayFormatting.${field}`),
   ) &&
     contentCard.includes("pageBlockTextAlignClass") &&
     contentCard.includes("pageBlockTextPlacementClass") &&
-    component.includes("pageBlockTextAlignClass") &&
-    component.includes("pageBlockTextPlacementClass") &&
-    component.includes("presentation={presentation}") &&
-    carousel.includes("presentation={presentation}"),
+    carousel.includes("pageBlockTextAlignClass") &&
+    carousel.includes("pageBlockTextPlacementClass") &&
+    component.includes("displayFormatting={module.displayFormatting}") &&
+    carousel.includes("displayFormatting={displayFormatting}"),
+);
+check(
+  "CMS editor keeps Featured quantity labels concise and removes redundant source-limit guidance",
+  editor.includes("العناصر الظاهرة") &&
+    editor.includes("العدد المسموح به") &&
+    editor.includes("whitespace-nowrap text-sm font-medium") &&
+    editor.includes("[color-scheme:dark]") &&
+    editor.includes('className="block text-sm font-medium text-white/70"') &&
+    !editor.includes("العناصر الظاهرة في كل مرة") &&
+    !editor.includes("يحدد حد الاختيار من المصدر") &&
+    !editor.includes("هذه الحقول تخص حمولة الخبر أو المادة نفسها"),
+);
+check(
+  "Cards and list expose a real per-view count while list remains intentionally static",
+  /"three-cards":\s*\{[\s\S]*?itemsPerView:\s*\{[\s\S]*?mode:\s*"configurable"[\s\S]*?min:\s*1,[\s\S]*?max:\s*4,/u.test(
+    contract,
+  ) &&
+    /list:\s*\{[\s\S]*?itemsPerView:\s*\{[\s\S]*?mode:\s*"configurable"[\s\S]*?min:\s*1,[\s\S]*?max:\s*12,[\s\S]*?supportsNavigation:\s*false/u.test(
+      contract,
+    ) &&
+    component.includes("items.slice(0, module.itemsPerView).map") &&
+    contract.includes('"three-cards": "بطاقات"') &&
+    !contract.includes('"three-cards": "3 بطاقات"'),
 );
 check(
   "Featured metadata stays in a padded flow with stacked taxonomy and independent date across both card paths",
   contentCard.includes('data-featured-metadata-area=""') &&
+    contentCard.includes('data-featured-date=""') &&
     contentCard.includes('data-featured-taxonomy-stack=""') &&
     contentCard.includes('className="grid -translate-y-2 gap-1"') &&
     contentCard.includes(
@@ -675,21 +828,22 @@ check(
       "text-sm font-medium leading-5 text-white/80 drop-shadow-",
     ) &&
     !contentCard.includes('className="absolute inset-x-0 bottom-0') &&
-    component.includes('data-featured-metadata-area=""') &&
-    component.includes('data-featured-taxonomy-stack=""') &&
-    component.includes('className="grid -translate-y-2 gap-1"') &&
-    component.includes("mt-2 min-h-12 line-clamp-2") &&
-    component.includes("mt-2 min-h-10 line-clamp-2") &&
-    component.includes(
-      "text-sm font-medium leading-5 text-white/70 drop-shadow-",
+    carousel.includes('data-featured-metadata-area=""') &&
+    carousel.includes('data-featured-date=""') &&
+    carousel.includes('data-featured-taxonomy-stack=""') &&
+    carousel.includes('className="grid -translate-y-2 gap-1"') &&
+    carousel.includes("mt-2 min-h-12 line-clamp-2 text-base leading-7") &&
+    carousel.includes("mt-2 min-h-10 line-clamp-2 text-sm leading-6") &&
+    carousel.includes(
+      "text-sm leading-5 text-white/70 drop-shadow-",
     ) &&
-    component.includes("<PublicGoldPill>") &&
-    component.includes("text-sm leading-5 text-[#D8B87A]") &&
-    !component.includes('bg-[#05070B]/45') &&
+    carousel.includes("<PublicGoldPill>") &&
+    carousel.includes("text-sm leading-5 text-[#D8B87A]") &&
+    !carousel.includes('bg-[#05070B]/45') &&
     !contentCard.includes(
       'className="flex flex-wrap items-center gap-3 text-xs text-white/55"',
     ) &&
-    !component.includes(
+    !carousel.includes(
       'className="flex flex-wrap items-center gap-2 text-xs text-white/38"',
     ),
 );

@@ -8,12 +8,15 @@ import {
   buildContentDisplayOptionsFromFormData,
   buildPageBlockTextFormattingPatch,
   CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS,
+  resolveCollectionDisplayTextFormatting,
   resolveContentDisplayOptions,
   resolvePageBlockTextFormat,
 } from "../page-blocks/configs";
 import {
   FEATURED_PRESENTATION_VARIANTS,
   FEATURED_SELECTION_MODES,
+  resolveFeaturedItemsPerView,
+  resolveFeaturedNavigation,
   type FeaturedModuleConfig,
   type FeaturedPresentationVariant,
   type FeaturedSelectionMode,
@@ -54,6 +57,7 @@ export const featuredModuleConfigSchema: z.ZodType<FeaturedModuleConfig> = z
         .strict(),
     ]),
     itemLimit: z.number().int().min(1).max(12),
+    itemsPerView: z.number().int().min(1).max(12),
     display: z
       .object({
         title: z.boolean(),
@@ -62,6 +66,27 @@ export const featuredModuleConfigSchema: z.ZodType<FeaturedModuleConfig> = z
         series: z.boolean(),
         excerpt: z.boolean(),
         date: z.boolean(),
+      })
+      .strict(),
+    displayFormatting: z
+      .object({
+        titleBold: z.boolean(),
+        titleAlignment: z.enum(["right", "center", "left"]),
+        categoryBold: z.boolean(),
+        categoryAlignment: z.enum(["right", "center", "left"]),
+        seriesBold: z.boolean(),
+        seriesAlignment: z.enum(["right", "center", "left"]),
+        excerptBold: z.boolean(),
+        excerptAlignment: z.enum(["right", "center", "left"]),
+        dateBold: z.boolean(),
+        dateAlignment: z.enum(["right", "center", "left"]),
+      })
+      .strict(),
+    navigation: z
+      .object({
+        showArrows: z.boolean(),
+        showDots: z.boolean(),
+        autoplay: z.boolean(),
       })
       .strict(),
     presentation: z
@@ -83,14 +108,6 @@ export const featuredModuleConfigSchema: z.ZodType<FeaturedModuleConfig> = z
         showCta: z.boolean(),
         ctaBold: z.boolean(),
         ctaAlignment: z.enum(["right", "center", "left"]),
-        categoryBold: z.boolean(),
-        categoryAlignment: z.enum(["right", "center", "left"]),
-        seriesBold: z.boolean(),
-        seriesAlignment: z.enum(["right", "center", "left"]),
-        excerptBold: z.boolean(),
-        excerptAlignment: z.enum(["right", "center", "left"]),
-        dateBold: z.boolean(),
-        dateAlignment: z.enum(["right", "center", "left"]),
       })
       .strict(),
   })
@@ -157,8 +174,24 @@ export function parseFeaturedModuleConfig(
     raw?.display && typeof raw.display === "object"
       ? (raw.display as Record<string, unknown>)
       : {};
+  const displayFormattingRaw =
+    raw?.displayFormatting &&
+    typeof raw.displayFormatting === "object" &&
+    !Array.isArray(raw.displayFormatting)
+      ? (raw.displayFormatting as Record<string, unknown>)
+      : {};
+  const navigationRaw =
+    raw?.navigation &&
+    typeof raw.navigation === "object" &&
+    !Array.isArray(raw.navigation)
+      ? (raw.navigation as Record<string, unknown>)
+      : {};
   const kind = sourceKind(sourceRaw.kind);
   const itemLimitValue = Math.floor(Number(raw?.itemLimit ?? 4));
+  const itemLimit = Number.isFinite(itemLimitValue)
+    ? Math.max(1, Math.min(12, itemLimitValue))
+    : 4;
+  const variant = presentationVariant(presentationRaw.variant);
   const eyebrowFormat = resolvePageBlockTextFormat(presentationRaw, "eyebrow");
   const titleFormat = resolvePageBlockTextFormat(presentationRaw, "title", {
     bold: true,
@@ -168,16 +201,25 @@ export function parseFeaturedModuleConfig(
     "description",
   );
   const ctaFormat = resolvePageBlockTextFormat(presentationRaw, "cta");
-  const categoryFormat = resolvePageBlockTextFormat(
-    presentationRaw,
-    "category",
-  );
-  const seriesFormat = resolvePageBlockTextFormat(presentationRaw, "series");
-  const excerptFormat = resolvePageBlockTextFormat(
-    presentationRaw,
-    "excerpt",
-  );
-  const dateFormat = resolvePageBlockTextFormat(presentationRaw, "date");
+  const displayFormatting = resolveCollectionDisplayTextFormatting({
+    titleBold: displayFormattingRaw.titleBold,
+    titleAlignment: displayFormattingRaw.titleAlignment,
+    categoryBold:
+      displayFormattingRaw.categoryBold ?? presentationRaw.categoryBold,
+    categoryAlignment:
+      displayFormattingRaw.categoryAlignment ??
+      presentationRaw.categoryAlignment,
+    seriesBold: displayFormattingRaw.seriesBold ?? presentationRaw.seriesBold,
+    seriesAlignment:
+      displayFormattingRaw.seriesAlignment ?? presentationRaw.seriesAlignment,
+    excerptBold:
+      displayFormattingRaw.excerptBold ?? presentationRaw.excerptBold,
+    excerptAlignment:
+      displayFormattingRaw.excerptAlignment ?? presentationRaw.excerptAlignment,
+    dateBold: displayFormattingRaw.dateBold ?? presentationRaw.dateBold,
+    dateAlignment:
+      displayFormattingRaw.dateAlignment ?? presentationRaw.dateAlignment,
+  });
 
   return featuredModuleConfigSchema.parse({
     source:
@@ -197,9 +239,12 @@ export function parseFeaturedModuleConfig(
             ),
           }
         : { mode: selectionMode(selectionRaw.mode) },
-    itemLimit: Number.isFinite(itemLimitValue)
-      ? Math.max(1, Math.min(12, itemLimitValue))
-      : 4,
+    itemLimit,
+    itemsPerView: resolveFeaturedItemsPerView(
+      variant,
+      raw?.itemsPerView,
+      itemLimit,
+    ),
     display: resolveContentDisplayOptions({
       title: displayRaw.title ?? presentationRaw.showItemTitle,
       image: displayRaw.image ?? presentationRaw.showImage,
@@ -208,8 +253,10 @@ export function parseFeaturedModuleConfig(
       excerpt: displayRaw.excerpt ?? presentationRaw.showExcerpt,
       date: displayRaw.date ?? presentationRaw.showDate,
     }),
+    displayFormatting,
+    navigation: resolveFeaturedNavigation(variant, navigationRaw),
     presentation: {
-      variant: presentationVariant(presentationRaw.variant),
+      variant,
       eyebrow:
         String(
           presentationRaw.eyebrow ?? DEFAULT_PRESENTATION.eyebrow,
@@ -231,14 +278,6 @@ export function parseFeaturedModuleConfig(
       showCta: ctaFormat.visible,
       ctaBold: ctaFormat.bold,
       ctaAlignment: ctaFormat.alignment,
-      categoryBold: categoryFormat.bold,
-      categoryAlignment: categoryFormat.alignment,
-      seriesBold: seriesFormat.bold,
-      seriesAlignment: seriesFormat.alignment,
-      excerptBold: excerptFormat.bold,
-      excerptAlignment: excerptFormat.alignment,
-      dateBold: dateFormat.bold,
-      dateAlignment: dateFormat.alignment,
     },
   });
 }
@@ -287,16 +326,27 @@ export function buildFeaturedModuleConfig(
       "عدد العناصر يجب أن يكون بين 1 و12.",
     );
   }
+  const variant = presentationVariant(formData.get("presentation_variant"));
   const formatting = buildPageBlockTextFormattingPatch(formData, [
     { field: "eyebrow" },
     { field: "title", defaults: { bold: true } },
     { field: "description" },
     { field: "cta" },
-    ...CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS.map((field) => ({
-      field,
-      visibility: false,
-    })),
   ]);
+  const displayFormatting = resolveCollectionDisplayTextFormatting(
+    Object.fromEntries(
+      ["title", ...CONTENT_DISPLAY_FORMATTABLE_TEXT_FIELDS].flatMap((field) => [
+        [
+          `${field}Bold`,
+          formData.getAll(`display_${field}_bold`).at(-1),
+        ],
+        [
+          `${field}Alignment`,
+          formData.get(`display_${field}_alignment`),
+        ],
+      ]),
+    ),
+  );
 
   return featuredModuleConfigSchema.parse({
     source:
@@ -306,10 +356,21 @@ export function buildFeaturedModuleConfig(
         ? { mode: selectedMode, topicIds }
         : { mode: selectedMode },
     itemLimit,
+    itemsPerView: resolveFeaturedItemsPerView(
+      variant,
+      formData.get("items_per_view"),
+      itemLimit,
+    ),
     display: buildContentDisplayOptionsFromFormData(formData, false),
+    displayFormatting,
+    navigation: resolveFeaturedNavigation(variant, {
+      showArrows: formData.getAll("show_navigation_arrows").at(-1),
+      showDots: formData.getAll("show_navigation_dots").at(-1),
+      autoplay: formData.getAll("navigation_autoplay").at(-1),
+    }),
     presentation: {
       ...formatting,
-      variant: presentationVariant(formData.get("presentation_variant")),
+      variant,
       eyebrow: String(formData.get("eyebrow") ?? "").trim() || null,
       title: String(formData.get("title") ?? "").trim(),
       description: String(

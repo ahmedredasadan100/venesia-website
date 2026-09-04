@@ -628,9 +628,22 @@ const editor = read(
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
 );
 const action = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
+const mediaHubConfig = read("src/lib/media-hub-modules/parse-config.ts");
+const collectionHeader = read(
+  "src/components/collection-modules/CollectionSectionHeader.tsx",
+);
+const collectionFields = read(
+  "src/components/admin/page-blocks/CollectionModuleFields.tsx",
+);
 const sharedDisplayContract = read("src/lib/page-blocks/configs.ts");
 const sharedCollectionEditor = read(
   "src/components/admin/page-blocks/editors/CollectionModuleEditor.tsx",
+);
+const moduleRegistryMetadata = read(
+  "src/lib/page-composition/module-registry-metadata.ts",
+);
+const mediaHubModuleRegistryMetadata = moduleRegistryMetadata.slice(
+  moduleRegistryMetadata.indexOf('"media-hub": {'),
 );
 assert.ok(!editor.includes('name="media_type"'));
 assert.ok(editor.includes('name="placement" value={parsedInitial.placement}'));
@@ -638,6 +651,19 @@ assert.ok(!editor.includes("نوع المحتوى المميز"));
 assert.ok(editor.includes('.filter((key) => key !== "featured")'));
 assert.ok(editor.includes("CollectionPresentationFields"));
 assert.ok(editor.includes("CollectionModuleEditor"));
+assert.ok(editor.includes('id: "presentation"'));
+assert.ok(editor.includes('data-media-hub-editor-presentation=""'));
+assert.ok(
+  editor.includes("contextLabel={MEDIA_HUB_SECTION_LABELS[sectionKey]}"),
+);
+assert.ok(editor.includes('heading="تنسيق عناصر المحتوى"'));
+assert.ok(!editor.includes("تكوين عرض المحتوى"));
+assert.ok(mediaHubModuleRegistryMetadata.includes('navigationLabelAr: "العرض"'));
+assert.ok(
+  mediaHubModuleRegistryMetadata.includes(
+    'sectionDescriptionAr: "حرّر نصوص السكشن مع بقاء إعدادات العرض في قسمها المستقل."',
+  ),
+);
 assert.ok(editor.includes('label: "نوع المحتوى"'));
 assert.ok(editor.includes('name: "content_type"'));
 assert.ok(editor.includes('value: "list", label: "قائمة"'));
@@ -654,6 +680,39 @@ assert.ok(!action.includes('formData.get("listing_columns")'));
 assert.ok(!editor.includes("مصدر البيانات"));
 assert.ok(!action.includes('placementInput === "featured"'));
 assert.ok(action.includes('sectionKey === "featured"'));
+for (const ctaControl of [
+  'showName="show_cta"',
+  'boldName="cta_bold"',
+  'alignmentName="cta_alignment"',
+]) {
+  assert.ok(editor.includes(ctaControl));
+}
+assert.ok(action.includes('{ field: "cta" }'));
+assert.ok(mediaHubConfig.includes('{ field: "cta" }'));
+for (const publicCtaCapability of ["showCta", "ctaBold", "ctaAlignment"]) {
+  assert.ok(collectionHeader.includes(publicCtaCapability));
+}
+assert.ok(
+  collectionFields.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME"),
+);
+for (const editorOrganizationToken of [
+  'data-collection-presentation-fields=""',
+  "إعدادات النمط المختار",
+  'data-collection-presentation-settings={activeLayout}',
+  'data-collection-presentation-context=""',
+  "COLLECTION_PRESENTATION_CONTROL_SURFACE_CLASS_NAME",
+  "COLLECTION_PRESENTATION_LISTBOX_CLASS_NAME",
+  "{contextLabel}",
+  "LAYOUT_SUMMARIES[activeLayout]",
+  "variantCapabilities.itemsPerRow",
+  "variantCapabilities.cardVariant",
+  "mode={variantCapabilities.contentHierarchyMode}",
+  'mode === "featured-first"',
+]) {
+  assert.ok(collectionFields.includes(editorOrganizationToken));
+}
+assert.equal(collectionFields.match(/span=\{3\}/g)?.length, 4);
+assert.ok(!collectionFields.includes("visibleSettingsCount"));
 assert.ok(
   action.includes("buildCollectionModuleDisplayFormattingFromFormData(formData)"),
 );
@@ -699,6 +758,11 @@ assert.equal(
   7,
 );
 assert.ok(editor.includes("CollectionModuleDisplayFormattingFields"));
+assert.ok(editor.includes('name="presentation_description"'));
+assert.ok(editor.includes('aria-label="وصف السكشن"'));
+assert.ok(editor.includes('className={fieldClassName("h-11 min-w-0")}'));
+assert.ok(!editor.includes('<textarea\n                              name="presentation_description"'));
+assert.ok(!editor.includes('className={fieldClassName("h-[72px]'));
 for (const retiredField of [
   "side_limit",
   "list_limit",
@@ -763,7 +827,7 @@ assert.ok(capabilityFields.includes('name="collection_layout"'));
 assert.ok(capabilityFields.includes('name="items_per_row"'));
 assert.ok(capabilityFields.includes('name="collection_card_variant"'));
 assert.ok(capabilityFields.includes('label="طريقة العرض"'));
-assert.ok(capabilityFields.includes('activeLayout === "featured"'));
+assert.ok(capabilityFields.includes("4 لأربعة أعمدة"));
 assert.ok(capabilityFields.includes('mosaic: "فسيفساء بصرية"'));
 assert.ok(capabilityFields.includes('timeline: "خط زمني بالبطاقات"'));
 assert.ok(capabilityFields.includes('"timeline-digest": "موجز زمني"'));

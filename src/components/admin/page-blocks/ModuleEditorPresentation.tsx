@@ -594,14 +594,17 @@ export function ModuleEditorIdentitySection({
       data-module-editor-identity=""
       className={`mb-5 ${className}`.trim()}
     >
-      <ModuleEditorFieldGrid className="md:grid-cols-2 xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content] xl:justify-start">
+      <ModuleEditorFieldGrid className="items-center md:grid-cols-2 xl:grid-cols-[minmax(20rem,26rem)_max-content_max-content] xl:justify-start">
         <ModuleEditorField
           nature="standard"
           span={3}
           className="xl:col-span-1!"
         >
-          <label className="block space-y-2">
-            <span className="block text-sm font-medium text-white/70">
+          <label
+            data-module-editor-name-field=""
+            className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-3"
+          >
+            <span className="whitespace-nowrap text-sm font-medium text-white/70">
               {nameLabel}
             </span>
             <input
@@ -618,7 +621,12 @@ export function ModuleEditorIdentitySection({
             span={3}
             className="xl:col-span-1!"
           >
-            {children}
+            <div
+              data-module-editor-identity-control=""
+              className="h-full [&>[data-admin-form-listbox]]:grid [&>[data-admin-form-listbox]]:grid-cols-[max-content_minmax(0,1fr)] [&>[data-admin-form-listbox]]:items-center [&>[data-admin-form-listbox]]:gap-3 [&>[data-admin-form-listbox]]:space-y-0 [&>[data-admin-form-listbox]>p]:col-span-2 [&>[data-admin-form-listbox]>span]:whitespace-nowrap"
+            >
+              {children}
+            </div>
           </ModuleEditorField>
         ) : null}
         <ModuleEditorField
@@ -626,7 +634,7 @@ export function ModuleEditorIdentitySection({
           span={3}
           className="xl:col-span-1!"
         >
-          <div className="flex h-full items-end pb-1.5">
+          <div className="flex h-full items-center">
             <ModuleEditorStatusSwitch
               status={status}
               label={statusLabel}

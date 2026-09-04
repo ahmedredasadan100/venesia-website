@@ -61,15 +61,17 @@ export type CollectionModuleEditorProps<
 
 export function CollectionModuleDisplayFormattingFields({
   display,
+  heading = "إعدادات العرض",
 }: {
   display: CollectionDisplayOverrides;
+  heading?: string;
 }) {
   const textFormatting = resolveCollectionDisplayTextFormatting(display);
 
   return (
     <ModuleEditorSection data-collection-display-formatting-capability="">
       <ModuleEditorSectionHeading intent="settings">
-        إعدادات العرض
+        {heading}
       </ModuleEditorSectionHeading>
 
       <div

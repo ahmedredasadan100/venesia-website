@@ -5,9 +5,11 @@ import {
   type PublicContentSummary,
 } from "../content/public-content-read/contract";
 import {
+  type ContentDisplayField,
   resolveContentItemDisplay,
   type ContentDisplayOptions,
   type PageBlockTextFormattingConfig,
+  type ResolvedCollectionDisplayTextFormatting,
 } from "../page-blocks/configs";
 
 export const FEATURED_SOURCE_KINDS = ["categories", "media-center"] as const;
@@ -61,7 +63,7 @@ export const FEATURED_PRESENTATION_LABELS_AR: Record<
   hero: "هيرو",
   editorial: "تحريري",
   "large-card": "بطاقة كبيرة",
-  "three-cards": "3 بطاقات",
+  "three-cards": "بطاقات",
   list: "قائمة",
   carousel: "عرض شرائح كلاسيكي",
   "single-carousel": "خبر واحد متحرك",
@@ -82,11 +84,210 @@ export type FeaturedPresentation = PageBlockTextFormattingConfig & {
   ctaText: string;
 };
 
+export type FeaturedNavigation = {
+  showArrows: boolean;
+  showDots: boolean;
+  autoplay: boolean;
+};
+
+type FeaturedItemsPerViewPolicy =
+  | { mode: "fixed"; value: number }
+  | { mode: "configurable"; defaultValue: number; min: number; max: number };
+
+export type FeaturedPresentationProfile = {
+  summaryAr: string;
+  itemsPerView: FeaturedItemsPerViewPolicy;
+  supportsNavigation: boolean;
+  defaultNavigation: FeaturedNavigation;
+  displayFields: readonly ContentDisplayField[];
+};
+
+const FEATURED_CARD_DISPLAY_FIELDS = [
+  "image",
+  "title",
+  "excerpt",
+  "date",
+  "category",
+  "series",
+] as const satisfies readonly ContentDisplayField[];
+
+const STATIC_NAVIGATION = {
+  showArrows: false,
+  showDots: false,
+  autoplay: false,
+} as const satisfies FeaturedNavigation;
+
+const MANUAL_CAROUSEL_NAVIGATION = {
+  showArrows: true,
+  showDots: true,
+  autoplay: false,
+} as const satisfies FeaturedNavigation;
+
+const AUTOMATIC_CAROUSEL_NAVIGATION = {
+  showArrows: false,
+  showDots: true,
+  autoplay: true,
+} as const satisfies FeaturedNavigation;
+
+/** One product registry drives Admin relevance and Public paging behavior. */
+export const FEATURED_PRESENTATION_PROFILES = {
+  hero: {
+    summaryAr: "عنصر بارز واحد في كل شريحة مع تنقل عند تحميل أكثر من عنصر.",
+    itemsPerView: { mode: "fixed", value: 1 },
+    supportsNavigation: true,
+    defaultNavigation: MANUAL_CAROUSEL_NAVIGATION,
+    displayFields: FEATURED_CARD_DISPLAY_FIELDS,
+  },
+  editorial: {
+    summaryAr: "خبر رئيسي مع بطاقات تحريرية مساندة، من عنصرين إلى أربعة في كل مجموعة.",
+    itemsPerView: {
+      mode: "configurable",
+      defaultValue: 4,
+      min: 2,
+      max: 4,
+    },
+    supportsNavigation: true,
+    defaultNavigation: MANUAL_CAROUSEL_NAVIGATION,
+    displayFields: FEATURED_CARD_DISPLAY_FIELDS,
+  },
+  "large-card": {
+    summaryAr: "بطاقة كبيرة واحدة في كل شريحة مع تنقل عند وجود عناصر إضافية.",
+    itemsPerView: { mode: "fixed", value: 1 },
+    supportsNavigation: true,
+    defaultNavigation: MANUAL_CAROUSEL_NAVIGATION,
+    displayFields: FEATURED_CARD_DISPLAY_FIELDS,
+  },
+  "three-cards": {
+    summaryAr: "من بطاقة إلى أربع بطاقات في كل مجموعة مع تنقل بين المجموعات الإضافية.",
+    itemsPerView: {
+      mode: "configurable",
+      defaultValue: 3,
+      min: 1,
+      max: 4,
+    },
+    supportsNavigation: true,
+    defaultNavigation: MANUAL_CAROUSEL_NAVIGATION,
+    displayFields: FEATURED_CARD_DISPLAY_FIELDS,
+  },
+  list: {
+    summaryAr: "قائمة ثابتة تعرض العدد المختار فقط دون تنقل.",
+    itemsPerView: {
+      mode: "configurable",
+      defaultValue: 12,
+      min: 1,
+      max: 12,
+    },
+    supportsNavigation: false,
+    defaultNavigation: STATIC_NAVIGATION,
+    displayFields: FEATURED_CARD_DISPLAY_FIELDS,
+  },
+  carousel: {
+    summaryAr: "عرض الشرائح القديم: عنصر واحد وتنقل يدوي بالأسهم.",
+    itemsPerView: { mode: "fixed", value: 1 },
+    supportsNavigation: true,
+    defaultNavigation: {
+      showArrows: true,
+      showDots: false,
+      autoplay: false,
+    },
+    displayFields: FEATURED_CARD_DISPLAY_FIELDS,
+  },
+  "single-carousel": {
+    summaryAr: "عنصر واحد متحرك في كل شريحة.",
+    itemsPerView: { mode: "fixed", value: 1 },
+    supportsNavigation: true,
+    defaultNavigation: AUTOMATIC_CAROUSEL_NAVIGATION,
+    displayFields: FEATURED_CARD_DISPLAY_FIELDS,
+  },
+  "group-carousel": {
+    summaryAr: "مجموعة متحركة قابلة للضبط من عنصرين إلى أربعة في كل شريحة.",
+    itemsPerView: {
+      mode: "configurable",
+      defaultValue: 3,
+      min: 2,
+      max: 4,
+    },
+    supportsNavigation: true,
+    defaultNavigation: AUTOMATIC_CAROUSEL_NAVIGATION,
+    displayFields: FEATURED_CARD_DISPLAY_FIELDS,
+  },
+} as const satisfies Record<
+  FeaturedPresentationVariant,
+  FeaturedPresentationProfile
+>;
+
+export function featuredPresentationProfile(
+  variant: FeaturedPresentationVariant,
+): FeaturedPresentationProfile {
+  return FEATURED_PRESENTATION_PROFILES[variant];
+}
+
+export function resolveFeaturedItemsPerView(
+  variant: FeaturedPresentationVariant,
+  value: unknown,
+  itemLimit: number,
+) {
+  const policy = featuredPresentationProfile(variant).itemsPerView;
+  const parsedItemLimit = Math.floor(Number(itemLimit));
+  const availableItems = Number.isFinite(parsedItemLimit)
+    ? Math.max(1, Math.min(12, parsedItemLimit))
+    : 1;
+  if (policy.mode === "fixed") {
+    return Math.min(policy.value, availableItems);
+  }
+
+  const parsed = Math.floor(Number(value));
+  const candidate = Number.isFinite(parsed) ? parsed : policy.defaultValue;
+  const maximum = Math.min(policy.max, availableItems);
+  const minimum = Math.min(policy.min, maximum);
+  return Math.max(minimum, Math.min(maximum, candidate));
+}
+
+function navigationBoolean(value: unknown, fallback: boolean) {
+  if (value === true || value === "true" || value === "1" || value === "on") {
+    return true;
+  }
+  if (value === false || value === "false" || value === "0") return false;
+  return fallback;
+}
+
+export function resolveFeaturedNavigation(
+  variant: FeaturedPresentationVariant,
+  raw: unknown,
+): FeaturedNavigation {
+  const profile = featuredPresentationProfile(variant);
+  if (!profile.supportsNavigation) return { ...STATIC_NAVIGATION };
+
+  const value =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
+  const showArrows = navigationBoolean(
+    value.showArrows ?? value.show_arrows,
+    profile.defaultNavigation.showArrows,
+  );
+  const requestedDots = navigationBoolean(
+    value.showDots ?? value.show_dots,
+    profile.defaultNavigation.showDots,
+  );
+  return {
+    showArrows,
+    showDots: showArrows || requestedDots ? requestedDots : true,
+    autoplay: navigationBoolean(
+      value.autoplay,
+      profile.defaultNavigation.autoplay,
+    ),
+  };
+}
+
 export type FeaturedModuleConfig = {
   source: FeaturedSource;
   selection: FeaturedSelection;
   itemLimit: number;
+  itemsPerView: number;
   display: ContentDisplayOptions;
+  displayFormatting: ResolvedCollectionDisplayTextFormatting;
+  navigation: FeaturedNavigation;
   presentation: FeaturedPresentation;
 };
 
@@ -106,7 +307,11 @@ export type ResolvedFeaturedModule = {
   sortOrder: number;
   source: FeaturedSource;
   selection: FeaturedSelection;
+  itemLimit: number;
+  itemsPerView: number;
   display: ContentDisplayOptions;
+  displayFormatting: ResolvedCollectionDisplayTextFormatting;
+  navigation: FeaturedNavigation;
   presentation: FeaturedPresentation;
   items: PublicContentSummary[];
 };
@@ -115,14 +320,27 @@ export function resolveFeaturedItemDisplay(
   display: ContentDisplayOptions,
   item: PublicContentSummary,
 ): ContentDisplayOptions {
-  return resolveContentItemDisplay(display, item.display, {
-    title: item.title,
-    image: item.image,
-    category: item.category,
-    series: item.series,
-    excerpt: item.excerpt,
-    date: item.date,
-  });
+  return resolveContentItemDisplay(
+    display,
+    {
+      // Featured owns visibility inside its own cards. Detail-page visibility
+      // must not turn an exposed module control into a no-op.
+      title: true,
+      image: true,
+      excerpt: true,
+      date: true,
+      category: true,
+      series: true,
+    },
+    {
+      title: item.title,
+      image: item.image,
+      category: item.category,
+      series: item.series,
+      excerpt: item.excerpt,
+      date: item.date,
+    },
+  );
 }
 
 export type FeaturedEditorItem = Pick<

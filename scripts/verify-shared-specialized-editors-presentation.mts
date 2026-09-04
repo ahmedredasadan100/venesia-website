@@ -739,7 +739,6 @@ check(
 check(
   "identity composition is shared by every root and no empty Settings tab survives",
   moduleEditorRootSources
-    .filter(({ path }) => !path.endsWith("HeroEditClient.tsx"))
     .every(
       ({ source }) =>
         source.includes("<ModuleEditorIdentitySection") &&
@@ -749,6 +748,16 @@ check(
     ) &&
     moduleEditorPresentation.includes(
       "export function ModuleEditorIdentitySection",
+    ) &&
+    moduleEditorPresentation.includes('data-module-editor-name-field=""') &&
+    moduleEditorPresentation.includes(
+      'data-module-editor-identity-control=""',
+    ) &&
+    moduleEditorPresentation.includes(
+      'className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-3"',
+    ) &&
+    moduleEditorPresentation.includes(
+      "[&>[data-admin-form-listbox]]:grid-cols-[max-content_minmax(0,1fr)]",
     ) &&
     !moduleEditorPresentation.includes(
       "export function ModuleEditorSettingsComposition",
@@ -861,6 +870,7 @@ check(
     ).includes('alignmentOptions={["right", "center"]}') &&
     [
       "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
+      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
       "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
       "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
@@ -881,9 +891,16 @@ check(
     !read(
       "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
     ).includes("FeaturedDisplayVisibility") &&
-    !read(
-      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-    ).includes('alignmentName="display_') &&
+    [
+      'name="show_navigation_arrows"',
+      'name="show_navigation_dots"',
+      'name="navigation_autoplay"',
+      'alignmentName="display_title_alignment"',
+    ].every((token) =>
+      read(
+        "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
+      ).includes(token),
+    ) &&
     read(
       "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
     ).includes("HeroTextFieldRow") &&

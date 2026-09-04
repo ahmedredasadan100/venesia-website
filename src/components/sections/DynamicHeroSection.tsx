@@ -366,7 +366,7 @@ function HomeDynamicHero({
       <RichTextContent
         value={description}
         mode="auto"
-        className={`max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9 ${heroTextAlignClass(activeConfig.descriptionAlignment)}`}
+        className={`max-w-2xl text-base leading-8 text-white/68 md:text-lg md:leading-9 ${heroTextAlignClass(activeConfig.descriptionAlignment)} ${activeConfig.descriptionBold ? "font-bold" : "font-normal"}`}
       />
     ) : null,
     cta: (
@@ -667,7 +667,7 @@ function InternalDynamicHero({
         <RichTextContent
           value={description}
           mode="auto"
-          className="block whitespace-pre-line text-[15px] leading-8 text-white/68 md:text-base md:leading-9 [&_a]:text-[#E8D5A8] [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-r-2 [&_blockquote]:border-[#D8B87A]/45 [&_blockquote]:pr-4 [&_h1]:mb-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pr-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-white/85 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pr-5"
+          className={`block whitespace-pre-line text-[15px] leading-8 text-white/68 md:text-base md:leading-9 [&_a]:text-[#E8D5A8] [&_a]:underline [&_blockquote]:my-3 [&_blockquote]:border-r-2 [&_blockquote]:border-[#D8B87A]/45 [&_blockquote]:pr-4 [&_h1]:mb-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:mb-2 [&_h3]:font-semibold [&_li]:mb-1 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pr-5 [&_p]:mb-3 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-white/85 [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pr-5 ${config.descriptionBold ? "font-bold" : "font-normal"}`}
         />
       </HeroReservedSlot>
     ),
