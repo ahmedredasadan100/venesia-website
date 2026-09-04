@@ -196,6 +196,7 @@ export type HeroContentControls = {
   subtitleAlignment: HeroTextAlignment;
 
   showDescription: boolean;
+  descriptionBold: boolean;
   descriptionAlignment: HeroDescriptionAlignment;
 
   showCta: boolean;
@@ -353,6 +354,10 @@ export function resolveHeroContentControls(
     subtitleAlignment: parseHeroTextAlignment(raw.subtitleAlignment, "right"),
 
     showDescription: boolOr(raw.showDescription, true),
+    descriptionBold: boolOr(
+      raw.descriptionBold ?? raw.description_bold,
+      false,
+    ),
     descriptionAlignment: parseHeroDescriptionAlignment(
       raw.descriptionAlignment,
       "right",
@@ -499,6 +504,10 @@ export function parseHeroContentControlsFormData(
       defaults.subtitleAlignment,
     ),
     showDescription: readBoolean("show_description", defaults.showDescription),
+    descriptionBold: readBoolean(
+      "description_bold",
+      defaults.descriptionBold,
+    ),
     descriptionAlignment: parseHeroDescriptionAlignment(
       formData.get("description_alignment"),
       defaults.descriptionAlignment,

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AdminNotice from "../../../../../../components/admin/AdminNotice";
-import AdminRichTextEditor from "../../../../../../components/admin/AdminRichTextEditor";
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
 import {
   ModuleEditorHeader,
@@ -26,6 +25,7 @@ import {
 } from "../../../../../../lib/hero/hero-content-controls";
 import { fieldClassName } from "../../../../../../lib/page-blocks/admin-utils";
 import type { ModuleAssignmentContext } from "../../../../../../lib/page-blocks/module-assignments-query";
+import { stripHtml } from "../../../../../../lib/rich-text/html-utils";
 import { resolveSafeInternalPath } from "../../../../../../lib/security/safe-internal-path";
 import { updateHeroTemplateDetails } from "../actions";
 import HeroCtaFields from "./HeroCtaFields";
@@ -622,11 +622,13 @@ export default function HeroEditClient({
               label="وصف المشروع"
               alignmentName="description_alignment"
               showName="show_description"
+              boldName="description_bold"
               alignmentDefault={
                 controls.descriptionAlignment === "justify"
                   ? "right"
                   : controls.descriptionAlignment
               }
+              boldDefault={controls.descriptionBold}
               showDefault={controls.showDescription}
             />
           </ModuleEditorField>
@@ -693,28 +695,26 @@ export default function HeroEditClient({
             />
           </ModuleEditorField>
 
-          <ModuleEditorField nature="long-content" span={6}>
-            <HeroVisibilityAlignRow
+          <ModuleEditorField nature="short-description" span={6}>
+            <HeroTextFieldRow
               label="الوصف"
+              name="description"
+              defaultValue={stripHtml(String(config.description ?? "")).replace(
+                /\s+/gu,
+                " ",
+              )}
+              boldName="description_bold"
               alignmentName="description_alignment"
               showName="show_description"
+              boldDefault={controls.descriptionBold}
               alignmentDefault={
                 controls.descriptionAlignment === "justify"
                   ? "right"
                   : controls.descriptionAlignment
               }
               showDefault={controls.showDescription}
-            >
-              <AdminRichTextEditor
-                name="description"
-                label="الوصف"
-                defaultValue={String(config.description ?? "")}
-                toolbarMode="none"
-                minHeight={56}
-                maxHeight={88}
-                placeholder="اكتب وصف الهيرو..."
-              />
-            </HeroVisibilityAlignRow>
+              placeholder="اكتب وصف الهيرو..."
+            />
           </ModuleEditorField>
         </ModuleEditorFieldGrid>
       </ModuleEditorSection>

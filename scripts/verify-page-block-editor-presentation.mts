@@ -34,6 +34,9 @@ const { resolveContentModuleEditorConfig } = await jiti.import<
 const { asContentConfig } = await jiti.import<
   typeof import("../src/lib/page-blocks/configs.ts")
 >("../src/lib/page-blocks/configs.ts");
+const { parseHeroContentControlsFormData } = await jiti.import<
+  typeof import("../src/lib/hero/hero-content-controls.ts")
+>("../src/lib/hero/hero-content-controls.ts");
 const { orderPageCompositionRowsForDisplay } = await jiti.import<
   typeof import("../src/app/admin/pages-blocks/pages/[id]/page-blocks/page-blocks-utils.ts")
 >(
@@ -222,6 +225,9 @@ const heroDetailRoute = read(
 const heroEditor = read(
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
 );
+const heroText = read(
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroTextFieldRow.tsx",
+);
 const heroOrderEditor = read(
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroElementOrderEditor.tsx",
 );
@@ -337,6 +343,11 @@ check(
 const ctaEditor = read(
   "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
 );
+const heroDescriptionFormatForm = new FormData();
+heroDescriptionFormatForm.set("description_bold", "true");
+const heroDescriptionFormatControls = parseHeroContentControlsFormData(
+  heroDescriptionFormatForm,
+);
 check(
   "CTA keeps introductory and short-description copy on the shared one-line field presentation",
   ctaEditor.includes('name="eyebrow"') &&
@@ -344,6 +355,31 @@ check(
     ctaEditor.includes('<ModuleEditorField nature="short-text" span={6}>') &&
     !ctaEditor.includes('<textarea\n                        name="description"') &&
     !ctaEditor.includes("h-[72px]"),
+);
+
+check(
+  "Hero description uses the shared one-line field and persists Bold through the public Hero contract",
+  heroEditor.includes(
+    '<ModuleEditorField nature="short-description" span={6}>',
+  ) &&
+    heroEditor.includes('name="description"') &&
+    heroEditor.split('boldName="description_bold"').length - 1 === 2 &&
+    heroEditor.includes("boldDefault={controls.descriptionBold}") &&
+    !heroEditor.includes("AdminRichTextEditor") &&
+    heroText.includes("<input") &&
+    !heroText.includes("<textarea") &&
+    heroContentControls.includes("descriptionBold: boolean") &&
+    heroContentControls.includes('readBoolean(\n      "description_bold"') &&
+    heroDescriptionFormatControls.descriptionBold === true &&
+    dynamicHero.includes(
+      'activeConfig.descriptionBold ? "font-bold" : "font-normal"',
+    ) &&
+    dynamicHero.includes(
+      'config.descriptionBold ? "font-bold" : "font-normal"',
+    ) &&
+    projectDetailsHero.includes(
+      'resolvedPresentation.descriptionBold ? "font-bold" : "font-normal"',
+    ),
 );
 
 check(
@@ -748,9 +784,6 @@ check(
 
 const heroVisibility = read(
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx",
-);
-const heroText = read(
-  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroTextFieldRow.tsx",
 );
 check(
   "binary Page Block state delegates to the shared switch",

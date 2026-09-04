@@ -76,7 +76,7 @@ export default function ProjectDetailsHero({
       <PlainTextContent
         value={project.shortDescription}
         as="p"
-        className={`max-w-2xl text-[15px] leading-7 text-white/62 ${resolvedPresentation.descriptionAlignment === "right" ? "mx-auto text-center lg:mx-0 lg:text-right" : heroTextAlignClass(resolvedPresentation.descriptionAlignment)}`}
+        className={`max-w-2xl text-[15px] leading-7 text-white/62 ${resolvedPresentation.descriptionAlignment === "right" ? "mx-auto text-center lg:mx-0 lg:text-right" : heroTextAlignClass(resolvedPresentation.descriptionAlignment)} ${resolvedPresentation.descriptionBold ? "font-bold" : "font-normal"}`}
       />
     ) : null,
     cta:
@@ -173,7 +173,7 @@ export default function ProjectDetailsHero({
                   <PlainTextContent
                     value={project.shortDescription}
                     as="p"
-                    className={`text-sm leading-7 text-white/58 ${heroTextAlignClass(resolvedPresentation.descriptionAlignment)}`}
+                    className={`text-sm leading-7 text-white/58 ${heroTextAlignClass(resolvedPresentation.descriptionAlignment)} ${resolvedPresentation.descriptionBold ? "font-bold" : "font-normal"}`}
                   />
                 </div>
               ) : null}
