@@ -20,6 +20,9 @@ export type CollectionSectionHeaderPresentation = {
   showDescription?: boolean;
   descriptionBold?: boolean;
   descriptionAlignment?: "right" | "center" | "left";
+  showCta?: boolean;
+  ctaBold?: boolean;
+  ctaAlignment?: "right" | "center" | "left";
 };
 
 type CollectionSectionHeaderProps = {
@@ -53,11 +56,14 @@ export default function CollectionSectionHeader({
           </p>
         ) : null}
       </div>
-      {actions || (href && presentation.ctaText) ? (
+      {actions || (href && presentation.ctaText && presentation.showCta !== false) ? (
         <div className="flex shrink-0 items-center gap-3">
           {actions}
-          {href && presentation.ctaText ? (
-            <Link href={href} className="text-sm font-medium text-[#D8B87A] transition hover:text-white">
+          {href && presentation.ctaText && presentation.showCta !== false ? (
+            <Link
+              href={href}
+              className={`min-w-28 text-sm text-[#D8B87A] transition hover:text-white ${pageBlockTextAlignClass(presentation.ctaAlignment ?? "right")} ${presentation.ctaBold ? "font-bold" : "font-medium"}`}
+            >
               {presentation.ctaText}
             </Link>
           ) : null}

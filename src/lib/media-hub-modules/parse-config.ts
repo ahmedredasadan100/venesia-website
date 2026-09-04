@@ -288,6 +288,7 @@ function readPresentation(
       { field: "eyebrow" },
       { field: "title", defaults: { bold: true } },
       { field: "description" },
+      { field: "cta" },
     ]),
     eyebrow: readText("eyebrow"),
     title: readText("title"),

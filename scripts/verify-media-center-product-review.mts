@@ -628,6 +628,13 @@ const editor = read(
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
 );
 const action = read("src/app/admin/pages-blocks/blocks/media-hub/actions.ts");
+const mediaHubConfig = read("src/lib/media-hub-modules/parse-config.ts");
+const collectionHeader = read(
+  "src/components/collection-modules/CollectionSectionHeader.tsx",
+);
+const collectionFields = read(
+  "src/components/admin/page-blocks/CollectionModuleFields.tsx",
+);
 const sharedDisplayContract = read("src/lib/page-blocks/configs.ts");
 const sharedCollectionEditor = read(
   "src/components/admin/page-blocks/editors/CollectionModuleEditor.tsx",
@@ -654,6 +661,21 @@ assert.ok(!action.includes('formData.get("listing_columns")'));
 assert.ok(!editor.includes("مصدر البيانات"));
 assert.ok(!action.includes('placementInput === "featured"'));
 assert.ok(action.includes('sectionKey === "featured"'));
+for (const ctaControl of [
+  'showName="show_cta"',
+  'boldName="cta_bold"',
+  'alignmentName="cta_alignment"',
+]) {
+  assert.ok(editor.includes(ctaControl));
+}
+assert.ok(action.includes('{ field: "cta" }'));
+assert.ok(mediaHubConfig.includes('{ field: "cta" }'));
+for (const publicCtaCapability of ["showCta", "ctaBold", "ctaAlignment"]) {
+  assert.ok(collectionHeader.includes(publicCtaCapability));
+}
+assert.ok(
+  collectionFields.includes("MODULE_EDITOR_CONTROL_CARD_CLASS_NAME"),
+);
 assert.ok(
   action.includes("buildCollectionModuleDisplayFormattingFromFormData(formData)"),
 );
@@ -699,6 +721,11 @@ assert.equal(
   7,
 );
 assert.ok(editor.includes("CollectionModuleDisplayFormattingFields"));
+assert.ok(editor.includes('name="presentation_description"'));
+assert.ok(editor.includes('aria-label="وصف السكشن"'));
+assert.ok(editor.includes('className={fieldClassName("h-11 min-w-0")}'));
+assert.ok(!editor.includes('<textarea\n                              name="presentation_description"'));
+assert.ok(!editor.includes('className={fieldClassName("h-[72px]'));
 for (const retiredField of [
   "side_limit",
   "list_limit",

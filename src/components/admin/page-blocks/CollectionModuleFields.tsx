@@ -15,7 +15,10 @@ import type {
 import { getCollectionViewVariantCapabilities } from "../../../lib/collection-modules/collection-view";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
 import { AdminFormListboxSelect } from "../ui";
-import { ModuleEditorField } from "./ModuleEditorPresentation";
+import {
+  ModuleEditorField,
+  MODULE_EDITOR_CONTROL_CARD_CLASS_NAME,
+} from "./ModuleEditorPresentation";
 
 const LAYOUT_LABELS: Record<CollectionLayout, string> = {
   featured: "مميز",
@@ -34,7 +37,11 @@ const CARD_VARIANT_LABELS: Record<CollectionCardVariant, string> = {
 
 export function CollectionItemLimitField({ value }: { value: number }) {
   return (
-    <ModuleEditorField nature="standard" span={4}>
+    <ModuleEditorField
+      nature="standard"
+      span={4}
+      className={MODULE_EDITOR_CONTROL_CARD_CLASS_NAME}
+    >
       <label className="block space-y-2">
         <span className="text-xs font-semibold text-white/55">عدد العناصر المعروضة</span>
         <input
@@ -67,7 +74,11 @@ export function CollectionContentHierarchyFields({
       <input type="hidden" name="content_hierarchy_mode" value={mode} />
 
       {mode === "featured-first" ? (
-        <ModuleEditorField nature="standard" span={4}>
+        <ModuleEditorField
+          nature="standard"
+          span={4}
+          className={MODULE_EDITOR_CONTROL_CARD_CLASS_NAME}
+        >
           <label className="block space-y-2">
             <span className="text-xs font-semibold text-white/55">عدد العناصر الثانوية</span>
             <input
@@ -116,7 +127,11 @@ export function CollectionViewFields({
 
   return (
     <>
-      <ModuleEditorField nature="standard" span={4}>
+      <ModuleEditorField
+        nature="standard"
+        span={4}
+        className={MODULE_EDITOR_CONTROL_CARD_CLASS_NAME}
+      >
         <AdminFormListboxSelect
           name="collection_layout"
           label="طريقة العرض"
@@ -130,7 +145,11 @@ export function CollectionViewFields({
       </ModuleEditorField>
 
       {variantCapabilities.itemsPerRow ? (
-        <ModuleEditorField nature="standard" span={3}>
+        <ModuleEditorField
+          nature="standard"
+          span={3}
+          className={MODULE_EDITOR_CONTROL_CARD_CLASS_NAME}
+        >
           <AdminFormListboxSelect
             name="items_per_row"
             label="عدد العناصر في الصف"
@@ -149,7 +168,11 @@ export function CollectionViewFields({
       )}
 
       {variantCapabilities.cardVariant ? (
-        <ModuleEditorField nature="standard" span={3}>
+        <ModuleEditorField
+          nature="standard"
+          span={3}
+          className={MODULE_EDITOR_CONTROL_CARD_CLASS_NAME}
+        >
           <AdminFormListboxSelect
             name="collection_card_variant"
             label="شكل الكروت"

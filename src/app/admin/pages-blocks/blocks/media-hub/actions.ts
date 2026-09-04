@@ -66,6 +66,7 @@ export async function updateMediaHubModule(formData: FormData) {
         { field: "eyebrow" },
         { field: "title", defaults: { bold: true } },
         { field: "description" },
+        { field: "cta" },
       ]),
       eyebrow: cleanText(formData.get("eyebrow")),
       title: cleanText(formData.get("title")),

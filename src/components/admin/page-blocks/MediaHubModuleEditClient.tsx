@@ -145,6 +145,7 @@ export default function MediaHubModuleEditClient({
   const eyebrowFormat = resolvePageBlockTextFormat(parsedInitial.presentation, "eyebrow");
   const titleFormat = resolvePageBlockTextFormat(parsedInitial.presentation, "title", { bold: true });
   const descriptionFormat = resolvePageBlockTextFormat(parsedInitial.presentation, "description");
+  const ctaFormat = resolvePageBlockTextFormat(parsedInitial.presentation, "cta");
   function handleSectionChange(nextSectionKey: MediaHubSectionKey) {
     setSectionKey(nextSectionKey);
     const nextPresentation = MEDIA_HUB_SECTION_DEFAULTS[nextSectionKey].config.presentation;
@@ -202,6 +203,9 @@ export default function MediaHubModuleEditClient({
             <input type="hidden" name="show_description" value={String(descriptionFormat.visible)} />
             <input type="hidden" name="description_bold" value={String(descriptionFormat.bold)} />
             <input type="hidden" name="description_alignment" value={descriptionFormat.alignment} />
+            <input type="hidden" name="show_cta" value={String(ctaFormat.visible)} />
+            <input type="hidden" name="cta_bold" value={String(ctaFormat.bold)} />
+            <input type="hidden" name="cta_alignment" value={ctaFormat.alignment} />
           </>
         ) : null}
 
@@ -271,27 +275,26 @@ export default function MediaHubModuleEditClient({
 
                         <ModuleEditorField nature="short-description" span={4}>
                           <ModuleEditorVisibilityAlignRow label="وصف السكشن" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
-                            <textarea
+                            <input
                               name="presentation_description"
                               aria-label="وصف السكشن"
                               value={description}
                               onChange={(event) => setDescription(event.target.value)}
-                              rows={2}
-                              className={fieldClassName("h-[72px] resize-none overflow-hidden leading-6")}
+                              className={fieldClassName("h-11 min-w-0")}
                             />
                           </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
 
-                        <ModuleEditorField nature="short-text" span={3}>
-                          <label className="block space-y-2">
-                            <span className="text-xs font-semibold text-white/55">نص زر الاستكشاف</span>
+                        <ModuleEditorField nature="short-text" span={4}>
+                          <ModuleEditorVisibilityAlignRow label="نص زر الاستكشاف" showName="show_cta" boldName="cta_bold" alignmentName="cta_alignment" showDefault={ctaFormat.visible} boldDefault={ctaFormat.bold} alignmentDefault={ctaFormat.alignment}>
                             <input
                               name="cta_text"
+                              aria-label="نص زر الاستكشاف"
                               value={ctaText}
                               onChange={(event) => setCtaText(event.target.value)}
                               className={fieldClassName()}
                             />
-                          </label>
+                          </ModuleEditorVisibilityAlignRow>
                         </ModuleEditorField>
 
                       </ModuleEditorFieldGrid>
