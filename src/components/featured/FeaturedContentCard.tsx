@@ -11,17 +11,20 @@ import {
   pageBlockTextAlignClass,
   pageBlockTextPlacementClass,
   resolvePageBlockTextFormat,
+  type ResolvedCollectionDisplayTextFormatting,
 } from "../../lib/page-blocks/configs";
 import PublicGoldPill from "../public/PublicGoldPill";
 
 export default function FeaturedContentCard({
   item,
   display,
+  displayFormatting,
   presentation,
   size = "standard",
 }: {
   item: PublicContentSummary;
   display: ContentDisplayOptions;
+  displayFormatting: ResolvedCollectionDisplayTextFormatting;
   presentation: FeaturedPresentation;
   size?: "standard" | "large";
 }) {
@@ -30,17 +33,13 @@ export default function FeaturedContentCard({
   const showMetadata =
     showTaxonomy || resolvedDisplay.date;
   const isArticle = item.contentType === "article";
-  const categoryFormat = resolvePageBlockTextFormat(presentation, "category");
-  const seriesFormat = resolvePageBlockTextFormat(presentation, "series");
-  const excerptFormat = resolvePageBlockTextFormat(presentation, "excerpt");
-  const dateFormat = resolvePageBlockTextFormat(presentation, "date");
   const ctaFormat = resolvePageBlockTextFormat(presentation, "cta");
   const cardMinHeightClass =
     size === "large"
       ? "min-h-[360px] @2xl/slot-module:min-h-[480px]"
       : "min-h-[290px]";
   const seriesMetadataClass =
-    `block w-fit max-w-full text-sm leading-5 text-[#D8B87A] drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] transition hover:text-[#E7CC98] ${seriesFormat.bold ? "font-bold" : "font-medium"} ${pageBlockTextAlignClass(seriesFormat.alignment)} ${pageBlockTextPlacementClass(seriesFormat.alignment)}`.trim();
+    `block w-fit max-w-full text-sm leading-5 text-[#D8B87A] drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)] transition hover:text-[#E7CC98] ${displayFormatting.seriesBold ? "font-bold" : "font-medium"} ${pageBlockTextAlignClass(displayFormatting.seriesAlignment)} ${pageBlockTextPlacementClass(displayFormatting.seriesAlignment)}`.trim();
 
   return (
     <article
@@ -78,7 +77,7 @@ export default function FeaturedContentCard({
               >
                 {resolvedDisplay.category ? (
                   <span
-                    className={`block w-full ${pageBlockTextAlignClass(categoryFormat.alignment)}`}
+                    className={`block w-full ${pageBlockTextAlignClass(displayFormatting.categoryAlignment)}`}
                   >
                     <PublicGoldPill
                       href={
@@ -88,7 +87,7 @@ export default function FeaturedContentCard({
                       }
                     >
                       <span
-                        className={`text-sm leading-5 ${categoryFormat.bold ? "font-bold" : "font-medium"}`}
+                        className={`text-sm leading-5 ${displayFormatting.categoryBold ? "font-bold" : "font-medium"}`}
                       >
                         {item.category}
                       </span>
@@ -111,7 +110,8 @@ export default function FeaturedContentCard({
             ) : null}
             {resolvedDisplay.date ? (
               <span
-                className={`block w-full ${showTaxonomy ? "border-t border-white/10 pt-1.5" : ""} ${pageBlockTextAlignClass(dateFormat.alignment)} ${dateFormat.bold ? "font-bold" : "font-normal"}`.trim()}
+                data-featured-date=""
+                className={`block w-full ${showTaxonomy ? "border-t border-white/10 pt-1.5" : ""} ${pageBlockTextAlignClass(displayFormatting.dateAlignment)} ${displayFormatting.dateBold ? "font-bold" : "font-normal"}`.trim()}
               >
                 {item.date}
               </span>
@@ -120,7 +120,7 @@ export default function FeaturedContentCard({
         ) : null}
         {resolvedDisplay.title ? (
           <h3
-            className={`${size === "large" ? "text-2xl @xl/slot-module:text-4xl" : "min-h-12 text-xl"} mt-2 line-clamp-2 font-semibold leading-tight text-white`}
+            className={`${size === "large" ? "text-2xl @xl/slot-module:text-4xl" : "min-h-12 text-xl"} mt-2 line-clamp-2 leading-tight text-white ${displayFormatting.titleBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(displayFormatting.titleAlignment)} ${pageBlockTextPlacementClass(displayFormatting.titleAlignment)}`}
           >
             <Link
               href={item.href}
@@ -132,7 +132,7 @@ export default function FeaturedContentCard({
         ) : null}
         {resolvedDisplay.excerpt ? (
           <p
-            className={`mt-4 max-w-2xl text-sm leading-7 text-white/65 ${size === "large" ? "min-h-14 line-clamp-2" : "min-h-7 line-clamp-1"} ${excerptFormat.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(excerptFormat.alignment)} ${pageBlockTextPlacementClass(excerptFormat.alignment)}`}
+            className={`mt-4 max-w-2xl text-sm leading-7 text-white/65 ${size === "large" ? "min-h-14 line-clamp-2" : "min-h-7 line-clamp-1"} ${displayFormatting.excerptBold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(displayFormatting.excerptAlignment)} ${pageBlockTextPlacementClass(displayFormatting.excerptAlignment)}`}
           >
             {item.excerpt}
           </p>

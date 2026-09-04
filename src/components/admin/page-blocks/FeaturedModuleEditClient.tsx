@@ -2,7 +2,13 @@
 
 import { useMemo, useState } from "react";
 
-import { AdminCheckbox, AdminFormGrid, AdminFormListboxSelect } from "../ui";
+import {
+  AdminCheckbox,
+  AdminFormGrid,
+  AdminFormListboxSelect,
+  AdminFormSwitch,
+  ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME,
+} from "../ui";
 import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../../venesia-scrollbar-styles";
 import {
   getContentTypeLabel,
@@ -11,6 +17,7 @@ import {
 import type {
   FeaturedEditorOptions,
   FeaturedModuleConfig,
+  FeaturedPresentationProfile,
   FeaturedPresentationVariant,
   FeaturedSelectionMode,
   FeaturedSourceKind,
@@ -20,6 +27,8 @@ import {
   FEATURED_EDITOR_PRESENTATION_VARIANTS,
   FEATURED_SELECTION_LABELS_AR,
   FEATURED_SELECTION_MODES,
+  featuredPresentationProfile,
+  resolveFeaturedItemsPerView,
 } from "../../../lib/featured-modules/contract";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
@@ -54,6 +63,58 @@ type FeaturedModuleEditClientProps = {
   saved?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
 };
+
+function FeaturedItemsPerViewControl({
+  profile,
+  value,
+  itemLimit,
+}: {
+  profile: FeaturedPresentationProfile;
+  value: number;
+  itemLimit: number;
+}) {
+  const policy = profile.itemsPerView;
+
+  if (policy.mode === "configurable") {
+    return (
+      <label className="flex min-h-10 items-center justify-between gap-2">
+        <span className="whitespace-nowrap text-sm font-medium text-white/70">
+          العناصر الظاهرة
+        </span>
+        <span className="flex shrink-0 items-center gap-1.5 text-sm text-[#E6C98D]">
+          <input
+            name="items_per_view"
+            type="number"
+            min={Math.min(policy.min, itemLimit)}
+            max={Math.min(policy.max, itemLimit)}
+            required
+            defaultValue={value}
+            className={fieldClassName(
+              "h-9 !w-14 !px-2 text-center [color-scheme:dark]",
+            )}
+            dir="ltr"
+            aria-label="العناصر الظاهرة"
+          />
+          <span>عنصر</span>
+        </span>
+      </label>
+    );
+  }
+
+  return (
+    <>
+      <input type="hidden" name="items_per_view" value={value} />
+      <div className="flex min-h-10 items-center justify-between gap-3">
+        <span className="text-sm font-medium text-white/70">
+          العناصر الظاهرة
+        </span>
+        <strong className="shrink-0 text-base text-[#E6C98D]">
+          {value} عنصر
+        </strong>
+      </div>
+    </>
+  );
+}
 
 export default function FeaturedModuleEditClient({
   block,
@@ -121,19 +182,19 @@ export default function FeaturedModuleEditClient({
     "description",
   );
   const ctaFormat = resolvePageBlockTextFormat(config.presentation, "cta");
-  const categoryFormat = resolvePageBlockTextFormat(
-    config.presentation,
-    "category",
-  );
-  const seriesFormat = resolvePageBlockTextFormat(
-    config.presentation,
-    "series",
-  );
-  const excerptFormat = resolvePageBlockTextFormat(
-    config.presentation,
-    "excerpt",
-  );
-  const dateFormat = resolvePageBlockTextFormat(config.presentation, "date");
+  const presentationProfile = featuredPresentationProfile(presentationVariant);
+  const usesPersistedPresentation =
+    presentationVariant === config.presentation.variant;
+  const itemsPerView = usesPersistedPresentation
+    ? config.itemsPerView
+    : resolveFeaturedItemsPerView(
+        presentationVariant,
+        undefined,
+        config.itemLimit,
+      );
+  const navigation = usesPersistedPresentation
+    ? config.navigation
+    : presentationProfile.defaultNavigation;
 
   function toggleManualItem(id: number, checked: boolean) {
     setManualIds((current) =>
@@ -261,8 +322,8 @@ export default function FeaturedModuleEditClient({
                       className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
                     >
                       <label className="block space-y-2">
-                        <span className="text-sm font-medium text-white/70">
-                          عدد العناصر
+                        <span className="block text-sm font-medium text-white/70">
+                          العدد المسموح به
                         </span>
                         <input
                           name="item_limit"
@@ -271,7 +332,9 @@ export default function FeaturedModuleEditClient({
                           max={12}
                           required
                           defaultValue={config.itemLimit}
-                          className={fieldClassName("h-11")}
+                          className={fieldClassName(
+                            "h-11 [color-scheme:dark]",
+                          )}
                           dir="ltr"
                         />
                       </label>
@@ -280,9 +343,15 @@ export default function FeaturedModuleEditClient({
 
                   {selectionMode === "manual" ? (
                     <fieldset className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-                      <legend className="px-2 text-sm font-semibold text-white">
+                      <legend className="sr-only">
                         العناصر اليدوية
                       </legend>
+                      <div
+                        data-featured-manual-heading=""
+                        className="mb-2 text-sm font-semibold text-white"
+                      >
+                        العناصر اليدوية
+                      </div>
                       <p className="mb-4 text-xs leading-6 text-white/45">
                         تظهر هنا العناصر المنشورة المطابقة للمصدر فقط، ويظل
                         ترتيب الاختيار محفوظًا.
@@ -366,17 +435,87 @@ export default function FeaturedModuleEditClient({
 
                   <ModuleEditorSection>
                     <ModuleEditorSectionHeading intent="settings">
-                      إعدادات العرض
+                      إعدادات النمط المختار
                     </ModuleEditorSectionHeading>
                     <div
-                      className="mt-4 grid items-start gap-4 md:grid-cols-3"
-                      data-featured-display-settings=""
+                      key={presentationVariant}
+                      className="mt-4 space-y-4 rounded-2xl border border-[#D8B87A]/15 bg-[#D8B87A]/[0.035] p-4"
+                      data-featured-variant-settings={presentationVariant}
                     >
-                      <input
-                        type="hidden"
-                        name="show_title_on_page"
-                        value={String(config.display.title)}
-                      />
+                      <p className="text-sm leading-6 text-white/58">
+                        {presentationProfile.summaryAr}
+                      </p>
+                      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4">
+                        <div
+                          className={`${ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME} min-h-16`}
+                          data-featured-items-per-view-control={
+                            presentationProfile.itemsPerView.mode
+                          }
+                        >
+                          <FeaturedItemsPerViewControl
+                            profile={presentationProfile}
+                            value={itemsPerView}
+                            itemLimit={config.itemLimit}
+                          />
+                        </div>
+                        {presentationProfile.supportsNavigation ? (
+                          <>
+                            <AdminFormSwitch
+                              name="show_navigation_arrows"
+                              label="إظهار أسهم التنقل"
+                              value="true"
+                              uncheckedValue="false"
+                              defaultChecked={navigation.showArrows}
+                              surface
+                              className="min-h-16"
+                            />
+                            <AdminFormSwitch
+                              name="show_navigation_dots"
+                              label="إظهار نقاط التنقل"
+                              value="true"
+                              uncheckedValue="false"
+                              defaultChecked={navigation.showDots}
+                              surface
+                              className="min-h-16"
+                            />
+                            <AdminFormSwitch
+                              name="navigation_autoplay"
+                              label="تشغيل التنقل تلقائيًا"
+                              value="true"
+                              uncheckedValue="false"
+                              defaultChecked={navigation.autoplay}
+                              surface
+                              className="min-h-16"
+                            />
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="hidden"
+                              name="show_navigation_arrows"
+                              value="false"
+                            />
+                            <input
+                              type="hidden"
+                              name="show_navigation_dots"
+                              value="false"
+                            />
+                            <input
+                              type="hidden"
+                              name="navigation_autoplay"
+                              value="false"
+                            />
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </ModuleEditorSection>
+
+                  <ModuleEditorSection>
+                    <ModuleEditorSectionHeading intent="settings">
+                      عنوان الموديول
+                    </ModuleEditorSectionHeading>
+                    <div className="mt-4 grid items-start gap-4 md:grid-cols-3">
                       <ModuleEditorVisibilityAlignRow
                         label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
                         showName="show_eyebrow"
@@ -427,6 +566,28 @@ export default function FeaturedModuleEditClient({
                           className={fieldClassName("h-10")}
                         />
                       </ModuleEditorVisibilityAlignRow>
+                    </div>
+                  </ModuleEditorSection>
+
+                  <ModuleEditorSection>
+                    <ModuleEditorSectionHeading intent="settings">
+                      تنسيق عناصر المحتوى
+                    </ModuleEditorSectionHeading>
+                    <div
+                      className="mt-4 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3"
+                      data-featured-display-settings=""
+                    >
+                      <ModuleEditorVisibilityAlignRow
+                        label="عنوان العنصر"
+                        showName="show_title_on_page"
+                        boldName="display_title_bold"
+                        alignmentName="display_title_alignment"
+                        showDefault={config.display.title}
+                        boldDefault={config.displayFormatting.titleBold}
+                        alignmentDefault={
+                          config.displayFormatting.titleAlignment
+                        }
+                      />
                       <ModuleEditorVisibilityAlignRow
                         label="الصورة"
                         showName="show_image_on_page"
@@ -436,38 +597,46 @@ export default function FeaturedModuleEditClient({
                       <ModuleEditorVisibilityAlignRow
                         label="التصنيف"
                         showName="show_category_on_page"
-                        boldName="category_bold"
-                        alignmentName="category_alignment"
+                        boldName="display_category_bold"
+                        alignmentName="display_category_alignment"
                         showDefault={config.display.category}
-                        boldDefault={categoryFormat.bold}
-                        alignmentDefault={categoryFormat.alignment}
+                        boldDefault={config.displayFormatting.categoryBold}
+                        alignmentDefault={
+                          config.displayFormatting.categoryAlignment
+                        }
                       />
                       <ModuleEditorVisibilityAlignRow
                         label="السلسلة"
                         showName="show_series_on_page"
-                        boldName="series_bold"
-                        alignmentName="series_alignment"
+                        boldName="display_series_bold"
+                        alignmentName="display_series_alignment"
                         showDefault={config.display.series}
-                        boldDefault={seriesFormat.bold}
-                        alignmentDefault={seriesFormat.alignment}
+                        boldDefault={config.displayFormatting.seriesBold}
+                        alignmentDefault={
+                          config.displayFormatting.seriesAlignment
+                        }
                       />
                       <ModuleEditorVisibilityAlignRow
                         label="المقتطف"
                         showName="show_excerpt_on_page"
-                        boldName="excerpt_bold"
-                        alignmentName="excerpt_alignment"
+                        boldName="display_excerpt_bold"
+                        alignmentName="display_excerpt_alignment"
                         showDefault={config.display.excerpt}
-                        boldDefault={excerptFormat.bold}
-                        alignmentDefault={excerptFormat.alignment}
+                        boldDefault={config.displayFormatting.excerptBold}
+                        alignmentDefault={
+                          config.displayFormatting.excerptAlignment
+                        }
                       />
                       <ModuleEditorVisibilityAlignRow
                         label="التاريخ"
                         showName="show_date_on_page"
-                        boldName="date_bold"
-                        alignmentName="date_alignment"
+                        boldName="display_date_bold"
+                        alignmentName="display_date_alignment"
                         showDefault={config.display.date}
-                        boldDefault={dateFormat.bold}
-                        alignmentDefault={dateFormat.alignment}
+                        boldDefault={config.displayFormatting.dateBold}
+                        alignmentDefault={
+                          config.displayFormatting.dateAlignment
+                        }
                       />
                       <ModuleEditorVisibilityAlignRow
                         label="نص الإجراء"

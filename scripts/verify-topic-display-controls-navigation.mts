@@ -260,14 +260,16 @@ check(
 );
 
 check(
-  "Topic cards and featured cards expose separate real category and series navigation",
+  "Topic cards keep item visibility while Featured owns current-module category visibility with real taxonomy values",
   [featuredCard, topicCard].every(
     (source) =>
       source.includes("/topics?category=${encodeURIComponent(") &&
       source.includes("/topics?series=${encodeURIComponent("),
   ) &&
     featuredCard.includes("resolveFeaturedItemDisplay(display, item)") &&
-    featuredContract.includes("resolveContentItemDisplay(display, item.display") &&
+    featuredContract.includes("resolveContentItemDisplay(") &&
+    featuredContract.includes("...item.display") &&
+    featuredContract.includes("category: true") &&
     pageBlockConfigs.includes(
       "display[field] && itemDisplay[field] && Boolean(values[field])",
     ) &&
