@@ -241,6 +241,10 @@ const filterOwner = publicContentOwner.slice(
   publicContentOwner.indexOf("function applyPublicFilters"),
   publicContentOwner.indexOf("function buildCollectionQuery"),
 );
+const featuredItemDisplayResolver = featuredContract.slice(
+  featuredContract.indexOf("export function resolveFeaturedItemDisplay("),
+  featuredContract.indexOf("export type FeaturedEditorItem"),
+);
 check(
   "one Unified Content public filter owner applies publication, category, and series contracts",
   filterOwner.includes('.eq("status", "published")') &&
@@ -260,16 +264,17 @@ check(
 );
 
 check(
-  "Topic cards keep item visibility while Featured owns current-module category visibility with real taxonomy values",
+  "Topic cards keep item visibility while Featured owns current-module item visibility with real taxonomy values",
   [featuredCard, topicCard].every(
     (source) =>
       source.includes("/topics?category=${encodeURIComponent(") &&
       source.includes("/topics?series=${encodeURIComponent("),
   ) &&
     featuredCard.includes("resolveFeaturedItemDisplay(display, item)") &&
-    featuredContract.includes("resolveContentItemDisplay(") &&
-    featuredContract.includes("...item.display") &&
-    featuredContract.includes("category: true") &&
+    featuredItemDisplayResolver.includes("resolveContentItemDisplay(") &&
+    ["title", "image", "excerpt", "date", "category", "series"].every(
+      (field) => featuredItemDisplayResolver.includes(`${field}: true`),
+    ) &&
     pageBlockConfigs.includes(
       "display[field] && itemDisplay[field] && Boolean(values[field])",
     ) &&

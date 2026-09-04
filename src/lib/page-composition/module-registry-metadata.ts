@@ -236,8 +236,15 @@ export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
       content: {
         navigationLabelAr: "المحتوى",
         sectionHeadingAr: "إعدادات موديول المركز الإعلامي",
-        sectionDescriptionAr: "حدّد وظيفة الموديول ونوع المحتوى وإعدادات العرض التابعة له.",
+        sectionDescriptionAr: "حرّر نصوص السكشن مع بقاء إعدادات العرض في قسمها المستقل.",
         icon: "media",
+      },
+      presentation: {
+        navigationLabelAr: "العرض",
+        sectionHeadingAr: null,
+        sectionDescriptionAr: null,
+        icon: "media",
+        sectionChrome: "implicit",
       },
       settings: {
         ...SETTINGS_SECTION,
