@@ -495,12 +495,14 @@ check(
 
 check(
   "Hero identity keeps name, display mode, and publication adjacent without stretching selection controls",
-  heroEditor.includes(
-    "xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content]",
-  ) &&
-    heroEditor.match(/className="xl:col-span-1!"/g)?.length === 3 &&
+  heroEditor.includes("<ModuleEditorIdentitySection") &&
+    heroEditor.includes('nameLabel="اسم الهيرو"') &&
+    heroEditor.includes("status={hero.status}") &&
     heroEditor.includes(
-      '<AdminFormListboxSelect\n            name="variant"',
+      '<AdminFormListboxSelect\n          name="variant"',
+    ) &&
+    !heroEditor.includes(
+      "xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content]",
     ) &&
     !heroEditor.includes(
       '<input type="hidden" name="variant" value="project-detail"',
@@ -554,6 +556,8 @@ const sharedIdentityAdopters = [
   "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
   "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
+  "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
 ];
 check(
   "module editors adopt the shared identity strip before tabs and preserve internal metadata without an empty Settings tab",
@@ -696,13 +700,21 @@ check(
 );
 
 check(
-  "shared identity composition aligns publication with naturally sized labeled controls",
+  "shared identity composition keeps the module name inline and aligns publication with naturally sized controls",
   presentation.includes("data-module-editor-identity") &&
+    presentation.includes('data-module-editor-name-field=""') &&
+    presentation.includes('data-module-editor-identity-control=""') &&
     presentation.includes(
-      "xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content]",
+      'className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-3"',
+    ) &&
+    presentation.includes(
+      "[&>[data-admin-form-listbox]]:grid-cols-[max-content_minmax(0,1fr)]",
+    ) &&
+    presentation.includes(
+      "xl:grid-cols-[minmax(20rem,26rem)_max-content_max-content]",
     ) &&
     presentation.includes("surface={false}") &&
-    presentation.includes("items-end pb-1.5"),
+    presentation.includes('className="flex h-full items-center"'),
 );
 
 check(

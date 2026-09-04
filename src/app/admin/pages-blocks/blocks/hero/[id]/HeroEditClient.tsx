@@ -8,11 +8,11 @@ import {
   ModuleEditorFeedback,
   ModuleEditorField,
   ModuleEditorFieldGrid,
+  ModuleEditorIdentitySection,
   ModuleEditorPagesTab,
   ModuleEditorSaveArea,
   ModuleEditorSection,
   ModuleEditorSectionHeading,
-  ModuleEditorStatusSwitch,
   ModuleEditorTabs,
 } from "../../../../../../components/admin/page-blocks/ModuleEditorPresentation";
 import { AdminFormListboxSelect } from "../../../../../../components/admin/ui";
@@ -524,57 +524,26 @@ export default function HeroEditClient({
   const previewPath = heroMeasurementPath(assignmentContext);
 
   const heroIdentityRow = (
-    <ModuleEditorSection className="mb-5">
-      <ModuleEditorFieldGrid className="md:grid-cols-2 xl:grid-cols-[minmax(16rem,20rem)_max-content_max-content] xl:justify-start">
-        <ModuleEditorField
-          nature="standard"
-          span={3}
-          className="xl:col-span-1!"
-        >
-          <label className="space-y-2">
-            <span className="block text-sm font-medium text-white/70">
-              اسم الهيرو
-            </span>
-            <input
-              name="name"
-              defaultValue={hero.name}
-              required
-              className={fieldClassName("h-11")}
-            />
-          </label>
-        </ModuleEditorField>
-        <input
-          type="hidden"
-          name="template_description"
-          value={hero.description ?? ""}
+    <>
+      <input
+        type="hidden"
+        name="template_description"
+        value={hero.description ?? ""}
+      />
+      <ModuleEditorIdentitySection
+        name={hero.name}
+        nameLabel="اسم الهيرو"
+        status={hero.status}
+        inputClassName={fieldClassName("h-11")}
+      >
+        <AdminFormListboxSelect
+          name="variant"
+          label="نمط العرض"
+          defaultValue={hero.variant}
+          options={variantOptions}
         />
-        <ModuleEditorField
-          nature="standard"
-          span={3}
-          className="xl:col-span-1!"
-        >
-          <AdminFormListboxSelect
-            name="variant"
-            label="نمط العرض"
-            defaultValue={hero.variant}
-            options={variantOptions}
-          />
-        </ModuleEditorField>
-        <ModuleEditorField
-          nature="binary-state"
-          span={3}
-          className="xl:col-span-1!"
-        >
-          <div className="flex h-full items-end pb-1.5">
-            <ModuleEditorStatusSwitch
-              status={hero.status}
-              label="حالة النشر"
-              surface={false}
-            />
-          </div>
-        </ModuleEditorField>
-      </ModuleEditorFieldGrid>
-    </ModuleEditorSection>
+      </ModuleEditorIdentitySection>
+    </>
   );
 
   const contentTab = isProjectDetail ? (
