@@ -5,7 +5,13 @@ export const TOPICS_LIST_VIEW_KEY = "content-topics";
  * from an older contract must not silently override a newly required default.
  */
 export const TOPICS_COLUMN_CONTRACT_VERSION = 2;
-export const TOPICS_LIST_PAGE_SIZES = [10, 20, 30, 50] as const;
+export const TOPICS_LIST_MAX_PAGE_SIZE = 50 as const;
+export const TOPICS_LIST_PAGE_SIZES = [
+  10,
+  20,
+  30,
+  TOPICS_LIST_MAX_PAGE_SIZE,
+] as const;
 
 export const TOPICS_PREFERENCE_COLUMN_KEYS = [
   "category",

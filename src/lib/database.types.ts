@@ -3503,6 +3503,10 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_publish_topics_atomically: {
+        Args: { p_actor_id: number; p_topics: Json }
+        Returns: Json
+      }
       admin_move_topic_categories_to_trash: {
         Args: { p_actor_id: number; p_category_ids: number[] }
         Returns: Json

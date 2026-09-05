@@ -65,6 +65,7 @@ type ProviderConfig = {
   extraFields?: readonly string[];
   stateFields?: readonly string[];
   supportsRebind?: boolean;
+  revisionField?: "updated_at";
   adoptsCanonicalLegacyPublic?: boolean;
   editHref: (row: ProviderRow) => string | null;
   publicHref?: (row: ProviderRow) => string | null;
@@ -341,6 +342,11 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
       }
       const update: TablesUpdate<MediaReferenceProviderTable> = {};
       Object.assign(update, { [reference.fieldKey]: nextValue });
+      if (config.revisionField) {
+        Object.assign(update, {
+          [config.revisionField]: new Date().toISOString(),
+        });
+      }
       const jsonField = config.jsonFields?.includes(reference.fieldKey) === true;
       let comparisonValue: string;
       if (jsonField) {
@@ -403,6 +409,7 @@ const PROVIDER_CONFIGS = [
     labelField: "title",
     fields: ["image", "excerpt", "content", "media_payload", "og_image"],
     jsonFields: ["media_payload"],
+    revisionField: "updated_at",
     extraFields: ["slug", "content_type"],
     stateFields: ["status", "deleted_at"],
     editHref: (row) => `/admin/content/topics/${row.id}`,

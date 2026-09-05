@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { TOPICS_LIST_PAGE_SIZES } from "../topics-list-config";
+import {
+  TOPICS_LIST_MAX_PAGE_SIZE,
+  TOPICS_LIST_PAGE_SIZES,
+} from "../topics-list-config";
 import type { ContentType } from "../content-types";
 import type { AdminEntityListQueryContract } from "../../entity-list/data-engine/contracts";
 
@@ -61,7 +64,7 @@ export const topicsQueryContract: AdminEntityListQueryContract<
   defaultSort: { field: "title", direction: "asc" },
   defaultPageSize: 10,
   pageSizeOptions: TOPICS_LIST_PAGE_SIZES,
-  maxPageSize: 50,
+  maxPageSize: TOPICS_LIST_MAX_PAGE_SIZE,
   searchMinLength: 2,
   rawFilterSchemas: {
     view: z.enum(["active", "trash"]),
