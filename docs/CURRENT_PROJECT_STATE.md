@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-08-29
+**Updated:** 2026-09-05
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -89,30 +89,29 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The 2026-08-23 authorized Project Location Presentation migration closure established the following facts against the configured Supabase Production project.
+The 2026-09-05 authorized Migration 100 application and registry reconciliation established the following current facts against the configured Supabase Production project.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
 | Repository migration files                        |                                               100 |
-| Production registry last-known                    |                                                99 |
-| Current Production live state                     |                     Unverified in this pass |
-| Last-known registry SQL provenance                | Exact repository SQL for all 99 recorded versions |
+| Production registry versions                      |                                               100 |
+| Current Production live state                     |                    Verified on 2026-09-05 |
+| Registry SQL provenance                           | Exact repository SQL for all 100 recorded versions |
 | Public tables                                     |                                                58 |
 | Public tables with RLS enabled                    |                                                58 |
-| Public catalog objects with repository provenance |                                               297 |
+| Public catalog objects with repository provenance |                                               298 |
 | Invalid, unready, or non-live indexes             |                                                 0 |
 | Unvalidated public constraints                    |                                                 0 |
 | Parallel public function overload names           |                                                 0 |
 | Public RLS policies                               |                                                 3 |
-
 | Anonymous-callable application data functions     |                                                 0 |
-| Registry reconciliation audit records             |                                                21 |
+| Registry reconciliation audit records             |                                                24 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
-`Repository migration 100 is branch candidate; Production registry 99 last-known and live unverified`
+Production migration `20260905090000_topics_bulk_publish_atomicity.sql` was applied once and reconciled into the canonical registry as migration 100 with exact repository SQL provenance. The corresponding application code remains unmerged on PR #140 and is not yet part of `main` or Vercel Production.
 
-The branch candidate is `20260905090000_topics_bulk_publish_atomicity.sql` and remains pending a separate migration-application approval.
+The RPC owns the bounded, revision-checked Topic transitions and their per-Topic Mutation Audit rows inside one database transaction. Application code remains the sole owner of semantic Publish Validation, and post-commit Media Center cache invalidation remains with the existing `revalidateMediaCenterPublicPaths` owner.
 
 The executable owners are:
 
