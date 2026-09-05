@@ -11,6 +11,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CONTRACT_PATH = "src/lib/admin/content/topics-bulk-publish.ts";
 const ACTION_PATH = "src/app/admin/content/topics/actions.ts";
 const CACHE_OWNER_PATH = "src/lib/cache/revalidate-public-cache-tags.ts";
+const MEDIA_CENTER_PUBLIC_PATHS_OWNER_PATH =
+  "src/lib/media-center/revalidate-public-paths.ts";
 const REFERENCE_PROVIDERS_PATH =
   "src/lib/admin/media-catalog/reference-providers.ts";
 const MIGRATION_PATH =
@@ -216,6 +218,7 @@ for (const path of [
   CONTRACT_PATH,
   ACTION_PATH,
   CACHE_OWNER_PATH,
+  MEDIA_CENTER_PUBLIC_PATHS_OWNER_PATH,
   REFERENCE_PROVIDERS_PATH,
   MIGRATION_PATH,
 ]) {
@@ -251,6 +254,9 @@ const contract = nativeRequire(
 ) as typeof import("../src/lib/admin/content/topics-bulk-publish.ts");
 const contractSource = read(CONTRACT_PATH);
 const cacheOwnerSource = read(CACHE_OWNER_PATH);
+const mediaCenterPublicPathsOwnerSource = read(
+  MEDIA_CENTER_PUBLIC_PATHS_OWNER_PATH,
+);
 const cacheOwner = loadTypeScriptModule<
   Pick<
     typeof import("../src/lib/cache/revalidate-public-cache-tags.ts"),
@@ -624,6 +630,56 @@ assert.match(publishBranch, /expected_updated_at\s*:\s*topic\.updated_at/u);
 assert.match(publishBranch, /parseTopicsBulkPublishRpcResult/u);
 assert.match(publishBranch, /runTopicsBulkPublishPostCommit/u);
 assert.match(publishBranch, /runBoundedPublicCacheRevalidation/u);
+assert.equal(
+  countMatches(publishBranch, /name:\s*["']media-center-public-paths["']/gu),
+  1,
+  "Bulk publish must register the composed Media Center public-path owner once.",
+);
+assert.equal(
+  countMatches(publishBranch, /revalidateMediaCenterPublicPaths\(\)/gu),
+  1,
+  "Bulk publish must invoke the composed Media Center public-path owner once.",
+);
+assert.doesNotMatch(
+  publishBranch,
+  /name:\s*["']media-center-cache["']/u,
+  "Bulk publish must not register the cache owner already contained by the public-path owner.",
+);
+assert.doesNotMatch(
+  publishBranch,
+  /run:\s*\(\)\s*=>\s*revalidateMediaCenterCache\(\)/u,
+  "Bulk publish must not invoke the nested Media Center cache owner independently.",
+);
+const mediaCenterRevalidationEvents: string[] = [];
+const mediaCenterPublicPathsOwner = loadTypeScriptModule<{
+  revalidateMediaCenterPublicPaths(): void;
+}>(MEDIA_CENTER_PUBLIC_PATHS_OWNER_PATH, {
+  "server-only": {},
+  "next/cache": {
+    revalidatePath: (path: string) => {
+      mediaCenterRevalidationEvents.push(`path:${path}`);
+    },
+  },
+  "../cache/revalidate-public-cache-tags": {
+    revalidateMediaCenterCache: () => {
+      mediaCenterRevalidationEvents.push("cache");
+    },
+  },
+  "../media-center-page-config": {
+    MEDIA_CENTER_PUBLIC_PATHS: ["/media-center", "/media-center/news"],
+  },
+});
+mediaCenterPublicPathsOwner.revalidateMediaCenterPublicPaths();
+assert.deepEqual(mediaCenterRevalidationEvents, [
+  "cache",
+  "path:/media-center",
+  "path:/media-center/news",
+]);
+assert.equal(
+  countMatches(mediaCenterPublicPathsOwnerSource, /revalidateMediaCenterCache\(\)/gu),
+  1,
+  "The composed Media Center public-path owner must invoke its cache owner once.",
+);
 assert.match(publishBranch, /postCommit\.feedbackStatus\s*===\s*["']warning["']/u);
 assert.match(publishBranch, /adminActionWarning\s*\(/u);
 assert.match(

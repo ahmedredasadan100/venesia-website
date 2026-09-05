@@ -1063,10 +1063,6 @@ export async function bulkUpdateUnifiedContent(
         cacheInvalidations: [
           { name: "topics-cache", run: () => revalidateTopicsCache() },
           {
-            name: "media-center-cache",
-            run: () => revalidateMediaCenterCache(),
-          },
-          {
             name: "media-center-public-paths",
             run: () => revalidateMediaCenterPublicPaths(),
           },
