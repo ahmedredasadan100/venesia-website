@@ -93,9 +93,10 @@ The 2026-08-23 authorized Project Location Presentation migration closure establ
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                                99 |
-| Production registry versions                      |                                                99 |
-| Registry SQL provenance                           | Exact repository SQL for all 99 deployed versions |
+| Repository migration files                        |                                               100 |
+| Production registry last-known                    |                                                99 |
+| Current Production live state                     |                     Unverified in this pass |
+| Last-known registry SQL provenance                | Exact repository SQL for all 99 recorded versions |
 | Public tables                                     |                                                58 |
 | Public tables with RLS enabled                    |                                                58 |
 | Public catalog objects with repository provenance |                                               297 |
@@ -108,6 +109,10 @@ The 2026-08-23 authorized Project Location Presentation migration closure establ
 | Registry reconciliation audit records             |                                                21 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
+
+`Repository migration 100 is branch candidate; Production registry 99 last-known and live unverified`
+
+The branch candidate is `20260905090000_topics_bulk_publish_atomicity.sql` and remains pending a separate migration-application approval.
 
 The executable owners are:
 

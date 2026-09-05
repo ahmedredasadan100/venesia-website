@@ -12,6 +12,41 @@ export const PUBLIC_CACHE_TAG_GROUPS = {
   seo: ["seo-global", "site-settings", "page-seo", "projects", "public-content", "topics", "media-center"],
 } as const;
 
+export const PUBLIC_CACHE_REVALIDATION_MAX_ATTEMPTS = 2 as const;
+
+export type BoundedPublicCacheRevalidationResult =
+  | { ok: true; attempts: 1 | 2 }
+  | { ok: false; attempts: 2; error: unknown };
+
+/**
+ * Retries an idempotent cache invalidation once. This is intentionally a
+ * bounded in-request retry, not durable or crash-safe delivery.
+ */
+export async function runBoundedPublicCacheRevalidation(
+  revalidate: () => void | Promise<void>,
+): Promise<BoundedPublicCacheRevalidationResult> {
+  let lastError: unknown;
+
+  for (
+    let attempt = 1;
+    attempt <= PUBLIC_CACHE_REVALIDATION_MAX_ATTEMPTS;
+    attempt += 1
+  ) {
+    try {
+      await revalidate();
+      return { ok: true, attempts: attempt as 1 | 2 };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  return {
+    ok: false,
+    attempts: PUBLIC_CACHE_REVALIDATION_MAX_ATTEMPTS,
+    error: lastError,
+  };
+}
+
 export function revalidatePublicCacheTags(tags: readonly string[]) {
   for (const tag of tags) {
     revalidateTag(tag, "max");

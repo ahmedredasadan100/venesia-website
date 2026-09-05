@@ -83,6 +83,64 @@ jobs:
       - name: Verify Media coordination on isolated PostgreSQL 17
         run: npm run verify:media-coordination-postgres
 
+  topics-bulk-publish-postgres:
+    name: Topics Bulk Publish · PostgreSQL 17
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: venesia_topics_bulk_publish_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d venesia_topics_bulk_publish_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
+
+    env:
+      TOPICS_BULK_PUBLISH_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/venesia_topics_bulk_publish_ci
+      TOPICS_BULK_PUBLISH_DATABASE_REQUIRED: "1"
+      TOPICS_BULK_PUBLISH_DATABASE_DISPOSABLE: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Verify Topics bulk publish on isolated PostgreSQL 17
+        run: npm run verify:topics-bulk-publish-postgres17
+
+      - name: Generate the disposable schema TypeScript contract
+        run: >-
+          supabase gen types typescript
+          --db-url "$TOPICS_BULK_PUBLISH_DATABASE_URL"
+          --schema public
+          > "$RUNNER_TEMP/topics-bulk-publish.database.types.ts"
+
+      - name: Verify generated RPC type provenance
+        env:
+          TOPICS_BULK_PUBLISH_GENERATED_TYPES_PATH: ${{ runner.temp }}/topics-bulk-publish.database.types.ts
+        run: npm run verify:topics-bulk-publish-generated-types
+
   dashboard-truth-postgres:
     name: Dashboard Truth · PostgreSQL 17
     runs-on: ubuntu-latest

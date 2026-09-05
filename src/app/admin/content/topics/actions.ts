@@ -28,6 +28,7 @@ import { getContentPublicVisibilityState } from "../../../../lib/content-public-
 import {
   revalidateMediaCenterCache,
   revalidateTopicsCache,
+  runBoundedPublicCacheRevalidation,
 } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { revalidateMediaCenterPublicPaths } from "../../../../lib/media-center/revalidate-public-paths";
 import {
@@ -35,8 +36,16 @@ import {
   TOPICS_LIST_VIEW_KEY,
   TOPICS_PREFERENCE_COLUMN_KEYS,
 } from "../../../../lib/admin/content/topics-list-config";
+import {
+  createTopicsBulkPublishSafeMetadata,
+  parseTopicsBulkPublishIds,
+  parseTopicsBulkPublishRpcResult,
+  runTopicsBulkPublishPostCommit,
+  type TopicsBulkPublishRpcResult,
+} from "../../../../lib/admin/content/topics-bulk-publish";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { logError } from "../../../../lib/logging";
 import {
   type MediaReferenceSynchronizationResult,
 } from "../../../../lib/admin/media-catalog/synchronization";
@@ -188,6 +197,61 @@ function getPublishFailure(
 
 function invalidMutation(message = "تعذر تنفيذ العملية."): AdminActionResult {
   return adminActionFailure("تعذر تنفيذ العملية", message);
+}
+
+function mapBulkPublishRpcFailure(
+  result: Exclude<TopicsBulkPublishRpcResult, { ok: true }>,
+): AdminActionResult {
+  switch (result.code) {
+    case "invalid_input":
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        "بيانات عملية النشر الجماعي غير صالحة.",
+        { code: "invalid_input" },
+      );
+    case "batch_limit":
+      return adminActionFailure(
+        "تجاوز حد النشر الجماعي",
+        `يمكن نشر ${result.limit} عنصرًا كحد أقصى في العملية الواحدة.`,
+        { code: "batch_limit" },
+      );
+    case "duplicate_ids":
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        "تحتوي الدفعة على موضوعات مكررة. لم يتم نشر أي عنصر.",
+        { code: "duplicate_ids" },
+      );
+    case "missing_topics":
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        "بعض الموضوعات المطلوبة غير موجودة. لم يتم نشر أي عنصر.",
+        { code: "missing_topics" },
+      );
+    case "deleted_topics":
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        "بعض الموضوعات المطلوبة موجودة في المحذوفات. لم يتم نشر أي عنصر.",
+        { code: "deleted_topics" },
+      );
+    case "revision_conflict":
+      return adminActionFailure(
+        "تغير المحتوى أثناء النشر",
+        "تغيرت بعض الموضوعات بعد التحقق منها. لم يتم نشر أي عنصر؛ حدّث القائمة وراجع التغييرات.",
+        { code: "revision_conflict" },
+      );
+    case "unauthorized_actor":
+      return adminActionFailure(
+        "تعذر نشر المحتوى",
+        "حساب المشرف الحالي غير مخول لتنفيذ عملية النشر.",
+        { code: "unauthorized_actor" },
+      );
+  }
+}
+
+function hasExactTopicIds(expected: readonly number[], actual: readonly number[]) {
+  if (expected.length !== actual.length) return false;
+  const sortedExpected = [...expected].sort((left, right) => left - right);
+  return sortedExpected.every((id, index) => id === actual[index]);
 }
 
 async function validateBulkCategoryMoveSeries(
@@ -815,8 +879,17 @@ export async function bulkUpdateUnifiedContent(
   formData: FormData,
 ): Promise<AdminActionResult> {
   const actor = await requireAdminSession();
-  const ids = getIds(formData);
   const action = getString(formData, "bulk_action");
+  let ids: number[];
+  if (action === "publish") {
+    const parsedIds = parseTopicsBulkPublishIds(formData.getAll("topic_ids"));
+    if (!parsedIds.ok) {
+      return mapBulkPublishRpcFailure(parsedIds);
+    }
+    ids = parsedIds.ids;
+  } else {
+    ids = getIds(formData);
+  }
   if (!ids.length) return invalidMutation("حدد محتوى واحدًا على الأقل.");
 
   if (action === "restore") {
@@ -845,19 +918,53 @@ export async function bulkUpdateUnifiedContent(
   const moveToTrash = action === "delete" || action === "move_to_trash";
 
   if (action === "publish") {
+    const correlationId = crypto.randomUUID();
+    const safeMetadata = createTopicsBulkPublishSafeMetadata(
+      ids,
+      correlationId,
+    );
     const { data, error: readError } = await getSupabaseAdmin()
       .from("topics")
       .select("*")
-      .in("id", ids)
-      .is("deleted_at", null);
-    if (readError) return invalidMutation(readError.message);
-    if ((data ?? []).length !== ids.length) {
+      .in("id", ids);
+    if (readError) {
+      logError(
+        "Topics bulk publish preflight read failed",
+        readError,
+        safeMetadata,
+      );
       return adminActionFailure(
         "تعذر نشر المحتوى",
-        "بعض السجلات غير موجودة أو محذوفة. حدّث الصفحة وحاول مرة أخرى.",
+        "تعذر تأكيد بيانات الموضوعات قبل النشر. لم تبدأ عملية النشر الذرية.",
+        { code: "database_failure" },
       );
     }
-    const restoreRequired = (data ?? []).find(
+    const topicsById = new Map(
+      (data ?? []).map((topic) => [Number(topic.id), topic] as const),
+    );
+    const missingTopicIds = ids.filter((id) => !topicsById.has(id));
+    if (missingTopicIds.length > 0) {
+      return mapBulkPublishRpcFailure({
+        ok: false,
+        code: "missing_topics",
+        topicIds: missingTopicIds,
+      });
+    }
+    const requestedTopics = ids.map((id) => topicsById.get(id)!);
+    const deletedTopicIds = requestedTopics
+      .filter((topic) => topic.deleted_at !== null)
+      .map((topic) => Number(topic.id));
+    if (deletedTopicIds.length > 0) {
+      return mapBulkPublishRpcFailure({
+        ok: false,
+        code: "deleted_topics",
+        topicIds: deletedTopicIds,
+      });
+    }
+    const topicsToPublish = requestedTopics.filter(
+      (topic) => topic.status !== "published",
+    );
+    const restoreRequired = topicsToPublish.find(
       (topic) =>
         getContentPublicVisibilityState({
           status: topic.status,
@@ -877,7 +984,7 @@ export async function bulkUpdateUnifiedContent(
         },
       );
     }
-    const invalid = (data ?? [])
+    const invalid = topicsToPublish
       .map((topic) => ({ topic, failure: getPublishFailure(topic) }))
       .find((entry) => entry.failure);
     if (invalid?.failure) {
@@ -891,30 +998,106 @@ export async function bulkUpdateUnifiedContent(
         },
       );
     }
-    const results = await Promise.all(
-      (data ?? []).map((topic) =>
-        getSupabaseAdmin()
-          .from("topics")
-          .update({
-            status: "published",
-            published_at: topic.published_at || now,
-            published_by: actor.id,
-            updated_by: actor.id,
-            updated_at: now,
-          })
-          .eq("id", topic.id),
-      ),
+    const expectedRevisions = requestedTopics.map((topic) => ({
+      id: Number(topic.id),
+      expected_updated_at: topic.updated_at,
+    }));
+    const { data: rpcPayload, error: publishError } =
+      await getSupabaseAdmin().rpc("admin_publish_topics_atomically", {
+        p_actor_id: actor.id,
+        p_topics: expectedRevisions,
+      });
+    if (publishError) {
+      logError(
+        "Topics bulk publish RPC failed",
+        publishError,
+        safeMetadata,
+      );
+      return adminActionFailure(
+        "تعذر تأكيد نتيجة النشر",
+        "تعذر تأكيد نتيجة عملية النشر الذرية. حدّث القائمة قبل تنفيذ إجراء جديد.",
+        { code: "database_failure" },
+      );
+    }
+
+    let publishResult: TopicsBulkPublishRpcResult;
+    try {
+      publishResult = parseTopicsBulkPublishRpcResult(rpcPayload);
+    } catch (error) {
+      logError(
+        "Topics bulk publish RPC returned an invalid payload",
+        error,
+        safeMetadata,
+      );
+      return adminActionFailure(
+        "تعذر إثبات نتيجة النشر",
+        "عادت عملية النشر بنتيجة غير موثوقة. حدّث القائمة قبل تنفيذ إجراء جديد.",
+        { code: "database_failure" },
+      );
+    }
+    if (!publishResult.ok) return mapBulkPublishRpcFailure(publishResult);
+    if (!hasExactTopicIds(ids, publishResult.requestedIds)) {
+      logError(
+        "Topics bulk publish RPC result did not match the requested batch",
+        undefined,
+        safeMetadata,
+      );
+      return adminActionFailure(
+        "تعذر إثبات نتيجة النشر",
+        "لا تطابق نتيجة النشر الدفعة المطلوبة. حدّث القائمة قبل تنفيذ إجراء جديد.",
+        { code: "database_failure" },
+      );
+    }
+
+    if (publishResult.publishedIds.length === 0) {
+      return adminActionSuccess(
+        "المحتوى منشور بالفعل",
+        `لم يتغير أي موضوع؛ العناصر المحددة وعددها ${publishResult.alreadyPublishedIds.length} منشورة بالفعل.`,
+        { code: "published" },
+      );
+    }
+
+    const postCommit = await runTopicsBulkPublishPostCommit(
+      safeMetadata,
+      {
+        cacheInvalidations: [
+          { name: "topics-cache", run: () => revalidateTopicsCache() },
+          {
+            name: "media-center-cache",
+            run: () => revalidateMediaCenterCache(),
+          },
+          {
+            name: "media-center-public-paths",
+            run: () => revalidateMediaCenterPublicPaths(),
+          },
+          { name: "topics-public-path", run: () => revalidatePath("/topics") },
+          {
+            name: "topics-admin-path",
+            run: () => revalidatePath(ADMIN_CONTENT_ROUTES.topics),
+          },
+        ],
+        runCacheInvalidation: runBoundedPublicCacheRevalidation,
+        logError: (message, error, metadata) =>
+          logError(message, error, metadata),
+      },
     );
-    const publishError = results.find((result) => result.error)?.error;
-    if (publishError) return invalidMutation(publishError.message);
-    await finishMutation({
-      actor,
-      action: "publish",
-      metadata: { bulk_action: action, topic_ids: ids, count: ids.length },
-    });
+    if (postCommit.feedbackStatus === "warning") {
+      return adminActionWarning(
+        "تم النشر وتحديث الـCache معلق",
+        `تم نشر ${publishResult.publishedIds.length} من عناصر المحتوى، لكن استمر فشل تحديث بعض القراءات المخبأة بعد المحاولة الآمنة المحدودة.`,
+        {
+          code: "committed_cache_revalidation_pending",
+          correlationId: postCommit.correlationId,
+        },
+      );
+    }
+    const alreadyPublishedMessage =
+      publishResult.alreadyPublishedIds.length > 0
+        ? ` وكان ${publishResult.alreadyPublishedIds.length} منشورًا بالفعل دون تغيير.`
+        : "";
     return adminActionSuccess(
       "تم نشر المحتوى",
-      `تم نشر ${ids.length} من عناصر المحتوى بنجاح.`,
+      `تم نشر ${publishResult.publishedIds.length} من عناصر المحتوى بنجاح.${alreadyPublishedMessage}`,
       { code: "published" },
     );
   } else if (action === "unpublish") {
