@@ -4,20 +4,21 @@ import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import type { Json } from "../database.types";
-import { logError } from "../logging";
+import { logError, logWarn } from "../logging";
 import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import { isPageModulePubliclyVisible } from "../page-blocks/admin-utils";
-import {
-  normalizeLayoutSlot,
-  type PageLayoutSlot,
-} from "../page-blocks/layout-slots";
+import { normalizeLayoutSlot } from "../page-blocks/layout-slots";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { parseFeaturedModuleConfig } from "./config";
 import { resolveFeaturedItems } from "./resolve-featured-items";
-import type {
-  FeaturedModuleTemplateRow,
-  ResolvedFeaturedModule,
-} from "./contract";
+import type { FeaturedModuleTemplateRow } from "./contract";
+import {
+  buildFeaturedModuleCacheKey,
+  FEATURED_MODULE_CACHE_CONTRACT_VERSION,
+  normalizeFeaturedModuleLoadResult,
+  rememberFeaturedPayloadRecovery,
+  type FeaturedModuleLoadResult,
+} from "./runtime-payload";
 
 function joinedTemplate<T>(value: T | T[] | null | undefined): T | null {
   if (!value) return null;
@@ -28,28 +29,41 @@ function isJsonObject(value: Json): value is Record<string, Json | undefined> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-export type LoadedFeaturedModule = ResolvedFeaturedModule & {
-  slot: PageLayoutSlot;
-};
-
-export type FeaturedModuleLoadResult = {
-  modules: LoadedFeaturedModule[];
-  hasAnyAssignmentRows: boolean;
-  hasCompositionError: boolean;
-};
+const warnedPayloadRecoveries = new Set<string>();
+const MAX_WARNED_PAYLOAD_RECOVERIES = 128;
 
 export const loadFeaturedModuleStateForPageSlug = cache(
   async function loadFeaturedModuleStateForPageSlug(
     pageSlug: string,
   ): Promise<FeaturedModuleLoadResult> {
-    return unstable_cache(
+    const cachedState = await unstable_cache(
       () => queryFeaturedModuleStateForPageSlug(pageSlug),
-      ["featured-module-state", pageSlug],
+      buildFeaturedModuleCacheKey(pageSlug),
       {
         revalidate: 300,
         tags: ["page-composition", "featured-modules", "public-content"],
       },
     )();
+    const normalized = normalizeFeaturedModuleLoadResult(cachedState);
+    for (const recovery of normalized.recoveries) {
+      const recoveryKey = `${pageSlug}:${recovery.assignmentId ?? "payload"}:${recovery.fields.join(",")}`;
+      if (
+        !rememberFeaturedPayloadRecovery(
+          warnedPayloadRecoveries,
+          recoveryKey,
+          MAX_WARNED_PAYLOAD_RECOVERIES,
+        )
+      ) {
+        continue;
+      }
+      logWarn("Featured cached payload normalized", {
+        pageSlug,
+        assignmentId: recovery.assignmentId,
+        recoveredFields: recovery.fields,
+        cacheContractVersion: FEATURED_MODULE_CACHE_CONTRACT_VERSION,
+      });
+    }
+    return normalized.state;
   },
 );
 
