@@ -97,6 +97,7 @@ for (const consumer of GLOBAL_SEO_PUBLIC_CONSUMERS) {
   const graph = collectExecutableSourceGraph({
     root: ROOT,
     entrySourceFiles: [consumer.sourceFile],
+    symbolAware: true,
   });
   assert.ok(
     exportsGenerateMetadata(graph, consumer.sourceFile),

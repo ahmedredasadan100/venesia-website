@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import { ADMIN_NAVIGATION_REGISTRY } from "../src/config/admin/navigation.ts";
 import { PUBLIC_PAGE_ROUTE_REGISTRY } from "../src/lib/admin/links/static-routes.ts";
-import { ADMIN_COLLECTION_SURFACE_ADOPTION } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
+import { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } from "../src/lib/admin/form-system/adoption-manifest.ts";
+import {
+  ADMIN_COLLECTION_SURFACE_ADOPTION,
+  PRODUCT_SURFACE_IDENTITIES,
+} from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const APP_ROUTE_MANIFEST = ".next/app-path-routes-manifest.json";
@@ -162,11 +166,63 @@ const builtAdminRoutes = builtPageRoutes.filter((route) =>
 const registeredPublicRoutes = unique(
   PUBLIC_PAGE_ROUTE_REGISTRY.map((route) => route.href),
 ).sort();
-const registeredAdminRoutes = unique(
+const collectionAdminRouteRegistrations =
   ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.flatMap(
     (surface) => surface.routes,
+  );
+const formAdminRouteRegistrations = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.flatMap(
+  (entry) => {
+    if (!("registryModuleKind" in entry)) return [];
+    const routeIdentities = PRODUCT_SURFACE_IDENTITIES.filter(
+      (identity) =>
+        identity.scope === "admin_route" &&
+        identity.route !== undefined &&
+        entry.sourceFiles.some((sourceFile) =>
+          identity.sourceFiles.includes(sourceFile),
+        ),
+    );
+    assert.equal(
+      routeIdentities.length,
+      1,
+      `${entry.id} must map to exactly one canonical Product Surface route.`,
+    );
+    return [
+      {
+        consumerId: entry.id,
+        route: routeIdentities[0]!.route!,
+      },
+    ];
+  },
+);
+const adminRouteRegistrations = [
+  ...ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.flatMap((surface) =>
+    surface.routes.map((route) => ({
+      consumerId: `collection:${surface.id}`,
+      route,
+    })),
   ),
-).sort();
+  ...formAdminRouteRegistrations.map((registration) => ({
+    consumerId: `form:${registration.consumerId}`,
+    route: registration.route,
+  })),
+];
+const duplicateAdminConsumerRouteRegistrations = adminRouteRegistrations.filter(
+  (registration, index, registrations) =>
+    registrations.findIndex(
+      (candidate) =>
+        candidate.consumerId === registration.consumerId &&
+        candidate.route === registration.route,
+    ) !== index,
+);
+assert.deepEqual(
+  duplicateAdminConsumerRouteRegistrations,
+  [],
+  "Each Admin consumer may register a route only once; independently inventoried nested consumers may share their aggregate route.",
+);
+const registeredAdminRoutes = unique([
+  ...collectionAdminRouteRegistrations,
+  ...formAdminRouteRegistrations.map((registration) => registration.route),
+]).sort();
 
 assert.equal(
   registeredPublicRoutes.length,
@@ -186,6 +242,15 @@ for (const surface of ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces) {
     assert.ok(
       existsSync(join(ROOT, sourceFile)),
       `${surface.id} registers missing source ${sourceFile}.`,
+    );
+  }
+}
+for (const entry of ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST) {
+  if (!("registryModuleKind" in entry)) continue;
+  for (const sourceFile of entry.sourceFiles) {
+    assert.ok(
+      existsSync(join(ROOT, sourceFile)),
+      `${entry.id} registers missing source ${sourceFile}.`,
     );
   }
 }
@@ -233,7 +298,7 @@ console.log(
   `Compiled Admin routes ............ ${builtAdminRoutes.length} registered`,
 );
 console.log(
-  `Admin consumer registrations ... ${ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.length} consumers`,
+  `Admin consumer registrations ... ${adminRouteRegistrations.length} Collection/Form route owners`,
 );
 console.log("Bidirectional fail-closed proof .. PASS");
 

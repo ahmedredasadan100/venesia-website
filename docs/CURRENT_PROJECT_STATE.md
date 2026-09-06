@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-09-05
+**Updated:** 2026-09-06
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -12,29 +12,29 @@ This file records the minimum current facts needed to begin work safely. Archite
 The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
 
 ```text
-84d8356b7544f40d362a1674c4670930759c4e8d
+360f0a1f4dcd40be98a7b8aa82706db13fc74b83
 ```
 
-Verified before the final Product Surface Identity re-alignment on 2026-08-21:
+Verified at the G0 starting gate on 2026-09-06:
 
 | Surface                       | SHA / state                                                                                                                                                             |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current official baseline     | `84d8356b7544f40d362a1674c4670930759c4e8d`                                                                                                                              |
-| `origin/main` / GitHub `main` | `84d8356b7544f40d362a1674c4670930759c4e8d`                                                                                                                              |
-| Delivery state                | Platform Governance, Presentation, and Executable Governance are merged; Product Surface Identity remains a PR #118 candidate until its merge and Production gates pass |
+| Current official baseline     | `360f0a1f4dcd40be98a7b8aa82706db13fc74b83`                                                                                         |
+| `origin/main` / GitHub `main` | `360f0a1f4dcd40be98a7b8aa82706db13fc74b83`                                                                                         |
+| Delivery state                | P1-A is merged and closed; G0 is a branch/PR candidate and does not become `main` authority until merged. |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-Current `main` remains the only official entering baseline. Product Surface Identity is a candidate delta from that exact baseline; its branch or PR is not architecture authority unless merged. This snapshot does not reopen closed Architecture, historical Technical Debt, or completed phases.
+Current `main` remains the only official entering baseline. G0 is a candidate delta from that exact baseline; its branch or PR is not architecture authority unless merged. This snapshot does not reopen closed Architecture, historical Technical Debt, or completed phases.
 
 ## Active phase
 
-- **Title:** Product Surface Identity
-- **Baseline:** live GitHub `main` at `84d8356b7544f40d362a1674c4670930759c4e8d`
-- **Status:** implementation, final consistency correction, and local verification are complete on PR #118; Ready for Review, not merged, and not production authority.
-- **Scope:** classify every Admin/public route and governed nested surface without changing Runtime, Capability, Adoption, Product Behavior, or domain rules.
+- **Title:** G0 — Governance Proof & Adoption Truth Reconciliation
+- **Baseline:** live GitHub `main` at `360f0a1f4dcd40be98a7b8aa82706db13fc74b83`
+- **Status:** branch/PR candidate until G0 is reviewed and merged; it is not current-`main` authority while unmerged.
+- **Scope:** reconcile capability declarations, executable reachability, derived closure, nested transport coverage, and architecture ownership guards without changing Product behavior.
 - **Boundaries:** do not reopen Architecture, historical PRs, or old Technical Debt without current-`main` regression evidence and an explicit scoped request.
 - **Delivery:** every future phase must independently prove local `main` = `origin/main` = GitHub `main` before implementation.
 
@@ -44,7 +44,7 @@ Current `main` remains the only official entering baseline. Product Surface Iden
 - The public content read owner under `src/lib/content/public-content-read/` owns current public Topic/media listing and detail query contracts. Public search consumers adopt it and do not create entity-specific public search runtimes.
 - Search is a portable Page Composition Content Module whose CMS schema owns title, description, placeholder, help text, scope, content types, result count, filters, default sort, and presentation. Every assigned launcher targets the ordinary CMS Page `/search`; that Page composes Hero, Breadcrumb, and Search through existing assignments and is not inferred into Navigation or Footer. Public Content Read remains the sole search read owner and Public Pagination remains the paging UI owner; no Search Runtime, engine, source of truth, or route-local search box exists.
 - The Public Pagination Platform Owner under `src/components/Pagination.tsx` and `src/components/pagination-model.ts` owns only page-navigation UI, the bounded page-window model, and URL page destinations. Topics Listing, Media Listing, and Project Tracking adopt the complete owner; Projects Listing adopts its presentation contract only while retaining local state and smooth-scroll behavior. Public Content and Project Tracking read owners retain page data truth, Listing retains content presentation, and all public pagination surfaces now share one visual contract.
-- Public Content Read owns Featured data eligibility and reads. The independent Featured Page Module owns source scope, automatic featured-only or ordered manual selection, and its Hero, Editorial, Large Card, 3 Cards, and Carousel presentations. Page Composition owns only assignment, position, and order. Media Hub no longer authors or resolves non-listing Featured content, and Topics Listing no longer owns the visual between Intro and Listing.
+- Public Content Read owns Featured data eligibility and reads. The independent Featured Page Module owns source scope, automatic featured-only or ordered manual selection, and its Hero, Editorial, Large Card, 3 Cards, and Carousel presentations. Page Composition owns only assignment, semantic Position, assignment visibility, and order. Media Hub no longer authors or resolves non-listing Featured content, and Topics Listing no longer owns the visual between Intro and Listing.
 - Projects use the database as their only project truth and persist the aggregate through the Project domain RPC owners.
 - Project create/edit delegates generic lifecycle, dirty protection, feedback, validation focus, and Create-to-Edit handoff to the current Form Runtime; Project validation and aggregate persistence remain domain-owned.
 - Media writes use the Media coordination contract; the global writer-adoption manifest is closed and contains no unadopted tooling owner.
@@ -55,10 +55,11 @@ Current `main` remains the only official entering baseline. Product Surface Iden
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
 - Product Identity, Runtime, Capability, and Adoption are four independent governance axes. The existing interaction adoption manifest contains the typed Product Surface Identity ledger; its records contain no Adoption or Capability registration ids, and Product Kind is never inferred from Runtime ownership, `workflowClassification`, Collection/Form adoption, or capability applicability.
 - Generic Bulk selection, presentation, intent, and confirmation requests remain with the Collection owner. Bulk pending, blocking, optimistic state, snapshot, rollback, reconciliation, and invalidation are owned only by the existing Data Runtime; domain actions retain business operation, eligibility, atomicity, and persistence.
-- Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. The current matrix has 11 Full Adoption claims and 0 Partial Adoption entries; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
-- The Consumer Capability Adoption Audit derives 18 axes from the Current Shared Capability Set and covers 61 registered Collection/Form consumer records. Every `src/app/admin/**/page.tsx` source has executable inventory coverage; nested consumer graphs stop at separately registered presentation boundaries.
+- Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. Inventory totals are derived by the verifier from the current canonical registries rather than frozen here; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
+- The Consumer Capability Adoption Audit derives every axis from the Current Shared Capability Set and every consumer from the current Collection/Form manifests. Executable proof follows runtime imports and re-exports through indirect descendants, ignores type-only and unused imports, and stops at canonical capability-owner boundaries. Nested Admin route handlers are separately derived as transport consumers and are not promoted into Product Surface identities.
 - Shared Listbox behavior is owned by `AdminListboxSelect` and `AdminFormListboxSelect`; the retired native `AdminSelect` owner has no remaining consumer. Boolean switches and selection checkboxes use `AdminFormSwitch` and `AdminCheckbox`; raw primitives remain internal to those owners.
-- Every specialized or explicit Form exception records its lower-level shared capabilities, known debt, review trigger, and closure impact. Capability exceptions require explicit per-axis Scope, Approving Owner, Evidence, and Rationale; classification alone cannot auto-approve a local implementation.
+- Every specialized or explicit Form exception records its lower-level shared capabilities, known debt, review trigger, and closure impact. Capability exceptions require explicit per-axis Scope, Approving Owner, Evidence, and Rationale; classification alone cannot auto-approve a local implementation. Form, Collection, Row Actions, Content Editor, and umbrella closure remain open whenever a required owner extension, adoption gap, incomplete module ledger, or behavior with source-only evidence remains.
+- Hero and Content Block Editors still render save-result feedback through direct `AdminNotice` paths. G0 records both as `feedback: missing_adoption` debt owned by the existing Feedback Runtime; they block Form and umbrella closure until a dedicated Product-behavior phase adopts the canonical feedback path and proves mounted parity.
 - Shared column preferences apply optimistic visibility locally, serialize writes, commit only verified success, roll back the latest failed request to the last committed state, and never use route refresh as preference reconciliation.
 - Dashboard recent content and Sitemap Effective Source tables adopt the shared Data Grid presentation owner; Dashboard edit/information interactions adopt Shared Row Actions.
 - Governorates, Cities, Districts, and Sub-districts share the Location Collection/Data contracts. Their optional columns, preferences, primary Name preset, sorting, pagination, and Row Actions are shared; Bulk is explicitly `not_required`, and delete eligibility is projected by the Location contract/adapter while the guarded RPC remains final enforcement.
@@ -66,9 +67,9 @@ Current `main` remains the only official entering baseline. Product Surface Iden
 - Public navigation API/layout consumers share the current public navigation owner, which applies active-menu and published linked-target truth. Redirect resolution uses the current exact capped lookup; neither path may restore the superseded PR #82 read owners.
 - The existing Sitemap capability preserves valid entries when one source fails, reports the source failure through the current logging owner, and exposes one route output contract.
 - Public Topic pages have one page-level `h1`; Article Markdown headings are rendered under that page heading without changing stored Markdown or approved visual typography.
-- Browser verification uses the existing Playwright dependency through one formal configuration on port 3000. `verify:platform-contracts` compares all 22 Public and 67 Admin compiled page routes bidirectionally with the existing Public Route and Admin consumer registries; new unregistered routes and registrations without a compiled owner fail closed. `verify:platform` adds HTTP/auth-boundary evidence; authenticated state is supplied externally and absent state is reported as `SKIPPED / UNPROVEN`.
-- Consumer Capability Governance derives all 17 current axes from the existing Current Shared Capability Set across 61 registered Collection/Form consumers. Applicability is typed, every decision/override argument is explicit, and Source Proof resolves canonical executable bindings through an AST runtime import graph. Proof tokens, regex discovery, unused imports, filenames, comment markers, and absence-based applicability are not accepted by the governance gate.
-- The same executable-proof boundary now covers Media writer classification, all registered Global SEO route/source consumers, the three Admin Content Editor consumers and six Public content contracts, the five specialized Form consumers, all eleven Page Composition column-preference consumers, Admin Users, and Platform Performance ownership. Their guards consume typed registrations or AST execution graphs rather than raw source strings.
+- Browser verification uses the existing Playwright dependency through one formal configuration on port 3000. `verify:platform-contracts` derives the compiled Public and Admin page-route inventories and compares them bidirectionally with the existing Public Route and Admin consumer registries; new unregistered routes and registrations without a compiled owner fail closed. `verify:platform` adds HTTP/auth-boundary evidence; authenticated state is supplied externally and absent state is reported as `SKIPPED / UNPROVEN`.
+- Consumer Capability Governance derives all current axes from the existing Current Shared Capability Set across the dynamically projected Collection/Form consumers. Applicability is typed, every decision/override argument is explicit, and Source Proof resolves canonical executable bindings through an AST runtime import graph. Source reachability is not Behavioral Proof: it cannot close broad Dirty Guard, rollback, save-parity, or visible-equals-saved claims, and the applicable Form, Row Actions, Content Editor, or umbrella closure remains open wherever its registered blockers require behavioral evidence. Proof tokens, regex discovery, unused imports, filenames, comment markers, and absence-based applicability are not accepted by the governance gate.
+- Symbol-aware executable-graph proof now covers Media writer classification, every registered Global SEO route/source consumer, the complete Admin Content Editor and Public content-contract inventories, all registered specialized Form consumers, every registered Page Composition column-preference consumer, and Admin Users. Platform Performance retains its separate direct-AST contract guard. Across these boundaries, inventories come from typed registrations and proof comes from the applicable AST execution graph or explicit AST contract checks rather than raw source strings.
 - Operational failures use the existing structured logger with context redaction, the Next.js server `onRequestError` hook, and public/Admin error boundaries. Vercel remains the current server-log sink; no external monitoring vendor has been selected.
 - GitHub CI uses PostgreSQL 17 for the Media Coordination, Dashboard Truth, and Reports Analytics service jobs. This alignment changes CI infrastructure only and does not change application behavior, schema, Supabase, or Vercel.
 - Existing Supabase admin clients adopt the generated `Database` contract. Compiler-visible table, relation, RPC, and JSON-boundary guards prevent consumers from restoring local result generics or broad database-result assertions; this is contract adoption, not a new Runtime or source of truth.
@@ -82,6 +83,7 @@ Current `main` remains the only official entering baseline. Product Surface Iden
 | PR #84      | The remaining valid PR #82 delta was reimplemented on the then-current `main` inside current owners and guarded by `verify:pr-82-delta-recovery`. |
 | PR #82      | Closed unmerged as superseded by PR #84; its old baseline, owners, contracts, and superseded implementations are not architecture authority.      |
 | PR #85      | GitHub Actions PostgreSQL service jobs aligned with Production PostgreSQL 17; no product or schema change.                                        |
+| PR #140     | P1-A Topics Bulk Publish Atomicity merged on `360f0a1f4dcd40be98a7b8aa82706db13fc74b83`; Migration 100 and its Production registry reconciliation were already verified before merge. |
 
 ## Closed Platform Health phase
 
@@ -109,7 +111,7 @@ The 2026-09-05 authorized Migration 100 application and registry reconciliation 
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
-Production migration `20260905090000_topics_bulk_publish_atomicity.sql` was applied once and reconciled into the canonical registry as migration 100 with exact repository SQL provenance. The corresponding application code remains unmerged on PR #140 and is not yet part of `main` or Vercel Production.
+Production migration `20260905090000_topics_bulk_publish_atomicity.sql` was applied once and reconciled into the canonical registry as migration 100 with exact repository SQL provenance. The corresponding application code was merged by PR #140 and is part of the current `main` baseline.
 
 The RPC owns the bounded, revision-checked Topic transitions and their per-Topic Mutation Audit rows inside one database transaction. Application code remains the sole owner of semantic Publish Validation, and post-commit Media Center cache invalidation remains with the existing `revalidateMediaCenterPublicPaths` owner.
 

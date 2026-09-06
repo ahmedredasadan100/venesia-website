@@ -1,15 +1,27 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 import ts from "typescript";
 
+import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
+
 const jiti = createJiti(import.meta.url);
-const { STRUCTURAL_CONTENT_TEMPLATE_SLUGS, resolveModuleProductKind } =
+const {
+  STRUCTURAL_CONTENT_TEMPLATE_SLUGS,
+  getContentModuleEditorKey,
+  resolveModuleProductKind,
+} =
   await jiti.import<
     typeof import("../src/lib/page-blocks/module-edit-registry.ts")
   >("../src/lib/page-blocks/module-edit-registry.ts");
+const { PAGE_MODULE_KINDS } = await jiti.import<
+  typeof import("../src/lib/page-blocks/types.ts")
+>("../src/lib/page-blocks/types.ts");
+const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } = await jiti.import<
+  typeof import("../src/lib/admin/form-system/adoption-manifest.ts")
+>("../src/lib/admin/form-system/adoption-manifest.ts");
 import {
   getModuleEditorHeaderMetadata,
   getModuleEditorSectionOrder,
@@ -19,6 +31,17 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
+const normalizePath = (path: string) => path.replaceAll("\\", "/");
+
+function discoverSourceFiles(directory: string): string[] {
+  return readdirSync(resolve(ROOT, directory), { withFileTypes: true }).flatMap(
+    (entry) => {
+      const sourcePath = normalizePath(`${directory}/${entry.name}`);
+      if (entry.isDirectory()) return discoverSourceFiles(sourcePath);
+      return /\.[cm]?[jt]sx?$/u.test(entry.name) ? [sourcePath] : [];
+    },
+  );
+}
 
 let passed = 0;
 function check(label: string, condition: unknown) {
@@ -38,40 +61,137 @@ const moduleEditorPresentation = read(
   "src/components/admin/page-blocks/ModuleEditorPresentation.tsx",
 );
 
-const moduleEditorRoots = [
-  "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
-  "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
-  "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-  "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-  "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-  "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-  "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
-  "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
-  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-] as const;
+type RegisteredModuleEditor = (typeof ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST)[number] & {
+  registryModuleKind: (typeof PAGE_MODULE_KINDS)[number];
+};
 
-const specializedConsumers = [
-  "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
-  "src/app/admin/pages-blocks/menus/MenuBuilderClient.tsx",
-  "src/app/admin/pages-blocks/footer/FooterBuilderClient.tsx",
-  "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-  "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
-  "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
-  "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-  "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-  "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-  "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-  "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
-  "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
-  "src/app/admin/projects/ProjectEditForm.tsx",
-  "src/app/admin/settings/security/SecuritySettingsClient.tsx",
-] as const;
+const registeredModuleEditors = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.filter(
+  (entry): entry is RegisteredModuleEditor =>
+    "registryModuleKind" in entry && entry.registryModuleKind !== undefined,
+);
+const registeredModuleEditorKinds = registeredModuleEditors.map(
+  (entry) => entry.registryModuleKind,
+);
+const discoveredModuleEditorRoutes = readdirSync(
+  resolve(ROOT, "src/app/admin/pages-blocks/blocks"),
+  { withFileTypes: true },
+)
+  .filter(
+    (entry) =>
+      entry.isDirectory() &&
+      existsSync(
+        resolve(
+          ROOT,
+          "src/app/admin/pages-blocks/blocks",
+          entry.name,
+          "[id]",
+          "page.tsx",
+        ),
+      ),
+  )
+  .map((entry) => entry.name)
+  .sort();
 
-const consumerSources = specializedConsumers.map((path) => ({
-  path,
-  source: read(path),
-}));
-const moduleEditorRootSet = new Set<string>(moduleEditorRoots);
+function moduleEditorRegistrationDrift(input: {
+  moduleKinds: readonly string[];
+  registeredKinds: readonly string[];
+  routeKinds: readonly string[];
+}) {
+  const expected = new Set(input.moduleKinds);
+  const registered = new Set(input.registeredKinds);
+  const routed = new Set(input.routeKinds);
+  return {
+    duplicateRegistrations:
+      input.registeredKinds.length - registered.size,
+    missingRegistrations: [...expected].filter((kind) => !registered.has(kind)),
+    unknownRegistrations: [...registered].filter((kind) => !expected.has(kind)),
+    missingRoutes: [...expected].filter((kind) => !routed.has(kind)),
+    unregisteredRoutes: [...routed].filter((kind) => !expected.has(kind)),
+  };
+}
+
+function registrationIsComplete(
+  drift: ReturnType<typeof moduleEditorRegistrationDrift>,
+) {
+  return (
+    drift.duplicateRegistrations === 0 &&
+    drift.missingRegistrations.length === 0 &&
+    drift.unknownRegistrations.length === 0 &&
+    drift.missingRoutes.length === 0 &&
+    drift.unregisteredRoutes.length === 0
+  );
+}
+
+const moduleEditorRegistration = moduleEditorRegistrationDrift({
+  moduleKinds: PAGE_MODULE_KINDS,
+  registeredKinds: registeredModuleEditorKinds,
+  routeKinds: discoveredModuleEditorRoutes,
+});
+
+check(
+  "Page Module editor identities and routes reconcile bidirectionally with the canonical registry",
+  registrationIsComplete(moduleEditorRegistration) &&
+    registeredModuleEditors.every(
+      (entry) =>
+        entry.sourceFiles.length === 1 &&
+        entry.sourceFiles[0] ===
+          `src/app/admin/pages-blocks/blocks/${entry.registryModuleKind}/[id]/page.tsx`,
+    ),
+);
+
+const futureEditorRegistration = moduleEditorRegistrationDrift({
+  moduleKinds: PAGE_MODULE_KINDS,
+  registeredKinds: registeredModuleEditorKinds,
+  routeKinds: [...discoveredModuleEditorRoutes, "negative-fixture"],
+});
+check(
+  "negative fixture: a future Page Module editor route without a canonical kind fails closed",
+  !registrationIsComplete(futureEditorRegistration) &&
+    futureEditorRegistration.unregisteredRoutes.includes("negative-fixture"),
+);
+
+function rootSourcesForEntry(entry: RegisteredModuleEditor) {
+  const graph = collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: entry.sourceFiles,
+    symbolAware: true,
+  });
+  const roots = [...graph].flatMap(([path, file]) => {
+    const source = file.getFullText();
+    return source.includes("<ModuleEditorHeader") &&
+      source.includes("<ModuleEditorTabs")
+      ? [{ path, source }]
+      : [];
+  });
+  assert.equal(
+    roots.length,
+    1,
+    `${entry.id} must reach exactly one executable Module Editor root`,
+  );
+  return { entry, graph, root: roots[0]! };
+}
+
+const registeredModuleEditorGraphs = registeredModuleEditors.map(
+  rootSourcesForEntry,
+);
+const moduleEditorRootSources = registeredModuleEditorGraphs.map(
+  ({ root }) => root,
+);
+const moduleEditorRootSet = new Set(
+  moduleEditorRootSources.map(({ path }) => path),
+);
+const allAdminPresentationSources = [
+  ...discoverSourceFiles("src/app/admin"),
+  ...discoverSourceFiles("src/components/admin"),
+];
+const consumerSources = allAdminPresentationSources.flatMap((path) => {
+  const source = read(path);
+  return (source.includes("<AdminModuleTabs") ||
+    source.includes("<ModuleEditorTabs")) &&
+    path !== "src/components/admin/page-blocks/ModuleEditorPresentation.tsx"
+    ? [{ path, source }]
+    : [];
+});
 
 function tabsAreIndependent(path: string, source: string) {
   const file = ts.createSourceFile(
@@ -222,8 +342,10 @@ check(
 );
 
 check(
-  "contextual feedback is adopted through the active panel instead of above navigation",
-  consumerSources.every(({ source }) => source.includes("activePanelContext=")),
+  "specialized non-Form-Runtime feedback is adopted through the active panel instead of above navigation",
+  consumerSources
+    .filter(({ source }) => !source.includes("<AdminFormRuntime"))
+    .every(({ source }) => source.includes("activePanelContext=")),
 );
 
 const menu = read("src/app/admin/pages-blocks/menus/MenuBuilderClient.tsx");
@@ -275,33 +397,26 @@ check(
   ).includes("<h2"),
 );
 
-const moduleEditorRootSources = moduleEditorRoots.map((path) => ({
-  path,
-  source: read(path),
-}));
-const moduleEditorFieldOwners = [
-  "src/components/admin/page-blocks/FeedModuleFilterFields.tsx",
-  "src/components/admin/page-blocks/editors/AboutApproachModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/AboutCtaModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/AboutIntroModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/AboutIntroSingleImageModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/AboutPrinciplesModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
-  "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/ProjectsHubMapModuleEditor.tsx",
-  "src/components/admin/page-blocks/editors/VisionGoalsModuleEditor.tsx",
-] as const;
-const moduleEditorFieldSources = moduleEditorFieldOwners.map((path) => ({
-  path,
-  source: read(path),
-}));
-const moduleEditorSources = [
-  ...moduleEditorRootSources,
-  ...moduleEditorFieldSources,
-];
+const combinedModuleEditorGraph = new Map(
+  registeredModuleEditorGraphs.flatMap(({ graph }) => [...graph]),
+);
+const moduleEditorSources = [...combinedModuleEditorGraph].flatMap(
+  ([path, file]) => {
+    const isDomainImplementation =
+      moduleEditorRootSet.has(path) ||
+      path.startsWith("src/components/admin/page-blocks/editors/") ||
+      path === "src/components/admin/page-blocks/FeedModuleFilterFields.tsx" ||
+      path.startsWith("src/app/admin/pages-blocks/blocks/hero/[id]/");
+    return isDomainImplementation
+      ? [{ path, source: file.getFullText() }]
+      : [];
+  },
+);
+const moduleSpecificEditorSources = moduleEditorSources.filter(
+  ({ path }) =>
+    path.startsWith("src/components/admin/page-blocks/editors/") &&
+    path.endsWith("ModuleEditor.tsx"),
+);
 
 const sharedTextFormatControls = read(
   "src/components/admin/ui/AdminTextFormatControls.tsx",
@@ -437,7 +552,7 @@ function getJsxStringValue(
   return null;
 }
 
-function collectModuleEditorTabs(path: string) {
+function collectModuleEditorTabs(path: string, activeEditorKey?: string) {
   const source = read(path);
   const file = ts.createSourceFile(
     path,
@@ -459,6 +574,110 @@ function collectModuleEditorTabs(path: string) {
     ts.forEachChild(node, collectDeclarations);
   }
   collectDeclarations(file);
+
+  const UNKNOWN = Symbol("unknown-static-value");
+  const TRUTHY = Symbol("truthy-static-value");
+  type StaticValue = string | number | boolean | null | typeof UNKNOWN | typeof TRUTHY;
+
+  function evaluateStaticValue(
+    expression: ts.Expression,
+    resolving = new Set<string>(),
+  ): StaticValue {
+    if (
+      ts.isParenthesizedExpression(expression) ||
+      ts.isAsExpression(expression) ||
+      ts.isTypeAssertionExpression(expression) ||
+      ts.isSatisfiesExpression(expression) ||
+      ts.isNonNullExpression(expression)
+    ) {
+      return evaluateStaticValue(expression.expression, resolving);
+    }
+    if (ts.isStringLiteral(expression) || ts.isNoSubstitutionTemplateLiteral(expression)) {
+      return expression.text;
+    }
+    if (ts.isNumericLiteral(expression)) return Number(expression.text);
+    if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
+    if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
+    if (expression.kind === ts.SyntaxKind.NullKeyword) return null;
+    if (ts.isArrayLiteralExpression(expression) || ts.isObjectLiteralExpression(expression)) {
+      return TRUTHY;
+    }
+    if (ts.isIdentifier(expression)) {
+      if (expression.text === "editorKey" && activeEditorKey !== undefined) {
+        return activeEditorKey;
+      }
+      if (resolving.has(expression.text)) return UNKNOWN;
+      const declaration = declarations.get(expression.text);
+      return declaration
+        ? evaluateStaticValue(
+            declaration,
+            new Set(resolving).add(expression.text),
+          )
+        : UNKNOWN;
+    }
+    if (ts.isPrefixUnaryExpression(expression) && expression.operator === ts.SyntaxKind.ExclamationToken) {
+      const value = evaluateStaticValue(expression.operand, resolving);
+      return value === UNKNOWN ? UNKNOWN : !Boolean(value);
+    }
+    if (ts.isBinaryExpression(expression)) {
+      const left = evaluateStaticValue(expression.left, resolving);
+      const right = evaluateStaticValue(expression.right, resolving);
+      if (left === UNKNOWN || right === UNKNOWN) return UNKNOWN;
+      switch (expression.operatorToken.kind) {
+        case ts.SyntaxKind.EqualsEqualsEqualsToken:
+        case ts.SyntaxKind.EqualsEqualsToken:
+          return left === right;
+        case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+        case ts.SyntaxKind.ExclamationEqualsToken:
+          return left !== right;
+        case ts.SyntaxKind.AmpersandAmpersandToken:
+          return Boolean(left) ? right : left;
+        case ts.SyntaxKind.BarBarToken:
+          return Boolean(left) ? left : right;
+        default:
+          return UNKNOWN;
+      }
+    }
+    if (ts.isConditionalExpression(expression)) {
+      const condition = evaluateStaticValue(expression.condition, resolving);
+      if (condition === UNKNOWN) return UNKNOWN;
+      return evaluateStaticValue(
+        Boolean(condition) ? expression.whenTrue : expression.whenFalse,
+        resolving,
+      );
+    }
+    return UNKNOWN;
+  }
+
+  function conditionMatches(expression: ts.Expression, expected: boolean) {
+    const value = evaluateStaticValue(expression);
+    return value !== UNKNOWN && Boolean(value) === expected;
+  }
+
+  function usageIsReachable(node: ts.Node) {
+    if (activeEditorKey === undefined) return true;
+    let current: ts.Node = node;
+    for (let parent = node.parent; parent; parent = parent.parent) {
+      if (ts.isConditionalExpression(parent)) {
+        if (current === parent.whenTrue && !conditionMatches(parent.condition, true)) {
+          return false;
+        }
+        if (current === parent.whenFalse && !conditionMatches(parent.condition, false)) {
+          return false;
+        }
+      }
+      if (
+        ts.isBinaryExpression(parent) &&
+        current === parent.right &&
+        parent.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken &&
+        !conditionMatches(parent.left, true)
+      ) {
+        return false;
+      }
+      current = parent;
+    }
+    return true;
+  }
 
   const cache = new Map<string, readonly string[]>();
   function resolveTabIds(
@@ -532,6 +751,7 @@ function collectModuleEditorTabs(path: string) {
 
   function inspectOpeningElement(node: ts.JsxOpeningLikeElement) {
     if (node.tagName.getText(file) !== "ModuleEditorTabs") return;
+    if (!usageIsReachable(node)) return;
     const moduleKind = getJsxStringValue(getJsxAttribute(node, "moduleKind"));
     const tabsAttribute = getJsxAttribute(node, "tabs");
     const tabsExpression =
@@ -573,11 +793,11 @@ function collectModuleEditorTabs(path: string) {
 }
 
 const rootEditorInventory: ModuleEditorMetadataInventoryEntry[] =
-  moduleEditorRoots
-    .filter((path) => !path.endsWith("ContentModuleEditClient.tsx"))
-    .flatMap((sourcePath) =>
-      collectModuleEditorTabs(sourcePath).map(({ moduleKind, tabIds }) => ({
-        sourcePath,
+  moduleEditorRootSources
+    .filter(({ path }) => !path.endsWith("ContentModuleEditClient.tsx"))
+    .flatMap(({ path }) =>
+      collectModuleEditorTabs(path).map(({ moduleKind, tabIds }) => ({
+        sourcePath: path,
         moduleKind,
         moduleSlug: null,
         tabIds,
@@ -586,50 +806,36 @@ const rootEditorInventory: ModuleEditorMetadataInventoryEntry[] =
 
 const contentEditorPath =
   "src/components/admin/page-blocks/ContentModuleEditClient.tsx";
-const contentTabUsages = collectModuleEditorTabs(contentEditorPath);
-const contentTabsByVariable = new Map(
-  contentTabUsages
-    .filter((usage) => usage.tabsVariable !== null)
-    .map((usage) => [usage.tabsVariable as string, usage.tabIds]),
+const defaultContentUsage = collectModuleEditorTabs(
+  contentEditorPath,
+  "generic",
 );
-const defaultContentTabs = contentTabUsages.find(
-  (usage) => usage.tabsVariable === null,
-)?.tabIds;
-assert.ok(
-  defaultContentTabs,
-  "Content Module Editor must expose its actual default tab ids",
+assert.equal(
+  defaultContentUsage.length,
+  1,
+  "Content Module Editor must expose one executable default tab set",
 );
-
-const specializedContentTabVariables: Partial<
-  Record<(typeof STRUCTURAL_CONTENT_TEMPLATE_SLUGS)[number], string>
-> = {
-  "home-story": "homeStoryTabs",
-  "home-contact": "homeContactTabs",
-  "about-cta": "aboutCtaTabs",
-  "projects-hub-hero": "heroPlatformTabs",
-};
 
 const contentEditorInventory: ModuleEditorMetadataInventoryEntry[] = [
   {
     sourcePath: contentEditorPath,
     moduleKind: "content",
     moduleSlug: null,
-    tabIds: defaultContentTabs,
+    tabIds: defaultContentUsage[0]!.tabIds,
   },
   ...STRUCTURAL_CONTENT_TEMPLATE_SLUGS.map((moduleSlug) => {
-    const tabsVariable = specializedContentTabVariables[moduleSlug];
-    const tabIds = tabsVariable
-      ? contentTabsByVariable.get(tabsVariable)
-      : defaultContentTabs;
-    assert.ok(
-      tabIds,
-      `Content Module Editor tabs are not discoverable for ${moduleSlug}`,
+    const editorKey = getContentModuleEditorKey(moduleSlug, moduleSlug);
+    const usages = collectModuleEditorTabs(contentEditorPath, editorKey);
+    assert.equal(
+      usages.length,
+      1,
+      `Content Module Editor must expose one executable tab set for ${moduleSlug}`,
     );
     return {
       sourcePath: contentEditorPath,
       moduleKind: resolveModuleProductKind("content", moduleSlug, moduleSlug),
       moduleSlug,
-      tabIds,
+      tabIds: usages[0]!.tabIds,
     };
   }),
 ];
@@ -766,9 +972,16 @@ check(
 
 check(
   "all module-specific section surfaces delegate to the shared Module Editor section owner",
-  moduleEditorFieldSources
-    .filter(({ path }) => !path.endsWith("FeedModuleFilterFields.tsx"))
-    .every(({ source }) => source.includes("<ModuleEditorSection")) &&
+  moduleSpecificEditorSources.every(({ path }) => {
+    const graph = collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: [path],
+      symbolAware: true,
+    });
+    return [...graph.values()].some((file) =>
+      file.getFullText().includes("<ModuleEditorSection"),
+    );
+  }) &&
     moduleEditorSources.every(
       ({ source }) =>
         !source.includes(
@@ -820,18 +1033,13 @@ check(
     moduleEditorSources.every(
       ({ source }) => !source.includes('mode="read-only"'),
     ) &&
-    [
-      "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
-      "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-    ].every((path) => {
-      const source = read(path);
-      return (
-        source.includes(
-          '<input type="hidden" name="slug" value={block.slug}',
-        ) && !source.includes('mode="editable"')
-      );
-    }) &&
+    moduleEditorRootSources
+      .filter(({ source }) => source.includes('name="slug"'))
+      .every(
+        ({ source }) =>
+          source.includes('<input type="hidden" name="slug"') &&
+          !source.includes('mode="editable"'),
+      ) &&
     !read(
       "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
     ).includes("ModuleEditorTechnicalIdentity") &&
@@ -841,40 +1049,35 @@ check(
     read("src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts").includes(
       '.select("slug,variant")',
     ) &&
-    [
-      "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-      "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
-    ].every((path) => !read(path).includes('name="slug"')),
+    registeredModuleEditorGraphs
+      .filter(({ entry }) => entry.registryModuleKind.startsWith("media-"))
+      .every(({ root }) => !root.source.includes('name="slug"')),
+);
+
+const moduleEditorListboxConsumers = moduleEditorSources.filter(({ source }) =>
+  source.includes("AdminFormListboxSelect"),
+);
+const moduleEditorSwitchConsumers = moduleEditorSources.filter(({ source }) =>
+  source.includes("AdminFormSwitch"),
+);
+const moduleEditorGridConsumers = moduleEditorSources.filter(
+  ({ source }) =>
+    source.includes("AdminFormGrid") ||
+    source.includes("ModuleEditorFieldGrid") ||
+    source.includes("ModuleEditorRepeaterGrid"),
 );
 
 check(
   "shared listboxes, switches, and grids own standard Module Editor controls",
-  [
-    "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
-    "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
-    "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-    "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-    "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-    "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-    "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
-    "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
-    "src/components/admin/page-blocks/editors/ProjectsHubHeroModuleEditor.tsx",
-    "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
-    "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-  ].every((path) => read(path).includes("AdminFormListboxSelect")) &&
+  moduleEditorListboxConsumers.length > 0 &&
+    moduleEditorSwitchConsumers.length > 0 &&
+    moduleEditorGridConsumers.length > 0 &&
     read(
       "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
     ).includes("ModuleEditorVisibilityAlignRow") &&
     !read(
       "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
     ).includes('alignmentOptions={["right", "center"]}') &&
-    [
-      "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
-      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-      "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
-      "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
-      "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
-    ].every((path) => read(path).includes("AdminFormSwitch")) &&
     read(
       "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
     ).includes("ModuleEditorVisibilityAlignRow") &&
@@ -910,24 +1113,7 @@ check(
     read(
       "src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx",
     ).includes("ModuleEditorVisibilityAlignRow as default") &&
-    sharedModuleEditorPresentation.includes("AdminFormSwitch") &&
-    [
-      "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-      "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-      "src/components/admin/page-blocks/editors/HomeProjectsPlacementEditor.tsx",
-      "src/components/admin/page-blocks/editors/ProjectsHubFeaturedModuleEditor.tsx",
-      "src/components/admin/page-blocks/editors/ProjectsHubListingModuleEditor.tsx",
-      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-    ].every((path) => {
-      const source = read(path);
-      return (
-        source.includes("AdminFormGrid") ||
-        source.includes("ModuleEditorFieldGrid") ||
-        source.includes("ModuleEditorRepeaterGrid")
-      );
-    }),
+    sharedModuleEditorPresentation.includes("AdminFormSwitch"),
 );
 
 console.log(

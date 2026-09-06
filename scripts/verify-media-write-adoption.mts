@@ -407,6 +407,7 @@ for (const owner of manifest.owners) {
   const graph = collectExecutableSourceGraph({
     root: ROOT,
     entrySourceFiles: owner.sourceFiles,
+    symbolAware: true,
   });
   if (owner.classification === "adopted") {
     assert.equal(owner.acquiresWriteLease, true, `${owner.id} must acquire a lease.`);
@@ -458,6 +459,7 @@ for (const owner of manifest.owners) {
     const mutationGraph = collectExecutableSourceGraph({
       root: ROOT,
       entrySourceFiles: [mutationPath.sourceFile],
+      symbolAware: true,
     });
     assert.ok(
       graphUsesExecutableBinding({

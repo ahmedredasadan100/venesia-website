@@ -3,8 +3,8 @@
 > **The Official Architecture Constitution for Venesia Website/CMS**
 > **Document:** `AI_ARCHITECTURE_PRINCIPLES.md`
 > **Status:** Official, normative, and project-wide
-> **Version:** 3.6.0
-> **Effective date:** 2026-08-31
+> **Version:** 3.6.1
+> **Effective date:** 2026-09-06
 > **Repository:** `ahmedredasadan100/venesia-website`
 > **Architecture authority:** Project Owner / approved architecture decision
 > **Supersedes:** _Venesia CMS — Official Architecture Principle (Version 1.0)_ and every shorter or conflicting architecture summary
@@ -1720,7 +1720,7 @@ Portable Page Composition module and domain owner for Featured selection and pre
 ### Boundaries
 
 - Public Content Read owns public eligibility, filtering, and data reads.
-- Page Composition owns page assignment, semantic Position, and module order only.
+- Page Composition owns page assignment, semantic Position, assignment visibility, and module order only.
 - Listing remains independent and cannot select or render Featured.
 - Media Hub cannot author, resolve, or persist a second non-listing Featured owner.
 - Source scopes MUST come from the canonical taxonomy and content-type owners rather than module-local inventories.
@@ -2161,23 +2161,36 @@ Entity-named components belong under the entity/domain boundary unless they are 
 
 ## 12.7 Page Composition Space and Module Presentation Ownership
 
-Within the public rendering boundary, Page Composition MUST own the space around a module, including:
+Within the public rendering boundary, Page Composition MUST own only the semantic composition contract, including:
 
-- Display Position and assignment eligibility;
-- the page-level Layout and region relationship;
-- the outer Container and Grid;
-- the available width and any explicitly allocated height;
-- spacing between page regions and modules.
+- stable semantic Regions and their meaning;
+- module assignment eligibility for those Regions;
+- each assignment's Position;
+- each assignment's order;
+- each assignment's visibility.
 
-Page Composition MUST NOT own the internal Presentation of a module. It MUST NOT decide or rewrite:
+Page Composition MUST NOT own or prescribe the Theme's outer Layout, outer Container, outer Grid, available and responsive dimensions, visual Region mapping, or spacing between page Regions and modules.
 
-- the module's visual composition;
-- image placement or aspect ratio;
-- internal content distribution or semantic order;
-- the module's visual identity;
-- a position-specific alternative design.
+The active Theme MUST own the outer rendering contract, including:
 
-The module presenter owns those decisions. A module MUST adapt to the actual size of its assigned container while preserving its declared visual identity as far as the available space permits. Changing Display Position alone MUST NOT select a different module design.
+- the outer Layout;
+- the outer Container;
+- the outer Grid;
+- available and responsive dimensions;
+- visual Region mapping;
+- spacing between page Regions and modules.
+
+A Theme MUST consume the complete Page Composition Region and assignment contract. It MUST NOT redefine semantic Regions, narrow module assignment eligibility, or rewrite assignment Position, order, or visibility.
+
+A module presenter MUST own its internal Presentation, including:
+
+- internal visual composition;
+- image placement and aspect ratio;
+- internal content distribution and semantic order;
+- visual identity;
+- Product variants.
+
+A module MUST adapt to the actual size of its Theme-owned container while preserving its declared visual identity as far as the available space permits. Changing Display Position alone MUST NOT select a different module design.
 
 Reusable responsive behavior belongs to the existing Shared Module Presentation Contract. Portable modules MUST respond to their assigned container rather than infer presentation from the viewport or receive Display Position as a styling switch. A genuinely narrow container MAY trigger proportional rebalancing or stacking, and an explicit module-owned Product variant MAY intentionally change composition; neither case transfers Presentation ownership to Page Composition.
 
@@ -4958,11 +4971,17 @@ The following ADRs are part of this constitution.
 **Decision:** The existing adoption manifest owns one Current Shared Capability Set. Capability Applicability runs before Architecture/Implementation, Source Proof runs after implementation, and both derive every axis dynamically from that set. Applicability is declared through typed owner contracts; Source Proof resolves explicit executable bindings through the AST runtime import graph. Token lists, raw source matching, unused imports, filename discovery, and absence-based decisions are invalid proof. The existing Admin Runtime CI path enforces the all-inventoried-consumer projection before Product Review.
 **Consequences:** Adding a shared capability automatically expands every inventoried consumer audit without a copied capability list or fixed count. Adding a consumer requires explicit decisions and executable registration, while a new compiled route must match the existing consumer and public-route registries bidirectionally. Product Review focuses on product and UX quality instead of discovering missing shared-owner adoption. No new Runtime, Capability, manifest, registry, engine, or source of truth is introduced.
 
-## ADR-027 — Page Composition Owns Space; Modules Own Presentation
+## ADR-027 — Page Composition Owns Semantic Regions and Assignments; Theme Owns Outer Layout; Modules Own Presentation
 
 **Status:** Accepted
 **Context:** Product Review proved that technically valid Display Position rendering can still redesign a module when Page Composition or viewport breakpoints decide its internal image and content layout. That makes module identity depend on the page template and produces inconsistent quality across slots.
-**Decision:** Page Composition owns the platform's semantic Regions and Page Assignment Position. That contract is independent of Slugs, page names, Templates, Themes, CSS, and current Layout. Themes own outer Layout, Container, Grid, available dimensions, and the visual mapping of Regions, but MUST adopt rather than redefine or narrow the CMS contract. Product-fixed modules MAY constrain Position explicitly; flexible modules inherit the Page Composition Positions. Presentation remains derived from the module's Product contract and is not persisted by Page Assignment. Each module owns the implementation of its internal visual composition, image placement and ratio, content distribution, and visual identity. Reusable adaptation to available space belongs to the existing Shared Module Presentation Contract and is driven by the module container, not by Display Position or viewport-specific template logic.
+**Decision:** The concern-level ownership contract is the same contract defined normatively in Section 12.7:
+
+- **Page Composition:** stable semantic Regions and their meaning; module assignment eligibility for those Regions; each assignment's Position; each assignment's order; each assignment's visibility.
+- **Theme:** the outer Layout; the outer Container; the outer Grid; available and responsive dimensions; visual Region mapping; spacing between page Regions and modules.
+- **Module:** internal visual composition; image placement and aspect ratio; internal content distribution and semantic order; visual identity; Product variants.
+
+That contract is independent of Slugs, page names, Templates, Themes, CSS, and current Layout. Themes MUST adopt rather than redefine or narrow the CMS contract. Product-fixed modules MAY constrain Position explicitly; flexible modules inherit the Page Composition Positions. Presentation remains derived from the module's Product contract and is not persisted by Page Assignment. Reusable adaptation to available space belongs to the existing Shared Module Presentation Contract and is driven by the module container, not by Display Position or viewport-specific template logic.
 **Consequences:** Replacing the Venisia interface with a new Theme requires a new Region renderer, not a new CMS Position contract. Moving a flexible module between Positions changes its available space, not its Presentation or design owner. Page Composition cannot infer Presentation from Position, and modules cannot impose a Position merely for implementation convenience. Modules rebalance proportionally and stack only when their own presentation contract requires it. `Wide`, `Editorial`, and `Stack` are reversible Presentation states: leaving one state cannot leak its float, clear, geometry, spacing, or alignment into another. Explicit module variants remain module-owned. No new Runtime, Capability, System, manifest, or source of truth is introduced. Assignment Presentation remains a separate future phase that requires a real Product variant and renderer before persistence is introduced.
 **Evidence:** `PageSlotLayout` exposes the shared slot container and page-region geometry; module presenters and shared styles own internal container-responsive behavior; `verify:route-slot-policy` rejects presentation ownership inside Page Composition and is part of the existing quality gate.
 
@@ -5592,6 +5611,11 @@ Use these questions before approving any meaningful change.
 ---
 
 # 38. Changelog
+
+## 3.6.1 — 2026-09-06
+
+- Reconciled Section 12.7 with ADR-027: Page Composition owns semantic Regions and assignment decisions, Theme owns the outer layout contract, and each Module owns its internal Presentation.
+- Made Section 12.7 the normative concern-level ownership contract while retaining ADR-027 as the accepted decision record.
 
 ## 3.6.0 — 2026-08-31
 

@@ -52,8 +52,10 @@ function SlotModuleContainer({
 }
 
 /**
- * One renderer for every non-Hero Page Composition entry. Module renderers
- * provide presentation only; the surrounding Position owns width and geometry.
+ * The current Venisia Theme renderer for every non-Hero Page Composition
+ * entry. Page Composition supplies semantic Position/order/visibility, this
+ * Theme renderer owns outer width and geometry, and Module renderers own their
+ * internal presentation.
  */
 function renderOrderedSlotEntries(
   entries: SlotEntry[],
@@ -336,7 +338,7 @@ export default function PageSlotLayout({
     return (
       <div
         className="page-layout page-layout--main-sidebar"
-        data-page-layout-contract="slot-owned"
+        data-page-layout-contract="theme-owned"
       >
         {!skip.has("hero") ? (
           <HeroSlotContent
@@ -400,7 +402,7 @@ export default function PageSlotLayout({
   return (
     <div
       className="page-layout page-layout--stack"
-      data-page-layout-contract="slot-owned"
+      data-page-layout-contract="theme-owned"
     >
       {VENISIA_THEME_REGION_RENDER_ORDER.map(renderSlotStack)}
     </div>
