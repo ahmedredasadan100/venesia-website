@@ -86,7 +86,11 @@ check("legacy content tab remains absent", !createEditor.includes('id: "content"
 
 check("article adapters mount every article-specific capability once", [createEditor, editEditor].every((source) => ["ContentBasicDataPanel", "TopicMarkdownEditor", "FaqEditor", "SeoPanel", "ContentPublishingOptions", "ContentReviewPanel"].every((owner) => source.match(new RegExp(`<${owner}\\b`, "g"))?.length === 1)));
 check("shared basic owner keeps title, excerpt, slug, image, category, series and injected body", basicPanel.includes('name="title"') && basicPanel.includes('name="excerpt"') && basicPanel.includes("<TopicSlugInput") && basicPanel.includes("<TopicImageField") && basicPanel.includes("<ContentCategorySelect") && basicPanel.includes("<TopicSeriesFields") && basicPanel.match(/\{contentEditor\}/g)?.length === 1);
-check("content type remains display-only inside the common identity", basicPanel.includes("<TopicContentTypeControl") && !typeControl.includes("name="));
+check(
+  "content type remains display-only inside the common identity",
+  basicPanel.includes("<TopicContentTypeControl") &&
+    !/<(?:input|select|textarea)\b[^>]*\bname=/.test(typeControl),
+);
 check(
   "category submits one stable category_id control through the shared form listbox",
   categorySelect.match(/<AdminFormListboxSelect\b/g)?.length === 1 &&

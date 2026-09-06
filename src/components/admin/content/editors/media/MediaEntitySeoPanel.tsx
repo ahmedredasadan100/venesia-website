@@ -46,9 +46,23 @@ export type MediaEntitySeoValues = {
 export default function MediaEntitySeoPanel({
   contentType,
   values,
+  controlledValues,
+  onControlledValueChange,
 }: {
   contentType: MediaEditableContentType;
   values?: MediaEntitySeoValues | null;
+  controlledValues?: {
+    title: string;
+    excerpt: string;
+    content: string;
+    seoTitle: string;
+    seoDescription: string;
+    focusKeyword: string;
+  };
+  onControlledValueChange?: (
+    field: "seoTitle" | "seoDescription" | "focusKeyword",
+    value: string,
+  ) => void;
 }) {
   const bodyCorrectionTarget =
     contentType === "video"
@@ -112,6 +126,19 @@ export default function MediaEntitySeoPanel({
         slug: { tabId: "basic", targetId: "topic-slug" },
         "seo-keywords": { tabId: "seo", targetId: MEDIA_SEO_FIELD_IDS.seoKeywords },
       }}
+      controlledValues={
+        controlledValues
+          ? {
+              title: controlledValues.title,
+              description: controlledValues.excerpt,
+              content: controlledValues.content,
+              seoTitle: controlledValues.seoTitle,
+              seoDescription: controlledValues.seoDescription,
+              focusKeyword: controlledValues.focusKeyword,
+            }
+          : undefined
+      }
+      onControlledValueChange={onControlledValueChange}
     />
   );
 }

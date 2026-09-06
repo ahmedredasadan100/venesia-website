@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import {
+  AdminFormError,
+  useOptionalAdminFormRuntime,
+} from "../../../ui/AdminFormRuntime";
 
 type GalleryImageValues = {
   url: string;
@@ -17,6 +21,15 @@ const EMPTY_ROW: GalleryImageValues = { url: "", alt: "", caption: "" };
 export default function MediaGalleryFields({ defaultImages = [] }: MediaGalleryFieldsProps) {
   const [rows, setRows] = useState<GalleryImageValues[]>(
     defaultImages.length > 0 ? defaultImages : [{ ...EMPTY_ROW }],
+  );
+  const fieldErrors = useOptionalAdminFormRuntime()?.fieldErrors ?? {};
+  const hasUrlError = Boolean(fieldErrors.gallery_image_url?.length);
+  const hasAltError = Boolean(fieldErrors.gallery_image_alt?.length);
+  const altErrorIndex = Math.max(
+    0,
+    rows.findIndex(
+      (row) => row.url.trim().length > 0 && !(row.alt ?? "").trim(),
+    ),
   );
 
   function addRow() {
@@ -72,23 +85,47 @@ export default function MediaGalleryFields({ defaultImages = [] }: MediaGalleryF
               <label className="block lg:col-span-2">
                 <span className="text-sm font-medium text-white/70">رابط الصورة</span>
                 <input
+                  id={index === 0 ? "gallery_image_url" : undefined}
                   name="gallery_image_url"
                   value={row.url}
                   onChange={(event) => updateRow(index, "url", event.target.value)}
                   placeholder="/images/topics/example.jpg"
+                  aria-invalid={index === 0 && hasUrlError || undefined}
+                  aria-describedby={
+                    index === 0 && hasUrlError
+                      ? "gallery_image_url-error"
+                      : undefined
+                  }
                   className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
                 />
+                {index === 0 ? (
+                  <AdminFormError name="gallery_image_url" className="mt-2" />
+                ) : null}
               </label>
 
               <label className="block">
                 <span className="text-sm font-medium text-white/70">النص البديل (alt)</span>
                 <input
+                  id={
+                    index === altErrorIndex ? "gallery_image_alt" : undefined
+                  }
                   name="gallery_image_alt"
                   value={row.alt ?? ""}
                   onChange={(event) => updateRow(index, "alt", event.target.value)}
                   placeholder="وصف مختصر للصورة"
+                  aria-invalid={
+                    index === altErrorIndex && hasAltError || undefined
+                  }
+                  aria-describedby={
+                    index === altErrorIndex && hasAltError
+                      ? "gallery_image_alt-error"
+                      : undefined
+                  }
                   className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#D8B87A]/45"
                 />
+                {index === altErrorIndex ? (
+                  <AdminFormError name="gallery_image_alt" className="mt-2" />
+                ) : null}
               </label>
 
               <label className="block">

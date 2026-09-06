@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import AdminRichTextEditor from "../../../AdminRichTextEditor";
 import {
@@ -15,9 +22,12 @@ import {
   topicRevisionMatches,
   type TopicDraftCandidate,
 } from "../../../../../lib/admin/content/topic-revision";
+import { useOptionalAdminFormRuntime } from "../../../ui/AdminFormRuntime";
 
 export type AdminPublicRichContentEditorProps = {
   defaultValue?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
   variant?: "default" | "compact";
   draftIdentity: string;
   baselineRevision: string | null;
@@ -96,6 +106,8 @@ function MiniCounter({
  */
 export function AdminPublicRichContentEditor({
   defaultValue = "",
+  value,
+  onValueChange,
   variant = "default",
   draftIdentity,
   baselineRevision,
@@ -104,16 +116,34 @@ export function AdminPublicRichContentEditor({
     () => isHtmlContent(defaultValue) ? normalizeArticleMarkdown(defaultValue) : defaultValue,
     [defaultValue],
   );
-  const [initialEditorValue, setInitialEditorValue] = useState(storedDefaultValue);
-  const [content, setContent] = useState(storedDefaultValue);
+  const [uncontrolledContent, setUncontrolledContent] = useState(storedDefaultValue);
+  const controlled = value !== undefined;
+  const content = controlled
+    ? normalizeArticleMarkdown(value)
+    : uncontrolledContent;
   const [draftRestored, setDraftRestored] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<TopicDraftCandidate | null>(null);
   const [draftReady, setDraftReady] = useState(false);
+  const runtime = useOptionalAdminFormRuntime();
   const sectionRef = useRef<HTMLElement>(null);
   const draftKeyRef = useRef("");
   const pendingDraftRef = useRef<TopicDraftCandidate | null>(null);
   const skipNextDraftPersistRef = useRef(false);
+  const controlledRef = useRef(controlled);
+  const onValueChangeRef = useRef(onValueChange);
+  const notifyProjectionChangeRef = useRef(runtime?.notifyProjectionChange);
+  useLayoutEffect(() => {
+    controlledRef.current = controlled;
+    onValueChangeRef.current = onValueChange;
+    notifyProjectionChangeRef.current = runtime?.notifyProjectionChange;
+  }, [controlled, onValueChange, runtime?.notifyProjectionChange]);
   const compact = variant === "compact";
+
+  const commitContent = useCallback((nextValue: string) => {
+    const normalized = nextValue.replace(/\r\n/g, "\n");
+    if (!controlledRef.current) setUncontrolledContent(normalized);
+    onValueChangeRef.current?.(normalized);
+  }, []);
 
   useEffect(() => {
     skipNextDraftPersistRef.current = true;
@@ -128,8 +158,7 @@ export function AdminPublicRichContentEditor({
 
     if (!savedDraft || savedDraft.content === normalizedStoredDefault) {
       window.localStorage.removeItem(draftKeyRef.current);
-      setInitialEditorValue(storedDefaultValue);
-      setContent(storedDefaultValue);
+      if (!controlledRef.current) setUncontrolledContent(storedDefaultValue);
       setDraftRestored(false);
       pendingDraftRef.current = null;
       setPendingDraft(null);
@@ -141,8 +170,8 @@ export function AdminPublicRichContentEditor({
       !savedDraft.legacy &&
       topicRevisionMatches(savedDraft.baselineRevision, baselineRevision)
     ) {
-      setInitialEditorValue(savedDraft.content);
-      setContent(savedDraft.content);
+      commitContent(savedDraft.content);
+      notifyProjectionChangeRef.current?.();
       setDraftRestored(true);
       pendingDraftRef.current = null;
       setPendingDraft(null);
@@ -150,13 +179,12 @@ export function AdminPublicRichContentEditor({
       return;
     }
 
-    setInitialEditorValue(storedDefaultValue);
-    setContent(storedDefaultValue);
+    if (!controlledRef.current) setUncontrolledContent(storedDefaultValue);
     setDraftRestored(false);
     pendingDraftRef.current = savedDraft;
     setPendingDraft(savedDraft);
     setDraftReady(true);
-  }, [baselineRevision, draftIdentity, storedDefaultValue]);
+  }, [baselineRevision, commitContent, draftIdentity, storedDefaultValue]);
 
   useEffect(() => {
     if (!draftReady || pendingDraft || !draftKeyRef.current) return;
@@ -217,9 +245,10 @@ export function AdminPublicRichContentEditor({
       form.removeEventListener("submit", blockUnresolvedDraftSubmit, true);
   }, []);
 
-  const handleValueChange = useCallback((value: string) => {
-    setContent(value.replace(/\r\n/g, "\n"));
-  }, []);
+  const handleValueChange = useCallback(
+    (nextValue: string) => commitContent(nextValue),
+    [commitContent],
+  );
   const restorePendingDraft = useCallback(() => {
     if (!pendingDraft) return;
     const restoredContent = normalizeArticleMarkdown(pendingDraft.content);
@@ -229,22 +258,22 @@ export function AdminPublicRichContentEditor({
         JSON.stringify(createTopicDraft(restoredContent, baselineRevision)),
       );
     }
-    setInitialEditorValue(restoredContent);
-    setContent(restoredContent);
+    commitContent(restoredContent);
+    notifyProjectionChangeRef.current?.();
     setDraftRestored(true);
     pendingDraftRef.current = null;
     setPendingDraft(null);
-  }, [baselineRevision, pendingDraft]);
+  }, [baselineRevision, commitContent, pendingDraft]);
   const discardPendingDraft = useCallback(() => {
     if (draftKeyRef.current) {
       window.localStorage.removeItem(draftKeyRef.current);
     }
-    setInitialEditorValue(storedDefaultValue);
-    setContent(storedDefaultValue);
+    commitContent(storedDefaultValue);
+    notifyProjectionChangeRef.current?.();
     setDraftRestored(false);
     pendingDraftRef.current = null;
     setPendingDraft(null);
-  }, [storedDefaultValue]);
+  }, [commitContent, storedDefaultValue]);
   const stats = useMemo(() => getTextStats(content), [content]);
 
   return (
@@ -318,7 +347,8 @@ export function AdminPublicRichContentEditor({
         <AdminRichTextEditor
           name="content"
           label="نص المقال"
-          defaultValue={initialEditorValue}
+          defaultValue={storedDefaultValue}
+          value={content}
           placeholder="ابدأ كتابة المقال هنا..."
           minHeight={compact ? 440 : 620}
           toolbarMode="full"

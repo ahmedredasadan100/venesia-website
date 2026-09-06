@@ -262,9 +262,9 @@ const emptyGallery = {
   mediaPayload: { kind: "gallery" as const, images: [] },
 };
 check(
-  "an empty Gallery blocks publish and fixes the Gallery editor",
+  "an empty Gallery blocks publish and fixes the first visible Gallery URL field",
   getContentPublishBlockingChecks(emptyGallery).some(
-    (item) => item.id === "gallery-images" && item.correctionTarget?.targetId === "gallery-editor",
+    (item) => item.id === "gallery-images" && item.correctionTarget?.targetId === "gallery_image_url",
   ),
 );
 
@@ -276,9 +276,9 @@ const galleryWithoutAlt = {
   },
 };
 check(
-  "a Gallery image without Alt blocks publish and fixes the Gallery editor",
+  "a Gallery image without Alt blocks publish and fixes the first suitable visible Alt field",
   getContentPublishBlockingChecks(galleryWithoutAlt).some(
-    (item) => item.id === "gallery-alt" && item.correctionTarget?.targetId === "gallery-editor",
+    (item) => item.id === "gallery-alt" && item.correctionTarget?.targetId === "gallery_image_alt",
   ),
 );
 

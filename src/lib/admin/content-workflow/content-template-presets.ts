@@ -1,19 +1,35 @@
+import {
+  isMediaEditableContentType,
+  type MediaEditableContentType,
+} from "../content/content-types.ts";
+
 export type ContentTemplateTarget = "article" | "media";
+
+export type ContentTemplateContext =
+  | { target: "article" }
+  | {
+      target: "media";
+      mediaContentType: MediaEditableContentType;
+    };
+
+export type ContentTemplateDefaults = {
+  title?: string;
+  excerpt?: string;
+  content?: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  focusKeyword?: string;
+};
+
+export type ContentTemplateEditableValues = Required<ContentTemplateDefaults>;
 
 export type ContentTemplatePreset = {
   key: string;
   labelAr: string;
   target: ContentTemplateTarget;
   description: string;
-  mediaContentType?: "news" | "press" | "site_update";
-  defaults: {
-    title?: string;
-    excerpt?: string;
-    content?: string;
-    seoTitle?: string;
-    seoDescription?: string;
-    focusKeyword?: string;
-  };
+  mediaContentType?: MediaEditableContentType;
+  defaults: ContentTemplateDefaults;
   requiredFieldHints: string[];
   seoHints: string[];
   mediaHints: string[];
@@ -89,6 +105,51 @@ export const VENESIA_CONTENT_TEMPLATE_PRESETS: ContentTemplatePreset[] = [
   },
 ];
 
-export function getContentTemplatePresets(target: ContentTemplateTarget) {
-  return VENESIA_CONTENT_TEMPLATE_PRESETS.filter((preset) => preset.target === target);
+export function isContentTemplatePresetApplicable(
+  preset: ContentTemplatePreset,
+  context: ContentTemplateContext,
+) {
+  if (preset.target !== context.target) return false;
+  if (context.target === "article") {
+    return preset.mediaContentType === undefined;
+  }
+
+  return (
+    isMediaEditableContentType(context.mediaContentType) &&
+    isMediaEditableContentType(preset.mediaContentType) &&
+    preset.mediaContentType === context.mediaContentType
+  );
+}
+
+export function getContentTemplatePresets(context: ContentTemplateContext) {
+  return VENESIA_CONTENT_TEMPLATE_PRESETS.filter((preset) =>
+    isContentTemplatePresetApplicable(preset, context),
+  );
+}
+
+export function resolveContentTemplatePreset(
+  presetKey: string,
+  context: ContentTemplateContext,
+) {
+  const preset = VENESIA_CONTENT_TEMPLATE_PRESETS.find(
+    (candidate) => candidate.key === presetKey,
+  );
+  return preset && isContentTemplatePresetApplicable(preset, context)
+    ? preset
+    : null;
+}
+
+export function applyContentTemplatePreset(
+  current: ContentTemplateEditableValues,
+  presetKey: string,
+  context: ContentTemplateContext,
+): ContentTemplateEditableValues | null {
+  const preset = resolveContentTemplatePreset(presetKey, context);
+  if (!preset) return null;
+
+  return Object.entries(preset.defaults).reduce(
+    (next, [field, value]) =>
+      value === undefined ? next : { ...next, [field]: value },
+    current,
+  );
 }

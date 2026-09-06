@@ -122,7 +122,8 @@ check(
 );
 check(
   "Content keeps its existing review capability as its domain adapter",
-  contentAdapter.includes("buildContentReviewChecks(input)") &&
+  contentAdapter.includes("buildContentReviewChecks(reviewInput)") &&
+    contentAdapter.includes("controlledValues ? { ...input, ...controlledValues } : input") &&
     contentCapability.includes("buildContentReviewChecks") &&
     !projectAdapter.includes("content-review-capability"),
 );

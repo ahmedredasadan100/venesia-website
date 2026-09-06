@@ -27,6 +27,18 @@ type SeoPanelProps = {
   ogImage: string;
   ogImageAlt: string;
   faq?: FaqItem[];
+  controlledValues?: {
+    title: string;
+    excerpt: string;
+    content: string;
+    seoTitle: string;
+    seoDescription: string;
+    focusKeyword: string;
+  };
+  onControlledValueChange?: (
+    field: "seoTitle" | "seoDescription" | "focusKeyword",
+    value: string,
+  ) => void;
 };
 
 type TopicSeoAnalysisState = {
@@ -145,6 +157,19 @@ export default function SeoPanel(props: SeoPanelProps) {
         faq: props.faq ?? [],
       }}
       correctionTargets={TOPIC_SEO_CORRECTION_TARGETS}
+      controlledValues={
+        props.controlledValues
+          ? {
+              title: props.controlledValues.title,
+              description: props.controlledValues.excerpt,
+              content: props.controlledValues.content,
+              seoTitle: props.controlledValues.seoTitle,
+              seoDescription: props.controlledValues.seoDescription,
+              focusKeyword: props.controlledValues.focusKeyword,
+            }
+          : undefined
+      }
+      onControlledValueChange={props.onControlledValueChange}
       analysisExtension={createTopicAnalysisExtension(props.faq ?? [])}
     />
   );

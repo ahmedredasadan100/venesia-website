@@ -58,6 +58,7 @@ export type AdminUnsavedChangesGuardOptions<T extends HTMLElement> = {
   rootRef: RefObject<T | null>;
   pending?: boolean;
   resetKey?: unknown;
+  projectionRevision?: number;
   onNavigate?: () => void;
   title?: string;
   description?: string;
@@ -76,6 +77,7 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
   rootRef,
   pending = false,
   resetKey,
+  projectionRevision = 0,
   onNavigate,
   title = "إغلاق دون حفظ؟",
   description = LEAVE_WARNING,
@@ -189,26 +191,35 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     if (form) baselineRef.current = serializeAdminForm(form);
     dirtyRef.current = false;
     allowNavigationRef.current = false;
-    const frame = window.requestAnimationFrame(() => setIsDirty(false));
-    return () => window.cancelAnimationFrame(frame);
   }, [readForm, resetKey, updateDirty]);
 
   useEffect(() => {
-    const currentForm = readForm();
-    if (!currentForm) return;
-    const form: HTMLFormElement = currentForm;
+    const resolvedForm = readForm();
+    if (!resolvedForm) return;
+    const form: HTMLFormElement = resolvedForm;
+    const ownerDocument = form.ownerDocument;
 
-    function handleFormChange() {
+    function handleFormChange(event: Event) {
+      const target = event.target;
+      if (!(target instanceof Node) || !form.contains(target)) return;
       updateDirty(serializeAdminForm(form) !== baselineRef.current);
     }
 
-    form.addEventListener("input", handleFormChange);
-    form.addEventListener("change", handleFormChange);
+    ownerDocument.addEventListener("input", handleFormChange);
+    ownerDocument.addEventListener("change", handleFormChange);
     return () => {
-      form.removeEventListener("input", handleFormChange);
-      form.removeEventListener("change", handleFormChange);
+      ownerDocument.removeEventListener("input", handleFormChange);
+      ownerDocument.removeEventListener("change", handleFormChange);
     };
   }, [readForm, updateDirty]);
+
+  useLayoutEffect(() => {
+    if (projectionRevision === 0) return;
+    const form = readForm();
+    if (form) {
+      updateDirty(serializeAdminForm(form) !== baselineRef.current);
+    }
+  }, [projectionRevision, readForm, updateDirty]);
 
   useLayoutEffect(() => {
     pendingRef.current = pending;
@@ -330,6 +341,7 @@ export type AdminFormRuntimeContextValue<TResult = unknown> = {
   pending: boolean;
   fieldErrors: Record<string, string[]>;
   isDirty: boolean;
+  notifyProjectionChange: () => void;
   requestInternalNavigation: (href: string) => void;
   requestClose: () => void;
 };
@@ -392,13 +404,11 @@ function focusTarget(targetIdOrName: string) {
         behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
       });
-      const focusable = target.matches(
-        'input, textarea, select, button, [contenteditable="true"], [tabindex]',
-      )
+      const focusableSelector =
+        'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+      const focusable = target.matches(focusableSelector)
         ? target
-        : target.querySelector<HTMLElement>(
-            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
-          );
+        : target.querySelector<HTMLElement>(focusableSelector);
       focusable?.focus({ preventScroll: true });
     });
   });
@@ -492,6 +502,7 @@ export default function AdminFormRuntime<TResult = unknown>({
     Boolean(state.editHref);
   const pending = actionPending || handoffPending;
   const formRef = useRef<HTMLFormElement>(null);
+  const [projectionRevision, setProjectionRevision] = useState(0);
   const submittedBaselineRef = useRef<string | null>(null);
   const submittedControlsRef = useRef<AdminFormControlSnapshot[] | null>(null);
   const handledResultRef = useRef<AdminFormActionState<TResult>>(
@@ -505,8 +516,12 @@ export default function AdminFormRuntime<TResult = unknown>({
         state.status === "success" || state.status === "warning"
           ? state.savedRevision
           : undefined,
+      projectionRevision,
       onNavigate: clearFormFeedback,
     });
+  const notifyProjectionChange = useCallback(() => {
+    setProjectionRevision((current) => current + 1);
+  }, []);
   const requestInternalNavigation = useCallback(
     (href: string) => {
       const safeHref = resolveSafeInternalPath(href, "");
@@ -610,10 +625,19 @@ export default function AdminFormRuntime<TResult = unknown>({
       pending,
       fieldErrors: state.fieldErrors ?? {},
       isDirty,
+      notifyProjectionChange,
       requestInternalNavigation,
       requestClose,
     }),
-    [isDirty, mode, pending, requestClose, requestInternalNavigation, state],
+    [
+      isDirty,
+      mode,
+      notifyProjectionChange,
+      pending,
+      requestClose,
+      requestInternalNavigation,
+      state,
+    ],
   );
 
   return (
