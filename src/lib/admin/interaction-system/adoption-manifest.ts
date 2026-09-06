@@ -8,6 +8,7 @@
  */
 
 import type { AdminEntityListEntityKey } from "../entity-list/data-engine/registry";
+import type { PageModuleKind } from "../../page-blocks/types.ts";
 import type {
   AdminRowActionMoreKind,
   AdminRowActionPrimaryKind,
@@ -33,9 +34,23 @@ export const ADMIN_INTERACTION_SYSTEM = {
   role: "governance_contracts_umbrella",
   ownsRuntime: false,
   scope: "platform_governance",
-  globalClosed: true,
-  globalClosureBlockers: [],
 } as const;
+
+export type AdminGovernanceClosureBlocker = {
+  id: string;
+  owner: string;
+  evidence: "source_confirmed" | "source_proven_only";
+  rationale: string;
+};
+
+export function deriveAdminGovernanceClosure<
+  const TBlockers extends readonly AdminGovernanceClosureBlocker[],
+>(globalClosureBlockers: TBlockers) {
+  return {
+    globalClosureBlockers,
+    globalClosed: globalClosureBlockers.length === 0,
+  } as const;
+}
 
 export const ADMIN_INTERACTION_MODULES = [
   {
@@ -54,6 +69,7 @@ export const ADMIN_INTERACTION_MODULES = [
     sourceFiles: [
       "src/components/admin/entity-list/AdminEntityList.tsx",
       "src/components/admin/entity-list/AdminEntityListSurface.tsx",
+      "src/components/admin/ui/AdminBulkActionBar.tsx",
     ],
     responsibility:
       "Entity collection query state, filters, selection, row and Bulk presentation, Bulk intent and confirmation requests, pagination, and collection interaction ownership; it never owns mutation execution lifecycle.",
@@ -167,6 +183,7 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       owner: "AdminEntityList",
       sourceFiles: [
         "src/components/admin/entity-list/AdminEntityList.tsx",
+        "src/components/admin/ui/AdminBulkActionBar.tsx",
         "src/lib/admin/entity-list/index.ts",
         "src/lib/admin/entity-list/data-engine/client-controller.ts",
         "src/lib/admin/entity-list/bounded-client-pagination.ts",
@@ -180,6 +197,10 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
           sourceFile:
             "src/lib/admin/entity-list/data-engine/client-controller.ts",
           exportNames: ["useAdminEntityListController"],
+        },
+        {
+          sourceFile: "src/components/admin/ui/AdminBulkActionBar.tsx",
+          exportNames: ["default", "AdminBulkActionBar"],
         },
         {
           sourceFile: "src/lib/admin/entity-list/bounded-client-pagination.ts",
@@ -342,7 +363,7 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       applicabilityOwner: "explicit_consumer_declaration",
       localImplementationKinds: ["native_switch", "native_checkbox"],
       ownerAvailability: "available",
-      consumerBoundaries: ["form"],
+      consumerBoundaries: ["collection", "form"],
     },
     listbox: {
       owner: "AdminListboxSelect + AdminFormListboxSelect",
@@ -372,7 +393,7 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       applicabilityOwner: "explicit_consumer_declaration",
       localImplementationKinds: ["native_date_input"],
       ownerAvailability: "owner_extension_required",
-      consumerBoundaries: ["form"],
+      consumerBoundaries: ["collection", "form"],
     },
     scrollbar: {
       owner: "Venesia scrollbar visual token",
@@ -400,7 +421,7 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       applicabilityOwner: "explicit_consumer_declaration",
       localImplementationKinds: ["native_dialog"],
       ownerAvailability: "available",
-      consumerBoundaries: ["form"],
+      consumerBoundaries: ["collection", "form"],
     },
     confirmation: {
       owner: "AdminConfirmDialog",
@@ -419,11 +440,16 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
     media: {
       owner: "Existing Admin Media owner",
       sourceFiles: [
+        "src/components/admin/media/AdminMediaImageField.tsx",
         "src/components/admin/media/AdminMediaGalleryField.tsx",
         "src/components/admin/media/AdminMediaPickerModal.tsx",
         "src/components/admin/media/MediaLibraryCore.tsx",
       ],
       executableBindings: [
+        {
+          sourceFile: "src/components/admin/media/AdminMediaImageField.tsx",
+          exportNames: ["default"],
+        },
         {
           sourceFile: "src/components/admin/media/AdminMediaGalleryField.tsx",
           exportNames: ["default", "AdminMediaGalleryField"],
@@ -451,7 +477,11 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       executableBindings: [
         {
           sourceFile: "src/components/admin/AdminFeedbackProvider.tsx",
-          exportNames: ["default", "AdminFeedbackProvider", "useAdminFeedback"],
+          exportNames: [
+            "default",
+            "AdminFeedbackRegion",
+            "useAdminFeedback",
+          ],
         },
         {
           sourceFile: "src/lib/admin/admin-action-feedback.ts",
@@ -579,6 +609,33 @@ export const ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES = {
   Record<AdminExplicitConsumerCapabilityKey, AdminConsumerCapabilityOverride>
 >;
 
+export const ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION = {
+  state: "owner_extension_required",
+  rationale:
+    "Date input is applicable, but the current platform has no shared Date Picker owner available for adoption.",
+} as const satisfies AdminConsumerCapabilityOverride;
+
+export const ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION = {
+  state: "adopted",
+  rationale:
+    "The registered consumer reaches the existing Venesia scrollbar owner through its executable descendants.",
+} as const satisfies AdminConsumerCapabilityOverride;
+
+export const ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION = {
+  state: "adopted",
+  rationale:
+    "The registered consumer reaches the existing Admin Form/Data interaction-state owner through its executable descendants.",
+} as const satisfies AdminConsumerCapabilityOverride;
+
+function adoptedThroughExecutableDescendant(
+  capability: AdminConsumerCapabilityKey,
+): AdminConsumerCapabilityOverride {
+  return {
+    state: "adopted",
+    rationale: `The registered aggregate reaches ${ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].owner} through a non-owner executable descendant while the nested surface remains independently inventoried.`,
+  };
+}
+
 export const ADMIN_SWITCH_CONSUMER_CAPABILITIES = {
   ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
   switch: {
@@ -657,6 +714,11 @@ export const ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES = {
   listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
 } as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
 
+export const ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES = {
+  ...ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+  media: ADMIN_MEDIA_CONSUMER_CAPABILITIES.media,
+} as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
 export const ADMIN_SWITCH_MEDIA_CONSUMER_CAPABILITIES = {
   ...ADMIN_MEDIA_CONSUMER_CAPABILITIES,
   switch: {
@@ -670,6 +732,38 @@ export const ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES = {
   ...ADMIN_SWITCH_MEDIA_CONSUMER_CAPABILITIES,
   listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
 } as const satisfies AdminConsumerCapabilityAuditDeclaration["decisions"];
+
+export const ADMIN_BLOCK_EDITOR_CAPABILITY_DECISION_PROFILES = {
+  hero: ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+  content: ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+  cta: ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+  cards: ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+  breadcrumb: ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+  feed: ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+  featured: ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+  "media-sidebar": ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+  "media-hub": ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+} as const satisfies Readonly<
+  Record<
+    PageModuleKind,
+    AdminConsumerCapabilityAuditDeclaration["decisions"]
+  >
+>;
+
+export function instantiateAdminBlockEditorCapabilityDecisions(
+  moduleKind: PageModuleKind,
+): AdminConsumerCapabilityAuditDeclaration["decisions"] {
+  return Object.fromEntries(
+    Object.entries(
+      ADMIN_BLOCK_EDITOR_CAPABILITY_DECISION_PROFILES[moduleKind],
+    ).map(([capability, decision]) => [
+      capability,
+      decision.state === "approved_exception"
+        ? { ...decision, evidence: [...decision.evidence] }
+        : { ...decision },
+    ]),
+  ) as AdminConsumerCapabilityAuditDeclaration["decisions"];
+}
 
 export function adminConsumerCapabilityAudit(
   decisions: AdminConsumerCapabilityAuditDeclaration["decisions"],
@@ -784,6 +878,50 @@ export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
   },
 ] as const satisfies readonly AdminEntityPreviewCapabilityAdoption[];
 
+export function deriveAdminEntityPreviewCapabilityClosure(
+  adoption: readonly AdminEntityPreviewCapabilityAdoption[],
+) {
+  const adoptionBlockers = adoption
+    .filter((entry) => entry.status === "gap")
+    .map(
+      (entry): AdminGovernanceClosureBlocker => ({
+        id: `entity-preview-adoption:${entry.id}`,
+        owner: "shared_capabilities",
+        evidence: "source_confirmed",
+        rationale: entry.rationale,
+      }),
+    );
+  return {
+    capability: "entity_preview_public",
+    proofBoundaries: {
+      source: "manifest_declared_source_proven_only",
+      behavior: "source_proven_only",
+    },
+    ...deriveAdminGovernanceClosure([
+      ...adoptionBlockers,
+      {
+        id: "entity-preview-source:registered-consumer-owner-reachability",
+        owner: "shared_capabilities",
+        evidence: "source_proven_only",
+        rationale:
+          "The existing adoption ledger names consumer and owner files together; file presence and declared status do not independently prove executable consumer-to-owner reachability for every entry.",
+      },
+      {
+        id: "entity-preview-behavior:registered-consumer-interaction-proof",
+        owner: "shared_capabilities",
+        evidence: "source_proven_only",
+        rationale:
+          "Source adoption and pure resolver checks do not prove mounted authenticated Preview/Public interaction, disabled-state, focus, and navigation behavior for every registered consumer.",
+      },
+    ]),
+  } as const;
+}
+
+export const ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE =
+  deriveAdminEntityPreviewCapabilityClosure(
+    ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION,
+  );
+
 export type AdminRowActionsGovernedAction =
   Exclude<AdminRowActionPrimaryKind, "more"> | AdminRowActionMoreKind;
 
@@ -829,16 +967,32 @@ export const ADMIN_ROW_ACTIONS_EXISTING_OWNERS = {
   audit: "cms_admin_audit",
 } as const satisfies AdminRowActionsExistingOwners;
 
+export const ADMIN_ROW_ACTIONS_GLOBAL_CLOSURE_BLOCKERS =
+  [
+    {
+      id: "row-actions-behavior:authenticated-interaction-proof",
+      owner: "shared_capabilities",
+      evidence: "source_proven_only",
+      rationale:
+        "Source and executable reachability prove shared Row Actions ownership, but no registered repeatable behavioral ledger proves the authenticated pending, confirmation, rollback, feedback, and focus lifecycle across every adopted collection.",
+    },
+  ] as const satisfies readonly AdminGovernanceClosureBlocker[];
+
 /**
  * Every generic Admin Collection declares Row Actions through the shared
  * presentation capability while the existing Data Runtime owns pending,
  * optimistic reconciliation, rollback, and invalidation.
  */
 export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
+  ...deriveAdminGovernanceClosure(
+    ADMIN_ROW_ACTIONS_GLOBAL_CLOSURE_BLOCKERS,
+  ),
   capability: "shared_admin_row_actions",
   scope: "generic_admin_collection_surfaces",
-  globalClosed: true,
-  globalClosureBlockers: [],
+  proofBoundaries: {
+    source: "source_and_executable_reachability",
+    behavior: "source_proven_only",
+  },
   canonicalOrders: {
     primary: ["edit", "preview", "more"],
     more: [
@@ -1306,8 +1460,12 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
 } as const satisfies {
   capability: "shared_admin_row_actions";
   scope: "generic_admin_collection_surfaces";
-  globalClosed: true;
-  globalClosureBlockers: readonly string[];
+  proofBoundaries: {
+    source: "source_and_executable_reachability";
+    behavior: "source_proven_only";
+  };
+  globalClosed: boolean;
+  globalClosureBlockers: readonly AdminGovernanceClosureBlocker[];
   canonicalOrders: {
     primary: readonly AdminRowActionPrimaryKind[];
     more: readonly AdminRowActionMoreKind[];
@@ -1432,6 +1590,14 @@ export type AdminCollectionConsumerAdoptionEvidence = {
   requiredAdoption: readonly string[];
 };
 
+export type AdminCollectionTransportConsumer = {
+  id: string;
+  route: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+  sourceFile: string;
+  callerSourceFiles: readonly string[];
+};
+
 export type AdminCollectionSurfaceInventoryEntry = {
   id: string;
   /** Omitted means active; deprecated entries require owner-backed evidence. */
@@ -1448,6 +1614,8 @@ export type AdminCollectionSurfaceInventoryEntry = {
   routes: readonly string[];
   pageSourceFiles: readonly string[];
   presentationSourceFiles: readonly string[];
+  /** Non-page HTTP consumers nested under this registered surface. */
+  transportConsumers: readonly AdminCollectionTransportConsumer[];
   sourceOwner: string;
   headerOwner: "AdminPageContextHeader" | "not_applicable";
   engineLabel: string | null;
@@ -1508,6 +1676,7 @@ const ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS = {
   reorderOwner: "not_applicable",
   semanticPresentation: ADMIN_NO_SEMANTIC_PRESENTATION,
   consumerAdoptionEvidence: [],
+  transportConsumers: [],
   genuineExceptions: [],
 } as const;
 
@@ -1521,6 +1690,7 @@ const ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS = {
   reorderOwner: "not_applicable",
   semanticPresentation: ADMIN_NO_SEMANTIC_PRESENTATION,
   consumerAdoptionEvidence: [],
+  transportConsumers: [],
   genuineExceptions: [],
 } as const;
 
@@ -1534,6 +1704,7 @@ const ADMIN_FIXED_SURFACE_DEFAULTS = {
   reorderOwner: "not_applicable",
   semanticPresentation: ADMIN_NO_SEMANTIC_PRESENTATION,
   consumerAdoptionEvidence: [],
+  transportConsumers: [],
   genuineExceptions: [
     "The surface is a bounded structural or navigation composition, not a growing record collection.",
   ],
@@ -1549,6 +1720,7 @@ const ADMIN_AUTH_SURFACE_DEFAULTS = {
   reorderOwner: "not_applicable",
   semanticPresentation: ADMIN_NO_SEMANTIC_PRESENTATION,
   consumerAdoptionEvidence: [],
+  transportConsumers: [],
   genuineExceptions: [
     "Authentication routes intentionally render outside authenticated Admin Chrome.",
   ],
@@ -1647,25 +1819,105 @@ const ADMIN_TRACKING_CONSUMER_CONTRACTS = {
  * The verifier scans AdminEntityList, AdminDataGrid, and native table consumers
  * and requires every concrete surface source to appear exactly once here.
  */
-export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
-  scope: "all_admin_collection_and_list_surfaces",
-  globalClosed: true,
-  globalClosureBlockers: [],
-  genericAdoptionGaps: [],
-  canonicalSectionGap: "gap-7",
-  canonicalTableFooterGap: "gap-4",
-  ownerSourceFiles: {
-    header: "src/components/admin/ui/AdminPageContextHeader.tsx",
-    rowActions: "src/components/admin/ui/AdminDataGridRowActions.tsx",
-    columns: "src/components/admin/entity-list/AdminEntityList.tsx",
-    layout: "src/components/admin/entity-list/AdminEntityListSurface.tsx",
-    pagination: "src/components/admin/ui/AdminTablePagination.tsx",
-    query: [
-      "src/lib/admin/entity-list/data-engine/client-controller.ts",
-      "src/lib/admin/entity-list/bounded-client-pagination.ts",
-    ],
+export function deriveAdminCollectionClosureBlockers(input: {
+  genericAdoptionGaps: readonly string[];
+  surfaces: readonly {
+    id: string;
+    capabilityAudit: AdminConsumerCapabilityAuditDeclaration;
+    consumerAdoptionEvidence?: readonly {
+      id: string;
+      applicability: AdminConsumerCapabilityAuditDeclaration;
+    }[];
+  }[];
+}) {
+  const genericAdoptionBlockers = input.genericAdoptionGaps.map(
+    (gap): AdminGovernanceClosureBlocker => ({
+      id: `collection-generic-adoption:${gap}`,
+      owner: "collection_runtime",
+      evidence: "source_confirmed",
+      rationale: gap,
+    }),
+  );
+  const capabilityBlockers = input.surfaces.flatMap((surface) =>
+    [
+      { id: surface.id, capabilityAudit: surface.capabilityAudit },
+      ...(surface.consumerAdoptionEvidence ?? []).map((consumer) => ({
+        id: consumer.id,
+        capabilityAudit: consumer.applicability,
+      })),
+    ].flatMap(
+      (consumer): AdminGovernanceClosureBlocker[] =>
+      Object.entries({
+        ...consumer.capabilityAudit.decisions,
+        ...consumer.capabilityAudit.overrides,
+      }).flatMap(([capability, decision]) => {
+        if (
+          decision.state !== "owner_extension_required" &&
+          decision.state !== "missing_adoption"
+        ) {
+          return [];
+        }
+        const capabilityDefinition =
+          ADMIN_CURRENT_SHARED_CAPABILITY_SET[
+            capability as AdminConsumerCapabilityKey
+          ];
+        return [
+          {
+            id:
+              decision.state === "owner_extension_required"
+                ? `collection-capability-owner:${consumer.id}:${capability}`
+                : `collection-missing-adoption:${consumer.id}:${capability}`,
+            owner:
+              decision.state === "owner_extension_required"
+                ? capabilityDefinition?.owner ?? consumer.id
+                : consumer.id,
+            evidence: "source_confirmed" as const,
+            rationale: decision.rationale,
+          },
+        ];
+      }),
+    ),
+  );
+
+  return [...genericAdoptionBlockers, ...capabilityBlockers];
+}
+
+function defineAdminCollectionSurfaceAdoption<
+  const TAdoption extends {
+    genericAdoptionGaps: readonly string[];
+    surfaces: readonly {
+      id: string;
+      capabilityAudit: AdminConsumerCapabilityAuditDeclaration;
+    }[];
   },
-  surfaces: [
+>(adoption: TAdoption) {
+  return {
+    ...adoption,
+    ...deriveAdminGovernanceClosure(
+      deriveAdminCollectionClosureBlockers(adoption),
+    ),
+  } as const;
+}
+
+export const ADMIN_COLLECTION_SURFACE_ADOPTION =
+  defineAdminCollectionSurfaceAdoption({
+    scope: "all_admin_collection_and_list_surfaces",
+    proofBoundary: "source_and_executable_reachability",
+    genericAdoptionGaps: [],
+    canonicalSectionGap: "gap-7",
+    canonicalTableFooterGap: "gap-4",
+    ownerSourceFiles: {
+      header: "src/components/admin/ui/AdminPageContextHeader.tsx",
+      rowActions: "src/components/admin/ui/AdminDataGridRowActions.tsx",
+      columns: "src/components/admin/entity-list/AdminEntityList.tsx",
+      layout: "src/components/admin/entity-list/AdminEntityListSurface.tsx",
+      pagination: "src/components/admin/ui/AdminTablePagination.tsx",
+      query: [
+        "src/lib/admin/entity-list/data-engine/client-controller.ts",
+        "src/lib/admin/entity-list/bounded-client-pagination.ts",
+      ],
+    },
+    surfaces: [
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "content-topics",
@@ -1680,6 +1932,17 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       presentationSourceFiles: [
         "src/components/admin/content/TopicsListClient.tsx",
         "src/components/admin/content/UnifiedContentList.tsx",
+      ],
+      transportConsumers: [
+        {
+          id: "content-topics-search",
+          route: "/admin/content/topics/search",
+          method: "GET",
+          sourceFile: "src/app/admin/content/topics/search/route.ts",
+          callerSourceFiles: [
+            "src/components/admin/content/UnifiedContentFilters.tsx",
+          ],
+        },
       ],
       sourceOwner:
         "src/lib/admin/content/entity-list-adapters/topics.ts#topicsEntityListAdapter",
@@ -1810,7 +2073,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "pages",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_MODAL_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "full_collection_adoption",
@@ -1898,7 +2161,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "project-locations",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "full_collection_adoption",
@@ -1957,7 +2220,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "seo-redirects",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "full_collection_adoption",
@@ -2143,7 +2406,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "activity-log",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        {
+          ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+          date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+        },
         {},
       ),
       workflowClassification: "full_collection_adoption",
@@ -2217,8 +2483,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "media-recovery-queue",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        ADMIN_SWITCH_CONSUMER_CAPABILITIES,
+        {
+          busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
+        },
       ),
       workflowClassification: "page_system_only",
       generic: false,
@@ -2288,7 +2556,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "project-construction-tracking",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        {
+          ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+          date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+        },
         {
           visibility: {
             state: "adopted",
@@ -2360,7 +2631,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           presentationOwner:
             "src/components/admin/projects/tracking/TrackingCollections.tsx",
           applicability: adminConsumerCapabilityAudit(
-            ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+            {
+              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+              date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+            },
             {
               visibility: {
                 state: "adopted",
@@ -2389,7 +2663,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           presentationOwner:
             "src/components/admin/projects/tracking/TrackingCollections.tsx",
           applicability: adminConsumerCapabilityAudit(
-            ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+            {
+              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+              date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+            },
             {
               visibility: {
                 state: "adopted",
@@ -2418,7 +2695,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           presentationOwner:
             "src/components/admin/projects/tracking/TrackingCollections.tsx",
           applicability: adminConsumerCapabilityAudit(
-            ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+            {
+              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+              date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+            },
             {
               visibility: {
                 state: "adopted",
@@ -2450,7 +2730,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "block-template-libraries",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       gridOwner: "AdminDataGrid",
@@ -2506,7 +2786,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           presentationOwner:
             "src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx",
           applicability: adminConsumerCapabilityAudit(
-            ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+            ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
             {},
           ),
           contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
@@ -2522,7 +2802,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           presentationOwner:
             "src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx",
           applicability: adminConsumerCapabilityAudit(
-            ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+            ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
             {},
           ),
           contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
@@ -2539,7 +2819,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
             presentationOwner:
               "src/components/admin/page-blocks/BlockModuleManagerClient.tsx",
             applicability: adminConsumerCapabilityAudit(
-              ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+              ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
               {},
             ),
             contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
@@ -2557,7 +2837,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
           presentationOwner:
             "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
           applicability: adminConsumerCapabilityAudit(
-            ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+            ADMIN_SWITCH_CONSUMER_CAPABILITIES,
             {},
           ),
           contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
@@ -2574,75 +2854,13 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       exceptionRationale:
         "Each template-library consumer proves search, filtering, sorting, selection, publication bulk actions, optional columns, pagination, Row Actions, and shared Runtime adoption independently. Unsupported Media lifecycle commands remain explicit at their two consumers.",
       rationale:
-        "All nine template libraries use bounded-client query contracts, while per-consumer evidence prevents one grouped surface from hiding adoption drift between their distinct presentation adapters.",
-    },
-    {
-      ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
-      id: "block-template-editors",
-      capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-        {},
-      ),
-      workflowClassification: "page_system_only",
-      generic: false,
-      routes: [
-        "/admin/pages-blocks/blocks/content/[id]",
-        "/admin/pages-blocks/blocks/hero/[id]",
-        "/admin/pages-blocks/blocks/breadcrumb/[id]",
-        "/admin/pages-blocks/blocks/cards/[id]",
-        "/admin/pages-blocks/blocks/cta/[id]",
-        "/admin/pages-blocks/blocks/feed/[id]",
-        "/admin/pages-blocks/blocks/featured/[id]",
-        "/admin/pages-blocks/blocks/media-hub/[id]",
-        "/admin/pages-blocks/blocks/media-sidebar/[id]",
-      ],
-      pageSourceFiles: [
-        "src/app/admin/pages-blocks/blocks/content/[id]/page.tsx",
-        "src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx",
-        "src/app/admin/pages-blocks/blocks/breadcrumb/[id]/page.tsx",
-        "src/app/admin/pages-blocks/blocks/cards/[id]/page.tsx",
-        "src/app/admin/pages-blocks/blocks/cta/[id]/page.tsx",
-        "src/app/admin/pages-blocks/blocks/feed/[id]/page.tsx",
-        "src/app/admin/pages-blocks/blocks/featured/[id]/page.tsx",
-        "src/app/admin/pages-blocks/blocks/media-hub/[id]/page.tsx",
-        "src/app/admin/pages-blocks/blocks/media-sidebar/[id]/page.tsx",
-      ],
-      presentationSourceFiles: [
-        "src/components/admin/page-blocks/ModuleEditorPresentation.tsx",
-        "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
-        "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-        "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
-        "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
-        "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-        "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-        "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-        "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-        "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
-      ],
-      sourceOwner: "Page Composition schema and form owners",
-      headerOwner: "AdminPageContextHeader",
-      engineLabel: null,
-      headerState: "adopted",
-      rowActionsState: "not_applicable",
-      rowActionsOwner: "not_applicable",
-      columnVisibility: "not_applicable",
-      summaryCards: false,
-      filtersOrToolbar: false,
-      paginationState: "not_required",
-      paginationOwner: "not_applicable",
-      queryMode: "specialized",
-      layoutOwner:
-        "AdminShell + AdminPageExperience + Form Runtime where applicable",
-      requiredAdoption: [],
-      exceptionRationale: null,
-      rationale:
-        "Schema editing remains specialized content inside the structurally inherited Shared Admin Page System; the shared Module Editor header preserves validated Page Composition return context while direct Library entry retains Library navigation.",
+        "Every registry-derived template library uses bounded-client query contracts, while per-consumer evidence prevents one grouped surface from hiding adoption drift between distinct presentation adapters.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
       id: "menus-list",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       gridOwner: "AdminDataGrid",
@@ -2693,8 +2911,18 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "menu-editor-shell",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
-        {},
+        ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+        {
+          collection: adoptedThroughExecutableDescendant("collection"),
+          table: adoptedThroughExecutableDescendant("table"),
+          pagination: adoptedThroughExecutableDescendant("pagination"),
+          column_visibility: adoptedThroughExecutableDescendant(
+            "column_visibility",
+          ),
+          row_actions: adoptedThroughExecutableDescendant("row_actions"),
+          visibility: adoptedThroughExecutableDescendant("visibility"),
+          busy_state: adoptedThroughExecutableDescendant("busy_state"),
+        },
       ),
       workflowClassification: "page_system_only",
       generic: false,
@@ -2719,7 +2947,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "The builder workflow remains specialized while the nested Menu Items surface is inventoried separately.",
+        "The builder workflow remains specialized while its executable route aggregate adopts the nested Menu Items collection owners; the nested surface remains inventoried independently.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
@@ -2727,7 +2955,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       genuineExceptions: [],
       id: "menu-items",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       gridOwner: "AdminDataGrid",
@@ -2781,8 +3009,22 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "page-composition-shell",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+        {
+          collection: adoptedThroughExecutableDescendant("collection"),
+          table: adoptedThroughExecutableDescendant("table"),
+          toolbar: adoptedThroughExecutableDescendant("toolbar"),
+          search: adoptedThroughExecutableDescendant("search"),
+          pagination: adoptedThroughExecutableDescendant("pagination"),
+          column_visibility: adoptedThroughExecutableDescendant(
+            "column_visibility",
+          ),
+          row_actions: adoptedThroughExecutableDescendant("row_actions"),
+          visibility: adoptedThroughExecutableDescendant("visibility"),
+          confirmation: adoptedThroughExecutableDescendant("confirmation"),
+          feedback: adoptedThroughExecutableDescendant("feedback"),
+          busy_state: adoptedThroughExecutableDescendant("busy_state"),
+        },
       ),
       workflowClassification: "page_system_only",
       generic: false,
@@ -2797,9 +3039,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "not_applicable",
       rowActionsOwner: "not_applicable",
-      columnVisibility: "shared_optional_columns",
+      feedbackOwner: "not_applicable",
+      confirmationOwner: "not_applicable",
+      columnVisibility: "not_applicable",
       summaryCards: false,
-      filtersOrToolbar: true,
+      filtersOrToolbar: false,
       paginationState: "not_required",
       paginationOwner: "not_applicable",
       queryMode: "specialized",
@@ -2807,7 +3051,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Page editing is a specialized aggregate, while its module assignment collection is inventoried separately.",
+        "Page editing is a specialized aggregate whose executable route adopts the nested module-assignment collection, feedback, and confirmation owners; the assignment surface remains inventoried independently.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
@@ -2815,7 +3059,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       genuineExceptions: [],
       id: "page-block-assignments",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       gridOwner: "AdminDataGrid",
@@ -2864,8 +3108,15 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "footer-builder-shell",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+        {
+          table: adoptedThroughExecutableDescendant("table"),
+          pagination: adoptedThroughExecutableDescendant("pagination"),
+          row_actions: adoptedThroughExecutableDescendant("row_actions"),
+          visibility: adoptedThroughExecutableDescendant("visibility"),
+          confirmation: adoptedThroughExecutableDescendant("confirmation"),
+          feedback: adoptedThroughExecutableDescendant("feedback"),
+        },
       ),
       workflowClassification: "page_system_only",
       generic: false,
@@ -2880,6 +3131,8 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       headerState: "adopted",
       rowActionsState: "not_applicable",
       rowActionsOwner: "not_applicable",
+      feedbackOwner: "not_applicable",
+      confirmationOwner: "not_applicable",
       columnVisibility: "not_applicable",
       summaryCards: false,
       filtersOrToolbar: false,
@@ -2890,14 +3143,19 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "The Footer form session inherits Shared Admin Page, Feedback, and Confirmation owners.",
+        "The Footer aggregate inherits Shared Admin Page, Feedback, and Confirmation owners and reaches its nested Data Grid, pagination, and Row Actions consumers without claiming generic Collection ownership.",
     },
     {
       ...ADMIN_FIXED_SURFACE_DEFAULTS,
       id: "footer-fixed-slots",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
-        {},
+        ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+        {
+          pagination: adoptedThroughExecutableDescendant("pagination"),
+          row_actions: adoptedThroughExecutableDescendant("row_actions"),
+          visibility: adoptedThroughExecutableDescendant("visibility"),
+          confirmation: adoptedThroughExecutableDescendant("confirmation"),
+        },
       ),
       workflowClassification: "fixed_structure_not_paginated",
       generic: false,
@@ -2935,7 +3193,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ],
       id: "footer-manual-links",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {},
       ),
       collectionAdoption: "not_applicable",
@@ -2993,7 +3251,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ],
       id: "users-and-roles",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "full_collection_adoption",
@@ -3080,8 +3338,14 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "content-editor-pages",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
-        {},
+        {
+          ...ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+          date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+        },
+        {
+          scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
+          busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
+        },
       ),
       workflowClassification: "page_system_only",
       generic: false,
@@ -3131,8 +3395,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "project-editor-pages",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
-        {},
+        ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+        {
+          busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
+        },
       ),
       workflowClassification: "page_system_only",
       generic: false,
@@ -3172,8 +3438,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,
       id: "settings-pages",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
         {
+          busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
           search: {
             state: "approved_exception",
             scope: "settings-pages:integrations-fixed-provider-search",
@@ -3266,12 +3533,22 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       pageSourceFiles: [
         "src/app/admin/reports/page.tsx",
         "src/app/admin/reports/[report]/page.tsx",
-        "src/app/admin/reports/export/route.ts",
       ],
       presentationSourceFiles: [
         "src/components/admin/reports/AdminReportsView.tsx",
         "src/components/admin/reports/AdminReportDetailView.tsx",
         "src/components/admin/reports/AdminReportActions.tsx",
+      ],
+      transportConsumers: [
+        {
+          id: "reports-export",
+          route: "/admin/reports/export",
+          method: "GET",
+          sourceFile: "src/app/admin/reports/export/route.ts",
+          callerSourceFiles: [
+            "src/components/admin/reports/AdminReportActions.tsx",
+          ],
+        },
       ],
       sourceOwner:
         "src/lib/admin/reports/load-admin-reports.ts#loadAdminReports",
@@ -3298,7 +3575,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       id: "seo-meta-manager",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
-        {},
+        {
+          busy_state: ADMIN_BUSY_STATE_OWNER_ADOPTION_DECISION,
+        },
       ),
       workflowClassification: "page_system_only",
       generic: false,
@@ -3329,7 +3608,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
       ...ADMIN_AUTH_SURFACE_DEFAULTS,
       id: "admin-auth-pages",
       capabilityAudit: adminConsumerCapabilityAudit(
-        ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+        ADMIN_SWITCH_CONSUMER_CAPABILITIES,
         {},
       ),
       workflowClassification: "auth_out_of_scope",
@@ -3418,10 +3697,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
         "Read-only report rows expose only shared navigation and information commands, while query state and pagination use the existing Collection and Data owners.",
     },
   ],
-} as const satisfies {
+} as const) satisfies {
   scope: "all_admin_collection_and_list_surfaces";
-  globalClosed: true;
-  globalClosureBlockers: readonly string[];
+  proofBoundary: "source_and_executable_reachability";
+  globalClosed: boolean;
+  globalClosureBlockers: readonly AdminGovernanceClosureBlocker[];
   genericAdoptionGaps: readonly string[];
   canonicalSectionGap: "gap-7";
   canonicalTableFooterGap: "gap-4";
@@ -3433,6 +3713,9 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION = {
   >;
   surfaces: readonly AdminCollectionSurfaceInventoryEntry[];
 };
+
+export const ADMIN_COLLECTION_GLOBAL_CLOSURE_BLOCKERS =
+  ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers;
 
 /**
  * A Full Adoption claim is a Quality Gate input, not descriptive prose.

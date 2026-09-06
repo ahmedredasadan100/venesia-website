@@ -85,6 +85,7 @@ for (const entry of inScopeFormEntries) {
   const graph = collectExecutableSourceGraph({
     root: ROOT,
     entrySourceFiles: entry.sourceFiles,
+    symbolAware: true,
   });
   assert.ok(
     graphUsesExecutableBinding({
@@ -120,6 +121,7 @@ for (const [id, config] of preferenceEntries) {
   const graph = collectExecutableSourceGraph({
     root: ROOT,
     entrySourceFiles: config.consumerSourceFiles,
+    symbolAware: true,
   });
   for (const binding of COLUMN_BINDINGS) {
     assert.ok(

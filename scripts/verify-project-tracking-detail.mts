@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 
+import { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } from "../src/lib/admin/form-system/adoption-manifest.ts";
 import { ADMIN_COLLECTION_SURFACE_ADOPTION } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 
 const read = (path: string) =>
@@ -88,7 +89,6 @@ const trackingHub = read("src/lib/admin/projects/tracking-hub.ts");
 const constructionUpdatesPage = parseTsx(
   "src/app/admin/projects/construction-updates/page.tsx",
 );
-const formManifest = read("src/lib/admin/form-system/adoption-manifest.ts");
 const instantMutation = read(
   "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
 );
@@ -353,8 +353,10 @@ check(
 );
 check(
   "Date and Calendar truth is owner_extension_required and no prohibited shared owner was introduced",
-  formManifest.includes("date_picker: {") &&
-    formManifest.includes('state: "owner_extension_required"') &&
+  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.find(
+    (entry) => entry.id === "project-tracking-create-edit",
+  )?.capabilityAudit.decisions.date_picker.state ===
+    "owner_extension_required" &&
     adminForms.includes('type="date"') &&
     !adminForms.includes("AdminDatePickerField") &&
     !existsSync(

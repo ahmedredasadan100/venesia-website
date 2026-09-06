@@ -6,7 +6,7 @@ import HeroCtaFields from "../../../app/admin/pages-blocks/blocks/hero/[id]/Hero
 import HeroElementOrderEditor from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroElementOrderEditor";
 import {
   ModuleEditorHeader,
-  ModuleEditorFeedback,
+  ModuleEditorFeedbackSlot,
   ModuleEditorPagesTab,
   ModuleEditorIdentitySection,
   ModuleEditorSaveArea,
@@ -342,9 +342,9 @@ export default function ContentModuleEditClient({
                       ? "تم حفظ موديول الثقة وتحديث الصفحة الرئيسية بنجاح."
                       : "تم حفظ الموديول بنجاح.";
   const activePanelContext = (
-    <ModuleEditorFeedback>
+    <ModuleEditorFeedbackSlot>
       {saved ? <AdminNotice variant="success" message={savedMessage} /> : null}
-    </ModuleEditorFeedback>
+    </ModuleEditorFeedbackSlot>
   );
 
   return (

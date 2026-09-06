@@ -34,7 +34,9 @@ assert.ok(
   "architecture constitution must own the Page Composition/Module Presentation boundary",
 );
 assert.ok(
-  constitution.includes("## ADR-027 — Page Composition Owns Space; Modules Own Presentation"),
+  constitution.includes(
+    "## ADR-027 — Page Composition Owns Semantic Regions and Assignments; Theme Owns Outer Layout; Modules Own Presentation",
+  ),
   "accepted Module Presentation ownership ADR missing",
 );
 assert.ok(
@@ -156,7 +158,10 @@ const projectsPlan = read("src/lib/projects/build-projects-hub-render-plan.ts");
 const projectsRenderer = read("src/components/projects/ProjectsHubModulesRenderer.tsx");
 
 assert.ok(layout.includes("export function PageSlotContent"), "shared slot renderer export missing");
-assert.ok(layout.includes('data-page-layout-contract="slot-owned"'), "slot-owned layout marker missing");
+assert.ok(
+  layout.includes('data-page-layout-contract="theme-owned"'),
+  "Venisia Theme-owned outer layout marker missing",
+);
 assert.ok(layout.includes("data-page-layout-body"), "shared body container missing");
 assert.ok(layout.includes("xl:grid-cols-[minmax(0,1fr)_340px]"), "main/sidebar grid contract missing");
 assert.ok(layout.includes("@container/slot-module"), "every slot entry must expose the shared container-responsive contract");

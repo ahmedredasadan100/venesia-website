@@ -684,19 +684,22 @@ export function ModuleEditorPagesTab({
   );
 }
 
-export function ModuleEditorFeedback(
-  props:
-    | { backHref: string; saved?: boolean; children?: never }
-    | { children: ReactNode; backHref?: never; saved?: never },
-) {
-  const feedback =
-    "children" in props ? (
-      props.children
-    ) : (
-      <BlockEditorSaveFeedback backHref={props.backHref} saved={props.saved} />
-    );
+export function ModuleEditorFeedbackSlot({ children }: { children: ReactNode }) {
+  return children ? <div data-module-editor-feedback="">{children}</div> : null;
+}
 
-  return feedback ? <div data-module-editor-feedback="">{feedback}</div> : null;
+export function ModuleEditorFeedback({
+  backHref,
+  saved,
+}: {
+  backHref: string;
+  saved?: boolean;
+}) {
+  return (
+    <ModuleEditorFeedbackSlot>
+      <BlockEditorSaveFeedback backHref={backHref} saved={saved} />
+    </ModuleEditorFeedbackSlot>
+  );
 }
 
 export function ModuleEditorSaveArea({

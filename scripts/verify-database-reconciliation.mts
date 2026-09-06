@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // @ts-expect-error The pg runtime package has no declarations in this workspace.
 import pg from "pg";
 import ts from "typescript";
+
+import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
 
 const { Client } = pg;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -15,11 +17,7 @@ const CURRENT_PROJECT_STATE_PATH = join(ROOT, "docs", "CURRENT_PROJECT_STATE.md"
 const MIGRATION_FILE = /^(\d{14})_([a-z0-9_]+)\.sql$/u;
 const PLATFORM_OWNED_FUNCTIONS = new Set(["rls_auto_enable"]);
 const FRAMEWORK_ENTRYPOINTS = new Set(["instrumentation.ts"]);
-const GOVERNANCE_MANIFEST_ENTRYPOINTS = new Set([
-  "lib/admin/content/content-editor-adoption-manifest.ts",
-  "lib/admin/form-system/adoption-manifest.ts",
-  "lib/admin/seo/entity-seo-adoption-manifest.ts",
-]);
+const REGISTERED_TOOL_SOURCE = /scripts\/[a-z0-9_./-]+\.[cm]?[jt]s/giu;
 const RETIRED_LEGACY_PATHS = [
   "scripts/_final-probe.mjs",
   "scripts/apply-admin-audit-logs-migration.mjs",
@@ -130,8 +128,14 @@ function verifyRuntimeReachability() {
       .find(Boolean) ?? null;
   };
 
-  for (const file of files) {
-    const sourceFile = ts.createSourceFile(file, readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true);
+  const collectSourceImports = (file: string) => {
+    const targets = new Set<string>();
+    const sourceFile = ts.createSourceFile(
+      file,
+      readFileSync(file, "utf8"),
+      ts.ScriptTarget.Latest,
+      true,
+    );
     const visit = (node: ts.Node) => {
       let specifier: string | null = null;
       if (
@@ -153,26 +157,123 @@ function verifyRuntimeReachability() {
       }
       if (specifier) {
         const target = resolveSourceImport(file, specifier);
-        if (target) incoming.set(target, (incoming.get(target) ?? 0) + 1);
+        if (target) targets.add(target);
       }
       ts.forEachChild(node, visit);
     };
     visit(sourceFile);
+    return targets;
+  };
+
+  for (const file of files) {
+    for (const target of collectSourceImports(file)) {
+      incoming.set(target, (incoming.get(target) ?? 0) + 1);
+    }
   }
 
-  const zeroInbound = files
+  const packageScripts =
+    (JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8")) as {
+      scripts?: Record<string, string>;
+    }).scripts ?? {};
+  const registeredToolFiles = [
+    ...new Set(
+      Object.entries(packageScripts)
+        .filter(([name]) => name.startsWith("verify:"))
+        .flatMap(([, command]) =>
+          [...command.matchAll(REGISTERED_TOOL_SOURCE)].map(([sourceFile]) =>
+            resolve(ROOT, sourceFile),
+          ),
+        ),
+    ),
+  ];
+  const missingRegisteredToolFiles = registeredToolFiles.filter(
+    (file) => !existsSync(file),
+  );
+  assert.deepEqual(
+    missingRegisteredToolFiles,
+    [],
+    `Registered verifier source is missing: ${missingRegisteredToolFiles
+      .map((file) => relative(ROOT, file).replaceAll("\\", "/"))
+      .join(", ")}`,
+  );
+  const sourceBoundaryFiles = files.map((file) =>
+    relative(ROOT, file).replaceAll("\\", "/"),
+  );
+  const registeredVerifierGraph = collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: registeredToolFiles.map((file) =>
+      relative(ROOT, file).replaceAll("\\", "/"),
+    ),
+    traversalBoundarySourceFiles: sourceBoundaryFiles,
+    symbolAware: true,
+  });
+  const registeredGovernanceEntrypoints = new Set(
+    [...registeredVerifierGraph.keys()]
+      .filter((file) => file.startsWith("src/"))
+      .map((file) => resolve(ROOT, file)),
+  );
+
+  const fixtureRoot =
+    "scripts/fixtures/database-reconciliation-governance-entrypoint.mts";
+  const fixtureOwner = "src/fixtures/governance-entrypoint-owner.ts";
+  const fixtureOwnerSource =
+    "export function governanceOwner() { return true; }";
+  const fixtureGraph = (source: string) =>
+    collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: [fixtureRoot],
+      sourceOverrides: new Map([
+        [fixtureRoot, source],
+        [fixtureOwner, fixtureOwnerSource],
+      ]),
+      traversalBoundarySourceFiles: [fixtureOwner],
+      symbolAware: true,
+    });
+  assert.equal(
+    fixtureGraph(
+      'import type { governanceOwner } from "../../src/fixtures/governance-entrypoint-owner"; export type Owner = typeof governanceOwner;',
+    ).has(fixtureOwner),
+    false,
+    "A type-only verifier import must not own a zero-inbound Runtime source.",
+  );
+  assert.equal(
+    fixtureGraph(
+      'import { governanceOwner } from "../../src/fixtures/governance-entrypoint-owner"; export const verifier = true;',
+    ).has(fixtureOwner),
+    false,
+    "An unused verifier import must not own a zero-inbound Runtime source.",
+  );
+  assert.equal(
+    fixtureGraph(
+      'import { governanceOwner } from "../../src/fixtures/governance-entrypoint-owner"; governanceOwner();',
+    ).has(fixtureOwner),
+    true,
+    "A live registered verifier import must own its executable governance entrypoint.",
+  );
+
+  const zeroInboundAbsolute = files
     .filter((file) => incoming.get(file) === 0)
-    .map((file) => file.slice(sourceRoot.length + 1).replaceAll("\\", "/"))
-    .filter((file) => !file.startsWith("app/") && file !== "proxy.ts" && !file.endsWith(".d.ts"));
+    .filter((file) => {
+      const sourceFile = file.slice(sourceRoot.length + 1).replaceAll("\\", "/");
+      return !sourceFile.startsWith("app/") && sourceFile !== "proxy.ts" && !sourceFile.endsWith(".d.ts");
+    });
+  const zeroInbound = zeroInboundAbsolute.map((file) =>
+    file.slice(sourceRoot.length + 1).replaceAll("\\", "/"),
+  );
+  const registeredZeroInbound = new Set(
+    zeroInboundAbsolute
+      .filter((file) => registeredGovernanceEntrypoints.has(file))
+      .map((file) => file.slice(sourceRoot.length + 1).replaceAll("\\", "/")),
+  );
   assert.deepEqual(
     zeroInbound.sort(),
-    [...FRAMEWORK_ENTRYPOINTS, ...GOVERNANCE_MANIFEST_ENTRYPOINTS].sort(),
-    `Unowned zero-inbound Runtime source remains: ${zeroInbound.filter((file) => !FRAMEWORK_ENTRYPOINTS.has(file) && !GOVERNANCE_MANIFEST_ENTRYPOINTS.has(file)).join(", ")}`,
+    [...FRAMEWORK_ENTRYPOINTS, ...registeredZeroInbound].sort(),
+    `Unowned zero-inbound Runtime source remains: ${zeroInbound.filter((file) => !FRAMEWORK_ENTRYPOINTS.has(file) && !registeredZeroInbound.has(file)).join(", ")}`,
   );
   return {
     sourceFiles: files.length,
     frameworkEntrypoints: zeroInbound.filter((file) => FRAMEWORK_ENTRYPOINTS.has(file)).length,
-    governanceManifestEntrypoints: zeroInbound.filter((file) => GOVERNANCE_MANIFEST_ENTRYPOINTS.has(file)).length,
+    governanceManifestEntrypoints: registeredZeroInbound.size,
   };
 }
 

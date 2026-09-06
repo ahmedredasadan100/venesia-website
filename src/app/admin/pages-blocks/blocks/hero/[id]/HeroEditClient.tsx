@@ -5,7 +5,7 @@ import AdminNotice from "../../../../../../components/admin/AdminNotice";
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
 import {
   ModuleEditorHeader,
-  ModuleEditorFeedback,
+  ModuleEditorFeedbackSlot,
   ModuleEditorField,
   ModuleEditorFieldGrid,
   ModuleEditorIdentitySection,
@@ -727,7 +727,7 @@ export default function HeroEditClient({
           nowrap
           initialTabId={initialTabId}
           activePanelContext={
-            <ModuleEditorFeedback>
+            <ModuleEditorFeedbackSlot>
               {mediaSynchronizationWarning ? (
                 <AdminNotice
                   variant="warning"
@@ -739,7 +739,7 @@ export default function HeroEditClient({
                   message="تم حفظ الموديول بنجاح."
                 />
               ) : null}
-            </ModuleEditorFeedback>
+            </ModuleEditorFeedbackSlot>
           }
           tabs={[
             {

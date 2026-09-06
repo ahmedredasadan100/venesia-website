@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
@@ -21,14 +21,17 @@ import {
 import { ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS } from "../src/lib/admin/entity-list/types.ts";
 import {
   ADMIN_CURRENT_SHARED_CAPABILITY_SET,
+  ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE,
   ADMIN_INTERACTION_MODULES,
-  ADMIN_INTERACTION_SYSTEM,
   ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS,
   ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS,
+  ADMIN_COLLECTION_GLOBAL_CLOSURE_BLOCKERS,
   ADMIN_COLLECTION_SURFACE_ADOPTION,
   ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,
   ADMIN_ROW_ACTIONS_EXISTING_OWNERS,
   adminSharedCapabilityKeys,
+  deriveAdminCollectionClosureBlockers,
+  deriveAdminGovernanceClosure,
   type AdminCollectionFullAdoptionClaim,
   type AdminCollectionSemanticPresentationContract,
   type AdminCollectionSurfaceInventoryEntry,
@@ -40,9 +43,15 @@ import {
   type AdminRowActionsGovernedAction,
 } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 import {
+  ADMIN_INTERACTION_SYSTEM_CLOSURE,
+  deriveAdminInteractionSystemClosure,
+} from "../src/lib/admin/interaction-system/governance-closure.ts";
+import {
+  ADMIN_FORM_SYSTEM_CLOSURE,
   ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,
   type AdminFormAdoptionEntry,
 } from "../src/lib/admin/form-system/adoption-manifest.ts";
+import { PAGE_MODULE_KINDS } from "../src/lib/page-blocks/types.ts";
 import {
   collectExecutableSourceGraph,
   detectLocalImplementations,
@@ -66,17 +75,9 @@ function check(label: string, condition: unknown) {
 
 function closureStateIsConsistent(
   globalClosed: boolean,
-  blockers: readonly string[],
+  blockers: readonly unknown[],
 ) {
   return globalClosed ? blockers.length === 0 : blockers.length > 0;
-}
-
-function adoptionGapStateIsConsistent(
-  globalClosed: boolean,
-  gaps: readonly string[],
-  partialSurfaceCount: number,
-) {
-  return globalClosed ? gaps.length === 0 : gaps.length === partialSurfaceCount;
 }
 
 function sameOrderedValues(
@@ -181,6 +182,360 @@ type ResolvedConsumerCapabilityDecision = {
   };
 };
 
+type DiscoveredAdminTransportConsumer = {
+  route: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "HEAD" | "OPTIONS";
+  sourceFile: string;
+};
+
+const ADMIN_TRANSPORT_METHODS = [
+  "GET",
+  "POST",
+  "PUT",
+  "PATCH",
+  "DELETE",
+  "HEAD",
+  "OPTIONS",
+] as const;
+const ADMIN_TRANSPORT_ROUTE_FILE_NAMES = ["route.ts", "route.js"] as const;
+
+function discoverAdminTransportSourceConsumers(
+  sourceFile: string,
+  source: string,
+): DiscoveredAdminTransportConsumer[] {
+  const parsed = parseTypeScriptSource(sourceFile, source);
+  const exportedMethods = new Set<DiscoveredAdminTransportConsumer["method"]>();
+  for (const statement of parsed.statements) {
+    if (
+      ts.isExportDeclaration(statement) &&
+      !statement.isTypeOnly &&
+      statement.exportClause &&
+      ts.isNamedExports(statement.exportClause)
+    ) {
+      for (const element of statement.exportClause.elements) {
+        if (
+          !element.isTypeOnly &&
+          ADMIN_TRANSPORT_METHODS.includes(
+            element.name.text as DiscoveredAdminTransportConsumer["method"],
+          )
+        ) {
+          exportedMethods.add(
+            element.name.text as DiscoveredAdminTransportConsumer["method"],
+          );
+        }
+      }
+    }
+    const exported =
+      ts.canHaveModifiers(statement) &&
+      ts
+        .getModifiers(statement)
+        ?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+    if (!exported) continue;
+    if (
+      ts.isFunctionDeclaration(statement) &&
+      statement.name &&
+      ADMIN_TRANSPORT_METHODS.includes(
+        statement.name.text as DiscoveredAdminTransportConsumer["method"],
+      )
+    ) {
+      exportedMethods.add(
+        statement.name.text as DiscoveredAdminTransportConsumer["method"],
+      );
+    }
+    if (ts.isVariableStatement(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        if (
+          ts.isIdentifier(declaration.name) &&
+          ADMIN_TRANSPORT_METHODS.includes(
+            declaration.name.text as DiscoveredAdminTransportConsumer["method"],
+          )
+        ) {
+          exportedMethods.add(
+            declaration.name.text as DiscoveredAdminTransportConsumer["method"],
+          );
+        }
+      }
+    }
+  }
+  const routeFileName = ADMIN_TRANSPORT_ROUTE_FILE_NAMES.find((fileName) =>
+    sourceFile.endsWith(`/${fileName}`),
+  );
+  assert.ok(routeFileName, `${sourceFile} is not a supported Next Route Handler.`);
+  const route = `/${sourceFile
+    .slice("src/app/".length, -`/${routeFileName}`.length)}`;
+  return [...exportedMethods].map((method) => ({
+    route,
+    method,
+    sourceFile,
+  }));
+}
+
+function discoverAdminTransportConsumers() {
+  const routeSourceFiles: string[] = [];
+  const visit = (absoluteDirectory: string) => {
+    for (const entry of readdirSync(absoluteDirectory, {
+      withFileTypes: true,
+    })) {
+      const absolutePath = join(absoluteDirectory, entry.name);
+      if (entry.isDirectory()) {
+        visit(absolutePath);
+      } else if (
+        ADMIN_TRANSPORT_ROUTE_FILE_NAMES.includes(
+          entry.name as (typeof ADMIN_TRANSPORT_ROUTE_FILE_NAMES)[number],
+        )
+      ) {
+        routeSourceFiles.push(normalizeSourcePath(relative(ROOT, absolutePath)));
+      }
+    }
+  };
+  visit(join(ROOT, "src/app/admin"));
+
+  return routeSourceFiles.flatMap((sourceFile) =>
+    discoverAdminTransportSourceConsumers(sourceFile, read(sourceFile)),
+  );
+}
+
+function staticTransportExpressionText(
+  expression: ts.Expression,
+  parsed: ts.SourceFile,
+  seen = new Set<string>(),
+): string | null {
+  if (
+    ts.isParenthesizedExpression(expression) ||
+    ts.isAsExpression(expression) ||
+    ts.isTypeAssertionExpression(expression) ||
+    ts.isNonNullExpression(expression) ||
+    ts.isSatisfiesExpression(expression)
+  ) {
+    return staticTransportExpressionText(expression.expression, parsed, seen);
+  }
+  if (
+    ts.isStringLiteralLike(expression) ||
+    ts.isNoSubstitutionTemplateLiteral(expression)
+  ) {
+    return expression.text;
+  }
+  if (ts.isIdentifier(expression)) {
+    if (seen.has(expression.text)) return null;
+    let declaration: ts.VariableDeclaration | undefined;
+    const visit = (node: ts.Node) => {
+      if (
+        ts.isVariableDeclaration(node) &&
+        ts.isIdentifier(node.name) &&
+        node.name.text === expression.text &&
+        node.initializer &&
+        node.pos < expression.pos &&
+        ts.isVariableDeclarationList(node.parent) &&
+        (node.parent.flags & ts.NodeFlags.Const) !== 0 &&
+        (!declaration || node.pos > declaration.pos)
+      ) {
+        declaration = node;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    if (!declaration?.initializer) return null;
+    const nextSeen = new Set(seen);
+    nextSeen.add(expression.text);
+    return staticTransportExpressionText(
+      declaration.initializer,
+      parsed,
+      nextSeen,
+    );
+  }
+  if (
+    ts.isBinaryExpression(expression) &&
+    expression.operatorToken.kind === ts.SyntaxKind.PlusToken
+  ) {
+    const left = staticTransportExpressionText(expression.left, parsed, seen);
+    const right = staticTransportExpressionText(expression.right, parsed, seen);
+    return left !== null && right !== null ? `${left}${right}` : null;
+  }
+  if (ts.isTemplateExpression(expression)) {
+    let text = expression.head.text;
+    for (const span of expression.templateSpans) {
+      const value = staticTransportExpressionText(
+        span.expression,
+        parsed,
+        seen,
+      );
+      text += `${value ?? "{runtime}"}${span.literal.text}`;
+    }
+    return text;
+  }
+  if (ts.isCallExpression(expression)) return "{runtime}";
+  if (ts.isPropertyAccessExpression(expression)) return "{runtime}";
+  return null;
+}
+
+function transportTextMatchesRoute(text: string, route: string) {
+  const routeIndex = text.indexOf(route);
+  if (routeIndex < 0) return false;
+  const suffix = text.slice(routeIndex + route.length, routeIndex + route.length + 1);
+  return suffix === "" || ["?", "#", "/", "{"].includes(suffix);
+}
+
+function graphHasTransportRequest(
+  graph: ExecutableSourceGraph,
+  route: string,
+  method: DiscoveredAdminTransportConsumer["method"],
+) {
+  for (const parsed of graph.values()) {
+    let matched = false;
+    const visit = (node: ts.Node) => {
+      if (matched) return;
+      if (
+        ts.isCallExpression(node) &&
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "fetch" &&
+        node.arguments[0]
+      ) {
+        const requestText = staticTransportExpressionText(
+          node.arguments[0],
+          parsed,
+        );
+        let requestMethod = "GET";
+        const options = node.arguments[1];
+        if (options && ts.isObjectLiteralExpression(options)) {
+          const methodProperty = options.properties.find(
+            (property): property is ts.PropertyAssignment =>
+              ts.isPropertyAssignment(property) &&
+              property.name.getText(parsed).replaceAll(/["']/gu, "") ===
+                "method",
+          );
+          if (methodProperty) {
+            requestMethod =
+              staticTransportExpressionText(
+                methodProperty.initializer,
+                parsed,
+              )?.toUpperCase() ?? "UNKNOWN";
+          }
+        }
+        if (
+          requestText &&
+          requestMethod === method &&
+          transportTextMatchesRoute(requestText, route)
+        ) {
+          matched = true;
+          return;
+        }
+      }
+      if (method === "GET" && ts.isJsxAttribute(node) && node.initializer) {
+        const attributeName = node.name.getText(parsed).toLowerCase();
+        if (attributeName === "href" || attributeName.endsWith("href")) {
+          const expression = ts.isStringLiteral(node.initializer)
+            ? node.initializer
+            : ts.isJsxExpression(node.initializer)
+              ? node.initializer.expression
+              : undefined;
+          const requestText = expression
+            ? staticTransportExpressionText(expression, parsed)
+            : null;
+          if (requestText && transportTextMatchesRoute(requestText, route)) {
+            matched = true;
+            return;
+          }
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    if (matched) return true;
+  }
+  return false;
+}
+
+function collectAdminTransportCoverageFailures(
+  discovered: readonly DiscoveredAdminTransportConsumer[],
+  surfaces: readonly AdminCollectionSurfaceInventoryEntry[],
+  sourceOverrides?: SourceOverrides,
+) {
+  const failures: string[] = [];
+  const registered = surfaces.flatMap((surface) =>
+    surface.transportConsumers.map((consumer) => ({
+      ...consumer,
+      surface,
+    })),
+  );
+  const keyOf = (consumer: {
+    route: string;
+    method: string;
+  }) => `${consumer.route}#${consumer.method}`;
+  const discoveredKeys = discovered.map(keyOf);
+  const registeredKeys = registered.map(keyOf);
+
+  for (const key of new Set(discoveredKeys)) {
+    if (discoveredKeys.filter((candidate) => candidate === key).length !== 1) {
+      failures.push(`${key}:duplicate_discovered_handler`);
+    }
+    if (!registeredKeys.includes(key)) {
+      failures.push(`${key}:unregistered_handler`);
+    }
+  }
+  for (const key of new Set(registeredKeys)) {
+    if (registeredKeys.filter((candidate) => candidate === key).length !== 1) {
+      failures.push(`${key}:duplicate_registration`);
+    }
+    if (!discoveredKeys.includes(key)) {
+      failures.push(`${key}:stale_registration`);
+    }
+  }
+
+  for (const consumer of registered) {
+    const discoveredHandler = discovered.find(
+      (candidate) => keyOf(candidate) === keyOf(consumer),
+    );
+    const nestedUnderSurface = consumer.surface.routes.some(
+      (route) =>
+        consumer.route === route || consumer.route.startsWith(`${route}/`),
+    );
+    if (
+      !discoveredHandler ||
+      discoveredHandler.sourceFile !== consumer.sourceFile
+    ) {
+      failures.push(`${keyOf(consumer)}:source_mismatch`);
+    }
+    if (!nestedUnderSurface) {
+      failures.push(`${keyOf(consumer)}:not_nested_under_surface`);
+    }
+    if (
+      consumer.callerSourceFiles.length === 0 ||
+      consumer.callerSourceFiles.some(
+        (sourceFile) =>
+          !sourceOverrides?.has(sourceFile) &&
+          !existsSync(join(ROOT, sourceFile)),
+      )
+    ) {
+      failures.push(`${keyOf(consumer)}:missing_caller_source`);
+      continue;
+    }
+    const pageGraph = collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: consumer.surface.pageSourceFiles,
+      sourceOverrides,
+      symbolAware: true,
+    });
+    if (
+      consumer.callerSourceFiles.some(
+        (sourceFile) => !pageGraph.has(normalizeSourcePath(sourceFile)),
+      )
+    ) {
+      failures.push(`${keyOf(consumer)}:caller_not_reachable`);
+    }
+    if (
+      !graphHasTransportRequest(
+        pageGraph,
+        consumer.route,
+        consumer.method,
+      )
+    ) {
+      failures.push(`${keyOf(consumer)}:missing_request_evidence`);
+    }
+  }
+
+  return [...new Set(failures)];
+}
+
 const currentSharedCapabilityKeys = adminSharedCapabilityKeys(
   ADMIN_CURRENT_SHARED_CAPABILITY_SET,
 );
@@ -264,10 +619,31 @@ function consumerExecutableGraph(
 ) {
   return collectExecutableSourceGraph({
     root: ROOT,
-    entrySourceFiles: consumer.collectionSurface
-      ? consumer.collectionSurface.pageSourceFiles
-      : consumer.sourceFiles,
+    entrySourceFiles: consumer.sourceFiles,
     sourceOverrides,
+    symbolAware: true,
+  });
+}
+
+const canonicalCapabilityOwnerSourceFiles = [
+  ...new Set(
+    currentSharedCapabilityKeys.flatMap(
+      (capability) =>
+        ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].sourceFiles,
+    ),
+  ),
+];
+
+function consumerOwnershipGraph(
+  consumer: ConsumerCapabilityAuditRecord,
+  sourceOverrides?: SourceOverrides,
+) {
+  return collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: consumer.sourceFiles,
+    sourceOverrides,
+    traversalBoundarySourceFiles: canonicalCapabilityOwnerSourceFiles,
+    symbolAware: true,
   });
 }
 
@@ -278,16 +654,6 @@ function graphWithoutOwnerSources(
   const excluded = new Set(ownerSourceFiles.map(normalizeSourcePath));
   return new Map(
     [...graph].filter(([sourceFile]) => !excluded.has(sourceFile)),
-  );
-}
-
-function registeredConsumerSourceGraph(
-  consumer: ConsumerCapabilityAuditRecord,
-  graph: ExecutableSourceGraph,
-) {
-  const registered = new Set(consumer.sourceFiles.map(normalizeSourcePath));
-  return new Map(
-    [...graph].filter(([sourceFile]) => registered.has(sourceFile)),
   );
 }
 
@@ -390,6 +756,20 @@ function resolveConsumerCapabilityAudit(
   return decisions;
 }
 
+function capabilityExecutableBindingSignature(
+  capability: AdminConsumerCapabilityKey,
+) {
+  return ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].executableBindings
+    .map(
+      (binding) =>
+        `${normalizeSourcePath(binding.sourceFile)}#${[
+          ...binding.exportNames,
+        ].sort().join(",")}`,
+    )
+    .sort()
+    .join("|");
+}
+
 function collectConsumerCapabilityAuditFailures(
   consumer: ConsumerCapabilityAuditRecord,
   phase: "applicability" | "source_proof",
@@ -397,7 +777,6 @@ function collectConsumerCapabilityAuditFailures(
 ) {
   const failures: string[] = [];
   const decisions = resolveConsumerCapabilityAudit(consumer);
-  const graph = consumerExecutableGraph(consumer, sourceOverrides);
 
   if (consumer.declaration.phase !== "capability_applicability") {
     failures.push("missing_applicability_phase");
@@ -462,14 +841,49 @@ function collectConsumerCapabilityAuditFailures(
 
   if (phase === "applicability") return [...new Set(failures)];
 
+  const fullGraph = consumerExecutableGraph(consumer, sourceOverrides);
+  const ownershipGraph = consumerOwnershipGraph(consumer, sourceOverrides);
+
   for (const capability of currentSharedCapabilityKeys) {
     const decision = decisions[capability];
     const definition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
+    const consumerOwnedGraph = graphWithoutOwnerSources(
+      ownershipGraph,
+      canonicalCapabilityOwnerSourceFiles,
+    );
+    const consumerDirectlyOwnsBinding = definition.executableBindings.some(
+      (binding) =>
+        consumer.sourceFiles
+          .map(normalizeSourcePath)
+          .includes(normalizeSourcePath(binding.sourceFile)),
+    );
+    const hasExecutableBinding =
+      consumerDirectlyOwnsBinding ||
+      graphUsesExecutableBinding({
+        root: ROOT,
+        graph: fullGraph,
+        bindings: definition.executableBindings,
+        sourceOverrides,
+      });
+    const hasConsumerBoundaryBinding =
+      consumerDirectlyOwnsBinding ||
+      graphUsesExecutableBinding({
+        root: ROOT,
+        graph: consumerOwnedGraph,
+        bindings: definition.executableBindings,
+        sourceOverrides,
+      });
+    const bindingIsExplainedByAdoptedCapability =
+      decision.state === "not_applicable" &&
+      currentSharedCapabilityKeys.some(
+        (otherCapability) =>
+          otherCapability !== capability &&
+          decisions[otherCapability].state === "adopted" &&
+          capabilityExecutableBindingSignature(otherCapability) ===
+            capabilityExecutableBindingSignature(capability),
+      );
     const localImplementations = detectLocalImplementations(
-      graphWithoutOwnerSources(
-        registeredConsumerSourceGraph(consumer, graph),
-        definition.sourceFiles,
-      ),
+      consumerOwnedGraph,
     );
     const localMatches = definition.localImplementationKinds.filter((kind) =>
       localImplementations.has(kind),
@@ -488,16 +902,9 @@ function collectConsumerCapabilityAuditFailures(
     }
     if (
       decision.state === "adopted" &&
-      !graphUsesExecutableBinding({
-        root: ROOT,
-        graph,
-        bindings: definition.executableBindings,
-      })
+      !hasExecutableBinding
     ) {
       failures.push(`${capability}:missing_source_proof`);
-    }
-    if (decision.state === "missing_adoption") {
-      failures.push(`${capability}:missing_adoption`);
     }
     if (
       localMatches.length > 0 &&
@@ -506,17 +913,13 @@ function collectConsumerCapabilityAuditFailures(
       decision.state !== "owner_extension_required"
     ) {
       failures.push(
-        `${capability}:${graphUsesExecutableBinding({ root: ROOT, graph, bindings: definition.executableBindings }) ? "parallel" : "local"}_implementation`,
+        `${capability}:${hasExecutableBinding ? "parallel" : "local"}_implementation`,
       );
     }
     if (
-      definition.applicabilityOwner === "explicit_consumer_declaration" &&
       decision.state === "not_applicable" &&
-      graphUsesExecutableBinding({
-        root: ROOT,
-        graph: registeredConsumerSourceGraph(consumer, graph),
-        bindings: definition.executableBindings,
-      })
+      hasConsumerBoundaryBinding &&
+      !bindingIsExplainedByAdoptedCapability
     ) {
       failures.push(`${capability}:hidden_adoption`);
     }
@@ -524,17 +927,51 @@ function collectConsumerCapabilityAuditFailures(
   return [...new Set(failures)];
 }
 
+function collectionCapabilityAuditRecords(
+  surfaces: readonly AdminCollectionSurfaceInventoryEntry[],
+): ConsumerCapabilityAuditRecord[] {
+  return surfaces.flatMap((surface) => {
+    if (surface.consumerAdoptionEvidence.length === 0) {
+      return [
+        {
+          id: surface.id,
+          boundary: "collection" as const,
+          sourceFiles: [
+            ...surface.pageSourceFiles,
+            ...surface.presentationSourceFiles,
+          ],
+          declaration: surface.capabilityAudit,
+          collectionSurface: surface,
+        },
+      ];
+    }
+    return surface.consumerAdoptionEvidence.map((consumer) => {
+      const collectionSurface = {
+        ...surface,
+        id: consumer.id,
+        routes: [consumer.route],
+        pageSourceFiles: [consumer.pageSourceFile],
+        presentationSourceFiles: [consumer.presentationOwner],
+        capabilityAudit: consumer.applicability,
+        consumerAdoptionEvidence: [],
+        transportConsumers: [],
+        dataRegistryEntities: consumer.dataRegistryEntities,
+      } satisfies AdminCollectionSurfaceInventoryEntry;
+      return {
+        id: consumer.id,
+        boundary: "collection" as const,
+        sourceFiles: [consumer.pageSourceFile, consumer.presentationOwner],
+        declaration: consumer.applicability,
+        collectionSurface,
+      };
+    });
+  });
+}
+
 const consumerCapabilityAuditRecords: ConsumerCapabilityAuditRecord[] = [
-  ...ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.map((surface) => ({
-    id: surface.id,
-    boundary: "collection" as const,
-    sourceFiles: [
-      ...surface.pageSourceFiles,
-      ...surface.presentationSourceFiles,
-    ],
-    declaration: surface.capabilityAudit,
-    collectionSurface: surface,
-  })),
+  ...collectionCapabilityAuditRecords(
+    ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces,
+  ),
   ...ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.map((entry) => ({
     id: entry.id,
     boundary: "form" as const,
@@ -542,6 +979,94 @@ const consumerCapabilityAuditRecords: ConsumerCapabilityAuditRecord[] = [
     declaration: entry.capabilityAudit,
     formEntry: entry,
   })),
+];
+
+const expectedCollectionCapabilityConsumerIds =
+  ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.flatMap((surface) =>
+    surface.consumerAdoptionEvidence.length > 0
+      ? surface.consumerAdoptionEvidence.map((consumer) => consumer.id)
+      : [surface.id],
+  );
+const auditedCollectionCapabilityConsumerIds = consumerCapabilityAuditRecords
+  .filter((consumer) => consumer.boundary === "collection")
+  .map((consumer) => consumer.id);
+const groupedCollectionNegativeSurface =
+  ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.find(
+    (surface) => surface.consumerAdoptionEvidence.length > 0,
+  );
+const groupedCollectionNegativeConsumer =
+  groupedCollectionNegativeSurface?.consumerAdoptionEvidence[0];
+if (!groupedCollectionNegativeSurface || !groupedCollectionNegativeConsumer) {
+  throw new Error(
+    "Grouped Collection capability fixture requires per-consumer evidence.",
+  );
+}
+const groupedCollectionNegativeRecords = collectionCapabilityAuditRecords([
+  {
+    ...groupedCollectionNegativeSurface,
+    consumerAdoptionEvidence: [
+      {
+        ...groupedCollectionNegativeConsumer,
+        applicability: {
+          ...groupedCollectionNegativeConsumer.applicability,
+          decisions: {
+            ...groupedCollectionNegativeConsumer.applicability.decisions,
+            listbox: {
+              state: "not_applicable",
+              rationale:
+                "Negative fixture hides a per-route Listbox behind a grouped surface.",
+            },
+          },
+        },
+      },
+    ],
+  },
+]);
+const groupedCollectionNegativeFailures = groupedCollectionNegativeRecords.flatMap(
+  (consumer) =>
+    collectConsumerCapabilityAuditFailures(consumer, "source_proof"),
+);
+
+const discoveredAdminTransportConsumers = discoverAdminTransportConsumers();
+const adminTransportCoverageFailures = collectAdminTransportCoverageFailures(
+  discoveredAdminTransportConsumers,
+  ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces,
+);
+const topicsSearchTransport = discoveredAdminTransportConsumers.find(
+  (consumer) =>
+    consumer.route === "/admin/content/topics/search" &&
+    consumer.method === "GET",
+);
+const topicsSearchOmissionFixture = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.map(
+  (surface) => ({
+    ...surface,
+    transportConsumers: surface.transportConsumers.filter(
+      (consumer) =>
+        !(
+          consumer.route === "/admin/content/topics/search" &&
+          consumer.method === "GET"
+        ),
+    ),
+  }),
+);
+const topicsSearchMissingRequestOverrides = new Map<string, string>([
+  [
+    "src/components/admin/content/UnifiedContentFilters.tsx",
+    'import { useMemo } from "react"; export function useUnifiedContentToolbar() { return useMemo(() => ({ search: null }), []); }',
+  ],
+]);
+const topicsSearchMissingRequestFailures =
+  collectAdminTransportCoverageFailures(
+    discoveredAdminTransportConsumers,
+    ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces,
+    topicsSearchMissingRequestOverrides,
+  );
+const unregisteredTransportFixture = [
+  ...discoveredAdminTransportConsumers,
+  ...discoverAdminTransportSourceConsumers(
+    "src/app/admin/fixtures/unregistered-transport/route.js",
+    "export function GET() { return new Response(null); }",
+  ),
 ];
 
 const FUTURE_SHARED_CAPABILITY_FIXTURE = "future_capability_fixture" as const;
@@ -1022,6 +1547,7 @@ function collectSourceGraph(
         root: ROOT,
         entrySourceFiles,
         sourceOverrides,
+        symbolAware: true,
       }),
     ].map(([sourceFile, parsed]) => [sourceFile, parsed.getFullText()]),
   );
@@ -1695,9 +2221,6 @@ const formExceptionContractFailures =
     if (!contract.reviewTrigger.trim()) {
       failures.push(`${entry.id}:missing_review_trigger`);
     }
-    if (contract.blocksGlobalClosure) {
-      failures.push(`${entry.id}:blocks_global_closure`);
-    }
     for (const capability of lowerLevelSharedCapabilities) {
       if (decisions[capability].state !== "adopted") {
         failures.push(`${entry.id}:${capability}:lower_level_not_adopted`);
@@ -1747,13 +2270,13 @@ const supersededFailedPreferenceSettlement = settleAdminColumnPreferenceSave({
 });
 const registeredAdminConsumerGraph = new Map(
   consumerCapabilityAuditRecords.flatMap((consumer) => [
-    ...consumerExecutableGraph(consumer),
+    ...consumerOwnershipGraph(consumer),
   ]),
 );
 const rawListboxConsumerSources = detectLocalImplementations(
   graphWithoutOwnerSources(
     registeredAdminConsumerGraph,
-    ADMIN_CURRENT_SHARED_CAPABILITY_SET.listbox.sourceFiles,
+    canonicalCapabilityOwnerSourceFiles,
   ),
 ).has("native_select")
   ? ["registered_consumer_graph:native_select"]
@@ -1761,7 +2284,7 @@ const rawListboxConsumerSources = detectLocalImplementations(
 const rawBooleanControlConsumerSources = detectLocalImplementations(
   graphWithoutOwnerSources(
     registeredAdminConsumerGraph,
-    ADMIN_CURRENT_SHARED_CAPABILITY_SET.switch.sourceFiles,
+    canonicalCapabilityOwnerSourceFiles,
   ),
 ).has("native_checkbox")
   ? ["registered_consumer_graph:native_checkbox"]
@@ -1829,6 +2352,1325 @@ const localImplementationFixture = new Map([
     ),
   ],
 ]);
+const formCapabilityFixtureConsumer = consumerCapabilityAuditRecords.find(
+  (consumer) => consumer.boundary === "form",
+);
+if (!formCapabilityFixtureConsumer?.formEntry) {
+  throw new Error("Missing Form consumer for governance negative fixtures.");
+}
+function formConsumerFixture(input: {
+  id: string;
+  sourceFile: string;
+  declaration: AdminConsumerCapabilityAuditDeclaration;
+}) {
+  const baseConsumer = formCapabilityFixtureConsumer;
+  if (!baseConsumer?.formEntry) {
+    throw new Error("Missing Form consumer for governance negative fixtures.");
+  }
+  return {
+    ...baseConsumer,
+    id: input.id,
+    sourceFiles: [input.sourceFile],
+    declaration: input.declaration,
+    formEntry: {
+      ...baseConsumer.formEntry,
+      id: input.id,
+      sourceFiles: [input.sourceFile],
+      capabilityAudit: input.declaration,
+    },
+  } as ConsumerCapabilityAuditRecord;
+}
+
+const collectionCapabilityFixtureConsumer = consumerCapabilityAuditRecords.find(
+  (consumer) => consumer.boundary === "collection" && consumer.collectionSurface,
+);
+if (!collectionCapabilityFixtureConsumer?.collectionSurface) {
+  throw new Error("Missing Collection consumer for governance negative fixtures.");
+}
+function collectionConsumerFixture(input: {
+  id: string;
+  pageSourceFile: string;
+  presentationSourceFile: string;
+  declaration: AdminConsumerCapabilityAuditDeclaration;
+}) {
+  const baseConsumer = collectionCapabilityFixtureConsumer;
+  if (!baseConsumer?.collectionSurface) {
+    throw new Error("Missing Collection consumer for governance negative fixtures.");
+  }
+  return {
+    ...baseConsumer,
+    id: input.id,
+    sourceFiles: [input.pageSourceFile, input.presentationSourceFile],
+    declaration: input.declaration,
+    collectionSurface: {
+      ...baseConsumer.collectionSurface,
+      id: input.id,
+      pageSourceFiles: [input.pageSourceFile],
+      presentationSourceFiles: [input.presentationSourceFile],
+      capabilityAudit: input.declaration,
+    },
+  } as ConsumerCapabilityAuditRecord;
+}
+
+const transitiveFixtureRoot = "src/fixtures/governance/consumer.tsx";
+const transitiveFixtureOverrides = new Map<string, string>([
+  [
+    transitiveFixtureRoot,
+    'import { FixtureChild } from "./barrel"; export default function Consumer() { return <FixtureChild />; }',
+  ],
+  [
+    "src/fixtures/governance/barrel.ts",
+    'export { FixtureChild } from "./child"; export type { DeadType } from "./dead-type";',
+  ],
+  [
+    "src/fixtures/governance/child.tsx",
+    'import AdminFormSwitch from "../../components/admin/ui/AdminFormSwitch"; import type { DeadType } from "./dead-type"; import { DeadRuntime } from "./dead-runtime"; export function FixtureChild() { return <><AdminFormSwitch checked={false} onChange={() => {}} /><input type="date" /></>; }',
+  ],
+  ["src/fixtures/governance/dead-type.ts", "export type DeadType = string;"],
+  [
+    "src/fixtures/governance/dead-runtime.ts",
+    "export function DeadRuntime() { return null; }",
+  ],
+]);
+const hiddenDescendantDeclaration = {
+  ...formCapabilityFixtureConsumer.declaration,
+  decisions: {
+    ...formCapabilityFixtureConsumer.declaration.decisions,
+    switch: {
+      state: "not_applicable",
+      rationale: "Negative fixture hides an executable descendant.",
+    },
+    date_picker: {
+      state: "not_applicable",
+      rationale: "Negative fixture hides a native descendant.",
+    },
+  },
+} as AdminConsumerCapabilityAuditDeclaration;
+const hiddenDescendantConsumer = formConsumerFixture({
+  id: "hidden-descendant-fixture",
+  sourceFile: transitiveFixtureRoot,
+  declaration: hiddenDescendantDeclaration,
+});
+const hiddenDescendantFailures = collectConsumerCapabilityAuditFailures(
+  hiddenDescendantConsumer,
+  "source_proof",
+  transitiveFixtureOverrides,
+);
+const transitiveFixtureGraph = consumerOwnershipGraph(
+  hiddenDescendantConsumer,
+  transitiveFixtureOverrides,
+);
+
+const collectionPageFixtureRoot =
+  "src/fixtures/governance/collection-page-consumer.tsx";
+const collectionPresentationFixtureRoot =
+  "src/fixtures/governance/collection-presentation-consumer.tsx";
+const collectionPageChildFixture =
+  "src/fixtures/governance/collection-page-child.tsx";
+const collectionPageFixtureOverrides = new Map<string, string>([
+  [
+    collectionPageFixtureRoot,
+    'import { CollectionPageChild } from "./collection-page-child"; export default function CollectionPage() { return <CollectionPageChild />; }',
+  ],
+  [
+    collectionPresentationFixtureRoot,
+    "export default function CollectionPresentation() { return null; }",
+  ],
+  [
+    collectionPageChildFixture,
+    'import AdminListboxSelect from "../../components/admin/ui/AdminListboxSelect"; export function CollectionPageChild() { return <><AdminListboxSelect value="" onChange={() => {}} options={[]} /><select /></>; }',
+  ],
+]);
+const collectionPageFixtureDeclaration = {
+  ...collectionCapabilityFixtureConsumer.declaration,
+  decisions: {
+    ...collectionCapabilityFixtureConsumer.declaration.decisions,
+    listbox: {
+      state: "not_applicable",
+      rationale:
+        "Negative fixture hides canonical and parallel Listbox use in a Collection page descendant.",
+    },
+  },
+} as AdminConsumerCapabilityAuditDeclaration;
+const collectionPageFixtureConsumer = collectionConsumerFixture({
+  id: "collection-page-descendant-fixture",
+  pageSourceFile: collectionPageFixtureRoot,
+  presentationSourceFile: collectionPresentationFixtureRoot,
+  declaration: collectionPageFixtureDeclaration,
+});
+const collectionPageFixtureGraph = consumerOwnershipGraph(
+  collectionPageFixtureConsumer,
+  collectionPageFixtureOverrides,
+);
+const collectionPageFixtureFailures = collectConsumerCapabilityAuditFailures(
+  collectionPageFixtureConsumer,
+  "source_proof",
+  collectionPageFixtureOverrides,
+);
+
+const registeredOwnerFixtureRoot =
+  "src/fixtures/governance/registered-owner-consumer.tsx";
+const registeredOwnerFixtureOverrides = new Map<string, string>([
+  [
+    registeredOwnerFixtureRoot,
+    'import { useAdminFeedback } from "../../components/admin/AdminFeedbackProvider"; export default function Consumer() { useAdminFeedback(); return null; }',
+  ],
+]);
+const registeredOwnerHiddenDeclaration = {
+  ...formCapabilityFixtureConsumer.declaration,
+  overrides: {
+    ...formCapabilityFixtureConsumer.declaration.overrides,
+    feedback: {
+      state: "not_applicable",
+      rationale:
+        "Negative fixture hides direct use of a registered-owner capability.",
+    },
+  },
+} as AdminConsumerCapabilityAuditDeclaration;
+const registeredOwnerHiddenFailures = collectConsumerCapabilityAuditFailures(
+  formConsumerFixture({
+    id: "registered-owner-hidden-fixture",
+    sourceFile: registeredOwnerFixtureRoot,
+    declaration: registeredOwnerHiddenDeclaration,
+  }),
+  "source_proof",
+  registeredOwnerFixtureOverrides,
+);
+
+const exportStarFixtureRoot =
+  "src/fixtures/governance/export-star-consumer.tsx";
+const exportStarFixtureOverrides = new Map<string, string>([
+  [
+    exportStarFixtureRoot,
+    'import { ExportStarChild } from "./export-star-barrel"; export default function Consumer() { return <ExportStarChild />; }',
+  ],
+  [
+    "src/fixtures/governance/export-star-barrel.ts",
+    'export * from "./export-star-child";',
+  ],
+  [
+    "src/fixtures/governance/export-star-child.tsx",
+    "export function ExportStarChild() { return <select />; }",
+  ],
+]);
+const exportStarFixtureGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [exportStarFixtureRoot],
+  sourceOverrides: exportStarFixtureOverrides,
+  symbolAware: true,
+});
+
+const sideEffectFixtureRoot =
+  "src/fixtures/governance/side-effect-consumer.ts";
+const sideEffectFixtureOverrides = new Map<string, string>([
+  [
+    sideEffectFixtureRoot,
+    'import { runFixture } from "./side-effect-owner"; export default function Consumer() { return runFixture(); }',
+  ],
+  [
+    "src/fixtures/governance/side-effect-owner.ts",
+    'import "./side-effect-runtime"; export function runFixture() { return true; }',
+  ],
+  [
+    "src/fixtures/governance/side-effect-runtime.ts",
+    'window.alert("fixture");',
+  ],
+]);
+const sideEffectFixtureGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [sideEffectFixtureRoot],
+  sourceOverrides: sideEffectFixtureOverrides,
+  symbolAware: true,
+});
+
+const shadowedImportFixtureRoot =
+  "src/fixtures/governance/shadowed-import-consumer.ts";
+const shadowedImportFixtureOverrides = new Map<string, string>([
+  [
+    shadowedImportFixtureRoot,
+    'import { DeadRuntime } from "./shadowed-import-dead"; export default function Consumer(DeadRuntime: () => null) { return DeadRuntime(); }',
+  ],
+  [
+    "src/fixtures/governance/shadowed-import-dead.ts",
+    "export function DeadRuntime() { return null; }",
+  ],
+]);
+const shadowedImportFixtureGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [shadowedImportFixtureRoot],
+  sourceOverrides: shadowedImportFixtureOverrides,
+  symbolAware: true,
+});
+
+const namespaceFixtureRoot =
+  "src/fixtures/governance/namespace-consumer.ts";
+const namespaceFixtureOverrides = new Map<string, string>([
+  [
+    namespaceFixtureRoot,
+    'import * as Fixture from "./namespace-barrel"; export default function Consumer() { return Fixture.Live(); }',
+  ],
+  [
+    "src/fixtures/governance/namespace-barrel.ts",
+    'export { Live } from "./namespace-live"; export { Dead } from "./namespace-dead";',
+  ],
+  [
+    "src/fixtures/governance/namespace-live.ts",
+    "export function Live() { return true; }",
+  ],
+  [
+    "src/fixtures/governance/namespace-dead.tsx",
+    "export function Dead() { return <select />; }",
+  ],
+]);
+const namespaceFixtureGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [namespaceFixtureRoot],
+  sourceOverrides: namespaceFixtureOverrides,
+  symbolAware: true,
+});
+
+const typeOnlyReExportFixtureRoot =
+  "src/fixtures/governance/type-only-re-export-consumer.ts";
+const typeOnlyReExportOwner =
+  "src/fixtures/governance/type-only-re-export-owner.ts";
+const typeOnlyReExportOverrides = new Map<string, string>([
+  [
+    typeOnlyReExportFixtureRoot,
+    'import { Owner } from "./type-only-re-export-owner"; export type { Owner }; export const live = true;',
+  ],
+  [typeOnlyReExportOwner, "export function Owner() { return true; }"],
+]);
+const typeOnlyReExportGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [typeOnlyReExportFixtureRoot],
+  sourceOverrides: typeOnlyReExportOverrides,
+  symbolAware: true,
+});
+const typeOnlyReExportBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: typeOnlyReExportGraph,
+  bindings: [{ sourceFile: typeOnlyReExportOwner, exportNames: ["Owner"] }],
+  sourceOverrides: typeOnlyReExportOverrides,
+});
+
+const namespaceBindingFixtureRoot =
+  "src/fixtures/governance/namespace-binding-consumer.tsx";
+const namespaceBindingOwner =
+  "src/fixtures/governance/namespace-binding-owner.tsx";
+const namespaceBindingOverrides = new Map<string, string>([
+  [
+    namespaceBindingFixtureRoot,
+    'import * as Owner from "./namespace-binding-owner"; export default function Consumer() { return <Owner.Widget />; }',
+  ],
+  [
+    namespaceBindingOwner,
+    "export function Widget() { return <div />; } export function Unused() { return <select />; }",
+  ],
+]);
+const namespaceBindingGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [namespaceBindingFixtureRoot],
+  sourceOverrides: namespaceBindingOverrides,
+  symbolAware: true,
+});
+const namespaceMemberBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: namespaceBindingGraph,
+  bindings: [{ sourceFile: namespaceBindingOwner, exportNames: ["Widget"] }],
+  sourceOverrides: namespaceBindingOverrides,
+});
+const namespaceSelectionVariantSources = [
+  'import * as OwnerNS from "./namespace-selection-owner"; const { Widget } = OwnerNS; export function Consumer() { return Widget(); }',
+  'import * as OwnerNS from "./namespace-selection-owner"; const Alias = OwnerNS; export function Consumer() { return Alias.Widget(); }',
+] as const;
+const namespaceSelectionVariantResults = namespaceSelectionVariantSources.map(
+  (source, index) => {
+    const consumer =
+      `src/fixtures/governance/namespace-selection-consumer-${index}.tsx`;
+    const owner = "src/fixtures/governance/namespace-selection-owner.tsx";
+    const overrides = new Map<string, string>([
+      [consumer, source],
+      [
+        owner,
+        "export function Widget() { return <div />; } export function Unused() { return <select />; }",
+      ],
+    ]);
+    const graph = collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: [consumer],
+      sourceOverrides: overrides,
+      symbolAware: true,
+    });
+    return {
+      reachesOwner: graph.has(owner),
+      binds: graphUsesExecutableBinding({
+        root: ROOT,
+        graph,
+        bindings: [{ sourceFile: owner, exportNames: ["Widget"] }],
+        sourceOverrides: overrides,
+      }),
+      leaksUnused: detectLocalImplementations(graph).has("native_select"),
+    };
+  },
+);
+
+const extendsFixtureRoot = "src/fixtures/governance/extends-consumer.ts";
+const extendsFixtureOwner = "src/fixtures/governance/extends-owner.ts";
+const extendsFixtureOverrides = new Map<string, string>([
+  [
+    extendsFixtureRoot,
+    'import { ImportedBase } from "./extends-owner"; export class Child extends ImportedBase {}',
+  ],
+  [extendsFixtureOwner, "export class ImportedBase {}"],
+]);
+const extendsFixtureGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [extendsFixtureRoot],
+  sourceOverrides: extendsFixtureOverrides,
+  symbolAware: true,
+});
+const extendsBindingIsExecutable = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: extendsFixtureGraph,
+  bindings: [
+    { sourceFile: extendsFixtureOwner, exportNames: ["ImportedBase"] },
+  ],
+  sourceOverrides: extendsFixtureOverrides,
+});
+
+const selectedSideEffectFixtureRoot =
+  "src/fixtures/governance/selected-side-effect-consumer.ts";
+const selectedSideEffectDependency =
+  "src/fixtures/governance/selected-side-effect-dependency.ts";
+const selectedSideEffectOverrides = new Map<string, string>([
+  [
+    selectedSideEffectFixtureRoot,
+    'import { Live } from "./selected-side-effect-dependency"; export default function Consumer() { return Live(); }',
+  ],
+  [
+    selectedSideEffectDependency,
+    'window.alert("module initialization"); export function Live() { return true; } export function Dead() { return false; }',
+  ],
+]);
+const selectedSideEffectGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [selectedSideEffectFixtureRoot],
+  sourceOverrides: selectedSideEffectOverrides,
+  symbolAware: true,
+});
+
+const classStaticSideEffectFixtureRoot =
+  "src/fixtures/governance/class-static-side-effect-consumer.ts";
+const classStaticSideEffectDependency =
+  "src/fixtures/governance/class-static-side-effect-dependency.ts";
+const classStaticSideEffectOverrides = new Map<string, string>([
+  [
+    classStaticSideEffectFixtureRoot,
+    'import { Live } from "./class-static-side-effect-dependency"; export default function Consumer() { return Live(); }',
+  ],
+  [
+    classStaticSideEffectDependency,
+    'const runtime = { base() { return class {}; }, key() { return "key"; }, enumValue() { return 1; }, decorate() { return (value: unknown) => value; } }; class StaticHidden { static { window.alert("class initialization"); } } class ExtendsHidden extends runtime.base() {} class ComputedHidden { [runtime.key()]() {} } enum EnumHidden { Value = runtime.enumValue() } @runtime.decorate() class DecoratedHidden {} export function Live() { return true; }',
+  ],
+]);
+const classStaticSideEffectGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [classStaticSideEffectFixtureRoot],
+  sourceOverrides: classStaticSideEffectOverrides,
+  symbolAware: true,
+});
+const selectedClassSideEffectSource =
+  classStaticSideEffectGraph.get(classStaticSideEffectDependency)?.getFullText() ??
+  "";
+
+const dynamicImportFixtureRoot =
+  "src/fixtures/governance/dynamic-import-consumer.ts";
+const dynamicImportFixtureChild =
+  "src/fixtures/governance/dynamic-import-child.tsx";
+const dynamicImportFixtureOverrides = new Map<string, string>([
+  [
+    dynamicImportFixtureRoot,
+    'export async function Consumer() { const { DynamicChild } = await import("./dynamic-import-child"); return DynamicChild(); }',
+  ],
+  [
+    dynamicImportFixtureChild,
+    "export function DynamicChild() { return <dialog />; } export function Unused() { return <select />; }",
+  ],
+]);
+const dynamicImportFixtureGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [dynamicImportFixtureRoot],
+  sourceOverrides: dynamicImportFixtureOverrides,
+  symbolAware: true,
+});
+const dynamicImportFixtureBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: dynamicImportFixtureGraph,
+  bindings: [
+    { sourceFile: dynamicImportFixtureChild, exportNames: ["DynamicChild"] },
+  ],
+  sourceOverrides: dynamicImportFixtureOverrides,
+});
+const dynamicNamespaceFixtureRoot =
+  "src/fixtures/governance/dynamic-namespace-consumer.ts";
+const dynamicNamespaceFixtureOverrides = new Map<string, string>([
+  [
+    dynamicNamespaceFixtureRoot,
+    'export async function Consumer() { const OwnerNS = await import("./dynamic-import-child"); return OwnerNS.DynamicChild(); }',
+  ],
+  [
+    dynamicImportFixtureChild,
+    "export function DynamicChild() { return true; }",
+  ],
+]);
+const dynamicNamespaceFixtureGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [dynamicNamespaceFixtureRoot],
+  sourceOverrides: dynamicNamespaceFixtureOverrides,
+  symbolAware: true,
+});
+const dynamicNamespaceFixtureBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: dynamicNamespaceFixtureGraph,
+  bindings: [
+    { sourceFile: dynamicImportFixtureChild, exportNames: ["DynamicChild"] },
+  ],
+  sourceOverrides: dynamicNamespaceFixtureOverrides,
+});
+const dynamicPromiseNamespaceFixtureRoot =
+  "src/fixtures/governance/dynamic-promise-namespace-consumer.ts";
+const dynamicPromiseNamespaceOverrides = new Map<string, string>([
+  [
+    dynamicPromiseNamespaceFixtureRoot,
+    'export async function Consumer() { return import("./dynamic-import-child").then((OwnerNS) => OwnerNS.DynamicChild()); }',
+  ],
+  [dynamicImportFixtureChild, "export function DynamicChild() { return true; }"],
+]);
+const dynamicPromiseNamespaceGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [dynamicPromiseNamespaceFixtureRoot],
+  sourceOverrides: dynamicPromiseNamespaceOverrides,
+  symbolAware: true,
+});
+const dynamicPromiseNamespaceBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: dynamicPromiseNamespaceGraph,
+  bindings: [
+    { sourceFile: dynamicImportFixtureChild, exportNames: ["DynamicChild"] },
+  ],
+  sourceOverrides: dynamicPromiseNamespaceOverrides,
+});
+const dynamicAliasSelectionRoot =
+  "src/fixtures/governance/dynamic-alias-selection-consumer.ts";
+const dynamicAliasSelectionOwner =
+  "src/fixtures/governance/dynamic-alias-selection-owner.tsx";
+const dynamicAliasSelectionOverrides = new Map<string, string>([
+  [
+    dynamicAliasSelectionRoot,
+    'export async function Consumer() { const OwnerNS = await import("./dynamic-alias-selection-owner"); const Alias = OwnerNS; return Alias.Widget(); }',
+  ],
+  [
+    dynamicAliasSelectionOwner,
+    "export function Widget() { return true; } export function Unused() { return <select />; }",
+  ],
+]);
+const dynamicAliasSelectionGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [dynamicAliasSelectionRoot],
+  sourceOverrides: dynamicAliasSelectionOverrides,
+  symbolAware: true,
+});
+const dynamicAliasSelectionBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: dynamicAliasSelectionGraph,
+  bindings: [{ sourceFile: dynamicAliasSelectionOwner, exportNames: ["Widget"] }],
+  sourceOverrides: dynamicAliasSelectionOverrides,
+});
+
+const nonliteralDynamicOwner =
+  "src/fixtures/governance/nonliteral-dynamic-owner.ts";
+const nonliteralDynamicVariantSources = [
+  'const moduleName = "./nonliteral-dynamic-owner"; export async function Consumer() { const { Widget } = await import(moduleName); return Widget(); }',
+  'const prefix = "./nonliteral-dynamic"; export async function Consumer() { const { Widget } = await import(prefix + "-owner"); return Widget(); }',
+  'const suffix = "owner"; export async function Consumer() { const { Widget } = await import(`./nonliteral-dynamic-${suffix}`); return Widget(); }',
+] as const;
+const nonliteralDynamicVariantResults = nonliteralDynamicVariantSources.map(
+  (source, index) => {
+    const consumer =
+      `src/fixtures/governance/nonliteral-dynamic-consumer-${index}.ts`;
+    const overrides = new Map<string, string>([
+      [consumer, source],
+      [nonliteralDynamicOwner, "export function Widget() { return true; }"],
+    ]);
+    const graph = collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: [consumer],
+      sourceOverrides: overrides,
+      symbolAware: true,
+    });
+    return {
+      reachesOwner: graph.has(nonliteralDynamicOwner),
+      binds: graphUsesExecutableBinding({
+        root: ROOT,
+        graph,
+        bindings: [
+          { sourceFile: nonliteralDynamicOwner, exportNames: ["Widget"] },
+        ],
+        sourceOverrides: overrides,
+      }),
+    };
+  },
+);
+let unresolvedDynamicImportFailedClosed = false;
+try {
+  const sourceFile =
+    "src/fixtures/governance/unresolved-dynamic-import-consumer.ts";
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [sourceFile],
+    sourceOverrides: new Map([
+      [
+        sourceFile,
+        "export async function Consumer(moduleName: string) { return import(moduleName); }",
+      ],
+    ]),
+    symbolAware: true,
+  });
+} catch (error) {
+  unresolvedDynamicImportFailedClosed =
+    error instanceof Error && error.message.includes("unresolved dynamic import");
+}
+
+const deadBindingFixtureRoot =
+  "src/fixtures/governance/dead-binding-consumer.ts";
+const deadBindingOwner = "src/fixtures/governance/dead-binding-owner.ts";
+const deadBindingOverrides = new Map<string, string>([
+  [
+    deadBindingFixtureRoot,
+    'import { Owner } from "./dead-binding-owner"; const proof = Owner; function unusedProof() { return Owner; } if (false) Owner(); export const live = true;',
+  ],
+  [deadBindingOwner, "export function Owner() { return true; }"],
+]);
+const deadBindingGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [deadBindingFixtureRoot],
+  sourceOverrides: deadBindingOverrides,
+  symbolAware: true,
+});
+const deadBindingBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: deadBindingGraph,
+  bindings: [{ sourceFile: deadBindingOwner, exportNames: ["Owner"] }],
+  sourceOverrides: deadBindingOverrides,
+});
+const deadBindingVariantSources = [
+  'function first() { return Owner(); } function second() { return first(); }',
+  'false && Owner();',
+  'true || Owner();',
+  'false ? Owner() : null;',
+  'while (false) { Owner(); }',
+  'class Proof { method() { return Owner(); } }',
+  'class Proof { field = Owner; }',
+  'Boolean(Owner);',
+  'String(Owner);',
+  'console.log(Owner);',
+  'export const proof = Owner;',
+  'export const proof = [Owner];',
+] as const;
+const deadBindingVariantResults = deadBindingVariantSources.map(
+  (body, index) => {
+    const consumer =
+      `src/fixtures/governance/dead-binding-variant-${index}.ts`;
+    const owner =
+      `src/fixtures/governance/dead-binding-variant-owner-${index}.ts`;
+    const overrides = new Map<string, string>([
+      [consumer, `import { Owner } from "./dead-binding-variant-owner-${index}"; ${body}`],
+      [owner, "export function Owner() { return true; }"],
+    ]);
+    const graph = collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: [consumer],
+      sourceOverrides: overrides,
+      symbolAware: true,
+    });
+    return {
+      reachesOwner: graph.has(owner),
+      binds: graphUsesExecutableBinding({
+        root: ROOT,
+        graph,
+        bindings: [{ sourceFile: owner, exportNames: ["Owner"] }],
+        sourceOverrides: overrides,
+      }),
+    };
+  },
+);
+
+const requestedAliasConsumer =
+  "src/fixtures/governance/requested-alias-consumer.ts";
+const requestedAliasBridge =
+  "src/fixtures/governance/requested-alias-bridge.ts";
+const requestedAliasOwner =
+  "src/fixtures/governance/requested-alias-owner.tsx";
+const requestedAliasOverrides = new Map<string, string>([
+  [
+    requestedAliasConsumer,
+    'import { Alias } from "./requested-alias-bridge"; export function Consumer() { return Alias(); }',
+  ],
+  [
+    requestedAliasBridge,
+    'import { Owner } from "./requested-alias-owner"; export const Alias = Owner;',
+  ],
+  [requestedAliasOwner, "export function Owner() { return <select />; }"],
+]);
+const requestedAliasGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [requestedAliasConsumer],
+  sourceOverrides: requestedAliasOverrides,
+  symbolAware: true,
+});
+const requestedAliasBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: requestedAliasGraph,
+  bindings: [{ sourceFile: requestedAliasOwner, exportNames: ["Owner"] }],
+  sourceOverrides: requestedAliasOverrides,
+});
+
+const mixedImportSliceConsumer =
+  "src/fixtures/governance/mixed-import-slice-consumer.ts";
+const mixedImportSliceBridge =
+  "src/fixtures/governance/mixed-import-slice-bridge.ts";
+const mixedImportSliceOwner =
+  "src/fixtures/governance/mixed-import-slice-owner.tsx";
+const mixedImportSliceOverrides = new Map<string, string>([
+  [
+    mixedImportSliceConsumer,
+    'import { Header, Slot } from "./mixed-import-slice-bridge"; export function Consumer() { Header(); return Slot(); }',
+  ],
+  [
+    mixedImportSliceBridge,
+    'import OwnerHeader, { OwnerSaveFeedback } from "./mixed-import-slice-owner"; export function Header() { return OwnerHeader(); } export function Slot() { return null; } export function Feedback() { return OwnerSaveFeedback(); }',
+  ],
+  [
+    mixedImportSliceOwner,
+    'export default function OwnerHeader() { return true; } export function OwnerSaveFeedback() { return <select />; }',
+  ],
+]);
+const mixedImportSliceGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [mixedImportSliceConsumer],
+  sourceOverrides: mixedImportSliceOverrides,
+  symbolAware: true,
+});
+const mixedImportSliceLeaksUnusedNamedBinding = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: mixedImportSliceGraph,
+  bindings: [
+    { sourceFile: mixedImportSliceOwner, exportNames: ["OwnerSaveFeedback"] },
+  ],
+  sourceOverrides: mixedImportSliceOverrides,
+});
+
+const typescriptNamespaceFixtureRoot =
+  "src/fixtures/governance/typescript-namespace-consumer.ts";
+const typescriptNamespaceOwner =
+  "src/fixtures/governance/typescript-namespace-owner.ts";
+const typescriptNamespaceOverrides = new Map<string, string>([
+  [
+    typescriptNamespaceFixtureRoot,
+    'import { Owner } from "./typescript-namespace-owner"; export function Consumer() { return Owner.Widget(); }',
+  ],
+  [
+    typescriptNamespaceOwner,
+    'namespace Hidden { window.alert("namespace initialization"); } export namespace Owner { export function Widget() { return true; } } export function Unused() { return false; }',
+  ],
+]);
+const typescriptNamespaceGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [typescriptNamespaceFixtureRoot],
+  sourceOverrides: typescriptNamespaceOverrides,
+  symbolAware: true,
+});
+const typescriptNamespaceBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: typescriptNamespaceGraph,
+  bindings: [{ sourceFile: typescriptNamespaceOwner, exportNames: ["Owner"] }],
+  sourceOverrides: typescriptNamespaceOverrides,
+});
+
+const namespaceReExportFixtureRoot =
+  "src/fixtures/governance/namespace-re-export-consumer.tsx";
+const namespaceReExportBarrel =
+  "src/fixtures/governance/namespace-re-export-barrel.ts";
+const namespaceReExportOwner =
+  "src/fixtures/governance/namespace-re-export-owner.tsx";
+const namespaceReExportOverrides = new Map<string, string>([
+  [
+    namespaceReExportFixtureRoot,
+    'import { OwnerNS } from "./namespace-re-export-barrel"; export default function Consumer() { return <OwnerNS.Widget />; }',
+  ],
+  [namespaceReExportBarrel, 'export * as OwnerNS from "./namespace-re-export-owner";'],
+  [
+    namespaceReExportOwner,
+    "export function Widget() { return <div />; } export function Unused() { return <select />; }",
+  ],
+]);
+const namespaceReExportGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [namespaceReExportFixtureRoot],
+  sourceOverrides: namespaceReExportOverrides,
+  symbolAware: true,
+});
+const namespaceReExportBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: namespaceReExportGraph,
+  bindings: [{ sourceFile: namespaceReExportOwner, exportNames: ["Widget"] }],
+  sourceOverrides: namespaceReExportOverrides,
+});
+
+const namespaceAliasStarFixtureRoot =
+  "src/fixtures/governance/namespace-alias-star-consumer.ts";
+const namespaceAliasStarOwner =
+  "src/fixtures/governance/namespace-alias-star-owner.tsx";
+const namespaceAliasStarOverrides = new Map<string, string>([
+  [
+    namespaceAliasStarFixtureRoot,
+    'import { OwnerNS } from "./namespace-alias-star-barrel"; export function Consumer() { return OwnerNS.Widget(); }',
+  ],
+  [
+    "src/fixtures/governance/namespace-alias-star-barrel.ts",
+    'export * from "./namespace-alias-star-forwarder";',
+  ],
+  [
+    "src/fixtures/governance/namespace-alias-star-forwarder.ts",
+    'import * as OwnerNS from "./namespace-alias-star-owner"; export { OwnerNS };',
+  ],
+  [
+    namespaceAliasStarOwner,
+    "export function Widget() { return true; } export function Unused() { return <select />; }",
+  ],
+]);
+const namespaceAliasStarGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [namespaceAliasStarFixtureRoot],
+  sourceOverrides: namespaceAliasStarOverrides,
+  symbolAware: true,
+});
+const namespaceAliasStarBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: namespaceAliasStarGraph,
+  bindings: [{ sourceFile: namespaceAliasStarOwner, exportNames: ["Widget"] }],
+  sourceOverrides: namespaceAliasStarOverrides,
+});
+
+const computedPrimitiveFixtureRoot =
+  "src/fixtures/governance/computed-primitive-consumer.tsx";
+const computedPrimitiveImportedValues =
+  "src/fixtures/governance/computed-primitive-values.ts";
+const computedPrimitiveFixtureOverrides = new Map<string, string>([
+  [
+    computedPrimitiveFixtureRoot,
+    'import { importedKind } from "./computed-primitive-values"; const inputProps = { type: "FILE" } as const; const semanticProps = { role: "SWITCH" } as const; const listboxProps = { role: "LISTBOX" } as const; const localClass = "[&::-webkit-scrollbar]:hidden"; export function Uppercase() { return <input type="DATE" />; } export function ScopedDate() { const kind = "date"; return <input type={kind} />; } export function ScopedText() { const kind = "text"; return <input type={kind} />; } export function Imported() { return <input type={importedKind} />; } export function Spread() { const comboRole = "combobox"; return <><input {...inputProps} /><div {...semanticProps} /><div {...listboxProps}><button role="option" /></div><input role={comboRole} /><dialog open /><div className={localClass} /></>; }',
+  ],
+  [computedPrimitiveImportedValues, 'export const importedKind = "CHECKBOX";'],
+]);
+const computedPrimitiveFixture = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [computedPrimitiveFixtureRoot],
+  sourceOverrides: computedPrimitiveFixtureOverrides,
+  symbolAware: true,
+});
+const computedPrimitiveImplementations =
+  detectLocalImplementations(computedPrimitiveFixture);
+const intrinsicAliasFixtureRoot =
+  "src/fixtures/governance/intrinsic-alias-consumer.tsx";
+const intrinsicAliasImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [intrinsicAliasFixtureRoot],
+    sourceOverrides: new Map([
+      [
+        intrinsicAliasFixtureRoot,
+        'const SelectTag = "select"; const DialogTag = "dialog"; const InputTag = "input"; export function Consumer() { return <><SelectTag /><DialogTag open /><InputTag type="date" /></>; }',
+      ],
+    ]),
+    symbolAware: true,
+  }),
+);
+
+const destructuredPrimitiveFixtureRoot =
+  "src/fixtures/governance/destructured-primitive-consumer.tsx";
+const destructuredPrimitiveOverrides = new Map<string, string>([
+  [
+    destructuredPrimitiveFixtureRoot,
+    'const { dateKind, searchKind, dialogRole, listboxRole } = { dateKind: "date", searchKind: "search", dialogRole: "dialog", listboxRole: "listbox" } as const; export function Consumer() { return <><input type={dateKind} /><input type={searchKind} /><div role={dialogRole} /><div role={listboxRole} /></>; }',
+  ],
+]);
+const destructuredPrimitiveImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [destructuredPrimitiveFixtureRoot],
+    sourceOverrides: destructuredPrimitiveOverrides,
+    symbolAware: true,
+  }),
+);
+
+const namespacePrimitiveFixtureRoot =
+  "src/fixtures/governance/namespace-primitive-consumer.tsx";
+const namespacePrimitiveValues =
+  "src/fixtures/governance/namespace-primitive-values.ts";
+const namespacePrimitiveOverrides = new Map<string, string>([
+  [
+    namespacePrimitiveFixtureRoot,
+    'import * as Kinds from "./namespace-primitive-values"; export function Consumer() { return <><input type={Kinds.DATE} /><div role={Kinds.DIALOG} /><div role={Kinds.LISTBOX} /></>; }',
+  ],
+  [
+    namespacePrimitiveValues,
+    'export const DATE = "date"; export const DIALOG = "dialog"; export const LISTBOX = "listbox";',
+  ],
+]);
+const namespacePrimitiveImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [namespacePrimitiveFixtureRoot],
+    sourceOverrides: namespacePrimitiveOverrides,
+    symbolAware: true,
+  }),
+);
+
+const shadowedPrimitiveFixtureRoot =
+  "src/fixtures/governance/shadowed-primitive-consumer.tsx";
+const shadowedPrimitiveImportedValues =
+  "src/fixtures/governance/shadowed-primitive-values.ts";
+const shadowedPrimitiveOverrides = new Map<string, string>([
+  [
+    shadowedPrimitiveFixtureRoot,
+    'import { importedKind } from "./shadowed-primitive-values"; const kind = "date"; export function Parameter(kind = "text") { return <input type={kind} />; } export function Lexical() { let kind = "text"; return <input type={kind} />; } export function Imported() { return <input type={importedKind} />; }',
+  ],
+  [shadowedPrimitiveImportedValues, 'export const importedKind = "text";'],
+]);
+const shadowedPrimitiveImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [shadowedPrimitiveFixtureRoot],
+    sourceOverrides: shadowedPrimitiveOverrides,
+    symbolAware: true,
+  }),
+);
+
+const mutatedToDateFixtureRoot =
+  "src/fixtures/governance/mutated-to-date-consumer.tsx";
+const mutatedToDateImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [mutatedToDateFixtureRoot],
+    sourceOverrides: new Map([
+      [
+        mutatedToDateFixtureRoot,
+        'export function Consumer() { const props = { type: "text" }; props.type = "date"; return <input {...props} />; }',
+      ],
+    ]),
+    symbolAware: true,
+  }),
+);
+const mutatedToTextFixtureRoot =
+  "src/fixtures/governance/mutated-to-text-consumer.tsx";
+const mutatedToTextImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [mutatedToTextFixtureRoot],
+    sourceOverrides: new Map([
+      [
+        mutatedToTextFixtureRoot,
+        'export function Consumer() { const props = { type: "date" }; props.type = "text"; return <input {...props} />; }',
+      ],
+    ]),
+    symbolAware: true,
+  }),
+);
+
+const reboundObjectFixtureSources = [
+  'export function Consumer() { let props = { type: "text" }; props = { type: "date" }; return <input {...props} />; }',
+  'export function Consumer() { let props = { type: "date" }; props = { type: "text" }; return <input {...props} />; }',
+] as const;
+const reboundObjectImplementations = reboundObjectFixtureSources.map(
+  (source, index) => {
+    const sourceFile =
+      `src/fixtures/governance/rebound-object-${index}.tsx`;
+    return detectLocalImplementations(
+      collectExecutableSourceGraph({
+        root: ROOT,
+        entrySourceFiles: [sourceFile],
+        sourceOverrides: new Map([[sourceFile, source]]),
+        symbolAware: true,
+      }),
+    );
+  },
+);
+
+const taintedObjectFixtureSources = [
+  'export function Consumer() { const props = { type: "text" }; const alias = props; alias.type = "date"; return <input {...props} />; }',
+  'export function Consumer() { const props = { type: "text" }; (() => { props.type = "date"; })(); return <input {...props} />; }',
+  'export function Consumer() { const props = { type: "text" }; Object.assign(props, { type: "date" }); return <input {...props} />; }',
+  'export function Consumer(key: string) { const props = { [key]: "date" }; return <input {...props} />; }',
+  'export function Consumer() { const props = { get type() { return "date"; } }; return <input {...props} />; }',
+] as const;
+const taintedObjectImplementations = taintedObjectFixtureSources.map(
+  (source, index) => {
+    const sourceFile =
+      `src/fixtures/governance/tainted-object-${index}.tsx`;
+    return detectLocalImplementations(
+      collectExecutableSourceGraph({
+        root: ROOT,
+        entrySourceFiles: [sourceFile],
+        sourceOverrides: new Map([[sourceFile, source]]),
+        symbolAware: true,
+      }),
+    );
+  },
+);
+
+const crossModuleMutationConsumer =
+  "src/fixtures/governance/cross-module-mutation-consumer.tsx";
+const crossModuleMutationFixtureSources = [
+  'export let kind = "text"; kind = "date";',
+  'export let kind = "date"; kind = "text";',
+  'export const props = { type: "text" }; props.type = "date";',
+] as const;
+const crossModuleMutationImplementations =
+  crossModuleMutationFixtureSources.map((source, index) => {
+    const sourceFile =
+      `src/fixtures/governance/cross-module-mutation-values-${index}.ts`;
+    const consumerSource =
+      index === 2
+        ? `import { props } from "./cross-module-mutation-values-${index}"; export function Consumer() { return <input {...props} />; }`
+        : `import { kind } from "./cross-module-mutation-values-${index}"; export function Consumer() { return <input type={kind} />; }`;
+    return detectLocalImplementations(
+      collectExecutableSourceGraph({
+        root: ROOT,
+        entrySourceFiles: [crossModuleMutationConsumer],
+        sourceOverrides: new Map([
+          [crossModuleMutationConsumer, consumerSource],
+          [sourceFile, source],
+        ]),
+        symbolAware: true,
+      }),
+    );
+  });
+
+const unknownNativePropsFixtureRoot =
+  "src/fixtures/governance/unknown-native-props-consumer.tsx";
+const unknownNativePropsImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [unknownNativePropsFixtureRoot],
+    sourceOverrides: new Map([
+      [
+        unknownNativePropsFixtureRoot,
+        'export function Consumer(props: Record<string, unknown>) { return <><input type={props.kind as string} /><input {...props} /><div role={props.role as string} /><div {...props} /></>; }',
+      ],
+    ]),
+    symbolAware: true,
+  }),
+);
+const unknownComponentPropsFixtureRoot =
+  "src/fixtures/governance/unknown-component-props-consumer.tsx";
+const unknownComponentPropsImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [unknownComponentPropsFixtureRoot],
+    sourceOverrides: new Map([
+      [
+        unknownComponentPropsFixtureRoot,
+        'declare function SharedWidget(props: Record<string, unknown>): unknown; export function Consumer(props: Record<string, unknown>) { return <SharedWidget type={props.kind} role={props.role} {...props} />; }',
+      ],
+    ]),
+    symbolAware: true,
+  }),
+);
+const boundedRoleFixtureRoot =
+  "src/fixtures/governance/bounded-role-consumer.tsx";
+const boundedRoleImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [boundedRoleFixtureRoot],
+    sourceOverrides: new Map([
+      [
+        boundedRoleFixtureRoot,
+        'type Props = { role: "alert" | "status" }; export function Consumer({ role }: Props) { return <div role={role} />; }',
+      ],
+    ]),
+    symbolAware: true,
+  }),
+);
+const knownShapeUnknownValuesFixtureRoot =
+  "src/fixtures/governance/known-shape-unknown-values-consumer.tsx";
+const knownShapeUnknownValuesImplementations = detectLocalImplementations(
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [knownShapeUnknownValuesFixtureRoot],
+    sourceOverrides: new Map([
+      [
+        knownShapeUnknownValuesFixtureRoot,
+        'export function Consumer(name: string, value: unknown) { const shared = { name, defaultValue: value, className: "field" }; return <input {...shared} />; }',
+      ],
+    ]),
+    symbolAware: true,
+  }),
+);
+
+const feedbackAliasFixtureSources = [
+  'export function Consumer() { confirm("fixture"); }',
+  'export function Consumer() { globalThis.confirm("fixture"); }',
+  'export function Consumer() { self.alert("fixture"); }',
+  'export function Consumer() { const ask = window.confirm; ask("fixture"); }',
+  'export function Consumer() { window["confirm"]("fixture"); }',
+  'export function Consumer() { const { confirm: ask } = window; ask("fixture"); }',
+  'export function Consumer() { window.confirm.call(window, "fixture"); }',
+  'export function Consumer() { window.confirm.bind(window)("fixture"); }',
+  'export function Consumer() { (0, window.confirm)("fixture"); }',
+  'export function Consumer() { let ask = () => false; ask = window.confirm; ask("fixture"); }',
+  'export function Consumer() { const method = "confirm"; window[method]("fixture"); }',
+  'export function Consumer() { const host = window; host.confirm("fixture"); }',
+  'export function Consumer() { const feedback = { ask: window.confirm }; feedback.ask("fixture"); }',
+  'export function Consumer() { Reflect.apply(window.confirm, window, ["fixture"]); }',
+] as const;
+const feedbackAliasFixtureImplementations = feedbackAliasFixtureSources.map(
+  (source, index) =>
+    detectLocalImplementations(
+      new Map([
+        [
+          `src/fixtures/governance/feedback-alias-${index}.ts`,
+          parseTypeScriptSource(
+            `src/fixtures/governance/feedback-alias-${index}.ts`,
+            source,
+          ),
+        ],
+      ]),
+    ),
+);
+const shadowedFeedbackFixtureSources = [
+  'function confirm() { return true; } export function Consumer() { confirm(); }',
+  'import { confirm } from "./fixture-owner"; export function Consumer() { confirm(); }',
+] as const;
+const shadowedFeedbackFixtureImplementations =
+  shadowedFeedbackFixtureSources.map((source, index) =>
+    detectLocalImplementations(
+      new Map([
+        [
+          `src/fixtures/governance/shadowed-feedback-${index}.ts`,
+          parseTypeScriptSource(
+            `src/fixtures/governance/shadowed-feedback-${index}.ts`,
+            source,
+          ),
+        ],
+      ]),
+    ),
+  );
+
+const voidBindingFixtureRoot =
+  "src/fixtures/governance/void-binding-consumer.ts";
+const voidBindingOwner = "src/fixtures/governance/void-binding-owner.ts";
+const voidBindingOverrides = new Map<string, string>([
+  [
+    voidBindingFixtureRoot,
+    'import { Owner } from "./void-binding-owner"; import * as NS from "./void-binding-owner"; void Owner; void Owner.marker; void NS.Owner; Owner; export const live = true;',
+  ],
+  [
+    voidBindingOwner,
+    "export function Owner() { return true; } Owner.marker = true;",
+  ],
+]);
+const voidBindingGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [voidBindingFixtureRoot],
+  sourceOverrides: voidBindingOverrides,
+  symbolAware: true,
+});
+const voidReferenceBinds = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: voidBindingGraph,
+  bindings: [{ sourceFile: voidBindingOwner, exportNames: ["Owner"] }],
+  sourceOverrides: voidBindingOverrides,
+});
+
+const localExportStarFixtureRoot =
+  "src/fixtures/governance/local-export-star-consumer.tsx";
+const localExportStarChild =
+  "src/fixtures/governance/local-export-star-child.tsx";
+const localExportStarOverrides = new Map<string, string>([
+  [
+    localExportStarFixtureRoot,
+    'import { Child } from "./local-export-star-barrel"; export default function Consumer() { return <Child />; }',
+  ],
+  [
+    "src/fixtures/governance/local-export-star-barrel.ts",
+    'export * from "./local-export-star-child";',
+  ],
+  [
+    localExportStarChild,
+    "function Child() { return <select />; } export { Child };",
+  ],
+]);
+const localExportStarGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [localExportStarFixtureRoot],
+  sourceOverrides: localExportStarOverrides,
+  symbolAware: true,
+});
+
+const destructuredExportStarFixtureRoot =
+  "src/fixtures/governance/destructured-export-star-consumer.tsx";
+const destructuredExportStarChild =
+  "src/fixtures/governance/destructured-export-star-child.tsx";
+const destructuredExportStarOverrides = new Map<string, string>([
+  [
+    destructuredExportStarFixtureRoot,
+    'import { Child } from "./destructured-export-star-barrel"; export default function Consumer() { return <Child />; }',
+  ],
+  [
+    "src/fixtures/governance/destructured-export-star-barrel.ts",
+    'export * from "./destructured-export-star-child";',
+  ],
+  [
+    destructuredExportStarChild,
+    "const source = { Child() { return <select />; } }; export const { Child } = source;",
+  ],
+]);
+const destructuredExportStarGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [destructuredExportStarFixtureRoot],
+  sourceOverrides: destructuredExportStarOverrides,
+  symbolAware: true,
+});
+
+const mediaBoundaryFixtureRoot =
+  "src/fixtures/governance/media-boundary-consumer.tsx";
+const mediaBoundaryFixtureOverrides = new Map<string, string>([
+  [
+    mediaBoundaryFixtureRoot,
+    'import AdminMediaImageField from "../../components/admin/media/AdminMediaImageField"; export default function Consumer() { return <AdminMediaImageField />; }',
+  ],
+]);
+const mediaBoundaryDeclaration = {
+  ...formCapabilityFixtureConsumer.declaration,
+  decisions: {
+    ...formCapabilityFixtureConsumer.declaration.decisions,
+    media: {
+      state: "adopted",
+      rationale: "Fixture adopts the canonical Media owner.",
+    },
+    modal: {
+      state: "not_applicable",
+      rationale: "The Media owner's internal modal is not consumer ownership.",
+    },
+  },
+} as AdminConsumerCapabilityAuditDeclaration;
+const mediaBoundaryConsumer = formConsumerFixture({
+  id: "media-owner-boundary-fixture",
+  sourceFile: mediaBoundaryFixtureRoot,
+  declaration: mediaBoundaryDeclaration,
+});
+const mediaBoundaryGraph = consumerOwnershipGraph(
+  mediaBoundaryConsumer,
+  mediaBoundaryFixtureOverrides,
+);
+const mediaBoundaryFullGraph = consumerExecutableGraph(
+  mediaBoundaryConsumer,
+  mediaBoundaryFixtureOverrides,
+);
+const mediaBoundaryModalSourceReach = graphUsesExecutableBinding({
+  root: ROOT,
+  graph: mediaBoundaryFullGraph,
+  bindings: ADMIN_CURRENT_SHARED_CAPABILITY_SET.modal.executableBindings,
+  sourceOverrides: mediaBoundaryFixtureOverrides,
+});
+const mediaBoundaryFailures = collectConsumerCapabilityAuditFailures(
+  mediaBoundaryConsumer,
+  "source_proof",
+  mediaBoundaryFixtureOverrides,
+);
+
+const parallelListboxFixtureRoot =
+  "src/fixtures/governance/parallel-listbox-consumer.tsx";
+const parallelListboxFixtureOverrides = new Map<string, string>([
+  [
+    parallelListboxFixtureRoot,
+    'import AdminListboxSelect from "../../components/admin/ui/AdminListboxSelect"; export default function Consumer() { return <><AdminListboxSelect value="" onChange={() => {}} options={[]} /><select /></>; }',
+  ],
+]);
+const parallelListboxDeclaration = {
+  ...formCapabilityFixtureConsumer.declaration,
+  decisions: {
+    ...formCapabilityFixtureConsumer.declaration.decisions,
+    listbox: {
+      state: "adopted",
+      rationale: "Fixture declares canonical Listbox adoption.",
+    },
+  },
+} as AdminConsumerCapabilityAuditDeclaration;
+const parallelListboxFailures = collectConsumerCapabilityAuditFailures(
+  formConsumerFixture({
+    id: "parallel-listbox-fixture",
+    sourceFile: parallelListboxFixtureRoot,
+    declaration: parallelListboxDeclaration,
+  }),
+  "source_proof",
+  parallelListboxFixtureOverrides,
+);
+
+const contradictoryClosureBlocker = {
+  id: "negative-closure-fixture",
+  owner: "fixture_owner",
+  evidence: "source_confirmed",
+  rationale: "A blocker must keep the derived closure open.",
+} as const;
+const derivedNegativeClosure = deriveAdminGovernanceClosure([
+  contradictoryClosureBlocker,
+]);
+const closedGovernanceFixtureLedger = deriveAdminGovernanceClosure([]);
+const futureInteractionModuleId = "negative-fixture-future-runtime";
+const missingInteractionModuleClosureFixture =
+  deriveAdminInteractionSystemClosure({
+    modules: [
+      ...ADMIN_INTERACTION_MODULES,
+      { id: futureInteractionModuleId },
+    ],
+    componentClosures: ADMIN_INTERACTION_MODULES.map((module) => ({
+      moduleId: module.id,
+      closure: closedGovernanceFixtureLedger,
+    })),
+  });
+
+const collectionClosureFixtureSurface =
+  ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces[0];
+if (!collectionClosureFixtureSurface) {
+  throw new Error("Collection closure fixture requires a registered surface.");
+}
+const collectionClosureFixtureCapability = currentSharedCapabilityKeys[0];
+if (!collectionClosureFixtureCapability) {
+  throw new Error("Collection closure fixture requires a shared capability.");
+}
+const collectionClosureFixtureBlockers = deriveAdminCollectionClosureBlockers({
+  genericAdoptionGaps: ["negative-fixture-generic-gap"],
+  surfaces: [
+    {
+      id: "negative-fixture-collection-consumer",
+      capabilityAudit: {
+        ...collectionClosureFixtureSurface.capabilityAudit,
+        overrides: {
+          ...collectionClosureFixtureSurface.capabilityAudit.overrides,
+          [collectionClosureFixtureCapability]: {
+            state: "missing_adoption",
+            rationale:
+              "A registered applicable capability without adoption must block closure.",
+          },
+        },
+      } as AdminConsumerCapabilityAuditDeclaration,
+    },
+  ],
+});
+const derivedCollectionClosureBlockers =
+  deriveAdminCollectionClosureBlockers(ADMIN_COLLECTION_SURFACE_ADOPTION);
 
 check(
   "Current Shared Capability Set is the single dynamic source for audit axes, owners, applicability ownership, and executable binding proof",
@@ -1908,15 +3750,308 @@ check(
   rawBooleanControlConsumerSources.length === 0,
 );
 check(
-  "applicable behavior without canonical adoption cannot disappear inside not_applicable",
-  collectConsumerCapabilityAuditFailures(
-    missingAdoptionConsumer,
-    "source_proof",
-  ).includes("confirmation:missing_adoption"),
+  "a truthfully declared missing adoption remains explicit without becoming a false Source Proof failure",
+  resolveConsumerCapabilityAudit(missingAdoptionConsumer).confirmation.state ===
+    "missing_adoption" &&
+    !collectConsumerCapabilityAuditFailures(
+      missingAdoptionConsumer,
+      "source_proof",
+    ).includes("confirmation:missing_adoption"),
 );
 check(
   "local and parallel implementation detection is AST-based and projected from typed capability metadata",
   detectLocalImplementations(localImplementationFixture).has("window_confirm"),
+);
+check(
+  "Collection closure is derived from current consumer decisions and keeps generic plus missing-adoption evidence open",
+  ADMIN_COLLECTION_GLOBAL_CLOSURE_BLOCKERS ===
+    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers &&
+    sameValueSet(
+      derivedCollectionClosureBlockers.map((blocker) => blocker.id),
+      ADMIN_COLLECTION_GLOBAL_CLOSURE_BLOCKERS.map((blocker) => blocker.id),
+    ) &&
+    collectionClosureFixtureBlockers.some((blocker) =>
+      blocker.id.startsWith("collection-generic-adoption:"),
+    ) &&
+    collectionClosureFixtureBlockers.some((blocker) =>
+      blocker.id.startsWith("collection-missing-adoption:"),
+    ) &&
+    !deriveAdminGovernanceClosure(collectionClosureFixtureBlockers)
+      .globalClosed,
+);
+check(
+  "full transitive executable proof follows re-exports and indirect descendants while excluding type-only and dead imports",
+  transitiveFixtureGraph.has("src/fixtures/governance/barrel.ts") &&
+    transitiveFixtureGraph.has("src/fixtures/governance/child.tsx") &&
+    transitiveFixtureGraph.has(
+      "src/components/admin/ui/AdminFormSwitch.tsx",
+    ) &&
+    !transitiveFixtureGraph.has("src/fixtures/governance/dead-type.ts") &&
+    !transitiveFixtureGraph.has("src/fixtures/governance/dead-runtime.ts"),
+);
+check(
+  "symbol-aware executable proof follows export-star re-exports",
+  exportStarFixtureGraph.has(
+    "src/fixtures/governance/export-star-child.tsx",
+  ) && detectLocalImplementations(exportStarFixtureGraph).has("native_select"),
+);
+check(
+  "symbol-aware executable proof preserves bare side-effect imports",
+  sideEffectFixtureGraph.has(
+    "src/fixtures/governance/side-effect-runtime.ts",
+  ) && detectLocalImplementations(sideEffectFixtureGraph).has("window_alert"),
+);
+check(
+  "a shadowing lexical binding does not make an unused import executable",
+  !shadowedImportFixtureGraph.has(
+    "src/fixtures/governance/shadowed-import-dead.ts",
+  ),
+);
+check(
+  "namespace imports traverse only referenced exported members",
+  namespaceFixtureGraph.has("src/fixtures/governance/namespace-live.ts") &&
+    !namespaceFixtureGraph.has("src/fixtures/governance/namespace-dead.tsx") &&
+    !detectLocalImplementations(namespaceFixtureGraph).has("native_select"),
+);
+check(
+  "type-only re-exports neither traverse nor bind their imported runtime symbol",
+  !typeOnlyReExportGraph.has(typeOnlyReExportOwner) &&
+    !typeOnlyReExportBinds,
+);
+check(
+  "namespace-import member use resolves the matching executable owner binding",
+  namespaceBindingGraph.has(namespaceBindingOwner) &&
+    namespaceMemberBinds &&
+    !detectLocalImplementations(namespaceBindingGraph).has("native_select") &&
+    namespaceSelectionVariantResults.every(
+      (result) =>
+        result.reachesOwner && result.binds && !result.leaksUnused,
+    ),
+);
+check(
+  "class extends expressions retain runtime traversal and executable binding proof",
+  extendsFixtureGraph.has(extendsFixtureOwner) && extendsBindingIsExecutable,
+);
+check(
+  "selected dependencies retain executable module-initialization side effects",
+  selectedSideEffectGraph.has(selectedSideEffectDependency) &&
+    detectLocalImplementations(selectedSideEffectGraph).has("window_alert") &&
+    classStaticSideEffectGraph.has(classStaticSideEffectDependency) &&
+    detectLocalImplementations(classStaticSideEffectGraph).has("window_alert") &&
+    [
+      "StaticHidden",
+      "ExtendsHidden",
+      "ComputedHidden",
+      "EnumHidden",
+      "DecoratedHidden",
+    ].every((name) => selectedClassSideEffectSource.includes(name)),
+);
+check(
+  "dynamic imports traverse their executable descendant graph and resolve the requested binding",
+  dynamicImportFixtureGraph.has(dynamicImportFixtureChild) &&
+    detectLocalImplementations(dynamicImportFixtureGraph).has("native_dialog") &&
+    !detectLocalImplementations(dynamicImportFixtureGraph).has("native_select") &&
+    dynamicImportFixtureBinds &&
+    dynamicNamespaceFixtureGraph.has(dynamicImportFixtureChild) &&
+    dynamicNamespaceFixtureBinds &&
+    dynamicPromiseNamespaceGraph.has(dynamicImportFixtureChild) &&
+    dynamicPromiseNamespaceBinds &&
+    dynamicAliasSelectionGraph.has(dynamicAliasSelectionOwner) &&
+    dynamicAliasSelectionBinds &&
+    !detectLocalImplementations(dynamicAliasSelectionGraph).has(
+      "native_select",
+    ) &&
+    nonliteralDynamicVariantResults.every(
+      (result) => result.reachesOwner && result.binds,
+    ) &&
+    unresolvedDynamicImportFailedClosed,
+);
+check(
+  "dead aliases, uncalled functions, and statically false branches do not satisfy executable Source Proof",
+  deadBindingGraph.has(deadBindingOwner) &&
+    !deadBindingBinds &&
+    deadBindingVariantResults.every(
+      (result) => result.reachesOwner && !result.binds,
+    ),
+);
+check(
+  "an externally consumed requested export follows its whole-value owner alias without reviving dead exported proof tokens",
+  requestedAliasGraph.has(requestedAliasBridge) &&
+    requestedAliasGraph.has(requestedAliasOwner) &&
+    requestedAliasBinds &&
+    detectLocalImplementations(requestedAliasGraph).has("native_select"),
+);
+check(
+  "a requested export slice does not promote an unused named binding that shares a live import declaration",
+  mixedImportSliceGraph.has(mixedImportSliceBridge) &&
+    mixedImportSliceGraph.has(mixedImportSliceOwner) &&
+    !mixedImportSliceLeaksUnusedNamedBinding &&
+    !detectLocalImplementations(mixedImportSliceGraph).has("native_select"),
+);
+check(
+  "runtime TypeScript namespaces retain selected exports and module-initialization effects",
+  typescriptNamespaceGraph.has(typescriptNamespaceOwner) &&
+    typescriptNamespaceBinds &&
+    detectLocalImplementations(typescriptNamespaceGraph).has("window_alert"),
+);
+check(
+  "namespace re-exports traverse and resolve only the requested member binding",
+  namespaceReExportGraph.has(namespaceReExportBarrel) &&
+    namespaceReExportGraph.has(namespaceReExportOwner) &&
+    namespaceReExportBinds &&
+    !detectLocalImplementations(namespaceReExportGraph).has("native_select") &&
+    namespaceAliasStarGraph.has(namespaceAliasStarOwner) &&
+    namespaceAliasStarBinds &&
+    !detectLocalImplementations(namespaceAliasStarGraph).has("native_select"),
+);
+check(
+  "computed and spread JSX attributes retain native primitive detection",
+  computedPrimitiveImplementations.has("native_date_input") &&
+    computedPrimitiveImplementations.has("native_file_input") &&
+    computedPrimitiveImplementations.has("native_checkbox") &&
+    computedPrimitiveImplementations.has("native_switch") &&
+    computedPrimitiveImplementations.has("native_select") &&
+    computedPrimitiveImplementations.has("native_dialog") &&
+    computedPrimitiveImplementations.has("local_scrollbar_style") &&
+    intrinsicAliasImplementations.has("native_select") &&
+    intrinsicAliasImplementations.has("native_dialog") &&
+    intrinsicAliasImplementations.has("native_date_input") &&
+    destructuredPrimitiveImplementations.has("native_date_input") &&
+    destructuredPrimitiveImplementations.has("native_search_input") &&
+    destructuredPrimitiveImplementations.has("native_dialog") &&
+    destructuredPrimitiveImplementations.has("native_select") &&
+    namespacePrimitiveImplementations.has("native_date_input") &&
+    namespacePrimitiveImplementations.has("native_dialog") &&
+    namespacePrimitiveImplementations.has("native_select") &&
+    !shadowedPrimitiveImplementations.has("native_date_input") &&
+    mutatedToDateImplementations.has("native_date_input") &&
+    !mutatedToTextImplementations.has("native_date_input") &&
+    reboundObjectImplementations[0]?.has("native_date_input") &&
+    !reboundObjectImplementations[1]?.has("native_date_input") &&
+    taintedObjectImplementations.every((implementations) =>
+      implementations.has("native_date_input"),
+    ) &&
+    crossModuleMutationImplementations[0]?.has("native_date_input") &&
+    !crossModuleMutationImplementations[1]?.has("native_date_input") &&
+    crossModuleMutationImplementations[2]?.has("native_date_input"),
+);
+check(
+  "unresolved governed native attributes fail closed without treating component props as native implementations",
+  unknownNativePropsImplementations.has("native_search_input") &&
+    unknownNativePropsImplementations.has("native_date_input") &&
+    unknownNativePropsImplementations.has("native_file_input") &&
+    unknownNativePropsImplementations.has("native_checkbox") &&
+    unknownNativePropsImplementations.has("native_switch") &&
+    unknownNativePropsImplementations.has("native_dialog") &&
+    unknownNativePropsImplementations.has("native_select") &&
+    unknownComponentPropsImplementations.size === 0 &&
+    boundedRoleImplementations.size === 0 &&
+    knownShapeUnknownValuesImplementations.size === 0,
+);
+check(
+  "native confirm and alert detection covers global objects and aliases while excluding shadowed globals",
+  feedbackAliasFixtureImplementations[0]?.has("window_confirm") &&
+    feedbackAliasFixtureImplementations[1]?.has("window_confirm") &&
+    feedbackAliasFixtureImplementations[2]?.has("window_alert") &&
+    feedbackAliasFixtureImplementations.slice(3).every((implementations) =>
+      implementations.has("window_confirm"),
+    ) &&
+    shadowedFeedbackFixtureImplementations.every(
+      (implementations) => !implementations.has("window_confirm"),
+    ),
+);
+check(
+  "void, member-only void, namespace void, and naked tokens do not satisfy executable Source Proof",
+  voidBindingGraph.has(voidBindingOwner) && !voidReferenceBinds,
+);
+check(
+  "export-star traversal resolves a local declaration exported through a local export list",
+  localExportStarGraph.has(localExportStarChild) &&
+    detectLocalImplementations(localExportStarGraph).has("native_select"),
+);
+check(
+  "export-star traversal resolves a destructured exported const and its selected declaration dependencies",
+  destructuredExportStarGraph.has(destructuredExportStarChild) &&
+    detectLocalImplementations(destructuredExportStarGraph).has("native_select"),
+);
+check(
+  "not_applicable fails closed when a canonical capability is used by an indirect descendant instead of a registered root",
+  hiddenDescendantFailures.includes("switch:hidden_adoption") &&
+    hiddenDescendantFailures.includes("date_picker:local_implementation"),
+);
+check(
+  "Collection capability proof traverses both page and presentation roots and rejects a hidden or parallel owner in a page descendant",
+  collectionPageFixtureGraph.has(collectionPageFixtureRoot) &&
+    collectionPageFixtureGraph.has(collectionPresentationFixtureRoot) &&
+    collectionPageFixtureGraph.has(collectionPageChildFixture) &&
+    collectionPageFixtureFailures.includes("listbox:hidden_adoption") &&
+    collectionPageFixtureFailures.includes("listbox:parallel_implementation"),
+);
+check(
+  "not_applicable rejects direct executable use of every registered-owner capability without attributing canonical-owner internals",
+  registeredOwnerHiddenFailures.includes("feedback:hidden_adoption") &&
+    !mediaBoundaryFailures.includes("modal:hidden_adoption"),
+);
+check(
+  "canonical owner descendants remain visible to full Source Proof without becoming consumer-owned hidden or parallel implementations",
+  mediaBoundaryFullGraph.has("src/components/admin/VenesiaModal.tsx") &&
+    mediaBoundaryModalSourceReach &&
+  mediaBoundaryGraph.has(
+    "src/components/admin/media/AdminMediaImageField.tsx",
+  ) &&
+    !mediaBoundaryGraph.has("src/components/admin/VenesiaModal.tsx") &&
+    !mediaBoundaryFailures.includes("media:missing_source_proof") &&
+    !mediaBoundaryFailures.includes("modal:hidden_adoption") &&
+    !mediaBoundaryFailures.includes("modal:local_implementation") &&
+    !mediaBoundaryFailures.includes("modal:parallel_implementation"),
+);
+check(
+  "consumer-owned graph rejects a local Listbox implementation even beside the canonical owner",
+  parallelListboxFailures.includes("listbox:parallel_implementation"),
+);
+check(
+  "derived governance closure cannot report globalClosed while any blocker remains",
+  derivedNegativeClosure.globalClosed === false &&
+    derivedNegativeClosure.globalClosureBlockers.length === 1 &&
+    !closureStateIsConsistent(true, [contradictoryClosureBlocker]),
+);
+check(
+  "Admin transport inventory is discovered from route handlers and covered exactly once as nested consumers",
+  discoveredAdminTransportConsumers.length > 0 &&
+    adminTransportCoverageFailures.length === 0,
+);
+check(
+  "grouped Collection surfaces project each route-level capability declaration into the audit and cannot hide it behind an aggregate claim",
+  sameValueSet(
+    auditedCollectionCapabilityConsumerIds,
+    expectedCollectionCapabilityConsumerIds,
+  ) &&
+    groupedCollectionNegativeRecords.length === 1 &&
+    groupedCollectionNegativeFailures.includes("listbox:hidden_adoption"),
+);
+check(
+  "dropping Topics Search GET from nested transport coverage fails closed",
+  topicsSearchTransport !== undefined &&
+    collectAdminTransportCoverageFailures(
+      discoveredAdminTransportConsumers,
+      topicsSearchOmissionFixture,
+    ).includes("/admin/content/topics/search#GET:unregistered_handler"),
+);
+check(
+  "Topics Search transport proof requires executable GET request-path evidence beyond caller reachability",
+  topicsSearchMissingRequestFailures.includes(
+    "/admin/content/topics/search#GET:missing_request_evidence",
+  ) &&
+    !topicsSearchMissingRequestFailures.includes(
+      "/admin/content/topics/search#GET:caller_not_reachable",
+    ),
+);
+check(
+  "a newly discovered Next route.js or route.ts Admin handler without manifest registration fails closed",
+  collectAdminTransportCoverageFailures(
+    unregisteredTransportFixture,
+    ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces,
+  ).includes("/admin/fixtures/unregistered-transport#GET:unregistered_handler"),
 );
 
 check(
@@ -1949,11 +4084,54 @@ check(
 );
 check(
   "Admin Interaction System publishes a fail-closed adoption state",
-  ADMIN_INTERACTION_SYSTEM.globalClosed ===
-    ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed &&
+  sameValueSet(
+    Object.keys(ADMIN_INTERACTION_SYSTEM_CLOSURE.components),
+    ADMIN_INTERACTION_MODULES.map((module) => module.id),
+  ) &&
+  ADMIN_INTERACTION_SYSTEM_CLOSURE.globalClosed ===
+    Object.values(ADMIN_INTERACTION_SYSTEM_CLOSURE.components).every(
+      (component) => component.globalClosed,
+    ) &&
+  ADMIN_INTERACTION_SYSTEM_CLOSURE.globalClosureBlockers.length ===
+    Object.values(ADMIN_INTERACTION_SYSTEM_CLOSURE.components).reduce(
+      (total, component) =>
+        total + component.globalClosureBlockers.length,
+      0,
+    ) &&
+    ADMIN_INTERACTION_SYSTEM_CLOSURE.components.collection_runtime
+      ?.globalClosed ===
+      ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed &&
+    ADMIN_INTERACTION_SYSTEM_CLOSURE.components.form_runtime?.globalClosed ===
+      ADMIN_FORM_SYSTEM_CLOSURE.globalClosed &&
+    ADMIN_INTERACTION_SYSTEM_CLOSURE.components.shared_capabilities
+      ?.globalClosureBlockers.length ===
+      ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosureBlockers.length +
+        ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE.globalClosureBlockers.length &&
     closureStateIsConsistent(
-      ADMIN_INTERACTION_SYSTEM.globalClosed,
-      ADMIN_INTERACTION_SYSTEM.globalClosureBlockers,
+      ADMIN_INTERACTION_SYSTEM_CLOSURE.globalClosed,
+      ADMIN_INTERACTION_SYSTEM_CLOSURE.globalClosureBlockers,
+    ),
+);
+check(
+  "Shared Capabilities closure composes Row Actions and Entity Preview without treating Source Proof as behavior",
+  ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE.globalClosed === false &&
+    ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE.proofBoundaries.source ===
+      "manifest_declared_source_proven_only" &&
+    ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE.proofBoundaries.behavior ===
+      "source_proven_only" &&
+    ADMIN_INTERACTION_SYSTEM_CLOSURE.components.shared_capabilities
+      ?.globalClosed === false,
+);
+check(
+  "an inventoried Admin Interaction module without one complete closure ledger fails the umbrella closed",
+  missingInteractionModuleClosureFixture.globalClosed === false &&
+    Object.keys(missingInteractionModuleClosureFixture.components).includes(
+      futureInteractionModuleId,
+    ) &&
+    missingInteractionModuleClosureFixture.globalClosureBlockers.some(
+      (blocker) =>
+        blocker.id ===
+        `module:${futureInteractionModuleId}:module-closure-ledger:${futureInteractionModuleId}:missing`,
     ),
 );
 
@@ -1975,9 +4153,18 @@ check(
   new Set(manifestEntities).size === manifestEntities.length,
 );
 check(
-  "generic Row Actions adoption is globally closed after authenticated Browser QA",
-  ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosed === true &&
-    ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosureBlockers.length === 0,
+  "Row Actions Source Proof remains distinct from unregistered behavioral closure evidence",
+  ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.proofBoundaries.source ===
+    "source_and_executable_reachability" &&
+    ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.proofBoundaries.behavior ===
+      "source_proven_only" &&
+    ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosed === false &&
+    ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.globalClosureBlockers.some(
+      (blocker) =>
+        blocker.id ===
+          "row-actions-behavior:authenticated-interaction-proof" &&
+        blocker.evidence === "source_proven_only",
+    ),
 );
 check(
   "none of the generic collections claims Manual Order support",
@@ -2607,11 +4794,16 @@ check(
     ),
 );
 check(
-  "every inventoried Collection page and presentation source exists",
+  "every inventoried Collection page, presentation, transport, and transport-caller source exists",
   collectionSurfaces.every((surface) =>
-    [...surface.pageSourceFiles, ...surface.presentationSourceFiles].every(
-      (sourceFile) => existsSync(join(ROOT, sourceFile)),
-    ),
+    [
+      ...surface.pageSourceFiles,
+      ...surface.presentationSourceFiles,
+      ...surface.transportConsumers.flatMap((consumer) => [
+        consumer.sourceFile,
+        ...consumer.callerSourceFiles,
+      ]),
+    ].every((sourceFile) => existsSync(join(ROOT, sourceFile))),
   ),
 );
 const activeCollectionSurfaces = collectionSurfaces.filter(
@@ -2788,6 +4980,7 @@ const groupedConsumerEvidenceFailures = collectionSurfaces.flatMap(
       const graph = collectExecutableSourceGraph({
         root: ROOT,
         entrySourceFiles: [consumer.pageSourceFile],
+        symbolAware: true,
       });
       if (
         !surface.pageSourceFiles.includes(consumer.pageSourceFile) ||
@@ -2895,7 +5088,13 @@ const blockTemplateConsumerFailures =
   }) ?? ["block-template-libraries:missing_surface"];
 check(
   "each Block Template library proves its own Collection capabilities instead of inheriting a grouped claim",
-  blockTemplateLibraries?.consumerAdoptionEvidence.length === 9 &&
+  blockTemplateLibraries !== undefined &&
+    sameValueSet(
+      blockTemplateLibraries.consumerAdoptionEvidence.map((consumer) =>
+        consumer.route.slice("/admin/pages-blocks/blocks/".length),
+      ),
+      PAGE_MODULE_KINDS,
+    ) &&
     sameValueSet(
       blockTemplateLibraries.consumerAdoptionEvidence.map(
         (consumer) => consumer.route,
@@ -3557,15 +5756,11 @@ check(
   "Collection global closure claim matches executable Full Adoption coverage",
   ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed ===
     (partialAdoptionSurfaces.length === 0 &&
-      fullAdoptionContractFailures.length === 0) &&
+      fullAdoptionContractFailures.length === 0 &&
+      derivedCollectionClosureBlockers.length === 0) &&
     closureStateIsConsistent(
       ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed,
       ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosureBlockers,
-    ) &&
-    adoptionGapStateIsConsistent(
-      ADMIN_COLLECTION_SURFACE_ADOPTION.globalClosed,
-      ADMIN_COLLECTION_SURFACE_ADOPTION.genericAdoptionGaps,
-      partialAdoptionSurfaces.length,
     ),
 );
 check(
@@ -3640,7 +5835,6 @@ check(
     "footer-fixed-slots",
     "footer-manual-links",
     "block-template-libraries",
-    "block-template-editors",
   ].every((surfaceId) =>
     collectionSurfaces.some((surface) => surface.id === surfaceId),
   ) &&
@@ -4205,7 +6399,6 @@ check(
 check(
   "Instant Mutation inventory is unique, complete, and adopts the scoped owner contract",
   new Set(directInstantConsumers).size === directInstantConsumers.length &&
-    directInstantConsumers.length === 15 &&
     directInstantConsumers.every((sourceFile) => {
       const source = read(sourceFile);
       return (

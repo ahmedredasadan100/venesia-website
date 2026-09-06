@@ -5,19 +5,28 @@ import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
 
 import {
+  ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT,
   ADMIN_FORM_CONFIRM_DEBT,
+  ADMIN_FORM_BEHAVIOR_PROOF_LEDGER,
+  ADMIN_FORM_GLOBAL_CLOSURE_BLOCKERS,
   ADMIN_FORM_RUNTIME_MODULE,
   ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,
   ADMIN_FORM_SYSTEM_CLOSURE,
+  type AdminBlockEditorFeedbackAdoptionDebt,
   type AdminFormAdoptionClassification,
 } from "../src/lib/admin/form-system/adoption-manifest.ts";
 import {
+  ADMIN_CURRENT_SHARED_CAPABILITY_SET,
   ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION,
   ADMIN_INTERACTION_COLLECTION_RUNTIME_GAPS,
   ADMIN_INTERACTION_FORM_REFERENCE_CONSUMERS,
   ADMIN_INTERACTION_MODULES,
   ADMIN_INTERACTION_SYSTEM,
+  PRODUCT_SURFACE_IDENTITIES,
 } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
+import { ADMIN_INTERACTION_SYSTEM_CLOSURE } from "../src/lib/admin/interaction-system/governance-closure.ts";
+import { PAGE_MODULE_KINDS } from "../src/lib/page-blocks/types.ts";
+import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const jiti = createJiti(import.meta.url);
@@ -73,7 +82,7 @@ function check(label: string, condition: unknown) {
 
 function closureStateIsConsistent(
   globalClosed: boolean,
-  blockers: readonly string[],
+  blockers: readonly unknown[],
 ) {
   return globalClosed ? blockers.length === 0 : blockers.length > 0;
 }
@@ -105,6 +114,191 @@ const manifestSourceFiles = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.flatMap(
   (entry) => entry.sourceFiles,
 );
 const manifestSourceFileSet = new Set<string>(manifestSourceFiles);
+const manifestExecutableGraphs = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.map(
+  (entry) =>
+    collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: entry.sourceFiles,
+      symbolAware: true,
+    }),
+);
+
+function blockEditorKindFromProductIdentity(
+  identity: (typeof PRODUCT_SURFACE_IDENTITIES)[number],
+) {
+  const prefix = "/admin/pages-blocks/blocks/";
+  const suffix = "/[id]";
+  if (
+    identity.productSurfaceKind !== "builder" ||
+    identity.workflowOwner !== "block_template_domain" ||
+    !identity.route?.startsWith(prefix) ||
+    !identity.route.endsWith(suffix)
+  ) {
+    return null;
+  }
+  const moduleKind = identity.route.slice(prefix.length, -suffix.length);
+  return PAGE_MODULE_KINDS.includes(
+    moduleKind as (typeof PAGE_MODULE_KINDS)[number],
+  )
+    ? moduleKind
+    : null;
+}
+
+function collectBlockEditorCoverageFailures(input: {
+  canonicalModuleKinds: readonly string[];
+  formModuleKinds: readonly string[];
+  productModuleKinds: readonly string[];
+}) {
+  const failures: string[] = [];
+  const axes = [
+    ["form", input.formModuleKinds],
+    ["product", input.productModuleKinds],
+  ] as const;
+  for (const moduleKind of input.canonicalModuleKinds) {
+    for (const [axis, values] of axes) {
+      if (!values.includes(moduleKind)) {
+        failures.push(`${moduleKind}:missing_${axis}_registration`);
+      }
+    }
+  }
+  for (const [axis, values] of axes) {
+    for (const moduleKind of values) {
+      if (!input.canonicalModuleKinds.includes(moduleKind)) {
+        failures.push(`${moduleKind}:stale_${axis}_registration`);
+      }
+      if (values.filter((candidate) => candidate === moduleKind).length !== 1) {
+        failures.push(`${moduleKind}:duplicate_${axis}_registration`);
+      }
+    }
+  }
+  return [...new Set(failures)];
+}
+
+function collectCapabilityDecisionIdentityFailures(
+  entries: readonly {
+    id: string;
+    decisions: Readonly<Record<string, object>>;
+  }[],
+) {
+  const firstOwnerByDecision = new Map<object, string>();
+  const failures: string[] = [];
+  for (const entry of entries) {
+    for (const [capability, decision] of Object.entries(entry.decisions)) {
+      const firstOwner = firstOwnerByDecision.get(decision);
+      if (firstOwner) {
+        failures.push(
+          `${entry.id}:${capability}:shares_nested_decision_with:${firstOwner}`,
+        );
+      } else {
+        firstOwnerByDecision.set(decision, `${entry.id}:${capability}`);
+      }
+    }
+  }
+  return failures;
+}
+
+const blockEditorEntries = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.filter(
+  (
+    entry,
+  ): entry is (typeof ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST)[number] & {
+    registryModuleKind: (typeof PAGE_MODULE_KINDS)[number];
+  } => "registryModuleKind" in entry,
+);
+const blockEditorFeedbackDebtByKind = new Map<
+  string,
+  AdminBlockEditorFeedbackAdoptionDebt
+>(
+  ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT.map((debt) => [
+    debt.moduleKind,
+    debt,
+  ]),
+);
+const feedbackOwnerBoundarySourceFiles =
+  ADMIN_CURRENT_SHARED_CAPABILITY_SET.feedback.sourceFiles;
+const adminNoticeSourceFile = "src/components/admin/AdminNotice.tsx";
+const blockEditorFeedbackTruthFailures = blockEditorEntries.flatMap(
+  (entry) => {
+    const ownershipGraph = collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: entry.sourceFiles,
+      traversalBoundarySourceFiles: feedbackOwnerBoundarySourceFiles,
+      symbolAware: true,
+    });
+    const debt = blockEditorFeedbackDebtByKind.get(entry.registryModuleKind);
+    const feedbackOverride = entry.capabilityAudit.overrides.feedback;
+    const ownsDirectNoticePath = ownershipGraph.has(adminNoticeSourceFile);
+    const failures: string[] = [];
+    if (ownsDirectNoticePath !== Boolean(debt)) {
+      failures.push(`${entry.id}:direct_notice_debt_mismatch`);
+    }
+    if (debt && feedbackOverride?.state !== "missing_adoption") {
+      failures.push(`${entry.id}:direct_notice_not_declared_missing`);
+    }
+    if (!debt && feedbackOverride?.state === "missing_adoption") {
+      failures.push(`${entry.id}:stale_feedback_debt`);
+    }
+    if (
+      debt &&
+      (!debt.blocksGlobalClosure ||
+        debt.owner !== "feedback_runtime" ||
+        debt.sourceFiles.length === 0 ||
+        debt.sourceFiles.some((sourceFile) =>
+          !existsSync(absolutePath(sourceFile)),
+        ) ||
+        debt.requiredProof.length === 0 ||
+        !debt.risk.trim() ||
+        !debt.plannedPhase.trim())
+    ) {
+      failures.push(`${entry.id}:invalid_feedback_debt_contract`);
+    }
+    return failures;
+  },
+);
+const formBlockEditorKinds = blockEditorEntries.flatMap((entry) =>
+  entry.registryModuleKind ? [entry.registryModuleKind] : [],
+);
+const productBlockEditorKinds = PRODUCT_SURFACE_IDENTITIES.flatMap(
+  (identity) => {
+    const moduleKind = blockEditorKindFromProductIdentity(identity);
+    return moduleKind ? [moduleKind] : [];
+  },
+);
+const blockEditorCoverageFailures = collectBlockEditorCoverageFailures({
+  canonicalModuleKinds: PAGE_MODULE_KINDS,
+  formModuleKinds: formBlockEditorKinds,
+  productModuleKinds: productBlockEditorKinds,
+});
+const blockEditorDecisionIdentityFailures =
+  collectCapabilityDecisionIdentityFailures(
+    blockEditorEntries.map((entry) => ({
+      id: entry.id,
+      decisions: entry.capabilityAudit.decisions,
+    })),
+  );
+const futureBlockEditorFixture = "future-block-editor-fixture";
+const unregisteredBlockEditorFailures = collectBlockEditorCoverageFailures({
+  canonicalModuleKinds: [...PAGE_MODULE_KINDS, futureBlockEditorFixture],
+  formModuleKinds: formBlockEditorKinds,
+  productModuleKinds: [...productBlockEditorKinds, futureBlockEditorFixture],
+});
+const sharedNestedDecisionFixture = {
+  state: "not_applicable",
+  rationale: "Negative fixture for a shallow-shared nested decision.",
+} as const;
+const shallowSharedDecisionProfileFixture = {
+  fixture_capability: sharedNestedDecisionFixture,
+};
+const shallowSharedDecisionIdentityFailures =
+  collectCapabilityDecisionIdentityFailures([
+    {
+      id: "shallow-shared-decision-fixture-a",
+      decisions: { ...shallowSharedDecisionProfileFixture },
+    },
+    {
+      id: "shallow-shared-decision-fixture-b",
+      decisions: { ...shallowSharedDecisionProfileFixture },
+    },
+  ]);
 
 check(
   "Admin Interaction System is a governance/contracts umbrella, not a super-runtime",
@@ -113,39 +307,42 @@ check(
 );
 check(
   "Admin Interaction System closure state fails closed when adoption blockers exist",
-  closureStateIsConsistent(
-    ADMIN_INTERACTION_SYSTEM.globalClosed,
-    ADMIN_INTERACTION_SYSTEM.globalClosureBlockers,
-  ),
+  Object.keys(ADMIN_INTERACTION_SYSTEM_CLOSURE.components).length ===
+    ADMIN_INTERACTION_MODULES.length &&
+    ADMIN_INTERACTION_MODULES.every(
+      (module) => module.id in ADMIN_INTERACTION_SYSTEM_CLOSURE.components,
+    ) &&
+    ADMIN_INTERACTION_SYSTEM_CLOSURE.globalClosed ===
+    Object.values(ADMIN_INTERACTION_SYSTEM_CLOSURE.components).every(
+      (component) => component.globalClosed,
+    ) &&
+    ADMIN_INTERACTION_SYSTEM_CLOSURE.globalClosureBlockers.length ===
+      Object.values(ADMIN_INTERACTION_SYSTEM_CLOSURE.components).reduce(
+        (total, component) =>
+          total + component.globalClosureBlockers.length,
+        0,
+      ) &&
+    closureStateIsConsistent(
+      ADMIN_INTERACTION_SYSTEM_CLOSURE.globalClosed,
+      ADMIN_INTERACTION_SYSTEM_CLOSURE.globalClosureBlockers,
+    ),
 );
 
-const expectedInteractionModuleIds = [
-  "form_runtime",
-  "collection_runtime",
-  "data_runtime",
-  "feedback_runtime",
-  "confirmation_runtime",
-  "shared_capabilities",
-] as const;
 const interactionModulesById = new Map(
   ADMIN_INTERACTION_MODULES.map((module) => [module.id, module]),
 );
 check(
-  "Form, Collection, Data, Feedback, Confirmation, and Shared Capabilities keep explicit owners",
-  ADMIN_INTERACTION_MODULES.length === expectedInteractionModuleIds.length &&
-    interactionModulesById.size === expectedInteractionModuleIds.length &&
-    expectedInteractionModuleIds.every((id) =>
-      interactionModulesById.has(id),
-    ) &&
-    expectedInteractionModuleIds
-      .filter((id) => id !== "shared_capabilities")
-      .every(
-        (id) =>
-          interactionModulesById.get(id)?.classification ===
-          "independent_runtime",
-      ) &&
-    interactionModulesById.get("shared_capabilities")?.classification ===
-      "shared_capability_layer",
+  "the canonical Admin Interaction module inventory has unique explicit owners and no inferred module count",
+  ADMIN_INTERACTION_MODULES.length > 0 &&
+    interactionModulesById.size === ADMIN_INTERACTION_MODULES.length &&
+    ADMIN_INTERACTION_MODULES.every(
+      (module) =>
+        module.responsibility.trim().length > 0 &&
+        module.sourceFiles.length > 0 &&
+        (module.id === "shared_capabilities"
+          ? module.classification === "shared_capability_layer"
+          : module.classification === "independent_runtime"),
+    ),
 );
 check(
   "every declared Admin Interaction module owner exists",
@@ -166,13 +363,9 @@ const interactionFormReferenceIds = new Set<string>(
   ADMIN_INTERACTION_FORM_REFERENCE_CONSUMERS.map((entry) => entry.id),
 );
 check(
-  "Admin Interaction governance records the three Form Runtime reference consumers",
-  interactionFormReferenceIds.size === 3 &&
-    [
-      "topic-article-create-edit",
-      "topic-category-create-edit",
-      "topic-series-create-edit",
-    ].every((id) => interactionFormReferenceIds.has(id)) &&
+  "Admin Interaction Form references and Form shared-reference adopters match bidirectionally",
+  interactionFormReferenceIds.size ===
+    ADMIN_INTERACTION_FORM_REFERENCE_CONSUMERS.length &&
     ADMIN_INTERACTION_FORM_REFERENCE_CONSUMERS.every(
       (entry) =>
         entry.module === "form_runtime" &&
@@ -182,7 +375,10 @@ check(
             sourceFile,
           ),
         ),
-    ),
+    ) &&
+    ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.filter(
+      (entry) => entry.classification === "shared_reference",
+    ).every((entry) => interactionFormReferenceIds.has(entry.id)),
 );
 
 const previewCapabilityAdopter = ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.find(
@@ -259,9 +455,22 @@ check(
       "shared_legacy_form_adoption_closed",
 );
 check(
-  "global Form Runtime closure is explicitly forbidden",
-  ADMIN_FORM_SYSTEM_CLOSURE.globalClosed === false &&
-    ADMIN_FORM_SYSTEM_CLOSURE.globalClosureBlockers.length >= 1,
+  "global Form Runtime closure is derived open from owner, adoption, exception, and behavioral-proof blockers",
+  ADMIN_FORM_SYSTEM_CLOSURE.globalClosed ===
+    (ADMIN_FORM_GLOBAL_CLOSURE_BLOCKERS.length === 0) &&
+    ADMIN_FORM_SYSTEM_CLOSURE.globalClosureBlockers ===
+      ADMIN_FORM_GLOBAL_CLOSURE_BLOCKERS &&
+    ADMIN_FORM_SYSTEM_CLOSURE.globalClosureBlockers.length > 0,
+);
+check(
+  "source-only Form evidence remains distinct from Behavioral Proof and blocks global closure",
+  ADMIN_FORM_BEHAVIOR_PROOF_LEDGER.some(
+    (proof) =>
+      proof.requiredForGlobalClosure && proof.state === "source_proven_only",
+  ) &&
+    ADMIN_FORM_SYSTEM_CLOSURE.globalClosureBlockers.some((blocker) =>
+      blocker.id.startsWith("form-behavior:"),
+    ),
 );
 check(
   "manifest entry IDs are unique",
@@ -277,61 +486,59 @@ check(
     existsSync(absolutePath(sourceFile)),
   ),
 );
+check(
+  "every canonical Block Editor has one independent Form identity and one bidirectionally matching Product Surface identity",
+  blockEditorCoverageFailures.length === 0 &&
+    new Set(
+      blockEditorEntries.map((entry) => entry.capabilityAudit.decisions),
+    ).size === blockEditorEntries.length &&
+    blockEditorDecisionIdentityFailures.length === 0 &&
+    blockEditorEntries.every(
+      (entry) =>
+        entry.sourceFiles.length === 1 &&
+        entry.sourceFiles[0] ===
+          `src/app/admin/pages-blocks/blocks/${entry.registryModuleKind}/[id]/page.tsx`,
+    ),
+);
+check(
+  "direct Block Editor action feedback is declared as blocking debt instead of hidden behind not_applicable",
+  blockEditorFeedbackDebtByKind.size ===
+    ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT.length &&
+    blockEditorFeedbackTruthFailures.length === 0 &&
+    ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT.every((debt) =>
+      ADMIN_FORM_GLOBAL_CLOSURE_BLOCKERS.some(
+        (blocker) =>
+          blocker.id ===
+          `form-missing-adoption:block-template-${debt.moduleKind}-editor:feedback`,
+      ),
+    ),
+);
+check(
+  "a shallow-shared nested Block Editor decision fails the identity proof",
+  shallowSharedDecisionIdentityFailures.length > 0,
+);
+check(
+  "a canonical Block Editor added without its Form adoption identity fails closed",
+  unregisteredBlockEditorFailures.includes(
+    `${futureBlockEditorFixture}:missing_form_registration`,
+  ),
+);
 
-const expectedClassifications: Record<
-  AdminFormAdoptionClassification,
-  readonly string[]
-> = {
-  shared_reference: [
-    "topic-article-create-edit",
-    "topic-category-create-edit",
-    "topic-series-create-edit",
-  ],
-  shared_adopter: [
-    "redirects-create-edit",
-    "projects-create-edit",
-    "project-locations-create-edit",
-    "project-tracking-create-edit",
-    "topic-media-create-edit",
-    "pages-quick-create",
-    "block-template-create-modals",
-    "menu-quick-create",
-    "company-identity-settings",
-    "users-create-edit",
-  ],
-  legacy_generic_gap: [],
-  specialized_exception: [
-    "page-composition-and-seo",
-    "block-template-builders-and-editors",
-    "menu-builder",
-    "footer-builder",
-    "global-seo-settings",
-    "media-library-settings",
-    "security-settings",
-    "integrations-server-configuration",
-    "users-and-roles",
-  ],
-  explicit_exception: [
-    "maintenance-immediate-setting",
-    "authentication-login",
-    "list-bulk-row-one-shot-actions",
-    "activity-sitemap-media-commands",
-  ],
-};
-
-for (const [classification, expectedIds] of Object.entries(
-  expectedClassifications,
-) as Array<[AdminFormAdoptionClassification, readonly string[]]>) {
-  const actualIds = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.filter(
-    (entry) => entry.classification === classification,
-  ).map((entry) => entry.id);
-  const actualIdSet = new Set<string>(actualIds);
-  check(
-    `${classification} inventory remains complete`,
-    actualIds.length === expectedIds.length &&
-      expectedIds.every((id) => actualIdSet.has(id)),
-  );
-}
+check(
+  "Form classifications are complete records from the canonical manifest rather than a copied consumer list",
+  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.every(
+    (entry) =>
+      entry.id.trim().length > 0 &&
+      entry.label.trim().length > 0 &&
+      entry.rationale.trim().length > 0 &&
+      entry.sourceFiles.length > 0 &&
+      (entry.classification === "specialized_exception" ||
+      entry.classification === "explicit_exception"
+        ? entry.exceptionContract.knownDebt.length > 0 &&
+          entry.exceptionContract.reviewTrigger.trim().length > 0
+        : !("exceptionContract" in entry)),
+  ),
+);
 
 check(
   "in-scope generic adoption gaps are closed without claiming global Form Runtime closure",
@@ -374,7 +581,9 @@ const formMutationOwnerSources = [
       sourceFile !== "src/components/admin/ui/AdminFormRuntime.tsx",
   );
 const unclassifiedFormMutationOwners = formMutationOwnerSources.filter(
-  (sourceFile) => !manifestSourceFileSet.has(sourceFile),
+  (sourceFile) =>
+    !manifestSourceFileSet.has(sourceFile) &&
+    !manifestExecutableGraphs.some((graph) => graph.has(sourceFile)),
 );
 check(
   "every Admin raw-form or imperative FormData owner is classified in the adoption manifest",
@@ -764,7 +973,7 @@ check(
     !actionsSource.includes("النسخة العامة"),
 );
 check(
-  "shared runtime owns pending state, dirty guard, feedback, and create-to-edit handoff",
+  "Form Runtime source exposes the pending, dirty-guard, feedback, and create-to-edit bindings without claiming mounted behavior",
   [
     "useActionState",
     "useAdminUnsavedChangesGuard",
@@ -778,7 +987,7 @@ check(
   ].every((marker) => runtime.includes(marker)),
 );
 check(
-  "create-to-edit handoff validates the internal target, clears dirty state, and replaces once",
+  "create-to-edit source contract orders target validation, clean-state marking, callback, and replace",
   createEditHandoffStart >= 0 &&
     createEditHandoffReplace > createEditHandoffStart &&
     createEditHandoffEnd > createEditHandoffReplace &&
@@ -815,7 +1024,7 @@ check(
     formDomPreservation.includes("new DataTransfer()"),
 );
 check(
-  "shared runtime locks every consumer field while a save or handoff is pending",
+  "Form Runtime source delegates pending field disabling to its shared fieldset boundary",
   /<fieldset\s+[\s\S]*?disabled=\{pending\}[\s\S]*?data-admin-form-fields=""[\s\S]*?>[\s\S]*?\{typeof children[\s\S]*?<\/fieldset>/.test(
     runtime,
   ),

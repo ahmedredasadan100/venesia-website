@@ -10,19 +10,31 @@
 import {
   ADMIN_MODAL_CONSUMER_CAPABILITIES,
   ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
-  ADMIN_MODAL_MEDIA_CONSUMER_CAPABILITIES,
+  ADMIN_MEDIA_CONSUMER_CAPABILITIES,
   ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
+  ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+  ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
+  ADMIN_CURRENT_SHARED_CAPABILITY_SET,
   ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
   ADMIN_SWITCH_CONSUMER_CAPABILITIES,
   ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
   ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+  ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+  adminSharedCapabilityKeys,
   adminConsumerCapabilityAudit,
+  deriveAdminGovernanceClosure,
+  instantiateAdminBlockEditorCapabilityDecisions,
+  type AdminGovernanceClosureBlocker,
   type AdminConsumerCapabilityApprovedException,
   type AdminConsumerCapabilityKey,
   type AdminConsumerCapabilityAuditDeclaration,
 } from "../interaction-system/adoption-manifest.ts";
+import {
+  PAGE_MODULE_KINDS,
+  type PageModuleKind,
+} from "../../page-blocks/types.ts";
 
 export type AdminFormAdoptionClassification =
   | "shared_reference"
@@ -33,6 +45,8 @@ export type AdminFormAdoptionClassification =
 
 type AdminFormAdoptionEntryBase = {
   id: string;
+  /** Present only for a Block Editor identity derived from PAGE_MODULE_KINDS. */
+  registryModuleKind?: PageModuleKind;
   label: string;
   sourceFiles: readonly string[];
   surfaces: readonly string[];
@@ -68,17 +82,6 @@ export const ADMIN_FORM_RUNTIME_MODULE = {
   ownsSharedCapabilities: false,
 } as const;
 
-export const ADMIN_FORM_SYSTEM_CLOSURE = {
-  phase: "Shared Legacy Adoption Closure",
-  module: ADMIN_FORM_RUNTIME_MODULE.id,
-  scope: "reference_consumers_and_in_scope_generic_legacy_forms",
-  allowedClaim: "shared_legacy_form_adoption_closed",
-  globalClosed: false,
-  globalClosureBlockers: [
-    "Other Admin Interaction System runtimes and capabilities have independent adoption ledgers.",
-  ],
-} as const;
-
 function approvedFormRuntimeException(input: {
   scope: string;
   evidence: readonly string[];
@@ -93,12 +96,154 @@ function approvedFormRuntimeException(input: {
   };
 }
 
+const ADMIN_BLOCK_EDITOR_REGISTERED_OWNER_CAPABILITIES = {
+  hero: [],
+  content: [],
+  cta: ["feedback"],
+  cards: ["feedback"],
+  breadcrumb: ["feedback"],
+  feed: ["feedback"],
+  featured: ["feedback", "scrollbar"],
+  "media-sidebar": ["feedback"],
+  "media-hub": ["feedback"],
+} as const satisfies Readonly<
+  Record<PageModuleKind, readonly AdminConsumerCapabilityKey[]>
+>;
+
+export type AdminBlockEditorFeedbackAdoptionDebt = {
+  id: string;
+  moduleKind: PageModuleKind;
+  description: string;
+  sourceFiles: readonly string[];
+  risk: string;
+  owner: "feedback_runtime";
+  blocksGlobalClosure: true;
+  plannedPhase: string;
+  requiredProof: readonly string[];
+};
+
+/**
+ * Known Block Editor action-feedback paths that still bypass the canonical
+ * Feedback Runtime. This is debt, not an approved exception: G0 records the
+ * current boundary without changing Product behavior.
+ */
+export const ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT = [
+  {
+    id: "block-editor-feedback:hero-direct-action-notice",
+    moduleKind: "hero",
+    description:
+      "Hero save-result feedback renders AdminNotice directly instead of publishing through the canonical Feedback Runtime.",
+    sourceFiles: [
+      "src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx",
+      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
+    ],
+    risk:
+      "Feedback policy, channel reconciliation, and lifecycle changes do not automatically reach this editor.",
+    owner: "feedback_runtime",
+    blocksGlobalClosure: true,
+    plannedPhase: "dedicated Block Editor Feedback adoption",
+    requiredProof: [
+      "The save-result path publishes through the canonical Feedback Runtime.",
+      "Mounted behavior preserves the current success and media-warning presentation.",
+    ],
+  },
+  {
+    id: "block-editor-feedback:content-direct-action-notice",
+    moduleKind: "content",
+    description:
+      "Content save-result feedback renders AdminNotice directly instead of publishing through the canonical Feedback Runtime.",
+    sourceFiles: [
+      "src/app/admin/pages-blocks/blocks/content/[id]/page.tsx",
+      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+    ],
+    risk:
+      "Feedback policy, channel reconciliation, and lifecycle changes do not automatically reach this editor.",
+    owner: "feedback_runtime",
+    blocksGlobalClosure: true,
+    plannedPhase: "dedicated Block Editor Feedback adoption",
+    requiredProof: [
+      "The save-result path publishes through the canonical Feedback Runtime.",
+      "Mounted behavior preserves every current content-specific success message.",
+    ],
+  },
+] as const satisfies readonly AdminBlockEditorFeedbackAdoptionDebt[];
+
+function blockEditorAdoptionEntry(
+  moduleKind: PageModuleKind,
+): AdminFormAdoptionEntry {
+  const sourceFile =
+    `src/app/admin/pages-blocks/blocks/${moduleKind}/[id]/page.tsx`;
+  const feedbackAdoptionDebt =
+    ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT.find(
+      (debt) => debt.moduleKind === moduleKind,
+    );
+  const decisions = instantiateAdminBlockEditorCapabilityDecisions(moduleKind);
+  const adoptedExplicitCapabilities = adminSharedCapabilityKeys(
+    ADMIN_CURRENT_SHARED_CAPABILITY_SET,
+  ).filter(
+    (capability) =>
+      ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].applicabilityOwner ===
+        "explicit_consumer_declaration" &&
+      decisions[
+        capability as keyof typeof decisions
+      ]?.state === "adopted",
+  );
+
+  return {
+    id: `block-template-${moduleKind}-editor`,
+    registryModuleKind: moduleKind,
+    capabilityAudit: adminConsumerCapabilityAudit(
+      decisions,
+      {
+        form_runtime: approvedFormRuntimeException({
+          scope: `block-template-${moduleKind}-editor:schema-builder-lifecycle`,
+          evidence: [sourceFile],
+          rationale:
+            "This registered schema editor owns a compound module composition session; its create modal is governed by the separate shared adopter.",
+        }),
+        ...(feedbackAdoptionDebt
+          ? {
+              feedback: {
+                state: "missing_adoption" as const,
+                rationale: `${feedbackAdoptionDebt.id}: ${feedbackAdoptionDebt.description}`,
+              },
+            }
+          : {}),
+      },
+    ),
+    label: `Block template ${moduleKind} editor`,
+    classification: "specialized_exception",
+    sourceFiles: [sourceFile],
+    surfaces: [`${moduleKind}:template-edit`, `${moduleKind}:template-command`],
+    rationale:
+      "The registry-derived Block Editor retains its dedicated composition contract and owns an independent capability declaration.",
+    exceptionContract: {
+      lowerLevelSharedCapabilities: [
+        ...ADMIN_BLOCK_EDITOR_REGISTERED_OWNER_CAPABILITIES[moduleKind],
+        ...adoptedExplicitCapabilities,
+      ],
+      knownDebt: [
+        "The schema edit session remains outside the generic Form Runtime by explicit aggregate ownership.",
+        ...(feedbackAdoptionDebt ? [feedbackAdoptionDebt.description] : []),
+      ],
+      reviewTrigger:
+        "Review when this schema editor converges on the same save, dirty-close, and create-to-edit lifecycle as generic entity forms.",
+      blocksGlobalClosure: false,
+    },
+  };
+}
+
 export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "topic-article-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-      {},
+      {
+        ...ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+        date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+      },
+      {
+        scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
+      },
     ),
     label: "Topic Article create and edit",
     classification: "shared_reference",
@@ -139,8 +284,13 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "topic-media-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-      {},
+      {
+        ...ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+        date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+      },
+      {
+        scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
+      },
     ),
     label: "Media Topic create and edit",
     classification: "shared_adopter",
@@ -165,7 +315,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "projects-create-edit",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_LISTBOX_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Project create and edit",
@@ -214,9 +364,9 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
         listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
         date_picker: {
-          state: "owner_extension_required",
+          ...ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
           rationale:
-            "Tracking dates are applicable, but the current platform has no shared Date or Calendar owner that can be adopted without a prohibited owner extension.",
+            "Tracking dates are applicable, but the current platform has no shared Date or Calendar owner available for adoption.",
         },
         switch: {
           state: "adopted",
@@ -282,7 +432,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "page-composition-and-seo",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "page-composition-and-seo:specialized-builder-lifecycle",
@@ -311,6 +461,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         "confirmation",
         "busy_state",
         "modal",
+        "media",
         "listbox",
         "switch",
       ],
@@ -325,7 +476,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "block-template-create-modals",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Block template create modals",
@@ -347,54 +498,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     rationale:
       "All generic template-create modals delegate form lifecycle, validation feedback, dirty confirmation, and Create-to-Edit handoff to AdminFormRuntime while schema editors retain their specialized owners.",
   },
-  {
-    id: "block-template-builders-and-editors",
-    capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-      {
-        form_runtime: approvedFormRuntimeException({
-          scope: "block-template-builders-and-editors:schema-builder-lifecycle",
-          evidence: [
-            "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
-            "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-          ],
-          rationale:
-            "Schema-driven block editors own compound module composition sessions; their generic create modals are registered as separate shared adopters.",
-        }),
-      },
-    ),
-    label: "Block template builders and editors",
-    classification: "specialized_exception",
-    sourceFiles: [
-      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-      "src/components/admin/page-blocks/BreadcrumbModuleEditClient.tsx",
-      "src/components/admin/page-blocks/CardsModuleEditClient.tsx",
-      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
-      "src/components/admin/page-blocks/CtaModuleEditClient.tsx",
-      "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
-      "src/components/admin/page-blocks/FeaturedModuleEditClient.tsx",
-      "src/components/admin/page-blocks/MediaHubModuleEditClient.tsx",
-      "src/components/admin/page-blocks/MediaSidebarModuleEditClient.tsx",
-    ],
-    surfaces: ["template-edit", "template-command"],
-    rationale:
-      "Schema-driven block editors retain their dedicated composition contract; their generic create modals are inventoried as shared adopters separately.",
-    exceptionContract: {
-      lowerLevelSharedCapabilities: [
-        "feedback",
-        "confirmation",
-        "media",
-        "switch",
-        "listbox",
-      ],
-      knownDebt: [
-        "Schema edit sessions remain outside the generic form runtime by explicit aggregate ownership.",
-      ],
-      reviewTrigger:
-        "Review when schema editors converge on the same save, dirty-close, and create-to-edit lifecycle as generic entity forms.",
-      blocksGlobalClosure: false,
-    },
-  },
+  ...PAGE_MODULE_KINDS.map(blockEditorAdoptionEntry),
   {
     id: "menu-quick-create",
     capabilityAudit: adminConsumerCapabilityAudit(
@@ -411,7 +515,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "menu-builder",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "menu-builder:hierarchical-builder-lifecycle",
@@ -442,6 +546,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         "busy_state",
         "listbox",
         "switch",
+        "media",
       ],
       knownDebt: [
         "Menu hierarchy and ordering remain specialized domain commands.",
@@ -454,7 +559,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "footer-builder",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Footer builder",
@@ -473,6 +578,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         "modal",
         "listbox",
         "switch",
+        "media",
       ],
       knownDebt: [
         "Footer slot composition and ordering remain one aggregate draft rather than generic entity forms.",
@@ -495,7 +601,12 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     rationale:
       "Singleton global metadata management is not a generic entity create/edit consumer.",
     exceptionContract: {
-      lowerLevelSharedCapabilities: ["feedback", "busy_state", "listbox"],
+      lowerLevelSharedCapabilities: [
+        "form_runtime",
+        "feedback",
+        "busy_state",
+        "listbox",
+      ],
       knownDebt: [
         "Global SEO remains a singleton settings aggregate with inheritance semantics.",
       ],
@@ -507,7 +618,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "company-identity-settings",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
+      ADMIN_MEDIA_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Company identity settings",
@@ -531,6 +642,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "Singleton upload, deletion, storage, and reconciliation policies retain a dedicated settings contract.",
     exceptionContract: {
       lowerLevelSharedCapabilities: [
+        "form_runtime",
         "feedback",
         "confirmation",
         "busy_state",
@@ -628,7 +740,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "users-and-roles",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_CONSUMER_CAPABILITIES,
       {},
     ),
     label: "Users and roles management",
@@ -639,10 +751,12 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "Identity status and delete commands remain specialized Auth-domain mutations while collection presentation, feedback, and confirmation use the shared owners and create/edit lifecycle is inventoried separately.",
     exceptionContract: {
       lowerLevelSharedCapabilities: [
+        "form_runtime",
         "feedback",
         "confirmation",
         "busy_state",
         "modal",
+        "switch",
       ],
       knownDebt: [
         "Identity status and deletion remain Auth-domain commands; create/edit is governed by its separate adopter entry.",
@@ -712,7 +826,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "list-bulk-row-one-shot-actions",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+      ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "list-bulk-row-one-shot-actions:atomic-command",
@@ -750,6 +864,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         "busy_state",
         "modal",
         "listbox",
+        "switch",
       ],
       knownDebt: [
         "Atomic list commands intentionally do not create persistent editable sessions.",
@@ -762,7 +877,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
   {
     id: "activity-sitemap-media-commands",
     capabilityAudit: adminConsumerCapabilityAudit(
-      ADMIN_MODAL_MEDIA_CONSUMER_CAPABILITIES,
+      ADMIN_MEDIA_CONSUMER_CAPABILITIES,
       {
         form_runtime: approvedFormRuntimeException({
           scope: "activity-sitemap-media-commands:query-command-utilities",
@@ -800,7 +915,6 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         "feedback",
         "confirmation",
         "busy_state",
-        "modal",
         "media",
       ],
       knownDebt: [
@@ -814,3 +928,135 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
 ] as const satisfies readonly AdminFormAdoptionEntry[];
 
 export const ADMIN_FORM_CONFIRM_DEBT = [] as const;
+
+export type AdminGovernanceBehaviorProof = {
+  id: string;
+  state: "source_proven_only" | "behavior_verified";
+  requiredForGlobalClosure: boolean;
+  evidence: readonly string[];
+  rationale: string;
+};
+
+export const ADMIN_FORM_BEHAVIOR_PROOF_LEDGER = [
+  {
+    id: "form-dirty-guard-programmatic-navigation",
+    state: "source_proven_only",
+    requiredForGlobalClosure: true,
+    evidence: [
+      "src/components/admin/ui/AdminFormRuntime.tsx",
+      "src/lib/admin/form-runtime.ts",
+    ],
+    rationale:
+      "Executable bindings and source guards exist, but no mounted runtime test currently proves dirty protection across programmatic navigation.",
+  },
+  {
+    id: "form-save-parity-across-consumers",
+    state: "source_proven_only",
+    requiredForGlobalClosure: true,
+    evidence: ["src/components/admin/ui/AdminFormRuntime.tsx"],
+    rationale:
+      "Source adoption does not by itself prove equivalent save, rollback, and completion behavior across every registered consumer.",
+  },
+] as const satisfies readonly AdminGovernanceBehaviorProof[];
+
+function behaviorProofBlocksGlobalClosure(
+  proof: AdminGovernanceBehaviorProof,
+) {
+  return proof.requiredForGlobalClosure && proof.state !== "behavior_verified";
+}
+
+const formCapabilityOwnerBlockers = adminSharedCapabilityKeys(
+  ADMIN_CURRENT_SHARED_CAPABILITY_SET,
+).flatMap((capability): AdminGovernanceClosureBlocker[] => {
+  const definition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
+  const hasApplicableConsumer = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.some(
+    (entry) =>
+      entry.capabilityAudit.decisions[
+        capability as keyof typeof entry.capabilityAudit.decisions
+      ]?.state === "owner_extension_required" ||
+      entry.capabilityAudit.overrides[capability]?.state ===
+        "owner_extension_required",
+  );
+  return definition.ownerAvailability === "owner_extension_required" &&
+    hasApplicableConsumer
+    ? [
+        {
+          id: `form-capability-owner:${capability}`,
+          owner: definition.owner,
+          evidence: "source_confirmed",
+          rationale: `${capability} is applicable to a registered Form consumer but its shared owner requires an extension.`,
+        },
+      ]
+    : [];
+});
+
+const formManifestBlockers = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.flatMap(
+  (entry): AdminGovernanceClosureBlocker[] => {
+    const blockers: AdminGovernanceClosureBlocker[] = [];
+    if (entry.classification === "legacy_generic_gap") {
+      blockers.push({
+        id: `form-legacy-gap:${entry.id}`,
+        owner: entry.id,
+        evidence: "source_confirmed",
+        rationale: entry.rationale,
+      });
+    }
+    for (const [capability, decision] of Object.entries({
+      ...entry.capabilityAudit.decisions,
+      ...entry.capabilityAudit.overrides,
+    })) {
+      if (decision.state === "missing_adoption") {
+        blockers.push({
+          id: `form-missing-adoption:${entry.id}:${capability}`,
+          owner: entry.id,
+          evidence: "source_confirmed",
+          rationale: decision.rationale,
+        });
+      }
+    }
+    if (
+      "exceptionContract" in entry &&
+      entry.exceptionContract !== undefined &&
+      entry.exceptionContract.blocksGlobalClosure
+    ) {
+      blockers.push({
+        id: `form-exception:${entry.id}`,
+        owner: entry.id,
+        evidence: "source_confirmed",
+        rationale: entry.exceptionContract.knownDebt.join(" "),
+      });
+    }
+    return blockers;
+  },
+);
+
+export const ADMIN_FORM_GLOBAL_CLOSURE_BLOCKERS = [
+  ...formCapabilityOwnerBlockers,
+  ...formManifestBlockers,
+  ...ADMIN_FORM_CONFIRM_DEBT.map(
+    (debt): AdminGovernanceClosureBlocker => ({
+      id: `form-confirm-debt:${debt}`,
+      owner: "confirmation_runtime",
+      evidence: "source_confirmed",
+      rationale: debt,
+    }),
+  ),
+  ...ADMIN_FORM_BEHAVIOR_PROOF_LEDGER.filter(
+    behaviorProofBlocksGlobalClosure,
+  ).map(
+    (proof): AdminGovernanceClosureBlocker => ({
+      id: `form-behavior:${proof.id}`,
+      owner: "form_runtime",
+      evidence: "source_proven_only",
+      rationale: proof.rationale,
+    }),
+  ),
+] as const satisfies readonly AdminGovernanceClosureBlocker[];
+
+export const ADMIN_FORM_SYSTEM_CLOSURE = {
+  phase: "Shared Legacy Adoption Closure",
+  module: ADMIN_FORM_RUNTIME_MODULE.id,
+  scope: "reference_consumers_and_in_scope_generic_legacy_forms",
+  allowedClaim: "shared_legacy_form_adoption_closed",
+  ...deriveAdminGovernanceClosure(ADMIN_FORM_GLOBAL_CLOSURE_BLOCKERS),
+} as const;
