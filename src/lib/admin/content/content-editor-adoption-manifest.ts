@@ -112,6 +112,22 @@ export const CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER: readonly ContentEditorBehavio
       rationale:
         "The actual-component Chromium matrix proves Video and aggregate Gallery errors render inline with valid ARIA, preserve values, focus visible controls, clear on successful retry, and do not duplicate submission.",
     },
+    {
+      id: "adm-05-safe-content-duplication",
+      owner: "scripts/verify-content-duplication-safety.mts",
+      state: "behavior_verified",
+      requiredForGlobalClosure: false,
+      rationale:
+        "The AST-selected executable payload matrix proves all six content types reset publication, views, and promotion state after the source spread while preserving intended content, SEO, taxonomy, media, and display fields without mutating the original row.",
+    },
+    {
+      id: "adm-06-publish-title-quality-policy",
+      owner: "scripts/verify-content-publish-validation-truth.mts",
+      state: "behavior_verified",
+      requiredForGlobalClosure: false,
+      rationale:
+        "The behavioral and executable-graph matrix proves one typed publish-only title policy covers Article, every Media type, Save as Published, Row Publish, and pre-RPC Atomic Bulk Publish while draft saves and legitimate near-match titles remain allowed.",
+    },
   ];
 
 export const CONTENT_EDITOR_GLOBAL_CLOSURE = deriveContentEditorClosure({

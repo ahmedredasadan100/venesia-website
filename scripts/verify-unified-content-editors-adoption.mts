@@ -1074,6 +1074,37 @@ for (const findingId of [
   );
 }
 
+for (const [findingId, evidenceOwner] of [
+  [
+    "adm-05-safe-content-duplication",
+    "scripts/verify-content-duplication-safety.mts",
+  ],
+  [
+    "adm-06-publish-title-quality-policy",
+    "scripts/verify-content-publish-validation-truth.mts",
+  ],
+] as const) {
+  const proof = CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER.find(
+    (candidate) => candidate.id === findingId,
+  );
+  assert.ok(proof, `${findingId} must be recorded in the Content Editor ledger.`);
+  assert.equal(
+    proof.state,
+    "behavior_verified",
+    `${findingId} can close only with rerunnable behavioral evidence.`,
+  );
+  assert.equal(
+    proof.owner,
+    evidenceOwner,
+    `${findingId} must reference its executable evidence owner.`,
+  );
+  assert.equal(
+    proof.requiredForGlobalClosure,
+    false,
+    `${findingId} is bounded and must not hide broader Content Editor blockers.`,
+  );
+}
+
 const negativeStateGuardFixtures: ReadonlyArray<{
   id: string;
   expected: ContentEditorStateGuardViolation;

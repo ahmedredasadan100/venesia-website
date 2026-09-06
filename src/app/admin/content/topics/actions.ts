@@ -19,6 +19,7 @@ import {
   parseTopicFaq,
   topicRowToPublishInput,
 } from "../../../../lib/admin/content-workflow/topic-publish-validation";
+import { getContentReleaseTitleQualityCheck } from "../../../../lib/admin/content-workflow/content-review-capability";
 import { isContentType } from "../../../../lib/admin/content/content-types";
 import {
   ADMIN_CONTENT_ROUTES,
@@ -189,6 +190,21 @@ function getPublishFailure(
         return input ? getMediaPublishBlockingChecks(input)[0] : null;
       })();
   if (!issue) return null;
+  return {
+    message: issue.hint,
+    focusTarget: issue.correctionTarget?.targetId,
+  };
+}
+
+function getReleaseTitleQualityFailure(
+  topic: Tables<"topics">,
+): PublishPreflightFailure | null {
+  if (!isContentType(topic.content_type)) return null;
+  const issue = getContentReleaseTitleQualityCheck({
+    contentType: topic.content_type,
+    title: topic.title,
+  });
+  if (issue.status !== "fail") return null;
   return {
     message: issue.hint,
     focusTarget: issue.correctionTarget?.targetId,
@@ -495,6 +511,8 @@ export async function duplicateUnifiedContent(
     published_at: null,
     published_by: null,
     views_count: 0,
+    is_featured: false,
+    is_popular: false,
     deleted_at: null,
     created_at: now,
     updated_at: now,
@@ -984,9 +1002,16 @@ export async function bulkUpdateUnifiedContent(
         },
       );
     }
-    const invalid = topicsToPublish
-      .map((topic) => ({ topic, failure: getPublishFailure(topic) }))
-      .find((entry) => entry.failure);
+    const invalid =
+      requestedTopics
+        .map((topic) => ({
+          topic,
+          failure: getReleaseTitleQualityFailure(topic),
+        }))
+        .find((entry) => entry.failure) ??
+      topicsToPublish
+        .map((topic) => ({ topic, failure: getPublishFailure(topic) }))
+        .find((entry) => entry.failure);
     if (invalid?.failure) {
       return adminActionFailure(
         "تعذر نشر المحتوى",
