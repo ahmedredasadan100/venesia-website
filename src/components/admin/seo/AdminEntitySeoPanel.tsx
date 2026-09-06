@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import {
   analyzeEntitySeo,
@@ -125,6 +125,21 @@ export type AdminEntitySeoPanelProps<TAnalysisState = undefined> = {
   correctionTargets: Partial<
     Record<string, AdminEntitySeoCorrectionTarget>
   >;
+  controlledValues?: Partial<
+    Pick<
+      SeoScoreInput,
+      | "title"
+      | "description"
+      | "content"
+      | "seoTitle"
+      | "seoDescription"
+      | "focusKeyword"
+    >
+  >;
+  onControlledValueChange?: (
+    field: "seoTitle" | "seoDescription" | "focusKeyword",
+    value: string,
+  ) => void;
   analysisExtension?: AdminEntitySeoAnalysisExtension<TAnalysisState>;
 };
 
@@ -221,6 +236,8 @@ function SeoTextField({
   label,
   defaultValue,
   liveValue,
+  value,
+  onValueChange,
   helper,
   textarea = false,
   dir = "rtl",
@@ -231,6 +248,8 @@ function SeoTextField({
   label: string;
   defaultValue: string;
   liveValue: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
   helper?: string;
   textarea?: boolean;
   dir?: "rtl" | "ltr";
@@ -248,6 +267,15 @@ function SeoTextField({
   ]
     .filter(Boolean)
     .join(" ") || undefined;
+  const valueProps =
+    value === undefined
+      ? { defaultValue }
+      : {
+          value,
+          onChange: (
+            event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+          ) => onValueChange?.(event.currentTarget.value),
+        };
   return (
     <label
       htmlFor={id}
@@ -258,7 +286,7 @@ function SeoTextField({
         <textarea
           id={id}
           name={name}
-          defaultValue={defaultValue}
+          {...valueProps}
           rows={4}
           dir={dir}
           aria-invalid={hasError || undefined}
@@ -269,7 +297,7 @@ function SeoTextField({
         <input
           id={id}
           name={name}
-          defaultValue={defaultValue}
+          {...valueProps}
           dir={dir}
           aria-invalid={hasError || undefined}
           aria-describedby={describedBy}
@@ -388,13 +416,15 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
   resolvedFallback,
   initial,
   correctionTargets,
+  controlledValues,
+  onControlledValueChange,
   analysisExtension,
 }: AdminEntitySeoPanelProps<TAnalysisState>) {
   const initialSeoTitleSegment = stripSeoTitleSuffix(
     initial.seoTitle,
     seoTitleSuffix,
   );
-  const [live, setLive] = useState<LiveSeoState>(() => ({
+  const [observedLive, setObservedLive] = useState<LiveSeoState>(() => ({
     ...initial,
     seoTitle: initialSeoTitleSegment,
   }));
@@ -410,7 +440,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
     if (!(form instanceof HTMLFormElement)) return;
 
     const read = () => {
-      setLive({
+      setObservedLive({
         profile: initial.profile,
         title: readValue(form, sourceFieldNames.title, initial.title),
         description: readValue(
@@ -470,6 +500,14 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       form.removeEventListener("change", read);
     };
   }, [analysisExtension, fieldNames, id, initial, initialSeoTitleSegment, social, sourceFieldNames]);
+
+  const live = useMemo(
+    () =>
+      controlledValues
+        ? { ...observedLive, ...controlledValues }
+        : observedLive,
+    [controlledValues, observedLive],
+  );
 
   const hasLocalSeo = hasEntitySeoData({
     title: live.seoTitle,
@@ -559,6 +597,10 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
               : ADMIN_ENTITY_SEO_TERMINOLOGY.seoTitle
           }
           defaultValue={initialSeoTitleSegment}
+          value={controlledValues?.seoTitle}
+          onValueChange={(value) =>
+            onControlledValueChange?.("seoTitle", value)
+          }
           liveValue={effectiveSeoTitle}
           standard={SEO_LENGTH_STANDARDS.title}
         />
@@ -572,6 +614,10 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           name={fieldNames.seoDescription}
           label={ADMIN_ENTITY_SEO_TERMINOLOGY.seoDescription}
           defaultValue={initial.seoDescription}
+          value={controlledValues?.seoDescription}
+          onValueChange={(value) =>
+            onControlledValueChange?.("seoDescription", value)
+          }
           liveValue={live.seoDescription}
           textarea
           standard={SEO_LENGTH_STANDARDS.description}
@@ -581,6 +627,10 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           name={fieldNames.focusKeyword}
           label={ADMIN_ENTITY_SEO_TERMINOLOGY.focusKeyword}
           defaultValue={initial.focusKeyword}
+          value={controlledValues?.focusKeyword}
+          onValueChange={(value) =>
+            onControlledValueChange?.("focusKeyword", value)
+          }
           liveValue={live.focusKeyword}
           helper={ADMIN_ENTITY_SEO_TERMINOLOGY.focusKeywordHelper}
         />
@@ -672,7 +722,7 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
           browseFolder={social.mediaBrowseFolder}
           appearance="dark"
           onValueChange={(ogImage) =>
-            setLive((current) => ({ ...current, ogImage }))
+            setObservedLive((current) => ({ ...current, ogImage }))
           }
         />
         <label className="mt-4 block text-sm font-semibold text-white/72">

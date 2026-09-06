@@ -154,11 +154,11 @@ function focusNavigationTarget(targetId: string) {
         behavior: prefersReducedMotion ? "auto" : "smooth",
         block: "center",
       });
-      const focusTarget = target.matches('input, textarea, select, button, [contenteditable="true"], [tabindex]')
+      const focusableSelector =
+        'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])';
+      const focusTarget = target.matches(focusableSelector)
         ? target
-        : target.querySelector<HTMLElement>(
-            'input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button:not([disabled]), [contenteditable="true"], [tabindex]:not([tabindex="-1"])',
-          );
+        : target.querySelector<HTMLElement>(focusableSelector);
       focusTarget?.focus({ preventScroll: true });
     });
   });

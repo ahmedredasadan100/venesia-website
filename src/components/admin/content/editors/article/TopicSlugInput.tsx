@@ -11,6 +11,7 @@ import {
 type TopicSlugInputProps = {
   defaultValue?: string | null;
   titleInputName?: string;
+  titleValue?: string;
   required?: boolean;
   contentType?: ContentType;
 };
@@ -69,16 +70,20 @@ function slugify(value: string) {
 export default function TopicSlugInput({
   defaultValue = "",
   titleInputName = "title",
+  titleValue,
   required = true,
 }: TopicSlugInputProps) {
   const [value, setValue] = useState(defaultValue ?? "");
   const [isManual, setIsManual] = useState(Boolean(defaultValue));
+  const resolvedValue =
+    titleValue !== undefined && !isManual ? slugify(titleValue) : value;
   const inputRef = useRef<HTMLInputElement>(null);
   const hasError = Boolean(
     useOptionalAdminFormRuntime()?.fieldErrors.slug?.length,
   );
 
   useEffect(() => {
+    if (titleValue !== undefined) return;
     const form = inputRef.current?.form;
     const titleInput = form?.elements.namedItem(titleInputName) as HTMLInputElement | null;
 
@@ -93,7 +98,7 @@ export default function TopicSlugInput({
     syncSlug();
 
     return () => titleInput.removeEventListener("input", syncSlug);
-  }, [isManual, titleInputName]);
+  }, [isManual, titleInputName, titleValue]);
 
   return (
     <div className="space-y-1.5">
@@ -105,7 +110,7 @@ export default function TopicSlugInput({
           ref={inputRef}
           id="topic-slug"
           name="slug"
-          value={value}
+          value={resolvedValue}
           onChange={(event) => {
             setValue(slugify(event.target.value));
             setIsManual(true);
@@ -124,7 +129,9 @@ export default function TopicSlugInput({
           onClick={() => {
             const form = inputRef.current?.form;
             const titleInput = form?.elements.namedItem(titleInputName) as HTMLInputElement | null;
-            setValue(slugify(titleInput?.value ?? ""));
+            setValue(
+              slugify(titleValue ?? titleInput?.value ?? ""),
+            );
             setIsManual(false);
           }}
           className="absolute bottom-1 left-1 top-1 z-10 shrink-0 whitespace-nowrap rounded-lg border border-[#D8B87A]/25 bg-[#090D12]/96 px-3 text-xs font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#E2B84F]/70"

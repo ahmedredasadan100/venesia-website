@@ -1,3 +1,5 @@
+"use client";
+
 import {
   AdminActionButton,
   AdminEntityPreviewActions,
@@ -7,7 +9,10 @@ import {
 import SeoPanel from "../../SeoPanel";
 import FaqEditor from "./article/FaqEditor";
 import ContentBasicDataPanel from "./ContentBasicDataPanel";
-import ContentEditorShell from "./ContentEditorShell";
+import ContentEditorShell, {
+  type ContentEditorModel,
+  type ContentEditorModelValue,
+} from "./ContentEditorShell";
 import ContentPublishingOptions from "./ContentPublishingOptions";
 import ContentDisplaySettings from "./ContentDisplaySettings";
 import TopicMarkdownEditor from "./article/TopicMarkdownEditor";
@@ -121,6 +126,178 @@ export default function ArticleEditor({
   });
   const publishInput = topicRowToPublishInput({ ...topic, faq });
   const selectedCategory = safeCategories.find((category) => category.slug === topic.category_slug)?.name ?? topic.category_slug ?? "—";
+  const initialModelValue: ContentEditorModelValue = {
+    title: topic.title ?? "",
+    excerpt: topic.excerpt ?? "",
+    content: topic.content ?? "",
+    seoTitle: topic.seo_title ?? "",
+    seoDescription: topic.seo_description ?? "",
+    focusKeyword: topic.focus_keyword ?? "",
+  };
+  const templateContext = { target: "article" } as const;
+
+  function renderTabs(model: ContentEditorModel) {
+    return [
+      {
+        id: "basic",
+        navigationLabel: "المحتوى",
+        sectionHeading: "بيانات الموضوع والمحتوى",
+        sectionDescription: "حدّث المحتوى الأساسي والتصنيف والصورة وإعدادات الظهور.",
+        icon: "content" as const,
+        content: (
+          <ContentBasicDataPanel
+            formId="topic-edit-form"
+            contentType="article"
+            mode="edit"
+            categories={categoryOptions}
+            series={safeSeries}
+            contentEditor={(
+              <TopicMarkdownEditor
+                defaultValue={topic.content ?? ""}
+                value={model.value.content}
+                onValueChange={(nextValue) =>
+                  model.setField("content", nextValue)
+                }
+                variant="compact"
+                draftIdentity={`topic:article:${topic.id}`}
+                baselineRevision={topic.updated_at}
+              />
+            )}
+            controlledValues={{
+              title: model.value.title,
+              excerpt: model.value.excerpt,
+            }}
+            onControlledValueChange={model.setField}
+            displaySettings={
+              <ContentDisplaySettings
+                showTitle={topic.show_title_on_page}
+                showImage={topic.show_image_on_page}
+                showExcerpt={topic.show_excerpt_on_page}
+                showDate={topic.show_date_on_page}
+                showCategory={topic.show_category_on_page}
+                showSeries={topic.show_series_on_page}
+                showIntroCard={topic.show_intro_card_on_page}
+              />
+            }
+            values={{
+              title: topic.title,
+              slug: topic.slug,
+              excerpt: topic.excerpt,
+              image: topic.image,
+              imageAlt: topic.image_alt,
+              categoryId: topic.category_id,
+              seriesId: topic.series_id,
+              series: topic.series,
+              seriesSlug: topic.series_slug,
+            }}
+          />
+        ),
+      },
+      {
+        id: "faq",
+        navigationLabel: "الأسئلة",
+        sectionHeading: "الأسئلة الشائعة وإعدادات الظهور",
+        sectionDescription: "راجع الأسئلة والأجوبة وطريقة ظهور القسم في صفحة الموضوع.",
+        icon: "faq" as const,
+        content: (
+          <FaqEditor
+            defaultFaq={faq}
+            defaultVisible={topic.show_faq_on_page}
+            defaultTitleVisible={topic.show_faq_title_on_page}
+          />
+        ),
+      },
+      {
+        id: "seo",
+        navigationLabel: "SEO",
+        sectionHeading: "تحسين محركات البحث والمشاركة",
+        sectionDescription: "راجع الأساسيات والمشاركة الاجتماعية والتحليل من عرض واحد منظم.",
+        icon: "seo" as const,
+        content: (
+          <SeoPanel
+            title={topic.title ?? ""}
+            excerpt={topic.excerpt ?? ""}
+            slug={topic.slug ?? ""}
+            content={topic.content ?? ""}
+            image={topic.image ?? ""}
+            imageAlt={topic.image_alt ?? ""}
+            seoTitle={topic.seo_title ?? ""}
+            seoDescription={topic.seo_description ?? ""}
+            seoKeywords={seoKeywords}
+            focusKeyword={topic.focus_keyword ?? ""}
+            canonicalUrl={topic.canonical_url ?? ""}
+            robotsIndex={topic.robots_index ?? null}
+            robotsFollow={topic.robots_follow ?? null}
+            ogImage={topic.og_image ?? ""}
+            ogImageAlt={topic.og_image_alt ?? ""}
+            faq={faq}
+            controlledValues={{
+              title: model.value.title,
+              excerpt: model.value.excerpt,
+              content: model.value.content,
+              seoTitle: model.value.seoTitle,
+              seoDescription: model.value.seoDescription,
+              focusKeyword: model.value.focusKeyword,
+            }}
+            onControlledValueChange={model.setField}
+          />
+        ),
+      },
+      {
+        id: "publish",
+        navigationLabel: "المراجعة",
+        icon: "publish" as const,
+        content: (
+          <ContentReviewPanel
+            formId="topic-edit-form"
+            initial={{
+              ...publishInput,
+              contentType: "article",
+              canonicalUrl: publishInput.canonicalUrl ?? "",
+              ogImage: publishInput.ogImage ?? "",
+              ogImageAlt: publishInput.ogImageAlt ?? "",
+              mediaPayload: null,
+            }}
+            controlledValues={{
+              title: model.value.title,
+              excerpt: model.value.excerpt,
+              content: model.value.content,
+              seoTitle: model.value.seoTitle,
+              seoDescription: model.value.seoDescription,
+              focusKeyword: model.value.focusKeyword,
+            }}
+            publishingOptions={
+              <ContentPublishingOptions
+                status={status}
+                featured={Boolean(topic.is_featured)}
+                popular={Boolean(topic.is_popular)}
+                publishedAt={topic.published_at}
+                dateLabel={topic.date_label}
+              />
+            }
+            status={status}
+            publishedAt={topic.published_at}
+            dateLabel={topic.date_label}
+            featured={Boolean(topic.is_featured)}
+            popular={Boolean(topic.is_popular)}
+            updatedAt={topic.updated_at}
+            contentTypeLabel="مقال"
+            categoryLabel={selectedCategory}
+            seriesLabel={topic.series ?? "—"}
+            initialDisplay={{
+              title: topic.show_title_on_page,
+              image: topic.show_image_on_page,
+              excerpt: topic.show_excerpt_on_page,
+              date: topic.show_date_on_page,
+              category: topic.show_category_on_page,
+              series: topic.show_series_on_page,
+              introCard: topic.show_intro_card_on_page,
+            }}
+          />
+        ),
+      },
+    ];
+  }
 
   return (
     <AdminPageExperience dir="rtl">
@@ -157,134 +334,9 @@ export default function ArticleEditor({
         baselineRevision={topic.updated_at}
         closeHref={returnPath}
         formId="topic-edit-form"
-        tabs={[
-            {
-              id: "basic",
-              navigationLabel: "المحتوى",
-              sectionHeading: "بيانات الموضوع والمحتوى",
-              sectionDescription: "حدّث المحتوى الأساسي والتصنيف والصورة وإعدادات الظهور.",
-              icon: "content",
-              content: (
-                <ContentBasicDataPanel
-                  formId="topic-edit-form"
-                  contentType="article"
-                  mode="edit"
-                  categories={categoryOptions}
-                  series={safeSeries}
-                  contentEditor={(
-                    <TopicMarkdownEditor
-                      defaultValue={topic.content ?? ""}
-                      variant="compact"
-                      draftIdentity={`topic:article:${topic.id}`}
-                      baselineRevision={topic.updated_at}
-                    />
-                  )}
-                  displaySettings={
-                    <ContentDisplaySettings
-                      showTitle={topic.show_title_on_page}
-                      showImage={topic.show_image_on_page}
-                      showExcerpt={topic.show_excerpt_on_page}
-                      showDate={topic.show_date_on_page}
-                      showCategory={topic.show_category_on_page}
-                      showSeries={topic.show_series_on_page}
-                      showIntroCard={topic.show_intro_card_on_page}
-                    />
-                  }
-                  values={{
-                    title: topic.title,
-                    slug: topic.slug,
-                    excerpt: topic.excerpt,
-                    image: topic.image,
-                    imageAlt: topic.image_alt,
-                    categoryId: topic.category_id,
-                    seriesId: topic.series_id,
-                    series: topic.series,
-                    seriesSlug: topic.series_slug,
-                  }}
-                />
-              ),
-            },
-            {
-              id: "faq",
-              navigationLabel: "الأسئلة",
-              sectionHeading: "الأسئلة الشائعة وإعدادات الظهور",
-              sectionDescription: "راجع الأسئلة والأجوبة وطريقة ظهور القسم في صفحة الموضوع.",
-              icon: "faq",
-              content: <FaqEditor defaultFaq={faq} defaultVisible={topic.show_faq_on_page} defaultTitleVisible={topic.show_faq_title_on_page} />,
-            },
-            {
-              id: "seo",
-              navigationLabel: "SEO",
-              sectionHeading: "تحسين محركات البحث والمشاركة",
-              sectionDescription: "راجع الأساسيات والمشاركة الاجتماعية والتحليل من عرض واحد منظم.",
-              icon: "seo",
-              content: (
-                <SeoPanel
-                  title={topic.title ?? ""}
-                  excerpt={topic.excerpt ?? ""}
-                  slug={topic.slug ?? ""}
-                  content={topic.content ?? ""}
-                  image={topic.image ?? ""}
-                  imageAlt={topic.image_alt ?? ""}
-                  seoTitle={topic.seo_title ?? ""}
-                  seoDescription={topic.seo_description ?? ""}
-                  seoKeywords={seoKeywords}
-                  focusKeyword={topic.focus_keyword ?? ""}
-                  canonicalUrl={topic.canonical_url ?? ""}
-                  robotsIndex={topic.robots_index ?? null}
-                  robotsFollow={topic.robots_follow ?? null}
-                  ogImage={topic.og_image ?? ""}
-                  ogImageAlt={topic.og_image_alt ?? ""}
-                  faq={faq}
-                />
-              ),
-            },
-            {
-              id: "publish",
-              navigationLabel: "المراجعة",
-              icon: "publish",
-              content: (
-                <ContentReviewPanel
-                  formId="topic-edit-form"
-                  initial={{
-                    ...publishInput,
-                    contentType: "article",
-                    canonicalUrl: publishInput.canonicalUrl ?? "",
-                    ogImage: publishInput.ogImage ?? "",
-                    ogImageAlt: publishInput.ogImageAlt ?? "",
-                    mediaPayload: null,
-                  }}
-                  publishingOptions={
-                    <ContentPublishingOptions
-                      status={status}
-                      featured={Boolean(topic.is_featured)}
-                      popular={Boolean(topic.is_popular)}
-                      publishedAt={topic.published_at}
-                      dateLabel={topic.date_label}
-                    />
-                  }
-                  status={status}
-                  publishedAt={topic.published_at}
-                  dateLabel={topic.date_label}
-                    featured={Boolean(topic.is_featured)}
-                    popular={Boolean(topic.is_popular)}
-                    updatedAt={topic.updated_at}
-                    contentTypeLabel="مقال"
-                    categoryLabel={selectedCategory}
-                    seriesLabel={topic.series ?? "—"}
-                  initialDisplay={{
-                    title: topic.show_title_on_page,
-                    image: topic.show_image_on_page,
-                    excerpt: topic.show_excerpt_on_page,
-                    date: topic.show_date_on_page,
-                    category: topic.show_category_on_page,
-                    series: topic.show_series_on_page,
-                    introCard: topic.show_intro_card_on_page,
-                  }}
-                />
-              ),
-            },
-        ]}
+        initialModelValue={initialModelValue}
+        templateContext={templateContext}
+        tabs={renderTabs}
       />
     </AdminPageExperience>
   );

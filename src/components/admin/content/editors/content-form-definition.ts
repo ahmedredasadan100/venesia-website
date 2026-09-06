@@ -4,6 +4,10 @@ import { CONTENT_EDITOR_NAVIGATION_EVENT } from "./content-editor-navigation";
 export const CONTENT_FORM_NAVIGATION: AdminFormNavigationContract = {
   eventName: CONTENT_EDITOR_NAVIGATION_EVENT,
   fields: {
+    content_type: {
+      tabId: "basic",
+      targetId: "topic-content-type-popover-trigger",
+    },
     title: { tabId: "basic", targetId: "content-title" },
     slug: { tabId: "basic", targetId: "topic-slug" },
     excerpt: { tabId: "basic", targetId: "content-excerpt" },
@@ -14,9 +18,18 @@ export const CONTENT_FORM_NAVIGATION: AdminFormNavigationContract = {
     image_alt: { tabId: "basic", targetId: "topic-image-alt" },
     video_url: { tabId: "basic", targetId: "video_url" },
     video_duration: { tabId: "basic", targetId: "video_duration" },
-    video_thumbnail: { tabId: "basic", targetId: "video_thumbnail" },
-    gallery_image_url: { tabId: "basic", targetId: "gallery-editor" },
-    gallery_image_alt: { tabId: "basic", targetId: "gallery-editor" },
+    video_thumbnail: {
+      tabId: "basic",
+      targetId: "video_thumbnail_control",
+    },
+    gallery_image_url: {
+      tabId: "basic",
+      targetId: "gallery_image_url",
+    },
+    gallery_image_alt: {
+      tabId: "basic",
+      targetId: "gallery_image_alt",
+    },
     faq_question: { tabId: "faq", targetId: "topic-faq-editor" },
     faq_answer: { tabId: "faq", targetId: "topic-faq-editor" },
     seo_title: { tabId: "seo", targetId: "content-seo-title" },

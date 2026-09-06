@@ -88,6 +88,30 @@ export const CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER: readonly ContentEditorBehavio
       rationale:
         "Public route reachability to the canonical read owner does not prove that every registered typed body contract is projected and rendered without semantic loss.",
     },
+    {
+      id: "adm-04-editor-state-binding",
+      owner: "scripts/qa-admin-form-guarded-navigation.mts",
+      state: "behavior_verified",
+      requiredForGlobalClosure: false,
+      rationale:
+        "The actual-component Chromium matrix proves one canonical Content Editor model drives the visible Markdown editor, derived FormData projection, dirty state, retry behavior, and draft recovery across preset and user edits.",
+    },
+    {
+      id: "adm-11-preset-applicability",
+      owner: "scripts/qa-admin-form-guarded-navigation.mts",
+      state: "behavior_verified",
+      requiredForGlobalClosure: false,
+      rationale:
+        "The actual-component Chromium matrix proves matching presets are visible and applicable while incompatible direct requests and media types without registered metadata fail closed.",
+    },
+    {
+      id: "adm-12-specialized-field-errors",
+      owner: "scripts/qa-admin-form-guarded-navigation.mts",
+      state: "behavior_verified",
+      requiredForGlobalClosure: false,
+      rationale:
+        "The actual-component Chromium matrix proves Video and aggregate Gallery errors render inline with valid ARIA, preserve values, focus visible controls, clear on successful retry, and do not duplicate submission.",
+    },
   ];
 
 export const CONTENT_EDITOR_GLOBAL_CLOSURE = deriveContentEditorClosure({

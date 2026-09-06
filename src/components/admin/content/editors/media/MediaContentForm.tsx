@@ -1,3 +1,5 @@
+"use client";
+
 import { createAdminFormErrorState } from "../../../../../lib/admin/form-runtime";
 import { adminFormFieldClassName } from "../../../../../lib/admin/admin-ui-styles";
 import {
@@ -8,11 +10,12 @@ import {
 import type { MediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import { mediaRowToPublishInput } from "../../../../../lib/admin/content-workflow/media-publish-validation";
 import { saveContentForm } from "../../../../../app/admin/content/topics/editor-actions/save";
-import ContentTemplatePicker from "../../../content-workflow/ContentTemplatePicker";
 import ContentReviewPanel from "../../../content-workflow/ContentReviewPanel";
 import ContentBasicDataPanel from "../ContentBasicDataPanel";
 import ContentDisplaySettings from "../ContentDisplaySettings";
-import ContentEditorShell from "../ContentEditorShell";
+import ContentEditorShell, {
+  type ContentEditorModel,
+} from "../ContentEditorShell";
 import ContentPublishingOptions from "../ContentPublishingOptions";
 import { AdminFormError } from "../../../ui/AdminFormRuntime";
 import TopicMarkdownEditor from "../article/TopicMarkdownEditor";
@@ -114,6 +117,15 @@ export default function MediaContentForm({
   const videoDefaults = getVideoDefaults(values?.media_payload);
   const galleryDefaults = getGalleryDefaults(values?.media_payload);
   const formId = mode === "edit" ? "content-edit-form" : "content-create-form";
+  const templateContext = { target: "media", mediaContentType: contentType } as const;
+  const initialModelValue = {
+    title: values?.title ?? "",
+    excerpt: values?.excerpt ?? "",
+    content: adapter.body === "markdown" ? content : "",
+    seoTitle: values?.seo_title ?? "",
+    seoDescription: values?.seo_description ?? "",
+    focusKeyword: values?.focus_keyword ?? "",
+  };
   const selectedCategory = categories.find(
     (category) => category.id === values?.category_id,
   );
@@ -163,54 +175,171 @@ export default function MediaContentForm({
     ogImageAlt: "",
   };
 
-  const specializedBodyEditor =
-    adapter.body === "video" ? (
-      <div className="space-y-5">
-        <MediaVideoFields
-          defaultVideoUrl={videoDefaults.videoUrl}
-          defaultDuration={videoDefaults.duration}
-          defaultThumbnail={videoDefaults.thumbnail}
-        />
-        <input type="hidden" name="content" value="" />
-      </div>
-    ) : adapter.body === "gallery" ? (
-      <div className="space-y-5">
-        <MediaGalleryFields defaultImages={galleryDefaults} />
-        <input type="hidden" name="content" value="" />
-      </div>
-    ) : (
-      <TopicMarkdownEditor
-        defaultValue={content}
-        variant="compact"
-        draftIdentity={`topic:${contentType}:${values?.id ?? "create"}`}
-        baselineRevision={values?.updated_at ?? null}
-      />
-    );
-  const bodyEditor = (
-    <div className="space-y-5">
-      {specializedBodyEditor}
-      {contentType === "news" || contentType === "site_update" ? (
-        <label className="block space-y-2">
-          <span className="text-sm font-semibold text-white/75">المشروع المرتبط</span>
-          <input
-            name="media_project"
-            defaultValue={values?.media_project ?? ""}
-            placeholder="مثال: D174"
-            className={adminFormFieldClassName()}
+  function renderTabs(model: ContentEditorModel) {
+    const specializedBodyEditor =
+      adapter.body === "video" ? (
+        <div className="space-y-5">
+          <MediaVideoFields
+            defaultVideoUrl={videoDefaults.videoUrl}
+            defaultDuration={videoDefaults.duration}
+            defaultThumbnail={videoDefaults.thumbnail}
           />
-          <AdminFormError name="media_project" />
-        </label>
+          <input type="hidden" name="content" value={model.value.content} readOnly />
+        </div>
+      ) : adapter.body === "gallery" ? (
+        <div className="space-y-5">
+          <MediaGalleryFields defaultImages={galleryDefaults} />
+          <input type="hidden" name="content" value={model.value.content} readOnly />
+        </div>
       ) : (
-        <input type="hidden" name="media_project" value={values?.media_project ?? ""} />
-      )}
-    </div>
-  );
+        <TopicMarkdownEditor
+          defaultValue={content}
+          value={model.value.content}
+          onValueChange={(nextValue) => model.setField("content", nextValue)}
+          variant="compact"
+          draftIdentity={`topic:${contentType}:${values?.id ?? "create"}`}
+          baselineRevision={values?.updated_at ?? null}
+        />
+      );
+    const bodyEditor = (
+      <div className="space-y-5">
+        {specializedBodyEditor}
+        {contentType === "news" || contentType === "site_update" ? (
+          <label className="block space-y-2">
+            <span className="text-sm font-semibold text-white/75">المشروع المرتبط</span>
+            <input
+              name="media_project"
+              defaultValue={values?.media_project ?? ""}
+              placeholder="مثال: D174"
+              className={adminFormFieldClassName()}
+            />
+            <AdminFormError name="media_project" />
+          </label>
+        ) : (
+          <input type="hidden" name="media_project" value={values?.media_project ?? ""} readOnly />
+        )}
+      </div>
+    );
+
+    return [
+      {
+        id: "basic",
+        navigationLabel: "المحتوى",
+        sectionHeading: "البيانات الأساسية والمحتوى",
+        sectionDescription:
+          "حرر البيانات المشتركة ثم أكمل الحقول المتخصصة التي يملكها هذا النوع فقط.",
+        icon: adapter.body === "markdown" ? "content" as const : "media" as const,
+        content: (
+          <ContentBasicDataPanel
+            formId={formId}
+            contentType={contentType}
+            mode={mode}
+            categories={categories}
+            series={availableSeries}
+            contentEditor={bodyEditor}
+            controlledValues={{
+              title: model.value.title,
+              excerpt: model.value.excerpt,
+            }}
+            onControlledValueChange={model.setField}
+            displaySettings={
+              <ContentDisplaySettings
+                showTitle={values?.show_title_on_page}
+                showImage={values?.show_image_on_page}
+                showExcerpt={values?.show_excerpt_on_page}
+                showDate={values?.show_date_on_page}
+                showCategory={values?.show_category_on_page}
+                showSeries={values?.show_series_on_page}
+                showIntroCard={values?.show_intro_card_on_page}
+              />
+            }
+            values={{
+              title: values?.title,
+              slug: values?.slug,
+              excerpt: values?.excerpt,
+              image: values?.image,
+              imageAlt: values?.image_alt,
+              categoryId: values?.category_id,
+              seriesId: values?.series_id,
+              series: values?.series,
+              seriesSlug: values?.series_slug,
+            }}
+          />
+        ),
+      },
+      {
+        id: "seo",
+        navigationLabel: "SEO",
+        sectionHeading: "تحسين محركات البحث والمشاركة",
+        sectionDescription:
+          "استخدم عقد Entity SEO الموحد ومعايناته ومسار التصحيح نفسه.",
+        icon: "seo" as const,
+        content: (
+          <MediaEntitySeoPanel
+            contentType={contentType}
+            values={values}
+            controlledValues={{
+              title: model.value.title,
+              excerpt: model.value.excerpt,
+              content: model.value.content,
+              seoTitle: model.value.seoTitle,
+              seoDescription: model.value.seoDescription,
+              focusKeyword: model.value.focusKeyword,
+            }}
+            onControlledValueChange={model.setField}
+          />
+        ),
+      },
+      {
+        id: "publish",
+        navigationLabel: "المراجعة",
+        icon: "publish" as const,
+        content: (
+          <ContentReviewPanel
+            formId={formId}
+            initial={publishInitial}
+            controlledValues={{
+              title: model.value.title,
+              excerpt: model.value.excerpt,
+              content: model.value.content,
+              seoTitle: model.value.seoTitle,
+              seoDescription: model.value.seoDescription,
+              focusKeyword: model.value.focusKeyword,
+            }}
+            publishingOptions={
+              <ContentPublishingOptions
+                status={values?.status ?? "unpublished"}
+                featured={Boolean(values?.is_featured)}
+                popular={Boolean(values?.is_popular)}
+                publishedAt={values?.published_at}
+                dateLabel={values?.date_label}
+              />
+            }
+            status={values?.status ?? "unpublished"}
+            publishedAt={values?.published_at}
+            dateLabel={values?.date_label}
+            featured={Boolean(values?.is_featured)}
+            popular={Boolean(values?.is_popular)}
+            updatedAt={values?.updated_at}
+            contentTypeLabel={getContentTypeLabel(contentType)}
+            categoryLabel={selectedCategory?.name ?? "—"}
+            seriesLabel={values?.series ?? "—"}
+            initialDisplay={{
+              title: values?.show_title_on_page,
+              image: values?.show_image_on_page,
+              excerpt: values?.show_excerpt_on_page,
+              date: values?.show_date_on_page,
+              category: values?.show_category_on_page,
+              series: values?.show_series_on_page,
+              introCard: values?.show_intro_card_on_page,
+            }}
+          />
+        ),
+      },
+    ];
+  }
 
   return (
-    <>
-      {mode === "create" ? (
-        <ContentTemplatePicker target="media" formId={formId} />
-      ) : null}
       <ContentEditorShell
         action={saveContentForm}
         contentType={contentType}
@@ -219,6 +348,8 @@ export default function MediaContentForm({
         baselineRevision={mode === "edit" ? values?.updated_at ?? null : undefined}
         closeHref={returnPath}
         formId={formId}
+        initialModelValue={initialModelValue}
+        templateContext={templateContext}
         initialState={
           errorMessage
             ? createAdminFormErrorState(
@@ -228,101 +359,7 @@ export default function MediaContentForm({
               )
             : undefined
         }
-        tabs={[
-          {
-            id: "basic",
-            navigationLabel: "المحتوى",
-            sectionHeading: "البيانات الأساسية والمحتوى",
-            sectionDescription:
-              "حرر البيانات المشتركة ثم أكمل الحقول المتخصصة التي يملكها هذا النوع فقط.",
-            icon: adapter.body === "markdown" ? "content" : "media",
-            content: (
-              <ContentBasicDataPanel
-                formId={formId}
-                contentType={contentType}
-                mode={mode}
-                categories={categories}
-                series={availableSeries}
-                contentEditor={bodyEditor}
-                displaySettings={
-                  <ContentDisplaySettings
-                    showTitle={values?.show_title_on_page}
-                    showImage={values?.show_image_on_page}
-                    showExcerpt={values?.show_excerpt_on_page}
-                    showDate={values?.show_date_on_page}
-                    showCategory={values?.show_category_on_page}
-                    showSeries={values?.show_series_on_page}
-                    showIntroCard={values?.show_intro_card_on_page}
-                  />
-                }
-                values={{
-                  title: values?.title,
-                  slug: values?.slug,
-                  excerpt: values?.excerpt,
-                  image: values?.image,
-                  imageAlt: values?.image_alt,
-                  categoryId: values?.category_id,
-                  seriesId: values?.series_id,
-                  series: values?.series,
-                  seriesSlug: values?.series_slug,
-                }}
-              />
-            ),
-          },
-          {
-            id: "seo",
-            navigationLabel: "SEO",
-            sectionHeading: "تحسين محركات البحث والمشاركة",
-            sectionDescription:
-              "استخدم عقد Entity SEO الموحد ومعايناته ومسار التصحيح نفسه.",
-            icon: "seo",
-            content: (
-              <MediaEntitySeoPanel
-                contentType={contentType}
-                values={values}
-              />
-            ),
-          },
-          {
-            id: "publish",
-            navigationLabel: "المراجعة",
-            icon: "publish",
-            content: (
-              <ContentReviewPanel
-                formId={formId}
-                initial={publishInitial}
-                publishingOptions={
-                  <ContentPublishingOptions
-                    status={values?.status ?? "unpublished"}
-                    featured={Boolean(values?.is_featured)}
-                    popular={Boolean(values?.is_popular)}
-                    publishedAt={values?.published_at}
-                    dateLabel={values?.date_label}
-                  />
-                }
-                status={values?.status ?? "unpublished"}
-                publishedAt={values?.published_at}
-                dateLabel={values?.date_label}
-                featured={Boolean(values?.is_featured)}
-                popular={Boolean(values?.is_popular)}
-                updatedAt={values?.updated_at}
-                contentTypeLabel={getContentTypeLabel(contentType)}
-                categoryLabel={selectedCategory?.name ?? "—"}
-                seriesLabel={values?.series ?? "—"}
-                initialDisplay={{
-                  title: values?.show_title_on_page,
-                  image: values?.show_image_on_page,
-                  excerpt: values?.show_excerpt_on_page,
-                  date: values?.show_date_on_page,
-                  category: values?.show_category_on_page,
-                  series: values?.show_series_on_page,
-                  introCard: values?.show_intro_card_on_page,
-                }}
-              />
-            ),
-          },
-        ]}
+        tabs={renderTabs}
       />
-    </>
   );
 }

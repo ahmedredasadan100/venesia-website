@@ -32,6 +32,9 @@ type AdminMediaImageFieldProps = {
   altHelperText?: string;
   onAltValueChange?: (value: string) => void;
   allowRemove?: boolean;
+  focusTargetId?: string;
+  ariaInvalid?: boolean;
+  ariaDescribedBy?: string;
 };
 
 export default function AdminMediaImageField({
@@ -53,6 +56,9 @@ export default function AdminMediaImageField({
   altHelperText,
   onAltValueChange,
   allowRemove = true,
+  focusTargetId,
+  ariaInvalid = false,
+  ariaDescribedBy,
 }: AdminMediaImageFieldProps) {
   const [value, setValue] = useState(defaultValue);
   const [prevDefaultValue, setPrevDefaultValue] = useState(defaultValue);
@@ -97,7 +103,13 @@ export default function AdminMediaImageField({
 
   if (variant === "compact") {
     return (
-      <div className="space-y-3" data-admin-media-image-field={name}>
+      <div
+        className="space-y-3"
+        data-admin-media-image-field={name}
+        role={focusTargetId ? "group" : undefined}
+        aria-invalid={focusTargetId ? ariaInvalid || undefined : undefined}
+        aria-describedby={focusTargetId ? ariaDescribedBy : undefined}
+      >
         <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
         <div className={`relative w-full overflow-hidden rounded-xl border ${compactFrameClass} ${compactAspectClassName}`}>
@@ -113,7 +125,12 @@ export default function AdminMediaImageField({
               />
               <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-1 bg-gradient-to-t from-black/85 via-black/55 to-transparent p-2 pt-8">
                 <button
+                  id={focusTargetId}
                   type="button"
+                  aria-label={focusTargetId ? label : undefined}
+                  aria-haspopup={focusTargetId ? "dialog" : undefined}
+                  aria-expanded={focusTargetId ? pickerOpen : undefined}
+                  aria-describedby={ariaDescribedBy}
                   onClick={() => setPickerOpen(true)}
                   className="cursor-pointer rounded-lg border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-2.5 py-1 text-[11px] font-semibold text-[#D8B87A] hover:bg-[#D8B87A]/15"
                 >
@@ -132,7 +149,12 @@ export default function AdminMediaImageField({
             </>
           ) : (
             <button
+              id={focusTargetId}
               type="button"
+              aria-label={focusTargetId ? label : undefined}
+              aria-haspopup={focusTargetId ? "dialog" : undefined}
+              aria-expanded={focusTargetId ? pickerOpen : undefined}
+              aria-describedby={ariaDescribedBy}
               onClick={() => setPickerOpen(true)}
               className={`flex h-full w-full cursor-pointer flex-col items-center justify-center gap-1 text-xs transition ${emptyCompactClass}`}
             >
@@ -170,7 +192,13 @@ export default function AdminMediaImageField({
   }
 
   return (
-    <div className="space-y-3" data-admin-media-image-field={name}>
+    <div
+      className="space-y-3"
+      data-admin-media-image-field={name}
+      role={focusTargetId ? "group" : undefined}
+      aria-invalid={focusTargetId ? ariaInvalid || undefined : undefined}
+      aria-describedby={focusTargetId ? ariaDescribedBy : undefined}
+    >
       <input ref={valueInputRef} type="hidden" name={name} value={value} />
 
       {showLabel ? (
@@ -191,7 +219,12 @@ export default function AdminMediaImageField({
             <Image src={value} alt="" fill className="object-cover" loading={previewLoading} sizes="360px" />
             <div className="absolute inset-x-0 bottom-0 flex flex-wrap gap-2 bg-gradient-to-t from-black/90 via-black/65 to-transparent p-3 pt-10">
               <button
+                id={focusTargetId}
                 type="button"
+                aria-label={focusTargetId ? label : undefined}
+                aria-haspopup={focusTargetId ? "dialog" : undefined}
+                aria-expanded={focusTargetId ? pickerOpen : undefined}
+                aria-describedby={ariaDescribedBy}
                 onClick={() => setPickerOpen(true)}
                 className="cursor-pointer rounded-lg border border-[#D8B87A]/35 bg-black/45 px-3 py-1.5 text-xs font-semibold text-[#F2D99B] backdrop-blur-sm hover:bg-[#D8B87A]/15"
               >
@@ -214,7 +247,12 @@ export default function AdminMediaImageField({
         </div>
       ) : (
         <button
+          id={focusTargetId}
           type="button"
+          aria-label={focusTargetId ? label : undefined}
+          aria-haspopup={focusTargetId ? "dialog" : undefined}
+          aria-expanded={focusTargetId ? pickerOpen : undefined}
+          aria-describedby={ariaDescribedBy}
           onClick={() => setPickerOpen(true)}
           data-admin-media-image-card="add"
           className={`flex h-44 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border border-dashed text-sm transition ${light ? "border-slate-300 bg-slate-50 text-slate-500 hover:border-[#b98724] hover:bg-amber-50" : "border-white/15 bg-[#05070B] text-white/45 hover:border-[#D8B87A]/30 hover:text-white/70"} ${showLabel ? "max-w-sm" : ""}`}

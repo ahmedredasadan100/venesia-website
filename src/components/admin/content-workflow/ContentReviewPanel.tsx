@@ -55,6 +55,17 @@ type ContentReviewPanelProps = {
     series?: boolean | null;
     introCard?: boolean | null;
   };
+  controlledValues?: Partial<
+    Pick<
+      ContentReviewInput,
+      | "title"
+      | "excerpt"
+      | "content"
+      | "seoTitle"
+      | "seoDescription"
+      | "focusKeyword"
+    >
+  >;
 };
 
 const CONTENT_REVIEW_GUIDANCE_CARDS: readonly EntityReviewAnalysisCardDefinition[] = [
@@ -192,6 +203,7 @@ export default function ContentReviewPanel({
   popular = false,
   updatedAt,
   initialDisplay,
+  controlledValues,
 }: ContentReviewPanelProps) {
   const seed = useMemo<ReviewState>(
     () => ({
@@ -211,6 +223,10 @@ export default function ContentReviewPanel({
     [initial, status, publishedAt, featured, popular, initialDisplay],
   );
   const [input, setInput] = useState(seed);
+  const reviewInput = useMemo(
+    () => (controlledValues ? { ...input, ...controlledValues } : input),
+    [controlledValues, input],
+  );
 
   useEffect(() => {
     const form = document.getElementById(formId);
@@ -225,7 +241,10 @@ export default function ContentReviewPanel({
     };
   }, [formId, seed]);
 
-  const checks = useMemo(() => buildContentReviewChecks(input), [input]);
+  const checks = useMemo(
+    () => buildContentReviewChecks(reviewInput),
+    [reviewInput],
+  );
   const visibleDate = publishedAt
     ? formatAdminDateTime(publishedAt)
     : input.publishedAt

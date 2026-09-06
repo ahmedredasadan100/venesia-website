@@ -61,8 +61,8 @@ const COMMON_CORRECTION_TARGETS = {
   "image-alt": { tabId: "basic", targetId: "topic-image-alt" },
   faq: { tabId: "faq", targetId: "topic-faq-editor" },
   "video-url": { tabId: "basic", targetId: "video_url" },
-  "gallery-images": { tabId: "basic", targetId: "gallery-editor" },
-  "gallery-alt": { tabId: "basic", targetId: "gallery-editor" },
+  "gallery-images": { tabId: "basic", targetId: "gallery_image_url" },
+  "gallery-alt": { tabId: "basic", targetId: "gallery_image_alt" },
 } as const satisfies Record<string, ContentReviewCorrectionTarget>;
 
 function seoTarget(_contentType: ContentType, field: "title" | "description" | "focus" | "canonical" | "og-alt") {

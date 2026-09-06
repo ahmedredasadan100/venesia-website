@@ -4,55 +4,31 @@ import { useState } from "react";
 
 import {
   getContentTemplatePresets,
-  type ContentTemplatePreset,
-  type ContentTemplateTarget,
+  type ContentTemplateContext,
 } from "../../../lib/admin/content-workflow/content-template-presets";
 import AdminListboxSelect from "../ui/AdminListboxSelect";
+import { useAdminFormRuntime } from "../ui/AdminFormRuntime";
 
 type ContentTemplatePickerProps = {
-  target: ContentTemplateTarget;
-  formId: string;
+  context: ContentTemplateContext;
+  onApplyPreset: (presetKey: string) => boolean;
 };
 
-function applyPresetToForm(
-  form: HTMLFormElement,
-  preset: ContentTemplatePreset,
-) {
-  const setValue = (name: string, value?: string) => {
-    if (!value) return;
-    const field = form.elements.namedItem(name);
-    if (
-      field instanceof HTMLInputElement ||
-      field instanceof HTMLTextAreaElement
-    ) {
-      field.value = value;
-      field.dispatchEvent(new Event("input", { bubbles: true }));
-      field.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-  };
-
-  setValue("title", preset.defaults.title);
-  setValue("excerpt", preset.defaults.excerpt);
-  setValue("content", preset.defaults.content);
-  setValue("seo_title", preset.defaults.seoTitle);
-  setValue("seo_description", preset.defaults.seoDescription);
-  setValue("focus_keyword", preset.defaults.focusKeyword);
-}
-
 export default function ContentTemplatePicker({
-  target,
-  formId,
+  context,
+  onApplyPreset,
 }: ContentTemplatePickerProps) {
-  const presets = getContentTemplatePresets(target);
+  const { pending, notifyProjectionChange } = useAdminFormRuntime();
+  const presets = getContentTemplatePresets(context);
   const [selectedKey, setSelectedKey] = useState("");
   const selected = presets.find((preset) => preset.key === selectedKey) ?? null;
 
   function applySelected() {
-    if (!selected) return;
-    const form = document.getElementById(formId);
-    if (!(form instanceof HTMLFormElement)) return;
-    applyPresetToForm(form, selected);
+    if (!selected || pending) return;
+    if (onApplyPreset(selected.key)) notifyProjectionChange();
   }
+
+  if (!presets.length) return null;
 
   return (
     <section className="rounded-[24px] border border-[#D8B87A]/14 bg-[#080B10]/88 p-5 shadow-[0_18px_60px_rgba(0,0,0,0.24)]">
@@ -91,7 +67,8 @@ export default function ContentTemplatePicker({
         <button
           type="button"
           onClick={applySelected}
-          disabled={!selected}
+          disabled={!selected || pending}
+          data-content-template-apply
           className="h-11 rounded-full bg-[#D8B87A] px-5 text-sm font-semibold text-[#06101C] transition hover:bg-[#e5c98d] disabled:cursor-not-allowed disabled:opacity-40"
         >
           تطبيق القالب

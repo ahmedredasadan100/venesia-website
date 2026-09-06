@@ -23,6 +23,14 @@ type ContentBasicDataPanelProps = {
   }>;
   contentEditor: ReactNode;
   displaySettings?: ReactNode;
+  controlledValues?: {
+    title: string;
+    excerpt: string;
+  };
+  onControlledValueChange?: (
+    field: "title" | "excerpt",
+    value: string,
+  ) => void;
   values?: {
     title?: string | null;
     slug?: string | null;
@@ -44,6 +52,8 @@ export default function ContentBasicDataPanel({
   series,
   contentEditor,
   displaySettings,
+  controlledValues,
+  onControlledValueChange,
   values,
 }: ContentBasicDataPanelProps) {
   return (
@@ -79,10 +89,15 @@ export default function ContentBasicDataPanel({
                 label="العنوان"
                 required
                 defaultValue={values?.title}
+                value={controlledValues?.title}
+                onValueChange={(value) =>
+                  onControlledValueChange?.("title", value)
+                }
                 placeholder="اكتب عنوان المحتوى"
               />
               <TopicSlugInput
                 defaultValue={values?.slug}
+                titleValue={controlledValues?.title}
                 contentType={contentType}
               />
             </div>
@@ -94,6 +109,10 @@ export default function ContentBasicDataPanel({
               name="excerpt"
               label="الوصف الخارجي (المقتطف)"
               defaultValue={values?.excerpt}
+              value={controlledValues?.excerpt}
+              onValueChange={(value) =>
+                onControlledValueChange?.("excerpt", value)
+              }
               placeholder="اكتب مقتطفًا مختصرًا للمحتوى"
             />
 

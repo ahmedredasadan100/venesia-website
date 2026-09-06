@@ -6,7 +6,14 @@ import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   markdownToRichTextHtml,
@@ -28,6 +35,7 @@ type AdminRichTextEditorProps = {
   name: string;
   label: string;
   defaultValue?: string;
+  value?: string;
   placeholder?: string;
   minHeight?: number;
   maxHeight?: number;
@@ -86,6 +94,7 @@ export default function AdminRichTextEditor({
   name,
   label,
   defaultValue = "",
+  value,
   placeholder = "اكتب المحتوى هنا...",
   minHeight = 220,
   maxHeight,
@@ -103,23 +112,52 @@ export default function AdminRichTextEditor({
   const editorReadOnly = pending || readOnly;
   const hasError = Boolean(runtime?.fieldErrors[name]?.length);
   const styleScope = `rich-text-${useId().replace(/:/g, "")}`;
-  const initialValue = useMemo(
-    () => storageFormat === "markdown"
-      ? defaultValue
-      : normalizeRichTextContent(defaultValue),
+  const normalizedDefaultValue = useMemo(
+    () =>
+      storageFormat === "markdown"
+        ? normalizeArticleMarkdown(defaultValue)
+        : normalizeRichTextContent(defaultValue),
     [defaultValue, storageFormat],
   );
-  const initialContent = useMemo(
-    () => storageFormat === "markdown"
-      ? markdownToRichTextHtml(normalizeArticleMarkdown(initialValue))
-      : initialValue,
-    [initialValue, storageFormat],
+  const [uncontrolledValue, setUncontrolledValue] = useState(
+    normalizedDefaultValue,
+  );
+  const [uncontrolledDefaultValue, setUncontrolledDefaultValue] = useState(
+    normalizedDefaultValue,
+  );
+  const controlled = value !== undefined;
+  if (!controlled && uncontrolledDefaultValue !== normalizedDefaultValue) {
+    setUncontrolledDefaultValue(normalizedDefaultValue);
+    setUncontrolledValue(normalizedDefaultValue);
+  }
+  const canonicalValue = useMemo(
+    () =>
+      controlled
+        ? storageFormat === "markdown"
+          ? normalizeArticleMarkdown(value)
+          : normalizeRichTextContent(value)
+        : uncontrolledValue,
+    [controlled, storageFormat, uncontrolledValue, value],
+  );
+  const projectedContent = useMemo(
+    () =>
+      storageFormat === "markdown"
+        ? markdownToRichTextHtml(canonicalValue)
+        : canonicalValue,
+    [canonicalValue, storageFormat],
   );
   const [linkEditorOpen, setLinkEditorOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
-  const valueInputRef = useRef<HTMLInputElement>(null);
-  const currentValueRef = useRef(initialValue);
+  const currentValueRef = useRef(canonicalValue);
+  const controlledRef = useRef(controlled);
+  const onValueChangeRef = useRef(onValueChange);
+  const notifyProjectionChangeRef = useRef(runtime?.notifyProjectionChange);
   const hasUserInteractedRef = useRef(false);
+  useLayoutEffect(() => {
+    controlledRef.current = controlled;
+    onValueChangeRef.current = onValueChange;
+    notifyProjectionChangeRef.current = runtime?.notifyProjectionChange;
+  }, [controlled, onValueChange, runtime?.notifyProjectionChange]);
   const isMinimal = toolbarMode !== "full";
   const showToolbar = toolbarMode !== "none";
   const withTextAlign = showToolbar && enableTextAlign;
@@ -164,7 +202,7 @@ export default function AdminRichTextEditor({
         : []),
       Placeholder.configure({ placeholder }),
     ],
-    content: initialContent,
+    content: projectedContent,
     editorProps: {
       attributes: {
         id: `${name}-editor`,
@@ -183,27 +221,40 @@ export default function AdminRichTextEditor({
         : nextHtml;
       if (nextValue === currentValueRef.current) return;
       currentValueRef.current = nextValue;
-      if (valueInputRef.current) {
-        valueInputRef.current.value = nextValue;
-        valueInputRef.current.dispatchEvent(new Event("input", { bubbles: true }));
-      }
-      onValueChange?.(nextValue);
+      if (!controlledRef.current) setUncontrolledValue(nextValue);
+      onValueChangeRef.current?.(nextValue);
+      notifyProjectionChangeRef.current?.();
     },
     onFocus: () => {
       hasUserInteractedRef.current = true;
     },
-  }, [enableArticleStructure, hasError, isMinimal, label, name, onValueChange, storageFormat, withTextAlign]);
+  }, [enableArticleStructure, isMinimal, storageFormat, withTextAlign]);
 
   useEffect(() => {
     if (!editor) return;
+    if (canonicalValue === currentValueRef.current) return;
+    currentValueRef.current = canonicalValue;
     const currentHtml = editor.isEmpty ? "" : editor.getHTML();
-    if (currentHtml !== initialContent) {
-      editor.commands.setContent(initialContent, { emitUpdate: false });
+    if (currentHtml !== projectedContent) {
+      editor.commands.setContent(projectedContent, { emitUpdate: false });
     }
-    currentValueRef.current = initialValue;
-    hasUserInteractedRef.current = false;
-    if (valueInputRef.current) valueInputRef.current.value = initialValue;
-  }, [editor, initialContent, initialValue]);
+  }, [canonicalValue, editor, projectedContent]);
+
+  useEffect(() => {
+    if (!editor) return;
+    editor.setOptions({
+      editorProps: {
+        attributes: {
+          id: `${name}-editor`,
+          class: "admin-rich-text-content focus:outline-none",
+          dir: "rtl",
+          role: "textbox",
+          "aria-label": label,
+          "aria-invalid": hasError ? "true" : "false",
+        },
+      },
+    });
+  }, [editor, hasError, label, name]);
 
   useEffect(() => {
     editor?.setEditable(!editorReadOnly);
@@ -397,7 +448,13 @@ export default function AdminRichTextEditor({
 
   return (
     <div className="space-y-2" data-admin-rich-text-scope={styleScope}>
-      <input ref={valueInputRef} type="hidden" name={name} defaultValue={initialValue} />
+      <input
+        type="hidden"
+        name={name}
+        value={canonicalValue}
+        readOnly
+        data-admin-form-derived-projection="content"
+      />
 
       {label && toolbarMode !== "none" ? (
         <span className={`text-sm font-medium ${appearance === "light" ? "text-slate-700" : "text-white/70"}`}>
