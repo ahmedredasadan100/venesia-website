@@ -210,12 +210,15 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
     };
   }, [readForm, updateDirty]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     pendingRef.current = pending;
     if (pending) {
       wasPendingRef.current = true;
-      return;
     }
+  }, [pending]);
+
+  useEffect(() => {
+    if (pending) return;
     if (!wasPendingRef.current) return;
 
     wasPendingRef.current = false;
@@ -327,6 +330,7 @@ export type AdminFormRuntimeContextValue<TResult = unknown> = {
   pending: boolean;
   fieldErrors: Record<string, string[]>;
   isDirty: boolean;
+  requestInternalNavigation: (href: string) => void;
   requestClose: () => void;
 };
 
@@ -503,6 +507,14 @@ export default function AdminFormRuntime<TResult = unknown>({
           : undefined,
       onNavigate: clearFormFeedback,
     });
+  const requestInternalNavigation = useCallback(
+    (href: string) => {
+      const safeHref = resolveSafeInternalPath(href, "");
+      if (!safeHref) return;
+      requestNavigation(safeHref);
+    },
+    [requestNavigation],
+  );
   const requestClose = useCallback(() => {
     if (onClose) {
       requestCallback(onClose);
@@ -598,9 +610,10 @@ export default function AdminFormRuntime<TResult = unknown>({
       pending,
       fieldErrors: state.fieldErrors ?? {},
       isDirty,
+      requestInternalNavigation,
       requestClose,
     }),
-    [isDirty, mode, pending, requestClose, state],
+    [isDirty, mode, pending, requestClose, requestInternalNavigation, state],
   );
 
   return (
