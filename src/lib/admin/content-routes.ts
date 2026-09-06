@@ -1,3 +1,5 @@
+import type { ContentType } from "./content/content-types";
+
 export const ADMIN_CONTENT_ROUTES = {
   topics: "/admin/content/topics",
   newTopic: "/admin/content/topics/new",
@@ -6,6 +8,11 @@ export const ADMIN_CONTENT_ROUTES = {
   series: "/admin/content/series",
   newSeries: "/admin/content/series/new",
 } as const;
+
+export function adminContentNewTopicPath(contentType: ContentType) {
+  const params = new URLSearchParams({ type: contentType });
+  return `${ADMIN_CONTENT_ROUTES.newTopic}?${params.toString()}`;
+}
 
 export function adminContentTopicPath(
   id: number | string,

@@ -1,11 +1,13 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import AdminListboxSelect from "../../ui/AdminListboxSelect";
 import {
   CONTENT_TYPE_OPTIONS,
+  isContentType,
   type ContentType,
 } from "../../../../lib/admin/content/content-types";
+import { adminContentNewTopicPath } from "../../../../lib/admin/content-routes";
+import { useAdminFormRuntime } from "../../ui/AdminFormRuntime";
 
 export default function TopicContentTypeControl({
   value,
@@ -14,7 +16,7 @@ export default function TopicContentTypeControl({
   value: ContentType;
   mode: "create" | "edit";
 }) {
-  const router = useRouter();
+  const { requestInternalNavigation } = useAdminFormRuntime();
 
   return (
     <label className="inline-grid min-w-0 max-w-full shrink-0 space-y-1.5">
@@ -27,7 +29,8 @@ export default function TopicContentTypeControl({
         sizing="content-relaxed"
         ariaLabel="نوع المحتوى"
         onChange={(next) => {
-          router.push(`/admin/content/topics/new?type=${next}`);
+          if (!isContentType(next) || next === value) return;
+          requestInternalNavigation(adminContentNewTopicPath(next));
         }}
       />
     </label>

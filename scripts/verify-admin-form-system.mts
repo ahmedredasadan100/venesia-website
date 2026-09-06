@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
+import * as ts from "typescript";
 
 import {
   ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT,
@@ -107,6 +108,384 @@ function sourcePathsFor(classification: AdminFormAdoptionClassification) {
   ).flatMap((entry) => entry.sourceFiles);
 }
 
+type FormProgrammaticNavigationPrimitive =
+  | "router.push"
+  | "router.replace"
+  | "router.back"
+  | "location.assign"
+  | "location.replace"
+  | "location.href"
+  | "history.pushState"
+  | "history.replaceState";
+
+type FormProgrammaticNavigationViolation = {
+  sourceFile: string;
+  primitive: FormProgrammaticNavigationPrimitive;
+  line: number;
+  column: number;
+};
+
+type NavigationAnalysisContext = {
+  parsed: ts.SourceFile;
+  nextRouterHookNames: ReadonlySet<string>;
+  identifierInitializers: ReadonlyMap<string, readonly ts.Expression[]>;
+  destructuredProperties: ReadonlyMap<
+    string,
+    readonly { expression: ts.Expression; propertyName: string }[]
+  >;
+  declaredNames: ReadonlySet<string>;
+};
+
+const FORM_RUNTIME_NAVIGATION_ADAPTER =
+  "src/components/admin/ui/AdminFormRuntime.tsx";
+const FORM_PROGRAMMATIC_NAVIGATION_CLASSIFICATIONS = new Set<
+  AdminFormAdoptionClassification
+>(["shared_reference", "shared_adopter"]);
+const ROUTER_NAVIGATION_METHODS = new Set(["push", "replace", "back"]);
+const LOCATION_NAVIGATION_METHODS = new Set(["assign", "replace"]);
+const HISTORY_NAVIGATION_METHODS = new Set(["pushState", "replaceState"]);
+
+function unwrapNavigationExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (
+    ts.isParenthesizedExpression(current) ||
+    ts.isAsExpression(current) ||
+    ts.isTypeAssertionExpression(current) ||
+    ts.isNonNullExpression(current) ||
+    ts.isSatisfiesExpression(current)
+  ) {
+    current = current.expression;
+  }
+  return current;
+}
+
+function staticNavigationProperty(
+  expression: ts.Expression,
+): { expression: ts.Expression; propertyName: string } | null {
+  const current = unwrapNavigationExpression(expression);
+  if (ts.isPropertyAccessExpression(current)) {
+    return {
+      expression: current.expression,
+      propertyName: current.name.text,
+    };
+  }
+  if (
+    ts.isElementAccessExpression(current) &&
+    current.argumentExpression &&
+    (ts.isStringLiteralLike(current.argumentExpression) ||
+      ts.isNumericLiteral(current.argumentExpression))
+  ) {
+    return {
+      expression: current.expression,
+      propertyName: current.argumentExpression.text,
+    };
+  }
+  return null;
+}
+
+function navigationPropertyChain(expression: ts.Expression): string[] | null {
+  const current = unwrapNavigationExpression(expression);
+  if (ts.isIdentifier(current)) return [current.text];
+  const property = staticNavigationProperty(current);
+  if (!property) return null;
+  const parent = navigationPropertyChain(property.expression);
+  return parent ? [...parent, property.propertyName] : null;
+}
+
+function collectNavigationAnalysisContext(
+  parsed: ts.SourceFile,
+): NavigationAnalysisContext {
+  const nextRouterHookNames = new Set<string>();
+  const identifierInitializers = new Map<string, ts.Expression[]>();
+  const destructuredProperties = new Map<
+    string,
+    { expression: ts.Expression; propertyName: string }[]
+  >();
+  const declaredNames = new Set<string>();
+
+  const declareBindingName = (name: ts.BindingName) => {
+    if (ts.isIdentifier(name)) {
+      declaredNames.add(name.text);
+      return;
+    }
+    for (const element of name.elements) {
+      if (ts.isBindingElement(element)) declareBindingName(element.name);
+    }
+  };
+
+  for (const statement of parsed.statements) {
+    if (
+      !ts.isImportDeclaration(statement) ||
+      !ts.isStringLiteral(statement.moduleSpecifier)
+    ) {
+      continue;
+    }
+    const importClause = statement.importClause;
+    if (importClause?.name) declaredNames.add(importClause.name.text);
+    const bindings = importClause?.namedBindings;
+    if (bindings && ts.isNamespaceImport(bindings)) {
+      declaredNames.add(bindings.name.text);
+    }
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        declaredNames.add(element.name.text);
+        if (
+          statement.moduleSpecifier.text === "next/navigation" &&
+          (element.propertyName ?? element.name).text === "useRouter"
+        ) {
+          nextRouterHookNames.add(element.name.text);
+        }
+      }
+    }
+  }
+
+  const visit = (node: ts.Node) => {
+    if (ts.isParameter(node)) declareBindingName(node.name);
+    if (
+      (ts.isFunctionDeclaration(node) ||
+        ts.isClassDeclaration(node) ||
+        ts.isEnumDeclaration(node)) &&
+      node.name
+    ) {
+      declaredNames.add(node.name.text);
+    }
+    if (ts.isVariableDeclaration(node)) {
+      declareBindingName(node.name);
+      if (node.initializer && ts.isIdentifier(node.name)) {
+        const initializers = identifierInitializers.get(node.name.text) ?? [];
+        initializers.push(node.initializer);
+        identifierInitializers.set(node.name.text, initializers);
+      }
+      if (node.initializer && ts.isObjectBindingPattern(node.name)) {
+        for (const element of node.name.elements) {
+          if (!ts.isIdentifier(element.name)) continue;
+          const property = element.propertyName ?? element.name;
+          if (!ts.isIdentifier(property) && !ts.isStringLiteralLike(property)) {
+            continue;
+          }
+          const aliases = destructuredProperties.get(element.name.text) ?? [];
+          aliases.push({
+            expression: node.initializer,
+            propertyName: property.text,
+          });
+          destructuredProperties.set(element.name.text, aliases);
+        }
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
+
+  return {
+    parsed,
+    nextRouterHookNames,
+    identifierInitializers,
+    destructuredProperties,
+    declaredNames,
+  };
+}
+
+type NavigationObjectKind = "router" | "location" | "history";
+
+function navigationObjectKinds(
+  expression: ts.Expression,
+  context: NavigationAnalysisContext,
+  seen = new Set<string>(),
+): ReadonlySet<NavigationObjectKind> {
+  const current = unwrapNavigationExpression(expression);
+  const kinds = new Set<NavigationObjectKind>();
+  const chain = navigationPropertyChain(current);
+  if (chain) {
+    const root = chain[0]!;
+    const unshadowedRoot = !context.declaredNames.has(root);
+    if (
+      unshadowedRoot &&
+      (chain.length === 1
+        ? root === "location"
+        : chain.length === 2 &&
+          ["window", "globalThis", "self", "document"].includes(root) &&
+          chain[1] === "location")
+    ) {
+      kinds.add("location");
+    }
+    if (
+      unshadowedRoot &&
+      (chain.length === 1
+        ? root === "history"
+        : chain.length === 2 &&
+          ["window", "globalThis", "self"].includes(root) &&
+          chain[1] === "history")
+    ) {
+      kinds.add("history");
+    }
+  }
+  if (
+    ts.isCallExpression(current) &&
+    ts.isIdentifier(unwrapNavigationExpression(current.expression)) &&
+    context.nextRouterHookNames.has(
+      (unwrapNavigationExpression(current.expression) as ts.Identifier).text,
+    )
+  ) {
+    kinds.add("router");
+  }
+  if (ts.isIdentifier(current)) {
+    const seenKey = `object:${current.text}`;
+    if (!seen.has(seenKey)) {
+      const nextSeen = new Set(seen);
+      nextSeen.add(seenKey);
+      for (const initializer of
+        context.identifierInitializers.get(current.text) ?? []) {
+        for (const kind of navigationObjectKinds(
+          initializer,
+          context,
+          nextSeen,
+        )) {
+          kinds.add(kind);
+        }
+      }
+    }
+  }
+  return kinds;
+}
+
+function navigationCallPrimitives(
+  expression: ts.Expression,
+  context: NavigationAnalysisContext,
+  seen = new Set<string>(),
+): ReadonlySet<FormProgrammaticNavigationPrimitive> {
+  const current = unwrapNavigationExpression(expression);
+  const primitives = new Set<FormProgrammaticNavigationPrimitive>();
+  const property = staticNavigationProperty(current);
+  if (property) {
+    const objectKinds = navigationObjectKinds(property.expression, context);
+    if (
+      ROUTER_NAVIGATION_METHODS.has(property.propertyName) &&
+      objectKinds.has("router")
+    ) {
+      primitives.add(
+        `router.${property.propertyName}` as FormProgrammaticNavigationPrimitive,
+      );
+    }
+    if (
+      LOCATION_NAVIGATION_METHODS.has(property.propertyName) &&
+      objectKinds.has("location")
+    ) {
+      primitives.add(
+        `location.${property.propertyName}` as FormProgrammaticNavigationPrimitive,
+      );
+    }
+    if (
+      HISTORY_NAVIGATION_METHODS.has(property.propertyName) &&
+      objectKinds.has("history")
+    ) {
+      primitives.add(
+        `history.${property.propertyName}` as FormProgrammaticNavigationPrimitive,
+      );
+    }
+  }
+  if (ts.isIdentifier(current)) {
+    const seenKey = `call:${current.text}`;
+    if (!seen.has(seenKey)) {
+      const nextSeen = new Set(seen);
+      nextSeen.add(seenKey);
+      for (const initializer of
+        context.identifierInitializers.get(current.text) ?? []) {
+        for (const primitive of navigationCallPrimitives(
+          initializer,
+          context,
+          nextSeen,
+        )) {
+          primitives.add(primitive);
+        }
+      }
+      for (const alias of
+        context.destructuredProperties.get(current.text) ?? []) {
+        const objectKinds = navigationObjectKinds(alias.expression, context);
+        if (
+          ROUTER_NAVIGATION_METHODS.has(alias.propertyName) &&
+          objectKinds.has("router")
+        ) {
+          primitives.add(
+            `router.${alias.propertyName}` as FormProgrammaticNavigationPrimitive,
+          );
+        }
+        if (
+          LOCATION_NAVIGATION_METHODS.has(alias.propertyName) &&
+          objectKinds.has("location")
+        ) {
+          primitives.add(
+            `location.${alias.propertyName}` as FormProgrammaticNavigationPrimitive,
+          );
+        }
+        if (
+          HISTORY_NAVIGATION_METHODS.has(alias.propertyName) &&
+          objectKinds.has("history")
+        ) {
+          primitives.add(
+            `history.${alias.propertyName}` as FormProgrammaticNavigationPrimitive,
+          );
+        }
+      }
+    }
+  }
+  return primitives;
+}
+
+function collectFormProgrammaticNavigationViolations(input: {
+  graph: ReadonlyMap<string, ts.SourceFile>;
+  excludedNonFormCapabilityOwnerSourceFiles?: ReadonlySet<string>;
+}) {
+  const violations: FormProgrammaticNavigationViolation[] = [];
+  for (const [sourceFile, parsed] of input.graph) {
+    if (
+      sourceFile === FORM_RUNTIME_NAVIGATION_ADAPTER ||
+      input.excludedNonFormCapabilityOwnerSourceFiles?.has(sourceFile)
+    ) {
+      continue;
+    }
+    const context = collectNavigationAnalysisContext(parsed);
+    const record = (
+      node: ts.Node,
+      primitive: FormProgrammaticNavigationPrimitive,
+    ) => {
+      const position = parsed.getLineAndCharacterOfPosition(
+        node.getStart(parsed),
+      );
+      violations.push({
+        sourceFile,
+        primitive,
+        line: position.line + 1,
+        column: position.character + 1,
+      });
+    };
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node)) {
+        for (const primitive of navigationCallPrimitives(
+          node.expression,
+          context,
+        )) {
+          record(node, primitive);
+        }
+      }
+      if (
+        ts.isBinaryExpression(node) &&
+        node.operatorToken.kind === ts.SyntaxKind.EqualsToken
+      ) {
+        const property = staticNavigationProperty(node.left);
+        if (
+          property?.propertyName === "href" &&
+          navigationObjectKinds(property.expression, context).has("location")
+        ) {
+          record(node, "location.href");
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+  }
+  return violations;
+}
+
 const entriesById = new Map(
   ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.map((entry) => [entry.id, entry]),
 );
@@ -122,6 +501,204 @@ const manifestExecutableGraphs = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.map(
       symbolAware: true,
     }),
 );
+const formCapabilityOwnerBoundarySourceFiles = new Set(
+  Object.values(ADMIN_CURRENT_SHARED_CAPABILITY_SET).flatMap((capability) =>
+    capability.sourceFiles.map(normalizePath),
+  ),
+);
+const capabilityOwnerBoundarySupport = new Map<string, Set<string>>();
+for (const capability of Object.values(
+  ADMIN_CURRENT_SHARED_CAPABILITY_SET,
+)) {
+  for (const sourceFile of capability.sourceFiles) {
+    const normalizedSourceFile = normalizePath(sourceFile);
+    const supportedBoundaries =
+      capabilityOwnerBoundarySupport.get(normalizedSourceFile) ??
+      new Set<string>();
+    capability.consumerBoundaries.forEach((boundary) =>
+      supportedBoundaries.add(boundary),
+    );
+    capabilityOwnerBoundarySupport.set(
+      normalizedSourceFile,
+      supportedBoundaries,
+    );
+  }
+}
+const nonFormCapabilityOwnerBoundarySourceFiles = new Set(
+  [...capabilityOwnerBoundarySupport]
+    .filter(([, supportedBoundaries]) => !supportedBoundaries.has("form"))
+    .map(([sourceFile]) => sourceFile),
+);
+const registeredFormProgrammaticNavigationGraphs =
+  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.filter((entry) =>
+    FORM_PROGRAMMATIC_NAVIGATION_CLASSIFICATIONS.has(entry.classification),
+  ).map((entry) => ({
+    consumerId: entry.id,
+    graph: collectExecutableSourceGraph({
+      root: ROOT,
+      entrySourceFiles: entry.sourceFiles,
+      traversalBoundarySourceFiles: [
+        ...formCapabilityOwnerBoundarySourceFiles,
+      ],
+      symbolAware: true,
+    }),
+  }));
+const registeredFormProgrammaticNavigationViolations = [
+  ...new Map(
+    registeredFormProgrammaticNavigationGraphs
+      .flatMap(({ graph }) =>
+        collectFormProgrammaticNavigationViolations({
+          graph,
+          excludedNonFormCapabilityOwnerSourceFiles:
+            nonFormCapabilityOwnerBoundarySourceFiles,
+        }),
+      )
+      .map((violation) => [
+        `${violation.sourceFile}:${violation.line}:${violation.column}:${violation.primitive}`,
+        violation,
+      ]),
+  ).values(),
+];
+const programmaticNavigationViolationSummary =
+  registeredFormProgrammaticNavigationViolations
+    .map(
+      (violation) =>
+        `${violation.sourceFile}:${violation.line}:${violation.column} (${violation.primitive})`,
+    )
+    .join(", ") || "none";
+const programmaticNavigationBehaviorProof =
+  ADMIN_FORM_BEHAVIOR_PROOF_LEDGER.find(
+    (proof) => proof.id === "form-dirty-guard-programmatic-navigation",
+  );
+
+const programmaticNavigationFixtureRoot =
+  "src/fixtures/governance/form-navigation-root.tsx";
+const programmaticNavigationFixtureChild =
+  "src/fixtures/governance/form-navigation-bypass.tsx";
+const programmaticNavigationFixtureGraph = collectExecutableSourceGraph({
+  root: ROOT,
+  entrySourceFiles: [programmaticNavigationFixtureRoot],
+  sourceOverrides: new Map([
+    [
+      programmaticNavigationFixtureRoot,
+      `import FormNavigationBypass from "./form-navigation-bypass";
+
+export default function FormNavigationFixtureRoot() {
+  return <FormNavigationBypass />;
+}
+`,
+    ],
+    [
+      programmaticNavigationFixtureChild,
+      `"use client";
+
+import { useRouter } from "next/navigation";
+
+export default function FormNavigationBypass() {
+  const router = useRouter();
+  const bypassGuard = () => {
+    router.push("/admin/direct-push");
+    router.replace("/admin/direct-replace");
+    router.back();
+    window.location.assign("/admin/location-assign");
+    window.location.replace("/admin/location-replace");
+    window.location.href = "/admin/location-href";
+    window.history.pushState({}, "", "/admin/history-push");
+    window.history.replaceState({}, "", "/admin/history-replace");
+  };
+  return <button onClick={bypassGuard}>Bypass</button>;
+}
+`,
+    ],
+  ]),
+  symbolAware: true,
+});
+const programmaticNavigationFixtureViolations =
+  collectFormProgrammaticNavigationViolations({
+    graph: programmaticNavigationFixtureGraph,
+  });
+const programmaticNavigationFixturePrimitives = [
+  ...new Set(
+    programmaticNavigationFixtureViolations.map(
+      (violation) => violation.primitive,
+    ),
+  ),
+].sort();
+const expectedProgrammaticNavigationFixturePrimitives: FormProgrammaticNavigationPrimitive[] =
+  [
+    "history.pushState",
+    "history.replaceState",
+    "location.assign",
+    "location.href",
+    "location.replace",
+    "router.back",
+    "router.push",
+    "router.replace",
+  ];
+
+const programmaticNavigationBoundaryFixtureRoot =
+  "src/fixtures/governance/form-navigation-boundary-root.tsx";
+const programmaticNavigationBoundaryFixtureOwner =
+  "src/fixtures/governance/form-navigation-boundary-owner.tsx";
+const programmaticNavigationBoundaryFixtureUnreachable =
+  "src/fixtures/governance/form-navigation-boundary-unreachable.tsx";
+const programmaticNavigationBoundaryFixtureGraph =
+  collectExecutableSourceGraph({
+    root: ROOT,
+    entrySourceFiles: [programmaticNavigationBoundaryFixtureRoot],
+    traversalBoundarySourceFiles: [
+      programmaticNavigationBoundaryFixtureOwner,
+    ],
+    sourceOverrides: new Map([
+      [
+        programmaticNavigationBoundaryFixtureRoot,
+        `import FormNavigationBoundaryOwner from "./form-navigation-boundary-owner";
+
+export default function FormNavigationBoundaryRoot() {
+  return <FormNavigationBoundaryOwner />;
+}
+`,
+      ],
+      [
+        programmaticNavigationBoundaryFixtureOwner,
+        `"use client";
+
+import { useRouter } from "next/navigation";
+import FormNavigationBoundaryUnreachable from "./form-navigation-boundary-unreachable";
+
+export default function FormNavigationBoundaryOwner() {
+  const router = useRouter();
+  return (
+    <button onClick={() => router.push("/admin/boundary-owner-bypass")}>
+      <FormNavigationBoundaryUnreachable />
+    </button>
+  );
+}
+`,
+      ],
+      [
+        programmaticNavigationBoundaryFixtureUnreachable,
+        `"use client";
+
+import { useRouter } from "next/navigation";
+
+export default function FormNavigationBoundaryUnreachable() {
+  const router = useRouter();
+  return (
+    <button onClick={() => router.replace("/admin/unreachable-bypass")}>
+      Unreachable bypass
+    </button>
+  );
+}
+`,
+      ],
+    ]),
+    symbolAware: true,
+  });
+const programmaticNavigationBoundaryFixtureViolations =
+  collectFormProgrammaticNavigationViolations({
+    graph: programmaticNavigationBoundaryFixtureGraph,
+  });
 
 function blockEditorKindFromProductIdentity(
   identity: (typeof PRODUCT_SURFACE_IDENTITIES)[number],
@@ -543,6 +1120,71 @@ check(
 check(
   "in-scope generic adoption gaps are closed without claiming global Form Runtime closure",
   sourcePathsFor("legacy_generic_gap").length === 0 &&
+    ADMIN_FORM_SYSTEM_CLOSURE.globalClosed === false,
+);
+
+check(
+  `registered shared Form consumers have no direct programmatic exit navigation outside the exact Form Runtime adapter; violations: ${programmaticNavigationViolationSummary}`,
+  ADMIN_CURRENT_SHARED_CAPABILITY_SET.form_runtime.sourceFiles.includes(
+    FORM_RUNTIME_NAVIGATION_ADAPTER,
+  ) &&
+    formCapabilityOwnerBoundarySourceFiles.has(
+      FORM_RUNTIME_NAVIGATION_ADAPTER,
+    ) &&
+    !nonFormCapabilityOwnerBoundarySourceFiles.has(
+      FORM_RUNTIME_NAVIGATION_ADAPTER,
+    ) &&
+    [...nonFormCapabilityOwnerBoundarySourceFiles].every(
+      (sourceFile) =>
+        formCapabilityOwnerBoundarySourceFiles.has(sourceFile) &&
+        !capabilityOwnerBoundarySupport.get(sourceFile)?.has("form"),
+    ) &&
+    registeredFormProgrammaticNavigationGraphs.length ===
+      ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.filter((entry) =>
+        FORM_PROGRAMMATIC_NAVIGATION_CLASSIFICATIONS.has(entry.classification),
+      ).length &&
+    registeredFormProgrammaticNavigationViolations.length === 0,
+);
+check(
+  "a registered Form descendant using direct router, location, or history navigation fails the programmatic-navigation guard",
+  programmaticNavigationFixtureViolations.length ===
+    expectedProgrammaticNavigationFixturePrimitives.length &&
+    programmaticNavigationFixtureViolations.every(
+      (violation) =>
+        violation.sourceFile === programmaticNavigationFixtureChild,
+    ) &&
+    expectedProgrammaticNavigationFixturePrimitives.every(
+      (primitive, index) =>
+        primitive === programmaticNavigationFixturePrimitives[index],
+    ),
+);
+check(
+  "a reachable Form-capable owner boundary is scanned for direct navigation while traversal stops at that owner",
+  programmaticNavigationBoundaryFixtureGraph.has(
+    programmaticNavigationBoundaryFixtureOwner,
+  ) &&
+    !programmaticNavigationBoundaryFixtureGraph.has(
+      programmaticNavigationBoundaryFixtureUnreachable,
+    ) &&
+    programmaticNavigationBoundaryFixtureViolations.length === 1 &&
+    programmaticNavigationBoundaryFixtureViolations[0]?.sourceFile ===
+      programmaticNavigationBoundaryFixtureOwner &&
+    programmaticNavigationBoundaryFixtureViolations[0]?.primitive ===
+      "router.push",
+);
+check(
+  "guarded programmatic navigation is behavior-verified by the mounted Chromium harness without closing unrelated Form blockers",
+  programmaticNavigationBehaviorProof?.state === "behavior_verified" &&
+    programmaticNavigationBehaviorProof.evidence.includes(
+      "scripts/verify-admin-form-system.mts",
+    ) &&
+    programmaticNavigationBehaviorProof.evidence.includes(
+      "scripts/qa-admin-form-guarded-navigation.mts",
+    ) &&
+    ADMIN_FORM_BEHAVIOR_PROOF_LEDGER.some(
+      (proof) => proof.id === "form-save-parity-across-consumers" &&
+        proof.state === "source_proven_only",
+    ) &&
     ADMIN_FORM_SYSTEM_CLOSURE.globalClosed === false,
 );
 

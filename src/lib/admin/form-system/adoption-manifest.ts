@@ -940,14 +940,16 @@ export type AdminGovernanceBehaviorProof = {
 export const ADMIN_FORM_BEHAVIOR_PROOF_LEDGER = [
   {
     id: "form-dirty-guard-programmatic-navigation",
-    state: "source_proven_only",
+    state: "behavior_verified",
     requiredForGlobalClosure: true,
     evidence: [
       "src/components/admin/ui/AdminFormRuntime.tsx",
       "src/lib/admin/form-runtime.ts",
+      "scripts/verify-admin-form-system.mts",
+      "scripts/qa-admin-form-guarded-navigation.mts",
     ],
     rationale:
-      "Executable bindings and source guards exist, but no mounted runtime test currently proves dirty protection across programmatic navigation.",
+      "A registry-scoped source guard and mounted Chromium integration harness prove guarded internal programmatic navigation across clean, dirty, pending, failed-save, successful-save, and create-to-edit states.",
   },
   {
     id: "form-save-parity-across-consumers",
