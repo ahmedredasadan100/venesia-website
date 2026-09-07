@@ -52,6 +52,64 @@ export type ContentReviewInput = {
   mediaPayload?: MediaTopicPayload | null;
 };
 
+export type ContentReleaseTitleQualityRule =
+  | Readonly<{ kind: "exact"; value: string }>
+  | Readonly<{ kind: "suffix"; value: string }>;
+
+export type ContentReleaseTitleQualityPolicy = Readonly<{
+  checkId: "release-title-quality";
+  scope: "publish_only";
+  rules: readonly ContentReleaseTitleQualityRule[];
+  failureHint: string;
+}>;
+
+export const CONTENT_RELEASE_TITLE_QUALITY_POLICY = {
+  checkId: "release-title-quality",
+  scope: "publish_only",
+  rules: [
+    { kind: "exact", value: "test" },
+    { kind: "exact", value: "test copy" },
+    { kind: "exact", value: "copy" },
+    { kind: "exact", value: "random" },
+    { kind: "suffix", value: " - نسخة" },
+  ],
+  failureHint: "استبدل العنوان المؤقت بعنوان واضح قبل النشر.",
+} as const satisfies ContentReleaseTitleQualityPolicy;
+
+export function normalizeContentReleaseTitle(value: string) {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("en-US");
+}
+
+function normalizeContentReleaseTitleRule(
+  rule: ContentReleaseTitleQualityRule,
+) {
+  const value = rule.value
+    .normalize("NFKC")
+    .replace(/\s+/gu, " ")
+    .toLocaleLowerCase("en-US");
+  return rule.kind === "exact" ? value.trim() : value;
+}
+
+export function violatesContentReleaseTitleQualityPolicy(
+  title: string,
+  policy: ContentReleaseTitleQualityPolicy =
+    CONTENT_RELEASE_TITLE_QUALITY_POLICY,
+) {
+  const normalizedTitle = normalizeContentReleaseTitle(title);
+  if (!normalizedTitle) return false;
+
+  return policy.rules.some((rule) => {
+    const normalizedRule = normalizeContentReleaseTitleRule(rule);
+    return rule.kind === "exact"
+      ? normalizedTitle === normalizedRule
+      : normalizedTitle.endsWith(normalizedRule);
+  });
+}
+
 const COMMON_CORRECTION_TARGETS = {
   title: { tabId: "basic", targetId: "content-title" },
   slug: { tabId: "basic", targetId: "topic-slug" },
@@ -86,6 +144,9 @@ export function resolveContentReviewCorrectionTarget(
   contentType: ContentType,
   checkId: string,
 ): ContentReviewCorrectionTarget | undefined {
+  if (checkId === CONTENT_RELEASE_TITLE_QUALITY_POLICY.checkId) {
+    return COMMON_CORRECTION_TARGETS.title;
+  }
   if (checkId === "content" || checkId === "internal-links") return bodyTarget(contentType);
   if (checkId === "seo-title") return seoTarget(contentType, "title");
   if (checkId === "seo-description") return seoTarget(contentType, "description");
@@ -120,7 +181,7 @@ function reviewGroup(checkId: string): EntityReviewAnalysisGroup {
 }
 
 function check(
-  input: ContentReviewInput,
+  input: Pick<ContentReviewInput, "contentType">,
   value: Omit<ContentReviewCheck, "severity" | "correctionTarget" | "group">,
 ): ContentReviewCheck {
   return {
@@ -129,6 +190,22 @@ function check(
     group: reviewGroup(value.id),
     correctionTarget: resolveContentReviewCorrectionTarget(input.contentType, value.id),
   };
+}
+
+export function getContentReleaseTitleQualityCheck(
+  input: Pick<ContentReviewInput, "contentType" | "title">,
+) {
+  const blocked = violatesContentReleaseTitleQualityPolicy(input.title);
+  return check(input, {
+    id: CONTENT_RELEASE_TITLE_QUALITY_POLICY.checkId,
+    label: "جودة عنوان النشر",
+    status: blocked ? "fail" : "pass",
+    blocksPublish: true,
+    hint: blocked
+      ? CONTENT_RELEASE_TITLE_QUALITY_POLICY.failureHint
+      : "العنوان لا يحمل علامة عنوان مؤقت.",
+    field: "title",
+  });
 }
 
 export function validateContentSlug(slug: string) {
@@ -183,6 +260,7 @@ export function buildContentReviewChecks(input: ContentReviewInput): ContentRevi
       hint: input.title.trim() ? "العنوان موجود." : "أضف عنوانًا واضحًا للمحتوى.",
       field: "title",
     }),
+    getContentReleaseTitleQualityCheck(input),
     check(input, {
       id: "slug",
       label: "Slug",
