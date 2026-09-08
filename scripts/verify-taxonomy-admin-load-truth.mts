@@ -36,7 +36,7 @@ function loadTypeScriptModule(
 type RuntimeLoadResult<T = unknown> = {
   status: string;
   data: T;
-  error: Error & { code?: string };
+  error: Error & { code?: string; scope?: string };
 };
 
 async function callLoader<T = unknown>(
@@ -118,6 +118,7 @@ const unpublishedCategory = {
   id: 11,
   name: "Persisted unpublished category",
   slug: "persisted-unpublished-category",
+  is_active: false,
   status: "unpublished",
 };
 
@@ -342,6 +343,35 @@ async function runOwnerChecks() {
     assert.deepEqual(result, { status: "data", data: [] });
   });
 
+  await verify("missing persisted Category parent fails as a relationship contract", async () => {
+    const owner = loadOwner({
+      topic_categories: [{ data: [publishedCategory], error: null }],
+    });
+    const result = await callLoader(
+      owner,
+      "loadCategoryParentFormOptions",
+      { excludeCategoryId: 31, persistedParentId: 999 },
+    );
+    assert.equal(result.status, "error");
+    assert.equal(result.error.scope, "category_parent_contract");
+    assert.equal(result.error.cause, undefined);
+  });
+
+  await verify("a descendant cannot masquerade as the persisted Category parent", async () => {
+    const edited = { ...publishedCategory, id: 31, parent_id: null };
+    const descendant = { ...publishedCategory, id: 32, parent_id: 31 };
+    const owner = loadOwner({
+      topic_categories: [{ data: [edited, descendant], error: null }],
+    });
+    const result = await callLoader(
+      owner,
+      "loadCategoryParentFormOptions",
+      { excludeCategoryId: 31, persistedParentId: 32 },
+    );
+    assert.equal(result.status, "error");
+    assert.equal(result.error.scope, "category_parent_contract");
+  });
+
   await verify("empty required Series category options fail closed", async () => {
     const owner = loadOwner({
       topic_categories: [{ data: [], error: null }],
@@ -405,6 +435,8 @@ async function runOwnerChecks() {
       999,
     );
     assert.equal(result.status, "error");
+    assert.equal(result.error.scope, "series_options_contract");
+    assert.equal(result.error.cause, undefined);
   });
 
   await verify("partial Topic taxonomy failure cannot return partial data", async () => {
@@ -443,7 +475,7 @@ async function runOwnerChecks() {
       ],
     });
     const result = await callLoader<{
-      categories: Array<{ id: number }>;
+      categories: Array<{ id: number; is_active: boolean | null }>;
       series: Array<{ id: number }>;
     }>(owner, "loadTopicTaxonomyFormDependencies", {
       currentCategoryId: 11,
@@ -458,6 +490,84 @@ async function runOwnerChecks() {
       result.data.series.map((series: { id: number }) => series.id),
       [20, 21],
     );
+    assert.equal(
+      result.data.categories.find(
+        (category: { id: number }) => category.id === 11,
+      )?.is_active,
+      false,
+    );
+  });
+
+  await verify("non-current Topic Categories require published and active truth", async () => {
+    const inactivePublished = {
+      ...publishedCategory,
+      id: 12,
+      is_active: false,
+    };
+    const activeUnpublished = {
+      ...publishedCategory,
+      id: 13,
+      status: "unpublished",
+    };
+    const nullActivity = {
+      ...publishedCategory,
+      id: 14,
+      is_active: null,
+    };
+    const owner = loadOwner({
+      topic_categories: [
+        {
+          data: [
+            publishedCategory,
+            inactivePublished,
+            activeUnpublished,
+            nullActivity,
+          ],
+          error: null,
+        },
+      ],
+      topic_series: [{ data: [publishedSeries], error: null }],
+    });
+    const result = await callLoader<{
+      categories: Array<{ id: number }>;
+    }>(owner, "loadTopicTaxonomyFormDependencies");
+    assert.equal(result.status, "data");
+    assert.deepEqual(
+      result.data.categories.map((category: { id: number }) => category.id),
+      [10],
+    );
+  });
+
+  await verify("persisted Topic Series must belong to its persisted Category", async () => {
+    const mismatchedSeries = { ...unpublishedSeries, category_id: 10 };
+    const owner = loadOwner({
+      topic_categories: [
+        { data: [publishedCategory, unpublishedCategory], error: null },
+      ],
+      topic_series: [{ data: [mismatchedSeries], error: null }],
+    });
+    const result = await callLoader(
+      owner,
+      "loadTopicTaxonomyFormDependencies",
+      { currentCategoryId: 11, currentSeriesId: 21 },
+    );
+    assert.equal(result.status, "error");
+    assert.equal(result.error.scope, "topic_taxonomy_contract");
+    assert.equal(result.error.cause, undefined);
+  });
+
+  await verify("persisted Topic Series without a Category fails closed", async () => {
+    const owner = loadOwner({
+      topic_categories: [{ data: [publishedCategory], error: null }],
+      topic_series: [{ data: [publishedSeries], error: null }],
+    });
+    const result = await callLoader(
+      owner,
+      "loadTopicTaxonomyFormDependencies",
+      { currentCategoryId: null, currentSeriesId: 20 },
+    );
+    assert.equal(result.status, "error");
+    assert.equal(result.error.scope, "topic_taxonomy_contract");
   });
 
   await verify("missing persisted Topic taxonomy id fails closed", async () => {
@@ -567,13 +677,17 @@ async function runCategoryRouteChecks() {
       parent_id: 10,
       updated_at: "2026-09-08T11:00:00.000Z",
     };
+    let optionRequest: unknown;
     const outcome = await renderEdit({
       loadCategoryFormRecord: async () => ({ status: "data", data: category }),
-      loadCategoryParentFormOptions: async () => ({
-        status: "data",
-        data: [{ value: "10", label: "Parent" }],
-      }),
-    });
+      loadCategoryParentFormOptions: async (input: unknown) => {
+        optionRequest = input;
+        return {
+          status: "data",
+          data: [{ value: "10", label: "Parent" }],
+        };
+      },
+    }, "31");
     assert.equal(outcome.error, null);
     const form = outcome.recorder.renders.find(
       (render) => render.type === outcome.CategoryForm,
@@ -583,6 +697,42 @@ async function runCategoryRouteChecks() {
     assert.equal(
       (form?.props.category as typeof category).updated_at,
       "2026-09-08T11:00:00.000Z",
+    );
+    assert.deepEqual(optionRequest, {
+      excludeCategoryId: 31,
+      persistedParentId: 10,
+    });
+  });
+
+  await verify("Category Edit owner blocks the Form when persisted parent is unavailable", async () => {
+    const owner = loadOwner({
+      topic_categories: [
+        {
+          data: {
+            id: 31,
+            name: "Category",
+            slug: "category",
+            parent_id: 999,
+            is_active: true,
+            status: "published",
+            color_token: "gold",
+            updated_at: "2026-09-08T11:00:00.000001Z",
+          },
+          error: null,
+        },
+        { data: [publishedCategory], error: null },
+      ],
+    });
+    const outcome = await renderEdit(owner, "31");
+    assert.equal(
+      (outcome.error as Error & { scope?: string })?.scope,
+      "category_parent_contract",
+    );
+    assert.equal(
+      outcome.recorder.renders.some(
+        (render) => render.type === outcome.CategoryForm,
+      ),
+      false,
     );
   });
 
@@ -877,6 +1027,43 @@ async function runTopicRouteChecks() {
     );
   });
 
+  for (const contentType of ["article", "gallery"] as const) {
+    await verify(`Topic Edit owner blocks the ${contentType} editor on a mismatched persisted pair`, async () => {
+      const owner = loadOwner({
+        topics: [
+          {
+            data: {
+              id: 7,
+              content_type: contentType,
+              category_id: 10,
+              series_id: 21,
+              deleted_at: null,
+            },
+            error: null,
+          },
+        ],
+        topic_categories: [
+          { data: [publishedCategory, unpublishedCategory], error: null },
+        ],
+        topic_series: [
+          { data: [publishedSeries, unpublishedSeries], error: null },
+        ],
+      });
+      const outcome = await renderEdit(owner);
+      assert.equal(
+        (outcome.error as Error & { scope?: string })?.scope,
+        "topic_taxonomy_contract",
+      );
+      assert.equal(
+        outcome.recorder.renders.some(
+          (render) =>
+            render.type === ArticleEditor || render.type === MediaContentForm,
+        ),
+        false,
+      );
+    });
+  }
+
   await verify("Topic Edit passes persisted ids to the Article editor", async () => {
     const topic = {
       id: 7,
@@ -993,6 +1180,57 @@ async function runTopicRouteChecks() {
   });
 }
 
+async function runCategoryPresentationChecks() {
+  await verify("Category presentation keeps only the persisted exception selectable", () => {
+    const recorder = createJsxRecorder();
+    const AdminFormListboxSelect = marker("AdminFormListboxSelect");
+    const component = loadTypeScriptModule(
+      "src/components/admin/content/editors/ContentCategorySelect.tsx",
+      {
+        "react/jsx-runtime": recorder.runtime,
+        "../../ui/AdminFormListboxSelect": defaultModule(
+          AdminFormListboxSelect,
+        ),
+        "../../ui/AdminFormRuntime": {
+          AdminFormError: marker("AdminFormError"),
+        },
+      },
+      true,
+    );
+    const ContentCategorySelect = component.default as (
+      input: Record<string, unknown>,
+    ) => unknown;
+    ContentCategorySelect({
+      defaultValue: 11,
+      persistedSelectionId: 11,
+      categories: [
+        { ...publishedCategory, depth: 0 },
+        { ...unpublishedCategory, depth: 0 },
+        { ...publishedCategory, id: 12, is_active: false, depth: 0 },
+        { ...publishedCategory, id: 13, is_active: null, depth: 0 },
+        { ...publishedCategory, id: 14, status: "unpublished", depth: 0 },
+      ],
+    });
+    const listbox = recorder.renders.find(
+      (render) => render.type === AdminFormListboxSelect,
+    );
+    const options = listbox?.props.options as Array<{
+      value: string;
+      disabled: boolean;
+    }>;
+    assert.deepEqual(
+      options.map((option) => [option.value, option.disabled]),
+      [
+        ["10", false],
+        ["11", false],
+        ["12", true],
+        ["13", true],
+        ["14", true],
+      ],
+    );
+  });
+}
+
 async function runAdminErrorBoundaryCheck() {
   await verify("Admin error boundary exposes the Next.js reset retry contract", () => {
     const recorder = createJsxRecorder();
@@ -1036,6 +1274,7 @@ await runOwnerChecks();
 await runCategoryRouteChecks();
 await runSeriesRouteChecks();
 await runTopicRouteChecks();
+await runCategoryPresentationChecks();
 await runAdminErrorBoundaryCheck();
 
 console.log(

@@ -192,8 +192,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
       - name: Verify Taxonomy consistency on isolated PostgreSQL 17 and PostgREST
         run: npm run verify:taxonomy-consistency-postgres17
+
+      - name: Generate the disposable Taxonomy schema TypeScript contract
+        run: >-
+          supabase gen types typescript
+          --db-url "$TAXONOMY_CONSISTENCY_DATABASE_URL"
+          --schema public
+          > "$RUNNER_TEMP/taxonomy-consistency.database.types.ts"
+
+      - name: Verify Taxonomy generated RPC type provenance
+        env:
+          TAXONOMY_CONSISTENCY_GENERATED_TYPES_PATH: ${{ runner.temp }}/taxonomy-consistency.database.types.ts
+        run: npm run verify:taxonomy-consistency-generated-types
 
   dashboard-truth-postgres:
     name: Dashboard Truth · PostgreSQL 17

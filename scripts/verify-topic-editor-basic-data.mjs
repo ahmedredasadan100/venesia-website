@@ -103,7 +103,13 @@ check(
   categorySelect.includes("depth: category.depth") &&
     !categorySelect.includes('repeat(category.depth)'),
 );
-check("inactive current category remains selectable only for its record", categorySelect.includes("category.is_active === false") && categorySelect.includes("String(category.id) !== initialValue"));
+check(
+  "only the persisted Category bypasses published-and-active selectability",
+  categorySelect.includes("category.id !== persistedSelectionId") &&
+    categorySelect.includes('category.status === "published"') &&
+    categorySelect.includes("category.is_active === true") &&
+    basicPanel.includes("persistedSelectionId"),
+);
 check(
   "series retains one series_id owner and stable target through the shared form listbox",
   seriesFields.match(/<AdminFormListboxSelect\b/g)?.length === 1 &&

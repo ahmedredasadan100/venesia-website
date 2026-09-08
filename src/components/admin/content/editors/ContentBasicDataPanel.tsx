@@ -128,6 +128,9 @@ export default function ContentBasicDataPanel({
                 <ContentCategorySelect
                   categories={categories}
                   defaultValue={values?.categoryId}
+                  persistedSelectionId={
+                    mode === "edit" ? values?.categoryId : null
+                  }
                 />
               </label>
               <TopicSeriesFields

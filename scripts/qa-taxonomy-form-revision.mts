@@ -760,6 +760,23 @@ try {
       qa.revalidatePaths.length > 0,
   );
 
+  qa.reset();
+  qa.seriesMutationResult = {
+    ok: false,
+    code: "series_category_conflict",
+  };
+  const relationshipConflict = await actionHarness.updateSeriesForm(
+    editInitialState,
+    seriesEditForm(INITIAL_REVISION),
+  );
+  check(
+    "actual Series action returns the database relationship conflict with zero success effects",
+    relationshipConflict.status === "error" &&
+      relationshipConflict.code === "series_category_conflict" &&
+      qa.seriesMutationInputs.length === 1 &&
+      hasNoSuccessEffects(qa),
+  );
+
   for (const [label, action, form, resultKey, inputKey] of [
     [
       "Category",
@@ -948,4 +965,4 @@ try {
   await rm(validateTempPath(tempDir), { recursive: true, force: true });
 }
 
-console.log(`Taxonomy form revision QA passed (${passed}/21).`);
+console.log(`Taxonomy form revision QA passed (${passed}/22).`);

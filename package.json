@@ -89,6 +89,7 @@
     "verify:topics-bulk-publish-postgres": "node --experimental-strip-types scripts/verify-topics-bulk-publish-postgres.mts",
     "verify:topics-bulk-publish-postgres17": "node --experimental-strip-types scripts/verify-topics-bulk-publish-postgres17.mts",
     "verify:taxonomy-consistency-postgres17": "node --experimental-strip-types scripts/verify-taxonomy-consistency-postgres17.mts",
+    "verify:taxonomy-consistency-generated-types": "node --experimental-strip-types scripts/verify-taxonomy-consistency-generated-types.mts",
     "verify:topics-bulk-publish-generated-types": "node --experimental-strip-types scripts/verify-topics-bulk-publish-generated-types.mts",
     "verify:topics-bulk-publish-atomicity": "node --experimental-strip-types scripts/verify-topics-bulk-publish-atomicity.mts && npm run verify:topics-bulk-publish-postgres",
     "verify:content-publish-validation-truth": "node --experimental-strip-types scripts/verify-content-publish-validation-truth.mts",

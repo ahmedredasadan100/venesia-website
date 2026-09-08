@@ -8,14 +8,17 @@ export type ContentEditorCategoryOption = {
   name: string;
   depth: number;
   is_active: boolean | null;
+  status?: string | null;
 };
 
 export default function ContentCategorySelect({
   categories,
   defaultValue,
+  persistedSelectionId,
 }: {
   categories: ContentEditorCategoryOption[];
   defaultValue?: number | null;
+  persistedSelectionId?: number | null;
 }) {
   const initialValue = defaultValue ? String(defaultValue) : "";
   const options = categories.map((category) => ({
@@ -23,7 +26,8 @@ export default function ContentCategorySelect({
     label: category.name,
     depth: category.depth,
     disabled:
-      category.is_active === false && String(category.id) !== initialValue,
+      category.id !== persistedSelectionId &&
+      !(category.status === "published" && category.is_active === true),
   }));
 
   return (

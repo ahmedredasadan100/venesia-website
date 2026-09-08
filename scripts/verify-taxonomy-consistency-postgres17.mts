@@ -190,6 +190,31 @@ const categoryPermanentDeleteFunctionSql = extractLifecycleFunction(
   "admin_move_topic_series_to_trash",
 );
 
+function migrationSlice(startMarker: string, endMarker: string) {
+  const start = migration.indexOf(startMarker);
+  const end = migration.indexOf(endMarker, start + startMarker.length);
+  assert.ok(start >= 0, `missing migration marker ${startMarker}`);
+  assert.ok(end > start, `missing migration boundary ${endMarker}`);
+  return migration.slice(start, end);
+}
+
+const categoryUpdateMigrationSql = migrationSlice(
+  "create function public.admin_update_topic_category(",
+  "drop function public.admin_update_topic_series(",
+);
+const seriesUpdateMigrationSql = migrationSlice(
+  "create function public.admin_update_topic_series(",
+  "create function public.admin_create_topic_series(",
+);
+const seriesCreateMigrationSql = migrationSlice(
+  "create function public.admin_create_topic_series(",
+  "create function public.enforce_topic_series_category_eligibility()",
+);
+const seriesEligibilityTriggerFunctionSql = migrationSlice(
+  "create function public.enforce_topic_series_category_eligibility()",
+  "create trigger topic_series_category_eligibility_on_insert",
+);
+
 const connectedClients = new Set<SqlClient>();
 
 async function createClient(label: string) {
@@ -439,6 +464,7 @@ async function callCategoryPermanentDelete(
 async function resetFixtures(admin: SqlClient) {
   await admin.query(`
     truncate table
+      public.admin_audit_logs,
       public.topics,
       public.topic_series,
       public.topic_categories,
@@ -448,6 +474,15 @@ async function resetFixtures(admin: SqlClient) {
     insert into public.admin_users(id, username, is_active) values
       (1, 'active-admin', true),
       (2, 'inactive-admin', false);
+
+    insert into public.admin_audit_logs(
+      id, actor_admin_user_id, actor_username, action,
+      entity_type, entity_id, entity_label, metadata, created_at
+    ) values (
+      1, 1, 'active-admin', 'fixture.baseline',
+      'taxonomy_fixture', 1, 'Taxonomy fixture', '{"baseline":true}'::jsonb,
+      '2026-09-07T09:00:00Z'
+    );
 
     insert into public.topic_categories(
       id, name, slug, parent_id, is_active, status, color_token,
@@ -574,6 +609,115 @@ async function topicsSnapshot(admin: SqlClient) {
   }));
 }
 
+async function categoriesSnapshot(admin: SqlClient) {
+  const result = await admin.query<{
+    id: string;
+    name: string;
+    slug: string;
+    parent_id: string | null;
+    is_active: boolean;
+    status: string;
+    color_token: string;
+    published_at: string | null;
+    updated_at: string;
+    deleted_at: string | null;
+  }>(`
+    select
+      id,
+      name,
+      slug,
+      parent_id,
+      is_active,
+      status,
+      color_token,
+      published_at::text as published_at,
+      updated_at::text as updated_at,
+      deleted_at::text as deleted_at
+    from public.topic_categories
+    order by id
+  `);
+  return result.rows.map((row) => ({
+    ...row,
+    id: Number(row.id),
+    parent_id: row.parent_id === null ? null : Number(row.parent_id),
+  }));
+}
+
+async function seriesRowsSnapshot(admin: SqlClient) {
+  const result = await admin.query<{
+    id: string;
+    name: string;
+    slug: string;
+    category_id: string;
+    status: string;
+    deleted_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }>(`
+    select
+      id,
+      name,
+      slug,
+      category_id,
+      status,
+      deleted_at::text as deleted_at,
+      created_at::text as created_at,
+      updated_at::text as updated_at
+    from public.topic_series
+    order by id
+  `);
+  return result.rows.map((row) => ({
+    ...row,
+    id: Number(row.id),
+    category_id: Number(row.category_id),
+  }));
+}
+
+async function auditSnapshot(admin: SqlClient) {
+  const result = await admin.query<{
+    id: string;
+    actor_admin_user_id: string | null;
+    actor_username: string;
+    action: string;
+    entity_type: string | null;
+    entity_id: string | null;
+    entity_label: string | null;
+    metadata: unknown;
+    created_at: string;
+  }>(`
+    select
+      id,
+      actor_admin_user_id,
+      actor_username,
+      action,
+      entity_type,
+      entity_id,
+      entity_label,
+      metadata,
+      created_at::text as created_at
+    from public.admin_audit_logs
+    order by id
+  `);
+  return result.rows.map((row) => ({
+    ...row,
+    id: Number(row.id),
+    actor_admin_user_id:
+      row.actor_admin_user_id === null
+        ? null
+        : Number(row.actor_admin_user_id),
+    entity_id: row.entity_id === null ? null : Number(row.entity_id),
+  }));
+}
+
+async function taxonomyStateSnapshot(admin: SqlClient) {
+  return {
+    categories: await categoriesSnapshot(admin),
+    series: await seriesRowsSnapshot(admin),
+    topics: await topicsSnapshot(admin),
+    audit: await auditSnapshot(admin),
+  };
+}
+
 async function deadlockCount(observer: SqlClient) {
   const result = await observer.query<{ deadlocks: string }>(
     `select deadlocks::text
@@ -606,6 +750,11 @@ function assertLifecycleLockOrder(
     orderedRows > tableLock && orderedRows < rowLock,
     `${label} must lock Category rows in ascending id order`,
   );
+  assert.match(
+    source.slice(tableLock, rowLock + "for update;".length),
+    /perform 1\s+from public\.topic_categories categories[\s\S]*?order by categories\.id\s+for update;/u,
+    `${label} must apply its ordered FOR UPDATE to the categories alias`,
+  );
   assert.ok(rowLock > tableLock, `${label} must row-lock after its table lock`);
   assert.ok(
     seriesDependencyCheck > rowLock,
@@ -630,6 +779,155 @@ function verifyLifecycleSourceLockOrder() {
   );
   console.log(
     "PASS lifecycle source lock order: the executed Category trash/delete owners take the Category table lock, then ordered row locks, then inspect Series, then mutate.",
+  );
+}
+
+function verifyMigrationSourceContracts() {
+  assert.match(
+    migration,
+    /drop function public\.admin_update_topic_category\(\s*bigint, text, bigint, boolean, text, bigint\s*\) restrict;/u,
+  );
+  assert.match(
+    migration,
+    /drop function public\.admin_update_topic_series\(\s*bigint, text, bigint, text, bigint\s*\) restrict;/u,
+  );
+  assert.doesNotMatch(migration, /drop function[\s\S]*?\)\s+cascade;/iu);
+
+  assert.match(
+    categoryUpdateMigrationSql,
+    /from public\.topics as topics[\s\S]*?order by topics\.id\s+for update;[\s\S]*?from public\.topic_categories as categories[\s\S]*?for no key update;/u,
+  );
+  const orderedTopicLocks =
+    seriesUpdateMigrationSql.match(/order by topics\.id\s+for update;/gu) ?? [];
+  assert.equal(
+    orderedTopicLocks.length,
+    2,
+    "Series update must take and recheck its Topic row locks in id order",
+  );
+  assert.match(
+    seriesUpdateMigrationSql,
+    /from public\.topic_series as series[\s\S]*?for update;[\s\S]*?from public\.topic_categories as categories[\s\S]*?for share;/u,
+  );
+  assert.match(
+    seriesCreateMigrationSql,
+    /from public\.topic_categories as categories[\s\S]*?categories\.deleted_at is null[\s\S]*?categories\.is_active is true[\s\S]*?categories\.status = 'published'[\s\S]*?for share;[\s\S]*?insert into public\.topic_series/u,
+  );
+  assert.match(
+    seriesEligibilityTriggerFunctionSql,
+    /from public\.topic_categories as categories[\s\S]*?categories\.deleted_at is null[\s\S]*?categories\.is_active is true[\s\S]*?categories\.status = 'published'[\s\S]*?for share;/u,
+  );
+  assert.equal(
+    (migration.match(/p_status not in \('published', 'unpublished'\)/gu) ?? [])
+      .length,
+    2,
+    "Series update/create must accept only published or unpublished",
+  );
+
+  console.log(
+    "PASS migration source contracts: both retired signatures use DROP FUNCTION ... RESTRICT with no CASCADE; Category/Series relationship locks name their aliases and order Topic rows by id; Create/trigger use eligible-Category FOR SHARE; Series statuses are published/unpublished only.",
+  );
+}
+
+async function verifyExistingMismatchStopsMigration(admin: SqlClient) {
+  await resetFixtures(admin);
+  await admin.query(`
+    insert into public.topics(
+      id, category_id, category, category_slug,
+      series_id, series, series_slug, updated_at, updated_by
+    ) values (
+      101, 5, 'Parent', 'parent',
+      10, 'Series Primary', 'series-primary',
+      '2026-09-07T10:00:00.000101Z', 1
+    )
+  `);
+  const stateBefore = await taxonomyStateSnapshot(admin);
+
+  let mismatchError: (Error & { code?: string; detail?: string }) | undefined;
+  try {
+    await admin.query(migration);
+  } catch (error) {
+    mismatchError = error as Error & { code?: string; detail?: string };
+  }
+  await admin.query("rollback");
+
+  assert.ok(mismatchError, "historical Topic/Series mismatch must stop migration");
+  assert.equal(mismatchError.code, "23514");
+  assert.match(
+    mismatchError.message,
+    /topic_series_category_invariant_violation/u,
+  );
+  assert.match(mismatchError.detail ?? "", /topic_id=101/u);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    stateBefore,
+    "the migration mismatch stop condition must not repair or partially mutate data",
+  );
+
+  const rollbackCatalog = await admin.query<{
+    old_category: string | null;
+    old_series: string | null;
+    new_constraint_count: number;
+    new_function_count: number;
+    trigger_count: number;
+  }>(`
+    select
+      pg_catalog.to_regprocedure(
+        'public.admin_update_topic_category(bigint,text,bigint,boolean,text,bigint)'
+      )::text as old_category,
+      pg_catalog.to_regprocedure(
+        'public.admin_update_topic_series(bigint,text,bigint,text,bigint)'
+      )::text as old_series,
+      (
+        select pg_catalog.count(*)::integer
+        from pg_catalog.pg_constraint as catalog_constraint
+        where catalog_constraint.conname in (
+          'topic_series_id_category_id_key',
+          'topics_series_requires_category_check',
+          'topics_series_category_id_fkey'
+        )
+      ) as new_constraint_count,
+      (
+        select pg_catalog.count(*)::integer
+        from pg_catalog.pg_proc as procedure
+        join pg_catalog.pg_namespace as namespace
+          on namespace.oid = procedure.pronamespace
+        where namespace.nspname = 'public'
+          and procedure.proname in (
+            'admin_create_topic_series',
+            'enforce_topic_series_category_eligibility'
+          )
+      ) as new_function_count,
+      (
+        select pg_catalog.count(*)::integer
+        from pg_catalog.pg_trigger as trigger
+        where trigger.tgrelid = 'public.topic_series'::pg_catalog.regclass
+          and not trigger.tgisinternal
+      ) as trigger_count
+  `);
+  assert.match(
+    rollbackCatalog.rows[0].old_category ?? "",
+    /admin_update_topic_category\(bigint,text,bigint,boolean,text,bigint\)$/u,
+  );
+  assert.match(
+    rollbackCatalog.rows[0].old_series ?? "",
+    /admin_update_topic_series\(bigint,text,bigint,text,bigint\)$/u,
+  );
+  assert.deepEqual(
+    {
+      new_constraint_count: rollbackCatalog.rows[0].new_constraint_count,
+      new_function_count: rollbackCatalog.rows[0].new_function_count,
+      trigger_count: rollbackCatalog.rows[0].trigger_count,
+    },
+    {
+      new_constraint_count: 0,
+      new_function_count: 0,
+      trigger_count: 0,
+    },
+  );
+
+  await resetFixtures(admin);
+  console.log(
+    "PASS migration mismatch preflight: an existing Topic/Series Category mismatch raised SQLSTATE 23514, preserved exact Category/Series/Topics/Audit snapshots, retained both old RPCs, and left zero P1-E constraints/functions/triggers.",
   );
 }
 
@@ -669,6 +967,7 @@ async function verifyOldSignatureDropPreflight(admin: SqlClient) {
       1::bigint
     ) as payload
   `);
+  const stateBeforeRestrictFailure = await taxonomyStateSnapshot(admin);
 
   let restrictError: (Error & { code?: string }) | undefined;
   try {
@@ -679,6 +978,11 @@ async function verifyOldSignatureDropPreflight(admin: SqlClient) {
   await admin.query("rollback");
   assert.ok(restrictError, "the dependent old signature must stop the migration");
   assert.equal(restrictError.code, "2BP01");
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    stateBeforeRestrictFailure,
+    "DROP RESTRICT failure must roll back the whole migration without Category/Series/Topics/Audit changes",
+  );
 
   const rollbackState = await admin.query<{
     old_category: string | null;
@@ -687,6 +991,7 @@ async function verifyOldSignatureDropPreflight(admin: SqlClient) {
     new_series: string | null;
     create_series: string | null;
     dependency_probe: string | null;
+    constraint_count: number;
     trigger_count: number;
   }>(`
     select
@@ -709,6 +1014,15 @@ async function verifyOldSignatureDropPreflight(admin: SqlClient) {
         as dependency_probe,
       (
         select pg_catalog.count(*)::integer
+        from pg_catalog.pg_constraint as catalog_constraint
+        where catalog_constraint.conname in (
+          'topic_series_id_category_id_key',
+          'topics_series_requires_category_check',
+          'topics_series_category_id_fkey'
+        )
+      ) as constraint_count,
+      (
+        select pg_catalog.count(*)::integer
         from pg_catalog.pg_trigger as trigger
         where trigger.tgrelid = 'public.topic_series'::pg_catalog.regclass
           and not trigger.tgisinternal
@@ -728,6 +1042,7 @@ async function verifyOldSignatureDropPreflight(admin: SqlClient) {
       new_series: rollbackState.rows[0].new_series,
       create_series: rollbackState.rows[0].create_series,
       dependency_probe: rollbackState.rows[0].dependency_probe,
+      constraint_count: rollbackState.rows[0].constraint_count,
       trigger_count: rollbackState.rows[0].trigger_count,
     },
     {
@@ -735,6 +1050,7 @@ async function verifyOldSignatureDropPreflight(admin: SqlClient) {
       new_series: null,
       create_series: null,
       dependency_probe: "p1_e_old_series_dependency_probe",
+      constraint_count: 0,
       trigger_count: 0,
     },
   );
@@ -785,6 +1101,131 @@ async function verifyOldSignatureDropPreflight(admin: SqlClient) {
 }
 
 async function verifyCatalogAndAcl(admin: SqlClient) {
+  const relationshipConstraints = await admin.query<{
+    name: string;
+    table_name: string;
+    constraint_type: string;
+    definition: string;
+    columns: string[];
+    referenced_table: string | null;
+    referenced_columns: string[] | null;
+    match_type: string;
+    is_deferrable: boolean;
+    is_deferred: boolean;
+    is_validated: boolean;
+  }>(`
+    select
+      catalog_constraint.conname as name,
+      catalog_constraint.conrelid::pg_catalog.regclass::text as table_name,
+      catalog_constraint.contype::text as constraint_type,
+      pg_catalog.pg_get_constraintdef(catalog_constraint.oid, true) as definition,
+      array(
+        select attribute.attname::text
+        from pg_catalog.unnest(catalog_constraint.conkey)
+          with ordinality as constraint_key(attnum, position)
+        join pg_catalog.pg_attribute as attribute
+          on attribute.attrelid = catalog_constraint.conrelid
+         and attribute.attnum = constraint_key.attnum
+        order by constraint_key.position
+      ) as columns,
+      case
+        when catalog_constraint.confrelid = 0 then null
+        else catalog_constraint.confrelid::pg_catalog.regclass::text
+      end as referenced_table,
+      case
+        when catalog_constraint.confrelid = 0 then null
+        else array(
+          select attribute.attname::text
+          from pg_catalog.unnest(catalog_constraint.confkey)
+            with ordinality as constraint_key(attnum, position)
+          join pg_catalog.pg_attribute as attribute
+            on attribute.attrelid = catalog_constraint.confrelid
+           and attribute.attnum = constraint_key.attnum
+          order by constraint_key.position
+        )
+      end as referenced_columns,
+      catalog_constraint.confmatchtype::text as match_type,
+      catalog_constraint.condeferrable as is_deferrable,
+      catalog_constraint.condeferred as is_deferred,
+      catalog_constraint.convalidated as is_validated
+    from pg_catalog.pg_constraint as catalog_constraint
+    where catalog_constraint.conname in (
+      'topic_series_id_category_id_key',
+      'topics_series_requires_category_check',
+      'topics_series_category_id_fkey'
+    )
+    order by catalog_constraint.conname
+  `);
+  assert.equal(
+    relationshipConstraints.rows.length,
+    3,
+    "the relationship invariant must have exactly its named unique/check/composite-FK constraints",
+  );
+  assert.deepEqual(
+    relationshipConstraints.rows.map((row) => ({
+      name: row.name,
+      table_name: row.table_name,
+      constraint_type: row.constraint_type,
+      columns: row.columns,
+      referenced_table: row.referenced_table,
+      referenced_columns: row.referenced_columns,
+      match_type: row.match_type,
+      is_deferrable: row.is_deferrable,
+      is_deferred: row.is_deferred,
+      is_validated: row.is_validated,
+    })),
+    [
+      {
+        name: "topic_series_id_category_id_key",
+        table_name: "topic_series",
+        constraint_type: "u",
+        columns: ["id", "category_id"],
+        referenced_table: null,
+        referenced_columns: null,
+        match_type: " ",
+        is_deferrable: false,
+        is_deferred: false,
+        is_validated: true,
+      },
+      {
+        name: "topics_series_category_id_fkey",
+        table_name: "topics",
+        constraint_type: "f",
+        columns: ["series_id", "category_id"],
+        referenced_table: "topic_series",
+        referenced_columns: ["id", "category_id"],
+        match_type: "s",
+        is_deferrable: false,
+        is_deferred: false,
+        is_validated: true,
+      },
+      {
+        name: "topics_series_requires_category_check",
+        table_name: "topics",
+        constraint_type: "c",
+        columns: ["category_id", "series_id"],
+        referenced_table: null,
+        referenced_columns: null,
+        match_type: " ",
+        is_deferrable: false,
+        is_deferred: false,
+        is_validated: true,
+      },
+    ],
+  );
+  assert.match(
+    relationshipConstraints.rows[0].definition,
+    /^UNIQUE \(id, category_id\)$/u,
+  );
+  assert.match(
+    relationshipConstraints.rows[1].definition,
+    /^FOREIGN KEY \(series_id, category_id\) REFERENCES topic_series\(id, category_id\) ON UPDATE RESTRICT ON DELETE RESTRICT$/u,
+  );
+  assert.match(
+    relationshipConstraints.rows[2].definition,
+    /^CHECK \(series_id IS NULL OR category_id IS NOT NULL\)$/u,
+  );
+
   const functions = await admin.query<{
     name: string;
     signature: string;
@@ -823,22 +1264,38 @@ async function verifyCatalogAndAcl(admin: SqlClient) {
       "enforce_topic_series_category_eligibility",
     ],
   );
+  assert.deepEqual(
+    functions.rows.map((row) => ({
+      name: row.name,
+      identity_args: row.identity_args,
+    })),
+    [
+      {
+        name: "admin_create_topic_series",
+        identity_args:
+          "p_name text, p_slug text, p_category_id bigint, p_status text, p_actor_id bigint",
+      },
+      {
+        name: "admin_update_topic_category",
+        identity_args:
+          "p_category_id bigint, p_name text, p_parent_id bigint, p_is_active boolean, p_color_token text, p_actor_id bigint, p_expected_updated_at timestamp with time zone",
+      },
+      {
+        name: "admin_update_topic_series",
+        identity_args:
+          "p_series_id bigint, p_name text, p_category_id bigint, p_status text, p_actor_id bigint, p_expected_updated_at timestamp with time zone",
+      },
+      {
+        name: "enforce_topic_series_category_eligibility",
+        identity_args: "",
+      },
+    ],
+  );
   for (const row of functions.rows) {
     assert.equal(row.provolatile, "v");
     assert.equal(row.prosecdef, false);
     assert.deepEqual(row.proconfig, ['search_path=""']);
   }
-  assert.match(
-    functions.rows.find((row) => row.name === "admin_update_topic_category")!
-      .identity_args,
-    /p_expected_updated_at timestamp with time zone$/u,
-  );
-  assert.match(
-    functions.rows.find((row) => row.name === "admin_update_topic_series")!
-      .identity_args,
-    /p_expected_updated_at timestamp with time zone$/u,
-  );
-
   const oldSignatures = await admin.query<{
     old_category: string | null;
     old_series: string | null;
@@ -892,6 +1349,86 @@ async function verifyCatalogAndAcl(admin: SqlClient) {
     });
   }
 
+  const executeAcl = await admin.query<{
+    signature: string;
+    grantee: string;
+    is_grantable: boolean;
+  }>(`
+    select
+      procedure.oid::pg_catalog.regprocedure::text as signature,
+      case
+        when expanded_acl.grantee = 0 then 'PUBLIC'
+        else grantee.rolname
+      end as grantee,
+      expanded_acl.is_grantable
+    from pg_catalog.pg_proc as procedure
+    join pg_catalog.pg_namespace as namespace
+      on namespace.oid = procedure.pronamespace
+    cross join lateral pg_catalog.aclexplode(
+      coalesce(
+        procedure.proacl,
+        pg_catalog.acldefault('f', procedure.proowner)
+      )
+    ) as expanded_acl
+    left join pg_catalog.pg_roles as grantee
+      on grantee.oid = expanded_acl.grantee
+    where namespace.nspname = 'public'
+      and procedure.proname in (
+        'admin_update_topic_category',
+        'admin_update_topic_series',
+        'admin_create_topic_series',
+        'enforce_topic_series_category_eligibility'
+      )
+      and expanded_acl.privilege_type = 'EXECUTE'
+    order by signature, grantee
+  `);
+  assert.deepEqual(
+    executeAcl.rows,
+    [
+      {
+        signature:
+          "admin_create_topic_series(text,text,bigint,text,bigint)",
+        grantee: "postgres",
+        is_grantable: false,
+      },
+      {
+        signature:
+          "admin_create_topic_series(text,text,bigint,text,bigint)",
+        grantee: "service_role",
+        is_grantable: false,
+      },
+      {
+        signature:
+          "admin_update_topic_category(bigint,text,bigint,boolean,text,bigint,timestamp with time zone)",
+        grantee: "postgres",
+        is_grantable: false,
+      },
+      {
+        signature:
+          "admin_update_topic_category(bigint,text,bigint,boolean,text,bigint,timestamp with time zone)",
+        grantee: "service_role",
+        is_grantable: false,
+      },
+      {
+        signature:
+          "admin_update_topic_series(bigint,text,bigint,text,bigint,timestamp with time zone)",
+        grantee: "postgres",
+        is_grantable: false,
+      },
+      {
+        signature:
+          "admin_update_topic_series(bigint,text,bigint,text,bigint,timestamp with time zone)",
+        grantee: "service_role",
+        is_grantable: false,
+      },
+      {
+        signature: "enforce_topic_series_category_eligibility()",
+        grantee: "postgres",
+        is_grantable: false,
+      },
+    ],
+  );
+
   const triggers = await admin.query<{ definition: string }>(`
     select pg_catalog.pg_get_triggerdef(trigger.oid, true) as definition
     from pg_catalog.pg_trigger as trigger
@@ -934,7 +1471,7 @@ async function verifyCatalogAndAcl(admin: SqlClient) {
   }
 
   console.log(
-    "PASS PostgreSQL catalog/ACL: exact non-overloaded SECURITY INVOKER signatures, empty search_path, service_role-only RPC execution, and insert/reassignment-only triggers.",
+    "PASS PostgreSQL catalog/ACL: exact validated unique/check/composite-FK relationship constraints, exact non-overloaded SECURITY INVOKER signatures, empty search_path, service_role-only RPC execution, and insert/reassignment-only triggers.",
   );
 }
 
@@ -1000,7 +1537,7 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
 
   await resetFixtures(admin);
   const categoryBefore = await categorySnapshot(admin);
-  const categoryTopicsBefore = await topicsSnapshot(admin);
+  const categoryStateBefore = await taxonomyStateSnapshot(admin);
   const categoryStale = await asServiceRole<{ payload: CategoryResult }>(
     admin,
     `select public.admin_update_topic_category(
@@ -1013,7 +1550,11 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
     code: "revision_conflict",
   });
   assert.deepEqual(await categorySnapshot(admin), categoryBefore);
-  assert.deepEqual(await topicsSnapshot(admin), categoryTopicsBefore);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    categoryStateBefore,
+    "stale Category revision must preserve Category/Series/Topics/Audit",
+  );
 
   const categoryMissing = await asServiceRole<{ payload: CategoryResult }>(
     admin,
@@ -1025,8 +1566,11 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
     ok: false,
     code: "invalid_input",
   });
-  assert.deepEqual(await categorySnapshot(admin), categoryBefore);
-  assert.deepEqual(await topicsSnapshot(admin), categoryTopicsBefore);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    categoryStateBefore,
+    "missing Category revision must preserve Category/Series/Topics/Audit",
+  );
 
   const parentUnavailable = await asServiceRole<{ payload: CategoryResult }>(
     admin,
@@ -1039,8 +1583,11 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
     ok: false,
     code: "parent_unavailable",
   });
-  assert.deepEqual(await categorySnapshot(admin), categoryBefore);
-  assert.deepEqual(await topicsSnapshot(admin), categoryTopicsBefore);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    categoryStateBefore,
+    "unavailable Category parent must preserve Category/Series/Topics/Audit",
+  );
 
   const hierarchyCycle = await asServiceRole<{ payload: CategoryResult }>(
     admin,
@@ -1053,13 +1600,17 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
     ok: false,
     code: "hierarchy_cycle",
   });
-  assert.deepEqual(await topicsSnapshot(admin), categoryTopicsBefore);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    categoryStateBefore,
+    "Category hierarchy cycle must preserve Category/Series/Topics/Audit",
+  );
 
   await resetFixtures(admin);
   const seriesFresh = await asServiceRole<{ payload: SeriesResult }>(
     admin,
     `select public.admin_update_topic_series(
-       10, 'Series Renamed', 5, 'unpublished', 1,
+       10, 'Series Renamed', 1, 'unpublished', 1,
        '2026-09-07T10:00:00.000010Z'::timestamptz
      ) as payload`,
   );
@@ -1074,7 +1625,7 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
     {
       code: "updated",
       name: "Series Renamed",
-      categoryId: 5,
+      categoryId: 1,
       topicsUpdated: 1,
     },
   );
@@ -1100,7 +1651,7 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
   const seriesSecondSave = await asServiceRole<{ payload: SeriesResult }>(
     admin,
     `select public.admin_update_topic_series(
-       10, 'Series Saved Again', 5, 'unpublished', 1, $1::timestamptz
+       10, 'Series Saved Again', 1, 'unpublished', 1, $1::timestamptz
      ) as payload`,
     [firstSeriesRevision],
   );
@@ -1116,7 +1667,7 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
 
   await resetFixtures(admin);
   const seriesBefore = await seriesSnapshot(admin);
-  const seriesTopicsBefore = await topicsSnapshot(admin);
+  const seriesStateBefore = await taxonomyStateSnapshot(admin);
   const seriesStale = await asServiceRole<{ payload: SeriesResult }>(
     admin,
     `select public.admin_update_topic_series(
@@ -1129,7 +1680,11 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
     code: "revision_conflict",
   });
   assert.deepEqual(await seriesSnapshot(admin), seriesBefore);
-  assert.deepEqual(await topicsSnapshot(admin), seriesTopicsBefore);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    seriesStateBefore,
+    "stale Series revision must preserve Category/Series/Topics/Audit",
+  );
 
   const seriesMissing = await asServiceRole<{ payload: SeriesResult }>(
     admin,
@@ -1141,24 +1696,53 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
     ok: false,
     code: "invalid_input",
   });
-  assert.deepEqual(await seriesSnapshot(admin), seriesBefore);
-  assert.deepEqual(await topicsSnapshot(admin), seriesTopicsBefore);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    seriesStateBefore,
+    "missing Series revision must preserve Category/Series/Topics/Audit",
+  );
 
-  const seriesUnsupportedStatus = await asServiceRole<{
+  const stateBeforeRelationshipConflict = seriesStateBefore;
+  const seriesCategoryConflict = await asServiceRole<{
     payload: SeriesResult;
   }>(
     admin,
     `select public.admin_update_topic_series(
-       10, 'Must Not Persist', 1, 'archived', 1,
+       10, 'Must Not Reassign Linked Series', 5, 'published', 1,
        '2026-09-07T10:00:00.000010Z'::timestamptz
      ) as payload`,
   );
-  assert.deepEqual(seriesUnsupportedStatus.rows[0].payload, {
+  assert.deepEqual(seriesCategoryConflict.rows[0].payload, {
     ok: false,
-    code: "invalid_input",
+    code: "series_category_conflict",
   });
-  assert.deepEqual(await seriesSnapshot(admin), seriesBefore);
-  assert.deepEqual(await topicsSnapshot(admin), seriesTopicsBefore);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    stateBeforeRelationshipConflict,
+    "typed Series reassignment conflict must preserve Category/Series/Topics/Audit",
+  );
+
+  for (const unsupportedStatus of ["draft", "archived"] as const) {
+    const seriesUnsupportedStatus = await asServiceRole<{
+      payload: SeriesResult;
+    }>(
+      admin,
+      `select public.admin_update_topic_series(
+         10, 'Must Not Persist', 1, $1, 1,
+         '2026-09-07T10:00:00.000010Z'::timestamptz
+       ) as payload`,
+      [unsupportedStatus],
+    );
+    assert.deepEqual(seriesUnsupportedStatus.rows[0].payload, {
+      ok: false,
+      code: "invalid_input",
+    });
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      stateBeforeRelationshipConflict,
+      `${unsupportedStatus} Series status must preserve Category/Series/Topics/Audit`,
+    );
+  }
 
   const categoryUnavailable = await asServiceRole<{ payload: SeriesResult }>(
     admin,
@@ -1171,11 +1755,14 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
     ok: false,
     code: "category_unavailable",
   });
-  assert.deepEqual(await seriesSnapshot(admin), seriesBefore);
-  assert.deepEqual(await topicsSnapshot(admin), seriesTopicsBefore);
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    seriesStateBefore,
+    "unavailable Series Category must preserve Category/Series/Topics/Audit",
+  );
 
   console.log(
-    "PASS Expected Revision: Category and Series fresh writes are atomic and monotonic; stale/missing revisions and invalid relationships return stable non-mutating results.",
+    "PASS Expected Revision: Category and Series fresh writes are atomic and monotonic; stale/missing revisions, invalid relationships, and linked-Series reassignment conflicts return stable non-mutating results across Category/Series/Topics/Audit.",
   );
 }
 
@@ -1195,7 +1782,7 @@ async function expectSqlState(
   assert.match(caught.message, messagePattern);
 }
 
-async function verifyCreateAndTriggerInvariant(admin: SqlClient) {
+async function verifyCreateAndRelationshipInvariant(admin: SqlClient) {
   await resetFixtures(admin);
   const created = await asServiceRole<{ payload: CreateSeriesResult }>(
     admin,
@@ -1269,6 +1856,89 @@ async function verifyCreateAndTriggerInvariant(admin: SqlClient) {
   );
   assert.equal((await seriesSnapshot(admin)).category_id, 1);
 
+  const relationshipStateBefore = await taxonomyStateSnapshot(admin);
+  await expectSqlState(
+    () =>
+      asServiceRole(
+        admin,
+        `insert into public.topics(
+           id, category_id, category, category_slug,
+           series_id, series, series_slug, updated_at, updated_by
+         ) values (
+           102, 5, 'Parent', 'parent',
+           10, 'Series Primary', 'series-primary',
+           '2026-09-07T10:00:00.000102Z', 1
+         )`,
+      ),
+    "23503",
+    /topics_series_category_id_fkey/u,
+  );
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    relationshipStateBefore,
+    "direct mismatched Topic INSERT must preserve Category/Series/Topics/Audit",
+  );
+
+  await expectSqlState(
+    () =>
+      asServiceRole(
+        admin,
+        `update public.topics
+         set category_id = 5,
+             category = 'Parent',
+             category_slug = 'parent',
+             updated_at = '2026-09-07T10:00:00.000103Z'
+         where id = 100`,
+      ),
+    "23503",
+    /topics_series_category_id_fkey/u,
+  );
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    relationshipStateBefore,
+    "direct mismatched Topic UPDATE must preserve Category/Series/Topics/Audit",
+  );
+
+  await expectSqlState(
+    () =>
+      asServiceRole(
+        admin,
+        `insert into public.topics(
+           id, category_id, category, category_slug,
+           series_id, series, series_slug, updated_at, updated_by
+         ) values (
+           103, null, 'No Category', 'no-category',
+           10, 'Series Primary', 'series-primary',
+           '2026-09-07T10:00:00.000103Z', 1
+         )`,
+      ),
+    "23514",
+    /topics_series_requires_category_check/u,
+  );
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    relationshipStateBefore,
+    "Topic series_id with null category_id must preserve Category/Series/Topics/Audit",
+  );
+
+  await expectSqlState(
+    () =>
+      asServiceRole(
+        admin,
+        `update public.topic_series
+         set category_id = 5,
+             updated_at = '2026-09-07T10:00:00.000104Z'
+         where id = 10`,
+      ),
+    "23503",
+    /topics_series_category_id_fkey/u,
+  );
+  assert.deepEqual(
+    await taxonomyStateSnapshot(admin),
+    relationshipStateBefore,
+    "direct reassignment of a linked Series must preserve Category/Series/Topics/Audit",
+  );
+
   await expectSqlState(
     () =>
       asServiceRole(
@@ -1300,7 +1970,7 @@ async function verifyCreateAndTriggerInvariant(admin: SqlClient) {
   assert.equal(sameCategoryEdit.category_id, 1);
 
   console.log(
-    "PASS Series Create Invariant: eligible create succeeds; missing/deleted/inactive/unpublished Categories fail without rows; direct insert/reassignment bypasses fail; a same-Category field edit remains allowed without firing the reassignment guard; slug uniqueness remains authoritative.",
+    "PASS Taxonomy Relationship Invariant: eligible Series create succeeds; unavailable Categories and direct Series eligibility bypasses fail; the composite FK rejects direct mismatched Topic INSERT/UPDATE and linked-Series reassignment; the check rejects series_id with null category_id; every rejection preserves Category/Series/Topics/Audit; same-Category Series edits and slug uniqueness retain their contracts.",
   );
 }
 
@@ -1350,10 +2020,16 @@ async function verifyCategoryRevisionRace(
     assert.ok(waitEvent);
 
     await writerA.query("commit");
+    const winnerState = await taxonomyStateSnapshot(admin);
     const second = await secondPromise;
     assert.deepEqual(second, { ok: false, code: "revision_conflict" });
     await writerB.query("commit");
 
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      winnerState,
+      "stale Category writer must preserve the first writer plus Series/Topics/Audit",
+    );
     assert.equal((await categorySnapshot(admin)).name, "Category Writer A");
   } finally {
     await safeRollback(writerA);
@@ -1407,10 +2083,16 @@ async function verifySeriesRevisionRace(
     assert.ok(waitEvent);
 
     await writerA.query("commit");
+    const winnerState = await taxonomyStateSnapshot(admin);
     const second = await secondPromise;
     assert.deepEqual(second, { ok: false, code: "revision_conflict" });
     await writerB.query("commit");
 
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      winnerState,
+      "stale Series writer must preserve the first writer plus Category/Topics/Audit",
+    );
     assert.equal((await seriesSnapshot(admin)).name, "Series Writer A");
   } finally {
     await safeRollback(writerA);
@@ -1461,9 +2143,16 @@ async function verifyCategoryTransitionCreateRace(
     assert.ok(waitEvent);
 
     await categoryWriter.query("commit");
+    const winnerState = await taxonomyStateSnapshot(admin);
     const result = await createPromise;
     assert.deepEqual(result, { ok: false, code: "category_unavailable" });
     await seriesCreator.query("commit");
+
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      winnerState,
+      "Series Create rejection must preserve the committed Category transition plus Series/Topics/Audit",
+    );
 
     const rows = await admin.query<{ count: string }>(
       `select count(*)::text as count
@@ -1517,12 +2206,19 @@ async function verifyCategoryTrashCreateRace(
     assert.ok(waitEvent);
 
     await lifecycleWriter.query("commit");
+    const winnerState = await taxonomyStateSnapshot(admin);
     const createResult = await createPromise;
     assert.deepEqual(createResult, {
       ok: false,
       code: "category_unavailable",
     });
     await seriesCreator.query("commit");
+
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      winnerState,
+      "Series Create rejection must preserve the committed Category trash plus Series/Topics/Audit",
+    );
 
     const persisted = await admin.query<{
       category_deleted: boolean;
@@ -1556,6 +2252,7 @@ async function verifyCategoryPermanentDeleteCreateRace(
   admin: SqlClient,
 ) {
   await resetFixtures(admin);
+  const stateBefore = await taxonomyStateSnapshot(admin);
   const lifecycleWriter = await createClient("category-permanent-delete");
   const seriesCreator = await createClient("create-behind-permanent-delete");
   try {
@@ -1581,6 +2278,15 @@ async function verifyCategoryPermanentDeleteCreateRace(
     });
     await seriesCreator.query("commit");
     await lifecycleWriter.query("commit");
+
+    const finalState = await taxonomyStateSnapshot(admin);
+    assert.deepEqual(
+      finalState.categories,
+      stateBefore.categories.filter((category) => category.id !== 4),
+    );
+    assert.deepEqual(finalState.series, stateBefore.series);
+    assert.deepEqual(finalState.topics, stateBefore.topics);
+    assert.deepEqual(finalState.audit, stateBefore.audit);
 
     const persisted = await admin.query<{
       category_count: string;
@@ -1612,7 +2318,7 @@ async function verifyCategoryUpdateSeriesReassignmentRace(
   observer: SqlClient,
 ) {
   await resetFixtures(admin);
-  const seriesBefore = await seriesSnapshot(admin, 10);
+  const seriesBefore = await seriesSnapshot(admin, 11);
   const categoryWriter = await createClient("category-update");
   const seriesWriter = await createClient("reassign-behind-category-update");
   try {
@@ -1634,12 +2340,12 @@ async function verifyCategoryUpdateSeriesReassignmentRace(
 
     let settled = false;
     const reassignmentPromise = callSeries(seriesWriter, {
-      id: 10,
+      id: 11,
       name: "Must Not Reassign",
       categoryId: 7,
       status: "published",
       actorId: 1,
-      expectedUpdatedAt: "2026-09-07T10:00:00.000010Z",
+      expectedUpdatedAt: "2026-09-07T10:00:00.000011Z",
     }).finally(() => {
       settled = true;
     });
@@ -1653,6 +2359,7 @@ async function verifyCategoryUpdateSeriesReassignmentRace(
     assert.ok(waitEvent);
 
     await categoryWriter.query("commit");
+    const winnerState = await taxonomyStateSnapshot(admin);
     const reassignmentResult = await reassignmentPromise;
     assert.deepEqual(reassignmentResult, {
       ok: false,
@@ -1660,7 +2367,13 @@ async function verifyCategoryUpdateSeriesReassignmentRace(
     });
     await seriesWriter.query("commit");
 
-    assert.deepEqual(await seriesSnapshot(admin, 10), seriesBefore);
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      winnerState,
+      "Series reassignment rejection must preserve the committed Category update plus Series/Topics/Audit",
+    );
+
+    assert.deepEqual(await seriesSnapshot(admin, 11), seriesBefore);
     const category = await admin.query<{
       is_active: boolean;
       status: string;
@@ -1730,11 +2443,18 @@ async function verifyDirectInsertTriggerRecheckRace(
     assert.ok(waitEvent);
 
     await categoryWriter.query("commit");
+    const winnerState = await taxonomyStateSnapshot(admin);
     const insertError = await insertPromise;
     assert.ok(insertError, "the direct insert must be rejected after recheck");
     assert.equal(insertError.code, "23503");
     assert.match(insertError.message, /topic_series_category_unavailable/u);
     await safeRollback(seriesWriter);
+
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      winnerState,
+      "direct trigger INSERT rejection must preserve the committed Category winner plus Series/Topics/Audit",
+    );
 
     const rows = await admin.query<{ count: string }>(
       `select count(*)::text as count
@@ -1796,6 +2516,7 @@ async function verifyDirectReassignmentTriggerRecheckRace(
     assert.ok(waitEvent);
 
     await categoryWriter.query("commit");
+    const winnerState = await taxonomyStateSnapshot(admin);
     const reassignmentError = await reassignmentPromise;
     assert.ok(
       reassignmentError,
@@ -1808,6 +2529,11 @@ async function verifyDirectReassignmentTriggerRecheckRace(
     );
     await safeRollback(seriesWriter);
 
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      winnerState,
+      "direct trigger reassignment rejection must preserve the committed Category winner plus Series/Topics/Audit",
+    );
     assert.deepEqual(await seriesSnapshot(admin, 10), seriesBefore);
     assert.deepEqual(await topicsSnapshot(admin), topicsBefore);
   } finally {
@@ -1815,6 +2541,245 @@ async function verifyDirectReassignmentTriggerRecheckRace(
     await safeRollback(seriesWriter);
     await closeClient(categoryWriter);
     await closeClient(seriesWriter);
+  }
+}
+
+async function verifyTopicWriteFirstSeriesReassignmentRace(
+  admin: SqlClient,
+  observer: SqlClient,
+) {
+  await resetFixtures(admin);
+  await admin.query(`
+    update public.topics
+    set series_id = null,
+        series = null,
+        series_slug = null
+    where id = 100
+  `);
+  const stateBefore = await taxonomyStateSnapshot(admin);
+  const topicWriter = await createClient("topic-first-relationship-write");
+  const seriesWriter = await createClient("series-behind-topic-write");
+  try {
+    await beginServiceRoleTransaction(topicWriter);
+    await beginServiceRoleTransaction(seriesWriter);
+    const topicPid = await backendPid(topicWriter);
+    const seriesPid = await backendPid(seriesWriter);
+
+    await topicWriter.query(`
+      update public.topics
+      set category_id = 1,
+          category = 'Primary',
+          category_slug = 'primary',
+          series_id = 10,
+          series = 'Series Primary',
+          series_slug = 'series-primary',
+          updated_at = '2026-09-07T10:00:00.000200Z',
+          updated_by = 1
+      where id = 100
+    `);
+
+    let settled = false;
+    const reassignmentPromise = callSeries(seriesWriter, {
+      id: 10,
+      name: "Must Not Reassign Behind Topic",
+      categoryId: 5,
+      status: "published",
+      actorId: 1,
+      expectedUpdatedAt: "2026-09-07T10:00:00.000010Z",
+    }).finally(() => {
+      settled = true;
+    });
+    const waitEvent = await waitForBlockedBackend({
+      observer,
+      blockedPid: seriesPid,
+      expectedBlockerPid: topicPid,
+      label: "Series reassignment behind a Topic relationship write",
+      isSettled: () => settled,
+    });
+    assert.ok(waitEvent);
+
+    await topicWriter.query("commit");
+    const reassignmentResult = await reassignmentPromise;
+    assert.deepEqual(reassignmentResult, {
+      ok: false,
+      code: "series_category_conflict",
+    });
+    const winnerState = await taxonomyStateSnapshot(admin);
+    await seriesWriter.query("commit");
+
+    assert.deepEqual(
+      await taxonomyStateSnapshot(admin),
+      winnerState,
+      "Series conflict after Topic-first recheck must not partially mutate Category/Series/Topics/Audit",
+    );
+    assert.deepEqual(winnerState.categories, stateBefore.categories);
+    assert.deepEqual(winnerState.series, stateBefore.series);
+    assert.deepEqual(winnerState.audit, stateBefore.audit);
+    assert.equal(winnerState.topics[0]?.series_id, 10);
+    assert.equal(winnerState.topics[0]?.category_id, 1);
+  } finally {
+    await safeRollback(topicWriter);
+    await safeRollback(seriesWriter);
+    await closeClient(topicWriter);
+    await closeClient(seriesWriter);
+  }
+}
+
+async function verifySeriesReassignmentFirstOldTopicWriteRace(
+  admin: SqlClient,
+  observer: SqlClient,
+) {
+  await resetFixtures(admin);
+  await admin.query(`
+    update public.topics
+    set series_id = null,
+        series = null,
+        series_slug = null
+    where id = 100
+  `);
+  const stateBefore = await taxonomyStateSnapshot(admin);
+  const seriesWriter = await createClient("series-first-reassignment");
+  const topicWriter = await createClient("old-topic-behind-series");
+  try {
+    await beginServiceRoleTransaction(seriesWriter);
+    await beginServiceRoleTransaction(topicWriter);
+    const seriesPid = await backendPid(seriesWriter);
+    const topicPid = await backendPid(topicWriter);
+
+    const seriesResult = await callSeries(seriesWriter, {
+      id: 10,
+      name: "Series Reassigned First",
+      categoryId: 5,
+      status: "published",
+      actorId: 1,
+      expectedUpdatedAt: "2026-09-07T10:00:00.000010Z",
+    });
+    assert.equal(seriesResult.ok, true);
+    assert.equal((seriesResult as SeriesSuccess).topics_updated, 0);
+
+    let settled = false;
+    const topicWritePromise = topicWriter
+      .query(`
+        update public.topics
+        set category_id = 1,
+            category = 'Primary',
+            category_slug = 'primary',
+            series_id = 10,
+            series = 'Series Primary',
+            series_slug = 'series-primary',
+            updated_at = '2026-09-07T10:00:00.000201Z',
+            updated_by = 1
+        where id = 100
+      `)
+      .then(() => undefined)
+      .catch((error: Error & { code?: string }) => error)
+      .finally(() => {
+        settled = true;
+      });
+    const waitEvent = await waitForBlockedBackend({
+      observer,
+      blockedPid: topicPid,
+      expectedBlockerPid: seriesPid,
+      label: "old Topic relationship write behind Series reassignment",
+      isSettled: () => settled,
+    });
+    assert.ok(waitEvent);
+
+    await seriesWriter.query("commit");
+    const winnerState = await taxonomyStateSnapshot(admin);
+    const topicWriteError = await topicWritePromise;
+    assert.ok(topicWriteError, "the stale old-Category Topic write must fail");
+    assert.equal(topicWriteError.code, "23503");
+    assert.match(topicWriteError.message, /topics_series_category_id_fkey/u);
+    await safeRollback(topicWriter);
+
+    const finalState = await taxonomyStateSnapshot(admin);
+    assert.deepEqual(
+      finalState,
+      winnerState,
+      "composite-FK rejection after Series-first commit must not partially mutate Category/Series/Topics/Audit",
+    );
+    assert.deepEqual(finalState.categories, stateBefore.categories);
+    assert.deepEqual(
+      finalState.topics,
+      stateBefore.topics,
+      "failed old-Category Topic write must leave the detached Topic untouched",
+    );
+    assert.deepEqual(finalState.audit, stateBefore.audit);
+    const reassignedSeries = finalState.series.find((row) => row.id === 10);
+    assert.equal(reassignedSeries?.name, "Series Reassigned First");
+    assert.equal(reassignedSeries?.category_id, 5);
+  } finally {
+    await safeRollback(seriesWriter);
+    await safeRollback(topicWriter);
+    await closeClient(seriesWriter);
+    await closeClient(topicWriter);
+  }
+}
+
+async function verifyCreateFirstCategoryTransitionWaitRace(
+  admin: SqlClient,
+  observer: SqlClient,
+) {
+  await resetFixtures(admin);
+  const stateBefore = await taxonomyStateSnapshot(admin);
+  const seriesCreator = await createClient("create-first-share-lock");
+  const categoryWriter = await createClient("category-behind-create");
+  try {
+    await beginServiceRoleTransaction(seriesCreator);
+    await beginServiceRoleTransaction(categoryWriter);
+    const creatorPid = await backendPid(seriesCreator);
+    const categoryPid = await backendPid(categoryWriter);
+
+    const createResult = await callCreateSeries(seriesCreator, {
+      name: "Create Holds Eligibility",
+      slug: "create-holds-eligibility",
+      categoryId: 7,
+      status: "published",
+      actorId: 1,
+    });
+    assert.equal(createResult.ok, true);
+
+    let settled = false;
+    const categoryPromise = callCategory(categoryWriter, {
+      id: 7,
+      name: "Race Target Transitioned",
+      parentId: null,
+      isActive: false,
+      colorToken: "blue",
+      actorId: 1,
+      expectedUpdatedAt: "2026-09-07T10:00:00.000007Z",
+    }).finally(() => {
+      settled = true;
+    });
+    const waitEvent = await waitForBlockedBackend({
+      observer,
+      blockedPid: categoryPid,
+      expectedBlockerPid: creatorPid,
+      label: "Category transition behind Series Create FOR SHARE",
+      isSettled: () => settled,
+    });
+    assert.ok(waitEvent);
+
+    await seriesCreator.query("commit");
+    const categoryResult = await categoryPromise;
+    assert.equal(categoryResult.ok, true);
+    await categoryWriter.query("commit");
+
+    const finalState = await taxonomyStateSnapshot(admin);
+    assert.deepEqual(finalState.audit, stateBefore.audit);
+    const category = finalState.categories.find((row) => row.id === 7);
+    assert.equal(category?.is_active, false);
+    assert.equal(category?.status, "unpublished");
+    const createdSeries = finalState.series.find(
+      (row) => row.slug === "create-holds-eligibility",
+    );
+    assert.equal(createdSeries?.category_id, 7);
+  } finally {
+    await safeRollback(seriesCreator);
+    await safeRollback(categoryWriter);
+    await closeClient(seriesCreator);
+    await closeClient(categoryWriter);
   }
 }
 
@@ -2070,6 +3035,19 @@ try {
       updated_at timestamptz not null default pg_catalog.now()
     );
 
+    create table public.admin_audit_logs (
+      id bigint generated by default as identity primary key,
+      actor_admin_user_id bigint references public.admin_users(id)
+        on delete set null,
+      actor_username text not null,
+      action text not null,
+      entity_type text,
+      entity_id bigint,
+      entity_label text,
+      metadata jsonb not null default '{}'::jsonb,
+      created_at timestamptz not null default pg_catalog.now()
+    );
+
     create table public.topic_categories (
       id bigint generated by default as identity primary key,
       name text not null,
@@ -2147,14 +3125,19 @@ try {
       update(name, category_id, status, deleted_at, updated_at)
       on public.topic_series to service_role;
     grant select on public.topics to service_role;
+    grant insert(
+      id, category_id, category, category_slug,
+      series_id, series, series_slug, updated_at, updated_by
+    ) on public.topics to service_role;
     grant update(
       category_id, category, category_slug,
-      series, series_slug, updated_at, updated_by
+      series_id, series, series_slug, updated_at, updated_by
     ) on public.topics to service_role;
     grant usage on sequence public.topic_categories_id_seq to service_role;
     grant usage on sequence public.topic_series_id_seq to service_role;
   `);
 
+  verifyMigrationSourceContracts();
   verifyLifecycleSourceLockOrder();
   await admin.query(categoryTrashFunctionSql);
   await admin.query(categoryPermanentDeleteFunctionSql);
@@ -2175,6 +3158,7 @@ try {
   `);
 
   await listener.query("listen pgrst");
+  await verifyExistingMismatchStopsMigration(admin);
   await verifyOldSignatureDropPreflight(admin);
   const notification = waitForNotification(listener, "pgrst");
   try {
@@ -2187,7 +3171,7 @@ try {
 
   await verifyCatalogAndAcl(admin);
   await verifyExpectedRevisionContracts(admin);
-  await verifyCreateAndTriggerInvariant(admin);
+  await verifyCreateAndRelationshipInvariant(admin);
 
   const deadlocksBefore = await deadlockCount(observer);
   await verifyCategoryRevisionRace(admin, observer);
@@ -2198,6 +3182,9 @@ try {
   await verifyCategoryUpdateSeriesReassignmentRace(admin, observer);
   await verifyDirectInsertTriggerRecheckRace(admin, observer);
   await verifyDirectReassignmentTriggerRecheckRace(admin, observer);
+  await verifyTopicWriteFirstSeriesReassignmentRace(admin, observer);
+  await verifySeriesReassignmentFirstOldTopicWriteRace(admin, observer);
+  await verifyCreateFirstCategoryTransitionWaitRace(admin, observer);
   const deadlocksAfter = await deadlockCount(observer);
   assert.equal(
     deadlocksAfter,
@@ -2205,13 +3192,13 @@ try {
     "PostgreSQL recorded a deadlock during the multi-session proofs",
   );
   console.log(
-    "PASS Concurrency: eight independent races covered stale writers, Category transition/create, Trash/create, Permanent Delete/create, Category update/reassignment, and direct trigger insert/reassignment; blocking paths waited/rechecked, the already-trashed delete path rejected concurrently, and all paths preserved state with deadlocks delta=0.",
+    "PASS Concurrency: 11 independent multi-session proofs included 10 observed lock waits plus the already-trashed delete/create rejection; they covered stale revisions, both Category eligibility lock directions, lifecycle/create, Category update/reassignment, direct eligibility triggers, Topic-first/Series-second typed recheck, and Series-first/old-Topic-second composite-FK rejection; rejection paths preserved state and deadlocks delta=0.",
   );
 
   await verifyPostgrestResolution(admin);
 
   console.log(
-    `PASS verify-taxonomy-consistency-postgres17 (PostgreSQL ${identity.version_num}; real PostgREST HTTP; exact RPC/ACL/trigger catalog; guarded Category/Series writes; atomic Series create; eight independent multi-session proofs including lifecycle and direct-trigger races).`,
+    `PASS verify-taxonomy-consistency-postgres17 (PostgreSQL ${identity.version_num}; real PostgREST HTTP; mismatch-stop rollback; exact constraint/RPC/ACL/trigger catalog; guarded Category/Series/Topic relationships; atomic Series create; 11 independent multi-session proofs with 10 observed lock waits and deadlocks delta=0).`,
   );
 } finally {
   for (const client of [...connectedClients]) {

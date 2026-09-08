@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { Database, Tables } from "../src/lib/database.types.ts";
+import type { UpdateTopicCategoryAtomicInput } from "../src/lib/admin/content/taxonomy-mutations.ts";
 import {
   createTopicDraft,
   encodeTopicRevision,
@@ -38,14 +39,14 @@ function verifyGeneratedDatabaseCompileContract(client: SupabaseClient<Database>
 
 void verifyGeneratedDatabaseCompileContract;
 
-const nullableCategoryRpcArgs: Database["public"]["Functions"]["admin_update_topic_category"]["Args"] = {
-  p_actor_id: 1,
-  p_category_id: 1,
-  p_color_token: null,
-  p_expected_updated_at: "2026-09-07T00:00:00Z",
-  p_is_active: true,
-  p_name: "Category",
-  p_parent_id: null,
+const nullableCategoryMutationInput: UpdateTopicCategoryAtomicInput = {
+  actorId: 1,
+  colorToken: null,
+  expectedUpdatedAt: "2026-09-07T00:00:00Z",
+  id: 1,
+  isActive: true,
+  name: "Category",
+  parentId: null,
 };
 const nullableAuthorizationRpcArgs: Database["public"]["Functions"]["promote_integration_authorization"]["Args"] = {
   p_access_expires_at: null,
@@ -77,7 +78,7 @@ const nullableMediaLeaseRpcArgs: Database["public"]["Functions"]["replace_media_
 };
 
 void [
-  nullableCategoryRpcArgs,
+  nullableCategoryMutationInput,
   nullableAuthorizationRpcArgs,
   nullableCredentialRpcArgs,
   nullableMediaLeaseRpcArgs,

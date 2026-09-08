@@ -80,6 +80,7 @@ const seriesMutationFailureCodeSchema = z.enum([
   "not_found",
   "revision_conflict",
   "category_unavailable",
+  "series_category_conflict",
 ]);
 const createSeriesMutationFailureCodeSchema = z.enum([
   "invalid_input",
@@ -188,9 +189,11 @@ export async function updateTopicCategoryAtomically(
     {
       p_category_id: parsed.id,
       p_name: parsed.name,
-      p_parent_id: parsed.parentId,
+      // PostgreSQL function arguments are nullable at runtime, but Supabase's
+      // generated Args shape cannot encode that metadata for required args.
+      p_parent_id: parsed.parentId as number,
       p_is_active: parsed.isActive,
-      p_color_token: parsed.colorToken,
+      p_color_token: parsed.colorToken as string,
       p_actor_id: parsed.actorId,
       p_expected_updated_at: parsed.expectedUpdatedAt,
     },

@@ -924,12 +924,15 @@ check(
     mediaSave.includes("currentTopic?.category_id"),
 );
 check(
-  "Existing inactive article categories must remain editable",
+  "Existing inactive article categories keep raw truth through an explicit persisted-selection exception",
   read("src/lib/admin/content/load-taxonomy-form-data.ts").includes(
     "category.id === currentCategoryId",
   ) &&
-    read("src/lib/admin/content/load-taxonomy-form-data.ts").includes(
+    !read("src/lib/admin/content/load-taxonomy-form-data.ts").includes(
       "{ ...category, is_active: true }",
+    ) &&
+    read("src/components/admin/content/editors/ContentCategorySelect.tsx").includes(
+      "persistedSelectionId",
     ),
 );
 

@@ -42,7 +42,8 @@ type TaxonomyMutationFailureCode =
   | "revision_conflict"
   | "parent_unavailable"
   | "hierarchy_cycle"
-  | "category_unavailable";
+  | "category_unavailable"
+  | "series_category_conflict";
 
 async function getSeriesCategoryChangeError(
   seriesId: number,
@@ -153,6 +154,18 @@ function buildTaxonomyMutationFailure(
         revision,
         "التصنيف المحدد غير موجود أو غير متاح للنشر.",
         { category_id: ["اختر تصنيفًا منشورًا ومتاحًا."] },
+        code,
+      );
+    case "series_category_conflict":
+      return buildFormFailure(
+        mode,
+        revision,
+        `${TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE} انقل أو أزل ارتباط الموضوعات الحالية أولًا.`,
+        {
+          category_id: [
+            "لا يمكن تغيير تصنيف سلسلة ما دامت مرتبطة بموضوعات.",
+          ],
+        },
         code,
       );
     case "unauthorized_actor":

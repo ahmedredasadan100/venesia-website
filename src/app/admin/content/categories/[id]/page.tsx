@@ -35,7 +35,10 @@ export default async function EditTopicCategoryPage({
   if (categoryResult.status === "error") throw categoryResult.error;
   if (categoryResult.status === "not_found") notFound();
 
-  const parentOptionsResult = await loadCategoryParentFormOptions(id);
+  const parentOptionsResult = await loadCategoryParentFormOptions({
+    excludeCategoryId: id,
+    persistedParentId: categoryResult.data.parent_id,
+  });
   if (parentOptionsResult.status === "error") {
     throw parentOptionsResult.error;
   }

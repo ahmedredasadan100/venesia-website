@@ -3536,11 +3536,11 @@ export type Database = {
         Args: {
           p_actor_id: number
           p_category_id: number
-          p_color_token: string | null
+          p_color_token: string
           p_expected_updated_at: string
           p_is_active: boolean
           p_name: string
-          p_parent_id: number | null
+          p_parent_id: number
         }
         Returns: Json
       }

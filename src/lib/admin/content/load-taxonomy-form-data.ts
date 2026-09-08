@@ -53,11 +53,15 @@ export type TopicTaxonomyFormDependencies = {
 
 type TaxonomyFormLoadScope =
   | "category_options"
+  | "category_parent_contract"
   | "series_options"
+  | "series_options_contract"
   | "category_record"
   | "series_record"
   | "topic_record"
   | "topic_taxonomy_dependencies"
+  | "topic_taxonomy_contract"
+  | "topic_taxonomy_required_options"
   | "topic_record_contract";
 
 const TAXONOMY_FORM_LOAD_ERROR_MESSAGE =
@@ -142,18 +146,30 @@ function toOptions(rows: AdminContentCategory[]): TaxonomyFormOption[] {
 }
 
 export async function loadCategoryParentFormOptions(
-  excludeId?: number,
+  {
+    excludeCategoryId,
+    persistedParentId,
+  }: {
+    excludeCategoryId?: number;
+    persistedParentId?: number | null;
+  } = {},
 ): Promise<TaxonomyFormDependencyResult<TaxonomyFormOption[]>> {
   const result = await loadCategoryRows("category_options");
   if (result.status === "error") return result;
 
-  const blockedIds = excludeId
-    ? new Set(getCategoryAndDescendantIds(result.data, excludeId))
+  const blockedIds = excludeCategoryId
+    ? new Set(getCategoryAndDescendantIds(result.data, excludeCategoryId))
     : new Set<number>();
+  const allowedRows = result.data.filter((row) => !blockedIds.has(row.id));
 
-  return dataResult(
-    toOptions(result.data.filter((row) => !blockedIds.has(row.id))),
-  );
+  if (
+    persistedParentId != null &&
+    !allowedRows.some((row) => row.id === persistedParentId)
+  ) {
+    return errorResult("category_parent_contract");
+  }
+
+  return dataResult(toOptions(allowedRows));
 }
 
 export async function loadSeriesCategoryFormOptions(
@@ -172,7 +188,7 @@ export async function loadSeriesCategoryFormOptions(
     (currentCategoryId != null &&
       !selectableRows.some((row) => row.id === currentCategoryId))
   ) {
-    return errorResult("series_options");
+    return errorResult("series_options_contract");
   }
 
   return dataResult(toOptions(selectableRows));
@@ -282,32 +298,38 @@ export async function loadTopicTaxonomyFormDependencies({
       return errorResult("topic_taxonomy_dependencies");
     }
 
-    const categories = categoriesResult.data
-      .filter(
-        (category) =>
-          category.status === "published" || category.id === currentCategoryId,
-      )
-      .map((category) =>
-        category.id === currentCategoryId
-          ? { ...category, is_active: true }
-          : category,
-      );
+    const persistedCategory = currentCategoryId == null
+      ? null
+      : categoriesResult.data.find(
+          (category) => category.id === currentCategoryId,
+        ) ?? null;
+    const persistedSeries = currentSeriesId == null
+      ? null
+      : seriesResult.data.find((item) => item.id === currentSeriesId) ?? null;
+    const persistedRelationshipInvalid =
+      currentSeriesId != null &&
+      (currentCategoryId == null ||
+        persistedSeries == null ||
+        persistedSeries.category_id !== currentCategoryId);
+
+    if (
+      (currentCategoryId != null && persistedCategory == null) ||
+      persistedRelationshipInvalid
+    ) {
+      return errorResult("topic_taxonomy_contract");
+    }
+
+    const categories = categoriesResult.data.filter(
+      (category) =>
+        category.id === currentCategoryId ||
+        (category.status === "published" && category.is_active === true),
+    );
     const series = seriesResult.data.filter(
       (item) => item.status === "published" || item.id === currentSeriesId,
     );
-    const selectedCategoryMissing =
-      currentCategoryId != null &&
-      !categories.some((category) => category.id === currentCategoryId);
-    const selectedSeriesMissing =
-      currentSeriesId != null &&
-      !series.some((item) => item.id === currentSeriesId);
 
-    if (
-      categories.length === 0 ||
-      selectedCategoryMissing ||
-      selectedSeriesMissing
-    ) {
-      return errorResult("topic_taxonomy_dependencies");
+    if (categories.length === 0) {
+      return errorResult("topic_taxonomy_required_options");
     }
 
     return dataResult({ categories, series });

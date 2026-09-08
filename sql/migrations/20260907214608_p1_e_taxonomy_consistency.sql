@@ -4,8 +4,65 @@
 -- - Category and Series edits require an exact updated_at revision.
 -- - Series creation validates and locks its Category in the same transaction.
 -- - Direct Series inserts/reassignments cannot bypass Category eligibility.
+-- - Topic/Series assignments cannot cross Category boundaries, including
+--   through direct SQL writes.
 
 begin;
+
+-- Existing drift is a stop condition, never a backfill opportunity. Raising
+-- here aborts the whole migration before any function or constraint changes.
+do $$
+declare
+  v_mismatch record;
+begin
+  select
+    topics.id as topic_id,
+    topics.series_id,
+    topics.category_id as topic_category_id,
+    series.category_id as series_category_id
+  into v_mismatch
+  from public.topics as topics
+  left join public.topic_series as series
+    on series.id = topics.series_id
+  where topics.series_id is not null
+    and (
+      series.id is null
+      or topics.category_id is null
+      or topics.category_id is distinct from series.category_id
+    )
+  order by topics.id
+  limit 1;
+
+  if found then
+    raise exception using
+      errcode = '23514',
+      message = 'topic_series_category_invariant_violation',
+      detail = pg_catalog.format(
+        'topic_id=%s series_id=%s topic_category_id=%s series_category_id=%s',
+        v_mismatch.topic_id,
+        v_mismatch.series_id,
+        coalesce(v_mismatch.topic_category_id::text, 'null'),
+        coalesce(v_mismatch.series_category_id::text, 'null')
+      );
+  end if;
+end;
+$$;
+
+alter table public.topic_series
+  add constraint topic_series_id_category_id_key
+  unique (id, category_id);
+
+alter table public.topics
+  add constraint topics_series_requires_category_check
+  check (series_id is null or category_id is not null);
+
+alter table public.topics
+  add constraint topics_series_category_id_fkey
+  foreign key (series_id, category_id)
+  references public.topic_series (id, category_id)
+  on update restrict
+  on delete restrict
+  not deferrable;
 
 drop function public.admin_update_topic_category(
   bigint, text, bigint, boolean, text, bigint
@@ -58,6 +115,23 @@ begin
   -- Serializing this small hierarchy keeps cycle checks race-safe.
   lock table public.topic_categories in share row exclusive mode;
 
+  -- Relationship writers lock Topics before Series/Category rows. Follow the
+  -- same order before propagating Category metadata to avoid lock cycles.
+  perform topics.id
+  from public.topics as topics
+  where topics.category_id = p_category_id
+     or (
+       topics.category_id is null
+       and topics.category_slug = (
+         select categories.slug
+         from public.topic_categories as categories
+         where categories.id = p_category_id
+           and categories.deleted_at is null
+       )
+     )
+  order by topics.id
+  for update;
+
   select
     categories.id,
     categories.name,
@@ -72,7 +146,7 @@ begin
   from public.topic_categories as categories
   where categories.id = p_category_id
     and categories.deleted_at is null
-  for update;
+  for no key update;
 
   if not found then
     return pg_catalog.jsonb_build_object(
@@ -207,6 +281,7 @@ set search_path = ''
 as $$
 declare
   v_series record;
+  v_topics_linked integer := 0;
   v_topics_updated integer := 0;
 begin
   if p_series_id is null
@@ -233,8 +308,18 @@ begin
     return pg_catalog.jsonb_build_object(
       'ok', false,
       'code', 'unauthorized_actor'
-    );
+     );
   end if;
+
+  -- Topic relationship writes take their row lock before PostgreSQL checks
+  -- the Series FK. Lock the same rows in id order before taking the Series
+  -- lock, then recheck after it to observe a writer that committed while the
+  -- Series lock was waiting.
+  perform topics.id
+  from public.topics as topics
+  where topics.series_id = p_series_id
+  order by topics.id
+  for update;
 
   select
     series.id,
@@ -261,6 +346,21 @@ begin
     return pg_catalog.jsonb_build_object(
       'ok', false,
       'code', 'revision_conflict'
+    );
+  end if;
+
+  perform topics.id
+  from public.topics as topics
+  where topics.series_id = p_series_id
+  order by topics.id
+  for update;
+  get diagnostics v_topics_linked = row_count;
+
+  if p_category_id is distinct from v_series.category_id
+     and v_topics_linked > 0 then
+    return pg_catalog.jsonb_build_object(
+      'ok', false,
+      'code', 'series_category_conflict'
     );
   end if;
 

@@ -85,6 +85,15 @@ check(
     ),
 );
 check(
+  "Topic Edit loader rejects a persisted Series and Category mismatch before editor mount",
+  taxonomyLoader.includes(
+    "persistedSeries.category_id !== currentCategoryId",
+  ) &&
+    taxonomyLoader.includes('errorResult("topic_taxonomy_contract")') &&
+    editPage.indexOf("if (taxonomyResult.status === \"error\")") <
+      editPage.indexOf('if (editorKind === "article")'),
+);
+check(
   "the shared basic owner passes the current category into the series owner",
   basicPanel.includes("defaultCategoryId={values?.categoryId}"),
 );
@@ -95,8 +104,9 @@ check(
     seriesFields.includes('categorySelect.addEventListener("change", syncCategory)'),
 );
 check(
-  "changing category clears an incompatible series value and the shared form listbox publishes change",
+  "an explicit Category change clears an incompatible Series after load truth has passed",
     seriesFields.includes('setValue("")') &&
+    seriesFields.includes("categorySelect.addEventListener") &&
     seriesFields.includes("<AdminFormListboxSelect") &&
     formListbox.includes("previousValueRef.current === selectedValue") &&
     formListbox.includes("previousValueRef.current = selectedValue") &&
@@ -125,10 +135,27 @@ check(
     mediaSave.includes("series_id: [seriesCategoryError]"),
 );
 check(
+  "Topic write failures return before success revalidation and Audit effects",
+  [articleSave, mediaSave].every(
+    (source) =>
+      source.indexOf("} catch (error)") !== -1 &&
+      source.lastIndexOf("revalidateUnifiedContentPaths({") >
+        source.indexOf("} catch (error)") &&
+      source.lastIndexOf("await recordCmsAdminAudit(") >
+        source.indexOf("} catch (error)"),
+  ),
+);
+check(
   "bulk category moves preflight linked series before writing",
   topicActions.includes("validateBulkCategoryMoveSeries") &&
     topicActions.indexOf("validateBulkCategoryMoveSeries(\n        ids") <
       topicActions.indexOf("category_id: category.id"),
+);
+check(
+  "bulk Topic relationship write failure returns before success effects",
+  topicActions.includes("if (error) return invalidMutation(error.message)") &&
+    topicActions.indexOf("if (error) return invalidMutation(error.message)") <
+      topicActions.indexOf("await finishMutation({", topicActions.indexOf('action === "move_category"')),
 );
 check(
   "series category changes reject linked topic conflicts before the RPC",
