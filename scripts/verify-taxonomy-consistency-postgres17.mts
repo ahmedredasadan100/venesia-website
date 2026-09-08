@@ -1166,7 +1166,13 @@ async function verifyCatalogAndAcl(admin: SqlClient) {
       name: row.name,
       table_name: row.table_name,
       constraint_type: row.constraint_type,
-      columns: row.columns,
+      // CHECK conkey order is catalog-internal; its definition proves the
+      // expression semantics. Sort a copy so deep equality still proves the
+      // exact two-column set without weakening UNIQUE/FK column order checks.
+      columns:
+        row.name === "topics_series_requires_category_check"
+          ? [...row.columns].sort()
+          : row.columns,
       referenced_table: row.referenced_table,
       referenced_columns: row.referenced_columns,
       match_type: row.match_type,
@@ -1747,8 +1753,8 @@ async function verifyExpectedRevisionContracts(admin: SqlClient) {
   const categoryUnavailable = await asServiceRole<{ payload: SeriesResult }>(
     admin,
     `select public.admin_update_topic_series(
-       10, 'Must Not Persist', 2, 'unpublished', 1,
-       '2026-09-07T10:00:00.000010Z'::timestamptz
+       11, 'Must Not Persist', 2, 'unpublished', 1,
+       '2026-09-07T10:00:00.000011Z'::timestamptz
      ) as payload`,
   );
   assert.deepEqual(categoryUnavailable.rows[0].payload, {
