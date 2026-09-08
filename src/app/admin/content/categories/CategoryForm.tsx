@@ -24,6 +24,7 @@ import {
   createCategoryForm,
   updateCategoryForm,
 } from "../taxonomy-form-actions";
+import TaxonomyExpectedRevisionInput from "../TaxonomyExpectedRevisionInput";
 
 type CategoryFormProps = {
   mode: "create" | "edit";
@@ -56,6 +57,11 @@ export default function CategoryForm({
         <>
           {category?.id ? (
             <input type="hidden" name="id" value={category.id} />
+          ) : null}
+          {isEdit ? (
+            <TaxonomyExpectedRevisionInput
+              initialRevision={category?.updated_at}
+            />
           ) : null}
 
           <AdminFormSection

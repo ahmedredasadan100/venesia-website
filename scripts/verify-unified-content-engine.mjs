@@ -329,7 +329,8 @@ check(
 const editorRoute = read("src/app/admin/content/topics/[id]/page.tsx");
 check(
   "Unified editor route must resolve by content_type",
-  editorRoute.includes("resolveContentEditor(topic.content_type)"),
+  editorRoute.includes("const contentType = topic.content_type") &&
+    editorRoute.includes("resolveContentEditor(contentType)"),
 );
 check(
   "Unified editor route must not resolve by category slug",
@@ -924,8 +925,12 @@ check(
 );
 check(
   "Existing inactive article categories must remain editable",
-  editorRoute.includes("category.id === topic.category_id") &&
-    editorRoute.includes("{ ...category, is_active: true }"),
+  read("src/lib/admin/content/load-taxonomy-form-data.ts").includes(
+    "category.id === currentCategoryId",
+  ) &&
+    read("src/lib/admin/content/load-taxonomy-form-data.ts").includes(
+      "{ ...category, is_active: true }",
+    ),
 );
 
 check(

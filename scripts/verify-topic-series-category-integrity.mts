@@ -60,6 +60,7 @@ const [
   mediaSave,
   topicActions,
   taxonomyActions,
+  taxonomyLoader,
 ] = await Promise.all([
   read("src/app/admin/content/topics/new/page.tsx"),
   read("src/app/admin/content/topics/[id]/page.tsx"),
@@ -71,13 +72,17 @@ const [
   read("src/app/admin/content/topics/media-actions/save.ts"),
   read("src/app/admin/content/topics/actions.ts"),
   read("src/app/admin/content/taxonomy-form-actions.ts"),
+  read("src/lib/admin/content/load-taxonomy-form-data.ts"),
 ]);
 
 check(
   "create and edit routes load the canonical series category relation",
   [newPage, editPage].every((source) =>
-    source.includes("id,name,slug,status,deleted_at,category_id"),
-  ),
+    source.includes("loadTopicTaxonomyFormDependencies"),
+  ) &&
+    taxonomyLoader.includes(
+      'select("id,name,slug,status,deleted_at,category_id")',
+    ),
 );
 check(
   "the shared basic owner passes the current category into the series owner",

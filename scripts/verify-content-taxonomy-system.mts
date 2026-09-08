@@ -92,6 +92,8 @@ const paths = {
     "src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts",
   migration:
     "sql/migrations/20260723040000_content_taxonomy_data_runtime.sql",
+  consistencyMigration:
+    "sql/migrations/20260907214608_p1_e_taxonomy_consistency.sql",
   lifecycleMigration:
     "sql/migrations/20260808120000_taxonomy_lifecycle_contract.sql",
   firstPublishMigration:
@@ -138,6 +140,7 @@ const taxonomyMutations = read(paths.taxonomyMutations);
 const instantMutation = read(paths.instantMutation);
 const instantMutationCache = read(paths.instantMutationCache);
 const migration = read(paths.migration);
+const consistencyMigration = read(paths.consistencyMigration);
 const lifecycleMigration = read(paths.lifecycleMigration);
 const firstPublishMigration = read(paths.firstPublishMigration);
 const createCategory = exportedFunctionSlice(
@@ -300,9 +303,10 @@ check(
 );
 check(
   "series-parity",
-  "series sort order is removed from the form UI only",
+  "series sort order is removed from the form UI and remains database-owned",
   !seriesForm.includes('name="sort_order"') &&
-    createSeries.includes("sort_order: 0") &&
+    !createSeries.includes("sort_order") &&
+    consistencyMigration.includes("insert into public.topic_series") &&
     migration.includes("sort_order"),
 );
 
@@ -575,8 +579,10 @@ for (const rpc of [
 ]) {
   check(
     "mutation-atomicity",
-    `${rpc} is defined by the additive taxonomy migration`,
-    migration.includes(`function public.${rpc}`),
+    `${rpc} is extended by the P1-E additive taxonomy migration`,
+    consistencyMigration.includes(`function public.${rpc}`) &&
+      consistencyMigration.includes("p_expected_updated_at timestamp with time zone") &&
+      consistencyMigration.includes("'code', 'revision_conflict'"),
   );
   check(
     "mutation-atomicity",
@@ -615,7 +621,28 @@ check(
   "mutation-atomicity",
   "category and series update actions delegate to atomic helpers",
   updateCategory.includes("updateTopicCategoryAtomically") &&
-    updateSeries.includes("updateTopicSeriesAtomically"),
+    updateSeries.includes("updateTopicSeriesAtomically") &&
+    updateCategory.includes("expectedUpdatedAt: expectedRevision.value") &&
+    updateSeries.includes("expectedUpdatedAt: expectedRevision.value"),
+);
+check(
+  "mutation-atomicity",
+  "Series create delegates validation and insertion to one governing RPC result",
+  taxonomyMutations.includes('"admin_create_topic_series"') &&
+    consistencyMigration.includes("function public.admin_create_topic_series") &&
+    consistencyMigration.includes("for share") &&
+    consistencyMigration.includes("insert into public.topic_series") &&
+    createSeries.includes("createTopicSeriesAtomically") &&
+    !createSeries.includes('.from("topic_series")'),
+);
+check(
+  "mutation-atomicity",
+  "Series create rejection returns before success audit and revalidation",
+  createSeries.indexOf("if (!mutation.ok)") !== -1 &&
+    createSeries.indexOf("if (!mutation.ok)") <
+      createSeries.indexOf("await recordCmsAdminAudit") &&
+    createSeries.indexOf("await recordCmsAdminAudit") <
+      createSeries.indexOf("revalidateTaxonomyPaths"),
 );
 check(
   "lifecycle-owner",

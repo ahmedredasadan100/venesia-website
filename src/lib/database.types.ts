@@ -3537,6 +3537,7 @@ export type Database = {
           p_actor_id: number
           p_category_id: number
           p_color_token: string | null
+          p_expected_updated_at: string
           p_is_active: boolean
           p_name: string
           p_parent_id: number | null
@@ -3547,8 +3548,19 @@ export type Database = {
         Args: {
           p_actor_id: number
           p_category_id: number
+          p_expected_updated_at: string
           p_name: string
           p_series_id: number
+          p_status: string
+        }
+        Returns: Json
+      }
+      admin_create_topic_series: {
+        Args: {
+          p_actor_id: number
+          p_category_id: number
+          p_name: string
+          p_slug: string
           p_status: string
         }
         Returns: Json

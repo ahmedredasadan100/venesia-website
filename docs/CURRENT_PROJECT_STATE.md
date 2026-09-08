@@ -95,7 +95,7 @@ The 2026-09-05 authorized Migration 100 application and registry reconciliation 
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                               100 |
+| Repository migration files                        |                                               101 |
 | Production registry versions                      |                                               100 |
 | Current Production live state                     |                    Verified on 2026-09-05 |
 | Registry SQL provenance                           | Exact repository SQL for all 100 recorded versions |

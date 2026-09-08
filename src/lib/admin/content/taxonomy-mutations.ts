@@ -10,6 +10,7 @@ const seriesStatusSchema = z.enum([
   "published",
   "unpublished",
 ]);
+const expectedRevisionSchema = z.string().trim().datetime({ offset: true });
 
 const updateTopicCategoryInputSchema = z.strictObject({
   id: positiveIdSchema,
@@ -18,11 +19,21 @@ const updateTopicCategoryInputSchema = z.strictObject({
   isActive: z.boolean(),
   colorToken: z.enum(ADMIN_TONE_TOKENS).nullable(),
   actorId: positiveIdSchema,
+  expectedUpdatedAt: expectedRevisionSchema,
 });
 
 const updateTopicSeriesInputSchema = z.strictObject({
   id: positiveIdSchema,
   name: z.string().trim().min(1),
+  categoryId: positiveIdSchema,
+  status: seriesStatusSchema,
+  actorId: positiveIdSchema,
+  expectedUpdatedAt: expectedRevisionSchema,
+});
+
+const createTopicSeriesInputSchema = z.strictObject({
+  name: z.string().trim().min(1),
+  slug: z.string().trim().min(1),
   categoryId: positiveIdSchema,
   status: seriesStatusSchema,
   actorId: positiveIdSchema,
@@ -42,7 +53,7 @@ const categoryMutationRowSchema = z.strictObject({
   status: z.string().nullable(),
   color_token: z.enum(ADMIN_TONE_TOKENS),
   published_at: z.string().nullable(),
-  updated_at: z.string().nullable(),
+  updated_at: expectedRevisionSchema,
 });
 
 const seriesMutationRowSchema = z.strictObject({
@@ -52,18 +63,69 @@ const seriesMutationRowSchema = z.strictObject({
   category_id: positiveIdSchema,
   status: seriesStatusSchema,
   deleted_at: z.string().nullable(),
-  updated_at: z.string().nullable(),
+  updated_at: expectedRevisionSchema,
 });
 
-const updateTopicCategoryResultSchema = z.strictObject({
-  category: categoryMutationRowSchema,
-  topics_updated: z.coerce.number().int().nonnegative().finite(),
-});
+const categoryMutationFailureCodeSchema = z.enum([
+  "invalid_input",
+  "unauthorized_actor",
+  "not_found",
+  "revision_conflict",
+  "parent_unavailable",
+  "hierarchy_cycle",
+]);
+const seriesMutationFailureCodeSchema = z.enum([
+  "invalid_input",
+  "unauthorized_actor",
+  "not_found",
+  "revision_conflict",
+  "category_unavailable",
+]);
+const createSeriesMutationFailureCodeSchema = z.enum([
+  "invalid_input",
+  "unauthorized_actor",
+  "category_unavailable",
+]);
 
-const updateTopicSeriesResultSchema = z.strictObject({
-  series: seriesMutationRowSchema,
-  topics_updated: z.coerce.number().int().nonnegative().finite(),
-});
+const updateTopicCategoryResultSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    code: z.literal("updated"),
+    category: categoryMutationRowSchema,
+    topics_updated: z.coerce.number().int().nonnegative().finite(),
+  }),
+  z.strictObject({
+    ok: z.literal(false),
+    code: categoryMutationFailureCodeSchema,
+  }),
+]);
+
+const updateTopicSeriesResultSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    code: z.literal("updated"),
+    series: seriesMutationRowSchema,
+    topics_updated: z.coerce.number().int().nonnegative().finite(),
+  }),
+  z.strictObject({
+    ok: z.literal(false),
+    code: seriesMutationFailureCodeSchema,
+  }),
+]);
+
+const createTopicSeriesResultSchema = z.discriminatedUnion("ok", [
+  z.strictObject({
+    ok: z.literal(true),
+    code: z.literal("created"),
+    series: seriesMutationRowSchema.extend({
+      created_at: expectedRevisionSchema,
+    }),
+  }),
+  z.strictObject({
+    ok: z.literal(false),
+    code: createSeriesMutationFailureCodeSchema,
+  }),
+]);
 
 const taxonomyLifecycleResultSchema = z.strictObject({
   affected_ids: z.array(positiveIdSchema).min(1),
@@ -76,6 +138,9 @@ export type UpdateTopicCategoryAtomicInput = z.input<
 export type UpdateTopicSeriesAtomicInput = z.input<
   typeof updateTopicSeriesInputSchema
 >;
+export type CreateTopicSeriesAtomicInput = z.input<
+  typeof createTopicSeriesInputSchema
+>;
 export type TaxonomyLifecycleAtomicInput = z.input<
   typeof taxonomyLifecycleInputSchema
 >;
@@ -85,6 +150,9 @@ export type UpdateTopicCategoryAtomicResult = z.output<
 >;
 export type UpdateTopicSeriesAtomicResult = z.output<
   typeof updateTopicSeriesResultSchema
+>;
+export type CreateTopicSeriesAtomicResult = z.output<
+  typeof createTopicSeriesResultSchema
 >;
 export type TaxonomyLifecycleAtomicResult = z.output<
   typeof taxonomyLifecycleResultSchema
@@ -124,6 +192,7 @@ export async function updateTopicCategoryAtomically(
       p_is_active: parsed.isActive,
       p_color_token: parsed.colorToken,
       p_actor_id: parsed.actorId,
+      p_expected_updated_at: parsed.expectedUpdatedAt,
     },
   );
   if (error) throw new TaxonomyMutationDatabaseError(error);
@@ -142,10 +211,29 @@ export async function updateTopicSeriesAtomically(
       p_category_id: parsed.categoryId,
       p_status: parsed.status,
       p_actor_id: parsed.actorId,
+      p_expected_updated_at: parsed.expectedUpdatedAt,
     },
   );
   if (error) throw new TaxonomyMutationDatabaseError(error);
   return updateTopicSeriesResultSchema.parse(data);
+}
+
+export async function createTopicSeriesAtomically(
+  input: CreateTopicSeriesAtomicInput,
+): Promise<CreateTopicSeriesAtomicResult> {
+  const parsed = createTopicSeriesInputSchema.parse(input);
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "admin_create_topic_series",
+    {
+      p_name: parsed.name,
+      p_slug: parsed.slug,
+      p_category_id: parsed.categoryId,
+      p_status: parsed.status,
+      p_actor_id: parsed.actorId,
+    },
+  );
+  if (error) throw new TaxonomyMutationDatabaseError(error);
+  return createTopicSeriesResultSchema.parse(data);
 }
 
 type TaxonomyLifecycleMutation =

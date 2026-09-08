@@ -14,7 +14,7 @@ import {
   isMediaEditableContentType,
 } from "../../../../../lib/admin/content/content-types";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
-import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { loadTopicTaxonomyFormDependencies } from "../../../../../lib/admin/content/load-taxonomy-form-data";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
 
 export const dynamic = "force-dynamic";
@@ -30,44 +30,25 @@ export default async function NewUnifiedContentPage({
   const query = await searchParams;
   const contentType = isContentType(query?.type) ? query.type : "article";
 
-  const supabase = getSupabaseAdmin();
-  const [{ data: categoryRows, error: categoriesError }, { data: seriesRows, error: seriesError }] =
-    await Promise.all([
-      supabase
-        .from("topic_categories")
-        .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
-        .is("deleted_at", null)
-        .order("sort_order", { ascending: true })
-        .order("id", { ascending: true }),
-      supabase
-        .from("topic_series")
-        .select("id,name,slug,status,deleted_at,category_id")
-        .is("deleted_at", null)
-        .order("sort_order", { ascending: true })
-        .order("name", { ascending: true }),
-    ]);
-  const categories = flattenAdminCategoryTree(
-    buildAdminCategoryTree(
-      (categoryRows ?? []).filter(
-        (category) => category.status === "published",
-      ),
-    ),
-  );
-  const series = seriesRows ?? [];
+  const taxonomyResult = await loadTopicTaxonomyFormDependencies();
+  if (taxonomyResult.status === "error") throw taxonomyResult.error;
+  const { categories, series } = taxonomyResult.data;
   const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
-  const loadError = categoriesError?.message ?? seriesError?.message;
 
   if (contentType === "article") {
     return (
       <ArticleCreateEditor
-        categories={categories.filter((category) => category.status === "published")}
-        series={series.filter((item) => item.status === "published" && !item.deleted_at)}
-        errorMessage={errorMessage ?? loadError}
+        categories={categories}
+        series={series}
+        errorMessage={errorMessage}
       />
     );
   }
 
   if (!isMediaEditableContentType(contentType)) return null;
+  const flattenedCategories = flattenAdminCategoryTree(
+    buildAdminCategoryTree(categories),
+  );
 
   return (
     <AdminPageExperience dir="rtl">
@@ -84,16 +65,13 @@ export default async function NewUnifiedContentPage({
         }
       />
       {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء المحتوى" message={errorMessage} /> : null}
-      {loadError ? <AdminNotice variant="danger" title="تعذر تحميل التصنيفات أو السلاسل" message={loadError} /> : null}
-      {!loadError ? (
-        <MediaContentForm
-          mode="create"
-          contentType={contentType}
-          categories={categories}
-          series={series}
-          errorMessage={errorMessage}
-        />
-      ) : null}
+      <MediaContentForm
+        mode="create"
+        contentType={contentType}
+        categories={flattenedCategories}
+        series={series}
+        errorMessage={errorMessage}
+      />
     </AdminPageExperience>
   );
 }

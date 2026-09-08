@@ -31,10 +31,17 @@ export default async function EditTopicCategoryPage({
   if (!/^\d+$/.test(rawId)) notFound();
   const id = Number(rawId);
 
-  const [category, parentOptions] = await Promise.all([
-    loadCategoryFormRecord(id),
-    loadCategoryParentFormOptions(id),
-  ]);
+  const categoryResult = await loadCategoryFormRecord(id);
+  if (categoryResult.status === "error") throw categoryResult.error;
+  if (categoryResult.status === "not_found") notFound();
+
+  const parentOptionsResult = await loadCategoryParentFormOptions(id);
+  if (parentOptionsResult.status === "error") {
+    throw parentOptionsResult.error;
+  }
+
+  const category = categoryResult.data;
+  const parentOptions = parentOptionsResult.data;
 
   return (
     <AdminPageExperience>
