@@ -54,14 +54,6 @@ export function deriveContentEditorClosure(input: {
 
 export const CONTENT_EDITOR_SOURCE_BLOCKERS = [
   {
-    id: "gallery-admin-shared-media-adoption",
-    owner:
-      "src/components/admin/content/editors/media/MediaGalleryFields.tsx",
-    evidence: "source_confirmed",
-    rationale:
-      "The Gallery content editor still owns local image-row add, remove, URL, alt, and caption controls instead of adopting the existing shared Admin Media gallery owner.",
-  },
-  {
     id: "gallery-public-projection",
     owner: "src/lib/media-center/adapt-topic-row.ts",
     evidence: "source_confirmed",
@@ -128,6 +120,14 @@ export const CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER: readonly ContentEditorBehavio
       rationale:
         "The behavioral and executable-graph matrix proves one typed publish-only title policy covers Article, every Media type, Save as Published, Row Publish, and pre-RPC Atomic Bulk Publish while draft saves and legitimate near-match titles remain allowed.",
     },
+    {
+      id: "adm-08-shared-gallery-authoring",
+      owner: "scripts/qa-admin-shared-gallery-authoring.mts",
+      state: "behavior_verified",
+      requiredForGlobalClosure: false,
+      rationale:
+        "The actual shared-owner Chromium and isolated JSONB round-trip matrix proves Gallery selection, ordered metadata, dirty state, validation recovery, save, and reload without a local URL authoring path.",
+    },
   ];
 
 export const CONTENT_EDITOR_GLOBAL_CLOSURE = deriveContentEditorClosure({
@@ -150,6 +150,8 @@ export const CONTENT_EDITOR_ARCHITECTURE = {
   publishingOwner: "src/components/admin/content/editors/ContentPublishingOptions.tsx",
   displaySettingsOwner: "src/components/admin/content/editors/ContentDisplaySettings.tsx",
   seoOwner: "src/components/admin/seo/AdminEntitySeoPanel.tsx",
+  mediaGalleryOwner:
+    "src/components/admin/media/AdminMediaGalleryField.tsx",
   persistenceAggregate: "public.topics",
   proofBoundaries: {
     source: "source_and_executable_reachability",

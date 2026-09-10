@@ -18,9 +18,9 @@ import ContentEditorShell, {
 } from "../ContentEditorShell";
 import ContentPublishingOptions from "../ContentPublishingOptions";
 import { AdminFormError } from "../../../ui/AdminFormRuntime";
+import AdminMediaGalleryField from "../../../media/AdminMediaGalleryField";
 import TopicMarkdownEditor from "../article/TopicMarkdownEditor";
 import MediaEntitySeoPanel from "./MediaEntitySeoPanel";
-import MediaGalleryFields from "./MediaGalleryFields";
 import MediaVideoFields from "./MediaVideoFields";
 
 export type MediaContentFormValues = {
@@ -188,7 +188,18 @@ export default function MediaContentForm({
         </div>
       ) : adapter.body === "gallery" ? (
         <div className="space-y-5">
-          <MediaGalleryFields defaultImages={galleryDefaults} />
+          <AdminMediaGalleryField
+            valueMode="items"
+            name="gallery_image_url"
+            altName="gallery_image_alt"
+            captionName="gallery_image_caption"
+            label="صور المعرض"
+            helperText="اختر الصور من مكتبة الميديا المشتركة، ثم اضبط النص البديل والتعليق وترتيب العرض."
+            dimensionHint="content"
+            defaultItems={galleryDefaults}
+            focusTargetId="gallery_image_url"
+            altFocusTargetId="gallery_image_alt"
+          />
           <input type="hidden" name="content" value={model.value.content} readOnly />
         </div>
       ) : (
