@@ -1,4 +1,5 @@
 import { CONTENT_TYPES, type ContentType } from "../admin/content/content-types";
+import type { GalleryImageItem } from "../admin/media-topic-payload";
 import { resolvePublicContentPath } from "../content/public-content-path";
 
 export type MediaContentType = Exclude<ContentType, "article">;
@@ -20,7 +21,8 @@ export type MediaContentItem = {
   project?: string;
   duration?: string;
   videoUrl?: string;
-  content?: string[];
+  content?: string;
+  galleryImages?: GalleryImageItem[];
   /** Canonical category identity for public content filtering; not rendered directly. */
   categorySlug?: string;
   seriesSlug?: string;
