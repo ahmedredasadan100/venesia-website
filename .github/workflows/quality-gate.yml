@@ -141,6 +141,77 @@ jobs:
           TOPICS_BULK_PUBLISH_GENERATED_TYPES_PATH: ${{ runner.temp }}/topics-bulk-publish.database.types.ts
         run: npm run verify:topics-bulk-publish-generated-types
 
+  taxonomy-consistency-postgres:
+    name: Taxonomy Consistency · PostgreSQL 17 · PostgREST
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: venesia_taxonomy_consistency_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d venesia_taxonomy_consistency_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
+
+      postgrest:
+        image: postgrest/postgrest:v16.2
+        env:
+          PGRST_DB_URI: postgresql://postgres:postgres@postgres:5432/venesia_taxonomy_consistency_ci
+          PGRST_DB_SCHEMAS: public
+          PGRST_DB_ANON_ROLE: anon
+          PGRST_JWT_SECRET: taxonomy-consistency-postgrest-jwt-secret-ci-only-20260908
+          PGRST_SERVER_PORT: 3000
+        ports:
+          - 3001:3000
+
+    env:
+      TAXONOMY_CONSISTENCY_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/venesia_taxonomy_consistency_ci
+      TAXONOMY_CONSISTENCY_DATABASE_REQUIRED: "1"
+      TAXONOMY_CONSISTENCY_DATABASE_DISPOSABLE: "1"
+      TAXONOMY_CONSISTENCY_POSTGREST_URL: http://127.0.0.1:3001
+      TAXONOMY_CONSISTENCY_POSTGREST_JWT_SECRET: taxonomy-consistency-postgrest-jwt-secret-ci-only-20260908
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 2.116.0
+
+      - name: Verify Taxonomy consistency on isolated PostgreSQL 17 and PostgREST
+        run: npm run verify:taxonomy-consistency-postgres17
+
+      - name: Generate the disposable Taxonomy schema TypeScript contract
+        run: >-
+          supabase gen types typescript
+          --db-url "$TAXONOMY_CONSISTENCY_DATABASE_URL"
+          --schema public
+          > "$RUNNER_TEMP/taxonomy-consistency.database.types.ts"
+
+      - name: Verify Taxonomy generated RPC type provenance
+        env:
+          TAXONOMY_CONSISTENCY_GENERATED_TYPES_PATH: ${{ runner.temp }}/taxonomy-consistency.database.types.ts
+        run: npm run verify:taxonomy-consistency-generated-types
+
   dashboard-truth-postgres:
     name: Dashboard Truth · PostgreSQL 17
     runs-on: ubuntu-latest

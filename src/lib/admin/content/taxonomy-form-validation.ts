@@ -62,9 +62,36 @@ export const seriesTaxonomyFormSchema = z.object({
 
 export type TaxonomyFieldErrors = Record<string, string[]>;
 
+export type TaxonomyExpectedRevisionResult =
+  | { ok: true; value: string }
+  | { ok: false; reason: "missing" | "invalid" };
+
+const taxonomyExpectedRevisionSchema = z
+  .string()
+  .trim()
+  .datetime({ offset: true });
+
 export function taxonomyFormDataValue(formData: FormData, name: string) {
   const value = formData.get(name);
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * Validates the opaque PostgreSQL revision token without normalizing it through
+ * Date, which would discard sub-millisecond precision.
+ */
+export function parseTaxonomyExpectedRevision(
+  formData: FormData,
+): TaxonomyExpectedRevisionResult {
+  const rawValue = formData.get("expected_updated_at");
+  if (typeof rawValue !== "string" || rawValue.trim() === "") {
+    return { ok: false, reason: "missing" };
+  }
+
+  const parsed = taxonomyExpectedRevisionSchema.safeParse(rawValue);
+  return parsed.success
+    ? { ok: true, value: parsed.data }
+    : { ok: false, reason: "invalid" };
 }
 
 export function categoryTaxonomyFormInput(formData: FormData) {

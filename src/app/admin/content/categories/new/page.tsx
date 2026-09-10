@@ -11,7 +11,11 @@ export const dynamic = "force-dynamic";
 
 export default async function NewTopicCategoryPage() {
   await requireAdminSession();
-  const parentOptions = await loadCategoryParentFormOptions();
+  const parentOptionsResult = await loadCategoryParentFormOptions();
+  if (parentOptionsResult.status === "error") {
+    throw parentOptionsResult.error;
+  }
+  const parentOptions = parentOptionsResult.data;
 
   return (
     <AdminPageExperience>

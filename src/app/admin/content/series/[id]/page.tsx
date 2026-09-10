@@ -30,10 +30,18 @@ export default async function EditSeriesPage({
   const { id: rawId } = await params;
   if (!/^\d+$/.test(rawId)) notFound();
   const id = Number(rawId);
-  const series = await loadSeriesFormRecord(id);
-  const categoryOptions = await loadSeriesCategoryFormOptions(
+  const seriesResult = await loadSeriesFormRecord(id);
+  if (seriesResult.status === "error") throw seriesResult.error;
+  if (seriesResult.status === "not_found") notFound();
+
+  const series = seriesResult.data;
+  const categoryOptionsResult = await loadSeriesCategoryFormOptions(
     series.category_id,
   );
+  if (categoryOptionsResult.status === "error") {
+    throw categoryOptionsResult.error;
+  }
+  const categoryOptions = categoryOptionsResult.data;
 
   return (
     <AdminPageExperience>

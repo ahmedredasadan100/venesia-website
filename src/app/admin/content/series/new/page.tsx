@@ -11,7 +11,11 @@ export const dynamic = "force-dynamic";
 
 export default async function NewSeriesPage() {
   await requireAdminSession();
-  const categoryOptions = await loadSeriesCategoryFormOptions();
+  const categoryOptionsResult = await loadSeriesCategoryFormOptions();
+  if (categoryOptionsResult.status === "error") {
+    throw categoryOptionsResult.error;
+  }
+  const categoryOptions = categoryOptionsResult.data;
 
   return (
     <AdminPageExperience>

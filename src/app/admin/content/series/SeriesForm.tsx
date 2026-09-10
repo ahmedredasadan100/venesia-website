@@ -23,6 +23,7 @@ import {
   createSeriesForm,
   updateSeriesForm,
 } from "../taxonomy-form-actions";
+import TaxonomyExpectedRevisionInput from "../TaxonomyExpectedRevisionInput";
 
 type SeriesFormProps = {
   mode: "create" | "edit";
@@ -51,6 +52,9 @@ export default function SeriesForm({
         <>
           {series?.id ? (
             <input type="hidden" name="id" value={series.id} />
+          ) : null}
+          {isEdit ? (
+            <TaxonomyExpectedRevisionInput initialRevision={series?.updated_at} />
           ) : null}
 
           <AdminFormSection

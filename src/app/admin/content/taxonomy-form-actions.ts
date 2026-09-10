@@ -16,11 +16,13 @@ import {
   categoryTaxonomyFormInput,
   categoryTaxonomyFormSchema,
   flattenTaxonomyValidationErrors,
+  parseTaxonomyExpectedRevision,
   seriesTaxonomyFormInput,
   seriesTaxonomyFormSchema,
   taxonomyFormDataValue,
 } from "../../../lib/admin/content/taxonomy-form-validation";
 import {
+  createTopicSeriesAtomically,
   updateTopicCategoryAtomically,
   updateTopicSeriesAtomically,
 } from "../../../lib/admin/content/taxonomy-mutations";
@@ -32,6 +34,16 @@ type DatabaseErrorLike = {
   code?: string;
   message?: string;
 };
+
+type TaxonomyMutationFailureCode =
+  | "invalid_input"
+  | "unauthorized_actor"
+  | "not_found"
+  | "revision_conflict"
+  | "parent_unavailable"
+  | "hierarchy_cycle"
+  | "category_unavailable"
+  | "series_category_conflict";
 
 async function getSeriesCategoryChangeError(
   seriesId: number,
@@ -59,6 +71,7 @@ function buildFormFailure(
   revision: number,
   message: string,
   fieldErrors?: Record<string, string[]>,
+  code?: string,
 ): AdminFormActionState {
   const focusTarget = fieldErrors
     ? Object.entries(fieldErrors).find(([, messages]) => messages.length > 0)?.[0]
@@ -69,6 +82,7 @@ function buildFormFailure(
     revision,
     title: "تعذر حفظ البيانات",
     message,
+    ...(code ? { code } : {}),
     ...(focusTarget ? { focusTarget } : {}),
     ...(fieldErrors ? { fieldErrors } : {}),
   };
@@ -92,8 +106,102 @@ function buildFormSuccess(
     entityId,
     mode,
     ...(code === "created" ? { editHref } : {}),
-    savedRevision: `${entityId}:${savedRevision}`,
+    savedRevision,
   };
+}
+
+function buildTaxonomyMutationFailure(
+  mode: AdminFormMode,
+  revision: number,
+  code: TaxonomyMutationFailureCode,
+): AdminFormActionState {
+  switch (code) {
+    case "revision_conflict":
+      return buildFormFailure(
+        mode,
+        revision,
+        "تم تعديل السجل من جلسة أخرى. راجع تغييراتك ثم أعد تحميل الصفحة قبل المحاولة مجددًا.",
+        undefined,
+        code,
+      );
+    case "not_found":
+      return buildFormFailure(
+        mode,
+        revision,
+        "السجل لم يعد موجودًا. أعد تحميل الصفحة قبل المتابعة.",
+        undefined,
+        code,
+      );
+    case "parent_unavailable":
+      return buildFormFailure(
+        mode,
+        revision,
+        "التصنيف الأب المحدد لم يعد متاحًا.",
+        { parent_id: ["اختر تصنيفًا أب متاحًا."] },
+        code,
+      );
+    case "hierarchy_cycle":
+      return buildFormFailure(
+        mode,
+        revision,
+        "لا يمكن نقل التصنيف داخل نفسه أو داخل أحد فروعه.",
+        { parent_id: ["اختر موضعًا لا ينشئ دورة هرمية."] },
+        code,
+      );
+    case "category_unavailable":
+      return buildFormFailure(
+        mode,
+        revision,
+        "التصنيف المحدد غير موجود أو غير متاح للنشر.",
+        { category_id: ["اختر تصنيفًا منشورًا ومتاحًا."] },
+        code,
+      );
+    case "series_category_conflict":
+      return buildFormFailure(
+        mode,
+        revision,
+        `${TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE} انقل أو أزل ارتباط الموضوعات الحالية أولًا.`,
+        {
+          category_id: [
+            "لا يمكن تغيير تصنيف سلسلة ما دامت مرتبطة بموضوعات.",
+          ],
+        },
+        code,
+      );
+    case "unauthorized_actor":
+      return buildFormFailure(
+        mode,
+        revision,
+        "تعذر إثبات صلاحية الجلسة الإدارية. أعد تسجيل الدخول ثم حاول مرة أخرى.",
+        undefined,
+        code,
+      );
+    case "invalid_input":
+      return buildFormFailure(
+        mode,
+        revision,
+        "بيانات الحفظ غير صالحة. راجع الحقول ثم حاول مرة أخرى.",
+        undefined,
+        code,
+      );
+  }
+}
+
+function buildExpectedRevisionFailure(
+  mode: AdminFormMode,
+  revision: number,
+  reason: "missing" | "invalid",
+): AdminFormActionState {
+  const missing = reason === "missing";
+  return buildFormFailure(
+    mode,
+    revision,
+    missing
+      ? "تعذر إثبات نسخة السجل المفتوحة. أعد تحميل الصفحة قبل الحفظ."
+      : "نسخة السجل المفتوحة غير صالحة. أعد تحميل الصفحة قبل الحفظ.",
+    undefined,
+    missing ? "revision_missing" : "revision_invalid",
+  );
 }
 
 function getDatabaseError(error: unknown): DatabaseErrorLike {
@@ -191,13 +299,16 @@ async function validateSeriesCategory(
 ) {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
-    .select("id, is_active")
+    .select("id, is_active, status")
     .eq("id", categoryId)
     .is("deleted_at", null)
     .maybeSingle();
   if (error) throw error;
   if (!data) return "التصنيف المحدد غير موجود.";
-  if (data.is_active === false && data.id !== currentCategoryId) {
+  if (
+    data.id !== currentCategoryId &&
+    (data.is_active !== true || data.status !== "published")
+  ) {
     return "لا يمكن ربط السلسلة بتصنيف غير منشور.";
   }
   return null;
@@ -302,6 +413,14 @@ export async function updateCategoryForm(
   if (!Number.isInteger(id) || id <= 0) {
     return formFailure("معرّف التصنيف غير صالح.");
   }
+  const expectedRevision = parseTaxonomyExpectedRevision(formData);
+  if (!expectedRevision.ok) {
+    return buildExpectedRevisionFailure(
+      mode,
+      revision,
+      expectedRevision.reason,
+    );
+  }
 
   const { data: current, error: currentError } = await getSupabaseAdmin()
     .from("topic_categories")
@@ -338,7 +457,11 @@ export async function updateCategoryForm(
       isActive: parsed.data.is_published,
       colorToken,
       actorId: actor.id,
+      expectedUpdatedAt: expectedRevision.value,
     });
+    if (!mutation.ok) {
+      return buildTaxonomyMutationFailure(mode, revision, mutation.code);
+    }
     const nextStatus = parsed.data.is_published
       ? "published"
       : "unpublished";
@@ -371,7 +494,7 @@ export async function updateCategoryForm(
       "updated",
       id,
       `/admin/content/categories/${id}`,
-      mutation.category.updated_at ?? String(revision),
+      mutation.category.updated_at,
     );
   } catch (error) {
     return databaseFormFailure(error, "تعذر تحديث التصنيف. حاول مرة أخرى.");
@@ -402,51 +525,37 @@ export async function createSeriesForm(
   }
 
   try {
-    const categoryError = await validateSeriesCategory(parsed.data.category_id);
-    if (categoryError) {
-      return formFailure(categoryError, { category_id: [categoryError] });
-    }
-    if (await slugExists("topic_series", parsed.data.slug)) {
-      return formFailure("هذا الـ Slug مستخدم في سلسلة أخرى.", {
-        slug: ["اختر Slug مختلفًا."],
-      });
-    }
-
-    const now = new Date().toISOString();
     const status = parsed.data.is_published ? "published" : "unpublished";
-    const { data, error } = await getSupabaseAdmin()
-      .from("topic_series")
-      .insert({
-        name: parsed.data.name,
-        slug: parsed.data.slug,
-        category_id: parsed.data.category_id,
-        status,
-        sort_order: 0,
-        deleted_at: null,
-        created_at: now,
-        updated_at: now,
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
+    const mutation = await createTopicSeriesAtomically({
+      name: parsed.data.name,
+      slug: parsed.data.slug,
+      categoryId: parsed.data.category_id,
+      status,
+      actorId: actor.id,
+    });
+    if (!mutation.ok) {
+      return buildTaxonomyMutationFailure(mode, revision, mutation.code);
+    }
 
+    // This remains the canonical audit owner; it records only after the RPC's
+    // governing result is ok:true and internally contains audit write failures.
     await recordCmsAdminAudit(
       {
         action: buildCmsAuditAction("topic_series", "create"),
         entityType: "topic_series",
-        entityId: data.id,
+        entityId: mutation.series.id,
         entityLabel: parsed.data.name,
         metadata: { slug: parsed.data.slug, status, category_id: parsed.data.category_id },
       },
       actor,
     );
-    revalidateTaxonomyPaths(`/admin/content/series/${data.id}`);
+    revalidateTaxonomyPaths(`/admin/content/series/${mutation.series.id}`);
     return formSuccess(
       "تم إنشاء السلسلة بنجاح.",
       "created",
-      data.id,
-      `/admin/content/series/${data.id}`,
-      now,
+      mutation.series.id,
+      `/admin/content/series/${mutation.series.id}`,
+      mutation.series.updated_at,
     );
   } catch (error) {
     return databaseFormFailure(error, "تعذر إنشاء السلسلة. حاول مرة أخرى.");
@@ -469,6 +578,14 @@ export async function updateSeriesForm(
   const id = Number(taxonomyFormDataValue(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) {
     return formFailure("معرّف السلسلة غير صالح.");
+  }
+  const expectedRevision = parseTaxonomyExpectedRevision(formData);
+  if (!expectedRevision.ok) {
+    return buildExpectedRevisionFailure(
+      mode,
+      revision,
+      expectedRevision.reason,
+    );
   }
 
   const { data: current, error: currentError } = await getSupabaseAdmin()
@@ -519,7 +636,11 @@ export async function updateSeriesForm(
       categoryId: parsed.data.category_id,
       status,
       actorId: actor.id,
+      expectedUpdatedAt: expectedRevision.value,
     });
+    if (!mutation.ok) {
+      return buildTaxonomyMutationFailure(mode, revision, mutation.code);
+    }
 
     await recordCmsAdminAudit(
       {
@@ -541,7 +662,7 @@ export async function updateSeriesForm(
       "updated",
       id,
       `/admin/content/series/${id}`,
-      mutation.series.updated_at ?? String(revision),
+      mutation.series.updated_at,
     );
   } catch (error) {
     return databaseFormFailure(error, "تعذر تحديث السلسلة. حاول مرة أخرى.");

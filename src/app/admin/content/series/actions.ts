@@ -345,6 +345,13 @@ export async function duplicateSeriesAjax(id: number): Promise<AdminActionResult
     })
     .select("id")
     .single();
+  if (insertError?.code === "23503") {
+    return adminActionFailure(
+      "تعذر نسخ السلسلة",
+      "التصنيف المرتبط لم يعد منشورًا ونشطًا ومتاحًا. حدّث الصفحة ثم اختر تصنيفًا متاحًا قبل المحاولة مرة أخرى.",
+      { code: "invalid_input", entityId: id },
+    );
+  }
   if (insertError || !inserted) {
     return adminActionFailure(
       "تعذر نسخ السلسلة",

@@ -91,12 +91,13 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The 2026-09-05 authorized Migration 100 application and registry reconciliation established the following current facts against the configured Supabase Production project.
+The 2026-09-05 authorized Migration 100 application and registry reconciliation established the Production facts below. The repository now contains 101 migrations, while the Production migration registry remains last-known at 100; Migration 101 is a PR candidate and is unapplied.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                               100 |
+| Repository migration files                        |                                               101 |
 | Production registry versions                      |                                               100 |
+| Migration 101 rollout state                       |                         PR candidate / unapplied |
 | Current Production live state                     |                    Verified on 2026-09-05 |
 | Registry SQL provenance                           | Exact repository SQL for all 100 recorded versions |
 | Public tables                                     |                                                58 |
@@ -112,6 +113,8 @@ The 2026-09-05 authorized Migration 100 application and registry reconciliation 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
 Production migration `20260905090000_topics_bulk_publish_atomicity.sql` was applied once and reconciled into the canonical registry as migration 100 with exact repository SQL provenance. The corresponding application code was merged by PR #140 and is part of the current `main` baseline.
+
+Repository migration 101, `20260907214608_p1_e_taxonomy_consistency.sql`, is a PR candidate only. It has not been applied to Production.
 
 The RPC owns the bounded, revision-checked Topic transitions and their per-Topic Mutation Audit rows inside one database transaction. Application code remains the sole owner of semantic Publish Validation, and post-commit Media Center cache invalidation remains with the existing `revalidateMediaCenterPublicPaths` owner.
 

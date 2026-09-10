@@ -8,10 +8,10 @@ import { logError } from "../../lib/logging";
 
 export default function AdminError({
   error,
-  retry,
+  reset,
 }: {
   error: Error & { digest?: string };
-  retry: () => void;
+  reset: () => void;
 }) {
   useEffect(() => {
     logError("Admin route render failed", error, {
@@ -31,7 +31,7 @@ export default function AdminError({
         actions={
           <button
             type="button"
-            onClick={retry}
+            onClick={reset}
             className="rounded-2xl border border-white/15 bg-white/[0.06] px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
           >
             إعادة المحاولة

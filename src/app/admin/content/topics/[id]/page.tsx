@@ -12,13 +12,17 @@ import {
   flattenAdminCategoryTree,
 } from "../../../../../lib/admin/content/category-hierarchy";
 import {
+  invalidTopicFormRecord,
+  loadTopicFormRecord,
+  loadTopicTaxonomyFormDependencies,
+} from "../../../../../lib/admin/content/load-taxonomy-form-data";
+import {
   getContentTypeLabel,
   isContentType,
   isMediaEditableContentType,
   resolveContentEditor,
 } from "../../../../../lib/admin/content/content-types";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
-import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import MediaContentForm from "../../../../../components/admin/content/editors/media/MediaContentForm";
 import { parseMediaTopicPayload } from "../../../../../lib/admin/media-topic-payload";
 import {
@@ -50,52 +54,25 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
   const topicId = Number(id);
   if (!Number.isSafeInteger(topicId) || topicId <= 0) notFound();
 
-  const supabase = getSupabaseAdmin();
-  const [
-    { data: topic },
-    { data: categoryRows },
-    { data: seriesRows },
-  ] = await Promise.all([
-    supabase
-      .from("topics")
-      .select("*")
-      .eq("id", topicId)
-      .is("deleted_at", null)
-      .maybeSingle(),
-    supabase
-      .from("topic_categories")
-      .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")
-      .is("deleted_at", null)
-      .order("sort_order", { ascending: true })
-      .order("id", { ascending: true }),
-    supabase
-      .from("topic_series")
-      .select("id,name,slug,status,deleted_at,category_id")
-      .is("deleted_at", null)
-      .order("sort_order", { ascending: true })
-      .order("name", { ascending: true }),
-  ]);
+  const topicResult = await loadTopicFormRecord(topicId);
+  if (topicResult.status === "error") throw topicResult.error;
+  if (topicResult.status === "not_found") notFound();
 
-  if (!topic || !isContentType(topic.content_type)) notFound();
-  const editorKind = resolveContentEditor(topic.content_type);
-  if (!editorKind) notFound();
-  const categories = categoryRows ?? [];
-  const selectableCategories = categories
-    .filter(
-      (category) =>
-        category.status === "published" || category.id === topic.category_id,
-    )
-    .map((category) =>
-      category.id === topic.category_id
-        ? { ...category, is_active: true }
-        : category,
-    );
-  const allSeries = seriesRows ?? [];
-  const selectableSeries = allSeries.filter(
-    (item) =>
-      (item.status === "published" && !item.deleted_at) ||
-      item.id === topic.series_id,
-  );
+  const topic = topicResult.data;
+  const contentType = topic.content_type;
+  if (!isContentType(contentType)) throw invalidTopicFormRecord().error;
+  const editorKind = resolveContentEditor(contentType);
+  if (!editorKind) throw invalidTopicFormRecord().error;
+
+  const taxonomyResult = await loadTopicTaxonomyFormDependencies({
+    currentCategoryId: topic.category_id,
+    currentSeriesId: topic.series_id,
+  });
+  if (taxonomyResult.status === "error") throw taxonomyResult.error;
+  const {
+    categories: selectableCategories,
+    series: selectableSeries,
+  } = taxonomyResult.data;
   const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
 
   if (editorKind === "article") {
@@ -110,7 +87,9 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
     );
   }
 
-  if (!isMediaEditableContentType(topic.content_type)) notFound();
+  if (!isMediaEditableContentType(contentType)) {
+    throw invalidTopicFormRecord().error;
+  }
   const flattenedCategories = flattenAdminCategoryTree(
     buildAdminCategoryTree(selectableCategories),
   );
@@ -120,7 +99,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       <AdminPageContextHeader
         eyebrow="UNIFIED CONTENT ENGINE"
         title="تعديل موضوع"
-        description={`${topic.title || "بدون عنوان"} — المحرر الحالي: ${getContentTypeLabel(topic.content_type)}. اختيار المحرر يعتمد على content_type فقط.`}
+        description={`${topic.title || "بدون عنوان"} — المحرر الحالي: ${getContentTypeLabel(contentType)}. اختيار المحرر يعتمد على content_type فقط.`}
         actions={
           <>
             <AdminActionButton href={returnPath} variant="dark">عرض الموضوعات</AdminActionButton>
@@ -130,7 +109,7 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
               capability={buildAdminContentPreviewCapability({
                 entityType: "topic",
                 id: topic.id,
-                contentType: topic.content_type,
+                contentType,
                 slug: topic.slug,
                 publicationStatus: topic.status,
                 allowedActions: ["internal-preview"],
@@ -151,9 +130,9 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       {errorMessage ? <AdminNotice variant="danger" title="تعذر حفظ المحتوى" message={errorMessage} /> : null}
       <MediaContentForm
         mode="edit"
-        contentType={topic.content_type}
+        contentType={contentType}
         categories={flattenedCategories}
-        series={allSeries}
+        series={selectableSeries}
         returnPath={returnPath}
         errorMessage={errorMessage}
         values={{
