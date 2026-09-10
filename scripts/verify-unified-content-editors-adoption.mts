@@ -417,25 +417,6 @@ function staticObjectPath(
   return staticString(objectPathExpression(root, variableName, path) ?? undefined);
 }
 
-function hasIndexedFieldLiteral(root: ts.Node, field: string) {
-  const decimalDigits = new Set(["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
-  return collectNodes(
-    root,
-    (
-      node,
-    ): node is ts.StringLiteralLike | ts.NoSubstitutionTemplateLiteral =>
-      ts.isStringLiteralLike(node) || ts.isNoSubstitutionTemplateLiteral(node),
-  ).some((literal) => {
-    if (!literal.text.startsWith(field)) return false;
-    const suffix = literal.text.slice(field.length);
-    return (
-      suffix.startsWith("[") ||
-      suffix.startsWith(".") ||
-      (suffix.startsWith("-") && decimalDigits.has(suffix[1] ?? ""))
-    );
-  });
-}
-
 function bindingIdentifiers(name: ts.BindingName): readonly string[] {
   if (ts.isIdentifier(name)) return [name.text];
   return name.elements.flatMap((element) =>
@@ -812,8 +793,12 @@ for (const sourceBlocker of CONTENT_EDITOR_SOURCE_BLOCKERS) {
   );
 }
 assert.ok(
-  globalClosureBlockerIds.has("gallery-admin-shared-media-adoption"),
-  "Gallery Admin shared-media adoption must remain an explicit closure blocker until it is fixed and verified.",
+  !globalClosureBlockerIds.has("gallery-admin-shared-media-adoption") &&
+    !CONTENT_EDITOR_SOURCE_BLOCKERS.some(
+      (blocker) =>
+        String(blocker.id) === "gallery-admin-shared-media-adoption",
+    ),
+  "Gallery Admin shared-media adoption must leave the blocker registry only after source and behavior proof.",
 );
 assert.ok(
   globalClosureBlockerIds.has("gallery-public-projection"),
@@ -1083,11 +1068,19 @@ for (const [findingId, evidenceOwner] of [
     "adm-06-publish-title-quality-policy",
     "scripts/verify-content-publish-validation-truth.mts",
   ],
+  [
+    "adm-08-shared-gallery-authoring",
+    "scripts/qa-admin-shared-gallery-authoring.mts",
+  ],
 ] as const) {
   const proof = CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER.find(
     (candidate) => candidate.id === findingId,
   );
   assert.ok(proof, `${findingId} must be recorded in the Content Editor ledger.`);
+  assert.ok(
+    existsSync(join(ROOT, evidenceOwner)),
+    `${findingId} must reference an existing rerunnable evidence owner.`,
+  );
   assert.equal(
     proof.state,
     "behavior_verified",
@@ -1104,6 +1097,19 @@ for (const [findingId, evidenceOwner] of [
     `${findingId} is bounded and must not hide broader Content Editor blockers.`,
   );
 }
+
+const packageScripts = (
+  JSON.parse(readSource("package.json")) as {
+    scripts?: Record<string, string>;
+  }
+).scripts ?? {};
+assert.ok(
+  packageScripts["verify:content-editor-adoption"]?.includes(
+    "qa:shared-gallery-authoring",
+  ) &&
+    packageScripts["ci:check"]?.includes("verify:content-editor-adoption"),
+  "ADM-08 behavioral proof must remain executable through the Content Editor CI path.",
+);
 
 const negativeStateGuardFixtures: ReadonlyArray<{
   id: string;
@@ -1380,8 +1386,8 @@ for (const preset of VENESIA_CONTENT_TEMPLATE_PRESETS.filter(
 const mediaVideoFields = readParsedSource(
   "src/components/admin/content/editors/media/MediaVideoFields.tsx",
 );
-const mediaGalleryFields = readParsedSource(
-  "src/components/admin/content/editors/media/MediaGalleryFields.tsx",
+const adminMediaGalleryField = readParsedSource(
+  CONTENT_EDITOR_ARCHITECTURE.mediaGalleryOwner,
 );
 const adminMediaImageField = readParsedSource(
   "src/components/admin/media/AdminMediaImageField.tsx",
@@ -1508,41 +1514,81 @@ assert.ok(
   "The shared Media image presentation owner must retain native button semantics while putting thumbnail focus and dialog ARIA on its actionable visible picker.",
 );
 
-for (const field of ["gallery_image_url", "gallery_image_alt"] as const) {
-  const inputs = jsxElements(mediaGalleryFields, "input").filter(
-    (element) => jsxAttributeStaticString(element, "name") === field,
-  );
-  const errors = jsxElements(mediaGalleryFields, "AdminFormError").filter(
-    (element) => jsxAttributeStaticString(element, "name") === field,
-  );
-  assert.equal(
-    errors.length,
-    1,
-    `${field} aggregate error must render exactly once in source, not once per error row.`,
-  );
-  assert.equal(
-    inputs.length,
-    1,
-    `${field} must retain one repeated FormData control declaration.`,
-  );
-  assert.ok(
-    inputs.every((element) =>
-      jsxHasAttributes(element, ["id", "aria-invalid", "aria-describedby"]),
-    ) &&
-      hasStaticString(mediaGalleryFields, `${field}-error`) &&
-      !hasIndexedFieldLiteral(mediaGalleryFields, field),
-    `${field} must expose a stable aria-describedby error id.`,
-  );
-}
+const galleryOwnerUse = jsxElements(
+  mediaContentForm,
+  "AdminMediaGalleryField",
+).find(
+  (element) =>
+    jsxAttributeStaticString(element, "valueMode") === "items" &&
+    jsxAttributeStaticString(element, "name") === "gallery_image_url" &&
+    jsxAttributeStaticString(element, "altName") === "gallery_image_alt" &&
+    jsxAttributeStaticString(element, "captionName") ===
+      "gallery_image_caption",
+);
+assertExecutableSourceBinding(
+  mediaContentFormSourceFile,
+  CONTENT_EDITOR_ARCHITECTURE.mediaGalleryOwner,
+  "default",
+);
 assert.ok(
-  hasIdentifier(mediaGalleryFields, "altErrorIndex") &&
-    hasPropertyPath(mediaGalleryFields, ["row", "url"]) &&
-    hasCall(mediaGalleryFields, "trim") &&
-    hasStaticString(mediaGalleryFields, "gallery_image_url") &&
-    hasStaticString(mediaGalleryFields, "gallery_image_alt") &&
-    hasIdentifier(mediaGalleryFields, "hasUrlError") &&
-    hasIdentifier(mediaGalleryFields, "hasAltError"),
-  "Gallery aggregate errors must bind once to the first suitable visible URL or missing Alt control.",
+  galleryOwnerUse &&
+    jsxAttributeStaticString(galleryOwnerUse, "focusTargetId") ===
+      "gallery_image_url" &&
+    jsxAttributeStaticString(galleryOwnerUse, "altFocusTargetId") ===
+      "gallery_image_alt" &&
+    !existsSync(
+      join(
+        ROOT,
+        "src/components/admin/content/editors/media/MediaGalleryFields.tsx",
+      ),
+    ),
+  "Gallery create/edit must adopt the shared Media Gallery owner directly with canonical ordered item and validation targets, leaving no local implementation.",
+);
+const galleryUrlInputs = jsxElements(adminMediaGalleryField, "input").filter(
+  (element) => jsxAttributePathIs(element, "name", ["props", "name"]),
+);
+const galleryAltInputs = jsxElements(adminMediaGalleryField, "input").filter(
+  (element) => jsxAttributePathIs(element, "name", ["props", "altName"]),
+);
+const galleryCaptionInputs = jsxElements(
+  adminMediaGalleryField,
+  "input",
+).filter((element) =>
+  jsxAttributePathIs(element, "name", ["props", "captionName"]),
+);
+const galleryErrors = jsxElements(adminMediaGalleryField, "AdminFormError");
+assert.ok(
+  hasTypeProperty(adminMediaGalleryField, "valueMode") &&
+    hasTypeProperty(adminMediaGalleryField, "defaultItems") &&
+    hasTypeProperty(adminMediaGalleryField, "altName") &&
+    hasTypeProperty(adminMediaGalleryField, "captionName") &&
+    galleryUrlInputs.some(
+      (element) => jsxAttributeStaticString(element, "type") === "hidden",
+    ) &&
+    galleryAltInputs.length === 1 &&
+    galleryCaptionInputs.length === 1 &&
+    galleryErrors.length === 2 &&
+    galleryErrors.some((element) =>
+      jsxAttributePathIs(element, "name", ["props", "name"]),
+    ) &&
+    galleryErrors.some((element) =>
+      jsxAttributePathIs(element, "name", ["props", "altName"]),
+    ),
+  "The shared Media Gallery owner must project ordered URL, Alt, and Caption controls while keeping URL selection picker-owned.",
+);
+assert.ok(
+  hasIdentifier(adminMediaGalleryField, "altErrorIndex") &&
+    hasCall(adminMediaGalleryField, "trim") &&
+    hasIdentifier(adminMediaGalleryField, "hasUrlError") &&
+    hasIdentifier(adminMediaGalleryField, "hasAltError") &&
+    hasIdentifier(adminMediaGalleryField, "focusTargetId") &&
+    hasIdentifier(adminMediaGalleryField, "altFocusTargetId") &&
+    hasStaticString(adminMediaGalleryField, "input") &&
+    hasCall(adminMediaGalleryField, "dispatchEvent") &&
+    ["add", "replace", "remove", "move-up", "move-down"].every((action) =>
+      hasStaticString(adminMediaGalleryField, action),
+    ),
+  "The shared Gallery owner must retain aggregate error focus and notify form and review ownership after every structural mutation.",
 );
 
 const specializedNavigationTargets = {
@@ -1796,6 +1842,7 @@ for (const sourceFile of [
   CONTENT_EDITOR_ARCHITECTURE.publishingOwner,
   CONTENT_EDITOR_ARCHITECTURE.displaySettingsOwner,
   CONTENT_EDITOR_ARCHITECTURE.seoOwner,
+  CONTENT_EDITOR_ARCHITECTURE.mediaGalleryOwner,
   ...CONTENT_EDITOR_ARCHITECTURE.persistenceAdapters,
   ...CONTENT_EDITOR_EXECUTABLE_BINDINGS.map((binding) => binding.sourceFile),
 ]) {

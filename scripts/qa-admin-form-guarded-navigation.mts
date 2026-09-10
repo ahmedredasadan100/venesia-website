@@ -111,7 +111,7 @@ import ContentEditorShell from "@content-editor-shell";
 import TopicMarkdownEditor from "@topic-markdown-editor";
 import SeoPanel from "@seo-panel";
 import MediaVideoFields from "@media-video-fields";
-import MediaGalleryFields from "@media-gallery-fields";
+import AdminMediaGalleryField from "@admin-media-gallery-field";
 import { createTopicDraft } from "@topic-revision";
 
 const qa = {
@@ -365,14 +365,21 @@ function ContentHarness({ actionOutcomes = ["success"], deferAction = false }) {
               defaultDuration: "1:30",
               defaultThumbnail: "",
             }),
-            React.createElement(MediaGalleryFields, {
-              defaultImages: [
+            React.createElement(AdminMediaGalleryField, {
+              valueMode: "items",
+              name: "gallery_image_url",
+              altName: "gallery_image_alt",
+              captionName: "gallery_image_caption",
+              label: "Gallery images",
+              defaultItems: [
                 {
                   url: "/images/qa-gallery.jpg",
                   alt: "QA gallery alt",
                   caption: "QA gallery caption",
                 },
               ],
+              focusTargetId: "gallery_image_url",
+              altFocusTargetId: "gallery_image_alt",
             }),
             React.createElement(RuntimeProbe),
           ),
@@ -492,8 +499,26 @@ export default function Image({ fill, priority, loader, unoptimized, ...props })
 `;
 
 const mediaPickerMockSource = String.raw`
-export function AdminMediaPickerModal() {
-  return null;
+import * as React from "react";
+
+export function AdminMediaPickerModal({ open, onClose, onSelect }) {
+  if (!open) return null;
+  return React.createElement(
+    "div",
+    { role: "dialog", "aria-label": "QA media picker" },
+    React.createElement(
+      "button",
+      {
+        type: "button",
+        "data-admin-media-picker-qa-confirm": "",
+        onClick: () => {
+          onSelect("/images/qa-gallery-error.jpg");
+          onClose();
+        },
+      },
+      "Confirm QA image",
+    ),
+  );
 }
 export default AdminMediaPickerModal;
 `;
@@ -573,9 +598,9 @@ async function compileHarness(rootDir: string, tempDir: string) {
           rootDir,
           "src/components/admin/content/editors/media/MediaVideoFields.tsx",
         ),
-        "@media-gallery-fields": path.join(
+        "@admin-media-gallery-field": path.join(
           rootDir,
-          "src/components/admin/content/editors/media/MediaGalleryFields.tsx",
+          "src/components/admin/media/AdminMediaGalleryField.tsx",
         ),
         "@topic-revision": path.join(
           rootDir,
@@ -1567,8 +1592,9 @@ try {
       browserIssues,
     );
     await page
-      .locator("#gallery_image_url")
-      .fill("/images/qa-gallery-error.jpg");
+      .locator('[data-admin-media-gallery-index="0"] [data-admin-media-gallery-action="replace"]')
+      .click();
+    await page.locator("[data-admin-media-picker-qa-confirm]").click();
     await waitForRuntime(page, { dirty: "true" });
     await page.locator('[data-admin-form-action="save"]').click();
     await waitForRuntime(page, {
@@ -1588,7 +1614,9 @@ try {
         (await page.locator("#gallery_image_alt-error").textContent()) ===
         "Gallery image alt text is required.",
       urlInvalid:
-        (await page.locator("#gallery_image_url").getAttribute("aria-invalid")) ===
+        (await page
+          .locator('[data-admin-media-gallery-mode="items"]')
+          .getAttribute("aria-invalid")) ===
         "true",
       urlDescribedBy:
         (await page
@@ -1602,8 +1630,11 @@ try {
           .locator("#gallery_image_alt")
           .getAttribute("aria-describedby")) === "gallery_image_alt-error",
       liveUrl:
-        (await page.locator("#gallery_image_url").inputValue()) ===
-        "/images/qa-gallery-error.jpg",
+        (await page
+          .locator('input[name="gallery_image_url"]')
+          .first()
+          .inputValue()) ===
+          "/images/qa-gallery-error.jpg",
       liveAlt:
         (await page.locator("#gallery_image_alt").inputValue()) ===
         "QA gallery alt",
@@ -1634,7 +1665,9 @@ try {
       (await getActionCalls(page)) === 2 &&
         (await page.locator("#gallery_image_url-error").count()) === 0 &&
         (await page.locator("#gallery_image_alt-error").count()) === 0 &&
-        (await page.locator("#gallery_image_url").getAttribute("aria-invalid")) ===
+        (await page
+          .locator('[data-admin-media-gallery-mode="items"]')
+          .getAttribute("aria-invalid")) ===
           null &&
         (await page.locator("#gallery_image_alt").getAttribute("aria-invalid")) ===
           null,
