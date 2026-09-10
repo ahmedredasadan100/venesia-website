@@ -42,7 +42,9 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
   ]);
 
   const pagePath = `${config.basePath}/${item.slug}`;
-  const content = item.content?.length ? item.content : config.fallbackContent;
+  const content = item.content?.trim()
+    ? item.content
+    : config.fallbackContent.join("\n\n");
 
   const pageJsonLd = buildPageJsonLd(
     {

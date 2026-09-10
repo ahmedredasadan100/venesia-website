@@ -4,12 +4,14 @@ import type { MediaDetailPageConfig } from "../../lib/media-center/detail-page-c
 import type { MediaContentItem } from "../../lib/media-center/types";
 import { getMediaHref } from "../../lib/media-center/types";
 import { resolveYouTubeEmbedUrl } from "../../lib/admin/media-topic-payload";
+import RichTextContent from "../content/RichTextContent";
+import PublicMediaImage from "../public/PublicMediaImage";
 import MediaDetailHeroImage from "./MediaDetailHeroImage";
 import RelatedMediaRail from "./RelatedMediaRail";
 
 type MediaDetailArticleProps = {
   item: MediaContentItem;
-  content: string[];
+  content: string;
   config: MediaDetailPageConfig;
   relatedItems: MediaContentItem[];
 };
@@ -74,12 +76,53 @@ export default function MediaDetailArticle({
 
       {item.type === "video" ? <MediaVideoPlayback item={item} /> : null}
 
-      <div className="space-y-6 rounded-[2rem] border border-white/10 bg-black/15 p-6 @xl/slot-module:p-7 @3xl/slot-module:p-9">
-        {content.map((paragraph) => (
-          <p key={paragraph} className="text-[15px] leading-9 text-white/68 @xl/slot-module:text-base">
-            {paragraph}
-          </p>
-        ))}
+      {item.type === "gallery" && item.galleryImages?.length ? (
+        <div
+          className="grid gap-4 @xl/slot-module:grid-cols-2"
+          data-public-media-gallery
+          data-public-media-gallery-count={item.galleryImages.length}
+        >
+          {item.galleryImages.map((image, index) => (
+            <figure
+              key={`${item.id}:${index}:${image.url}`}
+              className="overflow-hidden rounded-[1.5rem] border border-white/10 bg-black/15"
+              data-public-media-gallery-item
+              data-public-media-gallery-index={index}
+              data-public-media-gallery-url={image.url}
+            >
+              <div className="relative aspect-[4/3] overflow-hidden bg-white/[0.03]">
+                <PublicMediaImage
+                  src={image.url}
+                  alt={image.alt ?? ""}
+                  fill
+                  sizes="(max-width: 640px) 100vw, 50vw"
+                  className="object-cover"
+                  data-public-media-gallery-image
+                />
+              </div>
+              {image.caption ? (
+                <figcaption
+                  className="px-4 py-3 text-sm leading-7 text-white/55"
+                  data-public-media-gallery-caption
+                >
+                  {image.caption}
+                </figcaption>
+              ) : null}
+            </figure>
+          ))}
+        </div>
+      ) : null}
+
+      <div
+        className="rounded-[2rem] border border-white/10 bg-black/15 p-6 @xl/slot-module:p-7 @3xl/slot-module:p-9"
+        data-public-media-markdown
+      >
+        <RichTextContent
+          value={content}
+          mode="markdown"
+          demoteHeadings
+          className="article-rich-text"
+        />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-[1.5rem] border border-[#D8B87A]/20 bg-[#D8B87A]/[0.07] p-5">

@@ -15,6 +15,8 @@ import {
 import {
   normalizeYouTubeUrl,
   parseMediaTopicPayload,
+  validateGalleryPayload,
+  validateVideoPayload,
 } from "../../admin/media-topic-payload";
 import { formatArabicContentDate } from "../../content-dates";
 import type { Json } from "../../database.types";
@@ -38,7 +40,7 @@ const MEDIA_IMAGE_FALLBACK = "/images/venesia-5.png";
 
 /** Exact projection for every Public Collection read. Body and SEO fields are excluded. */
 export const PUBLIC_CONTENT_COLLECTION_SELECT =
-  "id, slug, title, excerpt, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, media_kind:media_payload->>kind, media_duration:media_payload->>duration, media_gallery_cover:media_payload->images->0->>url, media_project, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
+  "id, slug, title, excerpt, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, media_kind:media_payload->>kind, media_duration:media_payload->>duration, media_thumbnail:media_payload->>thumbnail, media_gallery_cover:media_payload->images->0->>url, media_gallery_cover_alt:media_payload->images->0->>alt, media_project, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
 
 /** Exact projection for one public detail. Collection consumers never receive these fields. */
 export const PUBLIC_CONTENT_DETAIL_SELECT =
@@ -47,6 +49,38 @@ export const PUBLIC_CONTENT_DETAIL_SELECT =
 /** Exact projection for sitemap generation. It avoids loading card, body, and rich-media data. */
 export const PUBLIC_CONTENT_SITEMAP_SELECT =
   "id, slug, content_type, published_at, updated_at, is_featured, canonical_url, robots_index";
+
+export class PublicContentReadError extends Error {
+  readonly code: "query_failed" | "contract_failed";
+
+  constructor(code: PublicContentReadError["code"], message: string) {
+    super(message);
+    this.name = "PublicContentReadError";
+    this.code = code;
+  }
+}
+
+type PublicContentReadFailure = {
+  context: string;
+  error: unknown;
+  details?: Record<string, unknown>;
+};
+
+function failPublicContentRead(
+  code: PublicContentReadError["code"],
+  ...failures: PublicContentReadFailure[]
+): never {
+  for (const failure of failures) {
+    logError(failure.context, failure.error, failure.details ?? {});
+  }
+
+  throw new PublicContentReadError(
+    code,
+    code === "query_failed"
+      ? "تعذر تحميل المحتوى العام حاليًا."
+      : "تعذر تجهيز المحتوى العام للعرض.",
+  );
+}
 
 type PublicContentRow = {
   id: number | string;
@@ -69,7 +103,9 @@ type PublicContentRow = {
   media_payload?: Json | null;
   media_kind?: string | null;
   media_duration?: string | null;
+  media_thumbnail?: string | null;
   media_gallery_cover?: string | null;
+  media_gallery_cover_alt?: string | null;
   media_project: string | null;
   seo_title?: string | null;
   seo_description?: string | null;
@@ -155,30 +191,55 @@ export async function loadPublicContentFilterOptions(): Promise<PublicContentFil
         .order("name", { ascending: true }),
     ]);
 
+    const queryFailures: PublicContentReadFailure[] = [];
     if (categoriesResult.error) {
-      logError(
-        "Public Content category filter options query failed",
-        categoriesResult.error,
-      );
+      queryFailures.push({
+        context: "Public Content category filter options query failed",
+        error: categoriesResult.error,
+      });
     }
     if (seriesResult.error) {
-      logError(
-        "Public Content series filter options query failed",
-        seriesResult.error,
-      );
+      queryFailures.push({
+        context: "Public Content series filter options query failed",
+        error: seriesResult.error,
+      });
+    }
+    if (queryFailures.length) {
+      failPublicContentRead("query_failed", ...queryFailures);
     }
 
     const normalizeOptions = (
       rows: readonly { slug: string | null; name: string | null }[] | null,
-    ) => (rows ?? []).flatMap((row) => {
-      const slug = row.slug?.trim() ?? "";
-      const name = row.name?.trim() ?? "";
-      return slug && name ? [{ slug, name }] : [];
-    });
+      source: "category" | "series",
+    ) => {
+      if (rows === null) {
+        failPublicContentRead("contract_failed", {
+          context: `Public Content ${source} filter options returned null data`,
+          error: new Error(
+            "Public Content filter options do not satisfy the read contract.",
+          ),
+        });
+      }
+
+      return rows.map((row) => {
+        const slug = row.slug?.trim() ?? "";
+        const name = row.name?.trim() ?? "";
+        if (!slug || !name) {
+          failPublicContentRead("contract_failed", {
+            context: `Public Content ${source} filter option is invalid`,
+            error: new Error(
+              "Public Content filter option does not satisfy the read contract.",
+            ),
+            details: { slug: row.slug, name: row.name },
+          });
+        }
+        return { slug, name };
+      });
+    };
 
     return {
-      categories: normalizeOptions(categoriesResult.data),
-      series: normalizeOptions(seriesResult.data),
+      categories: normalizeOptions(categoriesResult.data, "category"),
+      series: normalizeOptions(seriesResult.data, "series"),
     };
   }, ["public-content-filter-options"], {
     revalidate: 300,
@@ -186,35 +247,100 @@ export async function loadPublicContentFilterOptions(): Promise<PublicContentFil
   })();
 }
 
-function mapCollectionRow(row: PublicContentRow): PublicContentSummary | null {
-  if (!isContentType(row.content_type)) return null;
+function mapCollectionRow(row: PublicContentRow): PublicContentSummary {
+  if (!isContentType(row.content_type)) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content collection row has an invalid content type",
+      error: new Error("Public Content row does not satisfy the collection contract."),
+      details: { rowId: row.id, contentType: row.content_type },
+    });
+  }
   const id = Number(row.id);
   const slug = row.slug?.trim() ?? "";
-  if (!Number.isInteger(id) || !slug) return null;
+  if (!Number.isInteger(id) || !slug) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content collection row has an invalid identity",
+      error: new Error("Public Content row does not satisfy the collection contract."),
+      details: { rowId: row.id, contentType: row.content_type, slug: row.slug },
+    });
+  }
 
   const mediaPayload = parseMediaTopicPayload(row.media_payload);
+  const projectedMediaKind = row.media_kind?.trim() ?? "";
+  if (
+    projectedMediaKind &&
+    projectedMediaKind !== "video" &&
+    projectedMediaKind !== "gallery"
+  ) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content row has an invalid Rich Media kind",
+      error: new Error("Public Content Rich Media does not satisfy the read contract."),
+      details: { rowId: row.id, contentType: row.content_type },
+    });
+  }
   const mediaKind = row.media_kind === "video" || row.media_kind === "gallery"
     ? row.media_kind
     : mediaPayload?.kind ?? null;
-  const galleryCover = row.media_gallery_cover ?? (
-    mediaPayload?.kind === "gallery" ? mediaPayload.images[0]?.url : undefined
+  const explicitImage = row.image?.trim() ?? "";
+  const galleryCover = row.media_gallery_cover?.trim() || (
+    mediaPayload?.kind === "gallery" ? mediaPayload.images[0]?.url?.trim() : ""
   );
+  const galleryCoverAlt = row.media_gallery_cover_alt?.trim() || (
+    mediaPayload?.kind === "gallery" ? mediaPayload.images[0]?.alt?.trim() : ""
+  );
+  const videoThumbnail = row.media_thumbnail?.trim() || (
+    mediaPayload?.kind === "video" ? mediaPayload.thumbnail?.trim() : ""
+  );
+  const payloadImage = mediaKind === "gallery"
+    ? galleryCover
+    : mediaKind === "video"
+      ? videoThumbnail
+      : "";
+
+  const expectedMediaKind = row.content_type === "video" || row.content_type === "gallery"
+    ? row.content_type
+    : null;
+  if (mediaKind !== expectedMediaKind) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content row has mismatched Rich Media data",
+      error: new Error("Public Content Rich Media does not satisfy the read contract."),
+      details: {
+        rowId: row.id,
+        contentType: row.content_type,
+        mediaKind,
+      },
+    });
+  }
+  if (mediaKind === "gallery" && !galleryCover) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content Gallery has no valid cover contract",
+      error: new Error("Public Content Gallery does not satisfy the read contract."),
+      details: { rowId: row.id, contentType: row.content_type },
+    });
+  }
+
+  const resolvedImage = payloadImage || explicitImage;
   const mediaDuration = row.media_duration ?? (
     mediaPayload?.kind === "video" ? mediaPayload.duration : ""
   );
   const fallback = row.content_type === "article"
     ? ARTICLE_IMAGE_FALLBACK
     : MEDIA_IMAGE_FALLBACK;
+  const authoredImageAlt = row.image_alt?.trim() ?? "";
+  const title = row.title ?? "";
+  const imageAlt = resolvedImage === galleryCover && mediaKind === "gallery" && galleryCover
+    ? galleryCoverAlt || authoredImageAlt || title
+    : authoredImageAlt || title;
 
   return {
     id,
     contentType: row.content_type,
     slug,
     href: resolvePublicContentPath(row.content_type, slug),
-    title: row.title ?? "",
+    title,
     excerpt: row.excerpt ?? "",
-    image: resolveLocalPublicImage(row.image?.trim() || galleryCover, fallback),
-    imageAlt: row.image_alt ?? row.title ?? "",
+    image: resolveLocalPublicImage(resolvedImage, fallback),
+    imageAlt,
     category: row.category ?? "",
     categorySlug: row.category_slug ?? "",
     series: row.series ?? "",
@@ -241,10 +367,14 @@ function mapCollectionRow(row: PublicContentRow): PublicContentSummary | null {
 function mapCollectionRows(
   value: readonly PublicContentRow[] | null,
 ): PublicContentSummary[] {
-  return (value ?? []).flatMap((row) => {
-    const item = mapCollectionRow(row);
-    return item ? [item] : [];
-  });
+  if (value === null) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content collection query returned null data without an error",
+      error: new Error("Public Content collection data does not satisfy the read contract."),
+    });
+  }
+
+  return value.map(mapCollectionRow);
 }
 
 interface PublicContentFilterQuery extends PublicContentTextSearchQuery {
@@ -295,13 +425,21 @@ async function expandPublicCategoryHierarchy(categorySlugs: readonly string[]) {
     .is("deleted_at", null);
 
   if (error) {
-    logError("Public Content category hierarchy query failed", error, {
-      categorySlugs,
+    failPublicContentRead("query_failed", {
+      context: "Public Content category hierarchy query failed",
+      error,
+      details: { categorySlugs },
     });
-    return [...categorySlugs];
+  }
+  if (data === null) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content category hierarchy query returned null data",
+      error: new Error("Public Content category hierarchy data does not satisfy the read contract."),
+      details: { categorySlugs },
+    });
   }
 
-  const categories = (data ?? []) as AdminContentCategory[];
+  const categories = data as AdminContentCategory[];
   const selectedIds = new Set(
     categories
       .filter((category) => categorySlugs.includes(category.slug))
@@ -347,11 +485,14 @@ async function resolveFeaturedSelection(
       .eq("id", selection.topicId)
       .limit(1);
     if (manualResult.error) {
-      logError("Public Content manual featured query failed", manualResult.error, {
-        contentTypes: input.contentTypes,
-        featuredTopicId: selection.topicId,
+      failPublicContentRead("query_failed", {
+        context: "Public Content manual featured query failed",
+        error: manualResult.error,
+        details: {
+          contentTypes: input.contentTypes,
+          featuredTopicId: selection.topicId,
+        },
       });
-      return null;
     }
     return mapCollectionRows(manualResult.data)[0] ?? null;
   }
@@ -359,10 +500,11 @@ async function resolveFeaturedSelection(
   const featuredInput = { ...input, featured: "only" as const, excludeIds: [] };
   const featuredResult = await buildCollectionQuery(featuredInput).limit(1);
   if (featuredResult.error) {
-    logError("Public Content featured query failed", featuredResult.error, {
-      contentTypes: input.contentTypes,
+    failPublicContentRead("query_failed", {
+      context: "Public Content featured query failed",
+      error: featuredResult.error,
+      details: { contentTypes: input.contentTypes },
     });
-    return null;
   }
 
   return mapCollectionRows(featuredResult.data)[0] ?? null;
@@ -407,14 +549,24 @@ async function queryPublicContentCollection(
   let result = await buildCollectionQuery(listInput, true)
     .range(requestedFrom, requestedFrom + listInput.pageSize - 1);
   if (result.error) {
-    logError("Public Content collection query failed", result.error, {
-      contentTypes: input.contentTypes,
-      page: input.page,
+    failPublicContentRead("query_failed", {
+      context: "Public Content collection query failed",
+      error: result.error,
+      details: {
+        contentTypes: input.contentTypes,
+        page: input.page,
+      },
     });
-    return emptyCollection(input, featured);
   }
 
-  const totalCount = result.count ?? 0;
+  if (!Number.isInteger(result.count) || Number(result.count) < 0) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content collection query returned an invalid count",
+      error: new Error("Public Content collection count does not satisfy the read contract."),
+      details: { contentTypes: input.contentTypes, count: result.count },
+    });
+  }
+  const totalCount = Number(result.count);
   const totalPages = Math.max(1, Math.ceil(totalCount / listInput.pageSize));
   const page = Math.min(listInput.page, totalPages);
   const startIndex = totalCount === 0 ? 0 : (page - 1) * listInput.pageSize;
@@ -423,11 +575,11 @@ async function queryPublicContentCollection(
     result = await buildCollectionQuery(listInput)
       .range(startIndex, startIndex + listInput.pageSize - 1);
     if (result.error) {
-      logError("Public Content normalized-page query failed", result.error, {
-        contentTypes: input.contentTypes,
-        page,
+      failPublicContentRead("query_failed", {
+        context: "Public Content normalized-page query failed",
+        error: result.error,
+        details: { contentTypes: input.contentTypes, page },
       });
-      return emptyCollection(input, featured);
     }
   }
 
@@ -479,12 +631,33 @@ function normalizeFaq(value: Json | undefined): Array<{ question: string; answer
   return faq;
 }
 
-function mapDetailRow(row: PublicContentRow): PublicContentDetail | null {
+function mapDetailRow(row: PublicContentRow): PublicContentDetail {
   const summary = mapCollectionRow(row);
-  if (!summary) return null;
   const payload = parseMediaTopicPayload(row.media_payload);
   const video = payload?.kind === "video" ? payload : null;
   const gallery = payload?.kind === "gallery" ? payload : null;
+  const videoError = video
+    ? validateVideoPayload(video, { published: true })
+    : summary.contentType === "video"
+      ? "بيانات الفيديو المنشورة غير صالحة."
+      : null;
+  const galleryError = gallery
+    ? validateGalleryPayload(gallery, { published: true }) ||
+      (gallery.images.some((image) => !image.url.trim())
+        ? "بيانات صور المعرض المنشور غير مكتملة."
+        : null)
+    : summary.contentType === "gallery"
+      ? "بيانات معرض الصور المنشور غير صالحة."
+      : null;
+
+  if (videoError || galleryError) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content detail has invalid published Rich Media",
+      error: new Error(videoError ?? galleryError ?? "Invalid Rich Media."),
+      details: { rowId: row.id, contentType: row.content_type },
+    });
+  }
+  const normalizedVideoUrl = normalizeYouTubeUrl(video?.video_url ?? "");
 
   return {
     ...summary,
@@ -503,7 +676,7 @@ function mapDetailRow(row: PublicContentRow): PublicContentDetail | null {
     showFaqOnPage: row.show_faq_on_page !== false,
     showFaqTitleOnPage: row.show_faq_title_on_page !== false,
     readingTime: estimateReadingTimeLabel(row.content),
-    videoUrl: normalizeYouTubeUrl(video?.video_url ?? "") ?? "",
+    videoUrl: normalizedVideoUrl ?? "",
     videoDuration: video?.duration?.trim() ?? "",
     galleryImages: gallery?.images ?? [],
   };
@@ -521,8 +694,11 @@ async function queryPublicContentDetail(contentType: ContentType, slug: string) 
     .maybeSingle();
 
   if (error) {
-    logError("Public Content detail query failed", error, { contentType, slug });
-    return null;
+    failPublicContentRead("query_failed", {
+      context: "Public Content detail query failed",
+      error,
+      details: { contentType, slug },
+    });
   }
   return data ? mapDetailRow(data) : null;
 }
@@ -549,13 +725,37 @@ export async function loadPublicContentSitemapRows(): Promise<PublicContentSitem
       .is("deleted_at", null)
       .not("slug", "like", "e2e-test%");
 
-    if (error) throw new Error(error.message);
-    return (data ?? []).flatMap((row) => {
-      if (!isContentType(row.content_type)) return [];
+    if (error) {
+      failPublicContentRead("query_failed", {
+        context: "Public Content sitemap query failed",
+        error,
+      });
+    }
+    if (data === null) {
+      failPublicContentRead("contract_failed", {
+        context: "Public Content sitemap query returned null data",
+        error: new Error("Public Content sitemap data does not satisfy the read contract."),
+      });
+    }
+
+    return data.map((row) => {
+      if (!isContentType(row.content_type)) {
+        failPublicContentRead("contract_failed", {
+          context: "Public Content sitemap row has an invalid content type",
+          error: new Error("Public Content sitemap row does not satisfy the read contract."),
+          details: { rowId: row.id, contentType: row.content_type },
+        });
+      }
       const id = Number(row.id);
       const slug = row.slug?.trim() ?? "";
-      if (!Number.isInteger(id) || !slug) return [];
-      return [{
+      if (!Number.isInteger(id) || !slug) {
+        failPublicContentRead("contract_failed", {
+          context: "Public Content sitemap row has an invalid identity",
+          error: new Error("Public Content sitemap row does not satisfy the read contract."),
+          details: { rowId: row.id, contentType: row.content_type, slug: row.slug },
+        });
+      }
+      return {
         id,
         contentType: row.content_type,
         slug,
@@ -565,7 +765,7 @@ export async function loadPublicContentSitemapRows(): Promise<PublicContentSitem
         isFeatured: Boolean(row.is_featured),
         canonicalUrl: row.canonical_url ?? "",
         robotsIndex: row.robots_index ?? null,
-      }];
+      };
     });
   }, ["public-content-sitemap"], {
     revalidate: 300,
