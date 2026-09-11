@@ -4,7 +4,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAutoCarousel } from "../../hooks/use-auto-carousel";
-import type { MediaSidebarPresentation } from "../../lib/media-sidebar-modules/parse-config";
+import {
+  MEDIA_SIDEBAR_DEFAULT_MENU_PARENT,
+  type MediaSidebarPresentation,
+} from "../../lib/media-sidebar-modules/parse-config";
 import { usePublicNavigation } from "../PublicNavigationProvider";
 import FeedCarouselDots from "../feed-modules/FeedCarouselDots";
 import { SidebarFeedPanel } from "../sidebar-feeds/SidebarFeedPanel";
@@ -351,7 +354,8 @@ function renderWidgetPanel(
   switch (widget.widgetKey) {
     case "sections": {
       if (widget.config.source !== "navigation") return null;
-      const menuParent = widget.config.menuParent ?? "/media-center";
+      const menuParent =
+        widget.config.menuParent ?? MEDIA_SIDEBAR_DEFAULT_MENU_PARENT;
       const mediaItems = props.navItems.find((item) => item.href === menuParent)?.submenu ?? [];
 
       return (

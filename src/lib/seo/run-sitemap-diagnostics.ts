@@ -12,6 +12,8 @@ import type {
   SitemapExcludedCounts,
   SitemapMonitorSnapshot,
 } from "./sitemap-monitor-types";
+import { getProjectHref } from "../projects/public-helpers";
+import { resolvePublicContentPath } from "../content/public-content-path";
 
 function isValidAbsoluteUrl(url: string) {
   try {
@@ -133,7 +135,7 @@ async function findMissingPublishedRecords(entries: SitemapEntry[]) {
   if (projectsError) throw new Error(projectsError.message);
   for (const project of projects ?? []) {
     if (project.robots_index === false) continue;
-    const path = `/projects/${project.slug}`;
+    const path = getProjectHref(project);
     if (!sitemapPaths.has(path)) {
       missing.push(path);
     }
@@ -150,7 +152,7 @@ async function findMissingPublishedRecords(entries: SitemapEntry[]) {
   if (topicsError) throw new Error(topicsError.message);
   for (const topic of topics ?? []) {
     if (topic.robots_index === false) continue;
-    const path = `/topics/${topic.slug}`;
+    const path = resolvePublicContentPath("article", topic.slug);
     if (!sitemapPaths.has(path)) {
       missing.push(path);
     }

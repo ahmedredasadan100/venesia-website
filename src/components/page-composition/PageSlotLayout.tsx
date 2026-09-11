@@ -271,6 +271,9 @@ export function HeroSlotContent({
   const resolvedHomepageProjects = homepageProjects
     ?? composition.homepageProjects
     ?? undefined;
+  const resolvedBreadcrumbCurrentLabel =
+    breadcrumbCurrentLabel ?? composition.pageIdentity?.title;
+  const resolvedPublicPath = publicPath ?? composition.pageIdentity?.path;
   const resolvedListingContext = listingContext
     ? {
         ...listingContext,
@@ -282,8 +285,8 @@ export function HeroSlotContent({
     : undefined;
   const slotContentOptions = {
     homepageProjects: resolvedHomepageProjects,
-    breadcrumbCurrentLabel,
-    publicPath,
+    breadcrumbCurrentLabel: resolvedBreadcrumbCurrentLabel,
+    publicPath: resolvedPublicPath,
     searchParams,
     listingContext: resolvedListingContext,
     suppressFeaturedDuringSearch,
@@ -344,9 +347,9 @@ type PageSlotLayoutProps = {
   skipSlots?: PageLayoutSlot[];
   /** Published homepage projects for the existing home-projects renderer. */
   homepageProjects?: HomepageProjectCard[];
-  /** Dynamic detail label consumed by the shared Breadcrumb renderer. */
+  /** Dynamic/entity override; defaults to the persisted page identity. */
   breadcrumbCurrentLabel?: string;
-  /** Exact public path consumed by structural modules such as Search. */
+  /** Dynamic/entity override; defaults to the persisted page identity. */
   publicPath?: string;
   /** Request URL state consumed by structural modules without changing Composition. */
   searchParams?: SearchPlatformSearchParams;
@@ -394,6 +397,9 @@ export default function PageSlotLayout({
   const resolvedHomepageProjects = homepageProjects
     ?? composition.homepageProjects
     ?? undefined;
+  const resolvedBreadcrumbCurrentLabel =
+    breadcrumbCurrentLabel ?? composition.pageIdentity?.title;
+  const resolvedPublicPath = publicPath ?? composition.pageIdentity?.path;
   const resolvedListingContext = listingContext
     ? {
         ...listingContext,
@@ -406,8 +412,8 @@ export default function PageSlotLayout({
   const sidebarEntries = getSlotEntries(composition, "sidebar");
   const slotContentOptions = {
     homepageProjects: resolvedHomepageProjects,
-    breadcrumbCurrentLabel,
-    publicPath,
+    breadcrumbCurrentLabel: resolvedBreadcrumbCurrentLabel,
+    publicPath: resolvedPublicPath,
     searchParams,
     listingContext: resolvedListingContext,
     suppressFeaturedDuringSearch,
@@ -433,8 +439,8 @@ export default function PageSlotLayout({
           composition={composition}
           fallbackHero={fallbackHero}
           homepageProjects={resolvedHomepageProjects}
-          breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-          publicPath={publicPath}
+          breadcrumbCurrentLabel={resolvedBreadcrumbCurrentLabel}
+          publicPath={resolvedPublicPath}
           searchParams={searchParams}
           listingContext={listingContext}
           suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
@@ -463,8 +469,8 @@ export default function PageSlotLayout({
             prefix={prefix}
             suffix={suffix}
             homepageProjects={resolvedHomepageProjects}
-            breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-            publicPath={publicPath}
+            breadcrumbCurrentLabel={resolvedBreadcrumbCurrentLabel}
+            publicPath={resolvedPublicPath}
             searchParams={searchParams}
             listingContext={resolvedListingContext}
             suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
@@ -485,8 +491,8 @@ export default function PageSlotLayout({
             composition={composition}
             fallbackHero={fallbackHero}
             homepageProjects={resolvedHomepageProjects}
-            breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-            publicPath={publicPath}
+            breadcrumbCurrentLabel={resolvedBreadcrumbCurrentLabel}
+            publicPath={resolvedPublicPath}
             searchParams={searchParams}
             listingContext={listingContext}
             suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
@@ -506,8 +512,8 @@ export default function PageSlotLayout({
                   entries={getSlotEntries(composition, "main")}
                   suffix={mainAfter}
                   homepageProjects={resolvedHomepageProjects}
-                  breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-                  publicPath={publicPath}
+                  breadcrumbCurrentLabel={resolvedBreadcrumbCurrentLabel}
+                  publicPath={resolvedPublicPath}
                   searchParams={searchParams}
                   listingContext={resolvedListingContext}
                   suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
@@ -525,8 +531,8 @@ export default function PageSlotLayout({
                   entries={sidebarEntries}
                   prefix={sidebarPrefix}
                   homepageProjects={resolvedHomepageProjects}
-                  breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-                  publicPath={publicPath}
+                  breadcrumbCurrentLabel={resolvedBreadcrumbCurrentLabel}
+                  publicPath={resolvedPublicPath}
                   searchParams={searchParams}
                   listingContext={resolvedListingContext}
                   suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}

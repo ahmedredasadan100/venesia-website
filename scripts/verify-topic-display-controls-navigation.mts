@@ -209,7 +209,7 @@ check(
 );
 
 check(
-  "all shared Media detail consumers respect the intro gate and every individual field",
+  "Media detail keeps one Hero-owned title while preserving metadata display controls",
   mediaDetailPage.includes("showTitle={item.showTitleOnPage !== false}") &&
     mediaDetailPage.includes(
       "showHeroImage={item.showImageOnPage !== false}",
@@ -217,15 +217,21 @@ check(
     mediaDetailPage.includes(
       "showSubtitle={item.showExcerptOnPage !== false}",
     ) &&
-    mediaDetailArticle.includes("{item.showIntroCardOnPage ? (") &&
+    mediaDetailPage.includes("{item.showTitleOnPage === false ? (") &&
+    mediaDetailPage.includes('<h1 className="sr-only">{item.title}</h1>') &&
+    mediaDetailArticle.includes(
+      "{item.showIntroCardOnPage && hasIntroMetadata ? (",
+    ) &&
     [
-      "item.showTitleOnPage",
-      "item.showImageOnPage",
-      "item.showExcerptOnPage",
       "item.showDateOnPage",
       "item.showCategoryOnPage",
       "item.showSeriesOnPage",
-    ].every((token) => mediaDetailArticle.includes(token)),
+    ].every((token) => mediaDetailArticle.includes(token)) &&
+    !mediaDetailArticle.includes("<h1") &&
+    !mediaDetailArticle.includes("MediaDetailHeroImage") &&
+    !mediaDetailArticle.includes("item.showTitleOnPage") &&
+    !mediaDetailArticle.includes("item.showImageOnPage") &&
+    !mediaDetailArticle.includes("item.showExcerptOnPage"),
 );
 
 check(

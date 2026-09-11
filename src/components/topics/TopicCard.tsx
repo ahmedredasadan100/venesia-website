@@ -3,6 +3,7 @@ import {
   resolveCollectionDisplayTextFormatting,
   type TopicsListingDisplayOverrides,
 } from "../../lib/page-blocks/configs";
+import { resolvePublicContentPath } from "../../lib/content/public-content-path";
 import { CollectionListingCard } from "../collection-modules/CollectionListingPresenter";
 import TopicImage from "./TopicImage";
 
@@ -39,7 +40,7 @@ export default function TopicCard({
   showSeriesOnPage = true,
   displayOverrides,
 }: TopicCardProps) {
-  const href = `/topics/${slug}`;
+  const href = resolvePublicContentPath("article", slug);
   const textFormatting = resolveCollectionDisplayTextFormatting(
     displayOverrides,
   );

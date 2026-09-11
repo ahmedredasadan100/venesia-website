@@ -1,17 +1,18 @@
 import type { PageLayoutSlot } from "../page-blocks/layout-slots";
 import {
-  asProjectsHubFeaturedConfig,
-  asProjectsHubHeroConfig,
-  asProjectsHubListingConfig,
-  asProjectsHubMapConfig,
   isProjectsHubFeaturedTemplate,
   isProjectsHubHeroTemplate,
   isProjectsHubListingTemplate,
   isProjectsHubMapTemplate,
+  parseProjectsHubFeaturedPublicConfig,
+  parseProjectsHubHeroPublicConfig,
+  parseProjectsHubListingPublicConfig,
+  parseProjectsHubMapPublicConfig,
   type ProjectsHubFeaturedModuleConfig,
   type ProjectsHubHeroModuleConfig,
   type ProjectsHubListingModuleConfig,
   type ProjectsHubMapModuleConfig,
+  type ProjectsHubPublicConfigFailureReason,
 } from "../page-blocks/projects-hub-config";
 import type { ProjectsHubComposition, ProjectsHubCompositionAssignment } from "./load-projects-hub-composition";
 
@@ -24,15 +25,29 @@ export const PROJECTS_HUB_SUPPORTED_SLUGS = [
 
 export type ProjectsHubSupportedSlug = (typeof PROJECTS_HUB_SUPPORTED_SLUGS)[number];
 
-/** Reasons that indicate a real composition/load failure (not incomplete CMS staging). */
+/** Infrastructure failures only; publication/config availability is separate. */
 export const PROJECTS_HUB_LOAD_ERROR_REASONS = [
   "page_query_failed",
-  "page_missing",
   "assignments_query_failed",
   "unexpected_error",
 ] as const;
 
-export function isProjectsHubLoadErrorReason(reason: string | null | undefined): boolean {
+export type ProjectsHubLoadErrorReason =
+  (typeof PROJECTS_HUB_LOAD_ERROR_REASONS)[number];
+
+export const PROJECTS_HUB_UNAVAILABLE_REASONS = [
+  "page_unavailable",
+  "no_assignments",
+  "no_valid_visible_modules",
+  "incomplete_hub_modules",
+] as const;
+
+export type ProjectsHubUnavailableReason =
+  (typeof PROJECTS_HUB_UNAVAILABLE_REASONS)[number];
+
+export function isProjectsHubLoadErrorReason(
+  reason: string | null | undefined,
+): reason is ProjectsHubLoadErrorReason {
   return (PROJECTS_HUB_LOAD_ERROR_REASONS as readonly string[]).includes(reason ?? "");
 }
 
@@ -72,13 +87,22 @@ export type ProjectsHubRenderPlanModule =
 
 export type ProjectsHubPlanResult =
   | {
+      status: "ready";
       ready: true;
       modules: ProjectsHubRenderPlanModule[];
       skipped: Array<{ assignmentId: number; slug: string; reason: string }>;
     }
   | {
+      status: "unavailable";
       ready: false;
-      reason: string;
+      reason: ProjectsHubUnavailableReason;
+      modules: [];
+      skipped: Array<{ assignmentId: number; slug: string; reason: string }>;
+    }
+  | {
+      status: "error";
+      ready: false;
+      reason: ProjectsHubLoadErrorReason;
       modules: [];
       skipped: Array<{ assignmentId: number; slug: string; reason: string }>;
     };
@@ -97,19 +121,17 @@ function parseModuleConfig(
   config: unknown,
 ):
   | { ok: true; value: ProjectsHubRenderPlanModule["config"] }
-  | { ok: false; reason: string } {
-  if (config != null && (typeof config !== "object" || Array.isArray(config))) {
-    return { ok: false, reason: "config_not_object" };
+  | { ok: false; reason: ProjectsHubPublicConfigFailureReason } {
+  if (slug === "projects-hub-hero") {
+    return parseProjectsHubHeroPublicConfig(config);
   }
-
-  try {
-    if (slug === "projects-hub-hero") return { ok: true, value: asProjectsHubHeroConfig(config) };
-    if (slug === "projects-hub-featured") return { ok: true, value: asProjectsHubFeaturedConfig(config) };
-    if (slug === "projects-hub-listing") return { ok: true, value: asProjectsHubListingConfig(config) };
-    return { ok: true, value: asProjectsHubMapConfig(config) };
-  } catch {
-    return { ok: false, reason: "config_parse_failed" };
+  if (slug === "projects-hub-featured") {
+    return parseProjectsHubFeaturedPublicConfig(config);
   }
+  if (slug === "projects-hub-listing") {
+    return parseProjectsHubListingPublicConfig(config);
+  }
+  return parseProjectsHubMapPublicConfig(config);
 }
 
 /**
@@ -190,6 +212,7 @@ export function buildProjectsHubRenderPlan(composition: ProjectsHubComposition):
 
   if (!modules.length) {
     return {
+      status: "unavailable",
       ready: false,
       reason: skipped.length ? "no_valid_visible_modules" : "no_assignments",
       modules: [],
@@ -200,6 +223,7 @@ export function buildProjectsHubRenderPlan(composition: ProjectsHubComposition):
   const missing = PROJECTS_HUB_SUPPORTED_SLUGS.filter((slug) => !seen.has(slug));
   if (missing.length) {
     return {
+      status: "unavailable",
       ready: false,
       reason: "incomplete_hub_modules",
       modules: [],
@@ -214,5 +238,5 @@ export function buildProjectsHubRenderPlan(composition: ProjectsHubComposition):
     };
   }
 
-  return { ready: true, modules, skipped };
+  return { status: "ready", ready: true, modules, skipped };
 }

@@ -15,6 +15,7 @@ import {
   getProjectPublishingReadiness,
   resolveProjectPublicationStatusForVisibility,
 } from "../../../lib/admin/projects/project-publishing-capability";
+import { getProjectHref } from "../../../lib/projects/public-helpers";
 import type {
   EntityReviewAnalysisCardDefinition,
   EntityReviewAnalysisGroup,
@@ -204,7 +205,7 @@ export default function ProjectPublishChecklistPanel({
     initial.project.publication_status,
     false,
   );
-  const publicPath = project.slug ? `/projects/${project.slug}` : "—";
+  const publicPath = project.slug ? getProjectHref(project) : "—";
 
   return (
     <AdminEntityReviewPanel

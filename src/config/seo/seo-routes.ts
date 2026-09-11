@@ -1,8 +1,14 @@
+import {
+  getPublicPageRoute,
+  type PublicStaticPageRouteKey,
+} from "../../lib/admin/links/static-routes";
 import type { SeoRouteConfig } from "./seo-types";
+
+const pathFor = (key: PublicStaticPageRouteKey) => getPublicPageRoute(key).href;
 
 export const SEO_ROUTES: SeoRouteConfig[] = [
   {
-    path: "/",
+    path: pathFor("home"),
     title: "الثقة مش وعد… الثقة فعل",
     description:
       "فينيسيا للتطوير العقاري توثق مشروعاتها على أرض الواقع، من مراحل التنفيذ إلى التسليم، برؤية هندسية واضحة وثقة تُبنى بالفعل.",
@@ -15,7 +21,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     },
   },
   {
-    path: "/about",
+    path: pathFor("about"),
     title: "من نحن",
     description:
       "تعرف على فينيسيا للتطوير العقاري، رؤيتها، منهجها في التنفيذ، وفلسفتها القائمة على وضوح الملكية، جودة البناء، وتوثيق كل خطوة.",
@@ -28,7 +34,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     },
   },
   {
-    path: "/contact",
+    path: pathFor("contact"),
     title: "تواصل معنا",
     description:
       "تواصل مع فريق فينيسيا للتطوير العقاري لمعرفة تفاصيل المشروعات السكنية والتجارية ومتابعة أحدث مراحل التنفيذ.",
@@ -37,7 +43,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "monthly",
   },
   {
-    path: "/projects",
+    path: pathFor("projects"),
     title: "المشروعات",
     description:
       "استكشف مشروعات فينيسيا السكنية والتجارية في القاهرة الجديدة وبيت الوطن، مع توثيق مراحل التنفيذ خطوة بخطوة.",
@@ -50,7 +56,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     },
   },
   {
-    path: "/media-center",
+    path: pathFor("media-center"),
     title: "المركز الإعلامي",
     description:
       "أخبار فينيسيا، تحديثات الموقع، الجولات المرئية، والمواد الإعلامية التي توثق ما يحدث داخل المشروعات على أرض الواقع.",
@@ -59,7 +65,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "daily",
   },
   {
-    path: "/media-center/news",
+    path: pathFor("media-news"),
     title: "الأخبار | المركز الإعلامي",
     description:
       "آخر أخبار فينيسيا للتطوير العقاري وتحديثات المشروعات، موثقة من أرض التنفيذ بلغة واضحة وواقعية.",
@@ -68,7 +74,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "daily",
   },
   {
-    path: "/media-center/site-updates",
+    path: pathFor("media-site-updates"),
     title: "تحديثات الموقع",
     description:
       "توثيق مستمر لمراحل التنفيذ في مشروعات فينيسيا، من الحفر والخرسانة إلى التشطيبات والاستعداد للتسليم.",
@@ -77,7 +83,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "daily",
   },
   {
-    path: "/media-center/videos",
+    path: pathFor("media-videos"),
     title: "الفيديوهات",
     description:
       "جولات مرئية ولقطات من مواقع التنفيذ توضح تقدم الأعمال داخل مشروعات فينيسيا للتطوير العقاري.",
@@ -86,7 +92,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "weekly",
   },
   {
-    path: "/media-center/gallery",
+    path: pathFor("media-gallery"),
     title: "معرض الصور",
     description:
       "صور واقعية من مواقع ومشروعات فينيسيا للتطوير العقاري، توثق مراحل البناء والتفاصيل التنفيذية.",
@@ -95,7 +101,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "weekly",
   },
   {
-    path: "/media-center/press",
+    path: pathFor("media-press"),
     title: "الصحافة",
     description:
       "المواد الصحفية والإعلانات الرسمية الخاصة بفينيسيا للتطوير العقاري ومشروعاتها.",
@@ -104,7 +110,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
     changeFrequency: "monthly",
   },
   {
-    path: "/topics",
+    path: pathFor("topics"),
     title: "الموضوعات العقارية",
     description:
       "موضوعات توعوية تساعدك على فهم السوق العقاري، قراءة العقود، تقييم المطور، واختيار الاستثمار بوعي.",
@@ -114,7 +120,7 @@ export const SEO_ROUTES: SeoRouteConfig[] = [
   },
 
   {
-    path: "/track-your-project",
+    path: pathFor("track-your-project"),
     title: "تابع مشروعك",
     description:
       "تابع تطورات مشروعك مع فينيسيا للتطوير العقاري من خلال تحديثات موثقة تعكس تقدم التنفيذ على أرض الواقع.",

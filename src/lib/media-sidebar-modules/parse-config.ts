@@ -13,6 +13,10 @@ import {
   type ContentDisplayOptions,
 } from "../page-blocks/configs";
 import type { MediaSidebarWidgetKey } from "./types";
+import { getPublicPageRoute } from "../admin/links/static-routes";
+
+export const MEDIA_SIDEBAR_DEFAULT_MENU_PARENT =
+  getPublicPageRoute("media-center").href;
 
 export const MEDIA_SIDEBAR_ALL_MEDIA_CONTENT_TYPE = "all" as const;
 export type MediaSidebarMediaContentType =
@@ -68,7 +72,10 @@ export const MEDIA_SIDEBAR_WIDGET_DEFAULTS: Record<
   { config: MediaSidebarModuleConfig; defaultLimit?: number }
 > = {
   sections: {
-    config: { source: "navigation", menuParent: "/media-center" },
+    config: {
+      source: "navigation",
+      menuParent: MEDIA_SIDEBAR_DEFAULT_MENU_PARENT,
+    },
   },
   latest: {
     config: {
@@ -167,7 +174,10 @@ export function parseMediaSidebarModuleConfig(
 ): MediaSidebarModuleConfig {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     if (widgetKey === "sections") {
-      return { source: "navigation", menuParent: "/media-center" };
+      return {
+        source: "navigation",
+        menuParent: MEDIA_SIDEBAR_DEFAULT_MENU_PARENT,
+      };
     }
     const defaults = contentDefaults(widgetKey);
     return {
@@ -184,7 +194,7 @@ export function parseMediaSidebarModuleConfig(
       menuParent:
         typeof raw.menuParent === "string" && raw.menuParent.trim()
           ? raw.menuParent.trim()
-          : "/media-center",
+          : MEDIA_SIDEBAR_DEFAULT_MENU_PARENT,
     };
   }
 
@@ -212,7 +222,10 @@ export function buildMediaSidebarModuleConfig(
   formData: FormData,
 ): MediaSidebarModuleConfig {
   if (widgetKey === "sections") {
-    return { source: "navigation", menuParent: "/media-center" };
+    return {
+      source: "navigation",
+      menuParent: MEDIA_SIDEBAR_DEFAULT_MENU_PARENT,
+    };
   }
 
   const kind = readSourceKind(formData.get("source_kind"));

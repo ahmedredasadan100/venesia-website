@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import type { HomepageProjectCard } from "../../lib/projects/public-types";
+import { getProjectHref } from "../../lib/projects/public-helpers";
 import type {
   HomeProjectsButtonAlignment,
   HomeProjectsContent,
@@ -75,10 +76,6 @@ function resolveHomeProjectsContent(content: HomeProjectsContent) {
     eyebrowBold: content.eyebrowBold,
     eyebrowAlignment: content.eyebrowAlignment,
   };
-}
-
-function getProjectHref(project: HomepageProjectCard) {
-  return `/projects/${project.slug}`;
 }
 
 function chunkProjects(projects: HomepageProjectCard[], size: number) {

@@ -222,7 +222,13 @@ assert.ok(!topicsDetailPage.includes("TopicsSidebarSearchPanel"));
 assert.ok(topicsDetailPage.includes("<PageSlotContent"));
 assert.ok(!mediaPage.includes("MediaSidebarSearch"));
 assert.ok(!mediaDetailPage.includes("MediaSidebarSearch"));
-assert.ok(mediaDetailPage.includes("publicPath={pagePath}"));
+assert.ok(
+  mediaDetailPage.includes("const pagePath = getMediaHref(item)") &&
+    !/PageSlotLayout|PageSlotContent|SearchPlatform|searchParams/u.test(
+      mediaDetailPage,
+    ),
+  "Media detail must resolve its canonical path without inheriting Listing search composition",
+);
 assert.ok(!mediaSidebar.includes("PublicContentSearchInput"));
 assert.ok(
   topicsListing.includes("await loadPublicTopicsListing({") &&
@@ -269,6 +275,15 @@ for (const route of ["news", "videos", "gallery", "press", "site-updates"]) {
   const routePage = read(`src/app/(site)/media-center/${route}/page.tsx`);
   assert.ok(routePage.includes("MediaListingPage"), `${route} must adopt the shared Media listing`);
   assert.ok(routePage.includes("q?: string"), `${route} must expose the shared search query contract`);
+
+  const detailRoutePage = read(
+    `src/app/(site)/media-center/${route}/[slug]/page.tsx`,
+  );
+  assert.ok(
+    !detailRoutePage.includes("searchParams") &&
+      detailRoutePage.includes("const { slug } = await params"),
+    `${route} detail must consume only its route identity, not Listing search context`,
+  );
 }
 
 assert.ok(searchConfig.includes('SEARCH_PLATFORM_TEMPLATE_SLUG = "search-platform"'));

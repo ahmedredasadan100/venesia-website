@@ -3,6 +3,7 @@ import { isContentType } from "../../content/content-types";
 import { resolvePublicContentPath } from "../../../content/public-content-path";
 import { ADMIN_STATIC_ROUTES } from "../static-routes";
 import type { AdminLinkProvider } from "../types";
+import { getProjectHref } from "../../../projects/public-helpers";
 
 function matchesQuery(parts: Array<string | null | undefined>, query: string) {
   const normalized = query.trim().toLowerCase();
@@ -74,7 +75,7 @@ export const projectsLinkProvider: AdminLinkProvider = {
         resourceId: row.id,
         title: row.arabic_name,
         slug: row.slug,
-        publicPath: `/projects/${row.slug}`,
+        publicPath: getProjectHref(row),
         subtitle: row.type === "residential" ? "سكني" : "تجاري",
       }));
   },
@@ -83,7 +84,7 @@ export const projectsLinkProvider: AdminLinkProvider = {
     const { data, error } = await getSupabaseAdmin().from("projects").select("id,slug").in("id", ids);
     if (error) throw new Error(error.message);
     const map = new Map<number, string>();
-    (data ?? []).forEach((row) => map.set(row.id, `/projects/${row.slug}`));
+    (data ?? []).forEach((row) => map.set(row.id, getProjectHref(row)));
     return map;
   },
 };

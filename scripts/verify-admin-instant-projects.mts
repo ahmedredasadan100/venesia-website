@@ -350,7 +350,8 @@ check(
     publicLoader.includes('.eq("publication_status", "published")') &&
     publicMapper.includes("featured: project.featured === true") &&
     publicHelpers.includes("projects.filter((project) => project.featured)") &&
-    publicHelpers.includes("return `/projects/${project.slug}`") &&
+    publicHelpers.includes('getPublicDynamicPageRoute("project-detail")') &&
+    publicHelpers.includes("interpolatePublicRoute(") &&
     publicHelpers.includes("return absoluteUrlWithBase(getProjectHref(project))"),
   "Public Project loader filters authoritative publication before mapping and shared public-link derivation",
 );

@@ -1,26 +1,36 @@
-import ProjectsHubPage from "../../../components/projects/ProjectsHubPage";
-import { loadAndBuildProjectsHubPlan } from "../../../lib/projects/load-and-build-projects-hub-plan";
+import ProjectsHubPage, {
+  ProjectsHubUnavailableState,
+} from "../../../components/projects/ProjectsHubPage";
+import {
+  loadAndBuildProjectsHubPlan,
+  ProjectsHubPublicReadError,
+} from "../../../lib/projects/load-and-build-projects-hub-plan";
 import { loadPublishedProjects } from "../../../lib/projects/load-published-projects";
-import { logError } from "../../../lib/logging";
+import { logWarn } from "../../../lib/logging";
 import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
+import { getPublicPageRoute } from "../../../lib/admin/links/static-routes";
 
 export const revalidate = 300;
+const PAGE_IDENTITY = getPublicPageRoute("projects");
 
 export async function generateMetadata() {
-  return generatePublicMetadata({ path: "/projects" });
+  return generatePublicMetadata({ path: PAGE_IDENTITY.href });
 }
 
 export default async function ProjectsPage() {
-  const projects = await loadPublishedProjects();
-
   const plan = await loadAndBuildProjectsHubPlan();
 
-  if (!plan.ready) {
-    logError("Projects Hub composition load failed", new Error(plan.reason), {
+  if (plan.status === "unavailable") {
+    logWarn("Projects Hub public configuration unavailable", {
       reason: plan.reason,
     });
-    throw new Error("تعذر تحميل صفحة المشروعات. حاول مرة أخرى لاحقًا.");
+    return <ProjectsHubUnavailableState />;
   }
 
+  if (plan.status === "error") {
+    throw new ProjectsHubPublicReadError(plan.reason);
+  }
+
+  const projects = await loadPublishedProjects();
   return <ProjectsHubPage projects={projects} modulePlan={plan.modules} />;
 }

@@ -1,3 +1,5 @@
+import { getProjectHref } from "../../projects/public-helpers";
+
 export const PROJECT_PUBLICATION_STATUSES = [
   "published",
   "unpublished",
@@ -123,7 +125,7 @@ export function getProjectPreviewCapability(input: {
     publicViewPublicationPolicy: "published-only" as const,
     routes: {
       internalPreview: `/admin/projects/${input.id}/preview`,
-      publicView: `/projects/${input.slug}`,
+      publicView: getProjectHref(input),
     },
     access: {
       "internal-preview": "allowed" as const,

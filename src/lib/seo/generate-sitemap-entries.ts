@@ -5,6 +5,7 @@ import { loadPublicContentSitemapRows } from "../content/public-content-read/own
 import { logError } from "../logging";
 import { isReservedPublicPath } from "../pages/reserved-public-paths";
 import { loadPublishedProjectSitemapRows } from "../projects/load-published-projects";
+import { getProjectHref } from "../projects/public-helpers";
 import { getSupabaseAdmin } from "../supabase-admin";
 
 import type { SitemapEntry, SitemapEntrySource, SitemapGenerationResult } from "./sitemap-monitor-types";
@@ -126,7 +127,7 @@ export async function generateSitemapEntries(): Promise<SitemapGenerationResult>
     loadSourceEntries("projects", async () => {
       const projects = await loadPublishedProjectSitemapRows();
       return projects.filter((project) => project.robotsIndex !== false).map((project) => {
-        const path = `/projects/${project.slug}`;
+        const path = getProjectHref(project);
         return {
           url: buildSitemapAbsoluteUrl(path, baseUrl),
           path,

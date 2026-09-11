@@ -2,7 +2,6 @@ import type { MediaContentItem, MediaContentType } from "./media-center/types";
 import {
   getMediaHref,
   MEDIA_CONTENT_TYPES,
-  MEDIA_TYPE_PATHS,
   type MediaNewsItem,
 } from "./media-center/types";
 import {
@@ -16,7 +15,7 @@ import type { PublicContentFeaturedSelection } from "./content/public-content-re
 import { getDefaultMediaListingPresentation } from "./media-hub-modules/parse-config";
 
 export type { MediaContentItem, MediaContentType, MediaNewsItem };
-export { getMediaHref, MEDIA_TYPE_PATHS, MEDIA_CONTENT_TYPES };
+export { getMediaHref, MEDIA_CONTENT_TYPES };
 
 /** Media remains a presentation facade over Unified Content's Public Collection owner. */
 export async function getMediaItems(type?: MediaContentType) {

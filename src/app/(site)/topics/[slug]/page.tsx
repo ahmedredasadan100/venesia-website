@@ -19,6 +19,10 @@ import {
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { generatePublicMetadata, loadResolvedGlobalSeo } from "../../../../lib/seo/generate-public-metadata";
 import { buildPageJsonLd } from "../../../../lib/seo/build-jsonld";
+import {
+  resolvePublicContentPageRoute,
+  resolvePublicContentPath,
+} from "../../../../lib/content/public-content-path";
 
 export const revalidate = 300;
 
@@ -37,7 +41,7 @@ export async function generateMetadata({
 
   if (!topic) {
     return generatePublicMetadata({
-      path: `/topics/${slug}`,
+      path: resolvePublicContentPath("article", slug),
       title: "الموضوع غير موجود",
       description: "الموضوع المطلوب غير متاح حاليًا.",
       robots: NO_INDEX_ROBOTS,
@@ -45,7 +49,7 @@ export async function generateMetadata({
     });
   }
 
-  const pagePath = `/topics/${topic.slug}`;
+  const pagePath = resolvePublicContentPath("article", topic.slug);
 
   return generatePublicMetadata({
     path: pagePath,
@@ -84,10 +88,12 @@ export default async function TopicDetailsPage({
 
   const [relatedTopics, composition, globalSeo] = await Promise.all([
     loadRelatedPublicTopics(topic),
-    loadPageCompositionBySlug("topics"),
+    loadPageCompositionBySlug(
+      resolvePublicContentPageRoute("article").cmsPageSlug,
+    ),
     loadResolvedGlobalSeo(),
   ]);
-  const pagePath = `/topics/${topic.slug}`;
+  const pagePath = resolvePublicContentPath("article", topic.slug);
   const showCategoryMetadata =
     topic.showCategoryOnPage && Boolean(topic.category && topic.categorySlug);
   const showSeriesMetadata =
@@ -116,6 +122,7 @@ export default async function TopicDetailsPage({
   return (
     <InternalPageLayout
       title={topic.title}
+      breadcrumbCurrentLabel={topic.title}
       eyebrow={headerEyebrow}
       subtitle={topic.excerpt}
       heroImage={topic.image}

@@ -15,7 +15,8 @@ import {
 } from "../../lib/media-hub-modules/build-media-hub-render-plan";
 import type { MediaHubModuleState } from "../../lib/media-hub-modules/types";
 import { resolveMediaListingConfig } from "../../lib/media-hub-modules/listing-presentation";
-import { MEDIA_TYPE_PATHS } from "../../lib/media-center/types";
+import { resolvePublicContentBasePath } from "../../lib/content/public-content-path";
+import { getPublicPageRoute } from "../../lib/admin/links/static-routes";
 import { resolveCollectionModuleDisplayFormatting } from "../../lib/page-blocks/configs";
 
 export type MediaHubRenderContext = {
@@ -40,15 +41,15 @@ export function isMediaHubModuleRenderable(
 
 function getMediaHubSectionHref(module: MediaHubModuleState) {
   const kind = module.sectionData?.kind;
-  if (kind === "site-updates") return "/media-center/site-updates";
-  if (kind === "videos") return "/media-center/videos";
-  if (kind === "gallery") return "/media-center/gallery";
-  if (kind === "press") return "/media-center/press";
+  if (kind === "site-updates") return resolvePublicContentBasePath("site_update");
+  if (kind === "videos") return resolvePublicContentBasePath("video");
+  if (kind === "gallery") return resolvePublicContentBasePath("gallery");
+  if (kind === "press") return resolvePublicContentBasePath("press");
 
   const firstItem = module.sectionData?.items[0];
   return firstItem
-    ? `/media-center/${MEDIA_TYPE_PATHS[firstItem.type]}`
-    : "/media-center";
+    ? resolvePublicContentBasePath(firstItem.type)
+    : getPublicPageRoute("media-center").href;
 }
 
 export function renderMediaHubSection(

@@ -1,3 +1,8 @@
+import {
+  findPublicPageRouteByHref,
+  getPublicPageRoute,
+} from "./admin/links/static-routes";
+
 export type PublicNavigationItem = {
   id?: number;
   label: string;
@@ -29,18 +34,6 @@ function normalizePath(pathname: string) {
   return withoutTrailingSlash || "/";
 }
 
-function getDynamicLabel(pathname: string) {
-  if (pathname.startsWith("/projects/")) return "تفاصيل المشروع";
-  if (pathname.startsWith("/topics/")) return "تفاصيل الموضوع";
-  if (pathname.startsWith("/media-center/news/")) return "تفاصيل الخبر";
-  if (pathname.startsWith("/media-center/press/")) return "تفاصيل البيان الصحفي";
-  if (pathname.startsWith("/media-center/videos/")) return "تفاصيل الفيديو";
-  if (pathname.startsWith("/media-center/gallery/")) return "تفاصيل الصورة";
-  if (pathname.startsWith("/media-center/site-updates/")) return "تفاصيل التحديث";
-
-  return undefined;
-}
-
 export function getNavigationLabelFromItems(
   items: readonly PublicNavigationItem[],
   pathname: string,
@@ -50,7 +43,7 @@ export function getNavigationLabelFromItems(
   return (
     flattenNavigationItems(items).find(
       (item) => normalizePath(item.href) === normalizedPath,
-    )?.label ?? getDynamicLabel(normalizedPath)
+    )?.label
   );
 }
 
@@ -59,18 +52,25 @@ export function buildBreadcrumbsFromNavigation(
   items: readonly PublicNavigationItem[],
 ): BreadcrumbItem[] {
   const normalizedPath = normalizePath(pathname);
-  const homeLabel = getNavigationLabelFromItems(items, "/") ?? "الرئيسية";
+  const homeIdentity = getPublicPageRoute("home");
+  const homeLabel =
+    getNavigationLabelFromItems(items, homeIdentity.href) ?? homeIdentity.label;
 
   if (normalizedPath === "/") {
     return [{ label: homeLabel }];
   }
 
   const segments = normalizedPath.split("/").filter(Boolean);
-  const breadcrumbs: BreadcrumbItem[] = [{ label: homeLabel, href: "/" }];
+  const breadcrumbs: BreadcrumbItem[] = [
+    { label: homeLabel, href: homeIdentity.href },
+  ];
 
   segments.forEach((segment, index) => {
     const href = `/${segments.slice(0, index + 1).join("/")}`;
-    const label = getNavigationLabelFromItems(items, href) ?? segment;
+    const label =
+      getNavigationLabelFromItems(items, href) ??
+      findPublicPageRouteByHref(href)?.label ??
+      segment;
     const isLast = index === segments.length - 1;
 
     breadcrumbs.push(isLast ? { label } : { label, href });

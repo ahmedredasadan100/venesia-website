@@ -63,6 +63,7 @@ export default function DynamicHeroSection({
   domainSlides,
   autoplayMs,
   emptyState,
+  fallbackVisibility,
 }: DynamicHeroSectionProps) {
   const variant = hero?.variant || "internal-page";
 
@@ -113,6 +114,7 @@ export default function DynamicHeroSection({
       fallbackImage={fallbackImage}
       compositionFooter={compositionFooter}
       domainSlides={domainSlides}
+      fallbackVisibility={fallbackVisibility}
       // Visibility is a public contract: hidden content is removed from the
       // composed Hero, not merely made transparent while reserving DOM space.
       collapseHiddenContent={true}

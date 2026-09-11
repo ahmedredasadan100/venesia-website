@@ -1,12 +1,12 @@
 import Link from "next/link";
 
+import { resolvePublicContentBasePath } from "../../lib/content/public-content-path";
 import type { MediaDetailPageConfig } from "../../lib/media-center/detail-page-config";
 import type { MediaContentItem } from "../../lib/media-center/types";
 import { getMediaHref } from "../../lib/media-center/types";
 import { resolveYouTubeEmbedUrl } from "../../lib/admin/media-topic-payload";
 import RichTextContent from "../content/RichTextContent";
 import PublicMediaImage from "../public/PublicMediaImage";
-import MediaDetailHeroImage from "./MediaDetailHeroImage";
 import RelatedMediaRail from "./RelatedMediaRail";
 
 type MediaDetailArticleProps = {
@@ -22,55 +22,47 @@ export default function MediaDetailArticle({
   config,
   relatedItems,
 }: MediaDetailArticleProps) {
+  const hasIntroMetadata = Boolean(
+    (item.showCategoryOnPage && item.category) ||
+      (item.showSeriesOnPage && item.series) ||
+      (item.showDateOnPage && item.date) ||
+      (config.showProjectBadge && item.project) ||
+      (config.showDurationBadge && item.duration),
+  );
+
   return (
     <article className="space-y-10">
-      {item.showIntroCardOnPage ? (
+      {item.showIntroCardOnPage && hasIntroMetadata ? (
         <div className="space-y-10" data-media-intro-card>
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              {item.showCategoryOnPage && item.category ? (
-                <span className="rounded-full border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-1.5 text-xs font-medium text-[#D8B87A]">
-                  {item.category}
-                </span>
-              ) : null}
-
-              {item.showSeriesOnPage && item.series ? (
-                <span className="rounded-full border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-1.5 text-xs font-medium text-[#D8B87A]">
-                  {item.series}
-                </span>
-              ) : null}
-
-              {item.showDateOnPage && item.date ? (
-                <span className="text-sm text-white/45">{item.date}</span>
-              ) : null}
-
-              {config.showProjectBadge && item.project ? (
-                <span className="rounded-full border border-white/10 bg-white/[0.035] px-4 py-1.5 text-xs text-white/55">
-                  {item.project}
-                </span>
-              ) : null}
-
-              {config.showDurationBadge && item.duration ? (
-                <span className="rounded-full border border-white/10 bg-white/[0.035] px-4 py-1.5 text-xs text-white/55">
-                  {item.duration}
-                </span>
-              ) : null}
-            </div>
-
-            {item.showTitleOnPage ? (
-              <h1 className="mt-5 max-w-4xl text-3xl font-semibold leading-tight text-white @xl/slot-module:text-4xl">
-                {item.title}
-              </h1>
+          <div className="flex flex-wrap items-center gap-3">
+            {item.showCategoryOnPage && item.category ? (
+              <span className="rounded-full border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-1.5 text-xs font-medium text-[#D8B87A]">
+                {item.category}
+              </span>
             ) : null}
 
-            {item.showExcerptOnPage ? (
-              <p className="mt-5 max-w-3xl leading-8 text-white/60">{item.excerpt}</p>
+            {item.showSeriesOnPage && item.series ? (
+              <span className="rounded-full border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-4 py-1.5 text-xs font-medium text-[#D8B87A]">
+                {item.series}
+              </span>
+            ) : null}
+
+            {item.showDateOnPage && item.date ? (
+              <span className="text-sm text-white/45">{item.date}</span>
+            ) : null}
+
+            {config.showProjectBadge && item.project ? (
+              <span className="rounded-full border border-white/10 bg-white/[0.035] px-4 py-1.5 text-xs text-white/55">
+                {item.project}
+              </span>
+            ) : null}
+
+            {config.showDurationBadge && item.duration ? (
+              <span className="rounded-full border border-white/10 bg-white/[0.035] px-4 py-1.5 text-xs text-white/55">
+                {item.duration}
+              </span>
             ) : null}
           </div>
-
-          {item.showImageOnPage ? (
-            <MediaDetailHeroImage src={item.image} alt={item.imageAlt || item.title} variant={config.heroVariant} />
-          ) : null}
         </div>
       ) : null}
 
@@ -129,7 +121,7 @@ export default function MediaDetailArticle({
         <p className="text-sm leading-7 text-white/65">{config.cta.message}</p>
 
         <Link
-          href={config.basePath}
+          href={resolvePublicContentBasePath(item.type)}
           className="rounded-full border border-[#D8B87A]/35 px-5 py-2.5 text-sm font-medium text-[#D8B87A] transition hover:bg-[#D8B87A]/10"
         >
           {config.cta.backLabel}

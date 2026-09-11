@@ -1,14 +1,21 @@
-/**
- * CMS page registry for Media Center shell routes.
- * Static hero props preserve the current UI when no hero assignment exists.
- */
-export type MediaCenterCmsPageSlug =
-  | "media-center"
-  | "media-center-news"
-  | "media-center-videos"
-  | "media-center-gallery"
-  | "media-center-press"
-  | "media-center-site-updates";
+import {
+  getPublicPageRoute,
+  type PublicStaticPageRoute,
+} from "./admin/links/static-routes";
+
+const MEDIA_CENTER_ROUTE_KEYS = [
+  "media-center",
+  "media-news",
+  "media-videos",
+  "media-gallery",
+  "media-press",
+  "media-site-updates",
+] as const;
+
+type MediaCenterRouteKey = (typeof MEDIA_CENTER_ROUTE_KEYS)[number];
+type MediaCenterRoute = Extract<PublicStaticPageRoute, { key: MediaCenterRouteKey }>;
+
+export type MediaCenterCmsPageSlug = MediaCenterRoute["cmsPageSlug"];
 
 export type MediaCenterShellConfig = {
   cmsPageSlug: MediaCenterCmsPageSlug;
@@ -16,47 +23,32 @@ export type MediaCenterShellConfig = {
   heroImage: string;
 };
 
-export const MEDIA_CENTER_CMS_PAGES: Record<MediaCenterCmsPageSlug, MediaCenterShellConfig> = {
-  "media-center": {
-    cmsPageSlug: "media-center",
-    publicPath: "/media-center",
-    heroImage: "/images/venesia-5.png",
-  },
-  "media-center-news": {
-    cmsPageSlug: "media-center-news",
-    publicPath: "/media-center/news",
-    heroImage: "/images/venesia-5.png",
-  },
-  "media-center-videos": {
-    cmsPageSlug: "media-center-videos",
-    publicPath: "/media-center/videos",
-    heroImage: "/images/venesia-5.png",
-  },
-  "media-center-gallery": {
-    cmsPageSlug: "media-center-gallery",
-    publicPath: "/media-center/gallery",
-    heroImage: "/images/venesia-5.png",
-  },
-  "media-center-press": {
-    cmsPageSlug: "media-center-press",
-    publicPath: "/media-center/press",
-    heroImage: "/images/venesia-5.png",
-  },
-  "media-center-site-updates": {
-    cmsPageSlug: "media-center-site-updates",
-    publicPath: "/media-center/site-updates",
-    heroImage: "/images/venesia-5.png",
-  },
-};
+const mediaCenterRoutes = MEDIA_CENTER_ROUTE_KEYS.map((key) =>
+  getPublicPageRoute(key),
+);
 
-export const MEDIA_CENTER_PUBLIC_PATHS = Object.values(MEDIA_CENTER_CMS_PAGES).map(
-  (page) => page.publicPath,
+/** Media shell registry projected from the canonical public route owner. */
+export const MEDIA_CENTER_CMS_PAGES = Object.fromEntries(
+  mediaCenterRoutes.map((route) => [
+    route.cmsPageSlug,
+    {
+      cmsPageSlug: route.cmsPageSlug,
+      publicPath: route.href,
+      heroImage: "/images/venesia-5.png",
+    },
+  ]),
+) as Record<MediaCenterCmsPageSlug, MediaCenterShellConfig>;
+
+export const MEDIA_CENTER_PUBLIC_PATHS = mediaCenterRoutes.map(
+  (route) => route.href,
 );
 
 export function getMediaCenterCmsPageConfig(slug: MediaCenterCmsPageSlug) {
   return MEDIA_CENTER_CMS_PAGES[slug];
 }
 
-export function isMediaCenterCmsPageSlug(slug: string): slug is MediaCenterCmsPageSlug {
+export function isMediaCenterCmsPageSlug(
+  slug: string,
+): slug is MediaCenterCmsPageSlug {
   return slug in MEDIA_CENTER_CMS_PAGES;
 }

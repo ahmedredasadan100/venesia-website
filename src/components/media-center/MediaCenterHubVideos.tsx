@@ -1,6 +1,7 @@
 import type { MediaContentItem } from "../../lib/media-center";
 import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
 import type { CollectionDisplayOverrides } from "../../lib/page-blocks/configs";
+import { resolvePublicContentBasePath } from "../../lib/content/public-content-path";
 import MediaCenterCollectionItems from "./MediaCenterCollectionItems";
 import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
@@ -21,7 +22,7 @@ export default function MediaCenterHubVideos({
     <section>
       <MediaCenterHubSectionHeader
         presentation={presentation}
-        href="/media-center/videos"
+        href={resolvePublicContentBasePath("video")}
       />
       <MediaCenterCollectionItems
         items={items}

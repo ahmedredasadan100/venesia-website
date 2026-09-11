@@ -6,12 +6,15 @@ import {
   revalidatePageCompositionCache,
 } from "../cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../supabase-admin";
-import { MEDIA_CENTER_PUBLIC_PATHS } from "../media-center-page-config";
+import {
+  findPublicPageRouteByCmsSlug,
+  PUBLIC_STATIC_PAGE_ROUTES,
+} from "../admin/links/static-routes";
 import { normalizePath } from "../seo/seo-utils";
 
 import { ALL_ASSIGNMENT_TABLES } from "./block-module-registry";
 
-const BASE_PUBLIC_PATHS = ["/", "/about", "/contact", "/topics", "/track-your-project", ...MEDIA_CENTER_PUBLIC_PATHS];
+const BASE_PUBLIC_PATHS = PUBLIC_STATIC_PAGE_ROUTES.map((route) => route.href);
 
 function revalidateStoredPublicPagePath(path: string | null | undefined) {
   if (!path) return;
@@ -24,14 +27,10 @@ function revalidateStoredPublicPagePath(path: string | null | undefined) {
 function addPagePaths(paths: Set<string>, page?: { path: string | null; slug: string | null } | null) {
   if (!page) return;
   if (page.path) paths.add(page.path);
-  if (page.slug === "home") paths.add("/");
-  if (page.slug === "about") paths.add("/about");
-  if (page.slug === "contact") paths.add("/contact");
-  if (page.slug === "topics") paths.add("/topics");
-  if (page.slug === "track-your-project") paths.add("/track-your-project");
-  if (page.slug?.startsWith("media-center")) {
-    paths.add(page.path ?? "/media-center");
-  }
+  const registeredRoute = page.slug
+    ? findPublicPageRouteByCmsSlug(page.slug)
+    : null;
+  if (registeredRoute) paths.add(registeredRoute.href);
 }
 
 async function collectAssignedPublicPaths() {

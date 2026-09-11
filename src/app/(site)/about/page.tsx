@@ -3,11 +3,13 @@ import RevealAnimations from "../../../components/RevealAnimations";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
 import type { SearchPlatformSearchParams } from "../../../components/search-platform/SearchPlatformModule";
+import { getPublicPageRoute } from "../../../lib/admin/links/static-routes";
 
 export const revalidate = 300;
+const PAGE_IDENTITY = getPublicPageRoute("about");
 
 export async function generateMetadata() {
-  return generatePublicMetadata({ path: "/about" });
+  return generatePublicMetadata({ path: PAGE_IDENTITY.href });
 }
 
 type AboutPageProps = {
@@ -16,7 +18,7 @@ type AboutPageProps = {
 
 export default async function AboutPage({ searchParams }: AboutPageProps) {
   const [composition, resolvedSearchParams] = await Promise.all([
-    loadPageCompositionBySlug("about"),
+    loadPageCompositionBySlug(PAGE_IDENTITY.cmsPageSlug),
     searchParams ?? Promise.resolve({}),
   ]);
 

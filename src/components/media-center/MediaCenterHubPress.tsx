@@ -1,6 +1,7 @@
 import type { MediaContentItem } from "../../lib/media-center/types";
 import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
 import type { CollectionDisplayOverrides } from "../../lib/page-blocks/configs";
+import { resolvePublicContentBasePath } from "../../lib/content/public-content-path";
 import MediaCenterCollectionItems from "./MediaCenterCollectionItems";
 import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 
@@ -19,7 +20,7 @@ export default function MediaCenterHubPress({
     <section>
       <MediaCenterHubSectionHeader
         presentation={presentation}
-        href="/media-center/press"
+        href={resolvePublicContentBasePath("press")}
       />
       <MediaCenterCollectionItems
         items={items}

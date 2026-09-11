@@ -7,9 +7,9 @@ import { useAutoCarousel } from "../../hooks/use-auto-carousel";
 import type { CollectionContentHierarchy } from "../../lib/collection-modules/content-hierarchy";
 import {
   getMediaHref,
-  MEDIA_TYPE_PATHS,
   type MediaContentItem,
 } from "../../lib/media-center/types";
+import { resolvePublicContentBasePath } from "../../lib/content/public-content-path";
 import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
 import { resolveMediaCollectionItemDisplay } from "../../lib/media-center/collection-display-adapter";
 import {
@@ -147,7 +147,7 @@ export default function MediaCenterHubFeatured({
     <section className="relative">
       <MediaCenterHubSectionHeader
         presentation={presentation}
-        href={`/media-center/${MEDIA_TYPE_PATHS[primaryItem.type]}`}
+        href={resolvePublicContentBasePath(primaryItem.type)}
       />
 
       {hierarchyMode === "uniform" ? (

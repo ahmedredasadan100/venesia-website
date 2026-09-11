@@ -4,6 +4,7 @@ import {
   type MediaListingPageKey,
 } from "../../lib/media-center/listing-page-config";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
+import { resolvePublicContentPageRoute } from "../../lib/content/public-content-path";
 
 type MediaListingPageProps = {
   configKey: MediaListingPageKey;
@@ -16,16 +17,16 @@ type MediaListingPageProps = {
 
 export default async function MediaListingPage({ configKey, searchParams }: MediaListingPageProps) {
   const config = MEDIA_LISTING_PAGE_CONFIG[configKey];
+  const pageIdentity = resolvePublicContentPageRoute(config.mediaType);
   const [params, composition] = await Promise.all([
     searchParams ?? Promise.resolve(undefined),
-    loadPageCompositionBySlug(config.cmsPageSlug),
+    loadPageCompositionBySlug(pageIdentity.cmsPageSlug),
   ]);
 
   return (
     <MediaCenterShellLayout
-      cmsPageSlug={config.cmsPageSlug}
+      pageIdentity={pageIdentity}
       composition={composition}
-      publicPath={config.basePath}
       searchParams={params}
     />
   );

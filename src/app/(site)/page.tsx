@@ -7,11 +7,13 @@ import PageSlotLayout, {
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
 import { generatePublicMetadata } from "../../lib/seo/generate-public-metadata";
 import type { SearchPlatformSearchParams } from "../../components/search-platform/SearchPlatformModule";
+import { getPublicPageRoute } from "../../lib/admin/links/static-routes";
 
 export const revalidate = 300;
+const PAGE_IDENTITY = getPublicPageRoute("home");
 
 export async function generateMetadata() {
-  return generatePublicMetadata({ path: "/" });
+  return generatePublicMetadata({ path: PAGE_IDENTITY.href });
 }
 
 type HomePageProps = {
@@ -20,7 +22,7 @@ type HomePageProps = {
 
 export default async function HomePage({ searchParams }: HomePageProps) {
   const [composition, resolvedSearchParams] = await Promise.all([
-    loadPageCompositionBySlug("home"),
+    loadPageCompositionBySlug(PAGE_IDENTITY.cmsPageSlug),
     searchParams ?? Promise.resolve({}),
   ]);
   const homepageProjects = composition.homepageProjects ?? [];
@@ -41,10 +43,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       <HeroSlotContent
         composition={composition}
         homepageProjects={homepageProjects}
-        publicPath="/"
+        publicPath={PAGE_IDENTITY.href}
         searchParams={resolvedSearchParams}
         listingContext={{
-          publicPath: "/",
+          publicPath: PAGE_IDENTITY.href,
           searchParams: resolvedSearchParams,
         }}
         suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
@@ -61,10 +63,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         composition={composition}
         skipSlots={["hero", "main"]}
         homepageProjects={homepageProjects}
-        publicPath="/"
+        publicPath={PAGE_IDENTITY.href}
         searchParams={resolvedSearchParams}
         listingContext={{
-          publicPath: "/",
+          publicPath: PAGE_IDENTITY.href,
           searchParams: resolvedSearchParams,
         }}
       />

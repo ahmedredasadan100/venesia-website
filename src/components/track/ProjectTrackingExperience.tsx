@@ -12,6 +12,7 @@ import {
   type ProjectTrackingStage,
   type ProjectTrackingUpdate,
 } from "../../lib/projects/tracking/contract";
+import { getProjectTrackHref } from "../../lib/projects/public-helpers";
 
 type ProjectTrackingExperienceProps = {
   detail: ProjectTrackingPublicDetail;
@@ -287,7 +288,7 @@ export default function ProjectTrackingExperience({
     ) ??
     activeItem?.updates[0] ??
     null;
-  const basePath = `/track-your-project/${detail.project.slug}`;
+  const basePath = getProjectTrackHref(detail.project);
   const selectionQuery = {
     stage: detail.selectedStageId ?? undefined,
     item: detail.selectedItemId ?? undefined,
