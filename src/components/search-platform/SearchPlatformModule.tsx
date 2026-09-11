@@ -16,6 +16,7 @@ import {
 import {
   loadPublicContentCollection,
   loadPublicContentFilterOptions,
+  PublicContentReadError,
 } from "../../lib/content/public-content-read/owner";
 import {
   asSearchPlatformConfig,
@@ -59,6 +60,10 @@ function listParam(value: string | string[] | undefined) {
   return [...new Set(values.flatMap((item) => item.split(",")).map((item) => item.trim()).filter(Boolean))];
 }
 
+function slugParam(value: string | string[] | undefined) {
+  return firstParam(value).replace(/[^a-zA-Z0-9_-]/gu, "");
+}
+
 function resolveScopedContentTypes(
   config: SearchPlatformConfig,
   params: SearchPlatformSearchParams,
@@ -70,7 +75,9 @@ function resolveScopedContentTypes(
   const scoped = requestedScope.length
     ? configured.filter((contentType) => requestedScope.includes(contentType))
     : configured;
-  const requestedType = firstParam(params.type);
+  const requestedType = config.filters.includes("content-type")
+    ? firstParam(params.type)
+    : "";
 
   if (isContentType(requestedType) && scoped.includes(requestedType)) {
     return {
@@ -98,50 +105,56 @@ function SearchResultCard({
     <article
       className={[
         "group overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.035] transition hover:border-[#D8B87A]/30 hover:bg-white/[0.05]",
-        isList ? "grid gap-0 md:grid-cols-[15rem_minmax(0,1fr)]" : "flex h-full flex-col",
+        isList ? "" : "h-full",
       ].join(" ")}
       data-search-result-type={item.contentType}
     >
       <Link
         href={item.href}
         className={[
-          "relative block overflow-hidden bg-white/[0.03]",
-          isList ? "min-h-48 md:min-h-full" : "aspect-[16/10]",
+          "h-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]/70",
+          isList ? "grid gap-0 md:grid-cols-[15rem_minmax(0,1fr)]" : "flex flex-col",
         ].join(" ")}
+        data-search-result-link=""
       >
-        <Image
-          src={item.image}
-          alt={item.imageAlt || item.title}
-          fill
-          sizes={isList ? "(max-width: 768px) 100vw, 240px" : "(max-width: 768px) 100vw, 33vw"}
-          className="object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/55 via-transparent to-transparent" />
-      </Link>
+        <div
+          className={[
+            "relative block overflow-hidden bg-white/[0.03]",
+            isList ? "min-h-48 md:min-h-full" : "aspect-[16/10]",
+          ].join(" ")}
+        >
+          <Image
+            src={item.image}
+            alt={item.imageAlt || item.title}
+            fill
+            sizes={isList ? "(max-width: 768px) 100vw, 240px" : "(max-width: 768px) 100vw, 33vw"}
+            className="object-cover opacity-90 transition duration-700 group-hover:scale-105 group-hover:opacity-100"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#05070B]/55 via-transparent to-transparent" />
+        </div>
 
-      <div className="flex min-w-0 flex-1 flex-col p-6 text-right">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-[#D8B87A]/75">
-          <span>{getContentTypeLabel(item.contentType)}</span>
-          {item.category ? <span>· {item.category}</span> : null}
-          {item.series ? <span>· {item.series}</span> : null}
-        </div>
-        <h3 className="mt-3 text-xl font-semibold leading-8 text-white">
-          <Link href={item.href} className="transition hover:text-[#D8B87A]">
+        <div className="flex min-w-0 flex-1 flex-col p-6 text-right">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[#D8B87A]/75">
+            <span>{getContentTypeLabel(item.contentType)}</span>
+            {item.category ? <span>· {item.category}</span> : null}
+            {item.series ? <span>· {item.series}</span> : null}
+          </div>
+          <h3 className="mt-3 text-xl font-semibold leading-8 text-white transition group-hover:text-[#D8B87A]">
             {item.title}
-          </Link>
-        </h3>
-        {item.excerpt ? (
-          <p className="mt-3 line-clamp-3 leading-7 text-white/55">
-            {item.excerpt}
-          </p>
-        ) : null}
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5 text-sm">
-          <span className="text-white/38">{item.date}</span>
-          <Link href={item.href} className="text-[#D8B87A] transition hover:text-white">
-            عرض المحتوى
-          </Link>
+          </h3>
+          {item.excerpt ? (
+            <p className="mt-3 line-clamp-3 leading-7 text-white/55">
+              {item.excerpt}
+            </p>
+          ) : null}
+          <div className="mt-auto flex flex-wrap items-center justify-between gap-3 pt-5 text-sm">
+            <span className="text-white/38">{item.date}</span>
+            <span className="text-[#D8B87A] transition group-hover:text-white">
+              عرض المحتوى
+            </span>
+          </div>
         </div>
-      </div>
+      </Link>
     </article>
   );
 }
@@ -153,6 +166,8 @@ function SearchLauncher({
   query,
   suggestions,
   resultCount,
+  submitPersistentParams,
+  hasReadError,
 }: {
   config: SearchPlatformConfig;
   publicPath: string;
@@ -160,6 +175,8 @@ function SearchLauncher({
   query: string;
   suggestions: readonly PublicContentSearchSuggestion[];
   resultCount: number;
+  submitPersistentParams: Readonly<Record<string, string | undefined>>;
+  hasReadError: boolean;
 }) {
   const compact = config.presentation === "compact";
   const display = config.interfaceDisplay;
@@ -173,6 +190,7 @@ function SearchLauncher({
       dir="rtl"
       data-search-platform-module="launcher"
       data-search-platform-scope={scopeParam ?? ""}
+      data-search-runtime-state={hasReadError ? "error" : query ? (suggestions.length ? "data" : "empty") : "idle"}
       data-search-interface-display-formatting=""
     >
       <p className="text-xs uppercase tracking-[0.28em] text-[#D8B87A]/70">Search</p>
@@ -196,10 +214,12 @@ function SearchLauncher({
         <PublicContentSearchInput
           basePath={publicPath}
           submitPath="/search"
-          submitPersistentParams={{ types: scopeParam }}
+          submitPersistentParams={submitPersistentParams}
           query={query}
           suggestions={suggestions}
           resultCount={resultCount}
+          hasReadError={hasReadError}
+          preliminaryResults
           placeholder={config.placeholder}
           ariaLabel={config.title}
           helpText={config.helpText}
@@ -207,6 +227,22 @@ function SearchLauncher({
           showSearchAction={display.searchAction.visible}
         />
       </div>
+      {hasReadError ? (
+        <p
+          role="alert"
+          className="mt-4 rounded-xl border border-red-300/20 bg-red-300/[0.06] px-4 py-3 text-sm leading-6 text-red-100/80"
+          data-search-interface-element="error-results"
+        >
+          تعذر تحميل النتائج المبدئية حاليًا. أعد المحاولة بعد قليل.
+        </p>
+      ) : query && suggestions.length === 0 ? (
+        <p
+          className="mt-4 rounded-xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm leading-6 text-white/50"
+          data-search-interface-element="preview-empty"
+        >
+          لا توجد نتائج مبدئية مطابقة. اضغط Enter لعرض صفحة البحث الكاملة.
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -239,7 +275,7 @@ function SearchFilters({
 
   return (
     <form action="/search" method="get" className="grid gap-4 rounded-[1.5rem] border border-white/10 bg-white/[0.025] p-5 md:grid-cols-2 xl:grid-cols-4">
-      <input type="hidden" name="q" value={query} />
+      <input type="hidden" name="q" defaultValue={query} />
       {scopeParam ? <input type="hidden" name="types" value={scopeParam} /> : null}
 
       {config.filters.includes("content-type") && availableTypes.length > 1 ? (
@@ -312,24 +348,63 @@ export default async function SearchPlatformModule({
   const config = asSearchPlatformConfig(block.template.config);
   const configuredScope = config.scope === "all" ? [...CONTENT_TYPES] : config.contentTypes;
   const requestedScope = listParam(searchParams.types).filter(isContentType);
-  const activeScope = requestedScope.length
+  const requestedActiveScope = requestedScope.length
     ? configuredScope.filter((contentType) => requestedScope.includes(contentType))
+    : configuredScope;
+  const activeScope = requestedActiveScope.length
+    ? requestedActiveScope
     : configuredScope;
   const scopeParam = activeScope.length === CONTENT_TYPES.length
     ? undefined
     : activeScope.join(",");
   const query = normalizePublicContentSearchQuery(firstParam(searchParams.q));
+  const requestedType = firstParam(searchParams.type);
+  const selectedType = config.filters.includes("content-type") &&
+    isContentType(requestedType) && activeScope.includes(requestedType)
+    ? requestedType
+    : "";
+  const selectedCategory = config.filters.includes("category")
+    ? slugParam(searchParams.category)
+    : "";
+  const selectedSeries = config.filters.includes("series")
+    ? slugParam(searchParams.series)
+    : "";
+  const requestedSort = firstParam(searchParams.sort);
+  const selectedSort = requestedSort === "newest" || requestedSort === "oldest"
+    ? requestedSort
+    : config.defaultSort;
+  const selectedContentTypes = selectedType
+    ? [selectedType]
+    : activeScope.length
+      ? activeScope
+      : configuredScope;
+  const canonicalSearchParams = {
+    types: scopeParam,
+    type: selectedType || undefined,
+    category: selectedCategory || undefined,
+    series: selectedSeries || undefined,
+    sort: selectedSort,
+  } satisfies Readonly<Record<string, string | undefined>>;
 
-  if (publicPath !== "/search" || config.presentation === "compact") {
-    const listing = query
-      ? await loadPublicContentCollection({
-          contentTypes: activeScope.length ? activeScope : configuredScope,
+  if (publicPath !== "/search") {
+    let listing = EMPTY_RESULT;
+    let hasReadError = false;
+    if (query) {
+      try {
+        listing = await loadPublicContentCollection({
+          contentTypes: selectedContentTypes,
           search: query,
           page: 1,
           pageSize: 8,
-          sort: config.defaultSort,
-        })
-      : EMPTY_RESULT;
+          sort: selectedSort,
+          categorySlugs: selectedCategory ? [selectedCategory] : [],
+          seriesSlug: selectedSeries,
+        });
+      } catch (error) {
+        if (!(error instanceof PublicContentReadError)) throw error;
+        hasReadError = true;
+      }
+    }
     const suggestions: PublicContentSearchSuggestion[] = listing.items.map((item) => ({
       id: `${item.contentType}:${item.id}`,
       title: item.title,
@@ -347,39 +422,45 @@ export default async function SearchPlatformModule({
         query={query}
         suggestions={suggestions}
         resultCount={listing.totalCount}
+        submitPersistentParams={canonicalSearchParams}
+        hasReadError={hasReadError}
       />
     );
   }
 
   const scope = resolveScopedContentTypes(config, searchParams);
-  const selectedType = firstParam(searchParams.type);
-  const selectedCategory = config.filters.includes("category")
-    ? firstParam(searchParams.category)
-    : "";
-  const selectedSeries = config.filters.includes("series")
-    ? firstParam(searchParams.series)
-    : "";
-  const selectedSort = firstParam(searchParams.sort) === "oldest"
-    ? "oldest"
-    : config.defaultSort;
   const requestedPage = Math.max(1, Math.floor(Number(firstParam(searchParams.page))) || 1);
 
-  const [listing, filterOptions] = await Promise.all([
-    query
-      ? loadPublicContentCollection({
-          contentTypes: scope.selected,
-          search: query,
-          page: requestedPage,
-          pageSize: config.resultLimit,
-          sort: selectedSort,
-          categorySlugs: selectedCategory ? [selectedCategory] : [],
-          seriesSlug: selectedSeries,
-        })
-      : Promise.resolve({ ...EMPTY_RESULT, pageSize: config.resultLimit }),
-    config.filters.includes("category") || config.filters.includes("series")
-      ? loadPublicContentFilterOptions()
-      : Promise.resolve({ categories: [], series: [] }),
-  ]);
+  let listing: PublicContentCollectionResult = {
+    ...EMPTY_RESULT,
+    pageSize: config.resultLimit,
+  };
+  let filterOptions: Awaited<ReturnType<typeof loadPublicContentFilterOptions>> = {
+    categories: [],
+    series: [],
+  };
+  let hasReadError = false;
+  try {
+    [listing, filterOptions] = await Promise.all([
+      query
+        ? loadPublicContentCollection({
+            contentTypes: scope.selected,
+            search: query,
+            page: requestedPage,
+            pageSize: config.resultLimit,
+            sort: selectedSort,
+            categorySlugs: selectedCategory ? [selectedCategory] : [],
+            seriesSlug: selectedSeries,
+          })
+        : Promise.resolve({ ...EMPTY_RESULT, pageSize: config.resultLimit }),
+      config.filters.includes("category") || config.filters.includes("series")
+        ? loadPublicContentFilterOptions()
+        : Promise.resolve({ categories: [], series: [] }),
+    ]);
+  } catch (error) {
+    if (!(error instanceof PublicContentReadError)) throw error;
+    hasReadError = true;
+  }
   const suggestions: PublicContentSearchSuggestion[] = query
     ? listing.items.slice(0, 8).map((item) => ({
         id: `${item.contentType}:${item.id}`,
@@ -406,6 +487,7 @@ export default async function SearchPlatformModule({
       className="space-y-7 py-4 text-right"
       dir="rtl"
       data-search-platform-module="results"
+      data-search-runtime-state={hasReadError ? "error" : query ? (listing.items.length ? "data" : "empty") : "idle"}
       data-search-interface-display-formatting=""
     >
       <header className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-7 md:p-10">
@@ -429,10 +511,11 @@ export default async function SearchPlatformModule({
         <div className="mt-6 max-w-3xl">
           <PublicContentSearchInput
             basePath="/search"
-            persistentParams={{ types: scopeParam }}
+            persistentParams={canonicalSearchParams}
             query={query}
             suggestions={suggestions}
             resultCount={listing.totalCount}
+            hasReadError={hasReadError}
             placeholder={config.placeholder}
             ariaLabel={config.title}
             helpText={config.helpText}
@@ -442,7 +525,19 @@ export default async function SearchPlatformModule({
         </div>
       </header>
 
-      {query ? (
+      {hasReadError ? (
+        <div
+          role="alert"
+          className="rounded-[2rem] border border-red-300/20 bg-red-300/[0.06] p-10 text-center"
+          data-search-interface-element="error-results"
+        >
+          <p className="text-xs uppercase tracking-[0.3em] text-red-100/55">Search Error</p>
+          <h2 className="mt-4 text-2xl font-semibold text-white">تعذر تحميل نتائج البحث</h2>
+          <p className="mx-auto mt-4 max-w-xl leading-8 text-white/55">
+            لم تُعرض حالة فارغة بديلة. أعد المحاولة بعد قليل.
+          </p>
+        </div>
+      ) : query ? (
         <SearchFilters
           config={config}
           query={query}
@@ -457,7 +552,7 @@ export default async function SearchPlatformModule({
         />
       ) : null}
 
-      {query ? (
+      {hasReadError ? null : query ? (
         listing.items.length ? (
           <>
             {display.resultsTitle.visible ? (

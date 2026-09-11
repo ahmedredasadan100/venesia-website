@@ -66,6 +66,7 @@ export function renderMediaHubSection(
         module={module}
         publicPath={listingContext.publicPath}
         searchParams={listingContext.searchParams}
+        excludeContentIds={listingContext.excludeContentIds}
       />
     );
   }

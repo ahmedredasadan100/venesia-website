@@ -106,7 +106,7 @@ export default function SidebarLatestArticlesWidget({
                   <div className="relative aspect-[4/3] w-full overflow-hidden rounded-xl">
                     <Image
                       src={item.image}
-                      alt={item.title}
+                      alt={item.imageAlt}
                       fill
                       sizes="(max-width: 1024px) 30vw, 100px"
                       className="object-cover transition-transform duration-700 group-hover:scale-105"

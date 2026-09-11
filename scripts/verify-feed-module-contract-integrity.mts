@@ -27,11 +27,15 @@ const nativeRequire = createRequire(import.meta.url);
 function loadTranspiledModule(
   filename: string,
   overrides: Record<string, unknown> = {},
+  transform: (source: string) => string = (source) => source,
 ) {
-  const source = readFileSync(filename, "utf8").replace(/^\uFEFF/u, "");
+  const source = transform(
+    readFileSync(filename, "utf8").replace(/^\uFEFF/u, ""),
+  );
   const compiled = ts.transpileModule(source, {
     compilerOptions: {
       esModuleInterop: true,
+      jsx: ts.JsxEmit.ReactJSX,
       module: ts.ModuleKind.CommonJS,
       target: ts.ScriptTarget.ES2022,
     },
@@ -73,9 +77,16 @@ const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "./module-edit-registry": moduleEditRegistry,
 });
 const feedTypes = loadTranspiledModule("src/lib/feed-modules/types.ts");
+const itemLimitContract = await jiti.import<Record<string, unknown>>(
+  "../src/lib/collection-modules/item-limit.ts",
+);
+const collectionItemLimitMax = Number(
+  itemLimitContract.COLLECTION_ITEM_LIMIT_MAX,
+);
 const feedConfigContract = loadTranspiledModule(
   "src/lib/feed-modules/parse-feed-config.ts",
   {
+    "../collection-modules/item-limit": itemLimitContract,
     "../page-blocks/admin-utils": adminUtils,
     "../page-blocks/configs": pageBlockConfigs,
     "./types": feedTypes,
@@ -366,6 +377,19 @@ assert.throws(
   () => buildFeedModuleConfig(invalidLimitForm, "latest"),
   /عدد العناصر المعروضة/u,
 );
+const aboveMaximumLimitForm = createFeedForm();
+aboveMaximumLimitForm.set("limit", String(collectionItemLimitMax + 1));
+assert.throws(
+  () => buildFeedModuleConfig(aboveMaximumLimitForm, "latest"),
+  /عدد العناصر المعروضة/u,
+);
+assert.equal(
+  parseFeedModuleConfig(
+    { query: { limit: collectionItemLimitMax + 1 } },
+    "latest",
+  ).query.limit,
+  collectionItemLimitMax,
+);
 const missingTitleForm = createFeedForm();
 missingTitleForm.set("widget_title", " ");
 assert.throws(
@@ -552,170 +576,61 @@ try {
   await db.close();
 }
 
-type CategoryResolverRow = {
+type FeedArticleFixture = {
   id: number;
-  name: string | null;
-  slug: string | null;
-  status: string;
-  topics_count: Array<{ count: number | string | null }>;
-  topics?: Array<{
-    status: string;
-    content_type: string;
-    deleted_at: string | null;
-    series_slug: string | null;
-  }>;
+  title: string;
+  excerpt: string;
+  date: string;
+  image: string;
+  imageAlt: string;
+  href: string;
+  category: string;
+  series: string;
+  viewsCount: number;
 };
 
-type SeriesResolverRow = {
+type FeedCategoryFixture = {
+  id: number;
+  name: string;
   slug: string;
-  status: string;
-  category_id: number | null;
+  count: number;
 };
 
-type ResolverQueryResult = {
-  data: unknown;
-  error: Error | null;
+type FeedSeriesFixture = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  categoryId: number | null;
+  representative: { image: string; imageAlt: string } | null;
 };
-
-const resolverFixture: {
-  categories: CategoryResolverRow[];
-  series: SeriesResolverRow[];
-  categoryError: Error | null;
-  categoryFilters: Array<[string, unknown]>;
-} = {
-  categories: [],
-  series: [],
-  categoryError: null,
-  categoryFilters: [],
-};
-
-class ResolverQueryMock implements PromiseLike<ResolverQueryResult> {
-  private readonly table: string;
-  private readonly filters: Array<[string, unknown]> = [];
-  private resultLimit: number | null = null;
-
-  constructor(table: string) {
-    this.table = table;
-  }
-
-  select() {
-    return this;
-  }
-
-  eq(column: string, value: unknown) {
-    this.filters.push([column, value]);
-    if (this.table === "topic_categories") {
-      resolverFixture.categoryFilters.push([column, value]);
-    }
-    return this;
-  }
-
-  in(column: string, values: readonly unknown[]) {
-    this.filters.push([column, [...values]]);
-    if (this.table === "topic_categories") {
-      resolverFixture.categoryFilters.push([column, [...values]]);
-    }
-    return this;
-  }
-
-  is(column: string, value: unknown) {
-    if (column.includes(".")) {
-      this.filters.push([column, value]);
-    }
-    if (this.table === "topic_categories") {
-      resolverFixture.categoryFilters.push([column, value]);
-    }
-    return this;
-  }
-
-  order() {
-    return this;
-  }
-
-  limit(value: number) {
-    this.resultLimit = value;
-    return this;
-  }
-
-  async maybeSingle() {
-    const rows = this.applyFilters(
-      this.table === "topic_series" ? resolverFixture.series : [],
-    );
-    return { data: rows[0] ?? null, error: null };
-  }
-
-  then<TResult1 = ResolverQueryResult, TResult2 = never>(
-    onfulfilled?: ((value: ResolverQueryResult) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
-  ): Promise<TResult1 | TResult2> {
-    const result = this.resolveResult();
-    return Promise.resolve(result).then(onfulfilled, onrejected);
-  }
-
-  private applyFilters<T extends object>(rows: T[]) {
-    return this.filters.reduce((filtered, [column, value]) =>
-      column.includes(".")
-        ? filtered
-        : filtered.filter((row) =>
-            Array.isArray(value)
-              ? value.includes((row as Record<string, unknown>)[column])
-              : (row as Record<string, unknown>)[column] === value,
-          ), [...rows]);
-  }
-
-  private resolveResult(): ResolverQueryResult {
-    if (this.table === "topic_categories" && resolverFixture.categoryError) {
-      return { data: null, error: resolverFixture.categoryError };
-    }
-
-    const sourceRows: object[] = this.table === "topic_categories"
-      ? resolverFixture.categories
-      : this.table === "topic_series"
-        ? resolverFixture.series
-        : [];
-    const rows = this.applyFilters(sourceRows).map((row) => {
-      if (this.table !== "topic_categories") return row;
-
-      const category = row as CategoryResolverRow;
-      if (!category.topics) return category;
-
-      const topics = this.filters.reduce((filtered, [column, value]) => {
-        if (!column.startsWith("topics.")) return filtered;
-        const topicColumn = column.slice("topics.".length);
-        return filtered.filter((topic) =>
-          Array.isArray(value)
-            ? value.includes(topic[topicColumn as keyof typeof topic])
-            : topic[topicColumn as keyof typeof topic] === value,
-        );
-      }, category.topics);
-
-      return { ...category, topics_count: [{ count: topics.length }] };
-    });
-    return {
-      data: this.resultLimit === null ? rows : rows.slice(0, this.resultLimit),
-      error: null,
-    };
-  }
-}
 
 const publicCollectionInputs: Array<Record<string, unknown>> = [];
+const publicFeedCategoryInputs: Array<Record<string, unknown>> = [];
+const publicFeedSeriesInputs: Array<Record<string, unknown>> = [];
+let publicCollectionItems: FeedArticleFixture[] = [];
+let publicFeedCategories: FeedCategoryFixture[] = [];
+let publicFeedSeries: FeedSeriesFixture[] = [];
+let publicFeedCategoryFailure: Error | null = null;
 const resolverContract = loadTranspiledModule(
   "src/lib/feed-modules/resolve-topics-feed.ts",
   {
     "server-only": {},
-    "../supabase-admin": {
-      getSupabaseAdmin: () => ({
-        from: (table: string) => new ResolverQueryMock(table),
-      }),
-    },
     "../content/public-content-read/owner": {
       loadPublicContentCollection: async (input: Record<string, unknown>) => {
         publicCollectionInputs.push(input);
-        return { items: [] };
+        return { items: publicCollectionItems };
+      },
+      loadPublicContentFeedCategories: async (input: Record<string, unknown>) => {
+        publicFeedCategoryInputs.push(input);
+        if (publicFeedCategoryFailure) throw publicFeedCategoryFailure;
+        return publicFeedCategories;
+      },
+      loadPublicContentFeedSeries: async (input: Record<string, unknown>) => {
+        publicFeedSeriesInputs.push(input);
+        return publicFeedSeries;
       },
     },
-    "../logging": { logError: () => undefined },
-    "../content-dates": { formatArabicContentDate: () => "" },
     "../media/resolve-local-public-image": {
       resolveLocalPublicImage: (value: unknown, fallback: string) =>
         typeof value === "string" && value ? value : fallback,
@@ -725,13 +640,28 @@ const resolverContract = loadTranspiledModule(
 const resolveTopicsFeedModule = resolverContract.resolveTopicsFeedModule as (
   template: { feed_type: TopicsFeedType },
   config: FeedModuleConfig,
+  excludeContentIds?: readonly number[],
 ) => Promise<{
   kind: string;
-  items: Array<{ name: string; href: string; count: number }>;
+  items: Array<Record<string, unknown>>;
 }>;
 
 publicCollectionInputs.length = 0;
-await resolveTopicsFeedModule(
+publicCollectionItems = [
+  {
+    id: 71,
+    title: "Latest article",
+    excerpt: "Latest excerpt",
+    date: "11 September 2026",
+    image: "/latest.jpg",
+    imageAlt: "Latest authored alt",
+    href: "/topics/latest-article",
+    category: "Parent category",
+    series: "Series 71",
+    viewsCount: 17,
+  },
+];
+const latestPayload = await resolveTopicsFeedModule(
   { feed_type: "latest" },
   {
     ...enabledConfig,
@@ -741,6 +671,7 @@ await resolveTopicsFeedModule(
       seriesSlugs: ["district-guide", "market-updates"],
     },
   },
+  [901, 902],
 );
 assert.deepEqual(publicCollectionInputs.at(-1)?.seriesSlugs, [
   "district-guide",
@@ -748,130 +679,52 @@ assert.deepEqual(publicCollectionInputs.at(-1)?.seriesSlugs, [
 ]);
 assert.deepEqual(publicCollectionInputs.at(-1)?.categorySlugs, ["bait-al-watan"]);
 assert.equal(publicCollectionInputs.at(-1)?.pageSize, enabledConfig.query.limit);
+assert.equal(publicCollectionInputs.at(-1)?.sort, "newest");
+assert.deepEqual(publicCollectionInputs.at(-1)?.excludeIds, [901, 902]);
+assert.deepEqual(latestPayload.items, publicCollectionItems);
 
-resolverFixture.categories = [
-  { id: 1, name: "ØªØµÙ†ÙŠÙ Ø¢Ø®Ø±", slug: "other", status: "published", topics_count: [{ count: 4 }] },
-  { id: 2, name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", slug: "bait-al-watan", status: "published", topics_count: [{ count: "260" }] },
+publicCollectionItems = [
+  {
+    id: 81,
+    title: "Most viewed",
+    excerpt: "First by real views",
+    date: "11 September 2026",
+    image: "/most-viewed.jpg",
+    imageAlt: "Most viewed authored alt",
+    href: "/topics/most-viewed",
+    category: "Parent category",
+    series: "Series 81",
+    viewsCount: 900,
+  },
+  {
+    id: 82,
+    title: "Second most viewed",
+    excerpt: "Second by real views",
+    date: "10 September 2026",
+    image: "/second-most-viewed.jpg",
+    imageAlt: "Second authored alt",
+    href: "/topics/second-most-viewed",
+    category: "Child category",
+    series: "Series 82",
+    viewsCount: 450,
+  },
 ];
-resolverFixture.categoryFilters = [];
+const popularPayload = await resolveTopicsFeedModule(
+  { feed_type: "popular" },
+  enabledConfig,
+);
+assert.equal(publicCollectionInputs.at(-1)?.sort, "most-viewed");
+assert.equal("popularOnly" in (publicCollectionInputs.at(-1) ?? {}), false);
+assert.deepEqual(
+  popularPayload.items.map((item) => [item.id, item.viewsCount]),
+  [[81, 900], [82, 450]],
+);
+
+publicFeedCategories = [
+  { id: 2, name: "بيت الوطن", slug: "bait-al-watan", count: 260 },
+];
+publicFeedCategoryInputs.length = 0;
 const selectedCategoryPayload = await resolveTopicsFeedModule(
-  { feed_type: "categories" },
-  {
-    ...categoryConfig,
-    query: { ...categoryConfig.query, limit: 20, categorySlugs: ["bait-al-watan"] },
-  },
-);
-assert.deepEqual(selectedCategoryPayload, {
-  kind: "categories",
-  items: [{ name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", href: "/topics?category=bait-al-watan", count: 20 }],
-});
-
-resolverFixture.categories = [
-  { id: 2, name: "بيت الوطن", slug: "bait-al-watan", status: "published", topics_count: [{ count: 10 }] },
-];
-const belowLimitCategoryPayload = await resolveTopicsFeedModule(
-  { feed_type: "categories" },
-  {
-    ...categoryConfig,
-    query: { ...categoryConfig.query, limit: 20, categorySlugs: ["bait-al-watan"] },
-  },
-);
-assert.deepEqual(belowLimitCategoryPayload.items, [
-  { name: "بيت الوطن", href: "/topics?category=bait-al-watan", count: 10 },
-]);
-assert.ok(
-  resolverFixture.categoryFilters.some(
-    ([column, value]) => column === "slug" && Array.isArray(value) && value.includes("bait-al-watan"),
-  ),
-  "category filter must be applied by the source query before limit",
-);
-for (const [column, value] of [
-  ["topics.status", "published"],
-  ["topics.content_type", "article"],
-  ["topics.deleted_at", null],
-] as const) {
-  assert.ok(
-    resolverFixture.categoryFilters.some(
-      ([actualColumn, actualValue]) => actualColumn === column && actualValue === value,
-    ),
-    `public category counters must filter ${column}`,
-  );
-}
-
-resolverFixture.categories = [
-  { id: 1, name: "تصنيف آخر", slug: "other", status: "published", topics_count: [{ count: 4 }] },
-  { id: 2, name: "بيت الوطن", slug: "bait-al-watan", status: "published", topics_count: [{ count: "260" }] },
-  { id: 3, name: "غير مختار", slug: "unselected", status: "published", topics_count: [{ count: 7 }] },
-];
-resolverFixture.categoryFilters = [];
-const multiCategoryPayload = await resolveTopicsFeedModule(
-  { feed_type: "categories" },
-  {
-    ...categoryConfig,
-    query: { ...categoryConfig.query, limit: 20, categorySlugs: ["other", "bait-al-watan"] },
-  },
-);
-assert.deepEqual(multiCategoryPayload.items, [
-  { name: "تصنيف آخر", href: "/topics?category=other", count: 4 },
-  { name: "بيت الوطن", href: "/topics?category=bait-al-watan", count: 20 },
-]);
-assert.ok(
-  resolverFixture.categoryFilters.some(
-    ([column, value]) =>
-      column === "slug" &&
-      Array.isArray(value) &&
-      value.includes("other") &&
-      value.includes("bait-al-watan"),
-  ),
-  "multiple categories must be applied as one OR source filter before limit",
-);
-
-resolverFixture.categories = [{
-  id: 2,
-  name: "بيت الوطن",
-  slug: "bait-al-watan",
-  status: "published",
-  topics_count: [{ count: 6 }],
-  topics: [
-    { status: "published", content_type: "article", deleted_at: null, series_slug: "district-guide" },
-    { status: "published", content_type: "article", deleted_at: null, series_slug: "district-guide" },
-    { status: "published", content_type: "article", deleted_at: null, series_slug: "market-updates" },
-    { status: "published", content_type: "article", deleted_at: null, series_slug: "other-series" },
-    { status: "unpublished", content_type: "article", deleted_at: null, series_slug: "district-guide" },
-    { status: "published", content_type: "video", deleted_at: null, series_slug: "district-guide" },
-  ],
-}];
-resolverFixture.series = [
-  { slug: "district-guide", status: "published", category_id: 2 },
-  { slug: "market-updates", status: "published", category_id: 2 },
-];
-resolverFixture.categoryFilters = [];
-const allSeriesCategoryPayload = await resolveTopicsFeedModule(
-  { feed_type: "categories" },
-  {
-    ...categoryConfig,
-    query: { ...categoryConfig.query, limit: 20, categorySlugs: ["bait-al-watan"], seriesSlugs: [] },
-  },
-);
-assert.equal(allSeriesCategoryPayload.items[0]?.count, 4);
-
-resolverFixture.categoryFilters = [];
-const oneSeriesCategoryPayload = await resolveTopicsFeedModule(
-  { feed_type: "categories" },
-  {
-    ...categoryConfig,
-    query: {
-      ...categoryConfig.query,
-      limit: 20,
-      categorySlugs: ["bait-al-watan"],
-      seriesSlugs: ["district-guide"],
-    },
-  },
-);
-assert.equal(oneSeriesCategoryPayload.items[0]?.count, 2);
-
-resolverFixture.categoryFilters = [];
-const multipleSeriesCategoryPayload = await resolveTopicsFeedModule(
   { feed_type: "categories" },
   {
     ...categoryConfig,
@@ -883,49 +736,226 @@ const multipleSeriesCategoryPayload = await resolveTopicsFeedModule(
     },
   },
 );
-assert.equal(multipleSeriesCategoryPayload.items[0]?.count, 3);
+assert.deepEqual(selectedCategoryPayload, {
+  kind: "categories",
+  items: [{ name: "بيت الوطن", href: "/topics?category=bait-al-watan", count: 260 }],
+});
 assert.ok(
-  resolverFixture.categoryFilters.some(
-    ([column, value]) =>
-      column === "topics.series_slug" &&
-      Array.isArray(value) &&
-      value.includes("district-guide") &&
-      value.includes("market-updates"),
-  ),
-  "category counters must apply the selected series to the embedded topics aggregate",
+  publicFeedCategoryInputs.at(-1)?.limit === 20 &&
+    JSON.stringify(publicFeedCategoryInputs.at(-1)?.categorySlugs) ===
+      JSON.stringify(["bait-al-watan"]) &&
+    JSON.stringify(publicFeedCategoryInputs.at(-1)?.seriesSlugs) ===
+      JSON.stringify(["district-guide", "market-updates"]),
+  "Category Feed must delegate its full scope to Public Content Read",
 );
 
-resolverFixture.categories = [
-  { id: 3, name: "  ", slug: "blank-label", status: "published", topics_count: [{ count: 1 }] },
-  { id: 2, name: " Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù† ", slug: "bait-al-watan", status: "published", topics_count: [{ count: 2 }] },
-];
-const guardedCategoryPayload = await resolveTopicsFeedModule(
-  { feed_type: "categories" },
-  { ...categoryConfig, query: { ...categoryConfig.query, limit: 2 } },
+publicFeedCategoryFailure = new Error("category source failed");
+await assert.rejects(
+  () => resolveTopicsFeedModule({ feed_type: "categories" }, categoryConfig),
+  /category source failed/u,
 );
-assert.deepEqual(guardedCategoryPayload.items, [
-  { name: "Ø¨ÙŠØª Ø§Ù„ÙˆØ·Ù†", href: "/topics?category=bait-al-watan", count: 2 },
-]);
+publicFeedCategoryFailure = null;
 
-resolverFixture.categoryError = new Error("category query failed");
-const categoryFailurePayload = await resolveTopicsFeedModule(
-  { feed_type: "categories" },
-  categoryConfig,
-);
-assert.deepEqual(categoryFailurePayload, { kind: "categories", items: [] });
-resolverFixture.categoryError = null;
-
-resolverFixture.series = [
-  { slug: "hidden-series", status: "unpublished", category_id: 2 },
-];
-const unpublishedSeriesPayload = await resolveTopicsFeedModule(
-  { feed_type: "categories" },
+publicFeedSeries = [
   {
-    ...categoryConfig,
-    query: { ...categoryConfig.query, seriesSlugs: ["hidden-series"] },
+    id: 61,
+    name: "Series after sixty",
+    slug: "series-61",
+    description: "Representative resolved independently",
+    categoryId: 2,
+    representative: {
+      image: "/series-61.jpg",
+      imageAlt: "Authored alt for series 61",
+    },
+  },
+  {
+    id: 62,
+    name: "Series after sixty-two",
+    slug: "series-62",
+    description: "Second independent representative",
+    categoryId: 3,
+    representative: {
+      image: "/series-62.jpg",
+      imageAlt: "Authored alt for series 62",
+    },
+  },
+];
+publicFeedSeriesInputs.length = 0;
+const seriesPayload = await resolveTopicsFeedModule(
+  { feed_type: "series" },
+  {
+    ...seriesConfig,
+    query: {
+      ...seriesConfig.query,
+      limit: 2,
+      categorySlugs: ["parent"],
+      seriesSlugs: ["series-61", "series-62"],
+    },
   },
 );
-assert.deepEqual(unpublishedSeriesPayload, { kind: "categories", items: [] });
+assert.deepEqual(publicFeedSeriesInputs.at(-1), {
+  limit: 2,
+  categorySlugs: ["parent"],
+  seriesSlugs: ["series-61", "series-62"],
+});
+assert.deepEqual(
+  seriesPayload.items.map((item) => ({
+    slug: item.slug,
+    image: item.image,
+    imageAlt: item.imageAlt,
+  })),
+  [
+    {
+      slug: "series-61",
+      image: "/series-61.jpg",
+      imageAlt: "Authored alt for series 61",
+    },
+    {
+      slug: "series-62",
+      image: "/series-62.jpg",
+      imageAlt: "Authored alt for series 62",
+    },
+  ],
+);
+
+const latestWidgetContract = loadTranspiledModule(
+  "src/components/sidebar-feeds/SidebarLatestArticlesWidget.tsx",
+  {
+    "next/image": { default: () => null },
+    "next/link": { default: () => null },
+    "../../hooks/use-auto-carousel": { useAutoCarousel: () => ({}) },
+    "../../lib/feed-modules/types": feedTypes,
+    "../../lib/page-blocks/configs": pageBlockConfigs,
+    "../feed-modules/FeedCarouselDots": { default: () => null },
+    "./SidebarFeedPanel": { SidebarFeedPanel: () => null },
+  },
+  (source) => source.replace(
+    "function chunkItems(",
+    "export function chunkItems(",
+  ),
+);
+const chunkLatestItems = latestWidgetContract.chunkItems as (
+  items: Array<{ id: number }>,
+) => Array<Array<{ id: number }>>;
+const latestSlides = chunkLatestItems(
+  Array.from({ length: 7 }, (_, index) => ({ id: index + 1 })),
+);
+assert.deepEqual(latestSlides.map((slide) => slide.length), [3, 3, 1]);
+assert.deepEqual(
+  latestSlides.flat().map((item) => item.id),
+  [1, 2, 3, 4, 5, 6, 7],
+);
+
+const mediaSidebarContract = loadTranspiledModule(
+  "src/components/media-center/MediaSidebar.tsx",
+  {
+    "next/image": { default: () => null },
+    "next/link": { default: () => null },
+    "next/navigation": { usePathname: () => "/media-center/news" },
+    "../../hooks/use-auto-carousel": { useAutoCarousel: () => ({}) },
+    "../../lib/media-sidebar-modules/parse-config": {
+      MEDIA_SIDEBAR_DEFAULT_MENU_PARENT: null,
+    },
+    "../PublicNavigationProvider": { usePublicNavigation: () => ({}) },
+    "../feed-modules/FeedCarouselDots": { default: () => null },
+    "../sidebar-feeds/SidebarFeedPanel": { SidebarFeedPanel: () => null },
+  },
+  (source) => source.replace(
+    "function chunkSidebarMediaItems(",
+    "export function chunkSidebarMediaItems(",
+  ),
+);
+const chunkMediaSidebarItems = mediaSidebarContract.chunkSidebarMediaItems as (
+  items: Array<{ id: number }>,
+) => Array<Array<{ id: number }>>;
+const mediaSidebarSlides = chunkMediaSidebarItems(
+  Array.from({ length: 7 }, (_, index) => ({ id: index + 1 })),
+);
+assert.deepEqual(mediaSidebarSlides.map((slide) => slide.length), [3, 3, 1]);
+assert.deepEqual(
+  mediaSidebarSlides.flat().map((item) => item.id),
+  [1, 2, 3, 4, 5, 6, 7],
+);
+
+const mediaHubConfigContract = await jiti.import<Record<string, unknown>>(
+  "../src/lib/media-hub-modules/parse-config.ts",
+);
+const mediaHubDefaults = mediaHubConfigContract.MEDIA_HUB_SECTION_DEFAULTS as Record<
+  string,
+  { config: Record<string, unknown> }
+>;
+const mediaHubReads: Array<[string | undefined, number]> = [];
+const mediaHubContract = loadTranspiledModule(
+  "src/lib/media-hub-modules/resolve-hub-section-data.ts",
+  {
+    "server-only": {},
+    "../media-center": {
+      getMediaItems: async (type: string | undefined, limit: number) => {
+        mediaHubReads.push([type, limit]);
+        return Array.from({ length: limit }, (_, index) => ({ id: index + 1 }));
+      },
+    },
+    "./parse-config": mediaHubConfigContract,
+  },
+);
+const enrichMediaHubModules = mediaHubContract.enrichMediaHubModules as (
+  state: Record<string, unknown>,
+) => Promise<{
+  modules: Array<{
+    assignmentId: number;
+    sectionData?: { items?: unknown[] } | null;
+  }>;
+}>;
+function mediaHubModule(
+  assignmentId: number,
+  sectionKey: string,
+  itemLimit: number,
+  isVisible = true,
+) {
+  return {
+    assignmentId,
+    sectionKey,
+    slot: "main",
+    sortOrder: assignmentId,
+    isVisible,
+    title: sectionKey,
+    templateSlug: `fixture-${sectionKey}-${assignmentId}`,
+    config: {
+      ...mediaHubDefaults[sectionKey]?.config,
+      placement: "hub",
+      itemLimit,
+    },
+  };
+}
+const enrichedMediaHub = await enrichMediaHubModules({
+  modules: [
+    mediaHubModule(1, "videos", 7),
+    mediaHubModule(2, "videos", 3),
+    mediaHubModule(3, "gallery", 5),
+    mediaHubModule(4, "press", collectionItemLimitMax, false),
+    mediaHubModule(5, "featured", 4),
+  ],
+  sourceStatus: "database",
+  sourceIssues: [],
+  hasAnyAssignmentRows: true,
+  hasRenderableModules: true,
+});
+assert.deepEqual(mediaHubReads, [["video", 7], ["gallery", 5]]);
+assert.equal(
+  enrichedMediaHub.modules.find((module) => module.assignmentId === 1)
+    ?.sectionData?.items?.length,
+  7,
+);
+assert.equal(
+  enrichedMediaHub.modules.find((module) => module.assignmentId === 2)
+    ?.sectionData?.items?.length,
+  3,
+);
+assert.equal(
+  enrichedMediaHub.modules.find((module) => module.assignmentId === 3)
+    ?.sectionData?.items?.length,
+  5,
+);
 
 const editor = readFileSync(
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
@@ -949,6 +979,14 @@ const publicContentReadOwner = readFileSync(
   "src/lib/content/public-content-read/owner.ts",
   "utf8",
 );
+const publicContentReadContract = readFileSync(
+  "src/lib/content/public-content-read/contract.ts",
+  "utf8",
+);
+const contentFeedTypes = readFileSync(
+  "src/lib/content-feeds/types.ts",
+  "utf8",
+);
 const adminUtilsSource = readFileSync("src/lib/page-blocks/admin-utils.ts", "utf8");
 const blockLoader = readFileSync("src/lib/page-blocks/load-page-blocks.ts", "utf8");
 const compositionLoader = readFileSync("src/lib/page-blocks/load-page-composition.ts", "utf8");
@@ -965,6 +1003,23 @@ const mediaSidebarLoader = readFileSync(
 );
 const mediaSidebarResolver = readFileSync(
   "src/lib/media-sidebar-modules/resolve-widget-items.ts",
+  "utf8",
+);
+const mediaHubDataResolver = readFileSync(
+  "src/lib/media-hub-modules/resolve-hub-section-data.ts",
+  "utf8",
+);
+const mediaFacade = readFileSync("src/lib/media-center.ts", "utf8");
+const unifiedMediaProvider = readFileSync(
+  "src/lib/media-center/unified-provider.ts",
+  "utf8",
+);
+const mediaListingModule = readFileSync(
+  "src/components/media-center/MediaListingModule.tsx",
+  "utf8",
+);
+const mediaHubRenderer = readFileSync(
+  "src/components/media-center/renderMediaHubSections.tsx",
   "utf8",
 );
 const section = readFileSync("src/components/feed-modules/FeedModuleSection.tsx", "utf8");
@@ -1089,14 +1144,21 @@ assert.ok(loader.includes("parseFeedModuleConfig(template.config, template.feed_
 assert.ok(loader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
 assert.equal(loader.includes("isPublishedPageBlockStatus"), false);
 assert.equal(loader.includes("function isPublishedTemplate"), false);
-assert.ok(resolver.includes('.select("id, name, slug, description, status, sort_order, category_id")'));
-assert.ok(resolver.includes('subtitle: row.description ?? ""'));
-assert.ok(resolver.includes('categoriesQuery = categoriesQuery.in("slug", config.query.categorySlugs)'));
-assert.ok(resolver.includes('.eq("topics.status", "published")'));
-assert.ok(resolver.includes('.eq("topics.content_type", "article")'));
-assert.ok(resolver.includes('.is("topics.deleted_at", null)'));
-assert.ok(resolver.includes('categoriesQuery = categoriesQuery.in("topics.series_slug", config.query.seriesSlugs)'));
-assert.ok(resolver.includes("count: Math.min(filteredCount, config.query.limit)"));
+assert.ok(resolver.includes("loadPublicContentFeedCategories"));
+assert.ok(resolver.includes("loadPublicContentFeedSeries"));
+assert.equal(resolver.includes("getSupabaseAdmin"), false);
+assert.equal(resolver.includes("Math.min"), false);
+assert.equal(resolver.includes("catch ("), false);
+assert.ok(
+  resolver.includes('sort: feedType === "popular" ? "most-viewed" : "newest"'),
+  "Most Read must express real view ordering through Public Content Read",
+);
+assert.equal(
+  resolver.includes("popularOnly"),
+  false,
+  "Most Read must not redefine the editorial is_popular flag",
+);
+assert.ok(resolver.includes("excludeIds: excludeContentIds"));
 assert.ok(resolver.includes("categorySlugs: config.query.categorySlugs"));
 assert.ok(resolver.includes("seriesSlugs: config.query.seriesSlugs"));
 assert.ok(
@@ -1105,9 +1167,76 @@ assert.ok(
   ),
   "Public Content Read must apply the Feed seriesSlugs array without a duplicate Feed reader",
 );
-assert.ok(resolver.includes('query = query.in("category_id", categoryIds)'));
-assert.ok(resolver.includes('query = query.in("slug", config.query.seriesSlugs)'));
-assert.ok(resolver.includes('if (!name || !slug) return []'));
+assert.ok(
+  publicContentReadContract.includes('sort?: "newest" | "oldest" | "most-viewed"') &&
+    publicContentReadContract.includes("isPopular: boolean") &&
+    publicContentReadContract.includes("viewsCount: number"),
+  "Public Content Read keeps editorial popularity separate from real view order",
+);
+assert.ok(
+  publicContentReadOwner.includes('if (input.sort === "most-viewed")') &&
+    publicContentReadOwner.includes('.order("views_count", { ascending: false })') &&
+    publicContentReadOwner.includes("isPopular: Boolean(row.is_popular)") &&
+    publicContentReadOwner.includes("viewsCount: Math.max(0, Number(row.views_count) || 0)"),
+  "Most Read orders by views_count while preserving is_popular as authored data",
+);
+assert.ok(
+  publicContentReadOwner.includes("loadPublicContentFeedCategories") &&
+    publicContentReadOwner.includes("getCategoryAndDescendantIds") &&
+    /\.select\("id",\s*\{\s*count:\s*"exact",\s*head:\s*true\s*\}\)/u.test(
+      publicContentReadOwner,
+    ) &&
+    publicContentReadOwner.includes("count: await countPublicArticlesForCategory("),
+  "Category Feed counts the exact public Article total across descendants",
+);
+assert.ok(
+  publicContentReadOwner.includes("loadPublicContentFeedSeries") &&
+    publicContentReadOwner.includes("seriesSlug: row.slug") &&
+    publicContentReadOwner.includes("pageSize: 1") &&
+    !publicContentReadOwner.includes("loadTopicImagesBySeriesSlug"),
+  "each Series resolves one representative independently of a global content cap",
+);
+for (const field of ["id: number", "imageAlt: string", "category: string", "series: string", "viewsCount: number"]) {
+  assert.ok(
+    contentFeedTypes.includes(field),
+    `Feed item contract must retain ${field}`,
+  );
+}
+assert.ok(
+  loader.includes("throw new FeedModuleLoadFailure") &&
+    loader.includes("return await unstable_cache(") &&
+    loader.indexOf("return await unstable_cache(") < loader.indexOf("} catch (error)") &&
+    loader.includes("hasCompositionError: true"),
+  "Feed source failure is shaped only outside the cache and cannot be cached as Empty",
+);
+assert.ok(
+  compositionLoader.includes("const featuredStatePromise") &&
+    compositionLoader.includes("loadFeedModuleStateForPageSlug(") &&
+    compositionLoader.includes("module.items.map((item) => item.id)"),
+  "Feed reads exclude Featured identities before applying their limit",
+);
+assert.ok(
+  mediaHubRenderer.includes("excludeContentIds={listingContext.excludeContentIds}") &&
+    mediaListingModule.includes("excludeIds: searchQuery ? [] : excludeContentIds") &&
+    mediaFacade.includes("excludeIds?: readonly number[]") &&
+    unifiedMediaProvider.includes("excludeIds: params.excludeIds"),
+  "Media Listing delegates Featured exclusion to Public Content Read before pagination",
+);
+assert.ok(
+  mediaHubDataResolver.includes("new Map<MediaContentType, number>()") &&
+    mediaHubDataResolver.includes("Math.max(currentLimit, itemLimit)") &&
+    mediaHubDataResolver.includes("getMediaItems(type, itemLimit)") &&
+    mediaFacade.includes("limit: number") &&
+    unifiedMediaProvider.includes("pageSize: limit") &&
+    !mediaHubDataResolver.includes("getMediaItems(type)"),
+  "Media Hub requests the exact largest visible module limit for each content type",
+);
+assert.ok(
+  mediaSidebarResolver.includes(
+    'sort: widget.widgetKey === "popular" ? "most-viewed" : "newest"',
+  ) && !mediaSidebarResolver.includes("popularOnly"),
+  "Media Sidebar Most Read follows real views without changing editorial popularity",
+);
 assert.ok(adminUtilsSource.includes("export function isPageModulePubliclyVisible"));
 assert.ok(blockLoader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));
 assert.equal(blockLoader.includes("function isPublishedTemplate"), false);
@@ -1195,17 +1324,20 @@ for (const articlePresenter of [latest, popular]) {
   assert.ok(articlePresenter.includes("resolvedCardFormatting.showTitle"));
   assert.ok(articlePresenter.includes("resolvedCardFormatting.showDate"));
   assert.ok(articlePresenter.includes("resolvedCardFormatting.showExcerpt"));
+  assert.ok(articlePresenter.includes("alt={item.imageAlt}"));
   assert.ok(articlePresenter.includes("pageBlockTextAlignClass"));
   assert.ok(articlePresenter.includes("data-feed-article-title"));
   assert.ok(articlePresenter.includes("data-feed-article-date"));
   assert.ok(articlePresenter.includes("data-feed-article-excerpt"));
 }
+assert.ok(popular.includes("data-feed-article-views={item.viewsCount}"));
 assert.ok(latest.includes("if (!hasRenderableItems) return null"));
 assert.ok(categories.includes("resolvedCardFormatting.showCategory"));
 assert.ok(categories.includes("resolvedCardFormatting.showCount"));
 assert.ok(categories.includes("data-feed-category-name"));
 assert.ok(categories.includes("data-feed-category-count"));
 assert.ok(series.includes("showImage ? image"));
+assert.ok(series.includes("alt={item.imageAlt}"));
 assert.ok(series.includes("resolvedCardFormatting.showDescription"));
 assert.ok(series.includes("resolvedCardFormatting.showSeries"));
 assert.ok(series.includes("resolvedCardFormatting.showDetails"));

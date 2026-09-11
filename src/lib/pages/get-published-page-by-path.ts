@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import type { EntitySeoPersistenceRecord } from "../seo/entity-seo-types";
@@ -12,29 +14,37 @@ export type PublishedPageByPath = EntitySeoPersistenceRecord & {
   status: "published";
 };
 
-/**
- * Resolves one published CMS page by its exact public path.
- * Returns null when the page is missing, unpublished, or lookup fails.
- */
-export async function getPublishedPageByPath(path: string): Promise<PublishedPageByPath | null> {
-  try {
-    const { data, error } = await getSupabaseAdmin()
-      .from("pages")
-      .select("id,title,slug,path,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,status")
-      .eq("path", path)
-      .eq("status", "published")
-      .maybeSingle();
+export type PublishedPageByPathLookupResult = {
+  page: PublishedPageByPath | null;
+  sourceStatus: "database" | "missing" | "error";
+  sourceIssue?: string;
+  sourceError?: unknown;
+};
 
-    if (error) {
-      logError("getPublishedPageByPath failed", error, { path });
-      return null;
-    }
+async function queryPublishedPageStateByPath(
+  path: string,
+): Promise<PublishedPageByPathLookupResult> {
+  const { data, error } = await getSupabaseAdmin()
+    .from("pages")
+    .select("id,title,slug,path,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt,status")
+    .eq("path", path)
+    .eq("status", "published")
+    .maybeSingle();
 
-    if (!data) {
-      return null;
-    }
+  if (error) {
+    throw error;
+  }
 
+  if (!data) {
     return {
+      page: null,
+      sourceStatus: "missing",
+      sourceIssue: `Published page ${path} is not persisted.`,
+    };
+  }
+
+  return {
+    page: {
       id: data.id,
       title: data.title,
       slug: data.slug,
@@ -49,9 +59,47 @@ export async function getPublishedPageByPath(path: string): Promise<PublishedPag
       og_image: data.og_image,
       og_image_alt: data.og_image_alt,
       status: "published",
-    };
-  } catch (error) {
-    logError("getPublishedPageByPath unexpected failure", error, { path });
-    return null;
-  }
+    },
+    sourceStatus: "database",
+  };
 }
+
+/**
+ * Resolves one published CMS page by its exact public path. React cache()
+ * dedupes within one render without persisting a source failure across requests.
+ */
+export const getPublishedPageStateByPath = cache(
+  async function getPublishedPageStateByPath(
+    path: string,
+  ): Promise<PublishedPageByPathLookupResult> {
+    try {
+      return await queryPublishedPageStateByPath(path);
+    } catch (error) {
+      logError("getPublishedPageByPath failed", error, { path });
+      return {
+        page: null,
+        sourceStatus: "error",
+        sourceIssue:
+          error instanceof Error
+            ? error.message
+            : "Published page query failed.",
+        sourceError: error,
+      };
+    }
+  },
+);
+
+export const getPublishedPageByPath = cache(async function getPublishedPageByPath(
+  path: string,
+): Promise<PublishedPageByPath | null> {
+  const state = await getPublishedPageStateByPath(path);
+
+  if (state.sourceStatus === "error") {
+    if (state.sourceError instanceof Error) {
+      throw state.sourceError;
+    }
+    throw new Error(state.sourceIssue ?? "Published page query failed.");
+  }
+
+  return state.page;
+});

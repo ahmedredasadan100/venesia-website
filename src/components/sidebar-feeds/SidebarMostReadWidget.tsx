@@ -55,6 +55,7 @@ export default function SidebarMostReadWidget({
               href={item.href}
               className="group flex items-center gap-3"
               data-feed-article-card="popular"
+              data-feed-article-views={item.viewsCount}
             >
               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[#D8B87A]/25 text-xs text-[#D8B87A]">
                 {index + 1}
@@ -64,7 +65,7 @@ export default function SidebarMostReadWidget({
                 <div className="relative h-14 w-16 shrink-0 overflow-hidden rounded-xl">
                   <Image
                     src={item.image}
-                    alt={item.title}
+                    alt={item.imageAlt}
                     fill
                     sizes="64px"
                     className="object-cover transition-transform duration-700 group-hover:scale-105"

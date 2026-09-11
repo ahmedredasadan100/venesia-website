@@ -59,8 +59,10 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
     buildAdminCategoryTree(categoryRows),
   );
   const categorySlugById = new Map<number, string>();
+  const parentCategoryIdById = new Map<number, number | null>();
   for (const category of orderedCategories) {
     categorySlugById.set(category.id, category.slug);
+    parentCategoryIdById.set(category.id, category.parent_id);
   }
 
   const series: TopicSeriesFilterOption[] = (seriesRows ?? []).flatMap((row) => {
@@ -77,11 +79,17 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
   const seriesByCategorySlug: Record<string, TopicSeriesFilterOption[]> = {};
 
   for (const item of series) {
-    const categorySlug = categorySlugById.get(item.categoryId);
-    if (!categorySlug) continue;
-
-    if (!seriesByCategorySlug[categorySlug]) seriesByCategorySlug[categorySlug] = [];
-    seriesByCategorySlug[categorySlug].push(item);
+    const visitedCategoryIds = new Set<number>();
+    let categoryId: number | null = item.categoryId;
+    while (categoryId !== null && !visitedCategoryIds.has(categoryId)) {
+      visitedCategoryIds.add(categoryId);
+      const categorySlug = categorySlugById.get(categoryId);
+      if (categorySlug) {
+        if (!seriesByCategorySlug[categorySlug]) seriesByCategorySlug[categorySlug] = [];
+        seriesByCategorySlug[categorySlug].push(item);
+      }
+      categoryId = parentCategoryIdById.get(categoryId) ?? null;
+    }
   }
 
   for (const categorySlug of Object.keys(seriesByCategorySlug)) {

@@ -22,11 +22,14 @@ function adaptItems(items: Awaited<ReturnType<typeof loadPublicContentCollection
 }
 
 /** Media provider is an adapter only. It never constructs a database query. */
-export async function unifiedGetMediaItems(type?: MediaContentType) {
+export async function unifiedGetMediaItems(
+  type: MediaContentType | undefined,
+  limit: number,
+) {
   const result = await loadPublicContentCollection({
     contentTypes: type ? [type] : MEDIA_CONTENT_TYPES,
     page: 1,
-    pageSize: 60,
+    pageSize: limit,
     sort: "newest",
   });
   return adaptItems(result.items);
@@ -45,6 +48,7 @@ export async function unifiedGetMediaListingPage(
     sort: ListingSort;
     featuredSelection?: PublicContentFeaturedSelection;
     search?: string;
+    excludeIds?: readonly number[];
   },
 ) {
   const result = await loadPublicContentCollection({
@@ -54,6 +58,7 @@ export async function unifiedGetMediaListingPage(
     sort: params.sort,
     search: params.search,
     featuredSelection: params.featuredSelection,
+    excludeIds: params.excludeIds,
   });
 
   return {

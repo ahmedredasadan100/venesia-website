@@ -1,8 +1,10 @@
 import "server-only";
 
-import { getSupabaseAdmin } from "../supabase-admin";
-import { logError } from "../logging";
-import { loadPublicContentCollection } from "../content/public-content-read/owner";
+import {
+  loadPublicContentCollection,
+  loadPublicContentFeedCategories,
+  loadPublicContentFeedSeries,
+} from "../content/public-content-read/owner";
 import { resolveLocalPublicImage } from "../media/resolve-local-public-image";
 import type {
   FeedModuleConfig,
@@ -18,31 +20,37 @@ function getCategoryFilterHref(slug: string) {
 }
 
 function getSeriesFilterHref(slug: string) {
-  return `/topics?series=${slug}`;
+  return `/topics?series=${encodeURIComponent(slug)}`;
 }
 
 async function resolveLatestOrPopular(
   feedType: Extract<TopicsFeedType, "latest" | "popular">,
   config: FeedModuleConfig,
+  excludeContentIds: readonly number[],
 ): Promise<FeedModulePayload> {
   const result = await loadPublicContentCollection({
     contentTypes: ["article"],
     categorySlugs: config.query.categorySlugs,
     seriesSlugs: config.query.seriesSlugs,
-    popularOnly: feedType === "popular",
     page: 1,
     pageSize: config.query.limit,
-    sort: "newest",
+    sort: feedType === "popular" ? "most-viewed" : "newest",
+    excludeIds: excludeContentIds,
   });
 
   return {
     kind: "articles",
     items: result.items.map((item) => ({
+      id: item.id,
       title: item.title,
       excerpt: item.excerpt,
       date: item.date,
       image: item.image,
+      imageAlt: item.imageAlt,
       href: item.href,
+      category: item.category,
+      series: item.series,
+      viewsCount: item.viewsCount,
     })),
   };
 }
@@ -50,161 +58,54 @@ async function resolveLatestOrPopular(
 async function resolveCategories(
   config: FeedModuleConfig,
 ): Promise<FeedModulePayload> {
-  let selectedSeriesCategoryIds: number[] = [];
-  if (config.query.seriesSlugs.length) {
-    const { data: seriesRows, error: seriesError } = await getSupabaseAdmin()
-      .from("topic_series")
-      .select("category_id")
-      .in("slug", config.query.seriesSlugs)
-      .eq("status", "published")
-      .is("deleted_at", null);
-
-    if (seriesError) {
-      logError("resolveTopicsFeed: series lookup for categories failed", seriesError);
-      return { kind: "categories", items: [] };
-    }
-
-    selectedSeriesCategoryIds = [
-      ...new Set(
-        (seriesRows ?? [])
-          .map((row) => row.category_id)
-          .filter((id): id is number => id !== null),
-      ),
-    ];
-    if (!selectedSeriesCategoryIds.length) return { kind: "categories", items: [] };
-  }
-
-  let categoriesQuery = getSupabaseAdmin()
-    .from("topic_categories")
-    .select("id, name, slug, status, topics_count:topics(count)")
-    .eq("status", "published")
-    .is("deleted_at", null)
-    // Category counters follow the same public Article truth as the collection owner.
-    .eq("topics.status", "published")
-    .eq("topics.content_type", "article")
-    .is("topics.deleted_at", null);
-
-  if (config.query.categorySlugs.length) {
-    categoriesQuery = categoriesQuery.in("slug", config.query.categorySlugs);
-  }
-
-  if (selectedSeriesCategoryIds.length) {
-    categoriesQuery = categoriesQuery.in("id", selectedSeriesCategoryIds);
-    categoriesQuery = categoriesQuery.in("topics.series_slug", config.query.seriesSlugs);
-  }
-
-  const { data: categories, error: categoriesError } = await categoriesQuery
-    .order("sort_order", { ascending: true })
-    .order("name", { ascending: true })
-    .limit(config.query.limit);
-
-  if (categoriesError) {
-    logError("resolveTopicsFeed: categories query failed", categoriesError);
-    return { kind: "categories", items: [] };
-  }
+  const categories = await loadPublicContentFeedCategories({
+    limit: config.query.limit,
+    categorySlugs: config.query.categorySlugs,
+    seriesSlugs: config.query.seriesSlugs,
+  });
 
   return {
     kind: "categories",
-    items: (categories ?? []).flatMap((row) => {
-      const name = String(row.name ?? "").trim();
-      const slug = String(row.slug ?? "").trim();
-      if (!name || !slug) return [];
-
-      const rawCount = Array.isArray(row.topics_count) ? (row.topics_count[0]?.count ?? 0) : 0;
-      const parsedCount = Number(rawCount);
-      const filteredCount = Number.isFinite(parsedCount) && parsedCount >= 0 ? parsedCount : 0;
-
-      return [{
-        name,
-        href: getCategoryFilterHref(slug),
-        // The category badge represents the items this Feed exposes, not the uncapped source total.
-        count: Math.min(filteredCount, config.query.limit),
-      }];
-    }),
+    items: categories.map((category) => ({
+      name: category.name,
+      href: getCategoryFilterHref(category.slug),
+      count: category.count,
+    })),
   };
-}
-
-async function loadTopicImagesBySeriesSlug(seriesSlugs: string[]) {
-  if (!seriesSlugs.length) return [];
-  const result = await loadPublicContentCollection({
-    contentTypes: ["article"],
-    seriesSlugs,
-    page: 1,
-    pageSize: 60,
-    sort: "newest",
-  });
-  return result.items;
 }
 
 async function resolveSeries(
   config: FeedModuleConfig,
 ): Promise<FeedModulePayload> {
-  let query = getSupabaseAdmin()
-    .from("topic_series")
-    .select("id, name, slug, description, status, sort_order, category_id")
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .order("sort_order", { ascending: true })
-    .order("name", { ascending: true });
-
-  if (config.query.categorySlugs.length) {
-    const { data: categories, error: categoryError } = await getSupabaseAdmin()
-      .from("topic_categories")
-      .select("id")
-      .in("slug", config.query.categorySlugs)
-      .is("deleted_at", null)
-      .eq("status", "published");
-
-    if (categoryError) {
-      logError("resolveTopicsFeed: category lookup for series failed", categoryError);
-      return { kind: "series", items: [] };
-    }
-
-    const categoryIds = (categories ?? []).map((category) => category.id).filter(Boolean);
-    if (!categoryIds.length) return { kind: "series", items: [] };
-
-    query = query.in("category_id", categoryIds);
-  }
-
-  if (config.query.seriesSlugs.length) {
-    query = query.in("slug", config.query.seriesSlugs);
-  }
-
-  const { data: seriesRows, error: seriesError } = await query.limit(config.query.limit);
-
-  if (seriesError) {
-    logError("resolveTopicsFeed: series query failed", seriesError);
-    return { kind: "series", items: [] };
-  }
-
-  const rows = seriesRows ?? [];
-  const topicImages = await loadTopicImagesBySeriesSlug(rows.map((row) => row.slug));
+  const series = await loadPublicContentFeedSeries({
+    limit: config.query.limit,
+    categorySlugs: config.query.categorySlugs,
+    seriesSlugs: config.query.seriesSlugs,
+  });
 
   return {
     kind: "series",
-    items: rows.map((row) => {
-      const firstInSeries = topicImages.find((topic) => topic.seriesSlug === row.slug);
-
-      return {
-        title: row.name,
-        subtitle: row.description ?? "",
-        image: resolveLocalPublicImage(firstInSeries?.image, DEFAULT_IMAGE),
-        href: getSeriesFilterHref(row.slug),
-        slug: row.slug,
-      };
-    }),
+    items: series.map((item) => ({
+      title: item.name,
+      subtitle: item.description,
+      image: resolveLocalPublicImage(item.representative?.image, DEFAULT_IMAGE),
+      imageAlt: item.representative?.imageAlt || item.name,
+      href: getSeriesFilterHref(item.slug),
+      slug: item.slug,
+    })),
   };
 }
 
 export async function resolveTopicsFeedModule(
   template: Pick<FeedModuleTemplateRow, "feed_type">,
   config: FeedModuleConfig,
+  excludeContentIds: readonly number[] = [],
 ): Promise<FeedModulePayload> {
   switch (template.feed_type) {
     case "latest":
-      return resolveLatestOrPopular("latest", config);
+      return resolveLatestOrPopular("latest", config, excludeContentIds);
     case "popular":
-      return resolveLatestOrPopular("popular", config);
+      return resolveLatestOrPopular("popular", config, excludeContentIds);
     case "categories":
       return resolveCategories(config);
     case "series":

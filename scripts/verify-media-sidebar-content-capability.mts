@@ -126,7 +126,10 @@ check(
   "runtime delegates every content read to Public Content Read without parallel latest/popular queries",
   resolver.includes("loadPublicContentCollection") &&
     resolver.includes("publicContentSourceContentTypes(config.source)") &&
-    resolver.includes('popularOnly: widget.widgetKey === "popular"') &&
+    resolver.includes(
+      'sort: widget.widgetKey === "popular" ? "most-viewed" : "newest"',
+    ) &&
+    !resolver.includes("popularOnly") &&
     !resolver.includes("getMediaSidebarLatest") &&
     !resolver.includes("getMediaSidebarPopular") &&
     !mediaFacade.includes("getMediaSidebarLatest") &&

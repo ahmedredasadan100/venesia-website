@@ -12,22 +12,23 @@ type HubDataCacheEntry = {
 type HubDataCaches = Map<MediaContentType, HubDataCacheEntry>;
 
 async function loadHubDataCaches(state: MediaHubModulesState): Promise<HubDataCaches> {
-  const requirements = new Map<MediaContentType, { items: boolean }>();
+  const requirements = new Map<MediaContentType, number>();
   for (const moduleState of state.modules) {
+    const config = parseMediaHubModuleConfig(moduleState.config, moduleState.sectionKey);
     if (
       !moduleState.isVisible ||
-      moduleState.config.placement === "listing" ||
+      config.placement === "listing" ||
       moduleState.sectionKey === "featured" ||
-      !moduleState.config.type
+      !config.type
     ) continue;
-    const current = requirements.get(moduleState.config.type) ?? { items: false };
-    current.items = true;
-    requirements.set(moduleState.config.type, current);
+    const itemLimit = config.itemLimit ?? 4;
+    const currentLimit = requirements.get(config.type) ?? 0;
+    requirements.set(config.type, Math.max(currentLimit, itemLimit));
   }
 
   const entries = await Promise.all(
-    [...requirements.entries()].map(async ([type, needs]) => {
-      const items = needs.items ? await getMediaItems(type) : [];
+    [...requirements.entries()].map(async ([type, itemLimit]) => {
+      const items = await getMediaItems(type, itemLimit);
       return [type, { items }] as const;
     }),
   );

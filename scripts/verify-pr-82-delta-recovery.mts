@@ -69,6 +69,7 @@ const mediaHubLoader = read("src/lib/media-hub-modules/load-media-hub-modules.ts
 const mediaSidebarLoader = read("src/lib/media-sidebar-modules/load-media-sidebar-modules.ts");
 const mediaHubResolver = read("src/lib/media-hub-modules/resolve-hub-section-data.ts");
 const feedResolver = read("src/lib/feed-modules/resolve-topics-feed.ts");
+const publicContentOwner = read("src/lib/content/public-content-read/owner.ts");
 const feedLoader = read("src/lib/feed-modules/load-feed-modules.ts");
 const pageBlockLoader = read("src/lib/page-blocks/load-page-blocks.ts");
 const linkResolver = read("src/lib/admin/links/block-config-links.ts");
@@ -136,12 +137,15 @@ for (const loader of [mediaHubLoader, mediaSidebarLoader]) {
 }
 assert.ok(mediaHubResolver.includes("const requirements = new Map<MediaContentType"));
 assert.ok(mediaHubResolver.includes("moduleState.isVisible"));
-assert.ok(mediaHubResolver.includes('moduleState.config.placement === "listing"'));
+assert.ok(mediaHubResolver.includes('config.placement === "listing"'));
 
 assert.ok(feedResolver.includes('../content/public-content-read/owner'));
-assert.ok(feedResolver.includes('.eq("topics.status", "published")'));
-assert.ok(feedResolver.includes('.eq("topics.content_type", "article")'));
-assert.ok(feedResolver.includes('.is("topics.deleted_at", null)'));
+assert.ok(feedResolver.includes("loadPublicContentFeedCategories"));
+assert.ok(feedResolver.includes("loadPublicContentFeedSeries"));
+assert.equal(feedResolver.includes("getSupabaseAdmin"), false);
+assert.ok(publicContentOwner.includes('.eq("status", "published")'));
+assert.ok(publicContentOwner.includes('.in("content_type", input.contentTypes)'));
+assert.ok(publicContentOwner.includes('.is("deleted_at", null)'));
 assert.equal(feedResolver.includes("PUBLIC_CONTENT_VISIBILITY_CONTRACT"), false);
 
 for (const source of [feedLoader, pageBlockLoader, linkResolver, siteLayout, topicDetail, mediaDetail]) {

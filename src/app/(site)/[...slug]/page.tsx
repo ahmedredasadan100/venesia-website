@@ -2,7 +2,11 @@ import { notFound } from "next/navigation";
 
 import RevealAnimations from "../../../components/RevealAnimations";
 import PageSlotLayout from "../../../components/page-composition/PageSlotLayout";
-import { getPublishedPageByPath } from "../../../lib/pages/get-published-page-by-path";
+import {
+  getPublishedPageStateByPath,
+  type PublishedPageByPath,
+  type PublishedPageByPathLookupResult,
+} from "../../../lib/pages/get-published-page-by-path";
 import { resolvePublicPathFromSlugSegments } from "../../../lib/pages/normalize-page-path";
 import { isReservedPublicPath } from "../../../lib/pages/reserved-public-paths";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
@@ -16,27 +20,42 @@ type DynamicCmsPageProps = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-async function resolveDynamicCmsPage(params: Promise<{ slug: string[] }>) {
+async function resolveDynamicCmsPage(
+  params: Promise<{ slug: string[] }>,
+): Promise<PublishedPageByPathLookupResult> {
   const { slug } = await params;
   const normalized = resolvePublicPathFromSlugSegments(slug);
 
   if (!normalized.ok) {
-    return null;
+    return { page: null, sourceStatus: "missing" };
   }
 
   if (isReservedPublicPath(normalized.path)) {
-    return null;
+    return { page: null, sourceStatus: "missing" };
   }
 
-  return getPublishedPageByPath(normalized.path);
+  return getPublishedPageStateByPath(normalized.path);
+}
+
+function requireDynamicCmsPage(
+  result: PublishedPageByPathLookupResult,
+): PublishedPageByPath {
+  if (result.sourceStatus === "error") {
+    if (result.sourceError instanceof Error) {
+      throw result.sourceError;
+    }
+    throw new Error(result.sourceIssue ?? "Published page query failed.");
+  }
+
+  if (!result.page) {
+    notFound();
+  }
+
+  return result.page;
 }
 
 export async function generateMetadata({ params }: DynamicCmsPageProps) {
-  const page = await resolveDynamicCmsPage(params);
-
-  if (!page) {
-    notFound();
-  }
+  const page = requireDynamicCmsPage(await resolveDynamicCmsPage(params));
 
   return generatePublicMetadata({
     path: page.path,
@@ -47,14 +66,11 @@ export async function generateMetadata({ params }: DynamicCmsPageProps) {
 }
 
 export default async function DynamicCmsPage({ params, searchParams }: DynamicCmsPageProps) {
-  const [page, resolvedSearchParams] = await Promise.all([
+  const [pageResult, resolvedSearchParams] = await Promise.all([
     resolveDynamicCmsPage(params),
     searchParams ?? Promise.resolve({}),
   ]);
-
-  if (!page) {
-    notFound();
-  }
+  const page = requireDynamicCmsPage(pageResult);
 
   const composition = await loadPageCompositionBySlug(page.slug);
 

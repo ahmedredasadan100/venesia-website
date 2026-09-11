@@ -56,7 +56,7 @@ export type PublicContentFeaturedSelection =
 
 export type PublicContentCollectionInput = {
   contentTypes: readonly ContentType[];
-  sort?: "newest" | "oldest";
+  sort?: "newest" | "oldest" | "most-viewed";
   page?: number;
   pageSize?: number;
   search?: string;
@@ -92,6 +92,7 @@ export type PublicContentSummary = {
   publishedAt: string;
   isFeatured: boolean;
   isPopular: boolean;
+  viewsCount: number;
   mediaProject: string;
   mediaKind: "video" | "gallery" | null;
   mediaDuration: string;
@@ -115,6 +116,28 @@ export type PublicContentCollectionResult = {
   totalPages: number;
   startIndex: number;
   endIndex: number;
+};
+
+export type PublicContentFeedTaxonomyInput = {
+  limit: number;
+  categorySlugs?: readonly string[];
+  seriesSlugs?: readonly string[];
+};
+
+export type PublicContentFeedCategory = {
+  id: number;
+  name: string;
+  slug: string;
+  count: number;
+};
+
+export type PublicContentFeedSeries = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  categoryId: number | null;
+  representative: PublicContentSummary | null;
 };
 
 export type PublicContentSearchSuggestion = {
@@ -199,7 +222,10 @@ export function normalizePublicContentCollectionInput(
   return {
     ...input,
     contentTypes,
-    sort: input.sort === "oldest" ? "oldest" : "newest",
+    sort:
+      input.sort === "oldest" || input.sort === "most-viewed"
+        ? input.sort
+        : "newest",
     page: Math.max(1, Math.floor(Number(input.page ?? 1)) || 1),
     pageSize: Math.max(1, Math.min(
       Number.isFinite(requestedPageSize) ? requestedPageSize : 12,

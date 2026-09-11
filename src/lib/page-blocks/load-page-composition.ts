@@ -63,6 +63,15 @@ function pushBlock(
 export async function loadPageCompositionBySlug(
   pageSlug: string,
 ): Promise<PageComposition> {
+  const featuredStatePromise = loadFeaturedModuleStateForPageSlug(pageSlug);
+  const feedStatePromise = featuredStatePromise.then((featuredState) =>
+    loadFeedModuleStateForPageSlug(
+      pageSlug,
+      featuredState.modules.flatMap((module) =>
+        module.items.map((item) => item.id),
+      ),
+    ),
+  );
   const [
     pageState,
     heroState,
@@ -75,8 +84,8 @@ export async function loadPageCompositionBySlug(
     getPublishedPageStateBySlug(pageSlug),
     getHeroSectionState(pageSlug),
     loadPageBlockStateBySlug(pageSlug),
-    loadFeedModuleStateForPageSlug(pageSlug),
-    loadFeaturedModuleStateForPageSlug(pageSlug),
+    feedStatePromise,
+    featuredStatePromise,
     queryMediaHubModules(pageSlug),
     queryMediaSidebarModules(pageSlug),
   ]);

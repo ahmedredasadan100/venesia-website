@@ -53,6 +53,7 @@ function adaptPublicContentSummaryToTopic(item: PublicContentSummary): Topic {
     title: item.title,
     excerpt: item.excerpt,
     image: item.image,
+    imageAlt: item.imageAlt,
     category: item.category,
     categorySlug: item.categorySlug,
     date: item.date,

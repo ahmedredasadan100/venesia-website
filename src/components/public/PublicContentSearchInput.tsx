@@ -39,11 +39,13 @@ type PublicContentSearchInputProps = {
   query?: string;
   suggestions?: readonly PublicContentSearchSuggestion[];
   resultCount?: number;
+  hasReadError?: boolean;
   placeholder: string;
   ariaLabel: string;
   helpText: string;
   helpTextDisplay?: PublicContentSearchTextDisplay;
   showSearchAction?: boolean;
+  preliminaryResults?: boolean;
 };
 
 type FloatingListboxPosition = {
@@ -97,11 +99,13 @@ export default function PublicContentSearchInput({
   query = "",
   suggestions = [],
   resultCount = 0,
+  hasReadError = false,
   placeholder,
   ariaLabel,
   helpText,
   helpTextDisplay,
   showSearchAction = true,
+  preliminaryResults = false,
 }: PublicContentSearchInputProps) {
   const router = useRouter();
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -121,6 +125,7 @@ export default function PublicContentSearchInput({
 
   const committedQuery = normalizePublicContentSearchQuery(query);
   const normalizedDraft = normalizePublicContentSearchQuery(draftQuery);
+  const loading = isPending || normalizedDraft !== committedQuery;
   const showSuggestions =
     listboxOpen &&
     Boolean(committedQuery) &&
@@ -259,7 +264,7 @@ export default function PublicContentSearchInput({
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (event.key === "Enter") {
       event.preventDefault();
-      if (showSuggestions && activeSuggestion >= 0) {
+      if (!preliminaryResults && showSuggestions && activeSuggestion >= 0) {
         selectSuggestion(activeSuggestion);
       } else {
         submitSearch(normalizedDraft);
@@ -323,11 +328,20 @@ export default function PublicContentSearchInput({
           }}
           className={`overflow-y-auto overscroll-contain rounded-2xl border border-white/12 bg-[#080B10]/98 p-1.5 shadow-[0_24px_70px_rgba(0,0,0,0.48)] backdrop-blur-xl ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}
         >
+          {preliminaryResults ? (
+            <p
+              className="px-3 py-2 text-xs leading-5 text-white/45"
+              data-public-content-search-preview-label=""
+            >
+              نتائج مبدئية — اضغط Enter للانتقال إلى صفحة النتائج الكاملة.
+            </p>
+          ) : null}
           {suggestions.map((suggestion, index) => (
             <button
               key={suggestion.id}
               id={`${listboxId}-${index}`}
               type="button"
+              tabIndex={-1}
               role="option"
               aria-selected={index === activeSuggestion}
               onMouseDown={(event) => event.preventDefault()}
@@ -353,7 +367,19 @@ export default function PublicContentSearchInput({
     : null;
 
   return (
-    <div>
+    <div
+      data-public-content-search-state={
+        loading
+          ? "loading"
+          : hasReadError
+            ? "error"
+          : committedQuery
+            ? suggestions.length
+              ? "data"
+              : "empty"
+            : "idle"
+      }
+    >
       <div
         ref={anchorRef}
         data-public-content-search-field=""
@@ -391,7 +417,8 @@ export default function PublicContentSearchInput({
               : undefined
           }
           aria-describedby={statusId}
-          aria-busy={isPending || normalizedDraft !== committedQuery}
+          aria-busy={loading}
+          aria-invalid={hasReadError || undefined}
           autoComplete="off"
           maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}
           className={`w-full rounded-full border border-white/10 bg-black/20 py-3 ps-12 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-[#D8B87A]/45 focus:bg-black/30 focus:ring-2 focus:ring-[#D8B87A]/10 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden ${showSearchAction ? "pe-12" : "pe-4"}`}
@@ -434,14 +461,24 @@ export default function PublicContentSearchInput({
       {listbox}
 
       <p id={statusId} className="sr-only" role="status" aria-live="polite">
-        {isPending || normalizedDraft !== committedQuery
+        {loading
           ? "جارٍ البحث"
+          : hasReadError
+            ? "تعذر تحميل نتائج البحث"
           : committedQuery
             ? `تم العثور على ${resultCount} نتيجة`
             : helpText}
       </p>
 
-      {helpTextDisplay?.visible !== false ? (
+      {loading ? (
+        <p
+          className="mt-3 text-xs leading-6 text-[#D8B87A]/70"
+          data-public-content-search-loading=""
+          aria-hidden="true"
+        >
+          جارٍ تحديث النتائج…
+        </p>
+      ) : helpTextDisplay?.visible !== false ? (
         <p
           className={`mt-3 text-xs leading-6 text-white/35 ${helpTextDisplay?.bold ? "font-bold" : "font-normal"} ${pageBlockTextAlignClass(helpTextDisplay?.alignment ?? "right")}`}
           data-public-content-search-help=""

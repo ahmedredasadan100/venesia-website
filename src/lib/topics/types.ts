@@ -9,6 +9,7 @@ export type Topic = {
   title: string;
   excerpt: string;
   image: string;
+  imageAlt: string;
   category: string;
   categorySlug: string;
   date: string;

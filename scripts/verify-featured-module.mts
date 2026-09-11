@@ -841,6 +841,7 @@ const effectiveDisplay = resolveFeaturedItemDisplay(
     publishedAt: "2026-08-30T00:00:00.000Z",
     isFeatured: true,
     isPopular: false,
+    viewsCount: 0,
     mediaProject: "",
     mediaKind: null,
     mediaDuration: "",

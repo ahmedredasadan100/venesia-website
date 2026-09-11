@@ -59,6 +59,7 @@ const moduleRegistryMetadata = read(
 );
 const slotRenderer = read("src/components/page-composition/slot-module-nodes.tsx");
 const dynamicPage = read("src/app/(site)/[...slug]/page.tsx");
+const publicSiteError = read("src/app/(site)/error.tsx");
 const migration = read("sql/migrations/20260830232134_search_platform_module.sql");
 const regressionMigration = read(
   "sql/migrations/20260831202338_search_platform_autocomplete_regression.sql",
@@ -172,11 +173,41 @@ assert.ok(input.includes("persistentParams"));
 assert.ok(input.includes("submitPath"));
 assert.ok(input.includes("submitPersistentParams"));
 assert.ok(input.includes("router.push(href)"));
+const replaceNavigationStart = input.indexOf("const navigateToQuery = useCallback(");
+const submitNavigationStart = input.indexOf("const submitSearch = useCallback(");
+const navigationSyncStart = input.indexOf(
+  "useLayoutEffect(() => {",
+  submitNavigationStart,
+);
+const replaceNavigationSource = input.slice(
+  replaceNavigationStart,
+  submitNavigationStart,
+);
+const submitNavigationSource = input.slice(
+  submitNavigationStart,
+  navigationSyncStart,
+);
+assert.ok(
+  replaceNavigationStart >= 0 &&
+    submitNavigationStart > replaceNavigationStart &&
+    navigationSyncStart > submitNavigationStart &&
+    replaceNavigationSource.includes("buildSearchHref(basePath, normalized, persistentParams)") &&
+    replaceNavigationSource.includes("router.replace(href, { scroll: false })") &&
+    submitNavigationSource.includes("submitPath") &&
+    submitNavigationSource.includes("submitPersistentParams") &&
+    submitNavigationSource.includes("router.push(href)"),
+  "Typing must replace the current URL while explicit submission pushes the canonical destination",
+);
 assert.ok(input.includes("PUBLIC_CONTENT_SEARCH_DEBOUNCE_MS"));
 assert.ok(input.includes("maxLength={PUBLIC_CONTENT_SEARCH_MAX_LENGTH}"));
 assert.ok(input.includes('role="combobox"'));
 assert.ok(input.includes('role="listbox"'));
 assert.ok(input.includes('role="option"'));
+assert.match(
+  input,
+  /type="button"\s+tabIndex=\{-1\}\s+role="option"/u,
+  "Combobox options must remain arrow-operated without adding Tab stops",
+);
 assert.ok(input.includes("createPortal("));
 assert.ok(input.includes('position: "fixed"'));
 assert.ok(input.includes('data-public-content-search-listbox=""'));
@@ -188,6 +219,31 @@ assert.ok(input.includes('event.key === "Enter"'));
 assert.ok(input.includes("window.clearTimeout(searchTimerRef.current)"));
 assert.ok(input.includes("navigateToQuery(normalizedDraft)"));
 assert.ok(input.includes("submitSearch(normalizedDraft)"));
+assert.ok(
+  input.includes('params.delete("page")') &&
+    input.indexOf('params.delete("page")') < input.indexOf('params.set("q", normalized)'),
+  "Search navigation must reset pagination before writing the normalized query",
+);
+assert.ok(
+  input.includes('data-public-content-search-preview-label=""') &&
+    input.includes("نتائج مبدئية") &&
+    input.includes("preliminaryResults"),
+  "Launcher suggestions must identify themselves as a preliminary preview",
+);
+assert.ok(
+  input.includes("!preliminaryResults && showSuggestions") &&
+    input.includes("submitSearch(normalizedDraft)"),
+  "Launcher Enter must submit the full search while non-preview comboboxes may select an active option",
+);
+assert.ok(
+  input.includes('data-public-content-search-state={') &&
+    ["loading", "idle", "data", "empty"].every((state) =>
+      input.includes(`? "${state}"`) || input.includes(`: "${state}"`),
+    ) &&
+    input.includes('data-public-content-search-loading=""') &&
+    input.includes("جارٍ تحديث النتائج"),
+  "Search must expose distinct idle/loading/data/empty states and visible pending feedback",
+);
 assert.ok(input.includes('aria-label="تنفيذ البحث"'));
 assert.ok(input.includes('data-public-content-search-field=""'));
 assert.ok(input.includes('className="absolute end-2.5 top-1/2'));
@@ -297,7 +353,77 @@ assert.ok(slotRenderer.includes("<SearchPlatformModule"));
 assert.ok(dynamicPage.includes("publicPath={page.path}") && dynamicPage.includes("searchParams={resolvedSearchParams}"));
 assert.ok(searchModule.includes("basePath={publicPath}"));
 assert.ok(searchModule.includes('submitPath="/search"'));
-assert.ok(searchModule.includes("submitPersistentParams={{ types: scopeParam }}"));
+assert.ok(
+  searchModule.includes('if (publicPath !== "/search")') &&
+    !searchModule.includes('publicPath !== "/search" || config.presentation === "compact"'),
+  "/search identity must always select the full-results runtime even when presentation is compact",
+);
+const launcherRuntimeStart = searchModule.indexOf(
+  'if (publicPath !== "/search")',
+);
+const launcherRuntimeEnd = searchModule.indexOf(
+  "const scope = resolveScopedContentTypes",
+  launcherRuntimeStart,
+);
+const launcherRuntimeSource = searchModule.slice(
+  launcherRuntimeStart,
+  launcherRuntimeEnd,
+);
+const launcherPresentationSource = searchModule.slice(
+  searchModule.indexOf("function SearchLauncher("),
+  searchModule.indexOf("function SearchFilters("),
+);
+assert.ok(
+  launcherRuntimeStart >= 0 &&
+    launcherRuntimeEnd > launcherRuntimeStart &&
+    launcherRuntimeSource.includes("let listing = EMPTY_RESULT") &&
+    launcherRuntimeSource.includes("listing = await loadPublicContentCollection({") &&
+    launcherRuntimeSource.includes("contentTypes: selectedContentTypes") &&
+    launcherRuntimeSource.includes("search: query") &&
+    launcherRuntimeSource.includes("sort: selectedSort") &&
+    launcherRuntimeSource.includes("categorySlugs: selectedCategory ? [selectedCategory] : []") &&
+    launcherRuntimeSource.includes("seriesSlug: selectedSeries") &&
+    launcherRuntimeSource.includes("submitPersistentParams={canonicalSearchParams}") &&
+    launcherPresentationSource.includes("preliminaryResults"),
+  "Launcher preview must read the same normalized scope, filters, and sort that Enter submits to full Search",
+);
+const canonicalSearchParamsStart = searchModule.indexOf(
+  "const canonicalSearchParams = {",
+);
+const canonicalSearchParamsEnd = searchModule.indexOf(
+  "satisfies Readonly<Record<string, string | undefined>>",
+  canonicalSearchParamsStart,
+);
+const canonicalSearchParamsSource = searchModule.slice(
+  canonicalSearchParamsStart,
+  canonicalSearchParamsEnd,
+);
+assert.ok(
+  canonicalSearchParamsStart >= 0 &&
+    canonicalSearchParamsEnd > canonicalSearchParamsStart &&
+    ["types", "type", "category", "series", "sort"].every((field) =>
+      canonicalSearchParamsSource.includes(`${field}:`),
+    ) &&
+    searchModule.includes("query = normalizePublicContentSearchQuery(") &&
+    input.includes('params.set("q", normalized)') &&
+    searchModule.includes("submitPersistentParams={canonicalSearchParams}") &&
+    searchModule.includes("persistentParams={canonicalSearchParams}"),
+  "Preview reads and full-search navigation must preserve normalized q/types/type/category/series/sort",
+);
+const selectedSortStart = searchModule.indexOf("const selectedSort =");
+const selectedSortEnd = searchModule.indexOf(
+  "const selectedContentTypes =",
+  selectedSortStart,
+);
+const selectedSortSource = searchModule.slice(selectedSortStart, selectedSortEnd);
+assert.ok(
+  selectedSortStart >= 0 &&
+    selectedSortEnd > selectedSortStart &&
+    selectedSortSource.includes('"newest"') &&
+    selectedSortSource.includes('"oldest"') &&
+    selectedSortSource.includes("config.defaultSort"),
+  "An explicit newest or oldest URL sort must override the configured default",
+);
 assert.ok(searchModule.includes('data-search-platform-scope={scopeParam ?? ""}'));
 assert.ok(searchModule.includes("pageSize: 8"));
 assert.ok(searchModule.includes("suggestions={suggestions}"));
@@ -305,6 +431,10 @@ assert.ok(searchModule.includes("loadPublicContentCollection"));
 assert.ok(searchModule.includes("loadPublicContentFilterOptions"));
 assert.ok(searchModule.includes("<PublicPagination"));
 assert.ok(searchModule.includes('action="/search"'));
+assert.ok(
+  searchModule.includes('<input type="hidden" name="q" defaultValue={query} />'),
+  "Search filters must submit the active URL-owned query",
+);
 assert.ok(searchModule.includes('data-search-interface-display-formatting=""'));
 for (const element of ["title", "description", "results-title", "empty-results"]) {
   assert.ok(
@@ -316,6 +446,41 @@ assert.ok(searchModule.includes("helpTextDisplay={display.helpText}"));
 assert.ok(searchModule.includes("showSearchAction={display.searchAction.visible}"));
 assert.ok(searchModule.includes("display.emptyResults.title"));
 assert.ok(searchModule.includes("display.emptyResults.description"));
+const searchResultCardStart = searchModule.indexOf("function SearchResultCard(");
+const searchResultCardEnd = searchModule.indexOf(
+  "function SearchLauncher(",
+  searchResultCardStart,
+);
+const searchResultCardSource = searchModule.slice(
+  searchResultCardStart,
+  searchResultCardEnd,
+);
+assert.equal(
+  searchResultCardSource.match(/<Link\b/gu)?.length ?? 0,
+  1,
+  "Each search result card must expose exactly one link/focus target",
+);
+assert.ok(searchResultCardSource.includes('data-search-result-link=""'));
+assert.ok(
+  owner.includes("export class PublicContentReadError extends Error") &&
+    owner.includes("throw new PublicContentReadError(") &&
+    searchModule.includes("error instanceof PublicContentReadError") &&
+    searchModule.includes('data-search-runtime-state={hasReadError ? "error"') &&
+    searchModule.match(/hasReadError=\{hasReadError\}/gu)?.length === 3 &&
+    input.includes('hasReadError?: boolean;') &&
+    input.includes('? "error"') &&
+    input.includes('aria-invalid={hasReadError || undefined}') &&
+    input.includes('? "تعذر تحميل نتائج البحث"') &&
+    searchModule.includes('data-search-interface-element="error-results"') &&
+    searchModule.includes("لم تُعرض حالة فارغة بديلة") &&
+    !searchModule.includes(".catch("),
+  "Public Content read failures must render the explicit Search error state, never become empty results",
+);
+assert.ok(
+  publicSiteError.includes("تعذّر تحميل الصفحة") &&
+    publicSiteError.includes("retry"),
+  "Public Search must retain a distinct recoverable error presentation",
+);
 assert.ok(!searchModule.includes("pg_trgm") && !searchModule.includes("highlight"));
 assert.ok(!searchModule.includes('.from("topics")') && !searchModule.includes("getSupabaseAdmin"));
 assert.ok(searchEditor.includes('name="search_scope"'));
@@ -497,5 +662,5 @@ assert.ok(currentState.includes("Search is a portable Page Composition Content M
 assert.ok(systems.includes("| Search Platform Module"));
 
 console.log(
-  "PASS Search Platform: one Unified Content Public Collection owner and contract; CMS Search uses Content assignments and /search without a parallel runtime, engine, source of truth, navigation, footer, or performance extension.",
+  "PASS Search Platform: unified owner, full /search identity, canonical preview navigation, explicit runtime states, and single-target keyboard-accessible results are intact.",
 );

@@ -9,6 +9,8 @@ import {
   type ContentType,
 } from "../../admin/content/content-types";
 import {
+  buildAdminCategoryTree,
+  flattenAdminCategoryTree,
   getCategoryAndDescendantIds,
   type AdminContentCategory,
 } from "../../admin/content/category-hierarchy";
@@ -28,8 +30,12 @@ import { resolvePublicContentPath } from "../public-content-path";
 import {
   applyPublicContentTextSearch,
   normalizePublicContentCollectionInput,
+  PUBLIC_CONTENT_COLLECTION_MAX_PAGE_SIZE,
   type PublicContentCollectionInput,
   type PublicContentCollectionResult,
+  type PublicContentFeedCategory,
+  type PublicContentFeedSeries,
+  type PublicContentFeedTaxonomyInput,
   type PublicContentSummary,
   type PublicContentTextSearchQuery,
 } from "./contract";
@@ -40,11 +46,11 @@ const MEDIA_IMAGE_FALLBACK = "/images/venesia-5.png";
 
 /** Exact projection for every Public Collection read. Body and SEO fields are excluded. */
 export const PUBLIC_CONTENT_COLLECTION_SELECT =
-  "id, slug, title, excerpt, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, media_kind:media_payload->>kind, media_duration:media_payload->>duration, media_thumbnail:media_payload->>thumbnail, media_gallery_cover:media_payload->images->0->>url, media_gallery_cover_alt:media_payload->images->0->>alt, media_project, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
+  "id, slug, title, excerpt, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, views_count, media_kind:media_payload->>kind, media_duration:media_payload->>duration, media_thumbnail:media_payload->>thumbnail, media_gallery_cover:media_payload->images->0->>url, media_gallery_cover_alt:media_payload->images->0->>alt, media_project, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page";
 
 /** Exact projection for one public detail. Collection consumers never receive these fields. */
 export const PUBLIC_CONTENT_DETAIL_SELECT =
-  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, media_payload, media_project, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page, show_faq_on_page, show_faq_title_on_page";
+  "id, slug, title, excerpt, content, image, image_alt, category, category_slug, series, series_slug, date_label, published_at, content_type, is_featured, is_popular, views_count, media_payload, media_project, seo_title, seo_description, seo_keywords, focus_keyword, canonical_url, robots_index, robots_follow, og_image, og_image_alt, faq, show_title_on_page, show_image_on_page, show_excerpt_on_page, show_date_on_page, show_category_on_page, show_series_on_page, show_intro_card_on_page, show_faq_on_page, show_faq_title_on_page";
 
 /** Exact projection for sitemap generation. It avoids loading card, body, and rich-media data. */
 export const PUBLIC_CONTENT_SITEMAP_SELECT =
@@ -100,6 +106,7 @@ type PublicContentRow = {
   content_type: string | null;
   is_featured: boolean | null;
   is_popular: boolean | null;
+  views_count: number | null;
   media_payload?: Json | null;
   media_kind?: string | null;
   media_duration?: string | null;
@@ -349,6 +356,7 @@ function mapCollectionRow(row: PublicContentRow): PublicContentSummary {
     publishedAt: row.published_at ?? "",
     isFeatured: Boolean(row.is_featured),
     isPopular: Boolean(row.is_popular),
+    viewsCount: Math.max(0, Number(row.views_count) || 0),
     mediaProject: row.media_project?.trim() ?? "",
     mediaKind,
     mediaDuration: mediaDuration?.trim() ?? "",
@@ -415,9 +423,7 @@ function applyPublicFilters<Query extends PublicContentFilterQuery>(
   return applyPublicContentTextSearch(next, input.search);
 }
 
-async function expandPublicCategoryHierarchy(categorySlugs: readonly string[]) {
-  if (!categorySlugs.length) return [];
-
+async function queryPublishedPublicCategories() {
   const { data, error } = await getSupabaseAdmin()
     .from("topic_categories")
     .select("id,name,slug,parent_id,sort_order,is_active,status")
@@ -428,18 +434,32 @@ async function expandPublicCategoryHierarchy(categorySlugs: readonly string[]) {
     failPublicContentRead("query_failed", {
       context: "Public Content category hierarchy query failed",
       error,
-      details: { categorySlugs },
     });
   }
   if (data === null) {
     failPublicContentRead("contract_failed", {
       context: "Public Content category hierarchy query returned null data",
       error: new Error("Public Content category hierarchy data does not satisfy the read contract."),
-      details: { categorySlugs },
     });
   }
 
-  const categories = data as AdminContentCategory[];
+  return data as AdminContentCategory[];
+}
+
+const loadPublishedPublicCategories = cache(
+  async function loadPublishedPublicCategories() {
+    return unstable_cache(
+      queryPublishedPublicCategories,
+      ["public-content-category-hierarchy"],
+      { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
+    )();
+  },
+);
+
+async function expandPublicCategoryHierarchy(categorySlugs: readonly string[]) {
+  if (!categorySlugs.length) return [];
+
+  const categories = await loadPublishedPublicCategories();
   const selectedIds = new Set(
     categories
       .filter((category) => categorySlugs.includes(category.slug))
@@ -457,6 +477,206 @@ async function expandPublicCategoryHierarchy(categorySlugs: readonly string[]) {
   return [...new Set([...categorySlugs, ...resolved])];
 }
 
+function normalizeFeedTaxonomyInput(input: PublicContentFeedTaxonomyInput) {
+  const normalized = normalizePublicContentCollectionInput({
+    contentTypes: ["article"],
+    page: 1,
+    pageSize: input.limit,
+    categorySlugs: input.categorySlugs,
+    seriesSlugs: input.seriesSlugs,
+  });
+
+  return {
+    limit: Math.min(normalized.pageSize, PUBLIC_CONTENT_COLLECTION_MAX_PAGE_SIZE),
+    categorySlugs: normalized.categorySlugs,
+    seriesSlugs: normalized.seriesSlugs,
+  };
+}
+
+async function countPublicArticlesForCategory(
+  categories: readonly AdminContentCategory[],
+  categoryId: number,
+  seriesSlugs: readonly string[],
+) {
+  const descendantIds = new Set(
+    getCategoryAndDescendantIds([...categories], categoryId),
+  );
+  const categorySlugs = categories
+    .filter((category) => descendantIds.has(category.id))
+    .map((category) => category.slug);
+
+  let query = getSupabaseAdmin()
+    .from("topics")
+    .select("id", { count: "exact", head: true })
+    .eq("content_type", "article")
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .not("slug", "like", "e2e-test%")
+    .in("category_slug", categorySlugs);
+
+  if (seriesSlugs.length) query = query.in("series_slug", seriesSlugs);
+
+  const { count, error } = await query;
+  if (error) {
+    failPublicContentRead("query_failed", {
+      context: "Public Content Feed category count query failed",
+      error,
+      details: { categoryId, categorySlugs, seriesSlugs },
+    });
+  }
+  if (!Number.isInteger(count) || Number(count) < 0) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content Feed category count is invalid",
+      error: new Error("Public Content Feed category count does not satisfy the read contract."),
+      details: { categoryId, count },
+    });
+  }
+
+  return Number(count);
+}
+
+async function queryPublicContentFeedCategories(
+  input: ReturnType<typeof normalizeFeedTaxonomyInput>,
+): Promise<PublicContentFeedCategory[]> {
+  const categories = await loadPublishedPublicCategories();
+  const ordered = flattenAdminCategoryTree(
+    buildAdminCategoryTree([...categories]),
+  );
+  const requestedSlugs = new Set(input.categorySlugs);
+  let selectedSeriesCategoryIds = new Set<number>();
+  if (input.seriesSlugs.length) {
+    const { data, error } = await getSupabaseAdmin()
+      .from("topic_series")
+      .select("category_id")
+      .in("slug", input.seriesSlugs)
+      .eq("status", "published")
+      .is("deleted_at", null);
+    if (error) {
+      failPublicContentRead("query_failed", {
+        context: "Public Content Feed category series scope query failed",
+        error,
+        details: { seriesSlugs: input.seriesSlugs },
+      });
+    }
+    if (data === null) {
+      failPublicContentRead("contract_failed", {
+        context: "Public Content Feed category series scope returned null data",
+        error: new Error("Public Content Feed series scope does not satisfy the read contract."),
+        details: { seriesSlugs: input.seriesSlugs },
+      });
+    }
+    selectedSeriesCategoryIds = new Set(
+      data.flatMap((row) => row.category_id === null ? [] : [row.category_id]),
+    );
+  }
+
+  const selected = ordered.filter((category) => {
+    if (requestedSlugs.size && !requestedSlugs.has(category.slug)) return false;
+    if (!input.seriesSlugs.length) return true;
+    const descendantIds = getCategoryAndDescendantIds(categories, category.id);
+    return descendantIds.some((id) => selectedSeriesCategoryIds.has(id));
+  }).slice(0, input.limit);
+
+  return Promise.all(selected.map(async (category) => ({
+    id: category.id,
+    name: category.name,
+    slug: category.slug,
+    count: await countPublicArticlesForCategory(
+      categories,
+      category.id,
+      input.seriesSlugs,
+    ),
+  })));
+}
+
+export async function loadPublicContentFeedCategories(
+  rawInput: PublicContentFeedTaxonomyInput,
+): Promise<PublicContentFeedCategory[]> {
+  const input = normalizeFeedTaxonomyInput(rawInput);
+  return unstable_cache(
+    () => queryPublicContentFeedCategories(input),
+    ["public-content-feed-categories", JSON.stringify(input)],
+    { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
+  )();
+}
+
+async function queryPublicContentFeedSeries(
+  input: ReturnType<typeof normalizeFeedTaxonomyInput>,
+): Promise<PublicContentFeedSeries[]> {
+  const categories = await loadPublishedPublicCategories();
+  const categoryIdsBySlug = new Map(
+    categories.map((category) => [category.slug, category.id] as const),
+  );
+  const scopedCategoryIds = new Set(
+    input.categorySlugs.flatMap((slug) => {
+      const categoryId = categoryIdsBySlug.get(slug);
+      return categoryId === undefined
+        ? []
+        : getCategoryAndDescendantIds(categories, categoryId);
+    }),
+  );
+
+  let query = getSupabaseAdmin()
+    .from("topic_series")
+    .select("id,name,slug,description,category_id")
+    .eq("status", "published")
+    .is("deleted_at", null)
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (input.categorySlugs.length) {
+    if (!scopedCategoryIds.size) return [];
+    query = query.in("category_id", [...scopedCategoryIds]);
+  }
+  if (input.seriesSlugs.length) query = query.in("slug", input.seriesSlugs);
+
+  const { data, error } = await query.limit(input.limit);
+  if (error) {
+    failPublicContentRead("query_failed", {
+      context: "Public Content Feed series query failed",
+      error,
+      details: input,
+    });
+  }
+  if (data === null) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content Feed series query returned null data",
+      error: new Error("Public Content Feed series data does not satisfy the read contract."),
+      details: input,
+    });
+  }
+
+  return Promise.all(data.map(async (row) => {
+    const representative = await loadPublicContentCollection({
+      contentTypes: ["article"],
+      seriesSlug: row.slug,
+      page: 1,
+      pageSize: 1,
+      sort: "newest",
+    });
+
+    return {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      description: row.description ?? "",
+      categoryId: row.category_id,
+      representative: representative.items[0] ?? null,
+    };
+  }));
+}
+
+export async function loadPublicContentFeedSeries(
+  rawInput: PublicContentFeedTaxonomyInput,
+): Promise<PublicContentFeedSeries[]> {
+  const input = normalizeFeedTaxonomyInput(rawInput);
+  return unstable_cache(
+    () => queryPublicContentFeedSeries(input),
+    ["public-content-feed-series", JSON.stringify(input)],
+    { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
+  )();
+}
+
 function buildCollectionQuery(
   input: ReturnType<typeof normalizePublicContentCollectionInput>,
   includeCount = false,
@@ -465,7 +685,15 @@ function buildCollectionQuery(
     .from("topics")
     .select(PUBLIC_CONTENT_COLLECTION_SELECT, includeCount ? { count: "exact" } : undefined);
 
-  return applyPublicFilters(selected, input)
+  const filtered = applyPublicFilters(selected, input);
+  if (input.sort === "most-viewed") {
+    return filtered
+      .order("views_count", { ascending: false })
+      .order("published_at", { ascending: false })
+      .order("id", { ascending: false });
+  }
+
+  return filtered
     .order("published_at", { ascending: input.sort === "oldest" })
     .order("id", { ascending: input.sort === "oldest" });
 }
