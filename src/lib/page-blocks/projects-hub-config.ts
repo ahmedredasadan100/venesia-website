@@ -9,6 +9,7 @@ import {
 } from "./configs";
 import {
   normalizeHeroElementOrder,
+  PROJECT_HERO_ACTION_KEYS,
   resolveHeroContentControls,
   type HeroContentControls,
   type HeroElementKey,
@@ -112,6 +113,15 @@ export type ProjectsHubMapModuleConfig = PageBlockTextFormattingConfig & {
   exploreButtonLabel: string;
   mapPins: ProjectsHubMapPinConfig[];
 };
+
+export type ProjectsHubPublicConfigFailureReason =
+  | "config_not_object"
+  | "config_incomplete"
+  | "config_invalid";
+
+export type ProjectsHubPublicConfigParseResult<T> =
+  | { ok: true; value: T }
+  | { ok: false; reason: ProjectsHubPublicConfigFailureReason };
 
 export const PROJECTS_HUB_HERO_KEYS = [
   "selectionMode",
@@ -407,6 +417,448 @@ export function asProjectsHubMapConfig(raw: unknown): ProjectsHubMapModuleConfig
     titleBold: titleFormat.bold,
     titleAlignment: titleFormat.alignment,
   };
+}
+
+const LEGACY_PROJECTS_HUB_HERO_SELECTION_MODE =
+  "auto_residential_with_media";
+const PUBLIC_TEXT_ALIGNMENTS = ["right", "center", "left"] as const;
+const PUBLIC_DESCRIPTION_ALIGNMENTS = [
+  ...PUBLIC_TEXT_ALIGNMENTS,
+  "justify",
+] as const;
+
+function hasOwn(config: Record<string, unknown>, key: string) {
+  return Object.prototype.hasOwnProperty.call(config, key);
+}
+
+function hasRequiredKeys(
+  config: Record<string, unknown>,
+  keys: readonly string[],
+) {
+  return keys.every((key) => hasOwn(config, key));
+}
+
+function publicConfigRecord(
+  raw: unknown,
+): ProjectsHubPublicConfigParseResult<Record<string, unknown>> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ok: false, reason: "config_not_object" };
+  }
+  return { ok: true, value: raw as Record<string, unknown> };
+}
+
+function isSafeRequiredText(value: unknown, label: string, maxLength: number) {
+  if (typeof value !== "string" || !value.trim()) return false;
+  try {
+    assertSafePlainText(value, label, maxLength);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function hasValidOptionalBooleans(
+  config: Record<string, unknown>,
+  keys: readonly string[],
+) {
+  return keys.every(
+    (key) => !hasOwn(config, key) || typeof config[key] === "boolean",
+  );
+}
+
+function hasValidOptionalAlignments(
+  config: Record<string, unknown>,
+  fields: ReadonlyArray<{
+    key: string;
+    values: readonly string[];
+  }>,
+) {
+  return fields.every(({ key, values }) => {
+    if (!hasOwn(config, key)) return true;
+    const value = config[key];
+    return typeof value === "string" && values.includes(value);
+  });
+}
+
+function hasValidOptionalOrder(
+  config: Record<string, unknown>,
+  keys: readonly string[],
+  allowedValues: readonly string[],
+  aliases: Readonly<Record<string, string>> = {},
+) {
+  return keys.every((key) => {
+    if (!hasOwn(config, key)) return true;
+    const value = config[key];
+    if (!Array.isArray(value) || value.length !== allowedValues.length) {
+      return false;
+    }
+    const normalized = value.map((item) =>
+      typeof item === "string" ? (aliases[item] ?? item) : "",
+    );
+    return (
+      normalized.every((item) => allowedValues.includes(item)) &&
+      new Set(normalized).size === allowedValues.length
+    );
+  });
+}
+
+function isValidAutoplay(value: unknown) {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1000 &&
+    value <= 60000
+  );
+}
+
+function isValidPageSize(value: unknown, max = 48) {
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= max
+  );
+}
+
+/**
+ * Strict public decoder for the Projects Hub Hero.
+ *
+ * The original Projects Hub seed used `auto_residential_with_media` before
+ * projectType/variant/limit became authored fields. That one known value is
+ * decoded as the historical residential contract; arbitrary unknown values
+ * are never promoted through the Admin editor's tolerant defaults.
+ */
+export function parseProjectsHubHeroPublicConfig(
+  raw: unknown,
+): ProjectsHubPublicConfigParseResult<ProjectsHubHeroModuleConfig> {
+  const record = publicConfigRecord(raw);
+  if (!record.ok) return record;
+  const config = record.value;
+  const selectionMode = readText(config.selectionMode);
+  const isLegacy = selectionMode === LEGACY_PROJECTS_HUB_HERO_SELECTION_MODE;
+  const requiredKeys = isLegacy
+    ? (["selectionMode", "autoplayMs", "emptyState"] as const)
+    : ([
+        "selectionMode",
+        "projectType",
+        "variant",
+        "limit",
+        "autoplayMs",
+        "emptyState",
+      ] as const);
+  const submittedCtaLabel =
+    config.primaryCtaLabel ??
+    config.primary_cta_label ??
+    config.exploreLabel ??
+    config.explore_label;
+
+  if (
+    !hasRequiredKeys(config, requiredKeys) ||
+    (!isLegacy && submittedCtaLabel == null)
+  ) {
+    return { ok: false, reason: "config_incomplete" };
+  }
+  if (
+    (!isLegacy &&
+      !PROJECTS_HUB_HERO_SELECTION_MODES.includes(
+        selectionMode as ProjectsHubHeroSelectionMode,
+      )) ||
+    (hasOwn(config, "projectType") &&
+      !PROJECTS_HUB_HERO_PROJECT_TYPES.includes(
+        readText(config.projectType) as ProjectsHubHeroProjectType,
+      )) ||
+    (isLegacy &&
+      hasOwn(config, "projectType") &&
+      readText(config.projectType) !== "residential") ||
+    (hasOwn(config, "variant") &&
+      !PROJECTS_HUB_HERO_VARIANTS.includes(
+        readText(config.variant) as ProjectsHubHeroVariant,
+      )) ||
+    (hasOwn(config, "limit") && !isValidPageSize(config.limit, 12)) ||
+    !isValidAutoplay(config.autoplayMs) ||
+    (config.emptyState !== null &&
+      config.emptyState !== "" &&
+      !isSafeRequiredText(config.emptyState, "نص الحالة الفارغة", 400)) ||
+    (submittedCtaLabel != null &&
+      !isSafeRequiredText(submittedCtaLabel, "نص زر الإجراء", 100)) ||
+    !hasValidOptionalBooleans(config, [
+      "showEyebrow",
+      "eyebrowBold",
+      "showTitle",
+      "titleBold",
+      "showHighlight",
+      "highlightBold",
+      "showSubtitle",
+      "subtitleBold",
+      "showDescription",
+      "descriptionBold",
+      "description_bold",
+      "showCta",
+      "show_cta",
+      "showExploreLink",
+      "show_explore_link",
+      "showExplore",
+      "show_explore",
+      "ctaBold",
+      "cta_bold",
+      "showProjectDownloadAction",
+      "show_project_download_action",
+      "showProjectTrackingAction",
+      "show_project_tracking_action",
+      "showProjectReservationAction",
+      "show_project_reservation_action",
+    ]) ||
+    !hasValidOptionalAlignments(config, [
+      { key: "eyebrowAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "titleAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "highlightAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "subtitleAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "descriptionAlignment", values: PUBLIC_DESCRIPTION_ALIGNMENTS },
+      { key: "ctaAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "cta_alignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "exploreAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "explore_alignment", values: PUBLIC_TEXT_ALIGNMENTS },
+    ]) ||
+    !hasValidOptionalOrder(
+      config,
+      ["heroElementOrder", "hero_element_order"],
+      PROJECTS_HUB_HERO_ELEMENT_KEYS,
+      { explore: "cta" },
+    ) ||
+    !hasValidOptionalOrder(
+      config,
+      ["projectActionOrder", "project_action_order"],
+      PROJECT_HERO_ACTION_KEYS,
+    )
+  ) {
+    return { ok: false, reason: "config_invalid" };
+  }
+
+  return { ok: true, value: asProjectsHubHeroConfig(config) };
+}
+
+/**
+ * Display switches and typography were added after the original seed and stay
+ * optional for backwards compatibility. The original semantic fields remain
+ * mandatory and are validated without fallback substitution.
+ */
+export function parseProjectsHubFeaturedPublicConfig(
+  raw: unknown,
+): ProjectsHubPublicConfigParseResult<ProjectsHubFeaturedModuleConfig> {
+  const record = publicConfigRecord(raw);
+  if (!record.ok) return record;
+  const config = record.value;
+  if (
+    !hasRequiredKeys(config, [
+      "selectionMode",
+      "title",
+      "subtitle",
+      "limit",
+      "autoplayMs",
+    ])
+  ) {
+    return { ok: false, reason: "config_incomplete" };
+  }
+  const selectionMode = readText(config.selectionMode);
+  if (
+    !PROJECTS_HUB_FEATURED_SELECTION_MODES.includes(
+      selectionMode as ProjectsHubFeaturedSelectionMode,
+    ) ||
+    !isSafeRequiredText(config.title, "العنوان", 120) ||
+    !isSafeRequiredText(config.subtitle, "العنوان الفرعي", 240) ||
+    (config.limit !== null && !isValidPageSize(config.limit)) ||
+    !isValidAutoplay(config.autoplayMs) ||
+    !hasValidOptionalBooleans(config, [
+      "showTitle",
+      "show_title",
+      "showSubtitle",
+      "show_subtitle",
+      "showProjectImage",
+      "show_project_image",
+      "showProjectCode",
+      "show_project_code",
+      "showProjectName",
+      "show_project_name",
+      "showProjectDescription",
+      "show_project_description",
+      "showProjectType",
+      "show_project_type",
+      "showProjectLocation",
+      "show_project_location",
+      "showExploreButton",
+      "show_explore_button",
+      "showSliderDots",
+      "show_slider_dots",
+      "titleBold",
+      "title_bold",
+      "subtitleBold",
+      "subtitle_bold",
+    ]) ||
+    !hasValidOptionalAlignments(config, [
+      { key: "titleAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "title_alignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "subtitleAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "subtitle_alignment", values: PUBLIC_TEXT_ALIGNMENTS },
+    ])
+  ) {
+    return { ok: false, reason: "config_invalid" };
+  }
+  return { ok: true, value: asProjectsHubFeaturedConfig(config) };
+}
+
+export function parseProjectsHubListingPublicConfig(
+  raw: unknown,
+): ProjectsHubPublicConfigParseResult<ProjectsHubListingModuleConfig> {
+  const record = publicConfigRecord(raw);
+  if (!record.ok) return record;
+  const config = record.value;
+  if (
+    !hasRequiredKeys(config, [
+      "eyebrow",
+      "title",
+      "defaultFilter",
+      "visibleFilters",
+      "defaultView",
+      "pageSize",
+      "sort",
+    ])
+  ) {
+    return { ok: false, reason: "config_incomplete" };
+  }
+
+  const visibleFilters = Array.isArray(config.visibleFilters)
+    ? config.visibleFilters
+    : [];
+  const defaultFilter = readText(config.defaultFilter);
+  if (
+    !isSafeRequiredText(config.eyebrow, "النص التمهيدي", 80) ||
+    !isSafeRequiredText(config.title, "عنوان القسم", 120) ||
+    visibleFilters.length === 0 ||
+    visibleFilters.some(
+      (filter) =>
+        typeof filter !== "string" ||
+        !isFilterId(filter),
+    ) ||
+    !isFilterId(defaultFilter) ||
+    !visibleFilters.includes(defaultFilter) ||
+    !PROJECTS_HUB_VIEW_MODES.includes(
+      readText(config.defaultView) as ProjectsHubViewMode,
+    ) ||
+    !isValidPageSize(config.pageSize) ||
+    !PROJECTS_HUB_SORT_MODES.includes(
+      readText(config.sort) as ProjectsHubSortMode,
+    ) ||
+    !hasValidOptionalBooleans(config, [
+      "showEyebrow",
+      "show_eyebrow",
+      "showTitle",
+      "show_title",
+      "showFilterBar",
+      "show_filter_bar",
+      "showProjectImage",
+      "show_project_image",
+      "showProjectCode",
+      "show_project_code",
+      "showProjectName",
+      "show_project_name",
+      "showProjectDescription",
+      "show_project_description",
+      "showProjectType",
+      "show_project_type",
+      "showProjectLocation",
+      "show_project_location",
+      "showExploreButton",
+      "show_explore_button",
+      "showViewToggle",
+      "show_view_toggle",
+      "showPagination",
+      "show_pagination",
+      "showProjectCount",
+      "show_project_count",
+      "eyebrowBold",
+      "eyebrow_bold",
+      "titleBold",
+      "title_bold",
+    ]) ||
+    !hasValidOptionalAlignments(config, [
+      { key: "eyebrowAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "eyebrow_alignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "titleAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      { key: "title_alignment", values: PUBLIC_TEXT_ALIGNMENTS },
+    ])
+  ) {
+    return { ok: false, reason: "config_invalid" };
+  }
+  return { ok: true, value: asProjectsHubListingConfig(config) };
+}
+
+export function parseProjectsHubMapPublicConfig(
+  raw: unknown,
+): ProjectsHubPublicConfigParseResult<ProjectsHubMapModuleConfig> {
+  const record = publicConfigRecord(raw);
+  if (!record.ok) return record;
+  const config = record.value;
+  if (
+    !hasRequiredKeys(config, [
+      "title",
+      "mapImage",
+      "exploreButtonLabel",
+      "mapPins",
+    ])
+  ) {
+    return { ok: false, reason: "config_incomplete" };
+  }
+  if (!Array.isArray(config.mapPins) || config.mapPins.length === 0) {
+    return { ok: false, reason: "config_invalid" };
+  }
+
+  try {
+    if (
+      !isSafeRequiredText(config.title, "العنوان", 120) ||
+      typeof config.mapImage !== "string" ||
+      typeof config.exploreButtonLabel !== "string" ||
+      !isSafeRequiredText(
+        config.exploreButtonLabel,
+        "نص زر الاستكشاف",
+        80,
+      ) ||
+      !hasValidOptionalBooleans(config, [
+        "showTitle",
+        "show_title",
+        "titleBold",
+        "title_bold",
+      ]) ||
+      !hasValidOptionalAlignments(config, [
+        { key: "titleAlignment", values: PUBLIC_TEXT_ALIGNMENTS },
+        { key: "title_alignment", values: PUBLIC_TEXT_ALIGNMENTS },
+      ])
+    ) {
+      return { ok: false, reason: "config_invalid" };
+    }
+    assertSafeCmsMediaPath(config.mapImage, "صورة الخريطة");
+    for (const pin of config.mapPins) {
+      if (!pin || typeof pin !== "object" || Array.isArray(pin)) {
+        return { ok: false, reason: "config_invalid" };
+      }
+      const row = pin as Record<string, unknown>;
+      if (
+        typeof row.code !== "string" ||
+        typeof row.district !== "string" ||
+        typeof row.right !== "string" ||
+        typeof row.top !== "string" ||
+        !isSafeRequiredText(row.district, "المنطقة", 80)
+      ) {
+        return { ok: false, reason: "config_invalid" };
+      }
+      assertProjectCode(row.code);
+      assertMapPercent(row.right, "Right %");
+      assertMapPercent(row.top, "Top %");
+    }
+  } catch {
+    return { ok: false, reason: "config_invalid" };
+  }
+
+  return { ok: true, value: asProjectsHubMapConfig(config) };
 }
 
 /** Merge typed fields onto existing config without dropping unknown top-level keys. */

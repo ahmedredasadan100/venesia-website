@@ -8,8 +8,11 @@ import { loadProjectTrackingDetail } from "../../../../lib/projects/tracking/pub
 import { NO_INDEX_ROBOTS } from "../../../../config/seo/seo-rules";
 import { generatePublicMetadata } from "../../../../lib/seo/generate-public-metadata";
 import type { ProjectTrackingReadInput } from "../../../../lib/projects/tracking/contract";
+import { getPublicPageRoute } from "../../../../lib/admin/links/static-routes";
+import { getProjectTrackHref } from "../../../../lib/projects/public-helpers";
 
 export const revalidate = 300;
+const TRACKING_PAGE_IDENTITY = getPublicPageRoute("track-your-project");
 
 type ProjectTrackPageProps = {
   params: Promise<{
@@ -45,7 +48,7 @@ export async function generateMetadata({
 
   if (result.status !== "ready") {
     return generatePublicMetadata({
-      path: "/track-your-project",
+      path: TRACKING_PAGE_IDENTITY.href,
       title:
         result.status === "unavailable"
           ? `متابعة ${result.project.arabicName} غير متاحة مؤقتًا`
@@ -59,7 +62,7 @@ export async function generateMetadata({
   }
 
   return generatePublicMetadata({
-    path: `/track-your-project/${result.detail.project.slug}`,
+    path: getProjectTrackHref(result.detail.project),
     title: `متابعة ${result.detail.project.arabicName}`,
     description: result.detail.latestUpdate?.body ?? `تابع مراحل تنفيذ ${result.detail.project.arabicName} وآخر تحديثات المشروع الموثقة.`,
     robots: NO_INDEX_ROBOTS,

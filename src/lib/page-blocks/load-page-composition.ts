@@ -5,19 +5,23 @@ import { loadFeaturedModuleStateForPageSlug } from "../featured-modules/load-fea
 import { getHeroSectionState } from "../load-hero-section";
 import { queryMediaHubModules } from "../media-hub-modules/load-media-hub-modules";
 import { queryMediaSidebarModules } from "../media-sidebar-modules/load-media-sidebar-modules";
-import { normalizeLayoutSlot } from "./layout-slots";
-import type { PageComposition, SlotEntry } from "./page-composition-types";
-import { loadPageBlockStateBySlug } from "./load-page-blocks";
-import type { PageLayoutSlot } from "./layout-slots";
-import type { ResolvedPageBlock } from "./types";
+import {
+  getPublishedPageStateBySlug,
+  toPublicPageIdentity,
+} from "../pages/get-published-page-by-slug";
 import {
   comparePageAssignmentOrder,
   getDefaultAssignmentPosition,
   isAssignmentPositionAllowed,
 } from "../page-composition/page-assignment-contract";
 import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
-import { isHomeProjectsTemplate } from "./configs";
 import { loadHomepageProjects } from "../projects/load-homepage-projects";
+import { isHomeProjectsTemplate } from "./configs";
+import { normalizeLayoutSlot } from "./layout-slots";
+import { loadPageBlockStateBySlug } from "./load-page-blocks";
+import type { PageLayoutSlot } from "./layout-slots";
+import type { PageComposition, SlotEntry } from "./page-composition-types";
+import type { ResolvedPageBlock } from "./types";
 
 function emptySlots(): Record<PageLayoutSlot, SlotEntry[]> {
   return Object.fromEntries(
@@ -59,7 +63,16 @@ function pushBlock(
 export async function loadPageCompositionBySlug(
   pageSlug: string,
 ): Promise<PageComposition> {
-  const [heroState, blockState, feedState, featuredState, mediaHubModules, mediaSidebarModules] = await Promise.all([
+  const [
+    pageState,
+    heroState,
+    blockState,
+    feedState,
+    featuredState,
+    mediaHubModules,
+    mediaSidebarModules,
+  ] = await Promise.all([
+    getPublishedPageStateBySlug(pageSlug),
     getHeroSectionState(pageSlug),
     loadPageBlockStateBySlug(pageSlug),
     loadFeedModuleStateForPageSlug(pageSlug),
@@ -152,6 +165,7 @@ export async function loadPageCompositionBySlug(
     mediaHubModules.hasRenderableModules ||
     mediaSidebarModules.hasRenderableModules;
   const hasCompositionError =
+    pageState.sourceStatus === "error" ||
     heroState.visibility === "error" ||
     blockState.hasCompositionError ||
     feedState.hasCompositionError ||
@@ -160,6 +174,7 @@ export async function loadPageCompositionBySlug(
     mediaSidebarModules.sourceStatus === "error";
 
   return {
+    pageIdentity: pageState.page ? toPublicPageIdentity(pageState.page) : null,
     slots,
     blockStates: blockState.blockStates ?? [],
     heroVisibility: heroState.visibility,

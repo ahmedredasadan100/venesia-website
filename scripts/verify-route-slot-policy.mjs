@@ -236,16 +236,15 @@ assert.ok(!moduleMetadata.includes("preferredSlot"), "Template metadata must not
 
 for (const [label, source] of [
   ["Topics", topics],
-  ["Media Center", mediaRoot],
+  ["Media Center", `${mediaRoot}\n${mediaShell}`],
   ["Media listing", mediaShell],
-  ["Media detail", mediaDetail],
   ["Home", home],
 ]) {
   assert.ok(source.includes("PageSlotLayout") || source.includes("PageSlotContent"), `${label} has not adopted the shared renderer`);
 }
 for (const [label, source] of [
   ["Topics", topics],
-  ["Media Center", mediaRoot],
+  ["Media Center", `${mediaRoot}\n${mediaShell}`],
   ["Media listing", mediaShell],
   ["Home main", home],
   ["Home remaining regions", homeRoute],
@@ -260,8 +259,12 @@ for (const [label, source] of [
   );
 }
 assert.ok(
-  !mediaDetail.includes("listingContext="),
-  "inherited Media detail composition must fail closed for parent Listing assignments",
+  mediaDetail.includes("<InternalPageLayout") &&
+    mediaDetail.includes("<MediaDetailArticle") &&
+    !/loadPageCompositionBySlug|PageSlotLayout|PageSlotContent|getHeroSlotPeerEntries|listingContext=|searchParams/u.test(
+      mediaDetail,
+    ),
+  "Media detail must remain an entity-owned surface with no inherited Listing composition",
 );
 assert.ok(!topics.includes("findHeroSlotBreadcrumb") && !mediaRoot.includes("findHeroSlotBreadcrumb"));
 assert.ok(!mediaShell.includes("getSlotBlocks") && !mediaShell.includes("SlotModulesRenderer"));

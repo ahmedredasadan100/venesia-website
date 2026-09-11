@@ -6,6 +6,7 @@ import { isContentType } from "../content/content-types";
 import { resolvePublicContentPath } from "../../content/public-content-path";
 import { deserializeAdminLink } from "./serialize";
 import type { AdminLinkValue, LinkedResourceType } from "./types";
+import { getProjectHref } from "../../projects/public-helpers";
 
 export type LinkUsageSourceType =
   | "menu_item"
@@ -127,7 +128,7 @@ async function resolveResourcePublicPath(query: LinkUsageQuery) {
     }
     case "projects": {
       const { data } = await supabase.from("projects").select("slug").eq("id", query.linkedId).maybeSingle();
-      return data?.slug ? `/projects/${data.slug}` : null;
+      return data?.slug ? getProjectHref(data) : null;
     }
     case "topics": {
       const { data } = await supabase.from("topics").select("slug,content_type").eq("id", query.linkedId).maybeSingle();

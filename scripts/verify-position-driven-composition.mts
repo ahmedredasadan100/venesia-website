@@ -98,9 +98,6 @@ const listingShell = read(
 const mediaDetailPage = read(
   "src/components/media-center/MediaDetailPage.tsx",
 );
-const compositionUtils = read(
-  "src/lib/page-blocks/page-composition-utils.ts",
-);
 const topicDetailPage = read(
   "src/app/(site)/topics/[slug]/page.tsx",
 );
@@ -117,7 +114,7 @@ const directListingSurfaceSources = [
   read("src/components/contact/ContactPageContent.tsx"),
   read("src/components/track/TrackPageContent.tsx"),
   topicsPage,
-  read("src/app/(site)/media-center/page.tsx"),
+  `${read("src/app/(site)/media-center/page.tsx")}\n${listingShell}`,
   listingShell,
 ];
 const listingEditorAction = read(
@@ -515,8 +512,10 @@ assert.doesNotMatch(
   "Media Listing page must not keep a parallel rendering path",
 );
 assert.ok(
-  listingPage.includes("publicPath={config.basePath}"),
-  "Media Listing page must supply its exact public path to Composition context",
+  listingPage.includes("resolvePublicContentPageRoute(config.mediaType)") &&
+    listingPage.includes("pageIdentity={pageIdentity}") &&
+    listingShell.includes("publicPath={pageIdentity.href}"),
+  "Media Listing page must supply its owner-resolved public identity to Composition context",
 );
 assert.ok(
   compositionTypes.includes("export type ListingRenderContext") &&
@@ -538,22 +537,14 @@ for (const source of directListingSurfaceSources) {
 }
 assert.doesNotMatch(
   mediaDetailPage,
-  /listingContext=/u,
-  "Inherited Media detail Composition must not render the parent Listing surface",
+  /loadPageCompositionBySlug|PageSlotLayout|PageSlotContent|getHeroSlotPeerEntries|listingContext=|searchParams/u,
+  "Media detail must stay isolated from the parent Listing composition and its request context",
 );
 assert.ok(
-  compositionUtils.includes("export function getHeroSlotPeerEntries") &&
-    compositionUtils.includes('return getSlotEntries(composition, "hero")') &&
-    compositionUtils.includes('entry.kind !== "hero"') &&
-    mediaDetailPage.includes("const heroSlotPeers = getHeroSlotPeerEntries(composition)") &&
-    mediaDetailPage.includes("entries={heroSlotPeers}") &&
-    mediaDetailPage.includes('skipSlots={["hero"]}'),
-  "Media detail must keep its intrinsic entity Hero singular while rendering ordered non-Hero peers from the inherited Hero Position",
-);
-assert.doesNotMatch(
-  mediaDetailPage,
-  /composition\.slots\.hero/u,
-  "Media detail must not bypass the shared Hero-peer boundary with a route-owned allowlist",
+  mediaDetailPage.includes("<InternalPageLayout") &&
+    mediaDetailPage.includes("<MediaDetailArticle") &&
+    mediaDetailPage.includes("const pagePath = getMediaHref(item)"),
+  "Media detail must render the intrinsic entity shell and resolve its canonical public path through the shared owner",
 );
 assert.doesNotMatch(
   topicDetailPage,
@@ -598,7 +589,7 @@ assert.ok(
   "Topics fallback must fail closed when an assignment exists or Composition truth is unavailable",
 );
 assert.ok(
-  topicsPage.includes('listingContext={{ publicPath: "/topics", searchParams: params }}') &&
+  topicsPage.includes("listingContext={{ publicPath: PAGE_IDENTITY.href, searchParams: params }}") &&
     slotLayout.includes("listingContext: options.listingContext"),
   "Topics Listing request context must reach every Position, including Hero",
 );
@@ -664,7 +655,9 @@ assert.ok(
   projectsHubPublicLoader.includes("unstable_cache(queryProjectsHubComposition") &&
     projectsHubPublicLoader.includes("revalidate: 300") &&
     projectsHubPublicLoader.includes("error instanceof ProjectsHubCompositionReadError") &&
-    projectsHubPublicLoader.includes("return { ok: false, reason: error.reason }"),
+    projectsHubPublicLoader.includes(
+      'return { status: "error", ok: false, reason: error.reason }',
+    ),
   "Projects Hub must preserve its public failure contract outside the 300-second Data Cache",
 );
 

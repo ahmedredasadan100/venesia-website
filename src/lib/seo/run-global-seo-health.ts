@@ -17,6 +17,8 @@ import type {
   GlobalSeoHealthDimension,
   GlobalSeoHealthSnapshot,
 } from "./global-seo-health-types";
+import { getProjectHref } from "../projects/public-helpers";
+import { resolvePublicContentPath } from "../content/public-content-path";
 
 const DIMENSIONS: GlobalSeoHealthDimension[] = [
   "identity",
@@ -54,8 +56,8 @@ async function loadCanonicalDrift(baseUrl: string) {
   if (error) throw new Error(error.message);
   const expectedOrigin = new URL(baseUrl).origin;
   return [
-    ...(projects.data ?? []).map((row) => ({ path: `/projects/${row.slug}`, canonical: row.canonical_url })),
-    ...(topics.data ?? []).map((row) => ({ path: `/topics/${row.slug}`, canonical: row.canonical_url })),
+    ...(projects.data ?? []).map((row) => ({ path: getProjectHref(row), canonical: row.canonical_url })),
+    ...(topics.data ?? []).map((row) => ({ path: resolvePublicContentPath("article", row.slug), canonical: row.canonical_url })),
     ...(pages.data ?? []).map((row) => ({ path: row.path, canonical: row.canonical_url })),
   ].filter((item) => {
     try {

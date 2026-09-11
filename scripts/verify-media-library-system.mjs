@@ -33,7 +33,14 @@ function loadTypeScriptModule(relativePath, dependencies) {
 }
 
 const contentTypesModule = loadTypeScriptModule("src/lib/admin/content/content-types.ts", {});
-const publicContentPathModule = loadTypeScriptModule("src/lib/content/public-content-path.ts", {});
+const publicRoutesModule = loadTypeScriptModule(
+  "src/lib/admin/links/static-routes.ts",
+  {},
+);
+const publicContentPathModule = loadTypeScriptModule(
+  "src/lib/content/public-content-path.ts",
+  { "../admin/links/static-routes": publicRoutesModule },
+);
 class TestMediaStorageError extends Error {
   constructor(code, message, status) {
     super(message);

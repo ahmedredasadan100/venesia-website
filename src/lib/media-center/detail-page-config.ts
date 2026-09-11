@@ -1,13 +1,8 @@
 import type { MediaContentType } from "./types";
 
-export type MediaDetailHeroVariant = "default" | "gallery" | "video";
-
 export type MediaDetailPageConfig = {
   mediaType: MediaContentType;
-  cmsPageSlug: string;
-  basePath: `/media-center/${string}`;
   layoutEyebrow: string;
-  breadcrumbSectionLabel: string;
   notFound: {
     title: string;
     description: string;
@@ -22,7 +17,6 @@ export type MediaDetailPageConfig = {
     title: string;
     actionLabel: string;
   };
-  heroVariant: MediaDetailHeroVariant;
   showProjectBadge?: boolean;
   showDurationBadge?: boolean;
 };
@@ -30,10 +24,7 @@ export type MediaDetailPageConfig = {
 export const MEDIA_DETAIL_PAGE_CONFIG = {
   news: {
     mediaType: "news",
-    cmsPageSlug: "media-center-news",
-    basePath: "/media-center/news",
     layoutEyebrow: "News",
-    breadcrumbSectionLabel: "الأخبار",
     notFound: {
       title: "خبر غير موجود",
       description:
@@ -49,15 +40,11 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
       title: "أخبار ذات صلة",
       actionLabel: "قراءة الخبر",
     },
-    heroVariant: "default",
     showProjectBadge: true,
   },
   press: {
     mediaType: "press",
-    cmsPageSlug: "media-center-press",
-    basePath: "/media-center/press",
     layoutEyebrow: "Press",
-    breadcrumbSectionLabel: "البيانات الصحفية",
     notFound: {
       title: "بيان غير موجود",
       description:
@@ -77,14 +64,10 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
       title: "بيانات ذات صلة",
       actionLabel: "قراءة البيان",
     },
-    heroVariant: "default",
   },
   "site-updates": {
     mediaType: "site_update",
-    cmsPageSlug: "media-center-site-updates",
-    basePath: "/media-center/site-updates",
     layoutEyebrow: "Site Update",
-    breadcrumbSectionLabel: "تحديثات المواقع",
     notFound: {
       title: "تحديث غير موجود",
       description:
@@ -104,14 +87,10 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
       title: "تحديثات ذات صلة",
       actionLabel: "عرض التحديث",
     },
-    heroVariant: "default",
   },
   videos: {
     mediaType: "video",
-    cmsPageSlug: "media-center-videos",
-    basePath: "/media-center/videos",
     layoutEyebrow: "Video",
-    breadcrumbSectionLabel: "الفيديوهات",
     notFound: {
       title: "فيديو غير موجود",
       description:
@@ -131,15 +110,11 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
       title: "فيديوهات ذات صلة",
       actionLabel: "مشاهدة الفيديو",
     },
-    heroVariant: "video",
     showDurationBadge: true,
   },
   gallery: {
     mediaType: "gallery",
-    cmsPageSlug: "media-center-gallery",
-    basePath: "/media-center/gallery",
     layoutEyebrow: "Gallery",
-    breadcrumbSectionLabel: "معرض الصور",
     notFound: {
       title: "معرض غير موجود",
       description:
@@ -159,7 +134,6 @@ export const MEDIA_DETAIL_PAGE_CONFIG = {
       title: "معارض ذات صلة",
       actionLabel: "عرض المعرض",
     },
-    heroVariant: "gallery",
   },
 } as const satisfies Record<string, MediaDetailPageConfig>;
 

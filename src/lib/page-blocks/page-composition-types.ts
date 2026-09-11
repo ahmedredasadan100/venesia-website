@@ -5,6 +5,7 @@ import type { MediaHubModuleState, MediaHubModulesState } from "../media-hub-mod
 import type { MediaSidebarModulesState } from "../media-sidebar-modules/types";
 import type { MediaSidebarWidgetState } from "../media-sidebar-modules/types";
 import type { HeroSectionData } from "../page-sections";
+import type { PublicPageIdentity } from "../pages/get-published-page-by-slug";
 import type { HomepageProjectCard } from "../projects/public-types";
 import type { PageLayoutSlot } from "./layout-slots";
 import type { PageBlockPublicState, ResolvedPageBlock } from "./types";
@@ -68,6 +69,8 @@ export type SlotEntry =
   | MediaHubSlotEntry;
 
 export type PageComposition = {
+  /** Canonical CMS page identity consumed by the public shell. */
+  pageIdentity: PublicPageIdentity | null;
   slots: Record<PageLayoutSlot, SlotEntry[]>;
   /** Page Block assignment/publication truth before render filtering. */
   blockStates: PageBlockPublicState[];

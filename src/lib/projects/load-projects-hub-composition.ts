@@ -2,13 +2,19 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 
+import { getPublicPageRoute } from "../admin/links/static-routes";
 import type { Json } from "../database.types";
 import { normalizeBoolean } from "../page-blocks/admin-utils";
 import { normalizeLayoutSlot, type PageLayoutSlot } from "../page-blocks/layout-slots";
 import { logError } from "../logging";
+import {
+  getPublishedPageStateBySlug,
+  toPublicPageIdentity,
+  type PublicPageIdentity,
+} from "../pages/get-published-page-by-slug";
 import { getSupabaseAdmin } from "../supabase-admin";
 
-export const PROJECTS_HUB_PAGE_SLUG = "projects" as const;
+const PROJECTS_HUB_PAGE_IDENTITY = getPublicPageRoute("projects");
 
 export type ProjectsHubCompositionAssignment = {
   assignmentId: number;
@@ -24,17 +30,20 @@ export type ProjectsHubCompositionAssignment = {
 };
 
 export type ProjectsHubComposition = {
-  pageId: number;
-  pageSlug: string;
-  pagePath: string | null;
+  pageIdentity: PublicPageIdentity;
   assignments: ProjectsHubCompositionAssignment[];
 };
 
 export type ProjectsHubCompositionLoadResult =
-  | { ok: true; composition: ProjectsHubComposition }
-  | { ok: false; reason: string };
+  | { status: "ready"; ok: true; composition: ProjectsHubComposition }
+  | { status: "unavailable"; ok: false; reason: "page_unavailable" }
+  | {
+      status: "error";
+      ok: false;
+      reason: ProjectsHubCompositionReadFailureReason | "unexpected_error";
+    };
 
-type ProjectsHubCompositionReadFailureReason =
+export type ProjectsHubCompositionReadFailureReason =
   | "page_query_failed"
   | "assignments_query_failed";
 
@@ -59,33 +68,29 @@ function failProjectsHubCompositionRead(
 }
 
 async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoadResult> {
-  const supabase = getSupabaseAdmin();
-
-  const { data: page, error: pageError } = await supabase
-    .from("pages")
-    .select("id,slug,path,status")
-    .eq("slug", PROJECTS_HUB_PAGE_SLUG)
-    .eq("status", "published")
-    .maybeSingle();
-
-  if (pageError) {
+  const pageState = await getPublishedPageStateBySlug(
+    PROJECTS_HUB_PAGE_IDENTITY.cmsPageSlug,
+  );
+  if (pageState.sourceStatus === "error") {
     failProjectsHubCompositionRead(
       "page_query_failed",
-      "loadProjectsHubComposition: page lookup failed",
-      pageError,
+      "loadProjectsHubComposition: published page lookup failed",
+      new Error(pageState.sourceIssue ?? "Published page query failed."),
     );
   }
 
-  if (!page) {
-    return { ok: false, reason: "page_missing" };
+  if (!pageState.page) {
+    return { status: "unavailable", ok: false, reason: "page_unavailable" };
   }
+  const pageIdentity = toPublicPageIdentity(pageState.page);
+  const supabase = getSupabaseAdmin();
 
   const { data: rows, error: assignmentError } = await supabase
     .from("page_content_block_assignments")
     .select(
       "id,page_id,template_id,slot,sort_order,is_visible,content_block_templates(id,slug,variant,status,config)",
     )
-    .eq("page_id", page.id)
+    .eq("page_id", pageIdentity.id)
     .order("sort_order", { ascending: true });
 
   if (assignmentError) {
@@ -93,7 +98,7 @@ async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoad
       "assignments_query_failed",
       "loadProjectsHubComposition: assignments failed",
       assignmentError,
-      { pageId: page.id },
+      { pageId: pageIdentity.id },
     );
   }
 
@@ -117,11 +122,10 @@ async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoad
   }
 
   return {
+    status: "ready",
     ok: true,
     composition: {
-      pageId: page.id,
-      pageSlug: page.slug,
-      pagePath: page.path,
+      pageIdentity,
       assignments,
     },
   };
@@ -136,9 +140,9 @@ export async function loadProjectsHubComposition(): Promise<ProjectsHubCompositi
     })();
   } catch (error) {
     if (error instanceof ProjectsHubCompositionReadError) {
-      return { ok: false, reason: error.reason };
+      return { status: "error", ok: false, reason: error.reason };
     }
     logError("loadProjectsHubComposition: unexpected failure", error);
-    return { ok: false, reason: "unexpected_error" };
+    return { status: "error", ok: false, reason: "unexpected_error" };
   }
 }

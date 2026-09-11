@@ -1,10 +1,61 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, extname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
-import {
-  buildPublicMenuTree,
-  type MenuItemRow,
-} from "../src/lib/navigation/build-public-menu.ts";
+import type { MenuItemRow } from "../src/lib/navigation/build-public-menu.ts";
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const require = createRequire(import.meta.url);
+const moduleCache = new Map<string, { exports: Record<string, unknown> }>();
+
+function resolveLocalModule(fromPath: string, specifier: string) {
+  const base = resolve(dirname(fromPath), specifier);
+  const candidates = extname(base)
+    ? [base]
+    : [`${base}.ts`, `${base}.tsx`, resolve(base, "index.ts"), resolve(base, "index.tsx")];
+  const match = candidates.find((candidate) => existsSync(candidate));
+  if (!match) throw new Error(`Cannot resolve ${specifier} from ${fromPath}`);
+  return match;
+}
+
+function loadTypeScriptModule(relativePath: string) {
+  const absolutePath = resolve(ROOT, relativePath);
+  const cached = moduleCache.get(absolutePath);
+  if (cached) return cached.exports;
+
+  const commonJsModule = { exports: {} as Record<string, unknown> };
+  moduleCache.set(absolutePath, commonJsModule);
+  const output = ts.transpileModule(readFileSync(absolutePath, "utf8"), {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: absolutePath,
+  }).outputText;
+  const localRequire = (specifier: string) => {
+    if (specifier.startsWith(".")) {
+      return loadTypeScriptModule(resolveLocalModule(absolutePath, specifier));
+    }
+    return require(specifier);
+  };
+
+  Function("exports", "module", "require", "__filename", "__dirname", output)(
+    commonJsModule.exports,
+    commonJsModule,
+    localRequire,
+    absolutePath,
+    dirname(absolutePath),
+  );
+  return commonJsModule.exports;
+}
+
+const { buildPublicMenuTree } = loadTypeScriptModule(
+  "src/lib/navigation/build-public-menu.ts",
+) as typeof import("../src/lib/navigation/build-public-menu.ts");
 
 const read = (path: string) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8").replace(/\r\n?/gu, "\n");

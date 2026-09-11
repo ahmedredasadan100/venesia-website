@@ -1,11 +1,16 @@
 import MediaListingPage from "../../../../components/media-center/MediaListingPage";
 import { MEDIA_LISTING_PAGE_CONFIG } from "../../../../lib/media-center/listing-page-config";
+import { resolvePublicContentPageRoute } from "../../../../lib/content/public-content-path";
 import { generatePublicMetadata } from "../../../../lib/seo/generate-public-metadata";
 
 export const revalidate = 300;
 
+const PAGE_IDENTITY = resolvePublicContentPageRoute(
+  MEDIA_LISTING_PAGE_CONFIG.press.mediaType,
+);
+
 export async function generateMetadata() {
-  return generatePublicMetadata({ path: MEDIA_LISTING_PAGE_CONFIG.press.metadataPath });
+  return generatePublicMetadata({ path: PAGE_IDENTITY.href });
 }
 
 type PageProps = {

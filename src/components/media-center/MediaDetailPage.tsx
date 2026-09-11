@@ -1,55 +1,57 @@
 import { notFound } from "next/navigation";
 
 import InternalPageLayout from "../InternalPageLayout";
-import PageSlotLayout, {
-  hasRenderableSlotEntries,
-  PageSlotContent,
-} from "../page-composition/PageSlotLayout";
 import JsonLd from "../seo/JsonLd";
 import TopicViewTracker from "../content/TopicViewTracker";
+import {
+  resolvePublicContentBasePath,
+  resolvePublicContentPageRoute,
+} from "../../lib/content/public-content-path";
+import { getPublicPageRoute } from "../../lib/admin/links/static-routes";
 import { getMediaItemBySlug, getRelatedMediaItems } from "../../lib/media-center";
 import { MEDIA_DETAIL_PAGE_CONFIG, type MediaDetailPageKey } from "../../lib/media-center/detail-page-config";
-import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
-import { getHeroSlotPeerEntries } from "../../lib/page-blocks/page-composition-utils";
+import { getMediaHref } from "../../lib/media-center/types";
 import { buildPageJsonLd } from "../../lib/seo/build-jsonld";
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
+import { getPublishedPageStateBySlug } from "../../lib/pages/get-published-page-by-slug";
 import MediaDetailArticle from "./MediaDetailArticle";
 import MediaPageShell from "./MediaPageShell";
-import type { SearchPlatformSearchParams } from "../search-platform/SearchPlatformModule";
 
 type MediaDetailPageProps = {
   configKey: MediaDetailPageKey;
   slug: string;
-  searchParams?: SearchPlatformSearchParams;
 };
 
 export default async function MediaDetailPage({
   configKey,
   slug,
-  searchParams,
 }: MediaDetailPageProps) {
   const config = MEDIA_DETAIL_PAGE_CONFIG[configKey];
+  const sectionIdentity = resolvePublicContentPageRoute(config.mediaType);
   const itemPromise = getMediaItemBySlug(config.mediaType, slug);
-  const compositionPromise = loadPageCompositionBySlug(config.cmsPageSlug);
+  const sectionPageStatePromise = getPublishedPageStateBySlug(
+    sectionIdentity.cmsPageSlug,
+  );
   const globalSeoPromise = loadResolvedGlobalSeo();
-
-  const [item, composition] = await Promise.all([
+  const [item, sectionPageState] = await Promise.all([
     itemPromise,
-    compositionPromise,
+    sectionPageStatePromise,
   ]);
 
   if (!item) {
     notFound();
   }
-  if (!composition.mediaSidebarModules) return null;
 
   const [relatedItems, globalSeo] = await Promise.all([
     getRelatedMediaItems(config.mediaType, item.topicId ?? Number(item.id), 3),
     globalSeoPromise,
   ]);
 
-  const pagePath = `${config.basePath}/${item.slug}`;
-  const heroSlotPeers = getHeroSlotPeerEntries(composition);
+  const homeIdentity = getPublicPageRoute("home");
+  const mediaCenterIdentity = getPublicPageRoute("media-center");
+  const sectionPath = resolvePublicContentBasePath(item.type);
+  const sectionTitle = sectionPageState.page?.title ?? sectionIdentity.label;
+  const pagePath = getMediaHref(item);
   const content = item.content?.trim()
     ? item.content
     : config.fallbackContent.join("\n\n");
@@ -64,9 +66,9 @@ export default async function MediaDetailPage({
       publishedAt: item.publishedAt,
       updatedAt: item.publishedAt,
       breadcrumbs: [
-        { name: "الرئيسية", path: "/" },
-        { name: "المركز الإعلامي", path: "/media-center" },
-        { name: config.breadcrumbSectionLabel, path: config.basePath },
+        { name: homeIdentity.label, path: homeIdentity.href },
+        { name: mediaCenterIdentity.label, path: mediaCenterIdentity.href },
+        { name: sectionTitle, path: sectionPath },
         { name: item.title, path: pagePath },
       ],
     },
@@ -83,45 +85,21 @@ export default async function MediaDetailPage({
       showTitle={item.showTitleOnPage !== false}
       showHeroImage={item.showImageOnPage !== false}
       showSubtitle={item.showExcerptOnPage !== false}
-      heroSlotContent={
-        hasRenderableSlotEntries(heroSlotPeers, {
-          homepageProjects: composition.homepageProjects ?? undefined,
-          publicPath: pagePath,
-          searchParams,
-        }) ? (
-          <PageSlotContent
-            entries={heroSlotPeers}
-            homepageProjects={composition.homepageProjects ?? undefined}
-            breadcrumbCurrentLabel={item.title}
-            publicPath={pagePath}
-            searchParams={searchParams}
-          />
-        ) : composition.hasAnyAssignmentRows || composition.hasCompositionError ? null : undefined
-      }
-      compositionChildren
     >
-      <PageSlotLayout
-        composition={composition}
-        skipSlots={["hero"]}
-        breadcrumbCurrentLabel={item.title}
-        publicPath={pagePath}
-        searchParams={searchParams}
-        mainAfter={
-          <>
-            {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}
-            <JsonLd data={pageJsonLd} />
+      {item.showTitleOnPage === false ? (
+        <h1 className="sr-only">{item.title}</h1>
+      ) : null}
+      {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}
+      <JsonLd data={pageJsonLd} />
 
-            <MediaPageShell>
-              <MediaDetailArticle
-                item={item}
-                content={content}
-                config={config}
-                relatedItems={relatedItems}
-              />
-            </MediaPageShell>
-          </>
-        }
-      />
+      <MediaPageShell>
+        <MediaDetailArticle
+          item={item}
+          content={content}
+          config={config}
+          relatedItems={relatedItems}
+        />
+      </MediaPageShell>
     </InternalPageLayout>
   );
 }

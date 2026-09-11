@@ -58,6 +58,7 @@ import {
   type TrackingUpdateSort,
 } from "../../../../lib/admin/projects/tracking-contract";
 import { projectTrackingStatusLabel } from "../../../../lib/projects/tracking/contract";
+import { getProjectTrackHref } from "../../../../lib/projects/public-helpers";
 import {
   deleteTrackingItemAction,
   deleteTrackingStageAction,
@@ -624,7 +625,7 @@ export function TrackingStagesCollection({
                 محرر المشروع
               </AdminActionButton>
               <AdminActionButton
-                href={`/track-your-project/${project.slug}`}
+                href={getProjectTrackHref(project)}
                 variant="dark"
               >
                 فتح الصفحة العامة
@@ -1471,7 +1472,9 @@ export function TrackingUpdatesCollection({
                   edit: { access: "allowed", onSelect: () => setEditing(row) },
                   preview: {
                     access: "allowed",
-                    href: `/track-your-project/${controller.result.metrics!.project.slug}`,
+                    href: getProjectTrackHref(
+                      controller.result.metrics!.project,
+                    ),
                     target: "_blank",
                     rel: "noreferrer",
                     label: "الصفحة العامة",

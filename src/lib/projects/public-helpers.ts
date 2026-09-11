@@ -1,8 +1,15 @@
-import type { ProjectCategory, ProjectHubFilterId, PublicProject } from "./public-types";
+import {
+  getPublicDynamicPageRoute,
+  interpolatePublicRoute,
+} from "../admin/links/static-routes";
 import { absoluteUrlWithBase } from "../seo/seo-utils";
+import type { ProjectCategory, ProjectHubFilterId, PublicProject } from "./public-types";
 
 export function getProjectHref(project: Pick<PublicProject, "slug">) {
-  return `/projects/${project.slug}`;
+  return interpolatePublicRoute(
+    getPublicDynamicPageRoute("project-detail").href,
+    { slug: project.slug },
+  );
 }
 
 export function getProjectPublicUrl(
@@ -12,7 +19,10 @@ export function getProjectPublicUrl(
 }
 
 export function getProjectTrackHref(project: Pick<PublicProject, "slug">) {
-  return `/track-your-project/${project.slug}`;
+  return interpolatePublicRoute(
+    getPublicDynamicPageRoute("tracking-detail").href,
+    { slug: project.slug },
+  );
 }
 
 /** Canonical Arabic labels for known project categories. Extend when ProjectCategory expands. */

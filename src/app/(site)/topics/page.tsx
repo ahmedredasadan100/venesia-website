@@ -10,11 +10,13 @@ import { getHeroSectionByPageSlug } from "../../../lib/load-hero-section";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { loadFeedModulesForPageSlug } from "../../../lib/feed-modules/load-feed-modules";
 import { isTopicsListingTemplate } from "../../../lib/page-blocks/configs";
+import { getPublicPageRoute } from "../../../lib/admin/links/static-routes";
 
 export const revalidate = 300;
+const PAGE_IDENTITY = getPublicPageRoute("topics");
 
 export async function generateMetadata() {
-  return generatePublicMetadata({ path: "/topics" });
+  return generatePublicMetadata({ path: PAGE_IDENTITY.href });
 }
 
 type TopicsPageProps = {
@@ -31,8 +33,8 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const params = await searchParams;
 
   const [dynamicHero, composition] = await Promise.all([
-    getHeroSectionByPageSlug("topics"),
-    loadPageCompositionBySlug("topics"),
+    getHeroSectionByPageSlug(PAGE_IDENTITY.cmsPageSlug),
+    loadPageCompositionBySlug(PAGE_IDENTITY.cmsPageSlug),
   ]);
   const hasTopicsListingAssignmentRows = composition.blockStates.some(
     (state) =>
@@ -43,9 +45,11 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const useCmsLayout =
     composition.hasAnyAssignmentRows || composition.hasCompositionError;
   // Feeds are already in composition when CMS-managed; only reload for virgin static shell.
-  const sidebarFeeds = useCmsLayout ? [] : await loadFeedModulesForPageSlug("topics");
+  const sidebarFeeds = useCmsLayout
+    ? []
+    : await loadFeedModulesForPageSlug(PAGE_IDENTITY.cmsPageSlug);
   const listingContext = {
-    publicPath: "/topics",
+    publicPath: PAGE_IDENTITY.href,
     searchParams: params,
     excludeContentIds: composition.featuredModules.flatMap((module) =>
       module.items.map((item) => item.id),
@@ -73,9 +77,9 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
       <main className="relative z-10 min-h-[50vh] pb-20">
         <PageSlotLayout
           composition={composition}
-          publicPath="/topics"
+          publicPath={PAGE_IDENTITY.href}
           searchParams={params}
-          listingContext={{ publicPath: "/topics", searchParams: params }}
+          listingContext={{ publicPath: PAGE_IDENTITY.href, searchParams: params }}
           fallbackHero={fallbackHero}
           mainAfter={
             hasTopicsListingAssignmentRows || composition.hasCompositionError

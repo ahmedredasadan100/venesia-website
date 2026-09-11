@@ -47,14 +47,6 @@ export type MediaContentItem = {
 
 export type MediaNewsItem = MediaContentItem;
 
-export const MEDIA_TYPE_PATHS: Record<MediaContentType, string> = {
-  news: "news",
-  video: "videos",
-  gallery: "gallery",
-  press: "press",
-  site_update: "site-updates",
-};
-
 export const MEDIA_CONTENT_TYPES = CONTENT_TYPES.filter(
   (contentType): contentType is MediaContentType => contentType !== "article",
 );

@@ -2,11 +2,13 @@ import TrackPageContent from "../../../components/track/TrackPageContent";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
 import type { SearchPlatformSearchParams } from "../../../components/search-platform/SearchPlatformModule";
+import { getPublicPageRoute } from "../../../lib/admin/links/static-routes";
 
 export const revalidate = 300;
+const PAGE_IDENTITY = getPublicPageRoute("track-your-project");
 
 export async function generateMetadata() {
-  return generatePublicMetadata({ path: "/track-your-project" });
+  return generatePublicMetadata({ path: PAGE_IDENTITY.href });
 }
 
 type TrackYourProjectPageProps = {
@@ -17,7 +19,7 @@ export default async function TrackYourProjectPage({
   searchParams,
 }: TrackYourProjectPageProps) {
   const [composition, resolvedSearchParams] = await Promise.all([
-    loadPageCompositionBySlug("track-your-project"),
+    loadPageCompositionBySlug(PAGE_IDENTITY.cmsPageSlug),
     searchParams ?? Promise.resolve({}),
   ]);
 

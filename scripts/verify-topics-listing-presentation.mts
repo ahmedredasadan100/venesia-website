@@ -697,15 +697,15 @@ check(
       "isTopicsListingTemplate(state.templateSlug, state.templateVariant)",
     ) &&
     topicsPage.includes(
-      'listingContext={{ publicPath: "/topics", searchParams: params }}',
+      "listingContext={{ publicPath: PAGE_IDENTITY.href, searchParams: params }}",
     ) &&
     genericPage.includes("listingContext={{") &&
     genericPage.includes("publicPath: page.path") &&
     aboutPageContent.includes(
-      'listingContext={{ publicPath: "/about", searchParams }}',
+      "listingContext={{ publicPath: PAGE_IDENTITY.href, searchParams }}",
     ) &&
     contactPageContent.includes(
-      'listingContext={{ publicPath: "/contact", searchParams }}',
+      "listingContext={{ publicPath: PAGE_IDENTITY.href, searchParams }}",
     ) &&
     trackPageContent.includes("listingContext={{") &&
     !slotNodes.includes('publicPath === "/topics"') &&

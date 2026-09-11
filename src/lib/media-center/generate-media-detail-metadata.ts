@@ -4,6 +4,10 @@ import { NO_INDEX_ROBOTS } from "../../config/seo/seo-rules";
 import { getMediaItemBySlug } from "../media-center";
 import { MEDIA_DETAIL_PAGE_CONFIG, type MediaDetailPageKey } from "./detail-page-config";
 import { generatePublicMetadata } from "../seo/generate-public-metadata";
+import {
+  resolvePublicContentBasePath,
+  resolvePublicContentPath,
+} from "../content/public-content-path";
 
 type MediaDetailPageParams = {
   params: Promise<{
@@ -21,7 +25,7 @@ export async function generateMediaDetailMetadata(
 
   if (!item) {
     return generatePublicMetadata({
-      path: config.basePath,
+      path: resolvePublicContentBasePath(config.mediaType),
       title: config.notFound.title,
       description: config.notFound.description,
       robots: NO_INDEX_ROBOTS,
@@ -29,7 +33,7 @@ export async function generateMediaDetailMetadata(
     });
   }
 
-  const pagePath = `${config.basePath}/${item.slug}`;
+  const pagePath = resolvePublicContentPath(item.type, item.slug);
 
   return generatePublicMetadata({
     path: pagePath,

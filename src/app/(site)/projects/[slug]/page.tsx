@@ -12,8 +12,11 @@ import { generatePublicMetadata, loadResolvedGlobalSeo } from "../../../../lib/s
 import { buildPageJsonLd } from "../../../../lib/seo/build-jsonld";
 import { getDomainBackedHeroTemplateState } from "../../../../lib/load-hero-section";
 import { getHeroConfig } from "../../../../lib/page-sections";
+import { getPublicPageRoute } from "../../../../lib/admin/links/static-routes";
+import { getProjectHref } from "../../../../lib/projects/public-helpers";
 
 export const revalidate = 300;
+const PROJECTS_PAGE_IDENTITY = getPublicPageRoute("projects");
 
 type ProjectDetailsPageProps = {
   params: Promise<{
@@ -30,7 +33,7 @@ export async function generateMetadata({
 
   if (!project) {
     return generatePublicMetadata({
-      path: "/projects",
+      path: PROJECTS_PAGE_IDENTITY.href,
       title: "المشروع غير موجود",
       description: "المشروع المطلوب غير متاح حاليًا.",
       robots: NO_INDEX_ROBOTS,
@@ -38,7 +41,7 @@ export async function generateMetadata({
     });
   }
 
-  const pagePath = `/projects/${project.slug}`;
+  const pagePath = getProjectHref(project);
   const fallbackDescription = stripHtml(project.shortDescription);
 
   return generatePublicMetadata({
@@ -82,7 +85,7 @@ export default async function ProjectDetailsPage({
     await loadProjectLocationSectionPresentation(Number(project.id));
 
   const globalSeo = await loadResolvedGlobalSeo();
-  const pagePath = `/projects/${project.slug}`;
+  const pagePath = getProjectHref(project);
   const description = stripHtml(project.seo.description || project.shortDescription);
   const heroPresentation = projectDetailHeroState.hero
     ? getHeroConfig(projectDetailHeroState.hero)

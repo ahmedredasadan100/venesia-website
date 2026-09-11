@@ -3,6 +3,7 @@ import type {
   FooterSocialPlatform,
 } from "./types";
 import { FOOTER_SLOTS_CONFIG_VERSION, type FooterSlotsConfig } from "./footer-slot-types";
+import { getPublicPageRoute } from "../admin/links/static-routes";
 
 const SOCIAL_PLATFORMS: FooterSocialPlatform[] = [
   "facebook",
@@ -50,7 +51,7 @@ export const DEFAULT_FOOTER_SLOTS: FooterSlotsConfig = {
       heading: "المركز الإعلامي",
       config: {
         source: "main_submenu",
-        parentHref: "/media-center",
+        parentHref: getPublicPageRoute("media-center").href,
         parentLink: null,
         menuId: null,
         manualLinks: [],

@@ -1,4 +1,9 @@
 import type { PublicNavigationItem } from "../public-navigation";
+import {
+  getPublicDynamicPageRoute,
+  getPublicPageRoute,
+  interpolatePublicRoute,
+} from "../admin/links/static-routes";
 
 export type MenuItemRow = {
   id: number;
@@ -61,21 +66,27 @@ function resolveHref(item: MenuItemRow, maps: SlugMaps): string | null {
     if (!item.linked_id) return null;
     const slug = maps.topics.get(Number(item.linked_id));
     if (!slug) return null;
-    href = `/topics/${slug}`;
+    href = interpolatePublicRoute(
+      getPublicDynamicPageRoute("topic-detail").href,
+      { slug },
+    );
   }
 
   if (item.linked_type === "topic_categories") {
     if (!item.linked_id) return null;
     const slug = maps.topicCategories.get(Number(item.linked_id));
     if (!slug) return null;
-    href = `/topics?category=${slug}`;
+    href = `${getPublicPageRoute("topics").href}?category=${slug}`;
   }
 
   if (item.linked_type === "projects") {
     if (!item.linked_id) return null;
     const slug = maps.projects.get(Number(item.linked_id));
     if (!slug) return null;
-    href = `/projects/${slug}`;
+    href = interpolatePublicRoute(
+      getPublicDynamicPageRoute("project-detail").href,
+      { slug },
+    );
   }
 
   return appendAnchor(href, item.anchor);

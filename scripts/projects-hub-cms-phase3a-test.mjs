@@ -3,6 +3,7 @@
  * Does not mutate DB rows.
  */
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, extname, resolve } from "node:path";
@@ -84,9 +85,13 @@ function assignment(overrides) {
 }
 
 const baseComposition = {
-  pageId: 36,
-  pageSlug: "projects",
-  pagePath: "/projects",
+  pageIdentity: {
+    id: 36,
+    title: "المشروعات",
+    slug: "projects",
+    path: "/projects",
+    pageType: "projects_hub",
+  },
   assignments: [
     assignment({
       assignmentId: 120,
@@ -95,7 +100,7 @@ const baseComposition = {
       config: {
         selectionMode: "domain_projects",
         projectType: "both",
-        variant: "home-cinematic",
+        variant: "projects-hub",
         limit: 6,
         autoplayMs: 6000,
         emptyState: null,
@@ -145,6 +150,7 @@ const baseComposition = {
 // 1. Four valid visible assignments
 {
   const plan = buildProjectsHubRenderPlan(baseComposition);
+  assert.equal(plan.status, "ready");
   assert.equal(plan.ready, true);
   assert.deepEqual(
     plan.modules.map((m) => [m.sortOrder, m.slug]),
@@ -169,20 +175,20 @@ const baseComposition = {
 {
   const explicitVisibility = {
     ...baseComposition,
-    assignments: baseComposition.assignments.map((row) =>
-      row.templateSlug === "projects-hub-hero"
-        ? {
-            ...row,
-            config: {
-              ...row.config,
-              showEyebrow: false,
-              primaryCtaLabel: undefined,
-              showExploreLink: false,
-              exploreLabel: "تفاصيل المشروع",
-            },
-          }
-        : row,
-    ),
+    assignments: baseComposition.assignments.map((row) => {
+      if (row.templateSlug !== "projects-hub-hero") return row;
+      const legacyConfig = { ...row.config };
+      delete legacyConfig.primaryCtaLabel;
+      return {
+        ...row,
+        config: {
+          ...legacyConfig,
+          showEyebrow: false,
+          showExploreLink: false,
+          exploreLabel: "تفاصيل المشروع",
+        },
+      };
+    }),
   };
   const plan = buildProjectsHubRenderPlan(explicitVisibility);
   assert.equal(plan.ready, true);
@@ -275,12 +281,373 @@ const baseComposition = {
     ),
   };
   const plan = buildProjectsHubRenderPlan(withInvalid);
+  assert.equal(plan.status, "unavailable");
   assert.equal(plan.ready, false);
   assert.equal(plan.reason, "incomplete_hub_modules");
   assert.ok(plan.skipped.some((s) => s.reason === "config_not_object"));
 }
 
-// 5b. Single module only => incomplete
+function loadTsWithOverrides(relPath, overrides, isolatedCache = new Map()) {
+  const absolutePath = resolve(relPath);
+  if (isolatedCache.has(absolutePath)) {
+    return isolatedCache.get(absolutePath).exports;
+  }
+
+  const commonJsModule = { exports: {} };
+  isolatedCache.set(absolutePath, commonJsModule);
+  const output = ts.transpileModule(readFileSync(absolutePath, "utf8"), {
+    compilerOptions: {
+      esModuleInterop: true,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: absolutePath,
+  }).outputText;
+  const localRequire = (specifier) => {
+    if (Object.prototype.hasOwnProperty.call(overrides, specifier)) {
+      return overrides[specifier];
+    }
+    if (specifier.startsWith(".")) {
+      return loadTsWithOverrides(
+        resolveLocalModule(absolutePath, specifier),
+        overrides,
+        isolatedCache,
+      );
+    }
+    if (specifier === "server-only") return {};
+    return require(specifier);
+  };
+
+  try {
+    Function("exports", "module", "require", "__filename", "__dirname", output)(
+      commonJsModule.exports,
+      commonJsModule,
+      localRequire,
+      absolutePath,
+      dirname(absolutePath),
+    );
+    return commonJsModule.exports;
+  } catch (error) {
+    isolatedCache.delete(absolutePath);
+    throw error;
+  }
+}
+
+async function verifyInstalledNextCacheRejectsWithoutWriting() {
+  const cacheGlobal = globalThis;
+  const hadIncrementalCache = Object.prototype.hasOwnProperty.call(
+    cacheGlobal,
+    "__incrementalCache",
+  );
+  const previousIncrementalCache = cacheGlobal.__incrementalCache;
+  const hadAsyncLocalStorage = Object.prototype.hasOwnProperty.call(
+    cacheGlobal,
+    "AsyncLocalStorage",
+  );
+  const previousAsyncLocalStorage = cacheGlobal.AsyncLocalStorage;
+  const stored = new Map();
+  let sourceAttempts = 0;
+  let setCalls = 0;
+
+  cacheGlobal.AsyncLocalStorage = AsyncLocalStorage;
+  cacheGlobal.__incrementalCache = {
+    isOnDemandRevalidate: false,
+    generateSimpleCacheKey: async (key) => key,
+    get: async (key) => stored.get(key) ?? null,
+    set: async (key, value) => {
+      setCalls += 1;
+      stored.set(key, { value, isStale: false });
+    },
+  };
+
+  try {
+    const { unstable_cache: nextUnstableCache } = await import("next/cache.js");
+    const cached = nextUnstableCache(
+      async () => {
+        sourceAttempts += 1;
+        if (sourceAttempts === 1) {
+          throw new Error("Projects Hub isolated transient failure");
+        }
+        return { status: "recovered" };
+      },
+      ["projects-hub-public-resilience-installed-next"],
+      { revalidate: 300, tags: ["projects-hub-proof"] },
+    );
+
+    await assert.rejects(cached);
+    assert.equal(setCalls, 0, "Next Data Cache must not store a rejection");
+    assert.equal(stored.size, 0, "a rejection must not create a cache entry");
+    assert.equal((await cached()).status, "recovered");
+    assert.equal(sourceAttempts, 2, "the recovery attempt must reach its source");
+    assert.equal(setCalls, 1, "only the fulfilled recovery may be cached");
+    assert.equal((await cached()).status, "recovered");
+    assert.equal(sourceAttempts, 2, "only the recovered value may be replayed");
+  } finally {
+    if (hadIncrementalCache) {
+      cacheGlobal.__incrementalCache = previousIncrementalCache;
+    } else {
+      delete cacheGlobal.__incrementalCache;
+    }
+    if (hadAsyncLocalStorage) {
+      cacheGlobal.AsyncLocalStorage = previousAsyncLocalStorage;
+    } else {
+      delete cacheGlobal.AsyncLocalStorage;
+    }
+  }
+}
+
+async function verifyProjectsHubLoaderRecovery() {
+  const queryPlan = [
+    {
+      table: "page_content_block_assignments",
+      result: { data: [], error: null },
+    },
+  ];
+  const queryCounts = new Map();
+  let pageStateCalls = 0;
+
+  class QueryMock {
+    constructor(table) {
+      this.table = table;
+    }
+
+    select() {
+      return this;
+    }
+
+    eq() {
+      return this;
+    }
+
+    order() {
+      return this;
+    }
+
+    maybeSingle() {
+      return this;
+    }
+
+    then(onFulfilled, onRejected) {
+      queryCounts.set(this.table, (queryCounts.get(this.table) ?? 0) + 1);
+      const step = queryPlan.shift();
+      assert.ok(step, `unexpected Projects Hub source query: ${this.table}`);
+      assert.equal(step.table, this.table);
+      return Promise.resolve(step.result).then(onFulfilled, onRejected);
+    }
+  }
+
+  const cacheEntries = new Map();
+  let cacheWrites = 0;
+  const unstableCacheMock = (callback, keyParts = []) => async (...args) => {
+    const key = JSON.stringify([keyParts, args]);
+    if (cacheEntries.has(key)) return cacheEntries.get(key);
+    const result = await callback(...args);
+    cacheEntries.set(key, result);
+    cacheWrites += 1;
+    return result;
+  };
+  const loaderModule = loadTsWithOverrides(
+    "src/lib/projects/load-projects-hub-composition.ts",
+    {
+      "next/cache": { unstable_cache: unstableCacheMock },
+      "../logging": { logError: () => {} },
+      "../supabase-admin": {
+        getSupabaseAdmin: () => ({
+          from: (table) => new QueryMock(table),
+        }),
+      },
+      "../pages/get-published-page-by-slug": {
+        getPublishedPageStateBySlug: async (pageSlug) => {
+          assert.equal(pageSlug, "projects");
+          pageStateCalls += 1;
+          if (pageStateCalls === 1) {
+            return {
+              page: null,
+              sourceStatus: "error",
+              sourceIssue: "isolated page read failure",
+            };
+          }
+          return {
+            page: {
+              id: 36,
+              title: "المشروعات",
+              slug: "projects",
+              path: "/projects",
+              page_type: "projects_hub",
+              status: "published",
+            },
+            sourceStatus: "database",
+          };
+        },
+        toPublicPageIdentity: (page) => ({
+          id: page.id,
+          title: page.title,
+          slug: page.slug,
+          path: page.path,
+          pageType: page.page_type,
+        }),
+      },
+      "../page-blocks/admin-utils": {
+        normalizeBoolean: (value, fallback) =>
+          typeof value === "boolean" ? value : fallback,
+      },
+      "../page-blocks/layout-slots": {
+        normalizeLayoutSlot: (value) => value || "main",
+      },
+    },
+  );
+  const loadProjectsHubComposition = loaderModule.loadProjectsHubComposition;
+
+  assert.deepEqual(await loadProjectsHubComposition(), {
+    status: "error",
+    ok: false,
+    reason: "page_query_failed",
+  });
+  assert.equal(cacheWrites, 0, "Projects Hub failure must not write a cache entry");
+  assert.equal(cacheEntries.size, 0, "Projects Hub failure must leave no cached value");
+
+  const recovered = await loadProjectsHubComposition();
+  assert.equal(recovered.status, "ready");
+  assert.equal(recovered.ok, true);
+  assert.equal(pageStateCalls, 2, "the next request must reach the shared page source");
+  assert.equal(recovered.composition.pageIdentity.title, "المشروعات");
+  assert.equal(cacheWrites, 1, "only recovered composition may be cached");
+
+  const replayed = await loadProjectsHubComposition();
+  assert.equal(replayed.status, "ready");
+  assert.equal(pageStateCalls, 2, "fulfilled recovery may be reused");
+  assert.equal(
+    queryCounts.get("page_content_block_assignments"),
+    1,
+    "cached recovery must avoid a duplicate assignment query",
+  );
+  assert.equal(queryPlan.length, 0);
+}
+
+// 5a. Object-shaped invalid values never become active through public defaults.
+for (const [slug, patch, expectedReason] of [
+  ["projects-hub-hero", { variant: "home-cinematic" }, "config_invalid"],
+  ["projects-hub-hero", { showExploreLink: {} }, "config_invalid"],
+  ["projects-hub-hero", { hero_element_order: ["title"] }, "config_invalid"],
+  ["projects-hub-featured", { selectionMode: "manual" }, "config_invalid"],
+  ["projects-hub-featured", { show_project_image: "sometimes" }, "config_invalid"],
+  ["projects-hub-listing", { visibleFilters: ["unknown"] }, "config_invalid"],
+  ["projects-hub-listing", { title_alignment: "middle" }, "config_invalid"],
+  ["projects-hub-map", { mapPins: [] }, "config_invalid"],
+  ["projects-hub-map", { show_title: "sometimes" }, "config_invalid"],
+]) {
+  const invalidObject = {
+    ...baseComposition,
+    assignments: baseComposition.assignments.map((row) =>
+      row.templateSlug === slug
+        ? { ...row, config: { ...row.config, ...patch } }
+        : row,
+    ),
+  };
+  const plan = buildProjectsHubRenderPlan(invalidObject);
+  assert.equal(plan.status, "unavailable", `${slug} invalid object must be unavailable`);
+  assert.equal(plan.reason, "incomplete_hub_modules");
+  assert.ok(
+    plan.skipped.some(
+      (item) => item.slug === slug && item.reason === expectedReason,
+    ),
+    `${slug} invalid object must retain its strict decoder reason`,
+  );
+}
+
+// 5b. The one documented seed-era Hero discriminator stays compatible.
+{
+  const legacyHero = {
+    ...baseComposition,
+    assignments: baseComposition.assignments.map((row) =>
+      row.templateSlug === "projects-hub-hero"
+        ? {
+            ...row,
+            config: {
+              selectionMode: "auto_residential_with_media",
+              autoplayMs: 6000,
+              emptyState: null,
+            },
+          }
+        : row,
+    ),
+  };
+  const plan = buildProjectsHubRenderPlan(legacyHero);
+  assert.equal(plan.status, "ready");
+  const hero = plan.modules.find((module) => module.slug === "projects-hub-hero");
+  assert.equal(hero.config.selectionMode, "domain_projects");
+  assert.equal(hero.config.projectType, "residential");
+  assert.equal(hero.config.variant, "projects-hub");
+}
+
+// 5c. The legacy discriminator never permits a non-residential override.
+{
+  const legacyOverride = {
+    ...baseComposition,
+    assignments: baseComposition.assignments.map((row) =>
+      row.templateSlug === "projects-hub-hero"
+        ? {
+            ...row,
+            config: {
+              selectionMode: "auto_residential_with_media",
+              projectType: "commercial",
+              autoplayMs: 6000,
+              emptyState: null,
+            },
+          }
+        : row,
+    ),
+  };
+  const plan = buildProjectsHubRenderPlan(legacyOverride);
+  assert.equal(plan.status, "unavailable");
+  assert.ok(
+    plan.skipped.some(
+      (item) =>
+        item.slug === "projects-hub-hero" &&
+        item.reason === "config_invalid",
+    ),
+  );
+}
+
+// 5d. Ineligible candidates do not mask a later valid published version.
+for (const candidate of [
+  assignment({
+    assignmentId: 110,
+    sortOrder: 1,
+    templateSlug: "draft-projects-hero",
+    templateVariant: "projects-hub-hero",
+    templateStatus: "unpublished",
+    config: baseComposition.assignments[0].config,
+  }),
+  assignment({
+    assignmentId: 111,
+    sortOrder: 1,
+    templateSlug: "hidden-projects-hero",
+    templateVariant: "projects-hub-hero",
+    isVisible: false,
+    config: baseComposition.assignments[0].config,
+  }),
+  assignment({
+    assignmentId: 112,
+    sortOrder: 1,
+    templateSlug: "invalid-projects-hero",
+    templateVariant: "projects-hub-hero",
+    config: {},
+  }),
+]) {
+  const plan = buildProjectsHubRenderPlan({
+    ...baseComposition,
+    assignments: [candidate, ...baseComposition.assignments],
+  });
+  assert.equal(plan.status, "ready");
+  assert.equal(
+    plan.modules.find((module) => module.slug === "projects-hub-hero")
+      ?.assignmentId,
+    120,
+  );
+}
+
+// 5e. Single module only => incomplete
 {
   const one = {
     ...baseComposition,
@@ -402,6 +769,11 @@ const baseComposition = {
   assert.ok(plan.skipped.some((s) => s.reason === "duplicate_supported_slug"));
 }
 
+// 11. A rejected source read creates no Application/Data Cache entry and the
+// immediately following attempt reaches the source without TTL expiry.
+await verifyInstalledNextCacheRejectsWithoutWriting();
+await verifyProjectsHubLoaderRecovery();
+
 console.log(
   JSON.stringify(
     {
@@ -420,6 +792,7 @@ console.log(
       featuredLimitNoMutate: true,
       sharedFilterDefaults: true,
       duplicateSkip: true,
+      transientCacheRecovery: true,
     },
     null,
     2,

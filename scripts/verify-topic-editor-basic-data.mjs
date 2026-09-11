@@ -135,7 +135,14 @@ for (const field of ["show_title_on_page", "show_image_on_page", "show_excerpt_o
 check("public topic adapter receives legacy-safe display settings", publicLoader.includes("showTitleOnPage: item.display.title") && publicLoader.includes("showImageOnPage: item.display.image") && publicLoader.includes("showExcerptOnPage: item.display.excerpt"));
 check("public article output retains image-alt and display controls", publicPage.includes("alt={topic.imageAlt}") && publicPage.includes("topic.showTitleOnPage") && publicPage.includes("topic.showImageOnPage") && publicPage.includes("topic.showExcerptOnPage") && publicPage.includes("topic.showFaqTitleOnPage"));
 check("shared public layout can hide hero elements", publicLayout.includes("showHeroImage") && publicLayout.includes("showSubtitle") && publicLayout.includes("showTitle"));
-check("public path resolver maps article and media detail roots", publicPath.includes('article: "/topics"') && publicPath.includes('site_update: "/media-center/site-updates"') && publicPath.includes('gallery: "/media-center/gallery"'));
+check(
+  "public path resolver maps article and media routes through the canonical registry",
+  publicPath.includes('article: { listing: "topics", detail: "topic-detail" }') &&
+    publicPath.includes('listing: "media-site-updates"') &&
+    publicPath.includes('listing: "media-gallery"') &&
+    publicPath.includes("getPublicPageRoute(") &&
+    publicPath.includes("getPublicDynamicPageRoute("),
+);
 
 for (const retired of [
   "src/components/admin/content/editors/article/TopicBasicDataPanel.tsx",

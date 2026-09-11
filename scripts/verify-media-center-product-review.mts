@@ -616,7 +616,11 @@ for (const forbidden of [
   );
 }
 assert.ok(shellLayout.includes("<PageSlotLayout"));
-assert.ok(shellLayout.includes("listingContext={{ publicPath, searchParams }}"));
+assert.ok(
+  shellLayout.includes(
+    "listingContext={{ publicPath: pageIdentity.href, searchParams }}",
+  ),
+);
 assert.ok(!shellLayout.includes("mainAfter="));
 assert.ok(!shellLayout.includes("children:"));
 assert.ok(

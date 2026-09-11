@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { resolvePublicContentBasePath } from "../../lib/content/public-content-path";
 import { getMediaHref, type MediaContentItem } from "../../lib/media-center/types";
 import type { MediaHubModulePresentation } from "../../lib/media-hub-modules/parse-config";
 import { resolveMediaCollectionItemDisplay } from "../../lib/media-center/collection-display-adapter";
@@ -30,7 +31,7 @@ export default function MediaCenterHubTimeline({
       <section>
         <MediaCenterHubSectionHeader
           presentation={presentation}
-          href="/media-center/site-updates"
+          href={resolvePublicContentBasePath("site_update")}
         />
         <MediaCenterCollectionItems
           items={items}
@@ -45,7 +46,7 @@ export default function MediaCenterHubTimeline({
     <section className={isTimelineDigest ? "flex h-full flex-col" : undefined}>
       <MediaCenterHubSectionHeader
         presentation={presentation}
-        href="/media-center/site-updates"
+        href={resolvePublicContentBasePath("site_update")}
       />
 
       <div
