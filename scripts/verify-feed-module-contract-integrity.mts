@@ -1137,7 +1137,7 @@ for (const aggregateMember of [
   "heroState.hasAnyAssignmentRows",
   "blockState.hasAnyAssignmentRows",
   "feedState.hasAnyAssignmentRows",
-  "mediaHubModules?.hasAnyAssignmentRows",
+  "mediaHubModules.hasAnyAssignmentRows",
   "mediaSidebarModules.hasAnyAssignmentRows",
 ]) {
   assert.ok(
@@ -1149,7 +1149,7 @@ for (const renderableMember of [
   'heroState.visibility === "visible"',
   "blockState.hasRenderableModules",
   "feedState.modules.length > 0",
-  "mediaHubModules?.hasRenderableModules",
+  "mediaHubModules.hasRenderableModules",
   "mediaSidebarModules.hasRenderableModules",
 ]) {
   assert.ok(
@@ -1157,6 +1157,15 @@ for (const renderableMember of [
     `Page Composition renderable truth is missing ${renderableMember}`,
   );
 }
+assert.ok(
+  compositionLoader.includes('mediaHubModules.sourceStatus === "error"'),
+  "Route-neutral Media Hub composition must aggregate its non-optional error truth",
+);
+assert.equal(
+  compositionLoader.includes("mediaHubModules?."),
+  false,
+  "Route-neutral Media Hub composition must not regress to an optional route-gated aggregate",
+);
 assert.ok(compositionLoader.includes("assignmentId: heroState.assignmentId"));
 assert.ok(compositionLoader.includes('heroState.visibility === "error"'));
 assert.ok(heroLoader.includes('HeroSectionVisibility = "visible" | "hidden" | "none" | "error"'));

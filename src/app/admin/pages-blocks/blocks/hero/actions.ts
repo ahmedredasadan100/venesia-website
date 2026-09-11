@@ -25,6 +25,7 @@ import {
   parsePageBlockBulkIds,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
+import { getHeroAssignmentConflicts } from "../../../../../lib/page-blocks/module-assignments-query";
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import {
   PROJECT_DETAIL_HERO_ELEMENT_KEYS,
@@ -663,6 +664,12 @@ export async function updateHeroTemplateDetails(formData: FormData) {
         .filter(Boolean),
     ),
   ];
+  const assignmentConflicts = await getHeroAssignmentConflicts(pageIds, id);
+  if (assignmentConflicts.length) {
+    throw new Error(
+      "إحدى الصفحات المحددة مرتبطة بهيرو آخر. أزل الربط الحالي أولًا للحفاظ على Hero واحد لكل صفحة.",
+    );
+  }
   const { data: anchorPage, error: anchorError } = pageIds.length
     ? { data: { id: pageIds[0] }, error: null }
     : await getSupabaseAdmin()

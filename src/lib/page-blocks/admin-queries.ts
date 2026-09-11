@@ -12,6 +12,7 @@ import { normalizeLayoutSlot } from "./layout-slots";
 import type { PageBlockAssignmentRow } from "./types";
 import { isRetiredContentBlockTemplateSlug } from "./deprecated-block-modules";
 import {
+  comparePageAssignmentOrder,
   getDefaultAssignmentPosition,
   getProductFixedPositionReason,
 } from "../page-composition/page-assignment-contract";
@@ -344,9 +345,18 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
     const positionOrder = (slot: string) =>
       PAGE_COMPOSITION_POSITIONS.indexOf(normalizeLayoutSlot(slot));
     return positionOrder(a.slot) - positionOrder(b.slot)
-      || a.sort_order - b.sort_order
-      || a.module_kind.localeCompare(b.module_kind)
-      || a.id - b.id;
+      || comparePageAssignmentOrder(
+        {
+          sortOrder: a.sort_order,
+          moduleKind: a.module_kind,
+          assignmentId: a.id,
+        },
+        {
+          sortOrder: b.sort_order,
+          moduleKind: b.module_kind,
+          assignmentId: b.id,
+        },
+      );
   });
 
   return {

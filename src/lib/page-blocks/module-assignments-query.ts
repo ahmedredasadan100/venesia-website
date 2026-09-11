@@ -29,6 +29,34 @@ export type ModuleAssignmentContext = {
   pages: Array<{ id: number; title: string; slug: string; path: string }>;
 };
 
+export type HeroAssignmentConflict = {
+  pageId: number;
+  heroId: number;
+};
+
+export async function getHeroAssignmentConflicts(
+  pageIds: readonly number[],
+  exceptHeroId?: number,
+): Promise<HeroAssignmentConflict[]> {
+  const targetPageIds = [...new Set(pageIds.filter((pageId) => pageId > 0))];
+  if (!targetPageIds.length) return [];
+
+  let query = getSupabaseAdmin()
+    .from("hero_assignments")
+    .select("target_id,hero_id")
+    .eq("target_type", "page")
+    .in("target_id", targetPageIds);
+  if (exceptHeroId) query = query.neq("hero_id", exceptHeroId);
+  const { data, error } = await query;
+  if (error) throw new Error(`Hero assignment conflict read failed: ${error.message}`);
+
+  return (data ?? []).flatMap((row) =>
+    row.target_id == null
+      ? []
+      : [{ pageId: row.target_id, heroId: row.hero_id }],
+  );
+}
+
 async function loadModuleAssignmentContext(
   assignmentTable: PageModuleAssignmentTable,
   templateId: number,

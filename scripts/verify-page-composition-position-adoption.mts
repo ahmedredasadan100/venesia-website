@@ -3,12 +3,21 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 
 import {
+  comparePageAssignmentOrder,
   getAssignablePositions,
   getDefaultAssignmentPosition,
   MODULE_POSITION_CAPABILITIES,
 } from "../src/lib/page-composition/page-assignment-contract.ts";
 import { PAGE_COMPOSITION_POSITIONS } from "../src/lib/page-composition/positions.ts";
-import type { PageModuleKind } from "../src/lib/page-blocks/types.ts";
+import {
+  REGISTERED_SLOT_MODULE_KINDS,
+  SLOT_MODULE_REGISTRY,
+  resolveSlotModuleRegistration,
+} from "../src/lib/page-composition/slot-module-registry.ts";
+import {
+  PAGE_MODULE_KINDS,
+  type PageModuleKind,
+} from "../src/lib/page-blocks/types.ts";
 
 type AdoptionRow = {
   assignmentStore: string;
@@ -166,6 +175,60 @@ const ASSIGNABLE_MODULE_KINDS = Object.keys(
   MODULE_POSITION_CAPABILITIES,
 ) as PageModuleKind[];
 
+const EXPECTED_RENDERER_KEYS = {
+  hero: "hero",
+  content: "block",
+  cta: "block",
+  cards: "block",
+  breadcrumb: "block",
+  feed: "feed",
+  featured: "featured",
+  "media-sidebar": "media-sidebar",
+  "media-hub": "media-hub",
+} as const satisfies Record<PageModuleKind, string>;
+
+const samePositionOrder = [
+  { sortOrder: 10, moduleKind: "feed" as const, assignmentId: 1 },
+  { sortOrder: 10, moduleKind: "content" as const, assignmentId: 100 },
+  { sortOrder: 9, moduleKind: "media-hub" as const, assignmentId: 50 },
+  { sortOrder: 10, moduleKind: "content" as const, assignmentId: 2 },
+].sort(comparePageAssignmentOrder);
+assert.deepEqual(
+  samePositionOrder.map(({ sortOrder, moduleKind, assignmentId }) =>
+    `${sortOrder}:${moduleKind}:${assignmentId}`
+  ),
+  ["9:media-hub:50", "10:content:2", "10:content:100", "10:feed:1"],
+  "cross-kind Assignment order must use sort_order, module kind, then table-local id",
+);
+
+assert.deepEqual(
+  REGISTERED_SLOT_MODULE_KINDS,
+  PAGE_MODULE_KINDS,
+  "Slot Module Registry order must be derived from PAGE_MODULE_KINDS",
+);
+assert.equal(
+  SLOT_MODULE_REGISTRY.length,
+  PAGE_MODULE_KINDS.length,
+  "Slot Module Registry must contain exactly one entry per Page Module kind",
+);
+for (const kind of PAGE_MODULE_KINDS) {
+  const registration = resolveSlotModuleRegistration(kind);
+  assert.ok(registration, `${kind}: missing Slot Module registration`);
+  assert.equal(registration.kind, kind);
+  assert.equal(
+    registration.rendererKey,
+    EXPECTED_RENDERER_KEYS[kind],
+    `${kind}: renderer registry key drifted`,
+  );
+}
+for (const invalidKind of [null, undefined, "", "unknown", "FEED", " feed "]) {
+  assert.equal(
+    resolveSlotModuleRegistration(invalidKind),
+    null,
+    `Unknown module kind ${String(invalidKind)} must fail closed`,
+  );
+}
+
 assert.deepEqual(
   Object.keys(ADOPTION_MATRIX).sort(),
   [...ASSIGNABLE_MODULE_KINDS].sort(),
@@ -201,11 +264,14 @@ for (const kind of ASSIGNABLE_MODULE_KINDS) {
 const pageClient = read("src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx");
 const assignmentModal = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/use-page-blocks-assign-modal.ts");
 const assignmentModalView = read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx");
+const moduleRegistryMetadata = read("src/lib/page-composition/module-registry-metadata.ts");
 const assignmentCreate = read("src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts");
 const assignmentUpdate = read("src/app/admin/pages-blocks/pages/page-actions/assignment-update.ts");
 const assignmentSync = read("src/lib/page-blocks/sync-module-page-assignments.ts");
 const adminRead = read("src/lib/page-blocks/admin-queries.ts");
 const compositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
+const slotRenderPlan = read("src/components/page-composition/build-slot-render-plan.ts");
+const slotModuleNodes = read("src/components/page-composition/slot-module-nodes.tsx");
 const projectsLoader = read("src/lib/projects/load-projects-hub-composition.ts");
 const projectsPlan = read("src/lib/projects/build-projects-hub-render-plan.ts");
 
@@ -213,6 +279,25 @@ assert.ok(pageClient.includes("getAssignablePositions(row.module_kind)"));
 assert.ok(pageClient.includes("PAGE_COMPOSITION_POSITIONS"));
 assert.ok(assignmentModal.includes("getSlotOptions(assignModuleKind)"));
 assert.ok(assignmentModalView.includes('name="slot"'));
+assert.ok(
+  assignmentModal.includes("export type AssignableModuleKind = PageModuleKind"),
+  "Admin assignment kind must alias the canonical PageModuleKind",
+);
+assert.ok(
+  assignmentModalView.includes("REGISTERED_SLOT_MODULE_KINDS.map"),
+  "Admin assignment options must derive from the existing Slot Module Registry",
+);
+assert.doesNotMatch(
+  assignmentModalView,
+  /const\s+ASSIGNABLE_MODULE_KINDS\s*=/u,
+  "Admin assignment view must not keep a parallel module-kind inventory",
+);
+assert.ok(
+  moduleRegistryMetadata.includes(
+    "MODULE_KIND_METADATA: Record<PageModuleKind, ModuleKindMetadata>",
+  ),
+  "Module metadata must exhaustively cover PageModuleKind",
+);
 assert.ok(assignmentCreate.includes("positionPolicyFailure(options.kind, options.slot)"));
 assert.ok(
   assignmentCreate.includes('cleanText(formData.get("slot")) || getDefaultAssignmentPosition("media-sidebar")') &&
@@ -223,6 +308,12 @@ assert.ok(assignmentUpdate.includes("positionPolicyFailure(kind, slot)"));
 assert.ok(assignmentSync.includes("getDefaultAssignmentPosition(moduleKind)"));
 assert.doesNotMatch(assignmentSync, /defaultSlotFor|default_slot:\s*["']/u);
 assert.ok(adminRead.includes("PAGE_COMPOSITION_POSITIONS.indexOf(normalizeLayoutSlot(slot))"));
+assert.ok(
+  adminRead.includes("comparePageAssignmentOrder(") &&
+    slotRenderPlan.includes("comparePageAssignmentOrder(left, right)") &&
+    slotModuleNodes.includes("comparePageAssignmentOrder("),
+  "Admin reload and Public plans must share the canonical cross-kind Assignment comparator",
+);
 assert.doesNotMatch(adminRead, /slot\s*===\s*["']top["']/u);
 assert.ok(compositionLoader.includes("PAGE_COMPOSITION_POSITIONS.map"));
 assert.ok(compositionLoader.includes("isAssignmentPositionAllowed(block.blockType, block.slot)"));

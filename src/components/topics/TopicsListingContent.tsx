@@ -2,22 +2,19 @@ import Link from "next/link";
 
 import PublicPagination from "../Pagination";
 import TopicsListingModule from "./TopicsListingModule";
-import type { TopicsListingBlockConfig } from "../../lib/page-blocks/configs";
-import type { Topic } from "../../lib/topics/types";
+import {
+  asTopicsListingConfig,
+} from "../../lib/page-blocks/configs";
+import type {
+  ListingRenderContext,
+} from "../../lib/page-blocks/page-composition-types";
+import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
+import { normalizePublicContentSearchQuery } from "../../lib/content/public-content-read";
+import { loadPublicTopicsListing } from "../../lib/topics/load-public-topics";
 
 type TopicsListingContentProps = {
-  topics: Topic[];
-  totalCount: number;
-  currentPage: number;
-  totalPages: number;
-  startIndex: number;
-  endIndex: number;
-  sort: "latest" | "oldest";
-  categorySlug: string;
-  seriesSlug: string;
-  searchQuery?: string;
-  showCompositionError?: boolean;
-  listingConfig: TopicsListingBlockConfig;
+  block: ResolvedPageBlock | null;
+  context: ListingRenderContext;
 };
 
 function buildTopicsQuery(sort: string, categorySlug: string, seriesSlug: string) {
@@ -27,20 +24,45 @@ function buildTopicsQuery(sort: string, categorySlug: string, seriesSlug: string
   return query;
 }
 
-export default function TopicsListingContent({
-  topics,
-  totalCount,
-  currentPage,
-  totalPages,
-  startIndex,
-  endIndex,
-  sort,
-  categorySlug,
-  seriesSlug,
-  searchQuery = "",
-  showCompositionError = false,
-  listingConfig,
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+/** Assignment-scoped Topics Listing renderer used by canonical Page Composition. */
+export default async function TopicsListingContent({
+  block,
+  context,
 }: TopicsListingContentProps) {
+  const searchParams = context.searchParams ?? {};
+  const sort = firstParam(searchParams.sort) === "oldest" ? "oldest" : "latest";
+  const requestedCategorySlug = firstParam(searchParams.category)?.trim();
+  const seriesSlug = firstParam(searchParams.series)?.trim() ?? "";
+  const searchQuery = normalizePublicContentSearchQuery(
+    firstParam(searchParams.q),
+  );
+  const requestedPage = Number(firstParam(searchParams.page) ?? "1");
+  const listingConfig = asTopicsListingConfig(block?.template.config);
+  const configuredCategorySlug = listingConfig.collection.type === "category"
+    ? listingConfig.collection.categorySlug
+    : "";
+  const categorySlug = requestedCategorySlug ?? configuredCategorySlug;
+  const listing = await loadPublicTopicsListing({
+    sort,
+    categorySlug: categorySlug || undefined,
+    seriesSlug: seriesSlug || undefined,
+    page: Number.isFinite(requestedPage) && requestedPage > 0
+      ? Math.floor(requestedPage)
+      : 1,
+    itemsPerPage: listingConfig.itemLimit,
+    search: searchQuery,
+    excludeIds: searchQuery ? [] : [...(context.excludeContentIds ?? [])],
+  });
+  const topics = listing.visibleTopics;
+  const totalCount = listing.totalRegularTopics;
+  const currentPage = listing.currentPage;
+  const totalPages = listing.totalPages;
+  const startIndex = listing.startIndex;
+  const endIndex = listing.endIndex;
   const isSearching = searchQuery.length > 0;
   const hasResults = isSearching ? topics.length > 0 : totalCount > 0;
   const displayedTotalCount = isSearching
@@ -49,8 +71,13 @@ export default function TopicsListingContent({
   const pageQuery = buildTopicsQuery(sort, categorySlug, seriesSlug);
 
   return (
-    <div className="space-y-7 text-right" dir="rtl">
-      {showCompositionError ? (
+    <div
+      className="space-y-7 text-right"
+      dir="rtl"
+      data-topics-listing-assignment={block?.assignmentId ?? "fallback"}
+      data-topics-listing-public-path={context.publicPath}
+    >
+      {context.showCompositionError ? (
         <p
           role="status"
           className="rounded-[1.25rem] border border-white/10 bg-white/[0.03] px-5 py-4 text-sm text-white/55"
@@ -75,7 +102,7 @@ export default function TopicsListingContent({
             ) : (
               <div className="flex items-center gap-3">
                 <Link
-                  href={`/topics?${new URLSearchParams(buildTopicsQuery("latest", categorySlug, seriesSlug)).toString()}`}
+                  href={`${context.publicPath}?${new URLSearchParams(buildTopicsQuery("latest", categorySlug, seriesSlug)).toString()}`}
                   scroll={false}
                   className={`rounded-full border px-5 py-2.5 text-sm transition-all duration-300 ${
                     sort === "latest"
@@ -87,7 +114,7 @@ export default function TopicsListingContent({
                 </Link>
 
                 <Link
-                  href={`/topics?${new URLSearchParams(buildTopicsQuery("oldest", categorySlug, seriesSlug)).toString()}`}
+                  href={`${context.publicPath}?${new URLSearchParams(buildTopicsQuery("oldest", categorySlug, seriesSlug)).toString()}`}
                   scroll={false}
                   className={`rounded-full border px-5 py-2.5 text-sm transition-all duration-300 ${
                     sort === "oldest"
@@ -107,7 +134,7 @@ export default function TopicsListingContent({
             <PublicPagination
               currentPage={currentPage}
               totalPages={totalPages}
-              basePath="/topics"
+              basePath={context.publicPath}
               query={pageQuery}
             />
           ) : null}

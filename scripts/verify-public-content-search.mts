@@ -33,6 +33,7 @@ const topicsDetailPage = read("src/app/(site)/topics/[slug]/page.tsx");
 const topicsAdapter = read("src/lib/topics/load-public-topics.ts");
 const topicsListing = read("src/components/topics/TopicsListingContent.tsx");
 const mediaPage = read("src/components/media-center/MediaListingPage.tsx");
+const mediaListingModule = read("src/components/media-center/MediaListingModule.tsx");
 const mediaCenterShell = read("src/components/media-center/MediaCenterShellLayout.tsx");
 const mediaDetailPage = read("src/components/media-center/MediaDetailPage.tsx");
 const mediaCompositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
@@ -224,8 +225,8 @@ assert.ok(!mediaDetailPage.includes("MediaSidebarSearch"));
 assert.ok(mediaDetailPage.includes("publicPath={pagePath}"));
 assert.ok(!mediaSidebar.includes("PublicContentSearchInput"));
 assert.ok(
-  topicsPage.includes("await loadPublicTopicsListing({") &&
-    topicsPage.includes("itemsPerPage: listingConfig.itemLimit"),
+  topicsListing.includes("await loadPublicTopicsListing({") &&
+    topicsListing.includes("itemsPerPage: listingConfig.itemLimit"),
 );
 assert.ok(topicsPage.includes("searchParams={params}"));
 assert.ok(
@@ -235,14 +236,25 @@ assert.ok(
 assert.ok(!topicsListing.includes("FeaturedTopic"));
 assert.ok(
   topicsPage.includes("composition.featuredModules") &&
-    topicsPage.includes("excludeIds: searchQuery"),
+    topicsPage.includes("excludeContentIds:") &&
+    topicsListing.includes("excludeIds: searchQuery"),
   "Topics Search/Listing must not own Featured while non-search listing results avoid assigned Featured identities",
 );
-assert.ok(mediaPage.includes("getMediaListingPage"));
+assert.ok(mediaListingModule.includes("getMediaListingPage"));
 assert.ok(mediaPage.includes("searchParams={params}"));
 assert.ok(mediaCenterShell.includes("searchParams={searchParams}"));
-assert.ok(!mediaPage.includes("getMediaItems("), "Media search must not fetch a second catalog");
+assert.ok(
+  mediaListingModule.includes("searchParams = {}") &&
+    mediaListingModule.includes("firstParam(searchParams.q)"),
+  "Assignment-scoped Media Listing must consume the shared route request context",
+);
+assert.ok(
+  !mediaPage.includes("getMediaItems(") &&
+    !mediaListingModule.includes("getMediaItems("),
+  "Media search must not fetch a second catalog",
+);
 assert.ok(!mediaPage.includes("searchCatalog"));
+assert.ok(!mediaListingModule.includes("searchCatalog"));
 assert.ok(
   !mediaPage.includes("featuredNodes") &&
     mediaCompositionLoader.includes("slots[hubModule.slot].push") &&
@@ -376,7 +388,8 @@ assert.ok(pageSlotLayout.includes("isSearchPlatformTemplate"));
 assert.ok(pageSlotLayout.includes("suppressFeaturedDuringSearch"));
 assert.ok(!pageSlotLayout.includes('"/topics"'));
 assert.ok(
-  mediaSlotPlan.includes("if (context.suppressFeaturedDuringSearch) continue;"),
+  mediaSlotPlan.includes("context.suppressFeaturedDuringSearch ||") &&
+    mediaSlotPlan.includes("!isFeaturedModuleRenderable(entry.module)"),
   "Active Search Platform results must project Featured assignments out of the shared render plan",
 );
 assert.ok(

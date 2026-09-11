@@ -26,6 +26,7 @@ type TopicDetailsPageProps = {
   params: Promise<{
     slug: string;
   }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export async function generateMetadata({
@@ -69,8 +70,14 @@ export async function generateMetadata({
   });
 }
 
-export default async function TopicDetailsPage({ params }: TopicDetailsPageProps) {
-  const { slug } = await params;
+export default async function TopicDetailsPage({
+  params,
+  searchParams,
+}: TopicDetailsPageProps) {
+  const [{ slug }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({}),
+  ]);
   const topic = await loadPublicTopicBySlug(slug);
 
   if (!topic) notFound();
@@ -119,7 +126,7 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
       <TopicViewTracker topicId={topic.id} />
       <JsonLd data={pageJsonLd} />
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:[direction:ltr]">
+      <div className="page-layout-main-sidebar-grid grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:[direction:ltr]">
         <main dir="rtl" className="space-y-10 text-right">
           {topic.showIntroCardOnPage ? (
             <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.025]">
@@ -223,10 +230,12 @@ export default async function TopicDetailsPage({ params }: TopicDetailsPageProps
           )}
         </main>
 
-        <aside dir="rtl" className="space-y-6 text-right">
+        <aside dir="rtl" className="page-layout-slot--sidebar space-y-6 text-right">
           <PageSlotContent
             entries={getSlotEntries(composition, "sidebar")}
+            homepageProjects={composition.homepageProjects ?? undefined}
             publicPath={pagePath}
+            searchParams={resolvedSearchParams}
           />
         </aside>
       </div>

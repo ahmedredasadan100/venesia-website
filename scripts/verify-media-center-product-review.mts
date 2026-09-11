@@ -178,16 +178,28 @@ assert.deepEqual(listingConfig.listing, {
 });
 const resolvedAssignedListing = resolveMediaListingConfig(
   {
-    modules: [{ isVisible: true, config: listingConfig }],
+    assignmentId: 17,
+    isVisible: true,
+    config: listingConfig,
   } as never,
-  "news",
 );
+assert.ok(resolvedAssignedListing);
+assert.equal(resolvedAssignedListing.assignmentId, 17);
 assert.equal(
   resolvedAssignedListing.contentType,
   "video",
-  "the assigned module Content Type must override the route fallback",
+  "the assigned module Content Type must be the only Listing content source",
 );
 assert.deepEqual(resolvedAssignedListing.presentation, listingConfig.listing);
+assert.equal(
+  resolveMediaListingConfig({
+    assignmentId: 18,
+    isVisible: false,
+    config: listingConfig,
+  } as never),
+  null,
+  "a hidden Listing assignment must not resolve to fallback content",
+);
 assert.equal("featuredMode" in getDefaultMediaListingPresentation(), false);
 assert.deepEqual(
   getDefaultMediaListingPresentation().display,
@@ -554,6 +566,7 @@ assert.ok(featuredComponent.includes("aria-current"));
 assert.ok(!featuredComponent.includes("latest"));
 
 const listingPage = read("src/components/media-center/MediaListingPage.tsx");
+const listingModule = read("src/components/media-center/MediaListingModule.tsx");
 const mediaCompositionLoader = read(
   "src/lib/page-blocks/load-page-composition.ts",
 );
@@ -564,18 +577,21 @@ const venisiaMediaHubLayout = read(
   "src/components/page-composition/VenesiaThemeMediaHubLayout.tsx",
 );
 assert.ok(
-  mediaCompositionLoader.includes('hubModule.config.placement === "listing"'),
+  !mediaCompositionLoader.includes('hubModule.config.placement === "listing"'),
 );
 assert.ok(mediaCompositionLoader.includes("slots[hubModule.slot].push"));
 assert.ok(slotRenderPlan.includes('kind: "media-hub"'));
 assert.ok(venisiaMediaHubLayout.includes("renderVenesiaThemeMediaHubNodes"));
-assert.ok(
-  !listingPage.includes("module.config.type === config.mediaType"),
-  "Featured Content type must come from assigned module config, not the route config",
-);
-assert.ok(listingPage.includes("resolveMediaListingConfig"));
-assert.ok(listingPage.includes("resolvedModule.contentType"));
-assert.ok(listingPage.includes("getMediaListingPage({"));
+assert.ok(!listingPage.includes("resolveMediaListingConfig"));
+assert.ok(!listingPage.includes("getMediaListingPage({"));
+assert.ok(listingModule.includes("resolveMediaListingConfig(module)"));
+assert.ok(listingModule.includes("getMediaListingPage({"));
+assert.ok(listingModule.includes("resolved.contentType"));
+assert.ok(listingModule.includes("data-media-listing-assignment"));
+assert.ok(listingModule.includes("publicPath: string"));
+assert.ok(listingModule.includes("basePath={publicPath}"));
+assert.ok(!listingModule.includes('"/media-center/news"'));
+assert.ok(!listingModule.includes("MediaPageShell"));
 assert.ok(!listingPage.includes("ListingShell"));
 assert.ok(!listingPage.includes("isMediaListingShellPublished"));
 assert.ok(!listingPage.includes("featuredSelection"));
@@ -600,7 +616,9 @@ for (const forbidden of [
   );
 }
 assert.ok(shellLayout.includes("<PageSlotLayout"));
-assert.ok(shellLayout.includes("mainAfter={children}"));
+assert.ok(shellLayout.includes("listingContext={{ publicPath, searchParams }}"));
+assert.ok(!shellLayout.includes("mainAfter="));
+assert.ok(!shellLayout.includes("children:"));
 assert.ok(
   !shellLayout.includes("getSlotBlocks") &&
     !shellLayout.includes("SlotModulesRenderer"),
@@ -609,13 +627,15 @@ assert.ok(
 const compositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
 assert.ok(compositionLoader.includes("queryMediaHubModules(pageSlug)"));
 assert.ok(!compositionLoader.includes('pageSlug === "media-center"'));
+assert.ok(!compositionLoader.includes("isMediaCenterCmsPageSlug"));
 
 const listingPresentation = read(
   "src/lib/media-hub-modules/listing-presentation.ts",
 );
 assert.ok(
-  listingPresentation.includes('module.config.placement === "listing"'),
+  listingPresentation.includes('module.config.placement !== "listing"'),
 );
+assert.ok(!listingPresentation.includes(".find("));
 for (const retiredField of [
   "featuredMode",
   "manualTopicId",
@@ -788,6 +808,9 @@ const mediaListingResolver = read(
 const mediaListingPage = read(
   "src/components/media-center/MediaListingPage.tsx",
 );
+const mediaListingModule = read(
+  "src/components/media-center/MediaListingModule.tsx",
+);
 const mediaListingContent = read(
   "src/components/media-center/MediaListingContent.tsx",
 );
@@ -802,6 +825,21 @@ const mediaParseConfig = read(
 );
 const mediaHubRenderer = read(
   "src/components/media-center/renderMediaHubSections.tsx",
+);
+assert.ok(mediaHubRenderer.includes('module.config.placement === "listing"'));
+assert.ok(mediaHubRenderer.includes("<MediaListingModule"));
+assert.ok(
+  mediaHubRenderer.includes(
+    "Boolean(context.listingContext && resolveMediaListingConfig(module))",
+  ) &&
+    mediaHubRenderer.includes("if (!listingContext) return null") &&
+    mediaHubRenderer.includes("publicPath={listingContext.publicPath}") &&
+    mediaHubRenderer.includes("searchParams={listingContext.searchParams}"),
+  "Media Listing must require positive request context and fail closed when inherited",
+);
+assert.ok(
+  slotRenderPlan.includes("listingContext: context.listingContext"),
+  "Media Listing renderability must be decided inside the canonical contextual slot plan",
 );
 const topicsListingPresenter = read(
   "src/components/topics/TopicsListingModule.tsx",
@@ -841,12 +879,14 @@ assert.ok(
 );
 assert.ok(!sharedCollectionEditor.includes("additionalSettings"));
 assert.ok(mediaListingResolver.includes("resolveMediaListingConfig"));
-assert.ok(mediaListingPage.includes("resolvedModule.contentType"));
-assert.ok(mediaListingPage.includes("displayOverrides={presentation.display}"));
 assert.ok(mediaListingPage.includes("page?: string"));
-assert.ok(mediaListingPage.includes("requestedPage"));
-assert.ok(mediaListingPage.includes("currentPage={listing.currentPage}"));
-assert.ok(mediaListingPage.includes("totalPages={listing.totalPages}"));
+assert.ok(!mediaListingPage.includes("resolvedModule.contentType"));
+assert.ok(!mediaListingPage.includes("displayOverrides={presentation.display}"));
+assert.ok(mediaListingModule.includes("resolved.contentType"));
+assert.ok(mediaListingModule.includes("displayOverrides={presentation.display}"));
+assert.ok(mediaListingModule.includes("requestedPage"));
+assert.ok(mediaListingModule.includes("currentPage={listing.currentPage}"));
+assert.ok(mediaListingModule.includes("totalPages={listing.totalPages}"));
 assert.ok(
   mediaListingCard.includes("displayOverrides: CollectionDisplayOverrides"),
 );

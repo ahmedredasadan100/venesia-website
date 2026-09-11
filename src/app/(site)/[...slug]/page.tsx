@@ -66,6 +66,10 @@ export default async function DynamicCmsPage({ params, searchParams }: DynamicCm
           composition={composition}
           publicPath={page.path}
           searchParams={resolvedSearchParams}
+          listingContext={{
+            publicPath: page.path,
+            searchParams: resolvedSearchParams,
+          }}
         />
       </main>
       <RevealAnimations />

@@ -3,7 +3,6 @@ import "server-only";
 import { loadFeedModuleStateForPageSlug } from "../feed-modules/load-feed-modules";
 import { loadFeaturedModuleStateForPageSlug } from "../featured-modules/load-featured-modules";
 import { getHeroSectionState } from "../load-hero-section";
-import { isMediaCenterCmsPageSlug } from "../media-center-page-config";
 import { queryMediaHubModules } from "../media-hub-modules/load-media-hub-modules";
 import { queryMediaSidebarModules } from "../media-sidebar-modules/load-media-sidebar-modules";
 import { normalizeLayoutSlot } from "./layout-slots";
@@ -12,10 +11,13 @@ import { loadPageBlockStateBySlug } from "./load-page-blocks";
 import type { PageLayoutSlot } from "./layout-slots";
 import type { ResolvedPageBlock } from "./types";
 import {
+  comparePageAssignmentOrder,
   getDefaultAssignmentPosition,
   isAssignmentPositionAllowed,
 } from "../page-composition/page-assignment-contract";
 import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
+import { isHomeProjectsTemplate } from "./configs";
+import { loadHomepageProjects } from "../projects/load-homepage-projects";
 
 function emptySlots(): Record<PageLayoutSlot, SlotEntry[]> {
   return Object.fromEntries(
@@ -24,7 +26,20 @@ function emptySlots(): Record<PageLayoutSlot, SlotEntry[]> {
 }
 
 function sortEntries(entries: SlotEntry[]) {
-  return [...entries].sort((a, b) => a.sortOrder - b.sortOrder || a.assignmentId - b.assignmentId);
+  return [...entries].sort((left, right) =>
+    comparePageAssignmentOrder(
+      {
+        sortOrder: left.sortOrder,
+        moduleKind: left.kind === "block" ? left.block.blockType : left.kind,
+        assignmentId: left.assignmentId,
+      },
+      {
+        sortOrder: right.sortOrder,
+        moduleKind: right.kind === "block" ? right.block.blockType : right.kind,
+        assignmentId: right.assignmentId,
+      },
+    ),
+  );
 }
 
 function pushBlock(
@@ -44,19 +59,21 @@ function pushBlock(
 export async function loadPageCompositionBySlug(
   pageSlug: string,
 ): Promise<PageComposition> {
-  const isMediaCenterPage = isMediaCenterCmsPageSlug(pageSlug);
   const [heroState, blockState, feedState, featuredState, mediaHubModules, mediaSidebarModules] = await Promise.all([
     getHeroSectionState(pageSlug),
     loadPageBlockStateBySlug(pageSlug),
     loadFeedModuleStateForPageSlug(pageSlug),
     loadFeaturedModuleStateForPageSlug(pageSlug),
-    isMediaCenterPage
-      ? queryMediaHubModules(pageSlug)
-      : null,
+    queryMediaHubModules(pageSlug),
     queryMediaSidebarModules(pageSlug),
   ]);
 
   const slots = emptySlots();
+  const homepageProjects = blockState.blocks.some((block) =>
+    isHomeProjectsTemplate(block.template.slug, block.template.variant),
+  )
+    ? await loadHomepageProjects()
+    : null;
 
   for (const block of blockState.blocks) {
     pushBlock(slots, block);
@@ -93,10 +110,9 @@ export async function loadPageCompositionBySlug(
     });
   }
 
-  for (const hubModule of mediaHubModules?.modules ?? []) {
+  for (const hubModule of mediaHubModules.modules) {
     if (
       !hubModule.isVisible ||
-      hubModule.config.placement === "listing" ||
       !isAssignmentPositionAllowed("media-hub", hubModule.slot)
     ) continue;
     slots[hubModule.slot].push({
@@ -126,21 +142,21 @@ export async function loadPageCompositionBySlug(
     blockState.hasAnyAssignmentRows ||
     feedState.hasAnyAssignmentRows ||
     featuredState.hasAnyAssignmentRows ||
-    Boolean(mediaHubModules?.hasAnyAssignmentRows) ||
+    mediaHubModules.hasAnyAssignmentRows ||
     mediaSidebarModules.hasAnyAssignmentRows;
   const hasRenderableModules =
     heroState.visibility === "visible" ||
     blockState.hasRenderableModules ||
     feedState.modules.length > 0 ||
     featuredState.modules.length > 0 ||
-    Boolean(mediaHubModules?.hasRenderableModules) ||
+    mediaHubModules.hasRenderableModules ||
     mediaSidebarModules.hasRenderableModules;
   const hasCompositionError =
     heroState.visibility === "error" ||
     blockState.hasCompositionError ||
     feedState.hasCompositionError ||
     featuredState.hasCompositionError ||
-    mediaHubModules?.sourceStatus === "error" ||
+    mediaHubModules.sourceStatus === "error" ||
     mediaSidebarModules.sourceStatus === "error";
 
   return {
@@ -150,6 +166,7 @@ export async function loadPageCompositionBySlug(
     mediaHubModules,
     mediaSidebarModules,
     featuredModules: featuredState.modules,
+    homepageProjects,
     hasAnyAssignmentRows,
     hasRenderableModules,
     hasCompositionError,

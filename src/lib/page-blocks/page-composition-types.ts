@@ -5,8 +5,17 @@ import type { MediaHubModuleState, MediaHubModulesState } from "../media-hub-mod
 import type { MediaSidebarModulesState } from "../media-sidebar-modules/types";
 import type { MediaSidebarWidgetState } from "../media-sidebar-modules/types";
 import type { HeroSectionData } from "../page-sections";
+import type { HomepageProjectCard } from "../projects/public-types";
 import type { PageLayoutSlot } from "./layout-slots";
 import type { PageBlockPublicState, ResolvedPageBlock } from "./types";
+
+export type ListingRenderContext = {
+  publicPath: string;
+  searchParams?: Readonly<Record<string, string | string[] | undefined>>;
+  /** Content already rendered by a Featured assignment on the same page. */
+  excludeContentIds?: readonly number[];
+  showCompositionError?: boolean;
+};
 
 export type HeroSlotEntry = {
   kind: "hero";
@@ -66,6 +75,8 @@ export type PageComposition = {
   mediaHubModules: MediaHubModulesState | null;
   mediaSidebarModules: MediaSidebarModulesState | null;
   featuredModules: ResolvedFeaturedModule[];
+  /** Intrinsic data for every visible home-projects assignment, independent of route. */
+  homepageProjects: HomepageProjectCard[] | null;
   /** Assignment rows exist before visibility/publication filters. */
   hasAnyAssignmentRows: boolean;
   /** Visible and published modules exposed by the canonical composition, including specialized Media modules. */

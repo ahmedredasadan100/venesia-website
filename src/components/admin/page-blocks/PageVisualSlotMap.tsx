@@ -6,11 +6,37 @@ import { LAYOUT_SLOT_LABELS_AR, normalizeLayoutSlot, type PageLayoutSlot } from 
 import { moduleEditHref, moduleKindLabel, normalizeBoolean } from "../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../lib/page-blocks/types";
 import { PAGE_COMPOSITION_POSITIONS } from "../../../lib/page-blocks/layout-slots";
+import { comparePageAssignmentOrder } from "../../../lib/page-composition/page-assignment-contract";
 import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type PageVisualSlotMapProps = {
   assignments: PageBlockAssignmentRow[];
 };
+
+function compareRowsInSlot(
+  slot: PageLayoutSlot,
+  first: PageBlockAssignmentRow,
+  second: PageBlockAssignmentRow,
+) {
+  if (slot === "hero") {
+    const firstIsHero = first.module_kind === "hero";
+    const secondIsHero = second.module_kind === "hero";
+    if (firstIsHero !== secondIsHero) return firstIsHero ? -1 : 1;
+  }
+
+  return comparePageAssignmentOrder(
+    {
+      sortOrder: first.sort_order,
+      moduleKind: first.module_kind,
+      assignmentId: first.id,
+    },
+    {
+      sortOrder: second.sort_order,
+      moduleKind: second.module_kind,
+      assignmentId: second.id,
+    },
+  );
+}
 
 function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
   const groups = new Map<PageLayoutSlot, PageBlockAssignmentRow[]>();
@@ -29,7 +55,7 @@ function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
   for (const [slot, rows] of groups) {
     groups.set(
       slot,
-      [...rows].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id),
+      [...rows].sort((first, second) => compareRowsInSlot(slot, first, second)),
     );
   }
 

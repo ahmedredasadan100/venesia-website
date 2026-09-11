@@ -790,6 +790,17 @@ check(
     pagesClient.includes("setRows(pageDisplayRows)"),
 );
 
+check(
+  "Page Composition visual map keeps the fixed Hero above composable peers in the Hero region",
+  slotMap.includes("function compareRowsInSlot(") &&
+    slotMap.includes('if (slot === "hero")') &&
+    slotMap.includes('first.module_kind === "hero"') &&
+    slotMap.includes('second.module_kind === "hero"') &&
+    slotMap.includes("return firstIsHero ? -1 : 1") &&
+    slotMap.includes("comparePageAssignmentOrder(") &&
+    slotMap.includes("compareRowsInSlot(slot, first, second)"),
+);
+
 const heroVisibility = read(
   "src/app/admin/pages-blocks/blocks/hero/[id]/HeroVisibilityAlignRow.tsx",
 );

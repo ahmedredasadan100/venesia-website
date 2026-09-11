@@ -5,17 +5,11 @@ import DynamicHeroSection from "../../../components/sections/DynamicHeroSection"
 import TopicsInsightCtaSection from "../../../components/topics/TopicsInsightCtaSection";
 import TopicsIntroSection from "../../../components/topics/TopicsIntroSection";
 
-import { loadPublicTopicsListing } from "../../../lib/topics/load-public-topics";
 import { generatePublicMetadata } from "../../../lib/seo/generate-public-metadata";
 import { getHeroSectionByPageSlug } from "../../../lib/load-hero-section";
 import { loadPageCompositionBySlug } from "../../../lib/page-blocks/load-page-composition";
 import { loadFeedModulesForPageSlug } from "../../../lib/feed-modules/load-feed-modules";
-import { normalizePublicContentSearchQuery } from "../../../lib/content/public-content-read";
-import {
-  asTopicsListingConfig,
-  isTopicsListingTemplate,
-} from "../../../lib/page-blocks/configs";
-import type { PageComposition } from "../../../lib/page-blocks/page-composition-types";
+import { isTopicsListingTemplate } from "../../../lib/page-blocks/configs";
 
 export const revalidate = 300;
 
@@ -33,86 +27,35 @@ type TopicsPageProps = {
   }>;
 };
 
-function findTopicsListingBlock(composition: PageComposition) {
-  for (const entries of Object.values(composition.slots)) {
-    for (const entry of entries) {
-      if (
-        entry.kind === "block" &&
-        isTopicsListingTemplate(
-          entry.block.template.slug,
-          entry.block.template.variant,
-        )
-      ) {
-        return entry.block;
-      }
-    }
-  }
-  return null;
-}
-
 export default async function TopicsPage({ searchParams }: TopicsPageProps) {
   const params = await searchParams;
-  const sort = params?.sort === "oldest" ? "oldest" : "latest";
-  const requestedCategorySlug = params?.category?.trim();
-  const seriesSlug = params?.series?.trim() ?? "";
-  const searchQuery = normalizePublicContentSearchQuery(params?.q);
-  const requestedPage = Number(params?.page ?? 1);
 
   const [dynamicHero, composition] = await Promise.all([
     getHeroSectionByPageSlug("topics"),
     loadPageCompositionBySlug("topics"),
   ]);
-  const topicsListingBlock = findTopicsListingBlock(composition);
-  const listingConfig = asTopicsListingConfig(
-    topicsListingBlock?.template.config,
+  const hasTopicsListingAssignmentRows = composition.blockStates.some(
+    (state) =>
+      state.blockType === "content" &&
+      isTopicsListingTemplate(state.templateSlug, state.templateVariant),
   );
-  const configuredCategorySlug =
-    listingConfig.collection.type === "category"
-      ? listingConfig.collection.categorySlug
-      : "";
-  const categorySlug = requestedCategorySlug ?? configuredCategorySlug;
-  const listing = await loadPublicTopicsListing({
-    sort,
-    categorySlug: categorySlug || undefined,
-    seriesSlug: seriesSlug || undefined,
-    page: Number.isFinite(requestedPage) && requestedPage > 0 ? requestedPage : 1,
-    itemsPerPage: listingConfig.itemLimit,
-    search: searchQuery,
-    excludeIds: searchQuery
-      ? []
-      : composition.featuredModules.flatMap((module) => module.items.map((item) => item.id)),
-  });
   // Presence (any assignment rows) or load failure → CMS path; never resurrect static shell.
   const useCmsLayout =
     composition.hasAnyAssignmentRows || composition.hasCompositionError;
   // Feeds are already in composition when CMS-managed; only reload for virgin static shell.
   const sidebarFeeds = useCmsLayout ? [] : await loadFeedModulesForPageSlug("topics");
-
-  const {
-    visibleTopics,
-    totalRegularTopics,
-    currentPage,
-    totalPages,
-    startIndex,
-    endIndex,
-  } = listing;
-
-  const listingContent = (
-    <TopicsListingContent
-      topics={visibleTopics}
-      totalCount={totalRegularTopics}
-      currentPage={currentPage}
-      totalPages={totalPages}
-      startIndex={startIndex}
-      endIndex={endIndex}
-      sort={sort}
-      categorySlug={categorySlug}
-      seriesSlug={seriesSlug}
-      searchQuery={searchQuery}
-      showCompositionError={useCmsLayout && composition.hasCompositionError}
-      listingConfig={listingConfig}
-    />
-  );
+  const listingContext = {
+    publicPath: "/topics",
+    searchParams: params,
+    excludeContentIds: composition.featuredModules.flatMap((module) =>
+      module.items.map((item) => item.id),
+    ),
+    showCompositionError: useCmsLayout && composition.hasCompositionError,
+  };
+  const fallbackListingContent = hasTopicsListingAssignmentRows ||
+    composition.hasCompositionError
+    ? null
+    : <TopicsListingContent block={null} context={listingContext} />;
 
   const fallbackHero = (
     <DynamicHeroSection
@@ -132,17 +75,17 @@ export default async function TopicsPage({ searchParams }: TopicsPageProps) {
           composition={composition}
           publicPath="/topics"
           searchParams={params}
+          listingContext={{ publicPath: "/topics", searchParams: params }}
           fallbackHero={fallbackHero}
-          topicsListingContent={
-            topicsListingBlock ? listingContent : undefined
-          }
           mainAfter={
-            topicsListingBlock ? null : useCmsLayout ? (
-              listingContent
+            hasTopicsListingAssignmentRows || composition.hasCompositionError
+              ? null
+              : useCmsLayout ? (
+              fallbackListingContent
             ) : (
               <div className="space-y-10">
                 <TopicsIntroSection />
-                {listingContent}
+                {fallbackListingContent}
               </div>
             )
           }

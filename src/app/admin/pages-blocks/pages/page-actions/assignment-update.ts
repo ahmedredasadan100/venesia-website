@@ -67,7 +67,7 @@ export async function updateHeroPageAssignment(
     await mutatePageComposition(pageId, "save_hero_assignment", {
       assignment_id: assignmentId,
       hero_id: heroId,
-      sort_order: parseNumber(formData.get("sort_order"), 0),
+      sort_order: 0,
       is_visible: parseFormBoolean(formData, "is_visible", true),
     }, actor);
   } catch (error) {

@@ -22,6 +22,9 @@ import {
   LAYOUT_SLOT_LABELS_AR,
   type PageLayoutSlot,
 } from "../../../../../../lib/page-blocks/layout-slots";
+import {
+  REGISTERED_SLOT_MODULE_KINDS,
+} from "../../../../../../lib/page-composition/slot-module-registry";
 import type { PageBlockType } from "../../../../../../lib/page-blocks/types";
 import type { AssignableModuleKind } from "./use-page-blocks-assign-modal";
 
@@ -33,17 +36,6 @@ type TemplateOption = {
 };
 
 const slotLabels = LAYOUT_SLOT_LABELS_AR;
-const ASSIGNABLE_MODULE_KINDS = [
-  "hero",
-  "breadcrumb",
-  "content",
-  "cta",
-  "cards",
-  "feed",
-  "featured",
-  "media-sidebar",
-  "media-hub",
-] as const satisfies readonly AssignableModuleKind[];
 
 type PageBlocksAssignModalProps = {
   pageId: number;
@@ -57,6 +49,7 @@ type PageBlocksAssignModalProps = {
   assignPending: boolean;
   templateOptions: TemplateOption[];
   assignableTemplates: TemplateOption[];
+  heroAssignmentExists: boolean;
   slotOptions: PageLayoutSlot[];
   assignState: PageBlockActionResult;
   assignHeroState: PageBlockActionResult;
@@ -80,6 +73,7 @@ export default function PageBlocksAssignModal({
   assignPending,
   templateOptions,
   assignableTemplates,
+  heroAssignmentExists,
   slotOptions,
   assignState,
   assignHeroState,
@@ -145,7 +139,7 @@ export default function PageBlocksAssignModal({
               onAssignModuleKindChange(value as AssignableModuleKind);
               onAssignTemplateIdChange(null);
             }}
-            options={ASSIGNABLE_MODULE_KINDS.map((kind) => ({
+            options={REGISTERED_SLOT_MODULE_KINDS.map((kind) => ({
               value: kind,
               label: moduleKindLabel(kind),
             }))}
@@ -182,7 +176,9 @@ export default function PageBlocksAssignModal({
           </p>
           {!assignableTemplates.length ? (
             <p className="text-xs text-amber-200/70">
-              {templateOptions.length ? (
+              {assignModuleKind === "hero" && heroAssignmentExists ? (
+                "هذه الصفحة مرتبطة بهيرو واحد بالفعل. عدّل الربط الحالي أو أزله أولًا."
+              ) : templateOptions.length ? (
                 "كل القوالب مرتبطة بهذه الصفحة بالفعل."
               ) : (
                 <>
@@ -219,17 +215,21 @@ export default function PageBlocksAssignModal({
           </p>
         ) : null}
 
-        <label className={adminFormLabelClassName()}>
-          Order
-          <input
-            name="sort_order"
-            type="number"
-            min={0}
-            step={10}
-            placeholder="تلقائي"
-            className={adminFormFieldClassName()}
-          />
-        </label>
+        {assignModuleKind === "hero" ? (
+          <input type="hidden" name="sort_order" value="0" />
+        ) : (
+          <label className={adminFormLabelClassName()}>
+            Order
+            <input
+              name="sort_order"
+              type="number"
+              min={0}
+              step={10}
+              placeholder="تلقائي"
+              className={adminFormFieldClassName()}
+            />
+          </label>
+        )}
 
         <AdminFormSwitch
           label="ظاهر على الموقع"

@@ -3,7 +3,11 @@
 import { useActionState, useEffect, useMemo, useState } from "react";
 
 import { PAGE_BLOCK_ACTION_INITIAL } from "../../../../../../lib/page-blocks/action-result";
-import type { PageBlockAssignmentRow, PageBlockType } from "../../../../../../lib/page-blocks/types";
+import type {
+  PageBlockAssignmentRow,
+  PageBlockType,
+  PageModuleKind,
+} from "../../../../../../lib/page-blocks/types";
 import type { PageLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import {
   assignHeroModule,
@@ -13,7 +17,7 @@ import {
 } from "../../actions";
 import { getSlotOptions } from "./page-blocks-utils";
 
-export type AssignableModuleKind = PageBlockType | "hero" | "media-sidebar" | "media-hub";
+export type AssignableModuleKind = PageModuleKind;
 
 type TemplateOption = { id: number; name: string; slug: string; status: string };
 
@@ -132,8 +136,15 @@ export function usePageBlocksAssignModal({
   );
 
   const assignableTemplates = useMemo(
-    () => templateOptions.filter((template) => !assignedTemplateIds.has(template.id)),
-    [templateOptions, assignedTemplateIds],
+    () => assignModuleKind === "hero" && assignments.some(
+      (assignment) => assignment.module_kind === "hero",
+    )
+      ? []
+      : templateOptions.filter((template) => !assignedTemplateIds.has(template.id)),
+    [assignModuleKind, assignments, templateOptions, assignedTemplateIds],
+  );
+  const heroAssignmentExists = assignments.some(
+    (assignment) => assignment.module_kind === "hero",
   );
 
   function openAssignModal() {
@@ -159,6 +170,7 @@ export function usePageBlocksAssignModal({
     assignPending,
     templateOptions,
     assignableTemplates,
+    heroAssignmentExists,
     slotOptions,
     assignState,
     assignHeroState,

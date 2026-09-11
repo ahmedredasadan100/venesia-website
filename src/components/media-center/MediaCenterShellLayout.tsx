@@ -6,22 +6,16 @@ import type { MediaCenterCmsPageSlug } from "../../lib/media-center-page-config"
 type MediaCenterShellLayoutProps = {
   cmsPageSlug: MediaCenterCmsPageSlug;
   composition: PageComposition;
-  breadcrumbCurrentLabel?: string;
-  sidebarPrefix?: React.ReactNode;
-  publicPath?: string;
+  publicPath: string;
   searchParams?: SearchPlatformSearchParams;
-  children: React.ReactNode;
 };
 
 /** Media listing shell adopted by the canonical Page Composition renderer. */
 export default function MediaCenterShellLayout({
   cmsPageSlug,
   composition,
-  breadcrumbCurrentLabel,
-  sidebarPrefix,
   publicPath,
   searchParams,
-  children,
 }: MediaCenterShellLayoutProps) {
   return (
     <div
@@ -33,11 +27,9 @@ export default function MediaCenterShellLayout({
       <main className="relative z-10 min-h-[50vh] pb-20">
         <PageSlotLayout
           composition={composition}
-          mainAfter={children}
-          sidebarPrefix={sidebarPrefix}
-          breadcrumbCurrentLabel={breadcrumbCurrentLabel}
           publicPath={publicPath}
           searchParams={searchParams}
+          listingContext={{ publicPath, searchParams }}
         />
       </main>
     </div>

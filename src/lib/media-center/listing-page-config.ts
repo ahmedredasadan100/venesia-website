@@ -59,3 +59,20 @@ export const MEDIA_LISTING_PAGE_CONFIG = {
 } as const satisfies Record<string, MediaListingPageConfig>;
 
 export type MediaListingPageKey = keyof typeof MEDIA_LISTING_PAGE_CONFIG;
+
+const MEDIA_LISTING_PAGE_KEY_BY_CONTENT_TYPE = {
+  news: "news",
+  press: "press",
+  site_update: "site-updates",
+  video: "videos",
+  gallery: "gallery",
+} as const satisfies Record<MediaContentType, MediaListingPageKey>;
+
+/** Existing Media Listing copy/path projection, keyed by assigned content type. */
+export function getMediaListingPageConfigForContentType(
+  contentType: MediaContentType,
+): MediaListingPageConfig {
+  return MEDIA_LISTING_PAGE_CONFIG[
+    MEDIA_LISTING_PAGE_KEY_BY_CONTENT_TYPE[contentType]
+  ];
+}

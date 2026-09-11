@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ListingRenderContext } from "../../lib/page-blocks/page-composition-types";
 import MediaCenterCollectionItems from "./MediaCenterCollectionItems";
 import MediaCenterHubFeatured from "./MediaCenterHubFeatured";
 import MediaCenterHubFeaturedCollection from "./MediaCenterHubFeaturedCollection";
@@ -8,12 +9,34 @@ import MediaCenterHubPress from "./MediaCenterHubPress";
 import MediaCenterHubSectionHeader from "./MediaCenterHubSectionHeader";
 import MediaCenterHubTimeline from "./MediaCenterHubTimeline";
 import MediaCenterHubVideos from "./MediaCenterHubVideos";
+import MediaListingModule from "./MediaListingModule";
 import {
   buildMediaHubRenderPlan,
 } from "../../lib/media-hub-modules/build-media-hub-render-plan";
 import type { MediaHubModuleState } from "../../lib/media-hub-modules/types";
+import { resolveMediaListingConfig } from "../../lib/media-hub-modules/listing-presentation";
 import { MEDIA_TYPE_PATHS } from "../../lib/media-center/types";
 import { resolveCollectionModuleDisplayFormatting } from "../../lib/page-blocks/configs";
+
+export type MediaHubRenderContext = {
+  listingContext?: ListingRenderContext;
+};
+
+export function isMediaHubModuleRenderable(
+  module: MediaHubModuleState,
+  context: MediaHubRenderContext = {},
+) {
+  if (module.config.placement === "listing") {
+    return Boolean(context.listingContext && resolveMediaListingConfig(module));
+  }
+
+  const data = module.sectionData;
+  if (!data) return false;
+  const layout = module.config.presentation.collectionView.layout;
+  return layout === "featured" || layout === "editorial" || layout === "mosaic"
+    ? data.items.length > 0
+    : true;
+}
 
 function getMediaHubSectionHref(module: MediaHubModuleState) {
   const kind = module.sectionData?.kind;
@@ -28,7 +51,24 @@ function getMediaHubSectionHref(module: MediaHubModuleState) {
     : "/media-center";
 }
 
-export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
+export function renderMediaHubSection(
+  module: MediaHubModuleState,
+  context: MediaHubRenderContext = {},
+): ReactNode {
+  if (!isMediaHubModuleRenderable(module, context)) return null;
+  if (module.config.placement === "listing") {
+    const listingContext = context.listingContext;
+    if (!listingContext) return null;
+
+    return (
+      <MediaListingModule
+        module={module}
+        publicPath={listingContext.publicPath}
+        searchParams={listingContext.searchParams}
+      />
+    );
+  }
+
   const data = module.sectionData;
   if (!data) return null;
   const layout = module.config.presentation.collectionView.layout;
@@ -126,9 +166,12 @@ export function renderMediaHubSection(module: MediaHubModuleState): ReactNode {
   }
 }
 
-export function renderMediaHubSections(modules: MediaHubModuleState[]): ReactNode[] {
+export function renderMediaHubSections(
+  modules: MediaHubModuleState[],
+  context: MediaHubRenderContext = {},
+): ReactNode[] {
   return buildMediaHubRenderPlan(modules).flatMap((module) => {
-    const node = renderMediaHubSection(module);
+    const node = renderMediaHubSection(module, context);
     if (node == null) return [];
 
     return [
