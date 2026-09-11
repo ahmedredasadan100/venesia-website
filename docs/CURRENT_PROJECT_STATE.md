@@ -91,13 +91,14 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The 2026-09-05 authorized Migration 100 application and registry reconciliation established the Production facts below. The repository now contains 101 migrations, while the Production migration registry remains last-known at 100; Migration 101 is a PR candidate and is unapplied.
+The 2026-09-05 authorized Migration 100 application and registry reconciliation established the Production facts below. The repository now contains 102 migrations. Production registry facts below remain the historical snapshot, not a new live verification. Migration 102 is prepared and tested locally only.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                               101 |
+| Repository migration files                        |                                               102 |
 | Production registry versions                      |                                               100 |
 | Migration 101 rollout state                       |                         PR candidate / unapplied |
+| Migration 102 rollout state                       |                Local isolated proof / unapplied |
 | Current Production live state                     |                    Verified on 2026-09-05 |
 | Registry SQL provenance                           | Exact repository SQL for all 100 recorded versions |
 | Public tables                                     |                                                58 |
@@ -115,6 +116,8 @@ The 2026-09-05 authorized Migration 100 application and registry reconciliation 
 Production migration `20260905090000_topics_bulk_publish_atomicity.sql` was applied once and reconciled into the canonical registry as migration 100 with exact repository SQL provenance. The corresponding application code was merged by PR #140 and is part of the current `main` baseline.
 
 Repository migration 101, `20260907214608_p1_e_taxonomy_consistency.sql`, is a PR candidate only. It has not been applied to Production.
+
+Local P2-S + ADM-01 work from baseline `eb8620a33a1712726f4acb441656df9c200adc71` prepares migration 102, `20260911194004_topic_view_integrity.sql`. The existing `increment_topic_view` owner receives private, expiring visitor/topic deduplication and request-limit state. The user-approved PUB-07 policy is a signed server-issued browser cookie for 30 days; one qualified public Production view per visitor/topic per rolling 24 hours; 30 requests per visitor and 300 per trusted IP per rolling 60 seconds, including duplicates. Admin Preview, Vercel Preview, localhost and CI are excluded. The policy row is the sole configurable value source. Counts and editorial `is_popular` are preserved. Cookie deletion or a different browser can create a new identity; this is inflation reduction, not proof of a unique person or universal bot prevention. Daily authenticated cleanup bounds expired-state retention when the existing Cron scheduler runs successfully. No shared migration application, Git closure or deployment is authorized by this local phase; `globalClosed=false`.
 
 The RPC owns the bounded, revision-checked Topic transitions and their per-Topic Mutation Audit rows inside one database transaction. Application code remains the sole owner of semantic Publish Validation, and post-commit Media Center cache invalidation remains with the existing `revalidateMediaCenterPublicPaths` owner.
 
@@ -172,7 +175,7 @@ Operational recovery, authentication, and focused current QA tools remain becaus
 
 ## Current explicit boundaries and non-claims
 
-- Role semantics, rate limiting, compliance-grade blocking audit, and external Analytics provider activation require separate Product/Auth decisions. Current architecture does not invent those policies.
+- Role semantics, general rate limiting, compliance-grade blocking audit, and external Analytics provider activation require separate Product/Auth decisions. The locally approved PUB-07 view-endpoint policy above is the only rate-limiting exception in this phase.
 - No direct Production filesystem upload owner exists; static bundled assets and live legacy read values are not runtime writers.
 - A provider reported as unavailable must remain unavailable/partial; no report may synthesize zeroes, mock analytics, or fake success.
 - A green structural build alone does not prove live database state, authenticated Browser behavior, GitHub checks, Vercel deployment, or Production smoke. Those are separate release proofs.

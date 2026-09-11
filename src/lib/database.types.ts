@@ -2973,6 +2973,83 @@ export type Database = {
           },
         ]
       }
+      topic_view_policy: {
+        Row: {
+          singleton: boolean
+          cookie_ttl_seconds: number
+          dedupe_seconds: number
+          rate_window_seconds: number
+          visitor_request_limit: number
+          ip_request_limit: number
+        }
+        Insert: {
+          singleton?: boolean
+          cookie_ttl_seconds: number
+          dedupe_seconds: number
+          rate_window_seconds: number
+          visitor_request_limit: number
+          ip_request_limit: number
+        }
+        Update: {
+          singleton?: boolean
+          cookie_ttl_seconds?: number
+          dedupe_seconds?: number
+          rate_window_seconds?: number
+          visitor_request_limit?: number
+          ip_request_limit?: number
+        }
+        Relationships: []
+      }
+      topic_view_deduplication: {
+        Row: {
+          visitor_key: string
+          topic_id: number
+          counted_at: string
+          expires_at: string
+        }
+        Insert: {
+          visitor_key: string
+          topic_id: number
+          counted_at: string
+          expires_at: string
+        }
+        Update: {
+          visitor_key?: string
+          topic_id?: number
+          counted_at?: string
+          expires_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_view_deduplication_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topic_view_request_limits: {
+        Row: {
+          scope: string
+          identity_key: string
+          request_times: string[]
+          expires_at: string
+        }
+        Insert: {
+          scope: string
+          identity_key: string
+          request_times: string[]
+          expires_at: string
+        }
+        Update: {
+          scope?: string
+          identity_key?: string
+          request_times?: string[]
+          expires_at?: string
+        }
+        Relationships: []
+      }
       topics: {
         Row: {
           canonical_url: string | null
@@ -3714,7 +3791,11 @@ export type Database = {
       }
       global_seo_infrastructure_health: { Args: never; Returns: Json }
       global_truth_atomic_closure_health: { Args: never; Returns: Json }
-      increment_topic_view: { Args: { p_topic_id: number }; Returns: number }
+      increment_topic_view: {
+        Args: { p_topic_id: number | null; p_visitor_key: string | null; p_ip_key: string }
+        Returns: Json
+      }
+      prune_topic_view_state: { Args: never; Returns: Json }
       ingest_analytics_provider_read_model: {
         Args: {
           p_compare_key: string
