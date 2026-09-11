@@ -3,7 +3,10 @@ import "server-only";
 import { loadPublicContentCollection } from "../content/public-content-read/owner";
 import type { PublicContentSummary } from "../content/public-content-read/contract";
 import type { FeaturedModuleConfig } from "./contract";
-import { featuredSourceContentTypes } from "./contract";
+import {
+  featuredSourceContentTypes,
+  resolveAvailableFeaturedManualItems,
+} from "./contract";
 
 export async function resolveFeaturedItems(
   config: FeaturedModuleConfig,
@@ -28,8 +31,8 @@ export async function resolveFeaturedItems(
   });
 
   if (config.selection.mode !== "manual") return result.items;
-  const byId = new Map(result.items.map((item) => [item.id, item]));
-  return (manualIds ?? [])
-    .flatMap((id) => byId.get(id) ?? [])
-    .slice(0, config.itemLimit);
+  return resolveAvailableFeaturedManualItems(
+    manualIds ?? [],
+    result.items,
+  ).slice(0, config.itemLimit);
 }

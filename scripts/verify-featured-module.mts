@@ -15,9 +15,12 @@ const { buildFeaturedModuleConfig, parseFeaturedModuleConfig } =
 const {
   FEATURED_PRESENTATION_PROFILES,
   featuredPresentationProfile,
+  resolveAvailableFeaturedManualItems,
   resolveFeaturedItemDisplay,
+  resolveFeaturedManualEditorSelection,
   resolveFeaturedItemsPerView,
   resolveFeaturedNavigation,
+  updateFeaturedManualSelection,
 } = await jiti.import<
   typeof import("../src/lib/featured-modules/contract.ts")
 >("../src/lib/featured-modules/contract.ts");
@@ -213,8 +216,9 @@ check(
   "manual selection uses canonical includeIds, applies authored priority before the read limit, and restores order",
   resolver.includes("config.selection.topicIds.slice(0, config.itemLimit)") &&
     resolver.includes("includeIds: manualIds") &&
-    resolver.includes("new Map") &&
-    resolver.includes("manualIds ?? []"),
+    resolver.includes("resolveAvailableFeaturedManualItems") &&
+    contract.includes("const availableById = new Map") &&
+    contract.includes("topicIds.flatMap"),
 );
 check(
   "Public Content Read formally owns explicit identity filtering",
@@ -353,6 +357,274 @@ check(
     editor.includes("overflow-y-auto") &&
     sharedScrollbar.includes("VENESIA_SCROLLBAR_VISUAL_CLASSES") &&
     !editor.includes("scrollbar-width"),
+);
+
+const availableEditorItems = [
+  {
+    id: 701,
+    contentType: "article" as const,
+    title: "العنصر الأول",
+    categorySlug: "reference-category",
+    publishedAt: "2026-09-01T00:00:00.000Z",
+  },
+  {
+    id: 503,
+    contentType: "article" as const,
+    title: "العنصر الثالث",
+    categorySlug: "reference-category",
+    publishedAt: "2026-08-01T00:00:00.000Z",
+  },
+];
+
+checkEqual(
+  "all available manual IDs resolve without changing authored order",
+  resolveFeaturedManualEditorSelection(
+    [701, 503],
+    availableEditorItems,
+  ).map((entry) => ({
+    id: entry.id,
+    state: entry.state,
+    title: entry.item?.title ?? null,
+  })),
+  [
+    { id: 701, state: "resolved", title: "العنصر الأول" },
+    { id: 503, state: "resolved", title: "العنصر الثالث" },
+  ],
+);
+
+const missingMiddleIds = [701, 999001, 503];
+const missingMiddleSelection = resolveFeaturedManualEditorSelection(
+  missingMiddleIds,
+  availableEditorItems,
+);
+checkEqual(
+  "an unavailable ID in the middle becomes a tombstone in the same position",
+  missingMiddleSelection.map((entry) => [entry.id, entry.state]),
+  [
+    [701, "resolved"],
+    [999001, "unresolved"],
+    [503, "resolved"],
+  ],
+);
+
+checkEqual(
+  "multiple unavailable IDs remain distinct ordered tombstones",
+  resolveFeaturedManualEditorSelection(
+    [999001, 701, 999002, 503],
+    availableEditorItems,
+  ).map((entry) => [entry.id, entry.state]),
+  [
+    [999001, "unresolved"],
+    [701, "resolved"],
+    [999002, "unresolved"],
+    [503, "resolved"],
+  ],
+);
+
+checkEqual(
+  "changing the current option window cannot mutate or reorder authored IDs",
+  {
+    authored: missingMiddleIds,
+    projected: resolveFeaturedManualEditorSelection(
+      missingMiddleIds,
+      availableEditorItems.slice(0, 1),
+    ).map((entry) => entry.id),
+  },
+  {
+    authored: [701, 999001, 503],
+    projected: [701, 999001, 503],
+  },
+);
+
+checkEqual(
+  "manual selection changes only through explicit add or remove intent",
+  {
+    unavailableWindow: resolveFeaturedManualEditorSelection(
+      missingMiddleIds,
+      [],
+    ).map((entry) => entry.id),
+    unrelatedRemove: updateFeaturedManualSelection(
+      missingMiddleIds,
+      123456,
+      false,
+    ),
+    explicitRemove: updateFeaturedManualSelection(
+      missingMiddleIds,
+      999001,
+      false,
+    ),
+    explicitAdd: updateFeaturedManualSelection(missingMiddleIds, 777, true),
+  },
+  {
+    unavailableWindow: [701, 999001, 503],
+    unrelatedRemove: [701, 999001, 503],
+    explicitRemove: [701, 503],
+    explicitAdd: [701, 999001, 503, 777],
+  },
+);
+
+checkEqual(
+  "a returning source row resolves the original ID without replacement",
+  {
+    before: missingMiddleSelection[1],
+    after: resolveFeaturedManualEditorSelection(missingMiddleIds, [
+      ...availableEditorItems,
+      {
+        id: 999001,
+        contentType: "article" as const,
+        title: "العنصر العائد",
+        categorySlug: "reference-category",
+        publishedAt: "2026-09-02T00:00:00.000Z",
+      },
+    ])[1],
+  },
+  {
+    before: { id: 999001, state: "unresolved", item: null },
+    after: {
+      id: 999001,
+      state: "resolved",
+      item: {
+        id: 999001,
+        contentType: "article",
+        title: "العنصر العائد",
+        categorySlug: "reference-category",
+        publishedAt: "2026-09-02T00:00:00.000Z",
+      },
+    },
+  },
+);
+
+const manualPreservationForm = new FormData();
+manualPreservationForm.set("source_kind", "categories");
+manualPreservationForm.set("category_slug", "reference-category");
+manualPreservationForm.set("selection_mode", "manual");
+for (const id of [701, 999001, 503, 999002]) {
+  manualPreservationForm.append("manual_topic_ids", String(id));
+}
+manualPreservationForm.set("item_limit", "6");
+manualPreservationForm.set("presentation_variant", "group-carousel");
+manualPreservationForm.set("items_per_view", "3");
+manualPreservationForm.set("show_navigation_arrows", "false");
+manualPreservationForm.set("show_navigation_dots", "true");
+manualPreservationForm.set("navigation_autoplay", "true");
+manualPreservationForm.set("eyebrow", "اختيارات");
+manualPreservationForm.set("title", "عنوان محفوظ");
+manualPreservationForm.set("presentation_description", "وصف محفوظ");
+manualPreservationForm.set("cta_text", "التفاصيل");
+manualPreservationForm.set("show_title_on_page", "on");
+manualPreservationForm.set("show_image_on_page", "on");
+manualPreservationForm.set("show_excerpt_on_page", "on");
+const savedManualConfig = buildFeaturedModuleConfig(manualPreservationForm);
+const reloadedManualConfig = parseFeaturedModuleConfig(
+  JSON.parse(JSON.stringify(savedManualConfig)) as Record<string, unknown>,
+);
+checkEqual(
+  "manual Save and Reload preserve every available and unavailable ID plus presentation settings",
+  {
+    savedSelection: savedManualConfig.selection,
+    reloadedSelection: reloadedManualConfig.selection,
+    presentation: {
+      variant: reloadedManualConfig.presentation.variant,
+      eyebrow: reloadedManualConfig.presentation.eyebrow,
+      title: reloadedManualConfig.presentation.title,
+      description: reloadedManualConfig.presentation.description,
+      ctaText: reloadedManualConfig.presentation.ctaText,
+    },
+    itemLimit: reloadedManualConfig.itemLimit,
+    itemsPerView: reloadedManualConfig.itemsPerView,
+    navigation: reloadedManualConfig.navigation,
+    display: reloadedManualConfig.display,
+  },
+  {
+    savedSelection: {
+      mode: "manual",
+      topicIds: [701, 999001, 503, 999002],
+    },
+    reloadedSelection: {
+      mode: "manual",
+      topicIds: [701, 999001, 503, 999002],
+    },
+    presentation: {
+      variant: "group-carousel",
+      eyebrow: "اختيارات",
+      title: "عنوان محفوظ",
+      description: "وصف محفوظ",
+      ctaText: "التفاصيل",
+    },
+    itemLimit: 6,
+    itemsPerView: 3,
+    navigation: { showArrows: false, showDots: true, autoplay: true },
+    display: {
+      title: true,
+      image: true,
+      category: false,
+      series: false,
+      excerpt: true,
+      date: false,
+    },
+  },
+);
+
+const automaticPreservationForm = new FormData();
+automaticPreservationForm.set("source_kind", "categories");
+automaticPreservationForm.set("category_slug", "reference-category");
+automaticPreservationForm.set("selection_mode", "automatic");
+automaticPreservationForm.append("manual_topic_ids", "999001");
+automaticPreservationForm.set("item_limit", "4");
+automaticPreservationForm.set("presentation_variant", "list");
+automaticPreservationForm.set("items_per_view", "4");
+const automaticPreservationConfig = buildFeaturedModuleConfig(
+  automaticPreservationForm,
+);
+checkEqual(
+  "Automatic Featured ignores dormant manual fields and keeps its existing contract",
+  {
+    selection: automaticPreservationConfig.selection,
+    variant: automaticPreservationConfig.presentation.variant,
+    itemLimit: automaticPreservationConfig.itemLimit,
+  },
+  { selection: { mode: "automatic" }, variant: "list", itemLimit: 4 },
+);
+
+check(
+  "every existing presentation preserves the same manual identity contract",
+  Object.keys(FEATURED_PRESENTATION_PROFILES).every((variant) => {
+    const parsed = parseFeaturedModuleConfig({
+      source: { kind: "categories", categorySlug: "reference-category" },
+      selection: { mode: "manual", topicIds: missingMiddleIds },
+      itemLimit: 4,
+      presentation: { variant },
+    });
+    return (
+      parsed.presentation.variant === variant &&
+      parsed.selection.mode === "manual" &&
+      JSON.stringify(parsed.selection.topicIds) ===
+        JSON.stringify(missingMiddleIds)
+    );
+  }),
+);
+
+checkEqual(
+  "Public manual projection skips unresolved IDs without fake rows or crashes",
+  {
+    mixed: resolveAvailableFeaturedManualItems(
+      missingMiddleIds,
+      availableEditorItems,
+    ).map((item) => item.id),
+    none: resolveAvailableFeaturedManualItems([999001, 999002], []),
+  },
+  { mixed: [701, 503], none: [] },
+);
+
+check(
+  "Featured editor serializes authored IDs and exposes ordered resolved or tombstone state with explicit removal",
+  editor.includes("{manualIds.map((id) => (") &&
+    !editor.includes("submittedManualIds") &&
+    editor.includes('data-featured-manual-selection-order=""') &&
+    editor.includes('data-featured-manual-tombstone=""') &&
+    editor.includes("data-featured-resolution={entry.state}") &&
+    editor.includes("data-featured-manual-remove={entry.id}") &&
+    editor.includes("updateFeaturedManualSelection(current, id, checked)"),
 );
 
 const displayForm = new FormData();
@@ -933,5 +1205,7 @@ check(
   migration.includes("canonical contract drift detected") &&
     migration.includes("template.config ? 'placement'"),
 );
+
+await import("./qa-featured-editor-preservation.mts");
 
 console.log(`Featured Module verification passed (${passed} checks).`);

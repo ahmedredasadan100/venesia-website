@@ -7,6 +7,7 @@ import {
   AdminFormGrid,
   AdminFormListboxSelect,
   AdminFormSwitch,
+  AdminStatusPill,
   ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME,
 } from "../ui";
 import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../../venesia-scrollbar-styles";
@@ -28,7 +29,9 @@ import {
   FEATURED_SELECTION_LABELS_AR,
   FEATURED_SELECTION_MODES,
   featuredPresentationProfile,
+  resolveFeaturedManualEditorSelection,
   resolveFeaturedItemsPerView,
+  updateFeaturedManualSelection,
 } from "../../../lib/featured-modules/contract";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
@@ -166,9 +169,8 @@ export default function FeaturedModuleEditClient({
       ),
     [category?.scopeSlugs, contentType, editorOptions.items, sourceKind],
   );
-  const submittedManualIds = useMemo(() => {
-    const availableIds = new Set(manualOptions.map((item) => item.id));
-    return manualIds.filter((id) => availableIds.has(id));
+  const manualSelectionEntries = useMemo(() => {
+    return resolveFeaturedManualEditorSelection(manualIds, manualOptions);
   }, [manualIds, manualOptions]);
   const eyebrowFormat = resolvePageBlockTextFormat(
     config.presentation,
@@ -198,11 +200,7 @@ export default function FeaturedModuleEditClient({
 
   function toggleManualItem(id: number, checked: boolean) {
     setManualIds((current) =>
-      checked
-        ? current.includes(id)
-          ? current
-          : [...current, id]
-        : current.filter((candidate) => candidate !== id),
+      updateFeaturedManualSelection(current, id, checked),
     );
   }
 
@@ -353,10 +351,10 @@ export default function FeaturedModuleEditClient({
                         العناصر اليدوية
                       </div>
                       <p className="mb-4 text-xs leading-6 text-white/45">
-                        تظهر هنا العناصر المنشورة المطابقة للمصدر فقط، ويظل
-                        ترتيب الاختيار محفوظًا.
+                        يظل ترتيب كل المعرّفات المحفوظة ثابتًا. العنصر غير
+                        المتاح حاليًا يبقى محفوظًا حتى تزيله صراحةً.
                       </p>
-                      {submittedManualIds.map((id) => (
+                      {manualIds.map((id) => (
                         <input
                           key={id}
                           type="hidden"
@@ -364,33 +362,114 @@ export default function FeaturedModuleEditClient({
                           value={id}
                         />
                       ))}
-                      {manualOptions.length ? (
-                        <div
-                          data-featured-manual-items-scroll=""
-                          className={`grid max-h-[28rem] gap-2 overflow-y-auto md:grid-cols-2 ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}
-                        >
-                          {manualOptions.map((item) => {
-                            const checked = manualIds.includes(item.id);
-                            return (
-                              <label
-                                key={item.id}
-                                className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/8 bg-black/15 p-3 text-sm text-white/70"
+                      {manualSelectionEntries.length ? (
+                        <div className="mb-4 space-y-2">
+                          <div className="text-xs font-semibold text-white/55">
+                            ترتيب الاختيار المحفوظ
+                          </div>
+                          <ol
+                            data-featured-manual-selection-order=""
+                            className="space-y-2"
+                          >
+                            {manualSelectionEntries.map((entry, index) => (
+                              <li
+                                key={entry.id}
+                                data-featured-manual-selection-item=""
+                                data-featured-manual-item=""
+                                data-featured-item-id={entry.id}
+                                data-featured-resolution={entry.state}
+                                className="flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-black/20 p-3 text-sm text-white/70"
                               >
-                                <AdminCheckbox
-                                  label={`اختيار ${item.title}`}
-                                  checked={checked}
-                                  onChange={(event) =>
-                                    toggleManualItem(
-                                      item.id,
-                                      event.currentTarget.checked,
-                                    )
+                                <span
+                                  className="grid size-7 shrink-0 place-items-center rounded-full bg-white/8 font-en text-xs text-white/55"
+                                  aria-label={`الترتيب ${index + 1}`}
+                                >
+                                  {index + 1}
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                  {entry.state === "resolved" ? (
+                                    <>
+                                      <span className="block break-words text-white/80">
+                                        {entry.item.title}
+                                      </span>
+                                      <span className="font-en text-[11px] text-white/35">
+                                        ID {entry.id}
+                                      </span>
+                                    </>
+                                  ) : (
+                                    <span
+                                      data-featured-manual-tombstone=""
+                                      className="block"
+                                    >
+                                      <span className="block text-amber-100/80">
+                                        عنصر محفوظ غير متاح حاليًا
+                                      </span>
+                                      <span className="font-en text-[11px] text-white/40">
+                                        ID {entry.id}
+                                      </span>
+                                    </span>
+                                  )}
+                                </span>
+                                {entry.state === "unresolved" ? (
+                                  <AdminStatusPill tone="gold">
+                                    غير متاح
+                                  </AdminStatusPill>
+                                ) : null}
+                                <button
+                                  type="button"
+                                  data-featured-manual-remove={entry.id}
+                                  onClick={() =>
+                                    toggleManualItem(entry.id, false)
                                   }
-                                />
-                                <span>{item.title}</span>
-                              </label>
-                            );
-                          })}
+                                  className="shrink-0 rounded-lg border border-red-400/20 px-3 py-1.5 text-xs font-semibold text-red-200/75 transition hover:border-red-300/40 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300/60"
+                                  aria-label={`إزالة ${entry.state === "resolved" ? entry.item.title : `المعرّف ${entry.id}`}`}
+                                >
+                                  إزالة
+                                </button>
+                              </li>
+                            ))}
+                          </ol>
                         </div>
+                      ) : (
+                        <p
+                          data-featured-manual-selection-empty=""
+                          className="mb-4 text-sm text-white/40"
+                        >
+                          لم يتم اختيار عناصر بعد.
+                        </p>
+                      )}
+                      {manualOptions.length ? (
+                        <>
+                          <div className="mb-2 text-xs font-semibold text-white/55">
+                            العناصر المتاحة
+                          </div>
+                          <div
+                            data-featured-manual-items-scroll=""
+                            className={`grid max-h-[28rem] gap-2 overflow-y-auto md:grid-cols-2 ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}
+                          >
+                            {manualOptions.map((item) => {
+                              const checked = manualIds.includes(item.id);
+                              return (
+                                <label
+                                  key={item.id}
+                                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/8 bg-black/15 p-3 text-sm text-white/70"
+                                >
+                                  <AdminCheckbox
+                                    label={`اختيار ${item.title}`}
+                                    checked={checked}
+                                    onChange={(event) =>
+                                      toggleManualItem(
+                                        item.id,
+                                        event.currentTarget.checked,
+                                      )
+                                    }
+                                  />
+                                  <span>{item.title}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </>
                       ) : (
                         <p className="text-sm text-amber-200/70">
                           لا توجد عناصر منشورة مطابقة لهذا المصدر.
