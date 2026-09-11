@@ -16,6 +16,7 @@ type TopicCardProps = {
   title: string;
   excerpt: string;
   image: string;
+  imageAlt: string;
   date: string;
   readingTime: string;
   showDateOnPage?: boolean;
@@ -33,6 +34,7 @@ export default function TopicCard({
   title,
   excerpt,
   image,
+  imageAlt,
   date,
   readingTime,
   showDateOnPage = true,
@@ -82,7 +84,7 @@ export default function TopicCard({
       image={
         <TopicImage
           src={image}
-          alt={title}
+          alt={imageAlt}
           fill
           sizes="(max-width: 768px) 100vw, 250px"
           className="object-cover transition-transform duration-700 group-hover:scale-105"

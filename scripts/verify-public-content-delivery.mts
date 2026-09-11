@@ -58,6 +58,22 @@ type PublicFilterOptions = {
   series: Array<{ slug: string; name: string }>;
 };
 
+type PublicFeedCategory = {
+  id: number;
+  name: string;
+  slug: string;
+  count: number;
+};
+
+type PublicFeedSeries = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  categoryId: number | null;
+  representative: Record<string, unknown> | null;
+};
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nativeRequire = createRequire(import.meta.url);
 const read = (filename: string) =>
@@ -452,6 +468,12 @@ const loadPublicContentDetail = owner.loadPublicContentDetail as (
 ) => Promise<Record<string, unknown> | null>;
 const loadPublicContentFilterOptions = owner.loadPublicContentFilterOptions as () =>
   Promise<PublicFilterOptions>;
+const loadPublicContentFeedCategories = owner.loadPublicContentFeedCategories as (
+  input: Record<string, unknown>,
+) => Promise<PublicFeedCategory[]>;
+const loadPublicContentFeedSeries = owner.loadPublicContentFeedSeries as (
+  input: Record<string, unknown>,
+) => Promise<PublicFeedSeries[]>;
 
 const mediaTypes = await jiti.import<Record<string, unknown>>(
   "../src/lib/media-center/types.ts",
@@ -516,6 +538,7 @@ function topicRow(overrides: Record<string, unknown> = {}) {
     content_type: "article",
     is_featured: false,
     is_popular: false,
+    views_count: 0,
     media_payload: null,
     media_kind: null,
     media_duration: null,
@@ -604,6 +627,64 @@ check(
   "valid collection result retains current cache behavior",
   queryLog.length === collectionReadsAfterData && cacheHits === 1,
 );
+
+resetScenario();
+replaceQueryPlan([
+  {
+    label: "most-viewed collection",
+    table: "topics",
+    inspect: (operations) => {
+      const orderOperations = operations.filter(
+        (operation) => operation.method === "order",
+      );
+      assert.deepEqual(orderOperations.map((operation) => operation.args), [
+        ["views_count", { ascending: false }],
+        ["published_at", { ascending: false }],
+        ["id", { ascending: false }],
+      ]);
+      assert.equal(
+        operations.some(
+          (operation) =>
+            operation.method === "eq" &&
+            operation.args[0] === "is_popular",
+        ),
+        false,
+      );
+    },
+    result: success(
+      [
+        topicRow({
+          id: 201,
+          slug: "most-viewed-editorial-false",
+          views_count: 900,
+          is_popular: false,
+        }),
+        topicRow({
+          id: 202,
+          slug: "second-most-viewed-editorial-true",
+          views_count: 450,
+          is_popular: true,
+        }),
+      ],
+      { count: 2 },
+    ),
+  },
+]);
+const mostViewedCollection = await loadPublicContentCollection({
+  contentTypes: ["article"],
+  page: 1,
+  pageSize: 2,
+  sort: "most-viewed",
+});
+check(
+  "Most Read uses views_count order without filtering editorial is_popular",
+  mostViewedCollection.items[0]?.id === 201 &&
+    mostViewedCollection.items[0]?.viewsCount === 900 &&
+    mostViewedCollection.items[0]?.isPopular === false &&
+    mostViewedCollection.items[1]?.id === 202 &&
+    mostViewedCollection.items[1]?.isPopular === true,
+);
+assertPlanConsumed("most-viewed collection");
 
 const COLLECTION_GALLERY_COVER =
   "https://cdn.example.test/gallery/projected-cover.jpg";
@@ -1150,6 +1231,297 @@ check(
     queryLog.length === 3,
 );
 assertPlanConsumed("category-hierarchy recovery");
+
+resetScenario();
+replaceQueryPlan([
+  {
+    label: "Feed category hierarchy",
+    table: "topic_categories",
+    result: success([
+      {
+        id: 301,
+        name: "Parent",
+        slug: "feed-parent",
+        parent_id: null,
+        sort_order: 1,
+        is_active: true,
+        status: "published",
+      },
+      {
+        id: 302,
+        name: "Child",
+        slug: "feed-child",
+        parent_id: 301,
+        sort_order: 1,
+        is_active: true,
+        status: "published",
+      },
+    ]),
+  },
+  {
+    label: "Feed category selected Series scope",
+    table: "topic_series",
+    inspect: (operations) => {
+      const seriesFilter = operations.find(
+        (operation) => operation.method === "in" && operation.args[0] === "slug",
+      );
+      assert.deepEqual(seriesFilter?.args[1], ["series-a"]);
+    },
+    result: success([{ category_id: 302 }]),
+  },
+  {
+    label: "Feed parent exact count",
+    table: "topics",
+    inspect: (operations) => {
+      const select = operations.find((operation) => operation.method === "select");
+      assert.deepEqual(select?.args, ["id", { count: "exact", head: true }]);
+      const categoryFilter = operations.find(
+        (operation) =>
+          operation.method === "in" &&
+          operation.args[0] === "category_slug",
+      );
+      assert.deepEqual(categoryFilter?.args[1], ["feed-parent", "feed-child"]);
+      const seriesFilter = operations.find(
+        (operation) =>
+          operation.method === "in" && operation.args[0] === "series_slug",
+      );
+      assert.deepEqual(seriesFilter?.args[1], ["series-a"]);
+      assert.equal(
+        operations.some((operation) => operation.method === "limit"),
+        false,
+      );
+    },
+    result: success([], { count: 260 }),
+  },
+]);
+const feedCategories = await loadPublicContentFeedCategories({
+  limit: 20,
+  categorySlugs: ["feed-parent"],
+  seriesSlugs: ["series-a"],
+});
+check(
+  "Feed category count is the true parent-plus-descendants total, not item limit",
+  feedCategories.length === 1 && feedCategories[0]?.count === 260,
+);
+assertPlanConsumed("Feed parent exact count");
+
+resetScenario();
+const feedCategoryRecoveryInput = {
+  limit: 1,
+  categorySlugs: ["feed-recovery"],
+  seriesSlugs: [],
+};
+replaceQueryPlan([
+  {
+    label: "Feed category hierarchy failure",
+    table: "topic_categories",
+    result: failure("Feed category source unavailable"),
+  },
+]);
+await expectQueryFailure("Feed category Query Failure", () =>
+  loadPublicContentFeedCategories(feedCategoryRecoveryInput),
+);
+check(
+  "Feed category failure cannot be cached as Empty",
+  cacheWrites === 0,
+);
+replaceQueryPlan([
+  {
+    label: "Feed category hierarchy recovery",
+    table: "topic_categories",
+    result: success([
+      {
+        id: 303,
+        name: "Recovered category",
+        slug: "feed-recovery",
+        parent_id: null,
+        sort_order: 1,
+        is_active: true,
+        status: "published",
+      },
+    ]),
+  },
+  {
+    label: "Feed category count recovery",
+    table: "topics",
+    result: success([], { count: 12 }),
+  },
+]);
+const recoveredFeedCategories = await loadPublicContentFeedCategories(
+  feedCategoryRecoveryInput,
+);
+check(
+  "Feed category next request reaches source and caches only recovered Data",
+  recoveredFeedCategories[0]?.count === 12 &&
+    queryLog.length === 3 &&
+    cacheWrites === 2,
+);
+await loadPublicContentFeedCategories(feedCategoryRecoveryInput);
+check(
+  "Feed category recovered cache cannot replay the earlier failure",
+  queryLog.length === 3 && cacheHits === 1,
+);
+assertPlanConsumed("Feed category recovery");
+
+resetScenario();
+replaceQueryPlan([
+  {
+    label: "Feed Series hierarchy",
+    table: "topic_categories",
+    result: success([
+      {
+        id: 401,
+        name: "Series parent",
+        slug: "series-parent",
+        parent_id: null,
+        sort_order: 1,
+        is_active: true,
+        status: "published",
+      },
+      {
+        id: 402,
+        name: "Series child",
+        slug: "series-child",
+        parent_id: 401,
+        sort_order: 1,
+        is_active: true,
+        status: "published",
+      },
+    ]),
+  },
+  {
+    label: "Feed Series rows",
+    table: "topic_series",
+    inspect: (operations) => {
+      const categoryFilter = operations.find(
+        (operation) =>
+          operation.method === "in" && operation.args[0] === "category_id",
+      );
+      assert.deepEqual(categoryFilter?.args[1], [401, 402]);
+      assert.deepEqual(
+        operations.find((operation) => operation.method === "limit")?.args,
+        [2],
+      );
+    },
+    result: success([
+      {
+        id: 461,
+        name: "Series 61",
+        slug: "series-61",
+        description: "Representative after sixty",
+        category_id: 401,
+      },
+      {
+        id: 462,
+        name: "Series 62",
+        slug: "series-62",
+        description: "Second representative after sixty",
+        category_id: 402,
+      },
+    ]),
+  },
+  {
+    label: "Series 61 representative",
+    table: "topics",
+    inspect: (operations) => {
+      assert.deepEqual(
+        operations.find(
+          (operation) =>
+            operation.method === "eq" && operation.args[0] === "series_slug",
+        )?.args,
+        ["series_slug", "series-61"],
+      );
+      assert.deepEqual(
+        operations.find((operation) => operation.method === "range")?.args,
+        [0, 0],
+      );
+    },
+    result: success([
+      topicRow({
+        id: 4611,
+        slug: "series-61-representative",
+        image: "/series-61.jpg",
+        image_alt: "Authored Series 61 alt",
+        series_slug: "series-61",
+      }),
+    ], { count: 1 }),
+  },
+  {
+    label: "Series 62 representative",
+    table: "topics",
+    inspect: (operations) => {
+      assert.deepEqual(
+        operations.find(
+          (operation) =>
+            operation.method === "eq" && operation.args[0] === "series_slug",
+        )?.args,
+        ["series_slug", "series-62"],
+      );
+      assert.deepEqual(
+        operations.find((operation) => operation.method === "range")?.args,
+        [0, 0],
+      );
+    },
+    result: success([
+      topicRow({
+        id: 4621,
+        slug: "series-62-representative",
+        image: "/series-62.jpg",
+        image_alt: "Authored Series 62 alt",
+        series_slug: "series-62",
+      }),
+    ], { count: 1 }),
+  },
+]);
+const feedSeries = await loadPublicContentFeedSeries({
+  limit: 2,
+  categorySlugs: ["series-parent"],
+  seriesSlugs: ["series-61", "series-62"],
+});
+check(
+  "each Series beyond a global sixty-item window keeps its own representative and imageAlt",
+  feedSeries[0]?.representative?.imageAlt === "Authored Series 61 alt" &&
+    feedSeries[1]?.representative?.imageAlt === "Authored Series 62 alt",
+);
+assertPlanConsumed("Feed Series representatives");
+
+resetScenario();
+replaceQueryPlan([
+  {
+    label: "Featured exclusion refill",
+    table: "topics",
+    inspect: (operations) => {
+      const exclusionIndex = operations.findIndex(
+        (operation) =>
+          operation.method === "neq" &&
+          operation.args[0] === "id" &&
+          operation.args[1] === 901,
+      );
+      const rangeIndex = operations.findIndex(
+        (operation) => operation.method === "range",
+      );
+      assert.ok(exclusionIndex >= 0 && exclusionIndex < rangeIndex);
+      assert.deepEqual(operations[rangeIndex]?.args, [0, 2]);
+    },
+    result: success([
+      topicRow({ id: 902, slug: "refill-1" }),
+      topicRow({ id: 903, slug: "refill-2" }),
+      topicRow({ id: 904, slug: "refill-3" }),
+    ], { count: 9 }),
+  },
+]);
+const exclusionRefill = await loadPublicContentCollection({
+  contentTypes: ["article"],
+  page: 1,
+  pageSize: 3,
+  excludeIds: [901],
+});
+check(
+  "Featured exclusion occurs before limit and refills the requested page",
+  exclusionRefill.items.length === 3 &&
+    exclusionRefill.items.every((item) => item.id !== 901),
+);
+assertPlanConsumed("Featured exclusion refill");
 
 async function verifyFeaturedFailure(mode: "manual" | "automatic") {
   resetScenario();

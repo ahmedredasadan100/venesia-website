@@ -74,6 +74,22 @@ function emptyPageBlockLoadResult(hasCompositionError = false): PageBlockLoadRes
   };
 }
 
+type PageBlockReadFailure = {
+  context: string;
+  error: unknown;
+  details: Record<string, unknown>;
+};
+
+class PageBlockStateReadError extends Error {
+  constructor(
+    readonly partialResult: PageBlockLoadResult,
+    readonly failures: readonly PageBlockReadFailure[] = [],
+  ) {
+    super("Page block state read failed.");
+    this.name = "PageBlockStateReadError";
+  }
+}
+
 function appendBlockState(
   states: PageBlockPublicState[],
   blockType: PageBlockType,
@@ -105,11 +121,23 @@ function appendBlockState(
 export const loadPageBlockStateBySlug = cache(async function loadPageBlockStateBySlug(
   pageSlug: string,
 ): Promise<PageBlockLoadResult> {
-  return unstable_cache(
-    async () => queryPageBlockStateBySlug(pageSlug),
-    ["page-block-state-v3", pageSlug],
-    { revalidate: 300, tags: ["page-composition", "page-blocks"] },
-  )();
+  try {
+    return await unstable_cache(
+      async () => queryPageBlockStateBySlug(pageSlug),
+      ["page-block-state-v4", pageSlug],
+      { revalidate: 300, tags: ["page-composition", "page-blocks"] },
+    )();
+  } catch (error) {
+    if (!(error instanceof PageBlockStateReadError)) {
+      throw error;
+    }
+
+    for (const failure of error.failures) {
+      logError(failure.context, failure.error, failure.details);
+    }
+
+    return error.partialResult;
+  }
 });
 
 async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoadResult> {
@@ -117,7 +145,11 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
 
   const pageState = await getPublishedPageStateBySlug(pageSlug);
   if (!pageState.page) {
-    return emptyPageBlockLoadResult(pageState.sourceStatus === "error");
+    const result = emptyPageBlockLoadResult(pageState.sourceStatus === "error");
+    if (pageState.sourceStatus === "error") {
+      throw new PageBlockStateReadError(result);
+    }
+    return result;
   }
   const page = pageState.page;
 
@@ -150,11 +182,36 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
       .eq("page_id", page.id),
   ]);
 
-  const hasCompositionError = Boolean(contentError || ctaError || cardsError || breadcrumbError);
-  if (contentError) logError("loadPageBlockStateBySlug: content assignments failed", contentError, { pageSlug });
-  if (ctaError) logError("loadPageBlockStateBySlug: cta assignments failed", ctaError, { pageSlug });
-  if (cardsError) logError("loadPageBlockStateBySlug: cards assignments failed", cardsError, { pageSlug });
-  if (breadcrumbError) logError("loadPageBlockStateBySlug: breadcrumb assignments failed", breadcrumbError, { pageSlug });
+  const assignmentFailures: PageBlockReadFailure[] = [];
+  if (contentError) {
+    assignmentFailures.push({
+      context: "loadPageBlockStateBySlug: content assignments failed",
+      error: contentError,
+      details: { pageSlug },
+    });
+  }
+  if (ctaError) {
+    assignmentFailures.push({
+      context: "loadPageBlockStateBySlug: cta assignments failed",
+      error: ctaError,
+      details: { pageSlug },
+    });
+  }
+  if (cardsError) {
+    assignmentFailures.push({
+      context: "loadPageBlockStateBySlug: cards assignments failed",
+      error: cardsError,
+      details: { pageSlug },
+    });
+  }
+  if (breadcrumbError) {
+    assignmentFailures.push({
+      context: "loadPageBlockStateBySlug: breadcrumb assignments failed",
+      error: breadcrumbError,
+      details: { pageSlug },
+    });
+  }
+  const hasCompositionError = assignmentFailures.length > 0;
 
   assignmentRowCount += ctaAssignments?.length ?? 0;
   assignmentRowCount += cardsAssignments?.length ?? 0;
@@ -261,7 +318,7 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
   const hasRenderableModules = blocks.length > 0;
   const hasAnyAssignmentRows = assignmentRowCount > 0;
 
-  return {
+  const result: PageBlockLoadResult = {
     blocks: sortPageBlocks(blocks),
     blockStates,
     hasAnyAssignmentRows,
@@ -270,6 +327,12 @@ async function queryPageBlockStateBySlug(pageSlug: string): Promise<PageBlockLoa
     hasAssignments: hasRenderableModules,
     hiddenHomeModuleSlugs: [...hiddenHomeModuleSlugs],
   };
+
+  if (hasCompositionError) {
+    throw new PageBlockStateReadError(result, assignmentFailures);
+  }
+
+  return result;
 }
 
 export async function loadPageBlocksBySlug(pageSlug: string): Promise<ResolvedPageBlock[]> {

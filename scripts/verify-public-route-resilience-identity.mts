@@ -518,6 +518,70 @@ assert.ok(
   "missing Projects publication must remain typed unavailable, not error",
 );
 
+const publishedPageByPathOwnerSource = read(
+  "src/lib/pages/get-published-page-by-path.ts",
+);
+const dynamicCmsPageSource = read("src/app/(site)/[...slug]/page.tsx");
+const dynamicPathErrorCheck = dynamicCmsPageSource.indexOf(
+  'result.sourceStatus === "error"',
+);
+const dynamicPathMissingCheck = dynamicCmsPageSource.indexOf(
+  "if (!result.page)",
+  dynamicPathErrorCheck,
+);
+assert.ok(
+  publishedPageByPathOwnerSource.includes(
+    'sourceStatus: "database" | "missing" | "error"',
+  ) &&
+    publishedPageByPathOwnerSource.includes('sourceStatus: "missing"') &&
+    publishedPageByPathOwnerSource.includes('sourceStatus: "error"') &&
+    publishedPageByPathOwnerSource.includes("throw error;") &&
+    publishedPageByPathOwnerSource.includes('from "react"') &&
+    !publishedPageByPathOwnerSource.includes("unstable_cache") &&
+    !publishedPageByPathOwnerSource.includes('"use cache"'),
+  "path lookup must distinguish missing from source errors without persisting either in the Data Cache",
+);
+assert.ok(
+  dynamicCmsPageSource.includes("getPublishedPageStateByPath") &&
+    dynamicPathErrorCheck >= 0 &&
+    dynamicPathMissingCheck > dynamicPathErrorCheck &&
+    dynamicCmsPageSource.includes("throw result.sourceError") &&
+    dynamicCmsPageSource.includes("notFound();"),
+  "dynamic CMS routes must propagate source errors before mapping true missing pages to notFound",
+);
+
+const pageBlockStateSource = read("src/lib/page-blocks/load-page-blocks.ts");
+const pageBlockCacheStart = pageBlockStateSource.indexOf(
+  "export const loadPageBlockStateBySlug",
+);
+const pageBlockCacheCall = pageBlockStateSource.indexOf(
+  "return await unstable_cache(",
+  pageBlockCacheStart,
+);
+const pageBlockCacheCatch = pageBlockStateSource.indexOf(
+  "} catch (error)",
+  pageBlockCacheCall,
+);
+assert.ok(
+  pageBlockStateSource.includes("class PageBlockStateReadError extends Error") &&
+    pageBlockStateSource.includes("readonly partialResult: PageBlockLoadResult") &&
+    pageBlockStateSource.includes(
+      "async () => queryPageBlockStateBySlug(pageSlug)",
+    ) &&
+    pageBlockStateSource.includes('["page-block-state-v4", pageSlug]') &&
+    pageBlockCacheCall > pageBlockCacheStart &&
+    pageBlockCacheCatch > pageBlockCacheCall &&
+    pageBlockStateSource.includes("return error.partialResult;") &&
+    pageBlockStateSource.includes('pageState.sourceStatus === "error"') &&
+    pageBlockStateSource.includes("throw new PageBlockStateReadError(result);") &&
+    pageBlockStateSource.includes("const assignmentFailures: PageBlockReadFailure[] = []") &&
+    pageBlockStateSource.includes(
+      "throw new PageBlockStateReadError(result, assignmentFailures);",
+    ) &&
+    pageBlockStateSource.includes("hasCompositionError"),
+  "Page Block source and assignment failures must reject inside cache v4, then return partial error state only outside the cache",
+);
+
 const publishedPageOwnerSource = read(
   "src/lib/pages/get-published-page-by-slug.ts",
 );
@@ -571,5 +635,5 @@ assert.ok(
 );
 
 console.log(
-  `PASS Public route resilience and identity: ${PUBLIC_PAGE_ROUTE_REGISTRY.length} registry routes match ${sitePageFiles.length} site pages plus maintenance; canonical projections, Media detail isolation/H1/rich media, Page Composition identity, and Projects failure/cache contracts are intact.`,
+  `PASS Public route resilience and identity: ${PUBLIC_PAGE_ROUTE_REGISTRY.length} registry routes match ${sitePageFiles.length} site pages plus maintenance; path missing/error identity and non-cached Page Block partial-failure contracts are intact.`,
 );

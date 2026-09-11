@@ -6,6 +6,7 @@ import { unstable_cache } from "next/cache";
 import type { Json } from "../database.types";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
+import { PublicContentReadError } from "../content/public-content-read/owner";
 import { getPublishedPageStateBySlug } from "../pages/get-published-page-by-slug";
 import {
   isPageModulePubliclyVisible,
@@ -46,14 +47,43 @@ export type FeedModuleLoadResult = {
   hasCompositionError: boolean;
 };
 
+class FeedModuleLoadFailure extends Error {
+  readonly result: FeedModuleLoadResult;
+  readonly sourceError: unknown;
+
+  constructor(result: FeedModuleLoadResult, sourceError: unknown) {
+    super("Feed module source read failed.");
+    this.name = "FeedModuleLoadFailure";
+    this.result = result;
+    this.sourceError = sourceError;
+  }
+}
+
+function normalizeExcludeContentIds(ids: readonly number[]) {
+  return [...new Set(ids.filter(
+    (id) => Number.isSafeInteger(id) && id > 0,
+  ))].sort((left, right) => left - right);
+}
+
 export const loadFeedModuleStateForPageSlug = cache(async function loadFeedModuleStateForPageSlug(
   pageSlug: string,
+  excludeContentIds: readonly number[] = [],
 ): Promise<FeedModuleLoadResult> {
-  return unstable_cache(
-    async () => queryFeedModuleStateForPageSlug(pageSlug),
-    ["feed-module-state", pageSlug],
-    { revalidate: 300, tags: ["page-composition", "feed-modules"] },
-  )();
+  const normalizedExcludeIds = normalizeExcludeContentIds(excludeContentIds);
+  try {
+    return await unstable_cache(
+      async () => queryFeedModuleStateForPageSlug(pageSlug, normalizedExcludeIds),
+      ["feed-module-state-v2", pageSlug, JSON.stringify(normalizedExcludeIds)],
+      { revalidate: 300, tags: ["page-composition", "feed-modules"] },
+    )();
+  } catch (error) {
+    if (!(error instanceof FeedModuleLoadFailure)) throw error;
+    logError("loadFeedModulesForPageSlug: public read failed", error.sourceError, {
+      pageSlug,
+      excludeContentIds: normalizedExcludeIds,
+    });
+    return error.result;
+  }
 });
 
 export const loadFeedModulesForPageSlug = cache(async function loadFeedModulesForPageSlug(
@@ -63,16 +93,23 @@ export const loadFeedModulesForPageSlug = cache(async function loadFeedModulesFo
   return state.modules;
 });
 
-async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedModuleLoadResult> {
+async function queryFeedModuleStateForPageSlug(
+  pageSlug: string,
+  excludeContentIds: readonly number[],
+): Promise<FeedModuleLoadResult> {
   const supabase = getSupabaseAdmin();
 
   const pageState = await getPublishedPageStateBySlug(pageSlug);
   if (!pageState.page) {
-    return {
+    const result = {
       modules: [],
       hasAnyAssignmentRows: false,
       hasCompositionError: pageState.sourceStatus === "error",
     };
+    if (pageState.sourceStatus === "error") {
+      throw new FeedModuleLoadFailure(result, pageState.sourceIssue);
+    }
+    return result;
   }
   const page = pageState.page;
 
@@ -84,8 +121,10 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
     .order("id", { ascending: true });
 
   if (assignmentsError) {
-    logError("loadFeedModulesForPageSlug: assignments failed", assignmentsError, { pageSlug });
-    return { modules: [], hasAnyAssignmentRows: false, hasCompositionError: true };
+    throw new FeedModuleLoadFailure(
+      { modules: [], hasAnyAssignmentRows: false, hasCompositionError: true },
+      assignmentsError,
+    );
   }
 
   const hasAnyAssignmentRows = (assignments?.length ?? 0) > 0;
@@ -108,21 +147,34 @@ async function queryFeedModuleStateForPageSlug(pageSlug: string): Promise<FeedMo
     return [{ row, template, config }];
   });
 
-  const modules = await Promise.all(
-    resolvableAssignments.map(async ({ row, template, config }): Promise<LoadedFeedModule> => {
-      const payload = await resolveTopicsFeedModule(template, config);
+  let modules: LoadedFeedModule[];
+  try {
+    modules = await Promise.all(
+      resolvableAssignments.map(async ({ row, template, config }): Promise<LoadedFeedModule> => {
+        const payload = await resolveTopicsFeedModule(
+          template,
+          config,
+          excludeContentIds,
+        );
 
-      return {
-        assignmentId: row.id,
-        templateId: template.id,
-        sortOrder: row.sort_order ?? 0,
-        feedType: template.feed_type,
-        presentation: config.presentation,
-        payload,
-        slot: normalizeLayoutSlot(row.slot),
-      };
-    }),
-  );
+        return {
+          assignmentId: row.id,
+          templateId: template.id,
+          sortOrder: row.sort_order ?? 0,
+          feedType: template.feed_type,
+          presentation: config.presentation,
+          payload,
+          slot: normalizeLayoutSlot(row.slot),
+        };
+      }),
+    );
+  } catch (error) {
+    if (!(error instanceof PublicContentReadError)) throw error;
+    throw new FeedModuleLoadFailure(
+      { modules: [], hasAnyAssignmentRows, hasCompositionError: true },
+      error,
+    );
+  }
 
   return {
     modules,

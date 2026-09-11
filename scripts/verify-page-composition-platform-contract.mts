@@ -295,7 +295,7 @@ for (const mutationSource of [assignmentCreate, assignmentUpdate]) {
 assert.ok(compositionTypes.includes("slots: Record<PageLayoutSlot, SlotEntry[]>"));
 assert.ok(!compositionTypes.includes("layoutMode"), "CMS composition must not carry Theme layout state");
 assert.ok(!compositionLoader.includes("layoutMode"));
-assert.ok(!compositionLoader.includes("pageSlug,"), "Slug must not enter Position validation");
+assert.ok(!positionInventory.includes("pageSlug"), "Slug must not enter Position validation");
 
 assert.ok(venisiaThemeOrder.includes("VENISIA_THEME_REGION_RENDER_ORDER"));
 assert.deepEqual(

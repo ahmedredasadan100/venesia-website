@@ -18,8 +18,11 @@ export type { MediaContentItem, MediaContentType, MediaNewsItem };
 export { getMediaHref, MEDIA_CONTENT_TYPES };
 
 /** Media remains a presentation facade over Unified Content's Public Collection owner. */
-export async function getMediaItems(type?: MediaContentType) {
-  return unifiedGetMediaItems(type);
+export async function getMediaItems(
+  type: MediaContentType | undefined,
+  limit: number,
+) {
+  return unifiedGetMediaItems(type, limit);
 }
 
 export async function getMediaItemBySlug(type: MediaContentType, slug: string) {
@@ -34,6 +37,7 @@ export async function getMediaListingPage(
     pageSize?: number;
     featuredSelection?: PublicContentFeaturedSelection;
     search?: string;
+    excludeIds?: readonly number[];
   },
 ) {
   const sort = input.sort === "oldest" ? "oldest" : "newest";
@@ -47,6 +51,7 @@ export async function getMediaListingPage(
     sort,
     featuredSelection: search ? undefined : input.featuredSelection,
     search,
+    excludeIds: input.excludeIds,
   });
 }
 

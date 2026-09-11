@@ -110,7 +110,7 @@ export default function SidebarSeriesWidget({
       <div className="absolute inset-0 overflow-hidden rounded-t-2xl">
         <Image
           src={item.image}
-          alt={item.title}
+          alt={item.imageAlt}
           fill
           sizes="(max-width: 1024px) 100vw, 340px"
           className="object-cover opacity-85 transition-transform duration-700 group-hover:scale-105"

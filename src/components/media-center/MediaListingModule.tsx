@@ -10,6 +10,7 @@ type MediaListingModuleProps = {
   module: MediaHubModuleState;
   publicPath: string;
   searchParams?: SearchPlatformSearchParams;
+  excludeContentIds?: readonly number[];
 };
 
 function firstParam(value: string | string[] | undefined) {
@@ -21,6 +22,7 @@ export default async function MediaListingModule({
   module,
   publicPath,
   searchParams = {},
+  excludeContentIds,
 }: MediaListingModuleProps) {
   const resolved = resolveMediaListingConfig(module);
   if (!resolved) return null;
@@ -39,6 +41,7 @@ export default async function MediaListingModule({
     sort,
     pageSize: presentation.itemLimit,
     search: searchQuery,
+    excludeIds: searchQuery ? [] : excludeContentIds,
   });
 
   return (

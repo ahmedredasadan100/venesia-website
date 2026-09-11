@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { COLLECTION_ITEM_LIMIT_MAX } from "../collection-modules/item-limit";
 import {
   DEFAULT_FEED_ARTICLE_CARD_PRESENTATION,
   DEFAULT_FEED_CATEGORY_CARD_PRESENTATION,
@@ -97,7 +98,7 @@ export const feedModuleConfigSchema: z.ZodType<FeedModuleConfig> = z
       .strict(),
     query: z
       .object({
-        limit: z.number().int().min(1),
+        limit: z.number().int().min(1).max(COLLECTION_ITEM_LIMIT_MAX),
         categorySlugs: z.array(z.string().min(1)),
         seriesSlugs: z.array(z.string().min(1)),
       })
@@ -375,7 +376,9 @@ export function parseFeedModuleConfig(
     raw?.query && typeof raw.query === "object" ? (raw.query as Record<string, unknown>) : {};
 
   const limitValue = Number(queryRaw.limit ?? DEFAULT_QUERY.limit);
-  const limit = Number.isFinite(limitValue) && limitValue > 0 ? Math.floor(limitValue) : DEFAULT_QUERY.limit;
+  const limit = Number.isFinite(limitValue) && limitValue > 0
+    ? Math.min(COLLECTION_ITEM_LIMIT_MAX, Math.floor(limitValue))
+    : DEFAULT_QUERY.limit;
 
   const eyebrowFormat = resolvePageBlockTextFormat(presentationRaw, "eyebrow");
   const titleFormat = resolvePageBlockTextFormat(presentationRaw, "title", { bold: true });
@@ -440,10 +443,15 @@ export function buildFeedModuleConfig(
 
   const rawLimit = String(formData.get("limit") ?? "").trim();
   const limit = Number(rawLimit);
-  if (!/^\d+$/u.test(rawLimit) || !Number.isInteger(limit) || limit < 1) {
+  if (
+    !/^\d+$/u.test(rawLimit) ||
+    !Number.isInteger(limit) ||
+    limit < 1 ||
+    limit > COLLECTION_ITEM_LIMIT_MAX
+  ) {
     throw new FeedModuleConfigValidationError(
       "limit",
-      "عدد العناصر المعروضة يجب أن يكون رقمًا صحيحًا أكبر من أو يساوي 1.",
+      `عدد العناصر المعروضة يجب أن يكون رقمًا صحيحًا بين 1 و${COLLECTION_ITEM_LIMIT_MAX}.`,
     );
   }
 

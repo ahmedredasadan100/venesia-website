@@ -71,10 +71,9 @@ export async function enrichMediaSidebarModules(
           config.source.kind === "categories"
             ? [config.source.categorySlug]
             : [],
-        popularOnly: widget.widgetKey === "popular",
         page: 1,
         pageSize: config.limit,
-        sort: "newest",
+        sort: widget.widgetKey === "popular" ? "most-viewed" : "newest",
       });
 
       return {

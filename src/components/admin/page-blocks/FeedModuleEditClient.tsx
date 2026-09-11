@@ -29,6 +29,7 @@ import {
   TOPICS_FEED_TYPE_LABELS_AR,
   TOPICS_FEED_TYPES,
 } from "../../../lib/feed-modules/types";
+import { COLLECTION_ITEM_LIMIT_MAX } from "../../../lib/collection-modules/item-limit";
 import type { TopicFilterOptions } from "../../../lib/feed-modules/load-topic-filter-options";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import { resolvePageBlockTextFormat } from "../../../lib/page-blocks/configs";
@@ -141,6 +142,7 @@ export default function FeedModuleEditClient({
                         name="limit"
                         type="number"
                         min={1}
+                        max={COLLECTION_ITEM_LIMIT_MAX}
                         defaultValue={config.query.limit}
                         className={fieldClassName()}
                       />
