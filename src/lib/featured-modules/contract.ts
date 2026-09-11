@@ -348,6 +348,58 @@ export type FeaturedEditorItem = Pick<
   "id" | "contentType" | "title" | "categorySlug" | "publishedAt"
 >;
 
+export type FeaturedManualEditorSelectionEntry =
+  | {
+      id: number;
+      state: "resolved";
+      item: FeaturedEditorItem;
+    }
+  | {
+      id: number;
+      state: "unresolved";
+      item: null;
+    };
+
+/**
+ * Projects the authored identity order onto the editor's current read window.
+ * Missing rows remain explicit tombstones; availability never mutates identity.
+ */
+export function resolveFeaturedManualEditorSelection(
+  topicIds: readonly number[],
+  availableItems: readonly FeaturedEditorItem[],
+): FeaturedManualEditorSelectionEntry[] {
+  const availableById = new Map(availableItems.map((item) => [item.id, item]));
+
+  return topicIds.map((id) => {
+    const item = availableById.get(id);
+    return item
+      ? { id, state: "resolved", item }
+      : { id, state: "unresolved", item: null };
+  });
+}
+
+/** Selection changes only through an explicit add/remove interaction. */
+export function updateFeaturedManualSelection(
+  topicIds: readonly number[],
+  id: number,
+  selected: boolean,
+): number[] {
+  if (selected) {
+    return topicIds.includes(id) ? [...topicIds] : [...topicIds, id];
+  }
+
+  return topicIds.filter((candidate) => candidate !== id);
+}
+
+/** Public projection returns only real rows while preserving authored order. */
+export function resolveAvailableFeaturedManualItems<T extends { id: number }>(
+  topicIds: readonly number[],
+  availableItems: readonly T[],
+): T[] {
+  const availableById = new Map(availableItems.map((item) => [item.id, item]));
+  return topicIds.flatMap((id) => availableById.get(id) ?? []);
+}
+
 export type FeaturedEditorCategory = {
   id: number;
   slug: string;
