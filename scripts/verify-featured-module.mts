@@ -71,6 +71,9 @@ const mediaEditor = read(
 const topicsLoader = read("src/lib/topics/load-public-topics.ts");
 const topicsListing = read("src/components/topics/TopicsListingContent.tsx");
 const topicsPage = read("src/app/(site)/topics/page.tsx");
+const pageSlotLayout = read(
+  "src/components/page-composition/PageSlotLayout.tsx",
+);
 const migration = read(
   "sql/migrations/20260828233733_featured_page_composition_module.sql",
 );
@@ -888,7 +891,13 @@ check(
   "Topics Listing no longer owns Featured selection",
   !topicsLoader.includes("featuredSelection") &&
     topicsPage.includes("composition.featuredModules") &&
-    topicsPage.includes("excludeIds"),
+    topicsPage.includes("excludeContentIds") &&
+    pageSlotLayout.includes(
+      "excludeContentIds: composition.featuredModules.flatMap",
+    ) &&
+    pageSlotLayout.includes("listingContext: resolvedListingContext") &&
+    topicsListing.includes("excludeIds: searchQuery ? []") &&
+    topicsListing.includes("context.excludeContentIds"),
 );
 
 check(

@@ -149,11 +149,16 @@ const registry = read("src/lib/page-composition/slot-module-registry.ts");
 const moduleMetadata = read("src/lib/page-composition/module-registry-metadata.ts");
 const internalLayout = read("src/components/InternalPageLayout.tsx");
 const topics = read("src/app/(site)/topics/page.tsx");
+const topicDetail = read("src/app/(site)/topics/[slug]/page.tsx");
 const mediaRoot = read("src/app/(site)/media-center/page.tsx");
 const mediaShell = read("src/components/media-center/MediaCenterShellLayout.tsx");
 const mediaDetail = read("src/components/media-center/MediaDetailPage.tsx");
 const home = read("src/components/home/HomeMainSlotContent.tsx");
 const homeRoute = read("src/app/(site)/page.tsx");
+const dynamicCmsRoute = read("src/app/(site)/[...slug]/page.tsx");
+const aboutPage = read("src/components/about/AboutPageContent.tsx");
+const contactPage = read("src/components/contact/ContactPageContent.tsx");
+const trackPage = read("src/components/track/TrackPageContent.tsx");
 const projectsPlan = read("src/lib/projects/build-projects-hub-render-plan.ts");
 const projectsRenderer = read("src/components/projects/ProjectsHubModulesRenderer.tsx");
 
@@ -167,8 +172,31 @@ assert.ok(layout.includes("xl:grid-cols-[minmax(0,1fr)_340px]"), "main/sidebar g
 assert.ok(layout.includes("@container/slot-module"), "every slot entry must expose the shared container-responsive contract");
 assert.ok(layout.includes("data-slot-module-container"), "slot module container evidence marker missing");
 assert.ok(!layout.includes("page-layout-slot--main min-w-0 space-y-10"), "main slot must not add a second section-spacing owner");
-assert.ok(layout.includes("getSlotEntries(composition, \"hero\")"), "Hero additions must use canonical slot entries");
-assert.ok(layout.includes("compositionFooter={slotContent}"), "Hero tail must use shared slot content");
+assert.ok(
+  plan.includes('const composableEntries = entries.filter((entry) => entry.kind !== "hero")') &&
+    !plan.includes("heroItems.push") &&
+    !plan.includes("...heroItems"),
+  "Fixed singleton Hero must stay outside the composable Position/order plan",
+);
+assert.ok(
+  layout.includes('const heroEntry = composition.slots.hero.find((entry) => entry.kind === "hero")') &&
+    layout.includes('data-page-fixed-hero={heroEntry ? "singleton" : undefined}') &&
+    layout.includes("compositionFooter={compositionFooter}") &&
+    layout.includes('heroEntry?.hero.variant === "home-cinematic"') &&
+    layout.includes('heroEntry?.hero.variant === "projects-hub"') &&
+    layout.includes("heroEntry && !usesStandaloneHeroPresentation") &&
+    layout.includes("compositionFooter: renderPeersInHeroFooter ? peerContent : undefined") &&
+    layout.includes("!renderPeersInHeroFooter && peerNodes.length > 0") &&
+    layout.includes('data-hero-composition-peers="ordered-below-fixed-hero"') &&
+    layout.indexOf("{heroNode}") < layout.indexOf("{renderPeersAfterHero ? (") &&
+    !layout.includes("function renderHeroSlotPlan("),
+  "Hero must stay fixed while each Hero family renders ordered peers exactly once in its supported region",
+);
+assert.ok(
+  layout.includes("resolveSlotModuleRegistration(item.moduleKind)") &&
+    layout.includes("SLOT_RENDERER_REGISTRY[rendererKey]"),
+  "Composable peer modules must dispatch through the canonical Slot Module Registry",
+);
 assert.ok(!layout.includes('block.blockType === "breadcrumb"'), "Hero renderer must not special-case Breadcrumb");
 assert.ok(!layout.includes("SlotModuleWidthFrame"), "layout must not use module-owned width decisions");
 assert.ok(!nodes.includes("widthContract"), "module nodes must not own slot width");
@@ -215,12 +243,37 @@ for (const [label, source] of [
 ]) {
   assert.ok(source.includes("PageSlotLayout") || source.includes("PageSlotContent"), `${label} has not adopted the shared renderer`);
 }
+for (const [label, source] of [
+  ["Topics", topics],
+  ["Media Center", mediaRoot],
+  ["Media listing", mediaShell],
+  ["Home main", home],
+  ["Home remaining regions", homeRoute],
+  ["Dynamic CMS", dynamicCmsRoute],
+  ["About", aboutPage],
+  ["Contact", contactPage],
+  ["Track", trackPage],
+]) {
+  assert.ok(
+    source.includes("listingContext="),
+    `${label} must pass positive request context to route-neutral Listing assignments`,
+  );
+}
+assert.ok(
+  !mediaDetail.includes("listingContext="),
+  "inherited Media detail composition must fail closed for parent Listing assignments",
+);
 assert.ok(!topics.includes("findHeroSlotBreadcrumb") && !mediaRoot.includes("findHeroSlotBreadcrumb"));
 assert.ok(!mediaShell.includes("getSlotBlocks") && !mediaShell.includes("SlotModulesRenderer"));
 assert.ok(internalLayout.includes("heroSlotContent") && !internalLayout.includes("heroBreadcrumb"));
 assert.ok(!existsSync(resolve(root, "src/components/page-composition/SlotModulesRenderer.tsx")), "parallel slot renderer still exists");
 assert.ok(!existsSync(resolve(root, "src/components/home/build-home-main-render-plan.ts")), "parallel Home render plan still exists");
-assert.ok(homeRoute.includes('<PageSlotLayout composition={composition} skipSlots={["hero", "main"]}'), "Venesia Home Theme must render every remaining platform Region");
+assert.ok(
+  homeRoute.includes("<PageSlotLayout") &&
+    homeRoute.includes("composition={composition}") &&
+    homeRoute.includes('skipSlots={["hero", "main"]}'),
+  "Venesia Home Theme must render every remaining platform Region",
+);
 assert.ok(!projectsPlan.includes("unsupported_slot"), "Projects Theme must preserve Assignment Position instead of rejecting non-main Regions");
 assert.ok(projectsPlan.includes("position: assignment.slot"), "Projects render plan must carry the Assignment Position unchanged");
 assert.ok(projectsRenderer.includes("modulesByPosition") && projectsRenderer.includes("data-layout-slot={position}"), "Projects Theme must map platform Regions without rewriting the CMS contract");
@@ -233,6 +286,23 @@ const globalStyles = read("src/app/globals.css");
 assert.ok(!mediaPageShell.includes("MediaSidebar") && !mediaPageShell.includes("grid-cols-[320px_1fr]"), "MediaPageShell must not own a parallel sidebar layout");
 assert.ok(mediaSidebar.includes("export function MediaSidebarWidget") && !mediaSidebar.includes("MediaSidebarSearch"), "Media sidebar presentation must expose only its thin widget slot consumer");
 assert.ok(!mediaListing.includes("MediaSidebarSearch") && slotModuleNodes.includes("<SearchPlatformModule"), "Media search must compose through the assigned Search Platform module");
+assert.ok(
+  mediaSidebar.includes("if (!mediaItems.length) return null;"),
+  "Sections must render nothing when its navigation parent has no submenu",
+);
+assert.ok(
+  layout.includes("page-layout-main-sidebar-grid") &&
+    globalStyles.includes(".page-layout-slot--sidebar:not(") &&
+    globalStyles.includes(":has(> [data-slot-module-container]:not(:empty))") &&
+    globalStyles.includes(".page-layout-main-sidebar-grid:not(") &&
+    globalStyles.includes("grid-template-columns: minmax(0, 1fr)"),
+  "an empty client-rendered Sections widget must collapse both the Sidebar Region and its Theme column",
+);
+assert.ok(
+  topicDetail.includes('className="page-layout-main-sidebar-grid grid gap-8') &&
+    topicDetail.includes('className="page-layout-slot--sidebar space-y-6 text-right"'),
+  "Topic detail must adopt the shared empty-Sidebar Theme geometry contract",
+);
 
 assert.ok(!layout.includes("slot-editorial-flow"), "Page layout must not decide a module's visual composition");
 assert.ok(globalStyles.includes(".slot-editorial-flow"), "shared editorial-flow presentation contract missing");

@@ -19,6 +19,13 @@ export async function reorderPageComposition(
   if (!pageId || !slot || !assignments.length) {
     return { ok: false as const, code: "invalid_reorder_payload", message: "بيانات ترتيب الصفحة غير مكتملة." };
   }
+  if (assignments.some((assignment) => assignment.kind === "hero")) {
+    return {
+      ok: false as const,
+      code: "hero_order_is_fixed",
+      message: "الهيرو ثابت أعلى الصفحة وخارج الترتيب اليدوي للموديولات.",
+    };
+  }
   try {
     await mutatePageComposition(pageId, "reorder", {
       slot,

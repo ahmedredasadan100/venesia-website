@@ -64,6 +64,10 @@ const sharedPresenter = read(
 );
 const listingShell = read("src/components/topics/TopicsListingContent.tsx");
 const topicsPage = read("src/app/(site)/topics/page.tsx");
+const genericPage = read("src/app/(site)/[...slug]/page.tsx");
+const aboutPageContent = read("src/components/about/AboutPageContent.tsx");
+const contactPageContent = read("src/components/contact/ContactPageContent.tsx");
+const trackPageContent = read("src/components/track/TrackPageContent.tsx");
 const publicTopicsAdapter = read("src/lib/topics/load-public-topics.ts");
 const publicContentOwner = read("src/lib/content/public-content-read/owner.ts");
 const slotNodes = read("src/components/page-composition/slot-module-nodes.tsx");
@@ -636,24 +640,27 @@ check(
 );
 
 check(
-  "Topics page keeps loadPublicTopicsListing as the public read owner",
-  topicsPage.includes(
-    'import { loadPublicTopicsListing } from "../../../lib/topics/load-public-topics"',
-  ) && topicsPage.includes("await loadPublicTopicsListing({"),
+  "assignment-scoped Topics Listing keeps loadPublicTopicsListing as the public read owner",
+  listingShell.includes(
+    'import { loadPublicTopicsListing } from "../../lib/topics/load-public-topics"',
+  ) &&
+    listingShell.includes("await loadPublicTopicsListing({") &&
+    !topicsPage.includes("loadPublicTopicsListing"),
 );
 check(
-  "page supplies the resolved topics and the configured limit without moving read logic",
-  topicsPage.includes("itemsPerPage: listingConfig.itemLimit") &&
-    topicsPage.includes("topics={visibleTopics}") &&
-    topicsPage.includes("listingConfig={listingConfig}"),
+  "assignment-scoped adapter supplies resolved topics and configured limit without a route-owned read",
+  listingShell.includes("itemsPerPage: listingConfig.itemLimit") &&
+    listingShell.includes("topics={topics}") &&
+    listingShell.includes("config={listingConfig}") &&
+    listingShell.includes("const topics = listing.visibleTopics"),
 );
 check(
   "persisted Collection supplies the default category to the existing public read owner",
-  topicsPage.includes('listingConfig.collection.type === "category"') &&
-    topicsPage.includes(
+  listingShell.includes('listingConfig.collection.type === "category"') &&
+    listingShell.includes(
       "const categorySlug = requestedCategorySlug ?? configuredCategorySlug",
     ) &&
-    topicsPage.includes("categorySlug: categorySlug || undefined"),
+    listingShell.includes("categorySlug: categorySlug || undefined"),
 );
 check(
   "Topics adapter delegates the selected category without owning a database read",
@@ -675,10 +682,35 @@ check(
     ),
 );
 check(
-  "existing Page Composition renderer injects the page-owned Listing at assignment order",
-  slotNodes.includes('if (slug === "topics-listing")') &&
-    slotNodes.includes("context.topicsListingContent") &&
-    slotLayout.includes("topicsListingContent?: ReactNode"),
+  "canonical Page Composition renderer resolves every assignment-owned Listing from positive request context",
+  slotNodes.includes(
+    "isTopicsListingTemplate(slug, block.template.variant)",
+  ) &&
+    slotNodes.includes("if (context.listingContext)") &&
+    slotNodes.includes("<TopicsListingContent") &&
+    slotNodes.includes("block={block}") &&
+    slotNodes.includes("context={context.listingContext}") &&
+    slotLayout.includes("listingContext?: ListingRenderContext") &&
+    slotLayout.includes("listingContext: resolvedListingContext") &&
+    topicsPage.includes("hasTopicsListingAssignmentRows") &&
+    topicsPage.includes(
+      "isTopicsListingTemplate(state.templateSlug, state.templateVariant)",
+    ) &&
+    topicsPage.includes(
+      'listingContext={{ publicPath: "/topics", searchParams: params }}',
+    ) &&
+    genericPage.includes("listingContext={{") &&
+    genericPage.includes("publicPath: page.path") &&
+    aboutPageContent.includes(
+      'listingContext={{ publicPath: "/about", searchParams }}',
+    ) &&
+    contactPageContent.includes(
+      'listingContext={{ publicPath: "/contact", searchParams }}',
+    ) &&
+    trackPageContent.includes("listingContext={{") &&
+    !slotNodes.includes('publicPath === "/topics"') &&
+    !topicsPage.includes("findTopicsListingBlock") &&
+    !topicsPage.includes("getTopicsListingBlocks"),
 );
 check(
   "Intro renderer has no Listing dependency",

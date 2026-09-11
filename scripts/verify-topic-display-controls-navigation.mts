@@ -32,6 +32,7 @@ const [
   publicLoader,
   publicContentOwner,
   topicsPage,
+  topicsListing,
   featuredCard,
   featuredContract,
   pageBlockConfigs,
@@ -65,6 +66,7 @@ const [
   read("src/lib/topics/load-public-topics.ts"),
   read("src/lib/content/public-content-read/owner.ts"),
   read("src/app/(site)/topics/page.tsx"),
+  read("src/components/topics/TopicsListingContent.tsx"),
   read("src/components/featured/FeaturedContentCard.tsx"),
   read("src/lib/featured-modules/contract.ts"),
   read("src/lib/page-blocks/configs.ts"),
@@ -256,8 +258,18 @@ check(
 check(
   "the /topics query, pagination, sort, and cache contract carry the series filter",
   topicsPage.includes("series?: string") &&
-    topicsPage.includes("seriesSlug: seriesSlug || undefined") &&
-    topicsPage.includes("seriesSlug={seriesSlug}") &&
+    topicsListing.includes(
+      "firstParam(searchParams.series)?.trim()",
+    ) &&
+    topicsListing.includes("seriesSlug: seriesSlug || undefined") &&
+    topicsListing.includes("if (seriesSlug) query.series = seriesSlug") &&
+    topicsListing.includes(
+      'buildTopicsQuery("latest", categorySlug, seriesSlug)',
+    ) &&
+    topicsListing.includes(
+      'buildTopicsQuery("oldest", categorySlug, seriesSlug)',
+    ) &&
+    topicsListing.includes("query={pageQuery}") &&
     publicLoader.includes("seriesSlug?: string") &&
     publicLoader.includes("seriesSlug: params.seriesSlug") &&
     publicContentOwner.includes('.eq("series_slug", input.seriesSlug)'),

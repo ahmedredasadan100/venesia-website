@@ -6,6 +6,7 @@ import FeaturedModuleSection from "../featured/FeaturedModuleSection";
 import { MediaSidebarWidget } from "../media-center/MediaSidebar";
 import { renderMediaHubSections } from "../media-center/renderMediaHubSections";
 import type {
+  ListingRenderContext,
   PageComposition,
   SlotEntry,
 } from "../../lib/page-blocks/page-composition-types";
@@ -22,17 +23,103 @@ import { VENISIA_THEME_REGION_RENDER_ORDER } from "./venisia-theme-regions";
 import { renderVenesiaThemeMediaHubNodes } from "./VenesiaThemeMediaHubLayout";
 import type { SearchPlatformSearchParams } from "../search-platform/SearchPlatformModule";
 import { isSearchPlatformTemplate } from "../../lib/page-blocks/search-platform-config";
+import {
+  resolveSlotModuleRegistration,
+  type SlotModuleRendererKey,
+} from "../../lib/page-composition/slot-module-registry";
 
-type SlotContentOptions = {
+export type SlotContentOptions = {
   prefix?: ReactNode;
   suffix?: ReactNode;
   homepageProjects?: HomepageProjectCard[];
   breadcrumbCurrentLabel?: string;
-  topicsListingContent?: ReactNode;
   publicPath?: string;
   searchParams?: SearchPlatformSearchParams;
+  listingContext?: ListingRenderContext;
   suppressFeaturedDuringSearch?: boolean;
 };
+
+type SlotRendererInput = {
+  item?: SlotRenderPlanItem;
+  hero?: Extract<SlotEntry, { kind: "hero" }>;
+  compositionFooter?: ReactNode;
+  options?: SlotContentOptions;
+};
+
+type SlotRenderer = (input: SlotRendererInput) => ReactNode;
+
+/**
+ * Venisia Theme implementation for every renderer key declared by the
+ * canonical Slot Module Registry. The registry chooses capability; this map
+ * supplies the actual React renderer without redefining module inventory.
+ */
+export const SLOT_RENDERER_REGISTRY: Readonly<
+  Record<SlotModuleRendererKey, SlotRenderer>
+> = Object.freeze({
+  hero: ({ hero, compositionFooter }) =>
+    hero
+      ? (
+        <DynamicHeroSection
+          hero={hero.hero}
+          compositionFooter={compositionFooter}
+        />
+      )
+      : null,
+  block: ({ item }) => item?.kind === "module" ? item.node : null,
+  feed: ({ item }) =>
+    item?.kind === "feed" ? <FeedModuleSection module={item.module} /> : null,
+  featured: ({ item }) =>
+    item?.kind === "featured" ? (
+      <FeaturedModuleSection module={item.module} />
+    ) : null,
+  "media-sidebar": ({ item }) =>
+    item?.kind === "media-sidebar" ? (
+      <MediaSidebarWidget widget={item.widget} />
+    ) : null,
+  "media-hub": ({ item, options }) =>
+    item?.kind === "media-hub"
+      ? renderMediaHubSections([item.module], {
+          listingContext: options?.listingContext,
+        })[0] ?? null
+      : null,
+});
+
+function resolvePlanItemRendererKey(
+  item: SlotRenderPlanItem,
+): SlotModuleRendererKey | null {
+  return resolveSlotModuleRegistration(item.moduleKind)?.rendererKey ?? null;
+}
+
+function renderPlanItem(
+  item: SlotRenderPlanItem,
+  options: SlotContentOptions,
+) {
+  const rendererKey = resolvePlanItemRendererKey(item);
+  return rendererKey
+    ? SLOT_RENDERER_REGISTRY[rendererKey]({ item, options })
+    : null;
+}
+
+function buildContextualSlotRenderPlan(
+  entries: SlotEntry[],
+  options: SlotContentOptions,
+) {
+  return buildSlotRenderPlan(entries, {
+    homepageProjects: options.homepageProjects,
+    breadcrumbCurrentLabel: options.breadcrumbCurrentLabel,
+    publicPath: options.publicPath,
+    searchParams: options.searchParams,
+    listingContext: options.listingContext,
+    suppressFeaturedDuringSearch: options.suppressFeaturedDuringSearch,
+  });
+}
+
+export function hasRenderableSlotEntries(
+  entries: SlotEntry[],
+  options: SlotContentOptions = {},
+) {
+  return buildContextualSlotRenderPlan(entries, options).length > 0;
+}
 
 function SlotModuleContainer({
   children,
@@ -57,84 +144,67 @@ function SlotModuleContainer({
  * Theme renderer owns outer width and geometry, and Module renderers own their
  * internal presentation.
  */
-function renderOrderedSlotEntries(
-  entries: SlotEntry[],
-  options: SlotContentOptions = {},
+function renderOrderedPlanItems(
+  plan: SlotRenderPlanItem[],
+  options: SlotContentOptions,
 ) {
-  const plan = buildSlotRenderPlan(entries, {
-    homepageProjects: options.homepageProjects,
-    breadcrumbCurrentLabel: options.breadcrumbCurrentLabel,
-    topicsListingContent: options.topicsListingContent,
-    publicPath: options.publicPath,
-    searchParams: options.searchParams,
-    suppressFeaturedDuringSearch: options.suppressFeaturedDuringSearch,
-  });
   const nodes: ReactNode[] = [];
   let index = 0;
 
   while (index < plan.length) {
     const item = plan[index];
+    const rendererKey = resolvePlanItemRendererKey(item);
 
-    if (item.kind === "media-hub") {
+    if (rendererKey === "media-hub") {
       const run: Extract<SlotRenderPlanItem, { kind: "media-hub" }>[] = [];
-      while (index < plan.length && plan[index].kind === "media-hub") {
+      while (
+        index < plan.length &&
+        resolvePlanItemRendererKey(plan[index]) === "media-hub"
+      ) {
         run.push(
           plan[index] as Extract<SlotRenderPlanItem, { kind: "media-hub" }>,
         );
         index += 1;
       }
-      nodes.push(
-        <SlotModuleContainer
-          key={`media-hub-group-${run.map((entry) => entry.assignmentId).join("-")}`}
-          source="assignment"
-        >
-          {renderVenesiaThemeMediaHubNodes(
-            renderMediaHubSections(run.map((entry) => entry.module)),
-          )}
-        </SlotModuleContainer>,
-      );
+      const mediaNodes = run.flatMap((entry) => {
+        const node = renderPlanItem(entry, options);
+        return node == null ? [] : [node];
+      });
+      if (mediaNodes.length) {
+        nodes.push(
+          <SlotModuleContainer
+            key={`media-hub-group-${run.map((entry) => entry.assignmentId).join("-")}`}
+            source="assignment"
+          >
+            {renderVenesiaThemeMediaHubNodes(mediaNodes)}
+          </SlotModuleContainer>,
+        );
+      }
       continue;
     }
 
-    if (item.kind === "feed") {
-      nodes.push(
-        <SlotModuleContainer key={item.key} source="assignment">
-          <FeedModuleSection module={item.module} />
-        </SlotModuleContainer>,
-      );
-      index += 1;
-      continue;
-    }
-
-    if (item.kind === "featured") {
+    const node = renderPlanItem(item, options);
+    if (node != null) {
       nodes.push(
         <SlotModuleContainer key={item.key} source="assignment">
-          <FeaturedModuleSection module={item.module} />
+          {node}
         </SlotModuleContainer>,
       );
-      index += 1;
-      continue;
     }
-
-    if (item.kind === "media-sidebar") {
-      nodes.push(
-        <SlotModuleContainer key={item.key} source="assignment">
-          <MediaSidebarWidget widget={item.widget} />
-        </SlotModuleContainer>,
-      );
-      index += 1;
-      continue;
-    }
-
-    nodes.push(
-      <SlotModuleContainer key={item.key} source="assignment">
-        {item.node}
-      </SlotModuleContainer>,
-    );
     index += 1;
   }
 
   return nodes;
+}
+
+function renderOrderedSlotEntries(
+  entries: SlotEntry[],
+  options: SlotContentOptions = {},
+) {
+  return renderOrderedPlanItems(
+    buildContextualSlotRenderPlan(entries, options),
+    options,
+  );
 }
 
 export function PageSlotContent({
@@ -143,9 +213,9 @@ export function PageSlotContent({
   suffix,
   homepageProjects,
   breadcrumbCurrentLabel,
-  topicsListingContent,
   publicPath,
   searchParams,
+  listingContext,
   suppressFeaturedDuringSearch,
 }: {
   entries: SlotEntry[];
@@ -153,9 +223,9 @@ export function PageSlotContent({
   const nodes = renderOrderedSlotEntries(entries, {
     homepageProjects,
     breadcrumbCurrentLabel,
-    topicsListingContent,
     publicPath,
     searchParams,
+    listingContext,
     suppressFeaturedDuringSearch,
   });
 
@@ -180,46 +250,84 @@ export function PageSlotContent({
 type HeroSlotContentProps = {
   composition: PageComposition;
   fallbackHero?: ReactNode;
+  homepageProjects?: HomepageProjectCard[];
   breadcrumbCurrentLabel?: string;
+  publicPath?: string;
+  searchParams?: SearchPlatformSearchParams;
+  listingContext?: ListingRenderContext;
   suppressFeaturedDuringSearch?: boolean;
 };
 
 export function HeroSlotContent({
   composition,
   fallbackHero,
+  homepageProjects,
   breadcrumbCurrentLabel,
+  publicPath,
+  searchParams,
+  listingContext,
   suppressFeaturedDuringSearch,
 }: HeroSlotContentProps) {
+  const resolvedHomepageProjects = homepageProjects
+    ?? composition.homepageProjects
+    ?? undefined;
+  const resolvedListingContext = listingContext
+    ? {
+        ...listingContext,
+        excludeContentIds: composition.featuredModules.flatMap((module) =>
+          module.items.map((item) => item.id),
+        ),
+        showCompositionError: composition.hasCompositionError,
+      }
+    : undefined;
+  const slotContentOptions = {
+    homepageProjects: resolvedHomepageProjects,
+    breadcrumbCurrentLabel,
+    publicPath,
+    searchParams,
+    listingContext: resolvedListingContext,
+    suppressFeaturedDuringSearch,
+  } satisfies SlotContentOptions;
   const heroEntry = composition.slots.hero.find((entry) => entry.kind === "hero");
-  const heroEntries = getSlotEntries(composition, "hero");
-  const slotContent = heroEntries.length ? (
-    <PageSlotContent
-      entries={heroEntries}
-      breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-      suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
-    />
-  ) : null;
-
-  if (!heroEntry) {
-    if (!fallbackHero && !slotContent) return null;
-    return (
-      <div className="page-layout-slot" data-layout-slot="hero">
-        {fallbackHero}
-        {slotContent ? (
-          <div className="mx-auto w-full max-w-7xl px-6 pt-6">
-            {slotContent}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
+  const peerNodes = renderOrderedSlotEntries(
+    getSlotEntries(composition, "hero"),
+    slotContentOptions,
+  );
+  const peerContent = peerNodes.length ? <>{peerNodes}</> : undefined;
+  const usesStandaloneHeroPresentation =
+    heroEntry?.hero.variant === "home-cinematic" ||
+    heroEntry?.hero.variant === "projects-hub";
+  const renderPeersInHeroFooter = Boolean(
+    heroEntry && !usesStandaloneHeroPresentation,
+  );
+  const heroNode = heroEntry
+    ? SLOT_RENDERER_REGISTRY.hero({
+        hero: heroEntry,
+        compositionFooter: renderPeersInHeroFooter ? peerContent : undefined,
+        options: slotContentOptions,
+      })
+    : composition.heroVisibility === "none"
+      ? fallbackHero
+      : null;
+  const renderPeersAfterHero =
+    !renderPeersInHeroFooter && peerNodes.length > 0;
+  if (!heroNode && !peerNodes.length) return null;
 
   return (
-    <div className="page-layout-slot" data-layout-slot="hero">
-      <DynamicHeroSection
-        hero={heroEntry.hero}
-        compositionFooter={slotContent}
-      />
+    <div
+      className="page-layout-slot"
+      data-layout-slot="hero"
+      data-page-fixed-hero={heroEntry ? "singleton" : undefined}
+    >
+      {heroNode}
+      {renderPeersAfterHero ? (
+        <div
+          className="mx-auto w-full max-w-7xl px-6 pt-6"
+          data-hero-composition-peers="ordered-below-fixed-hero"
+        >
+          {peerNodes}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -238,15 +346,15 @@ type PageSlotLayoutProps = {
   homepageProjects?: HomepageProjectCard[];
   /** Dynamic detail label consumed by the shared Breadcrumb renderer. */
   breadcrumbCurrentLabel?: string;
-  /** Page-owned Topics results shell injected into its assigned Listing module. */
-  topicsListingContent?: ReactNode;
   /** Exact public path consumed by structural modules such as Search. */
   publicPath?: string;
   /** Request URL state consumed by structural modules without changing Composition. */
   searchParams?: SearchPlatformSearchParams;
+  /** Intrinsic request context required by assigned collection/listing modules. */
+  listingContext?: ListingRenderContext;
 };
 
-function hasActiveSearchPlatformQuery(
+export function hasActiveSearchPlatformQuery(
   composition: PageComposition,
   searchParams: SearchPlatformSearchParams | undefined,
 ) {
@@ -274,18 +382,42 @@ export default function PageSlotLayout({
   skipSlots = [],
   homepageProjects,
   breadcrumbCurrentLabel,
-  topicsListingContent,
   publicPath,
   searchParams,
+  listingContext,
 }: PageSlotLayoutProps) {
   const skip = new Set(skipSlots);
   const suppressFeaturedDuringSearch = hasActiveSearchPlatformQuery(
     composition,
     searchParams,
   );
+  const resolvedHomepageProjects = homepageProjects
+    ?? composition.homepageProjects
+    ?? undefined;
+  const resolvedListingContext = listingContext
+    ? {
+        ...listingContext,
+        excludeContentIds: composition.featuredModules.flatMap((module) =>
+          module.items.map((item) => item.id),
+        ),
+        showCompositionError: composition.hasCompositionError,
+      }
+    : undefined;
   const sidebarEntries = getSlotEntries(composition, "sidebar");
+  const slotContentOptions = {
+    homepageProjects: resolvedHomepageProjects,
+    breadcrumbCurrentLabel,
+    publicPath,
+    searchParams,
+    listingContext: resolvedListingContext,
+    suppressFeaturedDuringSearch,
+  } satisfies SlotContentOptions;
   const hasSidebarContent =
-    !skip.has("sidebar") && Boolean(sidebarEntries.length || sidebarPrefix);
+    !skip.has("sidebar") &&
+    Boolean(
+      hasRenderableSlotEntries(sidebarEntries, slotContentOptions) ||
+      sidebarPrefix,
+    );
   // Venesia Theme decision only. Page Composition exposes a semantic sidebar
   // Region and remains unaware whether a Theme renders it as a column, drawer,
   // stack, or any other visual treatment.
@@ -300,7 +432,11 @@ export default function PageSlotLayout({
           key="slot-hero"
           composition={composition}
           fallbackHero={fallbackHero}
+          homepageProjects={resolvedHomepageProjects}
           breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+          publicPath={publicPath}
+          searchParams={searchParams}
+          listingContext={listingContext}
           suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
         />
       );
@@ -309,7 +445,11 @@ export default function PageSlotLayout({
     const entries = getSlotEntries(composition, slot);
     const suffix = slot === "main" ? mainAfter : undefined;
     const prefix = slot === "sidebar" ? sidebarPrefix : undefined;
-    if (!entries.length && prefix == null && suffix == null) return null;
+    if (
+      !hasRenderableSlotEntries(entries, slotContentOptions) &&
+      prefix == null &&
+      suffix == null
+    ) return null;
 
     return (
       <div
@@ -322,11 +462,11 @@ export default function PageSlotLayout({
             entries={entries}
             prefix={prefix}
             suffix={suffix}
-            homepageProjects={homepageProjects}
+            homepageProjects={resolvedHomepageProjects}
             breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-            topicsListingContent={topicsListingContent}
             publicPath={publicPath}
             searchParams={searchParams}
+            listingContext={resolvedListingContext}
             suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
           />
         </div>
@@ -344,13 +484,17 @@ export default function PageSlotLayout({
           <HeroSlotContent
             composition={composition}
             fallbackHero={fallbackHero}
+            homepageProjects={resolvedHomepageProjects}
             breadcrumbCurrentLabel={breadcrumbCurrentLabel}
+            publicPath={publicPath}
+            searchParams={searchParams}
+            listingContext={listingContext}
             suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
           />
         ) : null}
 
         <div className="mx-auto w-full max-w-7xl px-6 pt-10" data-page-layout-body>
-          <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_340px] xl:[direction:ltr]">
+          <div className="page-layout-main-sidebar-grid grid gap-8 xl:grid-cols-[minmax(0,1fr)_340px] xl:[direction:ltr]">
             {!skip.has("main") ? (
               <section
                 dir="rtl"
@@ -361,11 +505,11 @@ export default function PageSlotLayout({
                 <PageSlotContent
                   entries={getSlotEntries(composition, "main")}
                   suffix={mainAfter}
-                  homepageProjects={homepageProjects}
+                  homepageProjects={resolvedHomepageProjects}
                   breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-                  topicsListingContent={topicsListingContent}
                   publicPath={publicPath}
                   searchParams={searchParams}
+                  listingContext={resolvedListingContext}
                   suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
                 />
               </section>
@@ -380,11 +524,11 @@ export default function PageSlotLayout({
                 <PageSlotContent
                   entries={sidebarEntries}
                   prefix={sidebarPrefix}
-                  homepageProjects={homepageProjects}
+                  homepageProjects={resolvedHomepageProjects}
                   breadcrumbCurrentLabel={breadcrumbCurrentLabel}
-                  topicsListingContent={topicsListingContent}
                   publicPath={publicPath}
                   searchParams={searchParams}
+                  listingContext={resolvedListingContext}
                   suppressFeaturedDuringSearch={suppressFeaturedDuringSearch}
                 />
               </aside>

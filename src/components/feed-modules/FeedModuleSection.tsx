@@ -14,8 +14,12 @@ function isEmptyPayload(module: ResolvedFeedModule) {
   return module.payload.items.length === 0;
 }
 
+export function isFeedModuleRenderable(module: ResolvedFeedModule) {
+  return module.presentation.emptyBehavior !== "hide" || !isEmptyPayload(module);
+}
+
 export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
-  if (module.presentation.emptyBehavior === "hide" && isEmptyPayload(module)) {
+  if (!isFeedModuleRenderable(module)) {
     return null;
   }
 

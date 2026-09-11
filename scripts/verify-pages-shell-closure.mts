@@ -746,7 +746,15 @@ assert.match(dataGrid, /embedded \? "" : "rounded-\[14px\] border border-white\/
 assert.match(uiRules, /عند تفعيل فرز عرض مختلف، يُعطّل reorder/u);
 assert.match(assignmentReorder, /mutatePageComposition\([\s\S]*"reorder"/u);
 
-assert.match(assignModal, /ASSIGNABLE_MODULE_KINDS/u);
+assert.match(
+  assignModal,
+  /REGISTERED_SLOT_MODULE_KINDS[\s\S]{0,120}from "[^"]*\/page-composition\/slot-module-registry"/u,
+);
+assert.match(
+  assignModal,
+  /options=\{REGISTERED_SLOT_MODULE_KINDS\.map\(\(kind\) => \(\{/u,
+);
+assert.doesNotMatch(assignModal, /\bASSIGNABLE_MODULE_KINDS\b/u);
 assert.match(assignModal, /moduleKindLabel\(kind\)/u);
 assert.match(assignModal, /getContentStatusMetadata\(template\.status\)\.label/u);
 assert.doesNotMatch(assignModal, /<option value="hero">Hero<\/option>/u);

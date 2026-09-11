@@ -38,6 +38,25 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+  PageSlotLayout owns Theme geometry. Client-rendered sidebar modules may
+  legitimately resolve to no DOM output (for example, a Sections widget whose
+  configured navigation parent has no submenu). Collapse that empty Region and
+  its desktop column while preserving the existing two-column layout whenever
+  a prefix or assigned module actually renders content.
+*/
+.page-layout-slot--sidebar:not(
+  :has(> [data-slot-module-container]:not(:empty))
+) {
+  display: none;
+}
+
+.page-layout-main-sidebar-grid:not(
+  :has(> .page-layout-slot--sidebar > [data-slot-module-container]:not(:empty))
+) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 /* ─────────────────────────────────────────────────────────
    Venesia Typography Polish
 ───────────────────────────────────────────────────────── */

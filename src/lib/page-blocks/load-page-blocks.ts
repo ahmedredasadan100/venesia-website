@@ -78,7 +78,7 @@ function appendBlockState(
   states: PageBlockPublicState[],
   blockType: PageBlockType,
   row: { id: number; is_visible: unknown },
-  template: { id: number; slug: string; status: string } | null,
+  template: { id: number; slug: string; variant: string; status: string } | null,
 ) {
   if (!template) return;
   const visibility = resolvePageModuleVisibilityFields(
@@ -90,6 +90,7 @@ function appendBlockState(
     blockType,
     templateId: template.id,
     templateSlug: template.slug,
+    templateVariant: template.variant,
     templateStatus: template.status,
     templatePublished: isPublishedPageBlockStatus(template.status),
     assignmentVisible: visibility.is_visible,
@@ -106,7 +107,7 @@ export const loadPageBlockStateBySlug = cache(async function loadPageBlockStateB
 ): Promise<PageBlockLoadResult> {
   return unstable_cache(
     async () => queryPageBlockStateBySlug(pageSlug),
-    ["page-block-state-v2", pageSlug],
+    ["page-block-state-v3", pageSlug],
     { revalidate: 300, tags: ["page-composition", "page-blocks"] },
   )();
 });

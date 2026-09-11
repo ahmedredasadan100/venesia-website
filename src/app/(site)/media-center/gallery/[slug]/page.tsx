@@ -7,13 +7,23 @@ type DetailsPageProps = {
   params: Promise<{
     slug: string;
   }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
 export function generateMetadata(props: DetailsPageProps) {
   return generateMediaDetailMetadata("gallery", props);
 }
 
-export default async function DetailsPage({ params }: DetailsPageProps) {
-  const { slug } = await params;
-  return <MediaDetailPage configKey="gallery" slug={slug} />;
+export default async function DetailsPage({ params, searchParams }: DetailsPageProps) {
+  const [{ slug }, resolvedSearchParams] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({}),
+  ]);
+  return (
+    <MediaDetailPage
+      configKey="gallery"
+      slug={slug}
+      searchParams={resolvedSearchParams}
+    />
+  );
 }

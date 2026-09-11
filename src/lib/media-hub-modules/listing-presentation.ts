@@ -1,37 +1,18 @@
-import type { MediaContentType } from "../media-center/types";
-import {
-  getDefaultMediaListingPresentation,
-  type MediaListingPresentationConfig,
-} from "./parse-config";
-import type { MediaHubModulesState } from "./types";
-
-function findAssignedMediaListing(state: MediaHubModulesState | null) {
-  return state?.modules.find(
-    (module) =>
-      module.isVisible &&
-      module.config.placement === "listing" &&
-      module.config.type &&
-      module.config.listing,
-  );
-}
+import type { MediaHubModuleState } from "./types";
 
 export function resolveMediaListingConfig(
-  state: MediaHubModulesState | null,
-  fallbackMediaType: MediaContentType,
+  module: MediaHubModuleState,
 ) {
-  const configuredModule = findAssignedMediaListing(state);
+  if (
+    !module.isVisible ||
+    module.config.placement !== "listing" ||
+    !module.config.type ||
+    !module.config.listing
+  ) return null;
 
   return {
-    contentType: configuredModule?.config.type ?? fallbackMediaType,
-    presentation:
-      configuredModule?.config.listing ??
-      getDefaultMediaListingPresentation(),
+    assignmentId: module.assignmentId,
+    contentType: module.config.type,
+    presentation: module.config.listing,
   };
-}
-
-export function resolveMediaListingPresentation(
-  state: MediaHubModulesState | null,
-  mediaType: MediaContentType,
-): MediaListingPresentationConfig {
-  return resolveMediaListingConfig(state, mediaType).presentation;
 }

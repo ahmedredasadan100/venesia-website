@@ -1,10 +1,4 @@
 import { BLOCK_MODULE_REGISTRY } from "../../../../../lib/page-blocks/block-module-registry";
-import {
-  MEDIA_HUB_ASSIGNMENT_TABLE,
-} from "../../../../../lib/media-hub-modules/registry";
-import {
-  MEDIA_SIDEBAR_ASSIGNMENT_TABLE,
-} from "../../../../../lib/media-sidebar-modules/registry";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
 import type { Json } from "../../../../../lib/database.types";
 import type { PageBlockType, PageModuleKind } from "../../../../../lib/page-blocks/types";
@@ -70,42 +64,22 @@ export function templateTable(blockType: PageBlockType) {
   return BLOCK_MODULE_REGISTRY[blockType].templateTable;
 }
 
-export async function nextSortOrder(pageId: number, blockType: PageBlockType) {
-  const table = assignmentTable(blockType);
+export async function nextPageCompositionSortOrder(
+  pageId: number,
+  slot: string,
+) {
   const { data, error } = await getSupabaseAdmin()
-    .from(table)
+    .from("page_composition_assignments")
     .select("sort_order")
     .eq("page_id", pageId)
+    .eq("slot", slot)
+    .neq("kind", "hero")
     .order("sort_order", { ascending: false })
     .limit(1);
 
-  if (error) throw new Error(`Page module sort-order read failed: ${error.message}`);
-
-  return (data?.[0]?.sort_order ?? 0) + 10;
-}
-
-export async function nextMediaSidebarSortOrder(pageId: number) {
-  const { data, error } = await getSupabaseAdmin()
-    .from(MEDIA_SIDEBAR_ASSIGNMENT_TABLE)
-    .select("sort_order")
-    .eq("page_id", pageId)
-    .order("sort_order", { ascending: false })
-    .limit(1);
-
-  if (error) throw new Error(`Media Sidebar sort-order read failed: ${error.message}`);
-
-  return (data?.[0]?.sort_order ?? 0) + 10;
-}
-
-export async function nextMediaHubSortOrder(pageId: number) {
-  const { data, error } = await getSupabaseAdmin()
-    .from(MEDIA_HUB_ASSIGNMENT_TABLE)
-    .select("sort_order")
-    .eq("page_id", pageId)
-    .order("sort_order", { ascending: false })
-    .limit(1);
-
-  if (error) throw new Error(`Media Hub sort-order read failed: ${error.message}`);
+  if (error) {
+    throw new Error(`Page Composition sort-order read failed: ${error.message}`);
+  }
 
   return (data?.[0]?.sort_order ?? 0) + 10;
 }

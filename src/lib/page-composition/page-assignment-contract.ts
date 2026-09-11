@@ -34,6 +34,26 @@ export type ModulePositionCapability =
   | FlexiblePositionCapability
   | ProductFixedPositionCapability;
 
+export type PageAssignmentOrderValue = Readonly<{
+  sortOrder: number;
+  moduleKind: PageModuleKind;
+  assignmentId: number;
+}>;
+
+/**
+ * Canonical same-Position order used by persistence reload, Admin optimistic
+ * state, and Public rendering. Assignment ids are local to each module table,
+ * so module kind must break a sort_order tie before the numeric id.
+ */
+export function comparePageAssignmentOrder(
+  first: PageAssignmentOrderValue,
+  second: PageAssignmentOrderValue,
+) {
+  return first.sortOrder - second.sortOrder
+    || first.moduleKind.localeCompare(second.moduleKind)
+    || first.assignmentId - second.assignmentId;
+}
+
 const FLEXIBLE_MODULE_POSITION = {
   mode: "page",
 } as const satisfies ModulePositionCapability;

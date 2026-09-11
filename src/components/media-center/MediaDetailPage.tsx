@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import InternalPageLayout from "../InternalPageLayout";
 import PageSlotLayout, {
+  hasRenderableSlotEntries,
   PageSlotContent,
 } from "../page-composition/PageSlotLayout";
 import JsonLd from "../seo/JsonLd";
@@ -9,18 +10,24 @@ import TopicViewTracker from "../content/TopicViewTracker";
 import { getMediaItemBySlug, getRelatedMediaItems } from "../../lib/media-center";
 import { MEDIA_DETAIL_PAGE_CONFIG, type MediaDetailPageKey } from "../../lib/media-center/detail-page-config";
 import { loadPageCompositionBySlug } from "../../lib/page-blocks/load-page-composition";
-import { getSlotEntries } from "../../lib/page-blocks/page-composition-utils";
+import { getHeroSlotPeerEntries } from "../../lib/page-blocks/page-composition-utils";
 import { buildPageJsonLd } from "../../lib/seo/build-jsonld";
 import { loadResolvedGlobalSeo } from "../../lib/seo/generate-public-metadata";
 import MediaDetailArticle from "./MediaDetailArticle";
 import MediaPageShell from "./MediaPageShell";
+import type { SearchPlatformSearchParams } from "../search-platform/SearchPlatformModule";
 
 type MediaDetailPageProps = {
   configKey: MediaDetailPageKey;
   slug: string;
+  searchParams?: SearchPlatformSearchParams;
 };
 
-export default async function MediaDetailPage({ configKey, slug }: MediaDetailPageProps) {
+export default async function MediaDetailPage({
+  configKey,
+  slug,
+  searchParams,
+}: MediaDetailPageProps) {
   const config = MEDIA_DETAIL_PAGE_CONFIG[configKey];
   const itemPromise = getMediaItemBySlug(config.mediaType, slug);
   const compositionPromise = loadPageCompositionBySlug(config.cmsPageSlug);
@@ -42,6 +49,7 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
   ]);
 
   const pagePath = `${config.basePath}/${item.slug}`;
+  const heroSlotPeers = getHeroSlotPeerEntries(composition);
   const content = item.content?.trim()
     ? item.content
     : config.fallbackContent.join("\n\n");
@@ -76,10 +84,17 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
       showHeroImage={item.showImageOnPage !== false}
       showSubtitle={item.showExcerptOnPage !== false}
       heroSlotContent={
-        getSlotEntries(composition, "hero").length ? (
+        hasRenderableSlotEntries(heroSlotPeers, {
+          homepageProjects: composition.homepageProjects ?? undefined,
+          publicPath: pagePath,
+          searchParams,
+        }) ? (
           <PageSlotContent
-            entries={getSlotEntries(composition, "hero")}
+            entries={heroSlotPeers}
+            homepageProjects={composition.homepageProjects ?? undefined}
             breadcrumbCurrentLabel={item.title}
+            publicPath={pagePath}
+            searchParams={searchParams}
           />
         ) : composition.hasAnyAssignmentRows || composition.hasCompositionError ? null : undefined
       }
@@ -90,6 +105,7 @@ export default async function MediaDetailPage({ configKey, slug }: MediaDetailPa
         skipSlots={["hero"]}
         breadcrumbCurrentLabel={item.title}
         publicPath={pagePath}
+        searchParams={searchParams}
         mainAfter={
           <>
             {item.topicId ? <TopicViewTracker topicId={item.topicId} /> : null}

@@ -145,7 +145,10 @@ export default function PageBlocksAssignmentsGrid({
             onDetach={() => onDetach(row)}
             reorderPosition={reorder.position}
             reorderCount={reorder.count}
-            manualReorderEnabled={manualReorderEnabled}
+            manualReorderEnabled={
+              manualReorderEnabled &&
+              row.module_kind !== "hero"
+            }
             onMoveTo={(targetPosition) => onReorder(row, targetPosition)}
             onDragStart={(event) => {
               draggedRowIdRef.current = rowId;

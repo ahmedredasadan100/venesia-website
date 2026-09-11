@@ -41,11 +41,18 @@ import {
   mapContactTrustCardsBlock,
 } from "../contact/contact-cms-mappers";
 import TopicsInsightCtaSection from "../topics/TopicsInsightCtaSection";
+import TopicsListingContent from "../topics/TopicsListingContent";
 import { ContentIntroPresentation } from "../sections/ContentSection";
 import { mapTopicsInsightCtaBlock } from "../topics/topics-cms-mappers";
 import { mapAboutCtaBlock, mapLegacyProjectsCtaBlock } from "../modules/about-cta-mappers";
 import { mapLegacyPrinciplesCardsBlock } from "../modules/about-principles-mappers";
-import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
+import type {
+  ListingRenderContext,
+} from "../../lib/page-blocks/page-composition-types";
+import type {
+  PageBlockType,
+  ResolvedPageBlock,
+} from "../../lib/page-blocks/types";
 import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import { mapVisionGoalsBlock } from "../modules/vision-goals-mappers";
 import {
@@ -60,6 +67,7 @@ import {
   isHomeProjectsTemplate,
   isHomeStoryTemplate,
   isHomeTrustTemplate,
+  isTopicsListingTemplate,
   isVisionGoalsTemplate,
 } from "../../lib/page-blocks/configs";
 import SectionRenderer from "../sections/SectionRenderer";
@@ -67,6 +75,7 @@ import SearchPlatformModule, {
   type SearchPlatformSearchParams,
 } from "../search-platform/SearchPlatformModule";
 import { isSearchPlatformTemplate } from "../../lib/page-blocks/search-platform-config";
+import { comparePageAssignmentOrder } from "../../lib/page-composition/page-assignment-contract";
 
 function isWhoWeAreContentBlock(block: ResolvedPageBlock) {
   return block.blockType === "content" && isAboutIntroTemplate(block.template.slug, block.template.variant);
@@ -113,28 +122,40 @@ function isAboutApproachContentBlock(block: ResolvedPageBlock) {
 
 export type SlotModuleNode = {
   key: string;
+  moduleKind: PageBlockType;
+  assignmentId: number;
   sortOrder: number;
   node: ReactNode;
 };
 
-function sortBlocks(blocks: ResolvedPageBlock[]) {
-  return [...blocks].sort((a, b) => a.sortOrder - b.sortOrder || a.assignmentId - b.assignmentId);
-}
+export type ContactFormPair = {
+  office: ResolvedPageBlock;
+  form: ResolvedPageBlock;
+};
 
-function indexBySlug(blocks: ResolvedPageBlock[]) {
-  const map = new Map<string, ResolvedPageBlock>();
-  for (const block of blocks) {
-    map.set(block.template.slug, block);
-  }
-  return map;
+function sortBlocks(blocks: ResolvedPageBlock[]) {
+  return [...blocks].sort((left, right) =>
+    comparePageAssignmentOrder(
+      {
+        sortOrder: left.sortOrder,
+        moduleKind: left.blockType,
+        assignmentId: left.assignmentId,
+      },
+      {
+        sortOrder: right.sortOrder,
+        moduleKind: right.blockType,
+        assignmentId: right.assignmentId,
+      },
+    ),
+  );
 }
 
 export type SlotModuleRenderContext = {
   homepageProjects?: HomepageProjectCard[];
   breadcrumbCurrentLabel?: string;
-  topicsListingContent?: ReactNode;
   publicPath?: string;
   searchParams?: SearchPlatformSearchParams;
+  listingContext?: ListingRenderContext;
   suppressFeaturedDuringSearch?: boolean;
 };
 
@@ -148,66 +169,63 @@ export type SlotModuleRenderContext = {
 export function buildSlotModuleNodes(
   blocks: ResolvedPageBlock[],
   context: SlotModuleRenderContext = {},
+  contactFormPairs: readonly ContactFormPair[] = [],
 ): SlotModuleNode[] {
   const sorted = sortBlocks(blocks);
-  const bySlug = indexBySlug(sorted);
-  const consumed = new Set<number>();
   const nodes: SlotModuleNode[] = [];
 
-  const mark = (block?: ResolvedPageBlock) => {
-    if (block) consumed.add(block.assignmentId);
-  };
-
   const push = (
+    block: ResolvedPageBlock,
     id: string,
-    sortOrder: number,
     node: ReactNode,
+    sortOrder = block.sortOrder,
   ) => {
-    nodes.push({ key: id, sortOrder, node });
+    nodes.push({
+      key: id,
+      moduleKind: block.blockType,
+      assignmentId: block.assignmentId,
+      sortOrder,
+      node,
+    });
   };
 
   for (const block of sorted) {
-    if (consumed.has(block.assignmentId)) continue;
-
     const slug = block.template.slug;
 
     if (isHomeStoryContentBlock(block)) {
-      mark(block);
       push(
+        block,
         `home-story-${block.assignmentId}`,
-        block.sortOrder,
         <HomeStorySection content={mapHomeStoryBlock(block)} />,
       );
       continue;
     }
 
     if (isHomeTrustContentBlock(block)) {
-      mark(block);
       push(
+        block,
         `home-trust-${block.assignmentId}`,
-        block.sortOrder,
         <HomeTrustSection content={mapHomeTrustBlock(block)} />,
       );
       continue;
     }
 
     if (isHomeContactContentBlock(block)) {
-      mark(block);
       push(
+        block,
         `home-contact-${block.assignmentId}`,
-        block.sortOrder,
         <HomeContactSection content={mapHomeContactBlock(block)} />,
       );
       continue;
     }
 
     if (isHomeProjectsContentBlock(block)) {
-      mark(block);
+      if (!context.homepageProjects?.length) continue;
       push(
+        block,
         `home-projects-${block.assignmentId}`,
-        block.sortOrder,
         <HomeProjectsSection
-          projects={context.homepageProjects ?? []}
+          projects={context.homepageProjects}
           content={mapHomeProjectsBlock(block)}
         />,
       );
@@ -218,10 +236,9 @@ export function buildSlotModuleNodes(
       const embeddedBeats = mapAboutIntroBeatsFromBlock(block);
       const moduleKey = `about-intro-${block.assignmentId}`;
       const cmsIntro = mapAboutIntroBlock(block);
-      mark(block);
       push(
+        block,
         moduleKey,
-        block.sortOrder,
         <WhoWeAreModuleSection
           cmsIntro={cmsIntro}
           cmsBeats={embeddedBeats}
@@ -231,164 +248,155 @@ export function buildSlotModuleNodes(
     }
 
     if (isAboutIntroSingleImageContentBlock(block)) {
-      mark(block);
       push(
+        block,
         `about-intro-single-image-${block.assignmentId}`,
-        block.sortOrder,
         <AboutIntroSingleImageModuleSection content={mapAboutIntroSingleImageBlock(block)} />,
       );
       continue;
     }
 
     if (isVisionGoalsContentBlock(block)) {
-      mark(block);
       push(
+        block,
         `vision-goals-${block.assignmentId}`,
-        block.sortOrder,
         <VisionGoalsModuleSection cmsContent={mapVisionGoalsBlock(block)} />,
       );
       continue;
     }
 
     if (isAboutCtaContentBlock(block)) {
-      mark(block);
       push(
+        block,
         `about-cta-${block.assignmentId}`,
-        block.sortOrder,
         <AboutCtaModuleSection cmsContent={mapAboutCtaBlock(block)} />,
       );
       continue;
     }
 
     if (slug === "about-projects-cta") {
-      mark(block);
       push(
+        block,
         `about-cta-legacy-${block.assignmentId}`,
-        block.sortOrder,
         <AboutCtaModuleSection cmsContent={mapLegacyProjectsCtaBlock(block)} />,
       );
       continue;
     }
 
     if (isAboutApproachContentBlock(block)) {
-      mark(block);
       push(
+        block,
         `about-approach-${block.assignmentId}`,
-        block.sortOrder,
         <AboutApproachModuleSection cmsContent={mapAboutApproachBlock(block)} />,
       );
       continue;
     }
 
     if (slug === "about-approach" && block.blockType === "content") {
-      mark(block);
       push(
+        block,
         `about-approach-legacy-${block.assignmentId}`,
-        block.sortOrder,
         <AboutApproachModuleSection cmsContent={mapAboutApproachBlock(block)} />,
       );
       continue;
     }
 
     if (isAboutPrinciplesContentBlock(block)) {
-      mark(block);
       push(
+        block,
         `about-principles-${block.assignmentId}`,
-        block.sortOrder,
         <AboutPrinciplesModuleSection cmsContent={mapAboutPrinciplesBlock(block)} />,
       );
       continue;
     }
 
     if (slug === "about-principles" && block.blockType === "cards") {
-      mark(block);
       push(
+        block,
         `about-principles-legacy-${block.assignmentId}`,
-        block.sortOrder,
         <AboutPrinciplesModuleSection cmsContent={mapLegacyPrinciplesCardsBlock(block)} />,
       );
       continue;
     }
 
     if (slug === "about-vision") {
-      mark(block);
       push(
+        block,
         `about-vision-${block.assignmentId}`,
-        block.sortOrder,
         <VisionGoalsModuleSection cmsContent={mapVisionGoalsBlock(block)} />,
       );
       continue;
     }
 
     if (slug === "contact-trust-cards") {
-      mark(block);
       push(
+        block,
         `contact-trust-${block.assignmentId}`,
-        block.sortOrder,
         <ContactFloatingTrustCards cmsCards={mapContactTrustCardsBlock(block)} />,
       );
       continue;
     }
 
     if (slug === "contact-form-office" || slug === "contact-form") {
-      const office = bySlug.get("contact-form-office");
-      const form = bySlug.get("contact-form");
-      mark(office);
-      mark(form);
+      const pair = contactFormPairs.find(
+        ({ office, form }) => office === block || form === block,
+      );
+      const office = pair?.office ?? (slug === "contact-form-office" ? block : undefined);
+      const form = pair?.form ?? (slug === "contact-form" ? block : undefined);
+      const anchor = pair ? sortBlocks([pair.office, pair.form])[0] : block;
+      if (anchor !== block) continue;
       push(
-        `contact-form-${block.assignmentId}`,
-        Math.min(office?.sortOrder ?? block.sortOrder, form?.sortOrder ?? block.sortOrder),
+        anchor,
+        `contact-form-${office?.assignmentId ?? "none"}-${form?.assignmentId ?? "none"}`,
         <ContactFormSection
           cmsOffice={office ? mapContactFormOfficeBlock(office) : null}
           cmsForm={form ? mapContactFormBlock(form) : null}
         />,
+        Math.min(
+          office?.sortOrder ?? anchor.sortOrder,
+          form?.sortOrder ?? anchor.sortOrder,
+        ),
       );
       continue;
     }
 
     if (slug === "contact-map") {
-      mark(block);
-      push(`contact-map-${block.assignmentId}`, block.sortOrder, <ContactMapSection cmsContent={mapContactMapBlock(block)} />);
+      push(block, `contact-map-${block.assignmentId}`, <ContactMapSection cmsContent={mapContactMapBlock(block)} />);
       continue;
     }
 
     if (slug === "contact-reasons") {
-      mark(block);
-      push(`contact-reasons-${block.assignmentId}`, block.sortOrder, <ContactReasonsSection cmsContent={mapContactReasonsBlock(block)} />);
+      push(block, `contact-reasons-${block.assignmentId}`, <ContactReasonsSection cmsContent={mapContactReasonsBlock(block)} />);
       continue;
     }
 
     if (slug === "contact-departments") {
-      mark(block);
       push(
+        block,
         `contact-departments-${block.assignmentId}`,
-        block.sortOrder,
         <ContactDepartmentsSection cmsContent={mapContactDepartmentsBlock(block)} />,
       );
       continue;
     }
 
     if (slug === "contact-faq") {
-      mark(block);
-      push(`contact-faq-${block.assignmentId}`, block.sortOrder, <ContactFAQSection cmsContent={mapContactFaqBlock(block)} />);
+      push(block, `contact-faq-${block.assignmentId}`, <ContactFAQSection cmsContent={mapContactFaqBlock(block)} />);
       continue;
     }
 
     if (isContactStyleCtaBlock(block)) {
-      mark(block);
       push(
+        block,
         `contact-style-cta-${block.assignmentId}`,
-        block.sortOrder,
         <ContactCTASection cmsContent={mapContactCtaBlock(block)} />,
       );
       continue;
     }
 
     if (slug === "topics-intro") {
-      mark(block);
       push(
+        block,
         `topics-intro-${block.assignmentId}`,
-        block.sortOrder,
         <ContentIntroPresentation
           config={asContentConfig(block.template.config)}
         />,
@@ -396,13 +404,15 @@ export function buildSlotModuleNodes(
       continue;
     }
 
-    if (slug === "topics-listing") {
-      mark(block);
-      if (context.topicsListingContent != null) {
+    if (isTopicsListingTemplate(slug, block.template.variant)) {
+      if (context.listingContext) {
         push(
+          block,
           `topics-listing-${block.assignmentId}`,
-          block.sortOrder,
-          context.topicsListingContent,
+          <TopicsListingContent
+            block={block}
+            context={context.listingContext}
+          />,
         );
       }
       continue;
@@ -412,10 +422,9 @@ export function buildSlotModuleNodes(
       block.blockType === "content" &&
       isSearchPlatformTemplate(block.template.slug, block.template.variant)
     ) {
-      mark(block);
       push(
+        block,
         `search-platform-${block.assignmentId}`,
-        block.sortOrder,
         <SearchPlatformModule
           block={block}
           publicPath={context.publicPath}
@@ -426,20 +435,18 @@ export function buildSlotModuleNodes(
     }
 
     if (slug === "topics-insight-cta") {
-      mark(block);
       push(
+        block,
         `topics-insight-${block.assignmentId}`,
-        block.sortOrder,
         <TopicsInsightCtaSection cmsContent={mapTopicsInsightCtaBlock(block)} />,
       );
       continue;
     }
 
     if (block.blockType === "breadcrumb") {
-      mark(block);
       push(
+        block,
         `breadcrumb-${block.assignmentId}`,
-        block.sortOrder,
         <BreadcrumbModuleSection
           config={asBreadcrumbConfig(block.template.config)}
           currentLabelOverride={context.breadcrumbCurrentLabel}
@@ -448,10 +455,11 @@ export function buildSlotModuleNodes(
       continue;
     }
 
-    mark(block);
-    push(`block-${block.assignmentId}`, block.sortOrder, <SectionRenderer block={block} />);
+    push(block, `block-${block.assignmentId}`, <SectionRenderer block={block} />);
   }
 
-  nodes.sort((a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key));
+  nodes.sort(
+    (left, right) => comparePageAssignmentOrder(left, right),
+  );
   return nodes;
 }

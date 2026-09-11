@@ -67,6 +67,7 @@ export type PageBlockPublicState = {
   blockType: PageBlockType;
   templateId: number;
   templateSlug: string;
+  templateVariant: string;
   templateStatus: string;
   templatePublished: boolean;
   assignmentVisible: boolean;

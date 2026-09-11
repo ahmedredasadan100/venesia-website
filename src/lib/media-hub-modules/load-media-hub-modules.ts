@@ -37,7 +37,8 @@ export async function queryMediaHubModules(
     .from("page_media_hub_module_assignments")
     .select("id,slot,sort_order,is_visible,media_hub_module_templates(section_key,name,slug,status,config)")
     .eq("page_id", pageState.page.id)
-    .order("sort_order", { ascending: true });
+    .order("sort_order", { ascending: true })
+    .order("id", { ascending: true });
 
   if (error) {
     return {

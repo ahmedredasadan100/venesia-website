@@ -3,13 +3,17 @@ import CollectionSectionHeader from "../collection-modules/CollectionSectionHead
 import FeaturedCarousel from "./FeaturedCarousel";
 import FeaturedContentCard from "./FeaturedContentCard";
 
+export function isFeaturedModuleRenderable(module: ResolvedFeaturedModule) {
+  return module.items.length > 0;
+}
+
 export default function FeaturedModuleSection({
   module,
 }: {
   module: ResolvedFeaturedModule;
 }) {
   const { items, presentation } = module;
-  if (!items.length) return null;
+  if (!isFeaturedModuleRenderable(module)) return null;
 
   if (presentation.variant === "editorial") {
     return (

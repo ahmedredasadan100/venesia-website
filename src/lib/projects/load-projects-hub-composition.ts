@@ -34,6 +34,30 @@ export type ProjectsHubCompositionLoadResult =
   | { ok: true; composition: ProjectsHubComposition }
   | { ok: false; reason: string };
 
+type ProjectsHubCompositionReadFailureReason =
+  | "page_query_failed"
+  | "assignments_query_failed";
+
+class ProjectsHubCompositionReadError extends Error {
+  readonly reason: ProjectsHubCompositionReadFailureReason;
+
+  constructor(reason: ProjectsHubCompositionReadFailureReason, cause: unknown) {
+    super(`Projects Hub composition read failed: ${reason}`, { cause });
+    this.name = "ProjectsHubCompositionReadError";
+    this.reason = reason;
+  }
+}
+
+function failProjectsHubCompositionRead(
+  reason: ProjectsHubCompositionReadFailureReason,
+  context: string,
+  error: unknown,
+  details: Record<string, unknown> = {},
+): never {
+  logError(context, error, details);
+  throw new ProjectsHubCompositionReadError(reason, error);
+}
+
 async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoadResult> {
   const supabase = getSupabaseAdmin();
 
@@ -45,8 +69,11 @@ async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoad
     .maybeSingle();
 
   if (pageError) {
-    logError("loadProjectsHubComposition: page lookup failed", pageError);
-    return { ok: false, reason: "page_query_failed" };
+    failProjectsHubCompositionRead(
+      "page_query_failed",
+      "loadProjectsHubComposition: page lookup failed",
+      pageError,
+    );
   }
 
   if (!page) {
@@ -62,8 +89,12 @@ async function queryProjectsHubComposition(): Promise<ProjectsHubCompositionLoad
     .order("sort_order", { ascending: true });
 
   if (assignmentError) {
-    logError("loadProjectsHubComposition: assignments failed", assignmentError, { pageId: page.id });
-    return { ok: false, reason: "assignments_query_failed" };
+    failProjectsHubCompositionRead(
+      "assignments_query_failed",
+      "loadProjectsHubComposition: assignments failed",
+      assignmentError,
+      { pageId: page.id },
+    );
   }
 
   const assignments: ProjectsHubCompositionAssignment[] = [];
@@ -104,6 +135,9 @@ export async function loadProjectsHubComposition(): Promise<ProjectsHubCompositi
       tags: ["page-composition", "page-blocks", "projects-hub"],
     })();
   } catch (error) {
+    if (error instanceof ProjectsHubCompositionReadError) {
+      return { ok: false, reason: error.reason };
+    }
     logError("loadProjectsHubComposition: unexpected failure", error);
     return { ok: false, reason: "unexpected_error" };
   }

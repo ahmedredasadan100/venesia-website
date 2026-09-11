@@ -27,7 +27,7 @@ export type ModuleEditorSectionMetadata = {
 type ModuleEditorSections = Record<string, ModuleEditorSectionMetadata>;
 
 export type ModuleKindMetadata = {
-  kind: PageModuleKind | string;
+  kind: PageModuleKind;
   labelAr: string;
   descriptionAr: string;
   editorSections: ModuleEditorSections;
@@ -74,7 +74,7 @@ const CONTENT_MODULE_SECTIONS: ModuleEditorSections = {
   pages: PAGES_SECTION,
 };
 
-export const MODULE_KIND_METADATA: Record<string, ModuleKindMetadata> = {
+export const MODULE_KIND_METADATA: Record<PageModuleKind, ModuleKindMetadata> = {
   hero: {
     kind: "hero",
     labelAr: "الهيرو",
@@ -495,7 +495,9 @@ export const SLOT_MODULE_SLUG_METADATA: Record<string, SlotModuleSlugMetadata> =
 };
 
 export function getModuleKindMetadata(kind: string): ModuleKindMetadata | null {
-  return MODULE_KIND_METADATA[kind] ?? null;
+  return Object.hasOwn(MODULE_KIND_METADATA, kind)
+    ? MODULE_KIND_METADATA[kind as PageModuleKind]
+    : null;
 }
 
 export function getSlotModuleSlugMetadata(slug: string): SlotModuleSlugMetadata | null {

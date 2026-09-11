@@ -41,6 +41,7 @@ import {
   normalizeLayoutSlot,
 } from "../../../../../lib/page-blocks/layout-slots";
 import {
+  comparePageAssignmentOrder,
   getAssignablePositions,
 } from "../../../../../lib/page-composition/page-assignment-contract";
 import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/types";
@@ -170,6 +171,7 @@ export default function PageBlocksClient({
     assignPending,
     templateOptions,
     assignableTemplates,
+    heroAssignmentExists,
     slotOptions,
     assignState,
     assignHeroState,
@@ -181,7 +183,7 @@ export default function PageBlocksClient({
     assignMediaHubAction,
   } = usePageBlocksAssignModal({
     pageId: page.id,
-    assignments,
+    assignments: instant.rows,
     templates,
     setActionMessage,
     router,
@@ -449,10 +451,26 @@ export default function PageBlocksClient({
   }
 
   function getAssignmentSiblings(row: PageBlockAssignmentRow) {
+    if (row.module_kind === "hero") return [row];
     const position = normalizeLayoutSlot(row.slot);
     return instant.rows
-      .filter((candidate) => normalizeLayoutSlot(candidate.slot) === position)
-      .sort((left, right) => left.sort_order - right.sort_order || left.module_kind.localeCompare(right.module_kind) || left.id - right.id);
+      .filter(
+        (candidate) =>
+          candidate.module_kind !== "hero" &&
+          normalizeLayoutSlot(candidate.slot) === position,
+      )
+      .sort((left, right) => comparePageAssignmentOrder(
+        {
+          sortOrder: left.sort_order,
+          moduleKind: left.module_kind,
+          assignmentId: left.id,
+        },
+        {
+          sortOrder: right.sort_order,
+          moduleKind: right.module_kind,
+          assignmentId: right.id,
+        },
+      ));
   }
 
   function getDisplayPositionOptions(row: PageBlockAssignmentRow): PageLayoutSlot[] {
@@ -468,7 +486,11 @@ export default function PageBlocksClient({
 
     const nextSortOrder =
       instant.rows
-        .filter((candidate) => normalizeLayoutSlot(candidate.slot) === nextSlot)
+        .filter(
+          (candidate) =>
+            candidate.module_kind !== "hero" &&
+            normalizeLayoutSlot(candidate.slot) === nextSlot,
+        )
         .reduce((largest, candidate) => Math.max(largest, candidate.sort_order), 0) + 10;
     const movedRowId = assignmentRowId(row);
     const positionedRows = instant.rows.map((candidate) =>
@@ -485,10 +507,18 @@ export default function PageBlocksClient({
             normalizeLayoutSlot(candidate.slot) === candidateSlot,
         )
         .sort(
-          (left, right) =>
-            left.sort_order - right.sort_order ||
-            left.module_kind.localeCompare(right.module_kind) ||
-            left.id - right.id,
+          (left, right) => comparePageAssignmentOrder(
+            {
+              sortOrder: left.sort_order,
+              moduleKind: left.module_kind,
+              assignmentId: left.id,
+            },
+            {
+              sortOrder: right.sort_order,
+              moduleKind: right.module_kind,
+              assignmentId: right.id,
+            },
+          ),
         )
         .forEach((candidate, index) => {
           canonicalPositionByRowId.set(assignmentRowId(candidate), {
@@ -566,12 +596,35 @@ export default function PageBlocksClient({
 
   async function handleReorderAssignment(row: PageBlockAssignmentRow, targetPosition: number) {
     if (!manualReorderEnabled) return;
+    if (row.module_kind === "hero") return;
     const siblings = getAssignmentSiblings(row);
     const index = siblings.findIndex((candidate) => assignmentRowId(candidate) === assignmentRowId(row));
     if (index < 0 || targetPosition < 0 || targetPosition >= siblings.length || targetPosition === index) return;
     const ordered = [...siblings];
     const [moved] = ordered.splice(index, 1);
     ordered.splice(targetPosition, 0, moved);
+    let heroPeerSortOrder: number | null = null;
+    if (normalizeLayoutSlot(row.slot) === "hero") {
+      const previous = ordered[targetPosition - 1];
+      const next = ordered[targetPosition + 1];
+      heroPeerSortOrder = !previous
+        ? 0
+        : !next
+          ? Math.max(...siblings.map((candidate) => candidate.sort_order)) + 10
+          : Math.floor((previous.sort_order + next.sort_order) / 2);
+      const isExactInsertion = Number.isSafeInteger(heroPeerSortOrder) &&
+        heroPeerSortOrder >= 0 &&
+        heroPeerSortOrder <= 2_147_483_647 &&
+        (!previous || previous.sort_order < heroPeerSortOrder) &&
+        (!next || heroPeerSortOrder < next.sort_order);
+      if (!isExactInsertion) {
+        setActionFeedback({
+          message: "تعذر تحديد ترتيب دقيق للموديول. حدّث الصفحة ثم حاول مرة أخرى.",
+          ok: false,
+        });
+        return;
+      }
+    }
     const sortOrderByRowId = new Map(
       ordered.map((item, orderedIndex) => [assignmentRowId(item), (orderedIndex + 1) * 10]),
     );
@@ -586,6 +639,33 @@ export default function PageBlocksClient({
             return sortOrder == null ? candidate : { ...candidate, sort_order: sortOrder };
           }),
         execute: async () => {
+          if (heroPeerSortOrder !== null) {
+            const formData = new FormData();
+            formData.set("page_id", String(page.id));
+            formData.set("assignment_id", String(row.id));
+            formData.set("block_type", row.module_kind);
+            formData.set("slot", row.slot);
+            formData.set("sort_order", String(heroPeerSortOrder));
+            formData.set(
+              "is_visible",
+              normalizeBoolean(row.is_visible, true) ? "true" : "false",
+            );
+            const response = await updatePageBlockAssignment(
+              { ok: true, message: null },
+              formData,
+            );
+            return response.ok
+              ? {
+                  ok: true as const,
+                  message: response.message ?? "تم حفظ ترتيب الموديولات ذريًا.",
+                  updatedAt: response.updatedAt,
+                }
+              : {
+                  ok: false as const,
+                  code: "hero_peer_reorder_failed",
+                  message: response.message ?? "تعذر حفظ ترتيب الموديولات.",
+                };
+          }
           const response = await reorderPageComposition(
             page.id,
             row.slot,
@@ -595,7 +675,19 @@ export default function PageBlocksClient({
             return { ok: false as const, code: response.code, message: response.message };
           }
           warning = response.warning ?? null;
-          return { ok: true as const, message: response.warning ?? "تم حفظ ترتيب الموديولات ذريًا." };
+          return {
+            ok: true as const,
+            message: response.warning ?? "تم حفظ ترتيب الموديولات ذريًا.",
+            updatedAt: undefined,
+          };
+        },
+        reconcileSuccess: (response, { cache }) => {
+          if (!response.updatedAt) return;
+          cache.patchRows((candidate) =>
+            candidate.module_kind === "hero"
+              ? candidate
+              : { ...candidate, updated_at: String(response.updatedAt) },
+          );
         },
       });
       setActionFeedback({ message: warning ?? result.message, ok: true });
@@ -872,6 +964,7 @@ export default function PageBlocksClient({
           assignPending={assignPending}
           templateOptions={templateOptions}
           assignableTemplates={assignableTemplates}
+          heroAssignmentExists={heroAssignmentExists}
           slotOptions={slotOptions}
           assignState={assignState}
           assignHeroState={assignHeroState}

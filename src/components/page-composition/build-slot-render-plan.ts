@@ -5,9 +5,17 @@ import type { ResolvedFeaturedModule } from "../../lib/featured-modules/contract
 import type { MediaHubModuleState } from "../../lib/media-hub-modules/types";
 import type { MediaSidebarWidgetState } from "../../lib/media-sidebar-modules/types";
 import type { SlotEntry } from "../../lib/page-blocks/page-composition-types";
-import type { ResolvedPageBlock } from "../../lib/page-blocks/types";
+import type {
+  PageBlockType,
+  ResolvedPageBlock,
+} from "../../lib/page-blocks/types";
+import { comparePageAssignmentOrder } from "../../lib/page-composition/page-assignment-contract";
+import { isFeedModuleRenderable } from "../feed-modules/FeedModuleSection";
+import { isFeaturedModuleRenderable } from "../featured/FeaturedModuleSection";
+import { isMediaHubModuleRenderable } from "../media-center/renderMediaHubSections";
 import {
   buildSlotModuleNodes,
+  type ContactFormPair,
   type SlotModuleRenderContext,
 } from "./slot-module-nodes";
 
@@ -15,12 +23,13 @@ import {
  * Explicit slot render plan items.
  *
  * - `feed` — standalone feed module (keeps its sort_order among blocks)
- * - `module` — output of buildSlotModuleNodes (may be a composite that already
- *   consumed peer blocks; peers never appear as separate module items)
+ * - `module` — output of buildSlotModuleNodes (a composite carries the
+ *   assignmentId of its earliest member)
  */
 export type SlotRenderPlanItem =
   | {
       kind: "feed";
+      moduleKind: "feed";
       key: string;
       assignmentId: number;
       sortOrder: number;
@@ -28,6 +37,7 @@ export type SlotRenderPlanItem =
     }
   | {
       kind: "media-sidebar";
+      moduleKind: "media-sidebar";
       key: string;
       assignmentId: number;
       sortOrder: number;
@@ -35,6 +45,7 @@ export type SlotRenderPlanItem =
     }
   | {
       kind: "featured";
+      moduleKind: "featured";
       key: string;
       assignmentId: number;
       sortOrder: number;
@@ -42,6 +53,7 @@ export type SlotRenderPlanItem =
     }
   | {
       kind: "media-hub";
+      moduleKind: "media-hub";
       key: string;
       assignmentId: number;
       sortOrder: number;
@@ -50,6 +62,8 @@ export type SlotRenderPlanItem =
   | {
       kind: "module";
       key: string;
+      moduleKind: PageBlockType;
+      assignmentId: number;
       sortOrder: number;
       node: ReactNode;
     };
@@ -58,23 +72,61 @@ export type SlotRenderPlanItem =
  * Peer-composite relationships resolved inside `buildSlotModuleNodes`.
  * Kept here so PageSlotLayout does not invent ad-hoc pairing rules.
  *
- * Parent triggers the composite; peers are marked consumed and must not render twice.
+ * Complementary slug occurrences pair only when adjacent in the full canonical
+ * slot sequence. Unmatched occurrences render a half section, so no legal
+ * Assignment is dropped or moved across another Assignment.
  */
 export const SLOT_COMPOSITE_RELATIONSHIPS = [
   {
     id: "contact-office-form",
     parentSlugs: ["contact-form-office", "contact-form"] as const,
     peerSlugs: ["contact-form-office", "contact-form"] as const,
-    notes: "Either slug opens one ContactFormSection; missing peer renders half section.",
+    notes: "Adjacent Office/Form occurrences pair one-to-one; every non-adjacent or unmatched occurrence renders a half section at its saved order.",
   },
 ] as const;
+
+function slotEntryOrder(entry: SlotEntry) {
+  return {
+    sortOrder: entry.sortOrder,
+    moduleKind: entry.kind === "block" ? entry.block.blockType : entry.kind,
+    assignmentId: entry.assignmentId,
+  };
+}
+
+function buildAdjacentContactFormPairs(entries: SlotEntry[]): ContactFormPair[] {
+  const ordered = [...entries].sort((left, right) =>
+    comparePageAssignmentOrder(slotEntryOrder(left), slotEntryOrder(right)),
+  );
+  const pairs: ContactFormPair[] = [];
+
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const current = ordered[index];
+    const next = ordered[index + 1];
+    if (current.kind !== "block" || next.kind !== "block") continue;
+
+    const currentSlug = current.block.template.slug;
+    const nextSlug = next.block.template.slug;
+    const isComplementaryPair =
+      (currentSlug === "contact-form-office" && nextSlug === "contact-form") ||
+      (currentSlug === "contact-form" && nextSlug === "contact-form-office");
+    if (!isComplementaryPair) continue;
+
+    pairs.push({
+      office: currentSlug === "contact-form-office" ? current.block : next.block,
+      form: currentSlug === "contact-form" ? current.block : next.block,
+    });
+    index += 1;
+  }
+
+  return pairs;
+}
 
 /**
  * Build an ordered render plan for one layout slot.
  *
  * Strategy:
- * 1. Collect all block entries and resolve composites via buildSlotModuleNodes
- *    (batching is required so peer lookup works).
+ * 1. Resolve Contact composites only across adjacent assignments in the full
+ *    canonical slot sequence, then batch Page Blocks through buildSlotModuleNodes.
  * 2. Keep feed entries as separate plan items.
  * 3. Merge and sort by sort_order so feeds stay interleaved with modules.
  *
@@ -89,11 +141,17 @@ export function buildSlotRenderPlan(
   const mediaSidebarItems: SlotRenderPlanItem[] = [];
   const mediaHubItems: SlotRenderPlanItem[] = [];
   const blocks: ResolvedPageBlock[] = [];
+  // Product invariant: Hero is a fixed singleton rendered above this
+  // composable-module plan. It never participates in Position ordering.
+  const composableEntries = entries.filter((entry) => entry.kind !== "hero");
+  const contactFormPairs = buildAdjacentContactFormPairs(composableEntries);
 
-  for (const entry of entries) {
+  for (const entry of composableEntries) {
     if (entry.kind === "feed") {
+      if (!isFeedModuleRenderable(entry.module)) continue;
       feedItems.push({
         kind: "feed",
+        moduleKind: "feed",
         key: `feed-${entry.assignmentId}`,
         assignmentId: entry.assignmentId,
         sortOrder: entry.sortOrder,
@@ -103,9 +161,13 @@ export function buildSlotRenderPlan(
     }
 
     if (entry.kind === "featured") {
-      if (context.suppressFeaturedDuringSearch) continue;
+      if (
+        context.suppressFeaturedDuringSearch ||
+        !isFeaturedModuleRenderable(entry.module)
+      ) continue;
       featuredItems.push({
         kind: "featured",
+        moduleKind: "featured",
         key: `featured-${entry.assignmentId}`,
         assignmentId: entry.assignmentId,
         sortOrder: entry.sortOrder,
@@ -117,6 +179,7 @@ export function buildSlotRenderPlan(
     if (entry.kind === "media-sidebar") {
       mediaSidebarItems.push({
         kind: "media-sidebar",
+        moduleKind: "media-sidebar",
         key: `media-sidebar-${entry.assignmentId}`,
         assignmentId: entry.assignmentId,
         sortOrder: entry.sortOrder,
@@ -126,8 +189,12 @@ export function buildSlotRenderPlan(
     }
 
     if (entry.kind === "media-hub") {
+      if (!isMediaHubModuleRenderable(entry.module, {
+        listingContext: context.listingContext,
+      })) continue;
       mediaHubItems.push({
         kind: "media-hub",
+        moduleKind: "media-hub",
         key: `media-hub-${entry.assignmentId}`,
         assignmentId: entry.assignmentId,
         sortOrder: entry.sortOrder,
@@ -141,9 +208,11 @@ export function buildSlotRenderPlan(
     }
   }
 
-  const moduleItems: SlotRenderPlanItem[] = buildSlotModuleNodes(blocks, context).map((node) => ({
+  const moduleItems: SlotRenderPlanItem[] = buildSlotModuleNodes(blocks, context, contactFormPairs).map((node) => ({
     kind: "module" as const,
     key: node.key,
+    moduleKind: node.moduleKind,
+    assignmentId: node.assignmentId,
     sortOrder: node.sortOrder,
     node: node.node,
   }));
@@ -155,6 +224,6 @@ export function buildSlotRenderPlan(
     ...mediaHubItems,
     ...moduleItems,
   ].sort(
-    (a, b) => a.sortOrder - b.sortOrder || a.key.localeCompare(b.key),
+    (left, right) => comparePageAssignmentOrder(left, right),
   );
 }

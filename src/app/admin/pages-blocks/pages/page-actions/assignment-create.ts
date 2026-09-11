@@ -5,19 +5,29 @@ import { BLOCK_MODULE_REGISTRY } from "../../../../../lib/page-blocks/block-modu
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
 import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { cleanText, parseFormBoolean, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
+import { getHeroAssignmentConflicts } from "../../../../../lib/page-blocks/module-assignments-query";
 import type { PageBlockType } from "../../../../../lib/page-blocks/types";
 import { getDefaultAssignmentPosition } from "../../../../../lib/page-composition/page-assignment-contract";
 import {
   databaseAssignmentKind,
   failure,
   mutatePageComposition,
-  nextMediaHubSortOrder,
-  nextMediaSidebarSortOrder,
-  nextSortOrder,
+  nextPageCompositionSortOrder,
   pageExists,
   positionPolicyFailure,
   success,
 } from "./helpers";
+
+async function resolveRequestedSortOrder(
+  formData: FormData,
+  pageId: number,
+  slot: string,
+) {
+  const rawSortOrder = cleanText(formData.get("sort_order"));
+  return rawSortOrder
+    ? parseNumber(rawSortOrder, 0)
+    : nextPageCompositionSortOrder(pageId, slot);
+}
 
 async function saveAssignment(options: {
   pageId: number;
@@ -54,12 +64,13 @@ export async function assignPageBlock(
   const blockType = cleanText(formData.get("block_type")) as PageBlockType;
   const templateId = parseNumber(formData.get("template_id"));
   if (!pageId || !templateId || !(blockType in BLOCK_MODULE_REGISTRY)) return failure("بيانات الربط غير مكتملة.");
+  const slot = cleanText(formData.get("slot")) || getDefaultAssignmentPosition(blockType);
   return saveAssignment({
     pageId,
     kind: blockType,
     templateId,
-    slot: cleanText(formData.get("slot")) || getDefaultAssignmentPosition(blockType),
-    sortOrder: parseNumber(formData.get("sort_order"), await nextSortOrder(pageId, blockType)),
+    slot,
+    sortOrder: await resolveRequestedSortOrder(formData, pageId, slot),
     isVisible: parseFormBoolean(formData, "is_visible", true),
   });
 }
@@ -71,12 +82,13 @@ export async function assignMediaSidebarModule(
   const pageId = parseNumber(formData.get("page_id"));
   const templateId = parseNumber(formData.get("template_id"));
   if (!pageId || !templateId) return failure("بيانات الربط غير مكتملة.");
+  const slot = cleanText(formData.get("slot")) || getDefaultAssignmentPosition("media-sidebar");
   return saveAssignment({
     pageId,
     kind: "media-sidebar",
     templateId,
-    slot: cleanText(formData.get("slot")) || getDefaultAssignmentPosition("media-sidebar"),
-    sortOrder: parseNumber(formData.get("sort_order"), await nextMediaSidebarSortOrder(pageId)),
+    slot,
+    sortOrder: await resolveRequestedSortOrder(formData, pageId, slot),
     isVisible: parseFormBoolean(formData, "is_visible", true),
   });
 }
@@ -88,12 +100,13 @@ export async function assignMediaHubModule(
   const pageId = parseNumber(formData.get("page_id"));
   const templateId = parseNumber(formData.get("template_id"));
   if (!pageId || !templateId) return failure("بيانات الربط غير مكتملة.");
+  const slot = cleanText(formData.get("slot")) || getDefaultAssignmentPosition("media-hub");
   return saveAssignment({
     pageId,
     kind: "media-hub",
     templateId,
-    slot: cleanText(formData.get("slot")) || getDefaultAssignmentPosition("media-hub"),
-    sortOrder: parseNumber(formData.get("sort_order"), await nextMediaHubSortOrder(pageId)),
+    slot,
+    sortOrder: await resolveRequestedSortOrder(formData, pageId, slot),
     isVisible: parseFormBoolean(formData, "is_visible", true),
   });
 }
@@ -107,16 +120,20 @@ export async function assignHeroModule(
   const heroId = parseNumber(formData.get("template_id"));
   if (!pageId || !heroId) return failure("بيانات ربط الهيرو غير مكتملة.");
   if (!(await pageExists(pageId))) return failure("الصفحة غير موجودة.");
+  const slot = getDefaultAssignmentPosition("hero");
   const slotRejection = positionPolicyFailure(
     "hero",
-    getDefaultAssignmentPosition("hero"),
+    slot,
   );
   if (slotRejection) return slotRejection;
   try {
+    if ((await getHeroAssignmentConflicts([pageId])).length) {
+      return failure("الصفحة مرتبطة بهيرو واحد بالفعل. عدّل الربط الحالي أو أزله أولًا.");
+    }
     await mutatePageComposition(pageId, "save_hero_assignment", {
       hero_id: heroId,
-      sort_order: parseNumber(formData.get("sort_order"), 0),
-      is_visible: true,
+      sort_order: 0,
+      is_visible: parseFormBoolean(formData, "is_visible", true),
     }, actor);
   } catch (error) {
     return failure(error instanceof Error ? error.message : "تعذر حفظ ربط الهيرو.");
