@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { validateAdminSessionPayload } from "./lib/admin/auth/admin-users";
+import { isCronRequestAuthorized } from "./lib/admin/auth/cron";
 import {
   ADMIN_SESSION_COOKIE,
   getAdminAuthConfig,
@@ -82,6 +83,13 @@ export async function proxy(request: NextRequest) {
 
   if (isAdminPath(pathname) || isAdminApiPath(pathname)) {
     return handleAdminAuth(request);
+  }
+
+  // This scheduled cleanup must survive public maintenance mode. Keep the
+  // exception exact and authenticated; Admin still uses its own boundary above.
+  if (pathname === "/api/content/topics/view-maintenance" &&
+      request.method === "GET" && isCronRequestAuthorized(request)) {
+    return NextResponse.next();
   }
 
   if (isMaintenancePublicPath(pathname)) {

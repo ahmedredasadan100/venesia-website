@@ -198,8 +198,11 @@ assert.match(coordinator, /integration_sync_analytics_projection_invalid/);
 assert.match(coordinator, /integration_sync_unowned_analytics_projection/);
 assert.match(coordinator, /failSyncRun/);
 assert.match(coordinator, /pruneAuthorizationAttempts/);
-assert.match(cron, /CRON_SECRET/);
-assert.match(cron, /timingSafeEqual/);
+assert.match(cron, /import \{ isCronRequestAuthorized \} from .*lib\/admin\/auth\/cron/);
+assert.match(cron, /if \(!isCronRequestAuthorized\(request\)\)/);
+const cronAuth = source("src/lib/admin/auth/cron.ts");
+assert.match(cronAuth, /CRON_SECRET/);
+assert.match(cronAuth, /timingSafeEqual/);
 assert.match(wizard, /select_test_sync/);
 assert.match(wizard, /diagnose/);
 assert.match(wizard, /AdminConfirmDialog/);
@@ -209,7 +212,10 @@ assert.match(actionRoute, /requireAdminSession/);
 assert.match(connectionService, /integration_connection_provider_mismatch/);
 assert.match(connectionService, /integrationAssetsDiscoveryFailed/);
 assert.match(connectionService, /integrationDiagnosed/);
-assert.deepEqual(vercel.crons, [{ path: "/api/admin/integrations/sync", schedule: "17 2 * * *" }]);
+assert.deepEqual(vercel.crons, [
+  { path: "/api/admin/integrations/sync", schedule: "17 2 * * *" },
+  { path: "/api/content/topics/view-maintenance", schedule: "37 2 * * *" },
+]);
 for (const name of ["GOOGLE_INTEGRATIONS_CLIENT_ID", "META_APP_ID", "TIKTOK_BUSINESS_APP_ID", "SNAPCHAT_MARKETING_CLIENT_ID", "CRON_SECRET"]) {
   assert.match(envExample, new RegExp(`^${name}=`, "m"));
 }

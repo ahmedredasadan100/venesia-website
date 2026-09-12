@@ -899,13 +899,13 @@ const viewRoute = read("src/app/api/content/topics/[id]/view/route.ts");
 const viewTracker = read("src/components/content/TopicViewTracker.tsx");
 check("Public view route must accept only a topic ID", viewRoute.includes('rpc("increment_topic_view"'));
 check(
-  "Client view tracking must deduplicate by session",
-  viewTracker.includes("window.sessionStorage.getItem") &&
-    viewTracker.includes("window.sessionStorage.setItem"),
+  "Client view tracking delegates history to the protected server and only coalesces in-flight requests",
+  !viewTracker.includes("sessionStorage") &&
+    viewTracker.includes("identity_required") && viewTracker.includes("pending.has(topicId)"),
 );
 check(
-  "Blocked session storage must not suppress a valid public view",
-  !viewTracker.includes("catch {\n      return;"),
+  "Cookie establishment is bounded and never falls back to unprotected counting",
+  viewTracker.includes("attempt < 2") && viewRoute.includes("topicViewResultSchema.parse(data)"),
 );
 check(
   "Admin and preview routes must not mount view tracking",

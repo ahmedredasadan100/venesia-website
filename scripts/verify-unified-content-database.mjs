@@ -53,7 +53,7 @@ const [
   negativeViews,
   preferencesContract,
   readModelContract,
-  rpcContract,
+  viewPolicyContract,
 ] = await Promise.all([
   supabase
     .from("topic_categories")
@@ -87,7 +87,11 @@ const [
       "id,title,category_id,category_name,category_color_token,series_id,series_name,content_type,status,is_featured,created_by_display,updated_by_display,published_by_display,views_count",
     )
     .limit(1),
-  supabase.rpc("increment_topic_view", { p_topic_id: -9223372036854775000n.toString() }),
+  // Live diagnostics stay read-only. Atomic view behavior is proved against
+  // the real RPC/trigger in verify:metrics-publishing-integrity, in isolation.
+  supabase.from("topic_view_policy")
+    .select("cookie_ttl_seconds,dedupe_seconds,rate_window_seconds,visitor_request_limit,ip_request_limit")
+    .eq("singleton", true).single(),
 ]);
 
 record("topic_categories contract", categoryContract.error);
@@ -96,7 +100,7 @@ record("category color constraint query", invalidColors.error);
 record("views non-negative query", negativeViews.error);
 record("admin preferences contract", preferencesContract.error);
 record("admin content read model", readModelContract.error);
-record("atomic view RPC", rpcContract.error);
+record("view protection policy contract", viewPolicyContract.error);
 
 if (!invalidColors.error && (invalidColors.count ?? 0) !== 0) {
   failures.push(`${invalidColors.count} categories have invalid semantic color tokens`);
@@ -104,8 +108,9 @@ if (!invalidColors.error && (invalidColors.count ?? 0) !== 0) {
 if (!negativeViews.error && (negativeViews.count ?? 0) !== 0) {
   failures.push(`${negativeViews.count} topics have a negative views_count`);
 }
-if (!rpcContract.error && rpcContract.data !== null) {
-  failures.push("increment_topic_view changed or returned data for an impossible topic ID");
+if (!viewPolicyContract.error && (!viewPolicyContract.data ||
+    Object.values(viewPolicyContract.data).some(value => !Number.isSafeInteger(value) || value <= 0))) {
+  failures.push("topic_view_policy must contain positive integer protection settings");
 }
 
 if (failures.length) {
