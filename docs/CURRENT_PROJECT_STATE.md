@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-09-06
+**Updated:** 2026-09-12
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -12,31 +12,32 @@ This file records the minimum current facts needed to begin work safely. Archite
 The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
 
 ```text
-360f0a1f4dcd40be98a7b8aa82706db13fc74b83
+6ec44b8afbf153e02b194759cc88a90058086835
 ```
 
-Verified at the G0 starting gate on 2026-09-06:
+Verified once at this phase entering gate on 2026-09-12 (02:19 UTC):
 
 | Surface                       | SHA / state                                                                                                                                                             |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current official baseline     | `360f0a1f4dcd40be98a7b8aa82706db13fc74b83`                                                                                         |
-| `origin/main` / GitHub `main` | `360f0a1f4dcd40be98a7b8aa82706db13fc74b83`                                                                                         |
-| Delivery state                | P1-A is merged and closed; G0 is a branch/PR candidate and does not become `main` authority until merged. |
+| Current official baseline     | `6ec44b8afbf153e02b194759cc88a90058086835`                                                                                         |
+| `origin/main` / GitHub `main` | `6ec44b8afbf153e02b194759cc88a90058086835`                                                                                         |
+| Delivery state                | P2-S + ADM-01 is merged and closed through PR #152. The current capability-completion delta is local and uncommitted. |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-Current `main` remains the only official entering baseline. G0 is a candidate delta from that exact baseline; its branch or PR is not architecture authority unless merged. This snapshot does not reopen closed Architecture, historical Technical Debt, or completed phases.
+P2-S + ADM-01 closed through PR #152 with DB first, standard merge commit, automatic Production deployment and bounded verification. Existing local closure evidence is retained under `.tmp-qa/p2-s-adm01/production-cutover-20260912/`. Earlier Smoke counter blocking remains **unproven**; only the separately recorded cutover Smoke has positive interception evidence. The transient read timeout recovered; its original cause is not established.
 
 ## Active phase
 
-- **Title:** G0 — Governance Proof & Adoption Truth Reconciliation
-- **Baseline:** live GitHub `main` at `360f0a1f4dcd40be98a7b8aa82706db13fc74b83`
-- **Status:** branch/PR candidate until G0 is reviewed and merged; it is not current-`main` authority while unmerged.
-- **Scope:** reconcile capability declarations, executable reachability, derived closure, nested transport coverage, and architecture ownership guards without changing Product behavior.
-- **Boundaries:** do not reopen Architecture, historical PRs, or old Technical Debt without current-`main` regression evidence and an explicit scoped request.
-- **Delivery:** every future phase must independently prove local `main` = `origin/main` = GitHub `main` before implementation.
+- **Title:** Shared Capability Completion & Adoption + Remaining Runtime Fixes
+- **Baseline:** `6ec44b8afbf153e02b194759cc88a90058086835`
+- **Branch:** `codex/shared-capability-completion-runtime-fixes`
+- **Scope:** VEN-A01/A02/A05/A06/A07/A08/A09/A10 at their current owners.
+- **Authorization:** local implementation, isolated verification and Product Review delivery only; no Git delivery, Production mutation or migration.
+- **Outside scope:** VEN-A04 Footer child-menu presentation requires a Product decision.
+- **Closure:** `globalClosed=false`; owner tests do not imply authenticated save/domain parity across every registered consumer.
 
 ## Current architecture truth
 
@@ -58,8 +59,9 @@ Current `main` remains the only official entering baseline. G0 is a candidate de
 - Full Management Collection claims are sourced from the adoption manifest and fail closed through executable contract/provenance evidence. Inventory totals are derived by the verifier from the current canonical registries rather than frozen here; local Bulk owners, direct Bulk lifecycle bypasses, local column-preference owners, local Collection query runtimes, missing axes, and false Full claims are negative fixtures.
 - The Consumer Capability Adoption Audit derives every axis from the Current Shared Capability Set and every consumer from the current Collection/Form manifests. Executable proof follows runtime imports and re-exports through indirect descendants, ignores type-only and unused imports, and stops at canonical capability-owner boundaries. Nested Admin route handlers are separately derived as transport consumers and are not promoted into Product Surface identities.
 - Shared Listbox behavior is owned by `AdminListboxSelect` and `AdminFormListboxSelect`; the retired native `AdminSelect` owner has no remaining consumer. Boolean switches and selection checkboxes use `AdminFormSwitch` and `AdminCheckbox`; raw primitives remain internal to those owners.
+- AdminDatePicker extends the existing Admin Form UI owner. Activity Log, the three Tracking lists and Content Editor Pages reach it through shared Collection filters; Article/Media and Tracking date fields bind it directly. Native date-only/local-date-time strings, bounds, RTL and consumer storage semantics are unchanged.
 - Every specialized or explicit Form exception records its lower-level shared capabilities, known debt, review trigger, and closure impact. Capability exceptions require explicit per-axis Scope, Approving Owner, Evidence, and Rationale; classification alone cannot auto-approve a local implementation. Form, Collection, Row Actions, Content Editor, and umbrella closure remain open whenever a required owner extension, adoption gap, incomplete module ledger, or behavior with source-only evidence remains.
-- Hero and Content Block Editors still render save-result feedback through direct `AdminNotice` paths. G0 records both as `feedback: missing_adoption` debt owned by the existing Feedback Runtime; they block Form and umbrella closure until a dedicated Product-behavior phase adopts the canonical feedback path and proves mounted parity.
+- Hero and Content Block Editors use the existing Feedback owner for success/media warning and AdminFormRuntime for failed-save preservation, Busy and retry. Content informational missing-editor-link notices remain separate from action feedback. Scoped mounted proof and per-consumer executable adoption evidence do not imply domain persistence parity.
 - Shared column preferences apply optimistic visibility locally, serialize writes, commit only verified success, roll back the latest failed request to the last committed state, and never use route refresh as preference reconciliation.
 - Dashboard recent content and Sitemap Effective Source tables adopt the shared Data Grid presentation owner; Dashboard edit/information interactions adopt Shared Row Actions.
 - Governorates, Cities, Districts, and Sub-districts share the Location Collection/Data contracts. Their optional columns, preferences, primary Name preset, sorting, pagination, and Row Actions are shared; Bulk is explicitly `not_required`, and delete eligibility is projected by the Location contract/adapter while the guarded RPC remains final enforcement.
@@ -83,6 +85,7 @@ Current `main` remains the only official entering baseline. G0 is a candidate de
 | PR #84      | The remaining valid PR #82 delta was reimplemented on the then-current `main` inside current owners and guarded by `verify:pr-82-delta-recovery`. |
 | PR #82      | Closed unmerged as superseded by PR #84; its old baseline, owners, contracts, and superseded implementations are not architecture authority.      |
 | PR #85      | GitHub Actions PostgreSQL service jobs aligned with Production PostgreSQL 17; no product or schema change.                                        |
+| PR #152 | P2-S + ADM-01: corrected migration 102, Metrics/Security protection and Hero publication proof; merge `6ec44b8afbf153e02b194759cc88a90058086835`. |
 | PR #140     | P1-A Topics Bulk Publish Atomicity merged on `360f0a1f4dcd40be98a7b8aa82706db13fc74b83`; Migration 100 and its Production registry reconciliation were already verified before merge. |
 
 ## Closed Platform Health phase
@@ -115,9 +118,9 @@ The 2026-09-05 authorized Migration 100 application and registry reconciliation 
 
 Production migration `20260905090000_topics_bulk_publish_atomicity.sql` was applied once and reconciled into the canonical registry as migration 100 with exact repository SQL provenance. The corresponding application code was merged by PR #140 and is part of the current `main` baseline.
 
-Repository migration 101, `20260907214608_p1_e_taxonomy_consistency.sql`, is a PR candidate only. It has not been applied to Production.
+Migration 101, `20260907214608_p1_e_taxonomy_consistency.sql`, was already present with matching provenance in the P2-S delivery registry comparison. It is not a pending candidate.
 
-Local P2-S + ADM-01 work from baseline `eb8620a33a1712726f4acb441656df9c200adc71` prepares migration 102, `20260911194004_topic_view_integrity.sql`. The existing `increment_topic_view` owner receives private, expiring visitor/topic deduplication and request-limit state. The user-approved PUB-07 policy is a signed server-issued browser cookie for 30 days; one qualified public Production view per visitor/topic per rolling 24 hours; 30 requests per visitor and 300 per trusted IP per rolling 60 seconds, including duplicates. Admin Preview, Vercel Preview, localhost and CI are excluded. The policy row is the sole configurable value source. Counts and editorial `is_popular` are preserved. Cookie deletion or a different browser can create a new identity; this is inflation reduction, not proof of a unique person or universal bot prevention. Daily authenticated cleanup bounds expired-state retention when the existing Cron scheduler runs successfully. No shared migration application, Git closure or deployment is authorized by this local phase; `globalClosed=false`.
+Closed P2-S + ADM-01 applied corrected migration 102 once before PR #152, `20260911194004_topic_view_integrity.sql`. The existing `increment_topic_view` owner receives private, expiring visitor/topic deduplication and request-limit state. The user-approved PUB-07 policy is a signed server-issued browser cookie for 30 days; one qualified public Production view per visitor/topic per rolling 24 hours; 30 requests per visitor and 300 per trusted IP per rolling 60 seconds, including duplicates. Admin Preview, Vercel Preview, localhost and CI are excluded. The policy row is the sole configurable value source. Counts and editorial `is_popular` are preserved. Cookie deletion or a different browser can create a new identity; this is inflation reduction, not proof of a unique person or universal bot prevention. Daily authenticated cleanup bounds expired-state retention when the existing Cron scheduler runs successfully. P2-S cutover authorization was consumed by its closed delivery. The current phase authorizes no new migration or Production action; `globalClosed=false`.
 
 The RPC owns the bounded, revision-checked Topic transitions and their per-Topic Mutation Audit rows inside one database transaction. Application code remains the sole owner of semantic Publish Validation, and post-commit Media Center cache invalidation remains with the existing `revalidateMediaCenterPublicPaths` owner.
 

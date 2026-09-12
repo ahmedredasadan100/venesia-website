@@ -32,18 +32,36 @@ function isJsonObject(value: Json): value is Record<string, Json | undefined> {
 const warnedPayloadRecoveries = new Set<string>();
 const MAX_WARNED_PAYLOAD_RECOVERIES = 128;
 
+class FeaturedReadFailure extends Error {
+  constructor(readonly state: FeaturedModuleLoadResult) {
+    super("Featured module source read failed.");
+  }
+}
+
 export const loadFeaturedModuleStateForPageSlug = cache(
   async function loadFeaturedModuleStateForPageSlug(
     pageSlug: string,
   ): Promise<FeaturedModuleLoadResult> {
-    const cachedState = await unstable_cache(
-      () => queryFeaturedModuleStateForPageSlug(pageSlug),
-      buildFeaturedModuleCacheKey(pageSlug),
-      {
-        revalidate: 300,
-        tags: ["page-composition", "featured-modules", "public-content"],
-      },
-    )();
+    let cachedState: FeaturedModuleLoadResult;
+    try {
+      cachedState = await unstable_cache(
+        async () => {
+          const state = await queryFeaturedModuleStateForPageSlug(pageSlug);
+          if (state.hasCompositionError) throw new FeaturedReadFailure(state);
+          return state;
+        },
+        buildFeaturedModuleCacheKey(pageSlug),
+        {
+          revalidate: 300,
+          tags: ["page-composition", "featured-modules", "public-content"],
+        },
+      )();
+    } catch (error) {
+      logError("Featured safe rendering after source failure", error, { pageSlug });
+      return error instanceof FeaturedReadFailure
+        ? error.state
+        : { modules: [], hasAnyAssignmentRows: false, hasCompositionError: true };
+    }
     const normalized = normalizeFeaturedModuleLoadResult(cachedState);
     for (const recovery of normalized.recoveries) {
       const recoveryKey = `${pageSlug}:${recovery.assignmentId ?? "payload"}:${recovery.fields.join(",")}`;

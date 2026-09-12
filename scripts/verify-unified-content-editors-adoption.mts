@@ -801,8 +801,9 @@ assert.ok(
   "Gallery Admin shared-media adoption must leave the blocker registry only after source and behavior proof.",
 );
 assert.ok(
-  globalClosureBlockerIds.has("gallery-public-projection"),
-  "Gallery Public projection must remain an explicit closure blocker until it is fixed and verified.",
+  !globalClosureBlockerIds.has("gallery-public-projection") &&
+    CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER.some(proof => proof.id === "gallery-public-projection" && proof.state === "source_proven_only" && proof.owner === "scripts/verify-public-content-delivery.mts"),
+  "The old Gallery source defect is resolved with projection and renderer binding evidence, without claiming mounted public rendering or closing save parity.",
 );
 for (const proof of CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER) {
   const blockerId = `content-editor-behavior:${proof.id}`;

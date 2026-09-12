@@ -93,7 +93,7 @@ async function queryFooterSettings(): Promise<FooterSettings> {
 
   if (error) {
     logError("loadFooterSettings failed", error, { resource: "site_settings:footer" });
-    return cloneEmptyFooterSettings("error", [error.message]);
+    throw new Error(error.message);
   }
 
   const rows = data ?? [];
@@ -107,16 +107,25 @@ async function queryFooterSettings(): Promise<FooterSettings> {
 }
 
 export const loadFooterSettings = cache(async function loadFooterSettings(): Promise<FooterSettings> {
-  return unstable_cache(
-    async () => queryFooterSettings(),
-    ["public-footer-settings-v2"],
-    { revalidate: 300, tags: ["footer", "site-settings"] },
-  )();
+  try {
+    return await unstable_cache(
+      async () => queryFooterSettings(),
+      ["public-footer-settings-v2"],
+      { revalidate: 300, tags: ["footer", "site-settings"] },
+    )();
+  } catch (error) {
+    logError("Footer safe rendering after source failure", error);
+    return cloneEmptyFooterSettings("error", [error instanceof Error ? error.message : "Footer source read failed."]);
+  }
 });
 
 export async function loadFooterSettingsForAdmin(): Promise<FooterSettings> {
   noStore();
-  return queryFooterSettings();
+  try {
+    return await queryFooterSettings();
+  } catch (error) {
+    return cloneEmptyFooterSettings("error", [error instanceof Error ? error.message : "Footer source read failed."]);
+  }
 }
 
 export { DEFAULT_FOOTER_SLOTS };

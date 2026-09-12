@@ -3,6 +3,8 @@ import type { Database } from "../database.types";
 export type CmsBackupTable = {
   name: Extract<keyof Database["public"]["Tables"], string>;
   orderBy?: string;
+  /** Stable unique key, also used to detect duplicate/missing page boundaries. */
+  primaryKey?: string;
 };
 
 /** Core CMS tables eligible for JSON backup. Extend as new entities ship. */
@@ -15,7 +17,7 @@ export const CMS_BACKUP_TABLES = [
   { name: "hero_assignments", orderBy: "id" },
   { name: "menus", orderBy: "id" },
   { name: "menu_items", orderBy: "sort_order" },
-  { name: "site_settings", orderBy: "key" },
+  { name: "site_settings", orderBy: "key", primaryKey: "key" },
   { name: "projects", orderBy: "id" },
   { name: "project_floor_plans", orderBy: "id" },
   { name: "project_delivery_items", orderBy: "id" },

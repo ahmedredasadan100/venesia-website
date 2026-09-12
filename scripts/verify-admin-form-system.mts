@@ -7,6 +7,7 @@ import * as ts from "typescript";
 
 import {
   ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT,
+  ADMIN_BLOCK_EDITOR_INFORMATIONAL_NOTICE_SCOPES,
   ADMIN_FORM_CONFIRM_DEBT,
   ADMIN_FORM_BEHAVIOR_PROOF_LEDGER,
   ADMIN_FORM_GLOBAL_CLOSURE_BLOCKERS,
@@ -793,6 +794,24 @@ const blockEditorFeedbackDebtByKind = new Map<
 const feedbackOwnerBoundarySourceFiles =
   ADMIN_CURRENT_SHARED_CAPABILITY_SET.feedback.sourceFiles;
 const adminNoticeSourceFile = "src/components/admin/AdminNotice.tsx";
+function hasDirectActionNotice(sourceFile: string) {
+  const source = read(sourceFile);
+  const tree = ts.createSourceFile(sourceFile, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const informational = ADMIN_BLOCK_EDITOR_INFORMATIONAL_NOTICE_SCOPES.filter(scope => scope.sourceFile === sourceFile);
+  let found = false;
+  function visit(node: ts.Node) {
+    if (ts.isFunctionDeclaration(node) && informational.some(scope => scope.functionName === node.name?.text)) {
+      // The exception is a static missing-editor-link explanation, with no
+      // save result input. A new stateful/action notice in this scope fails.
+      assert.doesNotMatch(node.getText(tree), /\b(saved|mediaSynchronizationWarning|useActionState|useState|useAdminFeedback)\b/);
+      return;
+    }
+    if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && node.tagName.getText(tree) === "AdminNotice") found = true;
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  return found;
+}
 const blockEditorFeedbackTruthFailures = blockEditorEntries.flatMap(
   (entry) => {
     const ownershipGraph = collectExecutableSourceGraph({
@@ -803,7 +822,8 @@ const blockEditorFeedbackTruthFailures = blockEditorEntries.flatMap(
     });
     const debt = blockEditorFeedbackDebtByKind.get(entry.registryModuleKind);
     const feedbackOverride = entry.capabilityAudit.overrides.feedback;
-    const ownsDirectNoticePath = ownershipGraph.has(adminNoticeSourceFile);
+    const ownsDirectNoticePath = ownershipGraph.has(adminNoticeSourceFile) &&
+      [...ownershipGraph.keys()].some(sourceFile => sourceFile !== adminNoticeSourceFile && !new Set<string>(feedbackOwnerBoundarySourceFiles).has(sourceFile) && hasDirectActionNotice(sourceFile));
     const failures: string[] = [];
     if (ownsDirectNoticePath !== Boolean(debt)) {
       failures.push(`${entry.id}:direct_notice_debt_mismatch`);
@@ -1089,6 +1109,17 @@ check(
           `form-missing-adoption:block-template-${debt.moduleKind}-editor:feedback`,
       ),
     ),
+);
+check(
+  "Hero and Content reset the shared form only on the saved server revision while retaining inputs on a failed save",
+  [
+    ["src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx", "hero"],
+    ["src/components/admin/page-blocks/ContentModuleEditClient.tsx", "block"],
+  ].every(([file, entity]) => {
+    const source = read(file);
+    return source.includes(`<AdminFormRuntime key={\u0060\u0024{${entity}.id}:\u0024{${entity}.updated_at}\u0060}`) &&
+      source.includes(`savedRevision={${entity}.updated_at}`) && source.includes("redirectAction=");
+  }),
 );
 check(
   "a shallow-shared nested Block Editor decision fails the identity proof",

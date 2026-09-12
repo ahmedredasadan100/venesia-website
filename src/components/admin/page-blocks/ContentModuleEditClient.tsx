@@ -1,6 +1,8 @@
 "use client";
 
 import AdminNotice from "../AdminNotice";
+import AdminFormRuntime from "../ui/AdminFormRuntime";
+import { BlockEditorSaveFeedback } from "./BlockEditorContextHeader";
 import { AdminActionButton, AdminFormGrid } from "../ui";
 import HeroCtaFields from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroCtaFields";
 import HeroElementOrderEditor from "../../../app/admin/pages-blocks/blocks/hero/[id]/HeroElementOrderEditor";
@@ -84,6 +86,7 @@ type ContentModuleEditClientProps = {
     depth: number;
   }[];
   saved?: boolean;
+  mediaSynchronizationWarning?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
 };
 
@@ -152,6 +155,7 @@ export default function ContentModuleEditClient({
   projectDetailHeroEditorLinks,
   topicCategoryOptions,
   saved,
+  mediaSynchronizationWarning,
   updateAction,
 }: ContentModuleEditClientProps) {
   const editorKey = getContentModuleEditorKey(block.slug, block.variant ?? "");
@@ -343,7 +347,7 @@ export default function ContentModuleEditClient({
                       : "تم حفظ الموديول بنجاح.";
   const activePanelContext = (
     <ModuleEditorFeedbackSlot>
-      {saved ? <AdminNotice variant="success" message={savedMessage} /> : null}
+      <BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/content" entityKey={`block-template-content:${block.id}`} savedRevision={block.updated_at} saved={saved} mediaSynchronizationWarning={mediaSynchronizationWarning} message={savedMessage} />
     </ModuleEditorFeedbackSlot>
   );
 
@@ -544,7 +548,7 @@ export default function ContentModuleEditClient({
         />
       )}
 
-      <form key={`${block.id}:${block.updated_at}`} action={updateAction}>
+      <AdminFormRuntime key={`${block.id}:${block.updated_at}`} mode="edit" entityKey={`block-template-content:${block.id}`} redirectAction={updateAction}>
         <input type="hidden" name="id" value={block.id} />
         <input type="hidden" name="slug" value={block.slug} />
         <input type="hidden" name="internal_description" value={block.description ?? ""} />
@@ -728,7 +732,7 @@ export default function ContentModuleEditClient({
         ) : (
           <ModuleEditorSaveArea />
         )}
-      </form>
+      </AdminFormRuntime>
     </div>
   );
 }

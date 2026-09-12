@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import AdminNotice from "../../../../../../components/admin/AdminNotice";
+import AdminFormRuntime from "../../../../../../components/admin/ui/AdminFormRuntime";
+import { BlockEditorSaveFeedback } from "../../../../../../components/admin/page-blocks/BlockEditorContextHeader";
 import AdminImagePathListField from "../../../../../../components/admin/page-blocks/AdminImagePathListField";
 import {
   ModuleEditorHeader,
@@ -43,6 +44,7 @@ type HeroEditClientProps = {
     description: string | null;
     variant: string;
     style_preset: string | null;
+    updated_at: string;
     status: "published" | "unpublished";
   };
   config: Record<string, unknown>;
@@ -712,7 +714,7 @@ export default function HeroEditClient({
         backLabel="الرجوع لكل الهيروهات"
       />
 
-      <form action={updateHeroTemplateDetails}>
+      <AdminFormRuntime key={`${hero.id}:${hero.updated_at}`} mode="edit" entityKey={`block-template-hero:${hero.id}`} redirectAction={updateHeroTemplateDetails}>
         <input type="hidden" name="id" value={hero.id} />
         <input type="hidden" name="slug" value={hero.slug} />
         <input
@@ -728,17 +730,7 @@ export default function HeroEditClient({
           initialTabId={initialTabId}
           activePanelContext={
             <ModuleEditorFeedbackSlot>
-              {mediaSynchronizationWarning ? (
-                <AdminNotice
-                  variant="warning"
-                  message="تم حفظ بيانات الموديول، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
-                />
-              ) : saved ? (
-                <AdminNotice
-                  variant="success"
-                  message="تم حفظ الموديول بنجاح."
-                />
-              ) : null}
+              <BlockEditorSaveFeedback backHref="/admin/pages-blocks/blocks/hero" entityKey={`block-template-hero:${hero.id}`} savedRevision={hero.updated_at} saved={saved} mediaSynchronizationWarning={mediaSynchronizationWarning} />
             </ModuleEditorFeedbackSlot>
           }
           tabs={[
@@ -870,7 +862,7 @@ export default function HeroEditClient({
         />
 
         <ModuleEditorSaveArea title="حفظ الهيرو" saveLabel="حفظ الهيرو" />
-      </form>
+      </AdminFormRuntime>
     </div>
   );
 }

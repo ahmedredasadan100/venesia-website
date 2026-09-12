@@ -52,18 +52,18 @@ export function deriveContentEditorClosure(input: {
   return deriveAdminGovernanceClosure(globalClosureBlockers);
 }
 
-export const CONTENT_EDITOR_SOURCE_BLOCKERS = [
-  {
-    id: "gallery-public-projection",
-    owner: "src/lib/media-center/adapt-topic-row.ts",
-    evidence: "source_confirmed",
-    rationale:
-      "The Public Content read owner preserves ordered Gallery images, but the Media Center adapter flattens only their non-empty captions into generic content paragraphs and drops the image URLs and per-image alt text; the detail renderer therefore has no Gallery image sequence to render.",
-  },
-] as const satisfies readonly ContentEditorClosureBlocker[];
+export const CONTENT_EDITOR_SOURCE_BLOCKERS: readonly ContentEditorClosureBlocker[] = [];
 
 export const CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER: readonly ContentEditorBehaviorProof[] =
   [
+    {
+      id: "gallery-public-projection",
+      owner: "scripts/verify-public-content-delivery.mts",
+      state: "source_proven_only",
+      requiredForGlobalClosure: false,
+      rationale:
+        "The former source finding is resolved at main 6ec44b8afbf153e02b194759cc88a90058086835: adapt-topic-row preserves galleryImages. Existing Public Content Delivery tests exercise typed projection and assert renderer AST bindings for ordered URLs, alt and captions. This is not mounted renderer or editor persistence proof; the broader public-rendering and save ledgers stay open.",
+    },
     {
       id: "registered-editor-save-round-trip",
       owner: "src/app/admin/content/topics/editor-actions/save.ts",

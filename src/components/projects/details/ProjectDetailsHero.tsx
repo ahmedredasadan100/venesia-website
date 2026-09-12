@@ -15,6 +15,7 @@ import {
 } from "../../../lib/hero/hero-content-controls";
 import type { HeroConfig } from "../../../lib/page-sections";
 import PlainTextContent from "../../content/PlainTextContent";
+import { resolvePublicPreviewHref } from "../../../lib/admin/links/validate";
 
 type ProjectDetailsHeroProps = {
   project: PublicProject;
@@ -220,6 +221,7 @@ function ProjectHeroActions({
   order: ProjectHeroActionKey[];
 }) {
   const weightClassName = bold ? "font-bold" : "font-medium";
+  const brochureHref = resolvePublicPreviewHref(project.brochureUrl);
   const visibleActionCount = [
     showDownload,
     showTracking,
@@ -232,7 +234,19 @@ function ProjectHeroActions({
         ? "grid-cols-2"
         : "grid-cols-3";
   const actions: Partial<Record<ProjectHeroActionKey, ReactNode>> = {
-    download: showDownload ? (
+    download: showDownload ? brochureHref ? (
+      <a
+        href={brochureHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        download
+        className={`${primaryActionClassName} ${weightClassName}`}
+        data-project-hero-action="download"
+      >
+        <DownloadIcon className={actionIconClassName} />
+        <span className={actionLabelClassName}>حمّل ملف المشروع</span>
+      </a>
+    ) : (
       <button
         type="button"
         disabled

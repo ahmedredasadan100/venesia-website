@@ -12,6 +12,7 @@ import {
   ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE,
   ADMIN_INTERACTION_MODULES,
   ADMIN_INTERACTION_SYSTEM,
+  ADMIN_SCOPED_RUNTIME_CLOSURES,
   ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,
   deriveAdminGovernanceClosure,
   type AdminGovernanceClosureBlocker,
@@ -112,6 +113,7 @@ export const ADMIN_INTERACTION_SYSTEM_CLOSURE = {
   ...deriveAdminInteractionSystemClosure({
     modules: ADMIN_INTERACTION_MODULES,
     componentClosures: [
+      ...ADMIN_SCOPED_RUNTIME_CLOSURES,
       {
         moduleId: "form_runtime",
         closure: ADMIN_FORM_SYSTEM_CLOSURE,

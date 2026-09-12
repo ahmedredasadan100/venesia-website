@@ -472,6 +472,7 @@ qa.mountContent = (options = {}) => {
 `;
 
 const navigationMockSource = String.raw`
+export { unstable_rethrow } from "next/dist/client/components/unstable-rethrow.browser";
 export function useRouter() {
   return window.__ADMIN_FORM_GUARDED_NAV_QA__.router;
 }

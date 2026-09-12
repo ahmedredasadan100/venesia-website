@@ -81,6 +81,13 @@ async function handleAdminAuth(request: NextRequest) {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // The scheduled transport has its own existing credential. Keep this exact
+  // GET exception before Admin sessions; the handler verifies it again.
+  if (pathname === "/api/admin/integrations/sync" &&
+      request.method === "GET" && isCronRequestAuthorized(request)) {
+    return NextResponse.next();
+  }
+
   if (isAdminPath(pathname) || isAdminApiPath(pathname)) {
     return handleAdminAuth(request);
   }

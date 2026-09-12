@@ -182,6 +182,7 @@ createRoot(document.getElementById("root")).render(React.createElement(Harness))
 `;
 
 const navigationMockSource = String.raw`
+export { unstable_rethrow } from "next/dist/client/components/unstable-rethrow.browser";
 export function useRouter() {
   return {
     push() {}, replace() {}, back() {}, forward() {}, refresh() {},

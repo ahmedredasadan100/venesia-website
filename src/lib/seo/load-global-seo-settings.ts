@@ -21,10 +21,7 @@ async function queryGlobalSeoEffectiveContract(): Promise<GlobalSeoEffectiveCont
 
   if (error) {
     logError("loadGlobalSeoSettings failed", error, { resource: "site_settings:seo" });
-    return resolveGlobalSeoEffectiveContract({
-      databaseStatus: "error",
-      databaseError: error.message,
-    });
+    throw new Error(error.message);
   }
 
   if (!data?.value) {
@@ -38,11 +35,15 @@ async function queryGlobalSeoEffectiveContract(): Promise<GlobalSeoEffectiveCont
 }
 
 export const loadGlobalSeoEffectiveContract = cache(async function loadGlobalSeoEffectiveContract(): Promise<GlobalSeoEffectiveContract> {
-  return unstable_cache(
-    async () => queryGlobalSeoEffectiveContract(),
-    ["global-seo-settings"],
-    { revalidate: 300, tags: ["seo-global", "site-settings"] },
-  )();
+  try {
+    return await unstable_cache(
+      async () => queryGlobalSeoEffectiveContract(),
+      ["global-seo-settings"],
+      { revalidate: 300, tags: ["seo-global", "site-settings"] },
+    )();
+  } catch (error) {
+    return globalSeoReadFailure(error);
+  }
 });
 
 export const loadGlobalSeoSettings = cache(async function loadGlobalSeoSettings(): Promise<GlobalSeoSettings> {
@@ -52,5 +53,17 @@ export const loadGlobalSeoSettings = cache(async function loadGlobalSeoSettings(
 /** Admin diagnostics/editor truth must never be hidden behind the public 300s cache snapshot. */
 export async function loadGlobalSeoEffectiveContractForAdmin(): Promise<GlobalSeoEffectiveContract> {
   noStore();
-  return queryGlobalSeoEffectiveContract();
+  try {
+    return await queryGlobalSeoEffectiveContract();
+  } catch (error) {
+    return globalSeoReadFailure(error);
+  }
+}
+
+function globalSeoReadFailure(error: unknown): GlobalSeoEffectiveContract {
+  logError("Global SEO safe rendering after source failure", error);
+  return resolveGlobalSeoEffectiveContract({
+    databaseStatus: "error",
+    databaseError: error instanceof Error ? error.message : "Global SEO source read failed.",
+  });
 }

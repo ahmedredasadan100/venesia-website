@@ -22,6 +22,8 @@ import { ADMIN_ENTITY_PRIMARY_COLUMN_PRESENTATIONS } from "../src/lib/admin/enti
 import {
   ADMIN_CURRENT_SHARED_CAPABILITY_SET,
   ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE,
+  ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION,
+  ADMIN_SCOPED_RUNTIME_CLOSURES,
   ADMIN_INTERACTION_MODULES,
   ADMIN_COLLECTION_FULL_ADOPTION_CLAIMS,
   ADMIN_COLLECTION_FULL_ADOPTION_REQUIRED_CONTRACTS,
@@ -696,7 +698,7 @@ function resolveConsumerCapabilityAudit(
   const decisions = projectSharedCapabilitySet(
     ADMIN_CURRENT_SHARED_CAPABILITY_SET,
     (capability): ResolvedConsumerCapabilityDecision => {
-      const definition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
+      const definition: AdminSharedConsumerCapabilityDefinition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
       const supportsBoundary = (
         definition.consumerBoundaries as readonly ConsumerCapabilityAuditBoundary[]
       ).includes(consumer.boundary);
@@ -823,13 +825,13 @@ function collectConsumerCapabilityAuditFailures(
     }
     if (
       declaration?.state === "adopted" &&
-      ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].ownerAvailability ===
+      (ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability] as AdminSharedConsumerCapabilityDefinition).ownerAvailability ===
         "owner_extension_required"
     ) {
       failures.push(`${capability}:unavailable_owner_claimed_adopted`);
     }
     if (
-      ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].ownerAvailability ===
+      (ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability] as AdminSharedConsumerCapabilityDefinition).ownerAvailability ===
         "available" &&
       !ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability].sourceFiles.every(
         (sourceFile) => existsSync(join(ROOT, sourceFile)),
@@ -846,7 +848,7 @@ function collectConsumerCapabilityAuditFailures(
 
   for (const capability of currentSharedCapabilityKeys) {
     const decision = decisions[capability];
-    const definition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
+    const definition: AdminSharedConsumerCapabilityDefinition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
     const consumerOwnedGraph = graphWithoutOwnerSources(
       ownershipGraph,
       canonicalCapabilityOwnerSourceFiles,
@@ -4116,7 +4118,7 @@ check(
   "Shared Capabilities closure composes Row Actions and Entity Preview without treating Source Proof as behavior",
   ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE.globalClosed === false &&
     ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE.proofBoundaries.source ===
-      "manifest_declared_source_proven_only" &&
+      "source_and_executable_reachability" &&
     ADMIN_ENTITY_PREVIEW_CAPABILITY_CLOSURE.proofBoundaries.behavior ===
       "source_proven_only" &&
     ADMIN_INTERACTION_SYSTEM_CLOSURE.components.shared_capabilities
@@ -4134,6 +4136,16 @@ check(
         `module:${futureInteractionModuleId}:module-closure-ledger:${futureInteractionModuleId}:missing`,
     ),
 );
+
+check("Data, Feedback and Confirmation each have one scoped ledger without promoting isolated owner proof into domain closure",
+  new Set(ADMIN_SCOPED_RUNTIME_CLOSURES.map(entry => entry.moduleId)).size === ADMIN_SCOPED_RUNTIME_CLOSURES.length &&
+  ADMIN_SCOPED_RUNTIME_CLOSURES.every(entry => !entry.closure.globalClosed && entry.closure.behaviorProof.state === "behavior_verified" && entry.closure.globalClosureBlockers.length > 0));
+for (const entry of ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION) {
+  const graph = collectExecutableSourceGraph({root: ROOT, entrySourceFiles: [entry.consumerSourceFile], symbolAware: true});
+  check(`${entry.id} binds the canonical Entity Preview resolver from its consumer entrypoint`, graphUsesExecutableBinding({
+    root: ROOT, graph, bindings: [{sourceFile: "src/lib/admin/interaction-system/entity-preview-capability.ts", exportNames: ["resolveAdminEntityPreviewActions"]}],
+  }));
+}
 
 check(
   "Entity List registry and manifest contain the same generic Data Runtime adopters",

@@ -24,7 +24,7 @@ async function queryProjectLocationSectionPresentation(
     logError("Project Location Section presentation read failed", error, {
       projectId,
     });
-    return DEFAULT_PROJECT_LOCATION_SECTION_PRESENTATION;
+    throw new Error(error.message);
   }
   if (!data) return DEFAULT_PROJECT_LOCATION_SECTION_PRESENTATION;
 
@@ -36,13 +36,18 @@ export const loadProjectLocationSectionPresentation = cache(
     if (!Number.isSafeInteger(projectId) || projectId <= 0) {
       return DEFAULT_PROJECT_LOCATION_SECTION_PRESENTATION;
     }
-    return unstable_cache(
-      () => queryProjectLocationSectionPresentation(projectId),
-      ["project-location-section-presentation-v2", String(projectId)],
-      {
-        revalidate: 300,
-        tags: ["projects", "project"],
-      },
-    )();
+    try {
+      return await unstable_cache(
+        () => queryProjectLocationSectionPresentation(projectId),
+        ["project-location-section-presentation-v2", String(projectId)],
+        {
+          revalidate: 300,
+          tags: ["projects", "project"],
+        },
+      )();
+    } catch (error) {
+      logError("Project location safe rendering after source failure", error, { projectId });
+      return DEFAULT_PROJECT_LOCATION_SECTION_PRESENTATION;
+    }
   },
 );
