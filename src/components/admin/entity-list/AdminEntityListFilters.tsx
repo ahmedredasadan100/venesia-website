@@ -1,5 +1,7 @@
 "use client";
 
+import AdminDatePicker from "../ui/AdminDatePicker";
+
 import { createPortal } from "react-dom";
 import {
   useEffect,
@@ -179,7 +181,8 @@ function AdminFilterField({
       </legend>
 
       {isDate ? (
-        <input
+        <AdminDatePicker
+          aria-label={filter.label ?? filter.placeholder}
           type="date"
           value={value === allValue ? "" : value}
           onChange={(event) => onChange(event.currentTarget.value || allValue)}

@@ -277,6 +277,7 @@ qa.mountPaths = (sourceMode) => {
 `;
 
 const navigationMockSource = String.raw`
+export { unstable_rethrow } from "next/dist/client/components/unstable-rethrow.browser";
 export function useRouter() {
   return {
     push() {},

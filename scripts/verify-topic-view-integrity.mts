@@ -234,7 +234,7 @@ async function verifyMaintenanceProxy({ db, load, stubs, rpcCalls, maintenance }
     assert.equal((await db.query("select * from public.topic_view_deduplication")).rows.length, 0);
     assert.equal((await db.query("select * from public.topic_view_request_limits")).rows.length, 0);
 
-    for (const endpoint of ["/api/admin/entity-lists/topics", "/api/admin/integrations/sync"]) {
+    for (const endpoint of ["/api/admin/entity-lists/topics", "/api/admin/integrations/sync/extra"]) {
       assert.equal((await proxy(new NextRequest(`https://fixture.example${endpoint}`, { headers: authorized }))).status, 401,
         "Cron bearer must never replace Admin session authentication");
     }

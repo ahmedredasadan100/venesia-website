@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import ts from "typescript";
 
 import { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } from "../src/lib/admin/form-system/adoption-manifest.ts";
-import { ADMIN_COLLECTION_SURFACE_ADOPTION } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
+import { ADMIN_COLLECTION_SURFACE_ADOPTION, ADMIN_CURRENT_SHARED_CAPABILITY_SET } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 
 const read = (path: string) =>
   readFileSync(resolve(process.cwd(), path), "utf8").replace(/\r\n?/g, "\n");
@@ -351,20 +351,33 @@ check(
     );
   })(),
 );
+const trackingDateTree = ts.createSourceFile("TrackingForms.tsx", adminForms, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const trackingDateFields: string[] = [];
+let rawTrackingDates = 0;
+function inspectTrackingDates(node: ts.Node) {
+  if (ts.isJsxSelfClosingElement(node)) {
+    const attributes = new Map(node.attributes.properties.filter(ts.isJsxAttribute).map(attribute => [attribute.name.getText(trackingDateTree), attribute.initializer]));
+    const type = attributes.get("type");
+    if (type && ts.isStringLiteral(type) && type.text === "date") {
+      const tag = node.tagName.getText(trackingDateTree);
+      if (tag === "input") rawTrackingDates++;
+      if (tag === "AdminDatePicker") {
+        const name = attributes.get("name");
+        if (name && ts.isStringLiteral(name)) trackingDateFields.push(name.text);
+      }
+    }
+  }
+  ts.forEachChild(node, inspectTrackingDates);
+}
+inspectTrackingDates(trackingDateTree);
 check(
-  "Date and Calendar truth is owner_extension_required and no prohibited shared owner was introduced",
-  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.find(
-    (entry) => entry.id === "project-tracking-create-edit",
-  )?.capabilityAudit.decisions.date_picker.state ===
-    "owner_extension_required" &&
-    adminForms.includes('type="date"') &&
-    !adminForms.includes("AdminDatePickerField") &&
-    !existsSync(
-      resolve(
-        process.cwd(),
-        "src/components/admin/ui/AdminDatePickerField.tsx",
-      ),
-    ),
+  "Tracking dates adopt the approved shared Form Date Picker with unchanged field names and no raw date input",
+  ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.find(entry => entry.id === "project-tracking-create-edit")?.capabilityAudit.decisions.date_picker.state === "adopted" &&
+    ADMIN_CURRENT_SHARED_CAPABILITY_SET.date_picker.ownerAvailability === "available" &&
+    ADMIN_CURRENT_SHARED_CAPABILITY_SET.date_picker.sourceFiles.includes("src/components/admin/ui/AdminDatePicker.tsx") &&
+    rawTrackingDates === 0 &&
+    JSON.stringify(trackingDateFields.sort()) === JSON.stringify(["project_receipt_date", "license_receipt_date", "start_date", "start_date", "completion_date", "occurred_on"].sort()) &&
+    !existsSync(resolve(process.cwd(), "src/components/admin/ui/AdminDatePickerField.tsx")),
 );
 check(
   "public read distinguishes pending schema, not-found, and unexpected failures",

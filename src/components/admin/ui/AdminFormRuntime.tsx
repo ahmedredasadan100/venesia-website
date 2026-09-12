@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { unstable_rethrow, useRouter } from "next/navigation";
 import {
   createContext,
   useActionState,
@@ -368,7 +368,6 @@ export type AdminFormRuntimeHandle = {
 };
 
 export type AdminFormRuntimeProps<TResult = unknown> = {
-  action: AdminFormAction<TResult>;
   initialState?: AdminFormActionState<TResult>;
   mode: AdminFormMode;
   entityKey: string;
@@ -381,7 +380,10 @@ export type AdminFormRuntimeProps<TResult = unknown> = {
   className?: string;
   children:
     ReactNode | ((context: AdminFormRuntimeContextValue<TResult>) => ReactNode);
-};
+} & (
+  | { action: AdminFormAction<TResult>; redirectAction?: never }
+  | { action?: never; redirectAction: (formData: FormData) => void | Promise<void> }
+);
 
 function firstFieldError(state: AdminFormActionState) {
   return Object.entries(state.fieldErrors ?? {}).find(
@@ -470,6 +472,7 @@ function formFeedback(state: AdminFormActionState): AdminActionFeedback | null {
 
 export default function AdminFormRuntime<TResult = unknown>({
   action,
+  redirectAction,
   initialState,
   mode,
   entityKey,
@@ -493,7 +496,20 @@ export default function AdminFormRuntime<TResult = unknown>({
     () => initialState ?? createAdminFormInitialState<TResult>(mode),
   );
   const [state, formAction, actionPending] = useActionState(
-    action,
+    async (previousState: AdminFormActionState<TResult>, formData: FormData) => {
+      if (action) return action(previousState, formData);
+      // Existing schema-editor saves finish via Next's redirect contract. Only
+      // application failures become form results; framework control flow stays intact.
+      try {
+        await redirectAction(formData);
+        return { ...previousState, status: "error" as const, revision: previousState.revision + 1,
+          title: "تعذر تأكيد الحفظ", message: "لم تصل نتيجة الحفظ. حدّث الصفحة للتحقق قبل إعادة المحاولة." };
+      } catch (error) {
+        unstable_rethrow(error);
+        return { ...previousState, status: "error" as const, revision: previousState.revision + 1,
+          title: "تعذر حفظ البيانات", message: "تعذر إكمال الحفظ. احتُفظ ببيانات النموذج؛ راجعها وحاول مرة أخرى." };
+      }
+    },
     resolvedInitialState,
   );
   const handoffPending =

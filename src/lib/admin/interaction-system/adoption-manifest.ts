@@ -52,6 +52,35 @@ export function deriveAdminGovernanceClosure<
   } as const;
 }
 
+/** Shared-owner proof, not an authenticated domain/save-parity claim. */
+export const ADMIN_SCOPED_INTERACTION_BEHAVIOR_PROOF = {
+  version: "shared-capability-completion-local-v1",
+  baseline: "6ec44b8afbf153e02b194759cc88a90058086835",
+  state: "behavior_verified",
+  evidence: ["scripts/qa-shared-capability-completion.mjs"],
+  scope: "Mounted canonical owners with isolated transport: Row Actions, Data optimism/rollback/retry, Confirmation pending/focus, Feedback single-result lifecycle, and Entity Preview eligibility/navigation.",
+  limits: "No real authenticated domain writes or persistence equivalence across all registered consumers. Evidence applies to the local delta; rerun when an owner or its contract changes.",
+} as const;
+
+// One complete ledger registration per existing runtime. Broad consumer/domain
+// evidence remains explicitly open instead of being replaced by owner-only QA.
+export const ADMIN_SCOPED_RUNTIME_CLOSURES = ([
+  { moduleId: "data_runtime", remaining: "Authenticated consumer-specific transport, server reconciliation and domain permission outcomes across the registered Data consumers." },
+  { moduleId: "feedback_runtime", remaining: "Consumer-specific server result/warning mappings across the full registered Feedback inventory." },
+  { moduleId: "confirmation_runtime", remaining: "Authenticated domain command outcomes across every registered destructive/guarded consumer." },
+] as const).map(({ moduleId, remaining }) => ({
+  moduleId,
+  closure: {
+    behaviorProof: ADMIN_SCOPED_INTERACTION_BEHAVIOR_PROOF,
+    ...deriveAdminGovernanceClosure([{
+      id: `${moduleId}:registered-consumer-domain-proof`,
+      owner: moduleId,
+      evidence: "source_proven_only",
+      rationale: `${remaining} Shared-owner behavior is verified separately in the scoped ledger.`,
+    }]),
+  },
+}));
+
 export const ADMIN_INTERACTION_MODULES = [
   {
     id: "form_runtime",
@@ -387,12 +416,12 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       consumerBoundaries: ["collection", "form"],
     },
     date_picker: {
-      owner: "owner_extension_required",
-      sourceFiles: [],
-      executableBindings: [],
+      owner: "Admin Form Date Picker",
+      sourceFiles: ["src/components/admin/ui/AdminDatePicker.tsx"],
+      executableBindings: [{ sourceFile: "src/components/admin/ui/AdminDatePicker.tsx", exportNames: ["default"] }],
       applicabilityOwner: "explicit_consumer_declaration",
       localImplementationKinds: ["native_date_input"],
-      ownerAvailability: "owner_extension_required",
+      ownerAvailability: "available",
       consumerBoundaries: ["collection", "form"],
     },
     scrollbar: {
@@ -609,10 +638,10 @@ export const ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES = {
   Record<AdminExplicitConsumerCapabilityKey, AdminConsumerCapabilityOverride>
 >;
 
-export const ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION = {
-  state: "owner_extension_required",
+export const ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION = {
+  state: "adopted",
   rationale:
-    "Date input is applicable, but the current platform has no shared Date Picker owner available for adoption.",
+    "The consumer reaches AdminDatePicker through Form fields or shared Collection filters; native date strings remain unchanged.",
 } as const satisfies AdminConsumerCapabilityOverride;
 
 export const ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION = {
@@ -817,12 +846,14 @@ export type AdminEntityPreviewCapabilityAdoption = {
     | "collection_runtime"
     | "legacy_entity_page";
   sourceFiles: readonly string[];
+  consumerSourceFile: string;
   rationale: string;
 };
 
 export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
   {
     id: "topic-article-edit-preview-public",
+    consumerSourceFile: "src/components/admin/content/editors/ArticleEditor.tsx",
     capability: "entity_preview_public",
     status: "adopted",
     capabilityOwner: "shared_capabilities",
@@ -836,6 +867,7 @@ export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
   },
   {
     id: "topic-media-edit-preview",
+    consumerSourceFile: "src/app/admin/content/topics/[id]/page.tsx",
     capability: "entity_preview_public",
     status: "adopted",
     capabilityOwner: "shared_capabilities",
@@ -850,6 +882,7 @@ export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
   },
   {
     id: "topic-category-collection-preview",
+    consumerSourceFile: "src/app/admin/content/categories/CategoryRowActions.tsx",
     capability: "entity_preview_public",
     status: "adopted",
     capabilityOwner: "shared_capabilities",
@@ -864,6 +897,7 @@ export const ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION = [
   },
   {
     id: "topic-series-collection-preview",
+    consumerSourceFile: "src/app/admin/content/series/series-columns.tsx",
     capability: "entity_preview_public",
     status: "adopted",
     capabilityOwner: "shared_capabilities",
@@ -894,24 +928,18 @@ export function deriveAdminEntityPreviewCapabilityClosure(
   return {
     capability: "entity_preview_public",
     proofBoundaries: {
-      source: "manifest_declared_source_proven_only",
+      source: "source_and_executable_reachability",
       behavior: "source_proven_only",
     },
+    sharedOwnerBehaviorProof: ADMIN_SCOPED_INTERACTION_BEHAVIOR_PROOF,
     ...deriveAdminGovernanceClosure([
       ...adoptionBlockers,
-      {
-        id: "entity-preview-source:registered-consumer-owner-reachability",
-        owner: "shared_capabilities",
-        evidence: "source_proven_only",
-        rationale:
-          "The existing adoption ledger names consumer and owner files together; file presence and declared status do not independently prove executable consumer-to-owner reachability for every entry.",
-      },
       {
         id: "entity-preview-behavior:registered-consumer-interaction-proof",
         owner: "shared_capabilities",
         evidence: "source_proven_only",
         rationale:
-          "Source adoption and pure resolver checks do not prove mounted authenticated Preview/Public interaction, disabled-state, focus, and navigation behavior for every registered consumer.",
+          "The scoped mounted owner proof covers eligibility, disabled state, keyboard focus and safe hrefs. Authenticated route/navigation outcomes for every registered consumer remain outside that isolated evidence.",
       },
     ]),
   } as const;
@@ -974,7 +1002,7 @@ export const ADMIN_ROW_ACTIONS_GLOBAL_CLOSURE_BLOCKERS =
       owner: "shared_capabilities",
       evidence: "source_proven_only",
       rationale:
-        "Source and executable reachability prove shared Row Actions ownership, but no registered repeatable behavioral ledger proves the authenticated pending, confirmation, rollback, feedback, and focus lifecycle across every adopted collection.",
+        "The scoped mounted ledger proves canonical Row Actions, pending, confirmation, rollback, feedback and focus with isolated transport. Authenticated domain outcomes across every adopted collection remain unverified by that proof.",
     },
   ] as const satisfies readonly AdminGovernanceClosureBlocker[];
 
@@ -988,6 +1016,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
     ADMIN_ROW_ACTIONS_GLOBAL_CLOSURE_BLOCKERS,
   ),
   capability: "shared_admin_row_actions",
+  sharedOwnerBehaviorProof: ADMIN_SCOPED_INTERACTION_BEHAVIOR_PROOF,
   scope: "generic_admin_collection_surfaces",
   proofBoundaries: {
     source: "source_and_executable_reachability",
@@ -1459,6 +1488,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
   ],
 } as const satisfies {
   capability: "shared_admin_row_actions";
+  sharedOwnerBehaviorProof: typeof ADMIN_SCOPED_INTERACTION_BEHAVIOR_PROOF;
   scope: "generic_admin_collection_surfaces";
   proofBoundaries: {
     source: "source_and_executable_reachability";
@@ -2408,7 +2438,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       capabilityAudit: adminConsumerCapabilityAudit(
         {
           ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-          date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+          date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
         },
         {},
       ),
@@ -2558,7 +2588,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       capabilityAudit: adminConsumerCapabilityAudit(
         {
           ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-          date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+          date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
         },
         {
           visibility: {
@@ -2633,7 +2663,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
           applicability: adminConsumerCapabilityAudit(
             {
               ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-              date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+              date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
             },
             {
               visibility: {
@@ -2665,7 +2695,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
           applicability: adminConsumerCapabilityAudit(
             {
               ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-              date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+              date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
             },
             {
               visibility: {
@@ -2697,7 +2727,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
           applicability: adminConsumerCapabilityAudit(
             {
               ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-              date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+              date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
             },
             {
               visibility: {
@@ -3340,7 +3370,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       capabilityAudit: adminConsumerCapabilityAudit(
         {
           ...ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-          date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+          date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
         },
         {
           scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,

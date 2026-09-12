@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import AdminDatePicker, { openAdminDatePicker } from "../../../ui/AdminDatePicker";
 
 import {
   getDateInputValue,
@@ -27,23 +28,6 @@ export default function TopicDateLabelField({ defaultValue, publishedAt, disable
   });
   const preservedLegacyLabel = defaultValue?.trim() ?? "";
 
-  function openCalendar() {
-    if (disabled) return;
-    const input = inputRef.current;
-    if (!input) return;
-    input.focus({ preventScroll: true });
-    const pickerInput = input as HTMLInputElement & { showPicker?: () => void };
-    if (typeof pickerInput.showPicker === "function") {
-      try {
-        pickerInput.showPicker();
-        return;
-      } catch {
-        // Fall through to the native input click while the user gesture is
-        // still active.
-      }
-    }
-    input.click();
-  }
 
   return (
     <>
@@ -51,7 +35,7 @@ export default function TopicDateLabelField({ defaultValue, publishedAt, disable
         <button
           type="button"
           disabled={disabled}
-          onClick={openCalendar}
+          onClick={() => openAdminDatePicker(inputRef.current)}
           aria-controls="topic-published-at"
           aria-label="فتح تقويم تاريخ النشر الظاهر"
           data-topic-date-picker-trigger="label"
@@ -71,7 +55,7 @@ export default function TopicDateLabelField({ defaultValue, publishedAt, disable
           </svg>
         </button>
         <div className="mt-2 flex min-w-0 overflow-hidden rounded-2xl border border-white/10 bg-black/30 focus-within:border-[#D8B87A]/45">
-          <input
+          <AdminDatePicker
             ref={inputRef}
             id="topic-published-at"
             type="date"

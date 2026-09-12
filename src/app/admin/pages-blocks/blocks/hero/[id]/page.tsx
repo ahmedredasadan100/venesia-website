@@ -52,6 +52,7 @@ export default async function HeroDetailsPage({ params, searchParams }: PageProp
         description: hero.description,
         variant: hero.variant,
         style_preset: hero.style_preset,
+        updated_at: hero.updated_at,
         status: getStatus(hero.status),
       }}
       config={config}

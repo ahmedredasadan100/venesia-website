@@ -19,6 +19,14 @@ import type {
 
 type JsonObject = Record<string, Json | undefined>;
 
+// Reject failed reads inside the persistent cache while preserving the owner's
+// visibility result for safe rendering outside it. Hidden/none remain cacheable.
+class HeroReadFailure<T> extends Error {
+  constructor(readonly state: T) {
+    super("Hero source read failed.");
+  }
+}
+
 type HeroTemplateRecord = {
   id: number;
   name: string;
@@ -160,11 +168,22 @@ export const getDomainBackedHeroTemplateState = cache(
   async function getDomainBackedHeroTemplateState(
     variant: HeroDomainBackedTemplateVariant,
   ): Promise<DomainBackedHeroTemplateState> {
-    return unstable_cache(
-      async () => queryDomainBackedHeroTemplateState(variant),
-      ["domain-backed-hero-template-state", variant],
-      { revalidate: 300, tags: ["hero"] },
-    )();
+    try {
+      return await unstable_cache(
+        async () => {
+          const state = await queryDomainBackedHeroTemplateState(variant);
+          if (state.visibility === "error") throw new HeroReadFailure(state);
+          return state;
+        },
+        ["domain-backed-hero-template-state", variant],
+        { revalidate: 300, tags: ["hero"] },
+      )();
+    } catch (error) {
+      logError("Domain Hero safe rendering after source failure", error, { variant });
+      return error instanceof HeroReadFailure
+        ? error.state
+        : { hero: null, visibility: "error" };
+    }
   },
 );
 
@@ -316,11 +335,22 @@ export type HeroSectionState = {
 export const getHeroSectionState = cache(async function getHeroSectionState(
   pageSlug: string,
 ): Promise<HeroSectionState> {
-  return unstable_cache(
-    async () => queryHeroSectionState(pageSlug),
-    ["hero-section-state", pageSlug],
-    { revalidate: 300, tags: ["page-composition", "hero"] },
-  )();
+  try {
+    return await unstable_cache(
+      async () => {
+        const state = await queryHeroSectionState(pageSlug);
+        if (state.visibility === "error") throw new HeroReadFailure(state);
+        return state;
+      },
+      ["hero-section-state", pageSlug],
+      { revalidate: 300, tags: ["page-composition", "hero"] },
+    )();
+  } catch (error) {
+    logError("Page Hero safe rendering after source failure", error, { pageSlug });
+    return error instanceof HeroReadFailure
+      ? error.state
+      : { hero: null, visibility: "error", assignmentId: null, hasAnyAssignmentRows: false, sourceIssue: "Hero source read failed." };
+  }
 });
 
 async function queryHeroSectionState(pageSlug: string): Promise<HeroSectionState> {

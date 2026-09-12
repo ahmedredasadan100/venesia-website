@@ -12,7 +12,7 @@ import {
   ADMIN_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
   ADMIN_MEDIA_CONSUMER_CAPABILITIES,
   ADMIN_LISTBOX_CONSUMER_CAPABILITIES,
-  ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+  ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
   ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
   ADMIN_CURRENT_SHARED_CAPABILITY_SET,
   ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
@@ -27,6 +27,7 @@ import {
   deriveAdminGovernanceClosure,
   instantiateAdminBlockEditorCapabilityDecisions,
   type AdminGovernanceClosureBlocker,
+  type AdminSharedConsumerCapabilityDefinition,
   type AdminConsumerCapabilityApprovedException,
   type AdminConsumerCapabilityKey,
   type AdminConsumerCapabilityAuditDeclaration,
@@ -97,8 +98,8 @@ function approvedFormRuntimeException(input: {
 }
 
 const ADMIN_BLOCK_EDITOR_REGISTERED_OWNER_CAPABILITIES = {
-  hero: [],
-  content: [],
+  hero: ["feedback", "form_runtime", "busy_state", "confirmation"],
+  content: ["feedback", "form_runtime", "busy_state", "confirmation"],
   cta: ["feedback"],
   cards: ["feedback"],
   breadcrumb: ["feedback"],
@@ -127,46 +128,14 @@ export type AdminBlockEditorFeedbackAdoptionDebt = {
  * Feedback Runtime. This is debt, not an approved exception: G0 records the
  * current boundary without changing Product behavior.
  */
-export const ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT = [
-  {
-    id: "block-editor-feedback:hero-direct-action-notice",
-    moduleKind: "hero",
-    description:
-      "Hero save-result feedback renders AdminNotice directly instead of publishing through the canonical Feedback Runtime.",
-    sourceFiles: [
-      "src/app/admin/pages-blocks/blocks/hero/[id]/page.tsx",
-      "src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx",
-    ],
-    risk:
-      "Feedback policy, channel reconciliation, and lifecycle changes do not automatically reach this editor.",
-    owner: "feedback_runtime",
-    blocksGlobalClosure: true,
-    plannedPhase: "dedicated Block Editor Feedback adoption",
-    requiredProof: [
-      "The save-result path publishes through the canonical Feedback Runtime.",
-      "Mounted behavior preserves the current success and media-warning presentation.",
-    ],
-  },
-  {
-    id: "block-editor-feedback:content-direct-action-notice",
-    moduleKind: "content",
-    description:
-      "Content save-result feedback renders AdminNotice directly instead of publishing through the canonical Feedback Runtime.",
-    sourceFiles: [
-      "src/app/admin/pages-blocks/blocks/content/[id]/page.tsx",
-      "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
-    ],
-    risk:
-      "Feedback policy, channel reconciliation, and lifecycle changes do not automatically reach this editor.",
-    owner: "feedback_runtime",
-    blocksGlobalClosure: true,
-    plannedPhase: "dedicated Block Editor Feedback adoption",
-    requiredProof: [
-      "The save-result path publishes through the canonical Feedback Runtime.",
-      "Mounted behavior preserves every current content-specific success message.",
-    ],
-  },
-] as const satisfies readonly AdminBlockEditorFeedbackAdoptionDebt[];
+export const ADMIN_BLOCK_EDITOR_FEEDBACK_ADOPTION_DEBT: readonly AdminBlockEditorFeedbackAdoptionDebt[] = [];
+
+// Informational content, not a save/action result. The guard verifies this exact
+// function scope; direct action-result AdminNotice rendering still fails.
+export const ADMIN_BLOCK_EDITOR_INFORMATIONAL_NOTICE_SCOPES = [{
+  sourceFile: "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
+  functionName: "ProjectDetailHeroEditorLinks",
+}] as const;
 
 function blockEditorAdoptionEntry(
   moduleKind: PageModuleKind,
@@ -195,7 +164,10 @@ function blockEditorAdoptionEntry(
     capabilityAudit: adminConsumerCapabilityAudit(
       decisions,
       {
-        form_runtime: approvedFormRuntimeException({
+        form_runtime: moduleKind === "hero" || moduleKind === "content" ? {
+          state: "adopted",
+          rationale: "The schema editor delegates save feedback, pending, and form preservation to AdminFormRuntime; composition fields retain their existing owner.",
+        } : approvedFormRuntimeException({
           scope: `block-template-${moduleKind}-editor:schema-builder-lifecycle`,
           evidence: [sourceFile],
           rationale:
@@ -223,7 +195,9 @@ function blockEditorAdoptionEntry(
         ...adoptedExplicitCapabilities,
       ],
       knownDebt: [
-        "The schema edit session remains outside the generic Form Runtime by explicit aggregate ownership.",
+        ...(moduleKind === "hero" || moduleKind === "content"
+          ? ["Schema-specific field projections and redirect-on-success actions remain in the Block Editor; generic entity persistence parity is not claimed."]
+          : ["The schema edit session remains outside the generic Form Runtime by explicit aggregate ownership."]),
         ...(feedbackAdoptionDebt ? [feedbackAdoptionDebt.description] : []),
       ],
       reviewTrigger:
@@ -239,7 +213,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     capabilityAudit: adminConsumerCapabilityAudit(
       {
         ...ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-        date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+        date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
       },
       {
         scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
@@ -286,7 +260,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     capabilityAudit: adminConsumerCapabilityAudit(
       {
         ...ADMIN_SWITCH_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
-        date_picker: ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+        date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
       },
       {
         scrollbar: ADMIN_SCROLLBAR_OWNER_ADOPTION_DECISION,
@@ -364,9 +338,9 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
         ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
         listbox: ADMIN_LISTBOX_CONSUMER_CAPABILITIES.listbox,
         date_picker: {
-          ...ADMIN_DATE_PICKER_OWNER_EXTENSION_DECISION,
+          ...ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
           rationale:
-            "Tracking dates are applicable, but the current platform has no shared Date or Calendar owner available for adoption.",
+            "Tracking date fields render AdminDatePicker directly; stored date strings and domain validation remain unchanged.",
         },
         switch: {
           state: "adopted",
@@ -939,6 +913,13 @@ export type AdminGovernanceBehaviorProof = {
 
 export const ADMIN_FORM_BEHAVIOR_PROOF_LEDGER = [
   {
+    id: "block-editor-shared-feedback-save-retry",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["scripts/qa-shared-capability-completion.mjs", "scripts/verify-admin-form-system.mts"],
+    rationale: "Local delta from 6ec44b8afbf153e02b194759cc88a90058086835: actual Form/Feedback owners preserve input, clear busy, publish one failure/result and support redirect success/media-warning retry; executable bindings cover Hero and every Content editor branch. Transport and Next redirect/reload are isolated; this is not domain persistence parity.",
+  },
+  {
     id: "form-dirty-guard-programmatic-navigation",
     state: "behavior_verified",
     requiredForGlobalClosure: true,
@@ -955,9 +936,9 @@ export const ADMIN_FORM_BEHAVIOR_PROOF_LEDGER = [
     id: "form-save-parity-across-consumers",
     state: "source_proven_only",
     requiredForGlobalClosure: true,
-    evidence: ["src/components/admin/ui/AdminFormRuntime.tsx"],
+    evidence: ["src/components/admin/ui/AdminFormRuntime.tsx", "scripts/qa-admin-form-runtime-behavior.mts", "scripts/qa-admin-form-guarded-navigation.mts", "scripts/qa-shared-capability-completion.mjs"],
     rationale:
-      "Source adoption does not by itself prove equivalent save, rollback, and completion behavior across every registered consumer.",
+      "Shared-owner and Content Editor mounted evidence covers preservation, guarded navigation and retry; it does not prove authenticated type-specific save, persistence, rollback and completion across every registered consumer. This broad parity claim remains open.",
   },
 ] as const satisfies readonly AdminGovernanceBehaviorProof[];
 
@@ -970,7 +951,7 @@ function behaviorProofBlocksGlobalClosure(
 const formCapabilityOwnerBlockers = adminSharedCapabilityKeys(
   ADMIN_CURRENT_SHARED_CAPABILITY_SET,
 ).flatMap((capability): AdminGovernanceClosureBlocker[] => {
-  const definition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
+  const definition: AdminSharedConsumerCapabilityDefinition = ADMIN_CURRENT_SHARED_CAPABILITY_SET[capability];
   const hasApplicableConsumer = ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.some(
     (entry) =>
       entry.capabilityAudit.decisions[

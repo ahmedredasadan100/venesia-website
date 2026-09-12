@@ -23,7 +23,7 @@ async function queryPageSeoByPath(path: string): Promise<EntitySeoData | null> {
 
   if (error) {
     logError("loadPageSeoByPath failed", error, { path: normalizedPath, resource: `page-seo:${normalizedPath}` });
-    return null;
+    throw new Error(error.message);
   }
 
   if (!data) return null;
@@ -36,9 +36,14 @@ export const loadPageSeoByPath = cache(async function loadPageSeoByPath(
 ): Promise<EntitySeoData | null> {
   const normalizedPath = normalizePath(path);
 
-  return unstable_cache(
-    async () => queryPageSeoByPath(normalizedPath),
-    ["page-seo", normalizedPath],
-    { revalidate: 300, tags: ["page-seo", "pages", `page-seo:${normalizedPath}`] },
-  )();
+  try {
+    return await unstable_cache(
+      async () => queryPageSeoByPath(normalizedPath),
+      ["page-seo", normalizedPath],
+      { revalidate: 300, tags: ["page-seo", "pages", `page-seo:${normalizedPath}`] },
+    )();
+  } catch (error) {
+    logError("Page SEO safe rendering after source failure", error, { path: normalizedPath });
+    return null;
+  }
 });

@@ -1,6 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
+import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 
 import { statusMeta } from "../../../lib/page-blocks/admin-utils";
 import { AdminFeedbackRegion } from "../AdminFeedbackProvider";
@@ -49,24 +50,27 @@ export default function BlockEditorContextHeader({
   );
 }
 
-export function BlockEditorSaveFeedback({ backHref, saved }: Pick<BlockEditorContextHeaderProps, "backHref" | "saved">) {
+export function BlockEditorSaveFeedback({ backHref, saved, message = "تم حفظ الموديول بنجاح.", mediaSynchronizationWarning, entityKey, savedRevision }: Pick<BlockEditorContextHeaderProps, "backHref" | "saved"> & {
+  message?: string;
+  mediaSynchronizationWarning?: boolean;
+  entityKey?: string;
+  savedRevision?: string;
+}) {
+  const feedback = useMemo<AdminActionFeedback | null>(() => saved || mediaSynchronizationWarning ? {
+    variant: mediaSynchronizationWarning ? "warning" : "success",
+    title: mediaSynchronizationWarning ? "تم الحفظ مع تنبيه" : "تم الحفظ",
+    message: mediaSynchronizationWarning
+      ? "تم حفظ بيانات الموديول، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
+      : message,
+    layout: "inline", dismissible: true, lifecycle: "manual",
+    dismissSearchParams: ["saved", "notice"],
+  } : null, [saved, message, mediaSynchronizationWarning]);
   return (
     <AdminFeedbackRegion
-      channel={`block-editor:${backHref}`}
+      key={savedRevision}
+      channel={entityKey ? `form:${entityKey}` : `block-editor:${backHref}`}
       label="نتيجة حفظ الموديول"
-      feedback={
-        saved
-          ? {
-              variant: "success",
-              title: "تم الحفظ",
-              message: "تم حفظ الموديول بنجاح.",
-              layout: "inline",
-              dismissible: true,
-              lifecycle: "manual",
-              dismissSearchParams: ["saved"],
-            }
-          : null
-      }
+      feedback={feedback}
     />
   );
 }

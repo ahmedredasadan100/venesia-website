@@ -16,8 +16,8 @@ import { loadTopicFilterOptionsForAdmin } from "../../../../../../lib/feed-modul
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
   searchParams?:
-    | Promise<{ saved?: string; returnPageId?: string }>
-    | { saved?: string; returnPageId?: string };
+    | Promise<{ saved?: string; notice?: string; returnPageId?: string }>
+    | { saved?: string; notice?: string; returnPageId?: string };
 };
 
 export default async function ContentBlockEditPage({
@@ -96,6 +96,7 @@ export default async function ContentBlockEditPage({
       projectDetailHeroEditorLinks={projectDetailHeroEditorLinks}
       topicCategoryOptions={topicCategoryOptions}
       saved={Boolean(resolvedSearch.saved)}
+      mediaSynchronizationWarning={resolvedSearch.notice === "saved_with_media_sync_warning"}
       updateAction={updateContentBlock}
     />
   );

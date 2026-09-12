@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import AdminDatePicker from "../../ui/AdminDatePicker";
 
 import {
   createTrackingItemAction,
@@ -78,7 +79,7 @@ export function TrackingProfileFormModal({
             <input type="hidden" name="project_id" value={projectId} />
             <AdminFormGrid>
               <AdminFormField label="تاريخ استلام المشروع">
-                <input
+                <AdminDatePicker
                   name="project_receipt_date"
                   type="date"
                   defaultValue={profile?.project_receipt_date ?? ""}
@@ -88,7 +89,7 @@ export function TrackingProfileFormModal({
                 <AdminFormError name="project_receipt_date" />
               </AdminFormField>
               <AdminFormField label="تاريخ استلام الرخصة">
-                <input
+                <AdminDatePicker
                   name="license_receipt_date"
                   type="date"
                   defaultValue={profile?.license_receipt_date ?? ""}
@@ -175,7 +176,7 @@ export function TrackingStageFormModal({
             </AdminFormField>
             <AdminFormGrid>
               <AdminFormField label="تاريخ البداية">
-                <input
+                <AdminDatePicker
                   name="start_date"
                   type="date"
                   defaultValue={stage?.start_date ?? ""}
@@ -306,7 +307,7 @@ export function TrackingItemFormModal({
               </AdminFormGridItem>
               <AdminFormGridItem span={4}>
                 <AdminFormField label="تاريخ البداية">
-                  <input
+                  <AdminDatePicker
                     name="start_date"
                     type="date"
                     defaultValue={item?.start_date ?? ""}
@@ -317,7 +318,7 @@ export function TrackingItemFormModal({
               </AdminFormGridItem>
               <AdminFormGridItem span={4}>
                 <AdminFormField label="تاريخ الإكمال">
-                  <input
+                  <AdminDatePicker
                     name="completion_date"
                     type="date"
                     defaultValue={item?.completion_date ?? ""}
@@ -399,7 +400,7 @@ export function TrackingUpdateFormModal({
               </AdminFormGridItem>
               <AdminFormGridItem span={3}>
                 <AdminFormField label="تاريخ التحديث" required>
-                  <input
+                  <AdminDatePicker
                     name="occurred_on"
                     type="date"
                     defaultValue={
