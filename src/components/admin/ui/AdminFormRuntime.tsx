@@ -14,6 +14,7 @@ import {
   useState,
   type ReactNode,
   type Ref,
+  type MutableRefObject,
   type RefObject,
 } from "react";
 
@@ -67,6 +68,7 @@ export type AdminUnsavedChangesGuardOptions<T extends HTMLElement> = {
 
 export type AdminUnsavedChangesGuard = {
   isDirty: boolean;
+  hasUnsavedChanges: () => boolean;
   markClean: (submittedBaseline?: string) => void;
   requestNavigation: (href: string) => void;
   requestCallback: (callback: () => void) => void;
@@ -328,6 +330,10 @@ export function useAdminUnsavedChangesGuard<T extends HTMLElement>({
 
   return {
     isDirty,
+    hasUnsavedChanges: () => {
+      const form = readForm();
+      return form ? serializeAdminForm(form) !== baselineRef.current : dirtyRef.current;
+    },
     markClean,
     requestNavigation,
     requestCallback,
@@ -371,6 +377,8 @@ export type AdminFormRuntimeProps<TResult = unknown> = {
   initialState?: AdminFormActionState<TResult>;
   mode: AdminFormMode;
   entityKey: string;
+  /** Persisted revision for redirecting editors; the owner accepts it when safe. */
+  savedRevision?: string;
   closeHref?: string;
   onClose?: () => void;
   onSuccess?: (state: AdminFormActionState<TResult>) => void;
@@ -470,7 +478,37 @@ function formFeedback(state: AdminFormActionState): AdminActionFeedback | null {
   };
 }
 
-export default function AdminFormRuntime<TResult = unknown>({
+export default function AdminFormRuntime<TResult = unknown>(
+  props: AdminFormRuntimeProps<TResult>,
+) {
+  const revisionGuardRef = useRef<(() => boolean) | null>(null);
+  const [accepted, setAccepted] = useState(props);
+  const [settled, notifySettled] = useState(0);
+  const onSettled = useCallback(() => notifySettled((value) => value + 1), []);
+  const changed = props.savedRevision !== undefined &&
+    props.entityKey === accepted.entityKey &&
+    props.savedRevision !== accepted.savedRevision;
+  // Keep the mounted fields on their accepted revision until their dirty/pending
+  // guard has inspected the live form after commit. A new RSC payload alone is
+  // not permission to discard edits made since that read began.
+  useLayoutEffect(() => {
+    if (props.entityKey !== accepted.entityKey ||
+      (changed && revisionGuardRef.current?.() !== false)) {
+      setAccepted(props);
+    }
+  }, [accepted.entityKey, changed, props, settled]);
+  const current = changed ? accepted : props;
+  return (
+    <AdminFormRuntimeInstance
+      key={`${current.entityKey}:${current.savedRevision ?? ""}`}
+      {...current}
+      revisionGuardRef={revisionGuardRef}
+      onSettled={onSettled}
+    />
+  );
+}
+
+function AdminFormRuntimeInstance<TResult = unknown>({
   action,
   redirectAction,
   initialState,
@@ -484,10 +522,16 @@ export default function AdminFormRuntime<TResult = unknown>({
   formId,
   className = "",
   children,
-}: AdminFormRuntimeProps<TResult>) {
+  revisionGuardRef,
+  onSettled,
+}: AdminFormRuntimeProps<TResult> & {
+  revisionGuardRef: MutableRefObject<(() => boolean) | null>;
+  onSettled: () => void;
+}) {
   const router = useRouter();
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const feedbackChannel = `form:${entityKey}`;
+  const redirectingSubmission = useRef(false);
   const clearFormFeedback = useCallback(
     () => clearFeedback(feedbackChannel),
     [clearFeedback, feedbackChannel],
@@ -501,11 +545,14 @@ export default function AdminFormRuntime<TResult = unknown>({
       // Existing schema-editor saves finish via Next's redirect contract. Only
       // application failures become form results; framework control flow stays intact.
       try {
+        redirectingSubmission.current = true;
         await redirectAction(formData);
+        redirectingSubmission.current = false;
         return { ...previousState, status: "error" as const, revision: previousState.revision + 1,
           title: "تعذر تأكيد الحفظ", message: "لم تصل نتيجة الحفظ. حدّث الصفحة للتحقق قبل إعادة المحاولة." };
       } catch (error) {
         unstable_rethrow(error);
+        redirectingSubmission.current = false;
         return { ...previousState, status: "error" as const, revision: previousState.revision + 1,
           title: "تعذر حفظ البيانات", message: "تعذر إكمال الحفظ. احتُفظ ببيانات النموذج؛ راجعها وحاول مرة أخرى." };
       }
@@ -524,7 +571,7 @@ export default function AdminFormRuntime<TResult = unknown>({
   const handledResultRef = useRef<AdminFormActionState<TResult>>(
     createAdminFormInitialState<TResult>(mode),
   );
-  const { isDirty, markClean, requestNavigation, requestCallback, dialog } =
+  const { isDirty, hasUnsavedChanges, markClean, requestNavigation, requestCallback, dialog } =
     useAdminUnsavedChangesGuard({
       rootRef: formRef,
       pending,
@@ -555,6 +602,21 @@ export default function AdminFormRuntime<TResult = unknown>({
   }, [closeHref, onClose, requestCallback, requestNavigation]);
 
   useImperativeHandle(runtimeRef, () => ({ requestClose }), [requestClose]);
+
+  useLayoutEffect(() => {
+    revisionGuardRef.current = () => {
+      if (pending) return false;
+      if (!hasUnsavedChanges()) return true;
+      const form = formRef.current;
+      // A redirect result may replace its submitted baseline, never later edits.
+      return Boolean(redirectingSubmission.current && form &&
+        submittedBaselineRef.current === serializeAdminForm(form));
+    };
+    return () => { revisionGuardRef.current = null; };
+  }, [hasUnsavedChanges, pending, revisionGuardRef]);
+  useEffect(() => {
+    if (!pending) onSettled();
+  }, [onSettled, pending]);
 
   useLayoutEffect(() => {
     const form = formRef.current;

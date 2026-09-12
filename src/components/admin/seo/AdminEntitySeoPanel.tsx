@@ -492,12 +492,17 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
       }
     };
 
+    // Observe after React's root listener has committed controlled field edits.
+    // A form-level render can restore the old value before onChange receives it.
+    const observe = (event: Event) => {
+      if (event.target instanceof Node && form.contains(event.target)) read();
+    };
     read();
-    form.addEventListener("input", read);
-    form.addEventListener("change", read);
+    form.ownerDocument.addEventListener("input", observe);
+    form.ownerDocument.addEventListener("change", observe);
     return () => {
-      form.removeEventListener("input", read);
-      form.removeEventListener("change", read);
+      form.ownerDocument.removeEventListener("input", observe);
+      form.ownerDocument.removeEventListener("change", observe);
     };
   }, [analysisExtension, fieldNames, id, initial, initialSeoTitleSegment, social, sourceFieldNames]);
 

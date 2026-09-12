@@ -17,6 +17,8 @@ type HarnessOptions = {
   mode: "create" | "edit";
   actionOutcome: "success" | "error" | "create-edit";
   deferAction?: boolean;
+  savedRevision?: string;
+  title?: string;
 };
 
 type ContentActionOutcome =
@@ -157,7 +159,7 @@ function RuntimeProbe() {
   );
 }
 
-function Harness({ mode, actionOutcome, deferAction = false }) {
+function Harness({ mode, actionOutcome, deferAction = false, savedRevision, title = "Initial title" }) {
   const action = React.useCallback(
     async (previousState, formData) => {
       qa.actionCalls += 1;
@@ -212,11 +214,12 @@ function Harness({ mode, actionOutcome, deferAction = false }) {
         mode,
         entityKey: "qa-topic",
         formId: "qa-admin-form",
+        savedRevision,
       },
       React.createElement("input", {
         id: "qa-title",
         name: "title",
-        defaultValue: "Initial title",
+        defaultValue: title,
       }),
       React.createElement(TopicContentTypeControl, {
         value: "article",
@@ -1710,6 +1713,70 @@ try {
           1 &&
         (await getActionCalls(page)) === 0,
     );
+    await closePage(page);
+  }
+
+  {
+    const { page } = await openContentHarness(
+      browser,
+      harnessUrl,
+      { actionOutcomes: ["success"] },
+      browserIssues,
+    );
+    await page.getByRole("tab", { name: "SEO", exact: true }).click();
+    const edits = {
+      seo_title: "A10 user-authored SEO title",
+      seo_description: "A10 user-authored description retained across input events",
+      focus_keyword: "A10 edited keyword",
+    };
+    for (const [name, value] of Object.entries(edits)) {
+      const field = page.locator(`[name="${name}"]`);
+      await field.fill(value);
+      await field.press("End");
+      await field.pressSequentially("!");
+    }
+    await page.getByRole("tab", { name: "Basic", exact: true }).click();
+    const projection = await getLiveFormValues(page);
+    for (const [name, value] of Object.entries(edits)) {
+      check(
+        `controlled SEO ${name} retains typed edits through observation and tab changes`,
+        projection?.[name] === `${value}!`,
+      );
+    }
+    await page.locator('[data-admin-form-action="save"]').click();
+    await waitForRuntime(page, { dirty: "false", pending: "false", status: "success" });
+    const submission = await getLastSubmission(page);
+    check(
+      "controlled SEO edits reach the submitted Content Editor projection once",
+      (await getActionCalls(page)) === 1 &&
+        Object.entries(edits).every(([name, value]) => submission[name] === `${value}!`),
+    );
+    await closePage(page);
+  }
+
+  {
+    const { page } = await openHarness(browser, harnessUrl, {
+      mode: "edit", actionOutcome: "success", savedRevision: "r1",
+    }, browserIssues);
+    const revise = (revision: string, title: string) => page.evaluate(({ revision, title }) => {
+      (window as unknown as HarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.mount({
+        mode: "edit", actionOutcome: "success", savedRevision: revision, title,
+      });
+    }, { revision, title });
+    await revise("r2", "Clean server revision");
+    await page.waitForFunction(() =>
+      (document.querySelector("#qa-title") as HTMLInputElement)?.value === "Clean server revision");
+    check("clean form accepts a newer saved revision", await page.locator("#qa-title").inputValue() === "Clean server revision");
+    await page.locator("#qa-title").fill("Newer unsaved user input");
+    await revise("r3", "Late server revision");
+    // A browser frame after React commits the incoming props is required here.
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    check("late saved revision cannot remount dirty fields", await page.locator("#qa-title").inputValue() === "Newer unsaved user input");
+    await page.locator("#qa-title").fill("Clean server revision");
+    await revise("r3", "Late server revision");
+    await page.waitForFunction(() =>
+      (document.querySelector("#qa-title") as HTMLInputElement)?.value === "Late server revision");
+    check("a held revision can be accepted after the form returns to its baseline", await page.locator("#qa-title").inputValue() === "Late server revision");
     await closePage(page);
   }
 

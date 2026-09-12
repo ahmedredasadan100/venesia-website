@@ -1111,13 +1111,13 @@ check(
     ),
 );
 check(
-  "Hero and Content reset the shared form only on the saved server revision while retaining inputs on a failed save",
+  "Hero and Content delegate saved revision acceptance to the shared dirty guard instead of remounting on every server read",
   [
     ["src/app/admin/pages-blocks/blocks/hero/[id]/HeroEditClient.tsx", "hero"],
     ["src/components/admin/page-blocks/ContentModuleEditClient.tsx", "block"],
   ].every(([file, entity]) => {
     const source = read(file);
-    return source.includes(`<AdminFormRuntime key={\u0060\u0024{${entity}.id}:\u0024{${entity}.updated_at}\u0060}`) &&
+    return source.includes(`<AdminFormRuntime key={${entity}.id}`) &&
       source.includes(`savedRevision={${entity}.updated_at}`) && source.includes("redirectAction=");
   }),
 );

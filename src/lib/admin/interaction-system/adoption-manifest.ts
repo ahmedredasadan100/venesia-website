@@ -1208,7 +1208,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
         "delete",
       ],
       rationale:
-        "Topic active and Trash row presentation is shared while instant mutations, feedback, confirmation, and audit remain with their existing owners.",
+        "Topic active and Trash row presentation is shared while instant mutations, feedback, confirmation, and audit remain with their existing owners. A10 real Article/Gallery command outcomes and six typed previews are scoped in docs/reports/A10_CONTENT_PROOF.md; this does not close other collections.",
     },
     {
       entity: "categories",
@@ -1236,7 +1236,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       confirmationActions: ["archive", "delete"],
       auditedActions: ["visibility", "duplicate", "archive", "delete"],
       rationale:
-        "Category active and Trash row presentation uses the shared capability while atomic lifecycle RPCs remain in the existing Content Taxonomy mutation owner.",
+        "Category active and Trash row presentation uses the shared capability while atomic lifecycle RPCs remain in the existing Content Taxonomy mutation owner. A10 authenticated information/preview, publication, relation rejection and duplicate/trash/restore/delete evidence is bound to Category in docs/reports/A10_CONTENT_PROOF.md.",
     },
     {
       entity: "series",
@@ -1263,7 +1263,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       confirmationActions: ["archive", "delete"],
       auditedActions: ["visibility", "duplicate", "archive", "delete"],
       rationale:
-        "Series active and Trash row presentation uses the shared capability while atomic lifecycle RPCs remain in the existing Content Taxonomy mutation owner.",
+        "Series active and Trash row presentation uses the shared capability while atomic lifecycle RPCs remain in the existing Content Taxonomy mutation owner. A10 authenticated commands and the filtered Admin Topics preview destination are scoped in docs/reports/A10_CONTENT_PROOF.md; no public Series route is inferred.",
     },
     {
       entity: "pages",
@@ -1483,7 +1483,7 @@ export const ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION = {
       confirmationActions: [],
       auditedActions: [],
       rationale:
-        "The quality report delegates topic edit navigation and read-only information presentation to Shared Row Actions; it declares no mutation capabilities.",
+        "The quality report delegates topic edit navigation and read-only information presentation to Shared Row Actions; it declares no mutation capabilities. A10 real authenticated filters, pagination, reload, information and edit navigation are documented in docs/reports/A10_CONTENT_PROOF.md.",
     },
   ],
 } as const satisfies {
@@ -2467,7 +2467,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Immutable audit rows have no commands, while query state and pagination use the existing Collection and Data owners.",
+        "Immutable audit rows have no commands, while query state and pagination use the existing Collection and Data owners. A10 proves real authenticated actor/entity/date filtering, next/previous pagination and reload in docs/reports/A10_CONTENT_PROOF.md; no write or confirmation command is added.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,

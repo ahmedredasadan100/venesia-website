@@ -913,6 +913,20 @@ export type AdminGovernanceBehaviorProof = {
 
 export const ADMIN_FORM_BEHAVIOR_PROOF_LEDGER = [
   {
+    id: "a10-authenticated-content-persistence",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["docs/reports/A10_CONTENT_PROOF.md"],
+    rationale: "Local A10 delta from eeb204bb890f97aaaffa902eaa0ca86541d16dca: actual Admin Auth, isolated PostgreSQL/PostgREST, Category/Series create/edit/conflict retry, all six typed Topic edit saves and Article/Video create-to-edit. The report binds each action to its real database/reload evidence; other forms and untested branch fields are not covered.",
+  },
+  {
+    id: "a10-block-editor-saved-revision-integrity",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["docs/reports/A10_CONTENT_PROOF.md", "scripts/qa-admin-form-guarded-navigation.mts"],
+    rationale: "Hero internal-page and generic Content use real authenticated save, failure/retry and database reload; a delayed real RSC read from a second editor must retain newer unsaved input. The canonical Form Runtime accepts saved revisions through its live dirty/pending guard. Media-warning proof isolates only one side-service HTTP failure; it does not mock the core save. Additional schema branches are enumerated separately in the report.",
+  },
+  {
     id: "block-editor-shared-feedback-save-retry",
     state: "behavior_verified",
     requiredForGlobalClosure: false,
