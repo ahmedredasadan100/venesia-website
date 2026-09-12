@@ -70,7 +70,7 @@ export const CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER: readonly ContentEditorBehavio
       state: "source_proven_only",
       requiredForGlobalClosure: true,
       rationale:
-        "Executable reachability proves shared owner adoption, not successful type-specific submit, persistence, failure, and reload behavior for every registered editor consumer.",
+        "A10 now proves real authenticated edits and reloads for all six types, Article/Video creation, and scoped declared Row Actions; see docs/reports/A10_CONTENT_PROOF.md. Exhaustive create/failure combinations and all registered field options are not implied by those samples; this broader claim remains open.",
     },
     {
       id: "registered-public-content-rendering",
@@ -78,7 +78,15 @@ export const CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER: readonly ContentEditorBehavio
       state: "source_proven_only",
       requiredForGlobalClosure: true,
       rationale:
-        "Public route reachability to the canonical read owner does not prove that every registered typed body contract is projected and rendered without semantic loss.",
+        "A10 adds real saved-row rendering for all six types (text, public Article FAQ, Video iframe, ordered Gallery images with alt/captions); see docs/reports/A10_CONTENT_PROOF.md. Internal Article preview currently omits FAQ and external video playback is isolated. This broad parity claim remains open beyond the enumerated fixtures/options.",
+    },
+    {
+      id: "a10-six-type-save-reload-render",
+      owner: "src/app/admin/content/topics/editor-actions/save.ts",
+      state: "behavior_verified",
+      requiredForGlobalClosure: false,
+      rationale:
+        "docs/reports/A10_CONTENT_PROOF.md binds baseline eeb204bb890f97aaaffa902eaa0ca86541d16dca plus the local A10 delta to real Admin sessions, Actions, isolated PostgreSQL saves, mounted reloads and preview/public rendering for article/news/press/site_update/video/gallery. SEO typing regression is covered by scripts/qa-admin-form-guarded-navigation.mts. This is scoped behavioral evidence, not a new Content owner or universal persistence closure.",
     },
     {
       id: "adm-04-editor-state-binding",

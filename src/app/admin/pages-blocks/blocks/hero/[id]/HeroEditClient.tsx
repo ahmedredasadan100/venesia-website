@@ -714,7 +714,7 @@ export default function HeroEditClient({
         backLabel="الرجوع لكل الهيروهات"
       />
 
-      <AdminFormRuntime key={`${hero.id}:${hero.updated_at}`} mode="edit" entityKey={`block-template-hero:${hero.id}`} redirectAction={updateHeroTemplateDetails}>
+      <AdminFormRuntime key={hero.id} savedRevision={hero.updated_at} mode="edit" entityKey={`block-template-hero:${hero.id}`} redirectAction={updateHeroTemplateDetails}>
         <input type="hidden" name="id" value={hero.id} />
         <input type="hidden" name="slug" value={hero.slug} />
         <input

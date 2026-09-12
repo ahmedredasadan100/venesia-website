@@ -548,7 +548,7 @@ export default function ContentModuleEditClient({
         />
       )}
 
-      <AdminFormRuntime key={`${block.id}:${block.updated_at}`} mode="edit" entityKey={`block-template-content:${block.id}`} redirectAction={updateAction}>
+      <AdminFormRuntime key={block.id} savedRevision={block.updated_at} mode="edit" entityKey={`block-template-content:${block.id}`} redirectAction={updateAction}>
         <input type="hidden" name="id" value={block.id} />
         <input type="hidden" name="slug" value={block.slug} />
         <input type="hidden" name="internal_description" value={block.description ?? ""} />

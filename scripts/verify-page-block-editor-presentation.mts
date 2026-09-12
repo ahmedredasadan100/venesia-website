@@ -673,7 +673,7 @@ const resolvedAboutIntroBeats = (
   resolvedAboutIntro as { beats?: Array<{ title?: string }> }
 ).beats;
 check(
-  "Content editors receive one canonical server read model and rehydrate by persisted revision",
+  "Content editors receive one canonical server read model and delegate revision acceptance to the shared form guard",
   moduleEditRegistry.includes(
     "export function resolveContentModuleEditorConfig",
   ) &&
@@ -682,7 +682,7 @@ check(
     !contentEditRoute.includes("block={block}") &&
     !contentEditClient.includes("block.config") &&
     contentEditClient.includes("config: unknown") &&
-    contentEditClient.includes("key={`${block.id}:${block.updated_at}`}") &&
+    contentEditClient.includes("key={block.id} savedRevision={block.updated_at}") &&
     resolvedAboutIntroBeats?.[0]?.title === "البداية من الأرض",
 );
 
