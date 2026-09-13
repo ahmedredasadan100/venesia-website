@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
+
 import { useState } from "react";
 
 import { AdminFormListboxSelect } from "../ui";
@@ -84,192 +86,194 @@ export default function FeedModuleEditClient({
       />
 
       <form action={updateAction}>
-        <input type="hidden" name="id" value={block.id} />
-        <input type="hidden" name="slug" value={block.slug} />
-        <input type="hidden" name="description" value={block.description ?? ""} />
+        <AdminFormPendingFields>
+          <input type="hidden" name="id" value={block.id} />
+          <input type="hidden" name="slug" value={block.slug} />
+          <input type="hidden" name="description" value={block.description ?? ""} />
 
-        <ModuleEditorIdentitySection
-          name={block.name}
-          status={block.status}
-          inputClassName={fieldClassName("h-11")}
-        >
-          <AdminFormListboxSelect
-            name="feed_type"
-            label="نوع موديول المحتوى"
-            value={feedType}
-            onChange={(nextFeedType) => {
-              if (TOPICS_FEED_TYPES.includes(nextFeedType as TopicsFeedType)) {
-                setFeedType(nextFeedType as TopicsFeedType);
-              }
-            }}
-            options={TOPICS_FEED_TYPES.map((feedType) => ({
-              value: feedType,
-              label: TOPICS_FEED_TYPE_LABELS_AR[feedType],
-            }))}
-          />
-        </ModuleEditorIdentitySection>
+          <ModuleEditorIdentitySection
+            name={block.name}
+            status={block.status}
+            inputClassName={fieldClassName("h-11")}
+          >
+            <AdminFormListboxSelect
+              name="feed_type"
+              label="نوع موديول المحتوى"
+              value={feedType}
+              onChange={(nextFeedType) => {
+                if (TOPICS_FEED_TYPES.includes(nextFeedType as TopicsFeedType)) {
+                  setFeedType(nextFeedType as TopicsFeedType);
+                }
+              }}
+              options={TOPICS_FEED_TYPES.map((feedType) => ({
+                value: feedType,
+                label: TOPICS_FEED_TYPE_LABELS_AR[feedType],
+              }))}
+            />
+          </ModuleEditorIdentitySection>
 
-        <ModuleEditorTabs
-          moduleKind="feed"
-          activePanelContext={<ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/feed" saved={saved} />}
-          tabs={[
-            {
-              id: "content",
-              content: (
-                <ModuleEditorSection>
-                  <ModuleEditorFieldGrid>
-                    <ModuleEditorField nature="short-text" span={4}>
-                      <ModuleEditorVisibilityAlignRow label={MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+          <ModuleEditorTabs
+            moduleKind="feed"
+            activePanelContext={<ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/feed" saved={saved} />}
+            tabs={[
+              {
+                id: "content",
+                content: (
+                  <ModuleEditorSection>
+                    <ModuleEditorFieldGrid>
+                      <ModuleEditorField nature="short-text" span={4}>
+                        <ModuleEditorVisibilityAlignRow label={MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr} showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+                          <input
+                            name="widget_title"
+                            aria-label={MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}
+                            defaultValue={config.presentation.title}
+                            required
+                            className={fieldClassName()}
+                          />
+                        </ModuleEditorVisibilityAlignRow>
+                      </ModuleEditorField>
+
+                      <ModuleEditorField nature="short-text" span={4}>
+                        <ModuleEditorVisibilityAlignRow label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+                          <input name="eyebrow" aria-label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr} defaultValue={config.presentation.eyebrow ?? ""} className={fieldClassName()} />
+                        </ModuleEditorVisibilityAlignRow>
+                      </ModuleEditorField>
+
+                      <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
+                        <span className="text-xs font-semibold text-white/55">عدد العناصر المعروضة</span>
                         <input
-                          name="widget_title"
-                          aria-label={MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr}
-                          defaultValue={config.presentation.title}
-                          required
+                          name="limit"
+                          type="number"
+                          min={1}
+                          max={COLLECTION_ITEM_LIMIT_MAX}
+                          defaultValue={config.query.limit}
                           className={fieldClassName()}
                         />
-                      </ModuleEditorVisibilityAlignRow>
-                    </ModuleEditorField>
+                      </label></ModuleEditorField>
+                    </ModuleEditorFieldGrid>
 
-                    <ModuleEditorField nature="short-text" span={4}>
-                      <ModuleEditorVisibilityAlignRow label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr} showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
-                        <input name="eyebrow" aria-label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr} defaultValue={config.presentation.eyebrow ?? ""} className={fieldClassName()} />
-                      </ModuleEditorVisibilityAlignRow>
-                    </ModuleEditorField>
+                    <FeedModuleFilterFields config={config} filterOptions={filterOptions} />
 
-                    <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
-                      <span className="text-xs font-semibold text-white/55">عدد العناصر المعروضة</span>
-                      <input
-                        name="limit"
-                        type="number"
-                        min={1}
-                        max={COLLECTION_ITEM_LIMIT_MAX}
-                        defaultValue={config.query.limit}
-                        className={fieldClassName()}
-                      />
-                    </label></ModuleEditorField>
-                  </ModuleEditorFieldGrid>
-
-                  <FeedModuleFilterFields config={config} filterOptions={filterOptions} />
-
-                  <div className="mt-6 space-y-3">
-                    <ModuleEditorSectionHeading intent="settings">
-                      تنسيق عناصر الـFeed
-                    </ModuleEditorSectionHeading>
-                    <div className="grid gap-4 xl:grid-cols-2">
-                      <ModuleEditorVisibilityAlignRow
-                        label="الصورة"
-                        className={"image" in displayCapability ? "" : "hidden"}
-                        showName="show_image"
-                        showDefault={config.presentation.showImage}
-                        controlMode="visibility-only"
-                      />
-
-                      <ModuleEditorVisibilityAlignRow
-                        label="عنوان الموضوع"
-                        className={isArticleVariant ? "" : "hidden"}
-                        showName="show_article_title"
-                        boldName="article_title_bold"
-                        alignmentName="article_title_alignment"
-                        showDefault={articleCard.showTitle}
-                        boldDefault={articleCard.titleBold}
-                        alignmentDefault={articleCard.titleAlignment}
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="المقتطف"
-                        className={isArticleVariant ? "" : "hidden"}
-                        showName="show_article_excerpt"
-                        boldName="article_excerpt_bold"
-                        alignmentName="article_excerpt_alignment"
-                        showDefault={articleCard.showExcerpt}
-                        boldDefault={articleCard.excerptBold}
-                        alignmentDefault={articleCard.excerptAlignment}
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="التاريخ"
-                        className={isArticleVariant ? "" : "hidden"}
-                        showName="show_article_date"
-                        boldName="article_date_bold"
-                        alignmentName="article_date_alignment"
-                        showDefault={articleCard.showDate}
-                        boldDefault={articleCard.dateBold}
-                        alignmentDefault={articleCard.dateAlignment}
-                      />
-
-                      <ModuleEditorVisibilityAlignRow
-                        label="اسم التصنيف"
-                        className={isCategoryVariant ? "" : "hidden"}
-                        showName="show_category"
-                        boldName="category_bold"
-                        alignmentName="category_alignment"
-                        showDefault={categoryCard.showCategory}
-                        boldDefault={categoryCard.categoryBold}
-                        alignmentDefault={categoryCard.categoryAlignment}
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="عدد الموضوعات"
-                        className={isCategoryVariant ? "" : "hidden"}
-                        showName="show_count"
-                        boldName="count_bold"
-                        alignmentName="count_alignment"
-                        showDefault={categoryCard.showCount}
-                        boldDefault={categoryCard.countBold}
-                        alignmentDefault={categoryCard.countAlignment}
-                      />
-
-                      <ModuleEditorVisibilityAlignRow
-                        label="اسم السلسلة"
-                        className={isSeriesVariant ? "" : "hidden"}
-                        showName="show_series"
-                        boldName="series_bold"
-                        alignmentName="series_alignment"
-                        showDefault={seriesCard.showSeries}
-                        boldDefault={seriesCard.seriesBold}
-                        alignmentDefault={seriesCard.seriesAlignment}
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="الوصف"
-                        className={isSeriesVariant ? "self-start" : "hidden"}
-                        showName="show_description"
-                        boldName="description_bold"
-                        alignmentName="description_alignment"
-                        showDefault={seriesCard.showDescription}
-                        boldDefault={seriesCard.descriptionBold}
-                        alignmentDefault={seriesCard.descriptionAlignment}
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="زر عرض كل الموضوعات"
-                        className={isSeriesVariant ? "" : "hidden"}
-                        showName="show_details"
-                        boldName="details_bold"
-                        alignmentName="details_alignment"
-                        showDefault={seriesCard.showDetails}
-                        boldDefault={seriesCard.detailsBold}
-                        alignmentDefault={seriesCard.detailsAlignment}
-                      >
-                        <input
-                          name="link_text"
-                          aria-label="نص زر عرض كل الموضوعات"
-                          defaultValue={
-                            config.presentation.linkText ??
-                            DEFAULT_FEED_SERIES_LINK_TEXT
-                          }
-                          className={fieldClassName()}
+                    <div className="mt-6 space-y-3">
+                      <ModuleEditorSectionHeading intent="settings">
+                        تنسيق عناصر الـFeed
+                      </ModuleEditorSectionHeading>
+                      <div className="grid gap-4 xl:grid-cols-2">
+                        <ModuleEditorVisibilityAlignRow
+                          label="الصورة"
+                          className={"image" in displayCapability ? "" : "hidden"}
+                          showName="show_image"
+                          showDefault={config.presentation.showImage}
+                          controlMode="visibility-only"
                         />
-                      </ModuleEditorVisibilityAlignRow>
+
+                        <ModuleEditorVisibilityAlignRow
+                          label="عنوان الموضوع"
+                          className={isArticleVariant ? "" : "hidden"}
+                          showName="show_article_title"
+                          boldName="article_title_bold"
+                          alignmentName="article_title_alignment"
+                          showDefault={articleCard.showTitle}
+                          boldDefault={articleCard.titleBold}
+                          alignmentDefault={articleCard.titleAlignment}
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="المقتطف"
+                          className={isArticleVariant ? "" : "hidden"}
+                          showName="show_article_excerpt"
+                          boldName="article_excerpt_bold"
+                          alignmentName="article_excerpt_alignment"
+                          showDefault={articleCard.showExcerpt}
+                          boldDefault={articleCard.excerptBold}
+                          alignmentDefault={articleCard.excerptAlignment}
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="التاريخ"
+                          className={isArticleVariant ? "" : "hidden"}
+                          showName="show_article_date"
+                          boldName="article_date_bold"
+                          alignmentName="article_date_alignment"
+                          showDefault={articleCard.showDate}
+                          boldDefault={articleCard.dateBold}
+                          alignmentDefault={articleCard.dateAlignment}
+                        />
+
+                        <ModuleEditorVisibilityAlignRow
+                          label="اسم التصنيف"
+                          className={isCategoryVariant ? "" : "hidden"}
+                          showName="show_category"
+                          boldName="category_bold"
+                          alignmentName="category_alignment"
+                          showDefault={categoryCard.showCategory}
+                          boldDefault={categoryCard.categoryBold}
+                          alignmentDefault={categoryCard.categoryAlignment}
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="عدد الموضوعات"
+                          className={isCategoryVariant ? "" : "hidden"}
+                          showName="show_count"
+                          boldName="count_bold"
+                          alignmentName="count_alignment"
+                          showDefault={categoryCard.showCount}
+                          boldDefault={categoryCard.countBold}
+                          alignmentDefault={categoryCard.countAlignment}
+                        />
+
+                        <ModuleEditorVisibilityAlignRow
+                          label="اسم السلسلة"
+                          className={isSeriesVariant ? "" : "hidden"}
+                          showName="show_series"
+                          boldName="series_bold"
+                          alignmentName="series_alignment"
+                          showDefault={seriesCard.showSeries}
+                          boldDefault={seriesCard.seriesBold}
+                          alignmentDefault={seriesCard.seriesAlignment}
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="الوصف"
+                          className={isSeriesVariant ? "self-start" : "hidden"}
+                          showName="show_description"
+                          boldName="description_bold"
+                          alignmentName="description_alignment"
+                          showDefault={seriesCard.showDescription}
+                          boldDefault={seriesCard.descriptionBold}
+                          alignmentDefault={seriesCard.descriptionAlignment}
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="زر عرض كل الموضوعات"
+                          className={isSeriesVariant ? "" : "hidden"}
+                          showName="show_details"
+                          boldName="details_bold"
+                          alignmentName="details_alignment"
+                          showDefault={seriesCard.showDetails}
+                          boldDefault={seriesCard.detailsBold}
+                          alignmentDefault={seriesCard.detailsAlignment}
+                        >
+                          <input
+                            name="link_text"
+                            aria-label="نص زر عرض كل الموضوعات"
+                            defaultValue={
+                              config.presentation.linkText ??
+                              DEFAULT_FEED_SERIES_LINK_TEXT
+                            }
+                            className={fieldClassName()}
+                          />
+                        </ModuleEditorVisibilityAlignRow>
+                      </div>
                     </div>
-                  </div>
 
-                </ModuleEditorSection>
-              ),
-            },
-            {
-              id: "pages",
-              content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
-            },
-          ]}
-        />
+                  </ModuleEditorSection>
+                ),
+              },
+              {
+                id: "pages",
+                content: <ModuleEditorPagesTab moduleName={block.name} assignmentContext={assignmentContext} />,
+              },
+            ]}
+          />
 
-        <ModuleEditorSaveArea />
+          <ModuleEditorSaveArea />
+        </AdminFormPendingFields>
       </form>
     </div>
   );

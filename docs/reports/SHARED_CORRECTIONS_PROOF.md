@@ -1,0 +1,50 @@
+# Shared Corrections & Adoption — scoped local proof
+
+Baseline: `d60938a6781db3630a64c1cf1798f7ef269c38b4`.
+Branch: `codex/shared-corrections-adoption`. The delivery inventory binds the final working-tree bytes; no commit or remote verification is claimed here.
+
+## Operation evidence
+
+Original checklist mapping: items 1–3 cover the eight template-save Actions and Page/Menu batch deletion (FSTA-01/02); 4–5 cover Navigation and resource search (FSTA-03/04); 6–11 cover Menu metadata, Menu item forms, Page SEO/schema editors, Footer drafts, Security account drafts and legacy Media feedback. Items 12–13 remain measurement without additional optimization; Production effect is unproven. **Item 14 is adoption proof for each actual operation**, documented in the table and atomic evidence below, with each boundary stated separately. Shared imports or one successful screen do not close other operations. Maintenance/Redirect deadline evidence belongs to FSTA-05 in the conditional performance section; it is not a replacement for item 14. This mapping corrects the local report's earlier item-14 label without changing or broadening its test results.
+
+| Consumer / operation | Correction and proof | Limits |
+| --- | --- | --- |
+| Header, Mobile, Footer resource links | Existing Navigation reads canonical typed Topic paths, Page path and Series identity from the current published targets. Real SDK → isolated PostgREST → PostgreSQL → actual menu builder covered all six Topic types, changed Page/Series targets, missing/unpublished/deleted targets and anchors. Navigation cache includes existing source invalidation tags. | Read fixture, not Production or full browser navigation. Next cache storage was isolated; cache adoption has source proof. A04 layout unchanged. |
+| Pages/Projects/Topics/Series link search | Existing shared escaped OR search is applied before the result limit. Four real providers each found row 235 in a 240-row fixture; empty-query limits and literal special characters passed. | No replacement search engine; hierarchical Category search contract unchanged. |
+| Menu metadata and Menu item create/edit; Page SEO | Native Actions retain ownership. `AdminFormPendingFields` at the existing Form owner locks fields and rejects duplicate submit events during pending. Actual components prove payload capture before locking, disabled/inert fields and one Action invocation. | Deferred Action ports and Next router isolated. Native redirect-error persistence and domain idempotence are not newly claimed. |
+| CTA/Cards/Breadcrumb/Feed/Featured/MediaSidebar/MediaHub template forms | Every actual form body is inside the same lower-level pending owner; registered route → rendered editor → native Action → protected fields is guarded per operation. | Shared native pending mechanism mounted once across the representative contracts above. The pending-field proof alone makes no atomicity claim; the separate authenticated atomic evidence below covers the eight update Actions. |
+| Footer aggregate | Incoming source replaces the aggregate draft only when clean and not pending. Real component tests prove dirty source rejection, pending locks, failure/retry, post-save newer input protection, clean source acceptance and default-restore baseline. | Action port isolated; no real Footer or external Media mutation. |
+| Security account name/email | Existing account owner uses the same source-acceptance policy and locks account fields while pending. Actual component tests cover dirty name and email, clean reads, failure/retry and newer post-save input. | Auth/Permissions/password/session policies and Actions unchanged. No live account write. |
+| Legacy Media `error` | Create/edit routes pass the legacy error to the existing Media Form → ContentEditorShell → Form/Feedback owner, without an additional error notice. Mounted owners prove one error, dismissal clearing `error`, submit clearing old feedback and one current failure. | Source wiring plus shared-owner behavior. Existing legacy success/media-warning notices keep their contract. This is not an additional authenticated Media round trip. |
+
+Durable checks: `scripts/verify-shared-corrections-adoption.mts`, `scripts/qa-shared-corrections-adoption.mjs`, `scripts/qa-shared-read-deadlines.mjs`, and the existing consumer capability preflight/source-proof and Form guards.
+
+Mounted proof uses real components and shared owners. Action transport, link-picker side reads, Next routing and the unrelated Menu items table are isolated. It does not substitute mocks for a database atomicity claim.
+
+## Conditional performance scope
+
+The actual Maintenance/Redirect read owners ignored the existing configured Supabase deadline: delayed loopback responses took 745/717ms with a 100ms test deadline. Adoption of the existing `createSupabaseFetch` owner reduced these to 105/115ms, preserving `false`/`null` failure policy and successful reads. The product's existing 8000ms default and configuration contract are unchanged.
+
+With 24 categories/series and 240 synthetic topics, real Feed reads measured 25 requests / 177ms for categories and 25 / 94ms for series (the category hierarchy was already warm for the series measurement). Warm repeated results used zero requests through the isolated Next cache adapter. Assignment invalidation read eight assignment tables plus Pages: nine requests / 58ms; repeated invalidation still required nine reads. Request amplification is confirmed; Production latency, Next cache hit rates and an operational benefit from changing these contracts were not demonstrated. Feed read and assignment-invalidation algorithms are unchanged. Atomic saves obtain affected page IDs from the transaction and run the same invalidators after commit through the existing bounded retry owner; no additional performance optimization or Production effect is claimed.
+
+## FSTA-01/02 — approved atomic continuation
+
+The user approved the existing Composition/Menu owner extension on the same local baseline. The additive migration `sql/migrations/20260912224809_shared_composition_menu_atomic_completion.sql` adds operations to the two existing RPC signatures; no extra Runtime, service role grant, historical migration edit, backfill or original/shared database application.
+
+Eight update Actions (Content, CTA, Cards, Breadcrumb, Feed, Featured, Media Sidebar and Media Hub) now call one template-plus-assignment transaction. Existing parsers own specialized fields. Stored config is re-read after the update and its triggers; mismatches fail inside the transaction. Templates can have no assignments. Old RPC operations remain callable; new code rejects old DB contracts without a multi-commit fallback.
+
+Page batch deletion locks current identities, excludes existing Home/Projects protections (including normalized whitespace/slashes), and calls the old Page delete branch within one transaction. Page-target Hero assignments are removed with the Page; Hero templates and route assignments are retained. Menu batch deletion locks menu IDs in order, captures item identities inside the transaction and deletes the group atomically.
+
+Actual current password hashing, login handler, signed Cookie verification, active-user/session checks, Actions, Supabase SDK, PostgREST, PostgreSQL 17 and read adapters are exercised by `scripts/verify-shared-atomic-persistence.mjs`. Fourteen operation groups include eight distinct family saves, observed first-write attempts followed by trigger failures and full rollback, retry/reload, before/after-trigger config mismatch, empty selection/assignments, protected Pages, malformed inputs, actual concurrent lock waits, legacy compatibility and unchanged ACL. Successful unchanged cases are reused; failed fixture/transport attempts are retained in the local evidence bundle.
+
+`scripts/qa-shared-atomic-persistence.mjs` mounts the actual Instant Mutation and Feedback owners. A real signed Cookie reaches actual Page Actions, a real late PostgreSQL delete failure restores all rows, and retry returns the real committed deletion set. Injected post-commit server cache and client refetch failures produce a warning without restoring deleted rows; the protected row remains. Media/cache save warnings have one display and clear their query parameters on dismissal. Browser and server network allowlists are installed before requests; an outbound probe is observed blocked. The full Pages screen is connected by source proof; this is a mounted shared-owner consumer fixture, not a claim of full-screen Browser coverage.
+
+Audit policy is preserved explicitly: existing assignment and delete RPC SQL audit is transactional and blocking; new assigned saves preserve that existing path/name. Empty/unassigned saves keep the existing best-effort CMS audit only. The CMS audit owner now also catches audit-context resolution failure. No new global audit availability policy is introduced.
+
+Next headers/cache/HTTP transport and Media lease/synchronization side services are isolated in these tests. Actual Media coordination receives real mutation results and its warning/uncertainty path is exercised, but Storage, catalog database leases and external services are not newly proved. Cache retry uses the existing two-attempt in-request owner; it is not durable delivery. The local delivery records the final source and migration hashes, applicability/source proof, final gate and cleanup.
+
+## Closure boundary
+
+Only the scoped source and component/read proofs above are claimed. Existing A10/ADM-01 evidence is reused within its original scope. The new authenticated evidence is limited to the atomic operations above; no changed Auth/permission policy, analytics, storage, Contact, FAQ parity or unrelated consumer proof is claimed. Earlier Smoke view-counter blocking remains **unproven**.
+
+A04 deferred. `globalClosed=false`. Local quality-gate results, failures retained, skips, source hashes and exact changed-file inventory are recorded in the local delivery bundle outside Git.

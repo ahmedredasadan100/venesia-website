@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
+import { AdminFormPendingFields } from "../../../../components/admin/ui/AdminFormRuntime";
+import { shouldAcceptAdminFormSource } from "../../../../lib/admin/form-runtime";
 
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
@@ -76,11 +78,20 @@ export default function FooterBuilderClient({
   const [restoreOpen, setRestoreOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const slotsSourceKey = JSON.stringify(settings.slots.slots);
-  const [lastSlotsSourceKey, setLastSlotsSourceKey] = useState(slotsSourceKey);
-  if (slotsSourceKey !== lastSlotsSourceKey) {
-    setLastSlotsSourceKey(slotsSourceKey);
-    setSlots(structuredClone(settings.slots.slots));
+  const sourceKey = JSON.stringify({ slots: settings.slots.slots, contactItems: settings.contactItems,
+    socialLinks: settings.socialLinks, legal: settings.legal });
+  const draftKey = JSON.stringify({ slots, contactItems, socialLinks, legal });
+  const [savedDraftKey, setSavedDraftKey] = useState(sourceKey);
+  const [lastSourceKey, setLastSourceKey] = useState(sourceKey);
+  if (sourceKey !== lastSourceKey) {
+    setLastSourceKey(sourceKey);
+    if (shouldAcceptAdminFormSource({ pending: isPending, dirty: draftKey !== savedDraftKey })) {
+      setSlots(structuredClone(settings.slots.slots));
+      setContactItems(structuredClone(settings.contactItems));
+      setSocialLinks(structuredClone(settings.socialLinks));
+      setLegal(structuredClone(settings.legal));
+      setSavedDraftKey(sourceKey);
+    }
   }
 
   const summary = useMemo(
@@ -108,6 +119,7 @@ export default function FooterBuilderClient({
   }
 
   function handleSave() {
+    if (isPending) return;
     resetAlerts();
     startTransition(async () => {
       try {
@@ -118,6 +130,7 @@ export default function FooterBuilderClient({
           legal,
         });
         const warning = result.status === "warning";
+        setSavedDraftKey(draftKey);
         setMessageWarning(warning);
         setMessage(
           warning
@@ -132,11 +145,15 @@ export default function FooterBuilderClient({
   }
 
   function handleRestore() {
+    if (isPending) return;
     resetAlerts();
     startTransition(async () => {
       try {
         const result = await restoreDefaultFooterAction();
         setSlots(structuredClone(result.slots.slots));
+        setSavedDraftKey((current) => JSON.stringify({
+          ...JSON.parse(current), slots: result.slots.slots,
+        }));
         setRestoreOpen(false);
         const warning = result.status === "warning";
         setMessageWarning(warning);
@@ -309,47 +326,49 @@ export default function FooterBuilderClient({
         }
       />
 
-      <AdminModuleTabs
-        tabs={editorTabs}
-        activePanelContext={
-          <AdminFeedbackRegion
-            channel="footer-builder"
-            label="نتائج إجراءات منشئ الفوتر"
-            feedback={
-              error
-                ? {
-                    variant: "danger",
-                    title: "تعذر تنفيذ الإجراء",
-                    message: error,
-                    layout: "inline",
-                    dismissible: true,
-                    lifecycle: "manual",
-                  }
-                : message
+      <AdminFormPendingFields pending={isPending}>
+        <AdminModuleTabs
+          tabs={editorTabs}
+          activePanelContext={
+            <AdminFeedbackRegion
+              channel="footer-builder"
+              label="نتائج إجراءات منشئ الفوتر"
+              feedback={
+                error
                   ? {
-                      variant: messageWarning ? "warning" : "success",
-                      title: messageWarning ? "تم التنفيذ مع تنبيه" : "تم تنفيذ الإجراء",
-                      message,
+                      variant: "danger",
+                      title: "تعذر تنفيذ الإجراء",
+                      message: error,
                       layout: "inline",
                       dismissible: true,
                       lifecycle: "manual",
-                      ...(saved ? { dismissSearchParams: ["saved"] } : {}),
                     }
-                  : settings.sourceStatus !== "database"
+                  : message
                     ? {
-                        variant: "warning",
-                        title: "تنبيه مصدر إعدادات الفوتر",
-                        message: `لم يُعرض fallback عام. حالة المصدر: ${slotsSourceLabel}. ${settings.sourceIssues.join(" ")}`,
+                        variant: messageWarning ? "warning" : "success",
+                        title: messageWarning ? "تم التنفيذ مع تنبيه" : "تم تنفيذ الإجراء",
+                        message,
                         layout: "inline",
                         dismissible: true,
-                        lifecycle: "persistent",
+                        lifecycle: "manual",
+                        ...(saved ? { dismissSearchParams: ["saved"] } : {}),
                       }
-                    : null
-            }
-          />
-        }
-      />
+                    : settings.sourceStatus !== "database"
+                      ? {
+                          variant: "warning",
+                          title: "تنبيه مصدر إعدادات الفوتر",
+                          message: `لم يُعرض fallback عام. حالة المصدر: ${slotsSourceLabel}. ${settings.sourceIssues.join(" ")}`,
+                          layout: "inline",
+                          dismissible: true,
+                          lifecycle: "persistent",
+                        }
+                      : null
+              }
+            />
+          }
+        />
 
+      </AdminFormPendingFields>
       <AdminConfirmDialog
         open={restoreOpen}
         title="استعادة الفوتر الافتراضي"

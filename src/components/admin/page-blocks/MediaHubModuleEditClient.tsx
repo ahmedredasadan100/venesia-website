@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
+
 import { useState } from "react";
 
 import { AdminFormListboxSelect } from "../ui";
@@ -179,166 +181,168 @@ export default function MediaHubModuleEditClient({
       />
 
       <form action={updateAction}>
-        <input type="hidden" name="id" value={block.id} />
-        <input type="hidden" name="description" value={block.description ?? ""} />
-        <input type="hidden" name="data_source" value="topics" />
-        {!isListing ? <input type="hidden" name="placement" value={parsedInitial.placement} /> : null}
-        {isListing ? (
-          <input type="hidden" name="section_key" value={initialSectionKey} />
-        ) : null}
+        <AdminFormPendingFields>
+          <input type="hidden" name="id" value={block.id} />
+          <input type="hidden" name="description" value={block.description ?? ""} />
+          <input type="hidden" name="data_source" value="topics" />
+          {!isListing ? <input type="hidden" name="placement" value={parsedInitial.placement} /> : null}
+          {isListing ? (
+            <input type="hidden" name="section_key" value={initialSectionKey} />
+          ) : null}
 
-        {isListing ? (
-          <>
-            <input type="hidden" name="eyebrow" value={eyebrow} />
-            <input type="hidden" name="title" value={title} />
-            <input type="hidden" name="presentation_description" value={description} />
-            <input type="hidden" name="cta_text" value={ctaText} />
-            <input type="hidden" name="show_eyebrow" value={String(eyebrowFormat.visible)} />
-            <input type="hidden" name="eyebrow_bold" value={String(eyebrowFormat.bold)} />
-            <input type="hidden" name="eyebrow_alignment" value={eyebrowFormat.alignment} />
-            <input type="hidden" name="show_title" value={String(titleFormat.visible)} />
-            <input type="hidden" name="title_bold" value={String(titleFormat.bold)} />
-            <input type="hidden" name="title_alignment" value={titleFormat.alignment} />
-            <input type="hidden" name="show_description" value={String(descriptionFormat.visible)} />
-            <input type="hidden" name="description_bold" value={String(descriptionFormat.bold)} />
-            <input type="hidden" name="description_alignment" value={descriptionFormat.alignment} />
-            <input type="hidden" name="show_cta" value={String(ctaFormat.visible)} />
-            <input type="hidden" name="cta_bold" value={String(ctaFormat.bold)} />
-            <input type="hidden" name="cta_alignment" value={ctaFormat.alignment} />
-          </>
-        ) : null}
+          {isListing ? (
+            <>
+              <input type="hidden" name="eyebrow" value={eyebrow} />
+              <input type="hidden" name="title" value={title} />
+              <input type="hidden" name="presentation_description" value={description} />
+              <input type="hidden" name="cta_text" value={ctaText} />
+              <input type="hidden" name="show_eyebrow" value={String(eyebrowFormat.visible)} />
+              <input type="hidden" name="eyebrow_bold" value={String(eyebrowFormat.bold)} />
+              <input type="hidden" name="eyebrow_alignment" value={eyebrowFormat.alignment} />
+              <input type="hidden" name="show_title" value={String(titleFormat.visible)} />
+              <input type="hidden" name="title_bold" value={String(titleFormat.bold)} />
+              <input type="hidden" name="title_alignment" value={titleFormat.alignment} />
+              <input type="hidden" name="show_description" value={String(descriptionFormat.visible)} />
+              <input type="hidden" name="description_bold" value={String(descriptionFormat.bold)} />
+              <input type="hidden" name="description_alignment" value={descriptionFormat.alignment} />
+              <input type="hidden" name="show_cta" value={String(ctaFormat.visible)} />
+              <input type="hidden" name="cta_bold" value={String(ctaFormat.bold)} />
+              <input type="hidden" name="cta_alignment" value={ctaFormat.alignment} />
+            </>
+          ) : null}
 
-        <ModuleEditorIdentitySection
-          name={block.name}
-          status={block.status}
-          inputClassName={fieldClassName("h-11")}
-        >
-          {isListing ? null : (
-            <AdminFormListboxSelect
-              name="section_key"
-              label="نوع السكشن"
-              value={sectionKey}
-              onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
-              options={SECTION_KEYS.map((key) => ({
-                value: key,
-                label: MEDIA_HUB_SECTION_LABELS[key],
-              }))}
-            />
-          )}
-        </ModuleEditorIdentitySection>
+          <ModuleEditorIdentitySection
+            name={block.name}
+            status={block.status}
+            inputClassName={fieldClassName("h-11")}
+          >
+            {isListing ? null : (
+              <AdminFormListboxSelect
+                name="section_key"
+                label="نوع السكشن"
+                value={sectionKey}
+                onChange={(value) => handleSectionChange(readInitialSectionKey(value))}
+                options={SECTION_KEYS.map((key) => ({
+                  value: key,
+                  label: MEDIA_HUB_SECTION_LABELS[key],
+                }))}
+              />
+            )}
+          </ModuleEditorIdentitySection>
 
-        <ModuleEditorTabs
-          moduleKind="media-hub"
-          activePanelContext={
-            <ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/media-hub" saved={saved} />
-          }
-          tabs={[
-            {
-              id: "content",
-              content: (
-                isListing && parsedInitial.listing && parsedInitial.type ? (
-                  <ListingPresentationFields
-                    config={parsedInitial.listing}
-                    mediaType={parsedInitial.type}
+          <ModuleEditorTabs
+            moduleKind="media-hub"
+            activePanelContext={
+              <ModuleEditorFeedback backHref="/admin/pages-blocks/blocks/media-hub" saved={saved} />
+            }
+            tabs={[
+              {
+                id: "content",
+                content: (
+                  isListing && parsedInitial.listing && parsedInitial.type ? (
+                    <ListingPresentationFields
+                      config={parsedInitial.listing}
+                      mediaType={parsedInitial.type}
+                    />
+                  ) : (
+                    <ModuleEditorSection>
+                      <ModuleEditorSectionHeading intent="domain">
+                        محتوى السكشن
+                      </ModuleEditorSectionHeading>
+                      <ModuleEditorFieldGrid className="mt-4">
+                        <ModuleEditorField nature="short-text" span={4}>
+                          <ModuleEditorVisibilityAlignRow label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
+                            <input
+                              name="eyebrow"
+                              aria-label="النص التمهيدي"
+                              value={eyebrow}
+                              onChange={(event) => setEyebrow(event.target.value)}
+                              className={fieldClassName()}
+                            />
+                          </ModuleEditorVisibilityAlignRow>
+                        </ModuleEditorField>
+
+                        <ModuleEditorField nature="short-text" span={4}>
+                          <ModuleEditorVisibilityAlignRow label="عنوان السكشن" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+                            <input
+                              name="title"
+                              aria-label="عنوان السكشن"
+                              value={title}
+                              onChange={(event) => setTitle(event.target.value)}
+                              className={fieldClassName()}
+                            />
+                          </ModuleEditorVisibilityAlignRow>
+                        </ModuleEditorField>
+
+                        <ModuleEditorField nature="short-description" span={4}>
+                          <ModuleEditorVisibilityAlignRow label="وصف السكشن" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
+                            <input
+                              name="presentation_description"
+                              aria-label="وصف السكشن"
+                              value={description}
+                              onChange={(event) => setDescription(event.target.value)}
+                              className={fieldClassName("h-11 min-w-0")}
+                            />
+                          </ModuleEditorVisibilityAlignRow>
+                        </ModuleEditorField>
+
+                        <ModuleEditorField nature="short-text" span={4}>
+                          <ModuleEditorVisibilityAlignRow label="نص زر الاستكشاف" showName="show_cta" boldName="cta_bold" alignmentName="cta_alignment" showDefault={ctaFormat.visible} boldDefault={ctaFormat.bold} alignmentDefault={ctaFormat.alignment}>
+                            <input
+                              name="cta_text"
+                              aria-label="نص زر الاستكشاف"
+                              value={ctaText}
+                              onChange={(event) => setCtaText(event.target.value)}
+                              className={fieldClassName()}
+                            />
+                          </ModuleEditorVisibilityAlignRow>
+                        </ModuleEditorField>
+                      </ModuleEditorFieldGrid>
+                    </ModuleEditorSection>
+                  )
+                ),
+              },
+              ...(!isListing
+                ? [
+                    {
+                      id: "presentation",
+                      content: (
+                        <div
+                          key={sectionKey}
+                          className="space-y-6"
+                          data-media-hub-editor-presentation=""
+                        >
+                          <CollectionPresentationFields
+                            hierarchy={activeHierarchy}
+                            hierarchyCapabilities={activeCapabilities.hierarchy}
+                            view={activeCollectionView}
+                            viewCapabilities={activeCapabilities.view}
+                            itemLimit={activeItemLimit}
+                            contextLabel={MEDIA_HUB_SECTION_LABELS[sectionKey]}
+                          />
+                          <CollectionModuleDisplayFormattingFields
+                            display={activeDisplay}
+                            heading="تنسيق عناصر المحتوى"
+                          />
+                        </div>
+                      ),
+                    },
+                  ]
+                : []),
+              {
+                id: "pages",
+                content: (
+                  <ModuleEditorPagesTab
+                    moduleName={block.name}
+                    assignmentContext={assignmentContext}
                   />
-                ) : (
-                  <ModuleEditorSection>
-                    <ModuleEditorSectionHeading intent="domain">
-                      محتوى السكشن
-                    </ModuleEditorSectionHeading>
-                    <ModuleEditorFieldGrid className="mt-4">
-                      <ModuleEditorField nature="short-text" span={4}>
-                        <ModuleEditorVisibilityAlignRow label="النص التمهيدي" showName="show_eyebrow" boldName="eyebrow_bold" alignmentName="eyebrow_alignment" showDefault={eyebrowFormat.visible} boldDefault={eyebrowFormat.bold} alignmentDefault={eyebrowFormat.alignment}>
-                          <input
-                            name="eyebrow"
-                            aria-label="النص التمهيدي"
-                            value={eyebrow}
-                            onChange={(event) => setEyebrow(event.target.value)}
-                            className={fieldClassName()}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
+                ),
+              },
+            ]}
+          />
 
-                      <ModuleEditorField nature="short-text" span={4}>
-                        <ModuleEditorVisibilityAlignRow label="عنوان السكشن" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
-                          <input
-                            name="title"
-                            aria-label="عنوان السكشن"
-                            value={title}
-                            onChange={(event) => setTitle(event.target.value)}
-                            className={fieldClassName()}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-
-                      <ModuleEditorField nature="short-description" span={4}>
-                        <ModuleEditorVisibilityAlignRow label="وصف السكشن" showName="show_description" boldName="description_bold" alignmentName="description_alignment" showDefault={descriptionFormat.visible} boldDefault={descriptionFormat.bold} alignmentDefault={descriptionFormat.alignment}>
-                          <input
-                            name="presentation_description"
-                            aria-label="وصف السكشن"
-                            value={description}
-                            onChange={(event) => setDescription(event.target.value)}
-                            className={fieldClassName("h-11 min-w-0")}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-
-                      <ModuleEditorField nature="short-text" span={4}>
-                        <ModuleEditorVisibilityAlignRow label="نص زر الاستكشاف" showName="show_cta" boldName="cta_bold" alignmentName="cta_alignment" showDefault={ctaFormat.visible} boldDefault={ctaFormat.bold} alignmentDefault={ctaFormat.alignment}>
-                          <input
-                            name="cta_text"
-                            aria-label="نص زر الاستكشاف"
-                            value={ctaText}
-                            onChange={(event) => setCtaText(event.target.value)}
-                            className={fieldClassName()}
-                          />
-                        </ModuleEditorVisibilityAlignRow>
-                      </ModuleEditorField>
-                    </ModuleEditorFieldGrid>
-                  </ModuleEditorSection>
-                )
-              ),
-            },
-            ...(!isListing
-              ? [
-                  {
-                    id: "presentation",
-                    content: (
-                      <div
-                        key={sectionKey}
-                        className="space-y-6"
-                        data-media-hub-editor-presentation=""
-                      >
-                        <CollectionPresentationFields
-                          hierarchy={activeHierarchy}
-                          hierarchyCapabilities={activeCapabilities.hierarchy}
-                          view={activeCollectionView}
-                          viewCapabilities={activeCapabilities.view}
-                          itemLimit={activeItemLimit}
-                          contextLabel={MEDIA_HUB_SECTION_LABELS[sectionKey]}
-                        />
-                        <CollectionModuleDisplayFormattingFields
-                          display={activeDisplay}
-                          heading="تنسيق عناصر المحتوى"
-                        />
-                      </div>
-                    ),
-                  },
-                ]
-              : []),
-            {
-              id: "pages",
-              content: (
-                <ModuleEditorPagesTab
-                  moduleName={block.name}
-                  assignmentContext={assignmentContext}
-                />
-              ),
-            },
-          ]}
-        />
-
-        <ModuleEditorSaveArea />
+          <ModuleEditorSaveArea />
+        </AdminFormPendingFields>
       </form>
     </div>
   );

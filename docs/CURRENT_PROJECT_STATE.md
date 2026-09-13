@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-09-12
+**Updated:** 2026-09-13
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -94,14 +94,16 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The 2026-09-05 authorized Migration 100 application and registry reconciliation established the Production facts below. The repository now contains 102 migrations. Production registry facts below remain the historical snapshot, not a new live verification. Migration 102 is prepared and tested locally only.
+The 2026-09-05 authorized Migration 100 application and registry reconciliation established the Production facts below. The repository now contains 103 migrations. Production registry facts below remain a historical snapshot, not a new live verification; Migration 102 was subsequently closed through PR #152 as recorded above.
+
+The Shared Corrections & Adoption continuation on local baseline `d60938a6781db3630a64c1cf1798f7ef269c38b4` adds `20260912224809_shared_composition_menu_atomic_completion.sql` as migration 103. It extends the existing Composition/Menu RPC owners for atomic template saves and Page/Menu batch deletion, preserving their signatures, ACL and Audit policy. It has been applied and tested only in an isolated local database. No original/shared/Production application or Git delivery is authorized by this local continuation; A04 is deferred and `globalClosed=false`. The scoped evidence is in `reports/SHARED_CORRECTIONS_PROOF.md` and the local delivery bundle.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
-| Repository migration files                        |                                               102 |
+| Repository migration files                        |                                               103 |
 | Production registry versions                      |                                               100 |
 | Migration 101 rollout state                       |                         PR candidate / unapplied |
-| Migration 102 rollout state                       |                Local isolated proof / unapplied |
+| Migration 103 rollout state                       |                Local isolated proof / shared unapplied |
 | Current Production live state                     |                    Verified on 2026-09-05 |
 | Registry SQL provenance                           | Exact repository SQL for all 100 recorded versions |
 | Public tables                                     |                                                58 |
@@ -120,7 +122,7 @@ Production migration `20260905090000_topics_bulk_publish_atomicity.sql` was appl
 
 Migration 101, `20260907214608_p1_e_taxonomy_consistency.sql`, was already present with matching provenance in the P2-S delivery registry comparison. It is not a pending candidate.
 
-Closed P2-S + ADM-01 applied corrected migration 102 once before PR #152, `20260911194004_topic_view_integrity.sql`. The existing `increment_topic_view` owner receives private, expiring visitor/topic deduplication and request-limit state. The user-approved PUB-07 policy is a signed server-issued browser cookie for 30 days; one qualified public Production view per visitor/topic per rolling 24 hours; 30 requests per visitor and 300 per trusted IP per rolling 60 seconds, including duplicates. Admin Preview, Vercel Preview, localhost and CI are excluded. The policy row is the sole configurable value source. Counts and editorial `is_popular` are preserved. Cookie deletion or a different browser can create a new identity; this is inflation reduction, not proof of a unique person or universal bot prevention. Daily authenticated cleanup bounds expired-state retention when the existing Cron scheduler runs successfully. P2-S cutover authorization was consumed by its closed delivery. The current phase authorizes no new migration or Production action; `globalClosed=false`.
+Closed P2-S + ADM-01 applied corrected migration 102 once before PR #152, `20260911194004_topic_view_integrity.sql`. The existing `increment_topic_view` owner receives private, expiring visitor/topic deduplication and request-limit state. The user-approved PUB-07 policy is a signed server-issued browser cookie for 30 days; one qualified public Production view per visitor/topic per rolling 24 hours; 30 requests per visitor and 300 per trusted IP per rolling 60 seconds, including duplicates. Admin Preview, Vercel Preview, localhost and CI are excluded. The policy row is the sole configurable value source. Counts and editorial `is_popular` are preserved. Cookie deletion or a different browser can create a new identity; this is inflation reduction, not proof of a unique person or universal bot prevention. Daily authenticated cleanup bounds expired-state retention when the existing Cron scheduler runs successfully. P2-S cutover authorization was consumed by its closed delivery. That closure grants no authorization for later database actions; the separate local-only migration 103 continuation is recorded above. `globalClosed=false`.
 
 The RPC owns the bounded, revision-checked Topic transitions and their per-Topic Mutation Audit rows inside one database transaction. Application code remains the sole owner of semantic Publish Validation, and post-commit Media Center cache invalidation remains with the existing `revalidateMediaCenterPublicPaths` owner.
 

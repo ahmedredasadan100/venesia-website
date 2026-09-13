@@ -116,10 +116,20 @@ check(
 );
 
 check(
-  "save and readback adopt the same Media Sidebar config owner",
+  "save builds the Media Sidebar config at its current owner and passes that row to coordination",
   action.includes("buildMediaSidebarModuleConfig(widgetKey, formData)") &&
-    action.includes("isPersistedMediaSidebarModuleConfigEqual") &&
-    action.includes('.select("id,config")'),
+    action.includes("intendedRow: nextRow") &&
+    action.replace(/\s+/gu, "").includes('"media-sidebar",id,nextRow,parsePageIdsFromForm(formData),actor'),
+);
+const sidebarUpdate = action.slice(action.indexOf("export async function updateMediaSidebarModule"));
+const atomicMigration = await read("sql/migrations/20260912224809_shared_composition_menu_atomic_completion.sql");
+check(
+  "update validates stored config inside the atomic template and assignment transaction",
+  sidebarUpdate.replace(/\s+/gu, "").includes('saveModuleTemplateWithPageAssignments("media-sidebar"') &&
+    !sidebarUpdate.includes("isPersistedMediaSidebarModuleConfigEqual") &&
+    atomicMigration.includes("execute format('select to_jsonb(t) from public.%I t where id=$1',v_template_table)") &&
+    atomicMigration.includes("v_saved_template->'config' is distinct from p_payload->'template'->'config'") &&
+    atomicMigration.indexOf("message='template_saved_config_mismatch'") < atomicMigration.lastIndexOf("delete from public.%I where template_id=$1"),
 );
 
 check(

@@ -127,7 +127,6 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
       ) : query?.notice ? (
         <AdminNotice variant="success" message="تم حفظ التغييرات بنجاح." />
       ) : null}
-      {errorMessage ? <AdminNotice variant="danger" title="تعذر حفظ المحتوى" message={errorMessage} /> : null}
       <MediaContentForm
         mode="edit"
         contentType={contentType}

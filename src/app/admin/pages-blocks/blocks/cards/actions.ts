@@ -1,5 +1,7 @@
 "use server";
 
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
@@ -23,10 +25,10 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
-  syncBlockModulePageAssignments,
+  saveModuleTemplateWithPageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import type { TablesInsert, TablesUpdate } from "../../../../../lib/database.types";
 import {
@@ -249,20 +251,13 @@ export async function updateCardsBlock(formData: FormData) {
     intendedRow: nextRow,
     actorId: actor.id,
     requestIdentity: `cards-block:update:${id}`,
-    mutate: async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("cards_block_templates")
-        .update(nextRow)
-        .eq("id", id)
-        .select("id")
-        .maybeSingle();
-      if (error || !data) throw new Error(error?.message ?? "Unable to update cards block.");
-      return data;
-    },
+    mutate: () => saveModuleTemplateWithPageAssignments(
+      "cards", id, nextRow, parsePageIdsFromForm(formData), actor,
+    ),
     resolveEntityIdentity: (value) => String(value.id),
   });
 
-  await syncBlockModulePageAssignments("cards", id, parsePageIdsFromForm(formData), actor);
+
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("content_block_template", "update"),
     entityType: "content_block_template",
@@ -270,9 +265,13 @@ export async function updateCardsBlock(formData: FormData) {
     entityLabel: name,
     metadata: { blockType: "cards", slug },
   }, actor);
-  await revalidateBlockModulePaths("cards");
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
+    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
+    await revalidateBlockModulePaths("cards");
+  });
+  if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);
   redirect(withModuleEditorReturnContextFromForm(
-    `/admin/pages-blocks/blocks/cards/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    `/admin/pages-blocks/blocks/cards/${id}?saved=1${cacheRevalidation.ok ? "" : "&cache_warning=1"}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
     formData,
   ));
 }

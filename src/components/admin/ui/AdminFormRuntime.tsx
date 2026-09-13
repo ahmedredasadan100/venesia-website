@@ -1,6 +1,7 @@
 "use client";
 
 import { unstable_rethrow, useRouter } from "next/navigation";
+import { useFormStatus } from "react-dom";
 import {
   createContext,
   useActionState,
@@ -28,6 +29,7 @@ import {
 import {
   createAdminFormInitialState,
   resolveAdminFormNavigationDecision,
+  shouldAcceptAdminFormSource,
   type AdminFormAction,
   type AdminFormActionState,
   type AdminFormMode,
@@ -39,6 +41,26 @@ import AdminConfirmDialog from "./AdminConfirmDialog";
 import { AdminStickyFormBar } from "./AdminForm";
 
 const LEAVE_WARNING = "لديك تعديلات غير محفوظة. هل تريد الإغلاق دون حفظها؟";
+
+/** Field protection for the existing native-action and specialized form owners. */
+export function AdminFormPendingFields({ children, pending: externalPending = false, className = "contents" }: {
+  children: ReactNode;
+  pending?: boolean;
+  className?: string;
+}) {
+  const status = useFormStatus();
+  const pending = externalPending || status.pending;
+  const fieldsRef = useRef<HTMLFieldSetElement>(null);
+  useLayoutEffect(() => {
+    const form = fieldsRef.current?.form;
+    if (!form || !pending) return;
+    const blockDuplicate = (event: Event) => event.preventDefault();
+    form.addEventListener("submit", blockDuplicate, true);
+    return () => form.removeEventListener("submit", blockDuplicate, true);
+  }, [pending]);
+  return <fieldset ref={fieldsRef} disabled={pending} inert={pending} aria-busy={pending || undefined}
+    data-admin-form-pending-fields="" className={className}>{children}</fieldset>;
+}
 
 function resolveForm(root: HTMLElement | null) {
   if (root instanceof HTMLFormElement) return root;
@@ -606,7 +628,7 @@ function AdminFormRuntimeInstance<TResult = unknown>({
   useLayoutEffect(() => {
     revisionGuardRef.current = () => {
       if (pending) return false;
-      if (!hasUnsavedChanges()) return true;
+      if (shouldAcceptAdminFormSource({ pending, dirty: hasUnsavedChanges() })) return true;
       const form = formRef.current;
       // A redirect result may replace its submitted baseline, never later edits.
       return Boolean(redirectingSubmission.current && form &&

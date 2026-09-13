@@ -1137,8 +1137,14 @@ assert.equal(actions.includes('? (feedType as TopicsFeedType) : "latest"'), fals
 assert.ok(
   actions.indexOf("isPersistedFeedModuleConfigEqual(coordinated.value.config, config)") <
     actions.indexOf("redirect(withModuleEditorReturnContextFromForm("),
-  "saved=1 must follow exact config readback",
+  "create saved=1 must follow exact config readback",
 );
+const feedUpdate = actions.slice(actions.indexOf("export async function updateFeedModule"));
+assert.ok(feedUpdate.replace(/\s+/gu, "").includes('saveModuleTemplateWithPageAssignments("feed"'));
+assert.equal(feedUpdate.includes("isPersistedFeedModuleConfigEqual"), false, "update readback mismatch must fail inside PostgreSQL before commit");
+const atomicMigration = readFileSync(path.join(process.cwd(), "sql/migrations/20260912224809_shared_composition_menu_atomic_completion.sql"), "utf8");
+assert.ok(atomicMigration.includes("v_saved_template->'config' is distinct from p_payload->'template'->'config'"));
+assert.ok(atomicMigration.indexOf("message='template_saved_config_mismatch'") < atomicMigration.lastIndexOf("delete from public.%I where template_id=$1"));
 
 assert.ok(loader.includes("parseFeedModuleConfig(template.config, template.feed_type)"));
 assert.ok(loader.includes("isPageModulePubliclyVisible(row.is_visible, template.status)"));

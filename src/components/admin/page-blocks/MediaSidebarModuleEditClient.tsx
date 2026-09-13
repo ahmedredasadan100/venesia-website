@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
+
 import { useState } from "react";
 
 import {
@@ -140,219 +142,221 @@ export default function MediaSidebarModuleEditClient({
       />
 
       <form action={updateAction}>
-        <input type="hidden" name="id" value={block.id} />
-        <input
-          type="hidden"
-          name="description"
-          value={block.description ?? ""}
-        />
+        <AdminFormPendingFields>
+          <input type="hidden" name="id" value={block.id} />
+          <input
+            type="hidden"
+            name="description"
+            value={block.description ?? ""}
+          />
 
-        <ModuleEditorIdentitySection
-          name={block.name}
-          status={block.status}
-          inputClassName={fieldClassName("h-11")}
-        />
+          <ModuleEditorIdentitySection
+            name={block.name}
+            status={block.status}
+            inputClassName={fieldClassName("h-11")}
+          />
 
-        <ModuleEditorTabs
-          moduleKind="media-sidebar"
-          activePanelContext={
-            <ModuleEditorFeedback
-              backHref="/admin/pages-blocks/blocks/media-sidebar"
-              saved={saved}
-            />
-          }
-          tabs={[
-            {
-              id: "content",
-              content: (
-                <div className="space-y-6">
-                  <ModuleEditorSection>
-                    <ModuleEditorSectionHeading intent="settings">
-                      اختيار المحتوى
-                    </ModuleEditorSectionHeading>
+          <ModuleEditorTabs
+            moduleKind="media-sidebar"
+            activePanelContext={
+              <ModuleEditorFeedback
+                backHref="/admin/pages-blocks/blocks/media-sidebar"
+                saved={saved}
+              />
+            }
+            tabs={[
+              {
+                id: "content",
+                content: (
+                  <div className="space-y-6">
+                    <ModuleEditorSection>
+                      <ModuleEditorSectionHeading intent="settings">
+                        اختيار المحتوى
+                      </ModuleEditorSectionHeading>
 
-                    <ModuleEditorFieldGrid>
-                      <ModuleEditorField nature="standard" span={12}>
-                    <AdminFormGrid columns={4}>
-                      {widgetKey !== "sections" ? (
-                        <>
-                          <div
-                            className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                          >
-                            <AdminFormListboxSelect
-                              name="source_kind"
-                              label="مصدر المحتوى"
-                              value={sourceKind}
-                              onChange={(value) =>
-                                setSourceKind(value as PublicContentSourceKind)
-                              }
-                              options={[
-                                { value: "categories", label: "التصنيفات" },
-                                {
-                                  value: "media-center",
-                                  label: "المركز الإعلامي",
-                                },
-                              ]}
-                              sizing="full"
-                            />
-                          </div>
-
-                          <div
-                            className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                          >
-                            {sourceKind === "categories" ? (
+                      <ModuleEditorFieldGrid>
+                        <ModuleEditorField nature="standard" span={12}>
+                      <AdminFormGrid columns={4}>
+                        {widgetKey !== "sections" ? (
+                          <>
+                            <div
+                              className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
+                            >
                               <AdminFormListboxSelect
-                                name="category_slug"
-                                label="التصنيف"
-                                value={categorySlug}
-                                onChange={setCategorySlug}
-                                searchable
-                                required
-                                options={categories.map((category) => ({
-                                  value: category.slug,
-                                  label: `${"— ".repeat(category.depth)}${category.name}`,
-                                }))}
-                                sizing="full"
-                              />
-                            ) : (
-                              <AdminFormListboxSelect
-                                name="content_type"
-                                label="نوع محتوى المركز الإعلامي"
-                                value={contentType}
+                                name="source_kind"
+                                label="مصدر المحتوى"
+                                value={sourceKind}
                                 onChange={(value) =>
-                                  setContentType(
-                                    value as MediaSidebarMediaContentType,
-                                  )
+                                  setSourceKind(value as PublicContentSourceKind)
                                 }
                                 options={[
+                                  { value: "categories", label: "التصنيفات" },
                                   {
-                                    value:
-                                      MEDIA_SIDEBAR_ALL_MEDIA_CONTENT_TYPE,
-                                    label: "كل محتوى المركز الإعلامي",
+                                    value: "media-center",
+                                    label: "المركز الإعلامي",
                                   },
-                                  ...MEDIA_EDITABLE_CONTENT_TYPES.map(
-                                    (value) => ({
-                                      value,
-                                      label: getContentTypeLabel(value),
-                                    }),
-                                  ),
                                 ]}
                                 sizing="full"
                               />
-                            )}
-                          </div>
-                        </>
-                      ) : null}
+                            </div>
 
-                      <div
-                        className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                      >
-                        <AdminFormListboxSelect
-                          name="widget_key"
-                          label="طريقة الاختيار"
-                          value={widgetKey}
-                          onChange={(value) =>
-                            handleWidgetChange(
-                              readInitialWidgetKey(value),
-                            )
-                          }
-                          options={WIDGET_KEYS.map((key) => ({
-                            value: key,
-                            label: MEDIA_SIDEBAR_WIDGET_LABELS[key],
-                          }))}
-                          sizing="full"
-                        />
-                      </div>
+                            <div
+                              className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
+                            >
+                              {sourceKind === "categories" ? (
+                                <AdminFormListboxSelect
+                                  name="category_slug"
+                                  label="التصنيف"
+                                  value={categorySlug}
+                                  onChange={setCategorySlug}
+                                  searchable
+                                  required
+                                  options={categories.map((category) => ({
+                                    value: category.slug,
+                                    label: `${"— ".repeat(category.depth)}${category.name}`,
+                                  }))}
+                                  sizing="full"
+                                />
+                              ) : (
+                                <AdminFormListboxSelect
+                                  name="content_type"
+                                  label="نوع محتوى المركز الإعلامي"
+                                  value={contentType}
+                                  onChange={(value) =>
+                                    setContentType(
+                                      value as MediaSidebarMediaContentType,
+                                    )
+                                  }
+                                  options={[
+                                    {
+                                      value:
+                                        MEDIA_SIDEBAR_ALL_MEDIA_CONTENT_TYPE,
+                                      label: "كل محتوى المركز الإعلامي",
+                                    },
+                                    ...MEDIA_EDITABLE_CONTENT_TYPES.map(
+                                      (value) => ({
+                                        value,
+                                        label: getContentTypeLabel(value),
+                                      }),
+                                    ),
+                                  ]}
+                                  sizing="full"
+                                />
+                              )}
+                            </div>
+                          </>
+                        ) : null}
 
-                      {widgetKey !== "sections" ? (
-                        <div
-                          className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                        >
-                          <label className="block space-y-2">
-                            <span className="text-sm font-medium text-white/70">
-                              عدد العناصر
-                            </span>
-                            <input
-                              name="limit"
-                              type="number"
-                              min={1}
-                              max={60}
-                              value={limit}
-                              onChange={(event) => {
-                                const next = Number(event.target.value);
-                                setLimit(
-                                  Number.isFinite(next) && next > 0
-                                    ? Math.min(60, next)
-                                    : 1,
-                                );
-                              }}
-                              required
-                              className={fieldClassName("h-11")}
-                              dir="ltr"
-                            />
-                          </label>
-                        </div>
-                      ) : null}
-                    </AdminFormGrid>
-                      </ModuleEditorField>
-                    </ModuleEditorFieldGrid>
-                  </ModuleEditorSection>
-
-                  {widgetKey !== "sections" ? (
-                    <ModuleEditorSection>
-                      <ModuleEditorSectionHeading intent="settings">
-                        إعدادات العرض
-                      </ModuleEditorSectionHeading>
-                      <AdminFormGrid columns={3} className="mt-4">
                         <div
                           className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
                         >
                           <AdminFormListboxSelect
-                            name="presentation"
-                            label="شكل العرض"
-                            value={presentation}
+                            name="widget_key"
+                            label="طريقة الاختيار"
+                            value={widgetKey}
                             onChange={(value) =>
-                              setPresentation(value as MediaSidebarPresentation)
+                              handleWidgetChange(
+                                readInitialWidgetKey(value),
+                              )
                             }
-                            options={MEDIA_SIDEBAR_PRESENTATIONS.map(
-                              (value) => ({
-                                value,
-                                label: MEDIA_SIDEBAR_PRESENTATION_LABELS[value],
-                              }),
-                            )}
+                            options={WIDGET_KEYS.map((key) => ({
+                              value: key,
+                              label: MEDIA_SIDEBAR_WIDGET_LABELS[key],
+                            }))}
                             sizing="full"
                           />
                         </div>
-                      </AdminFormGrid>
-                      <div className="mt-4">
-                        <ContentDisplaySettings
-                          showTitle={initialContentConfig.display.title}
-                          showImage={initialContentConfig.display.image}
-                          showCategory={initialContentConfig.display.category}
-                          showSeries={initialContentConfig.display.series}
-                          showExcerpt={initialContentConfig.display.excerpt}
-                          showDate={initialContentConfig.display.date}
-                          includeIntroCard={false}
-                        />
-                      </div>
-                    </ModuleEditorSection>
-                  ) : null}
-                </div>
-              ),
-            },
-            {
-              id: "pages",
-              content: (
-                <ModuleEditorPagesTab
-                  moduleName={block.name}
-                  assignmentContext={assignmentContext}
-                />
-              ),
-            },
-          ]}
-        />
 
-        <ModuleEditorSaveArea />
+                        {widgetKey !== "sections" ? (
+                          <div
+                            className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
+                          >
+                            <label className="block space-y-2">
+                              <span className="text-sm font-medium text-white/70">
+                                عدد العناصر
+                              </span>
+                              <input
+                                name="limit"
+                                type="number"
+                                min={1}
+                                max={60}
+                                value={limit}
+                                onChange={(event) => {
+                                  const next = Number(event.target.value);
+                                  setLimit(
+                                    Number.isFinite(next) && next > 0
+                                      ? Math.min(60, next)
+                                      : 1,
+                                  );
+                                }}
+                                required
+                                className={fieldClassName("h-11")}
+                                dir="ltr"
+                              />
+                            </label>
+                          </div>
+                        ) : null}
+                      </AdminFormGrid>
+                        </ModuleEditorField>
+                      </ModuleEditorFieldGrid>
+                    </ModuleEditorSection>
+
+                    {widgetKey !== "sections" ? (
+                      <ModuleEditorSection>
+                        <ModuleEditorSectionHeading intent="settings">
+                          إعدادات العرض
+                        </ModuleEditorSectionHeading>
+                        <AdminFormGrid columns={3} className="mt-4">
+                          <div
+                            className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
+                          >
+                            <AdminFormListboxSelect
+                              name="presentation"
+                              label="شكل العرض"
+                              value={presentation}
+                              onChange={(value) =>
+                                setPresentation(value as MediaSidebarPresentation)
+                              }
+                              options={MEDIA_SIDEBAR_PRESENTATIONS.map(
+                                (value) => ({
+                                  value,
+                                  label: MEDIA_SIDEBAR_PRESENTATION_LABELS[value],
+                                }),
+                              )}
+                              sizing="full"
+                            />
+                          </div>
+                        </AdminFormGrid>
+                        <div className="mt-4">
+                          <ContentDisplaySettings
+                            showTitle={initialContentConfig.display.title}
+                            showImage={initialContentConfig.display.image}
+                            showCategory={initialContentConfig.display.category}
+                            showSeries={initialContentConfig.display.series}
+                            showExcerpt={initialContentConfig.display.excerpt}
+                            showDate={initialContentConfig.display.date}
+                            includeIntroCard={false}
+                          />
+                        </div>
+                      </ModuleEditorSection>
+                    ) : null}
+                  </div>
+                ),
+              },
+              {
+                id: "pages",
+                content: (
+                  <ModuleEditorPagesTab
+                    moduleName={block.name}
+                    assignmentContext={assignmentContext}
+                  />
+                ),
+              },
+            ]}
+          />
+
+          <ModuleEditorSaveArea />
+        </AdminFormPendingFields>
       </form>
     </div>
   );

@@ -3,9 +3,8 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { revalidatePublicPagesWithBlockAssignments } from "../../../../../lib/page-blocks/admin-revalidate";
-import { getPageDeleteBlockReason } from "../../../../../lib/pages/page-admin-policy";
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 import { normalizePath } from "../../../../../lib/seo/seo-utils";
-import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { mutatePageComposition } from "./helpers";
 import type { PageDeleteResult } from "./types";
 
@@ -20,31 +19,30 @@ export async function deletePages(ids: number[]): Promise<PageDeleteResult> {
   const actor = await requireAdminSession();
   const validIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
   if (!validIds.length) return { ok: false, code: "invalid_pages", message: "حدد صفحة واحدة على الأقل." };
-  const { data: pages, error } = await getSupabaseAdmin().from("pages")
-    .select("id,slug,path,title").in("id", validIds);
-  if (error) return { ok: false, code: "page_load_failed", message: error.message };
-  if (!pages?.length) {
-    return { ok: false, code: "page_not_found", message: "الصفحة غير موجودة." };
-  }
-  const blockedIds: number[] = [];
-  const deletable = (pages ?? []).filter((page) => {
-    if (getPageDeleteBlockReason({ slug: page.slug, path: page.path })) { blockedIds.push(page.id); return false; }
-    return true;
-  });
-  if (!deletable.length) return { ok: false, code: "pages_protected", blockedIds, blockedCount: blockedIds.length, message: "لا يمكن حذف الصفحات المحددة — الصفحة الرئيسية محمية." };
-  const deletedIds = deletable.map((page) => page.id);
+  let result;
   try {
-    for (const pageId of deletedIds) {
-      await mutatePageComposition(pageId, "delete_page", {}, actor);
-    }
+    result = await mutatePageComposition(null, "delete_pages", { page_ids: validIds }, actor);
   } catch (caught) {
     return { ok: false, code: "page_delete_failed", message: caught instanceof Error ? caught.message : "تعذر حذف الصفحة ذريًا." };
   }
-  deletable.forEach((page) => revalidateDeletedPublicPath(page.path));
-  await revalidatePublicPagesWithBlockAssignments();
+  const deletedPages = result.deleted_pages as Array<{ id: number; path: string | null }>;
+  const blockedIds = result.blocked_ids as number[];
+  if (!deletedPages.length) {
+    return blockedIds.length
+      ? { ok: false, code: "pages_protected", blockedIds, blockedCount: blockedIds.length, message: "الصفحات المحددة محمية من الحذف." }
+      : { ok: false, code: "page_not_found", message: "الصفحة غير موجودة." };
+  }
+  const deletedIds = deletedPages.map((page) => page.id);
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
+    deletedPages.forEach((page) => revalidateDeletedPublicPath(page.path));
+    revalidatePath("/admin/pages-blocks/pages", "layout");
+    await revalidatePublicPagesWithBlockAssignments();
+  });
+  if (!cacheRevalidation.ok) console.error("Pages deleted; cache revalidation failed", cacheRevalidation.error);
   const blockedSuffix = blockedIds.length ? ` لم يُحذف ${blockedIds.length} صفحة محمية.` : "";
   return { ok: true, deletedIds, blockedIds, blockedCount: blockedIds.length,
-    message: `تم حذف ${deletedIds.length} صفحة بنجاح.${blockedSuffix}` };
+    feedbackStatus: blockedIds.length || !cacheRevalidation.ok ? "warning" : "success",
+    message: `تم حذف ${deletedIds.length} صفحة بنجاح.${blockedSuffix}${cacheRevalidation.ok ? "" : " تعذر تحديث الكاش بعد إعادة المحاولة؛ قد تتأخر القراءة العامة."}` };
 }
 
 export async function deletePage(pageId: number) { return deletePages([pageId]); }

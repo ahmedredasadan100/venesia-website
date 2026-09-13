@@ -14,7 +14,7 @@ export function databaseAssignmentKind(kind: string) {
 }
 
 export async function mutatePageComposition(
-  pageId: number,
+  pageId: number | null,
   operation: string,
   payload: Json,
   actor: { id: number; username: string },

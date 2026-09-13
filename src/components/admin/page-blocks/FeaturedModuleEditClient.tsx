@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
+
 import { useMemo, useState } from "react";
 
 import {
@@ -216,540 +218,542 @@ export default function FeaturedModuleEditClient({
       />
 
       <form action={updateAction}>
-        <input type="hidden" name="id" value={block.id} />
-        <input type="hidden" name="slug" value={block.slug} />
-        <input
-          type="hidden"
-          name="description"
-          value={block.description ?? ""}
-        />
+        <AdminFormPendingFields>
+          <input type="hidden" name="id" value={block.id} />
+          <input type="hidden" name="slug" value={block.slug} />
+          <input
+            type="hidden"
+            name="description"
+            value={block.description ?? ""}
+          />
 
-        <ModuleEditorIdentitySection
-          name={block.name}
-          status={block.status}
-          inputClassName={fieldClassName("h-11")}
-        />
+          <ModuleEditorIdentitySection
+            name={block.name}
+            status={block.status}
+            inputClassName={fieldClassName("h-11")}
+          />
 
-        <ModuleEditorTabs
-          moduleKind="featured"
-          activePanelContext={
-            <ModuleEditorFeedback
-              backHref="/admin/pages-blocks/blocks/featured"
-              saved={saved}
-            />
-          }
-          tabs={[
-            {
-              id: "content",
-              content: (
-                <ModuleEditorSection>
-                  <ModuleEditorSectionHeading intent="settings">
-                    مصدر المحتوى
-                  </ModuleEditorSectionHeading>
-
-                  <AdminFormGrid columns={4} className="mt-4">
-                    <div
-                      className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                    >
-                      <AdminFormListboxSelect
-                        name="source_kind"
-                        label="مصدر المحتوى"
-                        value={sourceKind}
-                        onChange={(value) =>
-                          setSourceKind(value as FeaturedSourceKind)
-                        }
-                        options={[
-                          { value: "categories", label: "التصنيفات" },
-                          { value: "media-center", label: "المركز الإعلامي" },
-                        ]}
-                        sizing="full"
-                      />
-                    </div>
-                    <div
-                      className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                    >
-                      {sourceKind === "categories" ? (
-                        <AdminFormListboxSelect
-                          name="category_slug"
-                          label="التصنيف"
-                          value={categorySlug}
-                          onChange={setCategorySlug}
-                          searchable
-                          options={editorOptions.categories.map((item) => ({
-                            value: item.slug,
-                            label: `${"— ".repeat(item.depth)}${item.name}`,
-                          }))}
-                          sizing="full"
-                        />
-                      ) : (
-                        <AdminFormListboxSelect
-                          name="content_type"
-                          label="نوع محتوى المركز الإعلامي"
-                          value={contentType}
-                          onChange={(value) =>
-                            setContentType(value as typeof contentType)
-                          }
-                          options={MEDIA_EDITABLE_CONTENT_TYPES.map(
-                            (value) => ({
-                              value,
-                              label: getContentTypeLabel(value),
-                            }),
-                          )}
-                          sizing="full"
-                        />
-                      )}
-                    </div>
-                    <div
-                      className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                    >
-                      <AdminFormListboxSelect
-                        name="selection_mode"
-                        label="طريقة الاختيار"
-                        value={selectionMode}
-                        onChange={(value) =>
-                          setSelectionMode(value as FeaturedSelectionMode)
-                        }
-                        options={FEATURED_SELECTION_MODES.map((value) => ({
-                          value,
-                          label: FEATURED_SELECTION_LABELS_AR[value],
-                        }))}
-                        sizing="full"
-                      />
-                    </div>
-                    <div
-                      className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                    >
-                      <label className="block space-y-2">
-                        <span className="block text-sm font-medium text-white/70">
-                          العدد المسموح به
-                        </span>
-                        <input
-                          name="item_limit"
-                          type="number"
-                          min={1}
-                          max={12}
-                          required
-                          defaultValue={config.itemLimit}
-                          className={fieldClassName(
-                            "h-11 [color-scheme:dark]",
-                          )}
-                          dir="ltr"
-                        />
-                      </label>
-                    </div>
-                  </AdminFormGrid>
-
-                  {selectionMode === "manual" ? (
-                    <fieldset className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
-                      <legend className="sr-only">
-                        العناصر اليدوية
-                      </legend>
-                      <div
-                        data-featured-manual-heading=""
-                        className="mb-2 text-sm font-semibold text-white"
-                      >
-                        العناصر اليدوية
-                      </div>
-                      <p className="mb-4 text-xs leading-6 text-white/45">
-                        يظل ترتيب كل المعرّفات المحفوظة ثابتًا. العنصر غير
-                        المتاح حاليًا يبقى محفوظًا حتى تزيله صراحةً.
-                      </p>
-                      {manualIds.map((id) => (
-                        <input
-                          key={id}
-                          type="hidden"
-                          name="manual_topic_ids"
-                          value={id}
-                        />
-                      ))}
-                      {manualSelectionEntries.length ? (
-                        <div className="mb-4 space-y-2">
-                          <div className="text-xs font-semibold text-white/55">
-                            ترتيب الاختيار المحفوظ
-                          </div>
-                          <ol
-                            data-featured-manual-selection-order=""
-                            className="space-y-2"
-                          >
-                            {manualSelectionEntries.map((entry, index) => (
-                              <li
-                                key={entry.id}
-                                data-featured-manual-selection-item=""
-                                data-featured-manual-item=""
-                                data-featured-item-id={entry.id}
-                                data-featured-resolution={entry.state}
-                                className="flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-black/20 p-3 text-sm text-white/70"
-                              >
-                                <span
-                                  className="grid size-7 shrink-0 place-items-center rounded-full bg-white/8 font-en text-xs text-white/55"
-                                  aria-label={`الترتيب ${index + 1}`}
-                                >
-                                  {index + 1}
-                                </span>
-                                <span className="min-w-0 flex-1">
-                                  {entry.state === "resolved" ? (
-                                    <>
-                                      <span className="block break-words text-white/80">
-                                        {entry.item.title}
-                                      </span>
-                                      <span className="font-en text-[11px] text-white/35">
-                                        ID {entry.id}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <span
-                                      data-featured-manual-tombstone=""
-                                      className="block"
-                                    >
-                                      <span className="block text-amber-100/80">
-                                        عنصر محفوظ غير متاح حاليًا
-                                      </span>
-                                      <span className="font-en text-[11px] text-white/40">
-                                        ID {entry.id}
-                                      </span>
-                                    </span>
-                                  )}
-                                </span>
-                                {entry.state === "unresolved" ? (
-                                  <AdminStatusPill tone="gold">
-                                    غير متاح
-                                  </AdminStatusPill>
-                                ) : null}
-                                <button
-                                  type="button"
-                                  data-featured-manual-remove={entry.id}
-                                  onClick={() =>
-                                    toggleManualItem(entry.id, false)
-                                  }
-                                  className="shrink-0 rounded-lg border border-red-400/20 px-3 py-1.5 text-xs font-semibold text-red-200/75 transition hover:border-red-300/40 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300/60"
-                                  aria-label={`إزالة ${entry.state === "resolved" ? entry.item.title : `المعرّف ${entry.id}`}`}
-                                >
-                                  إزالة
-                                </button>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      ) : (
-                        <p
-                          data-featured-manual-selection-empty=""
-                          className="mb-4 text-sm text-white/40"
-                        >
-                          لم يتم اختيار عناصر بعد.
-                        </p>
-                      )}
-                      {manualOptions.length ? (
-                        <>
-                          <div className="mb-2 text-xs font-semibold text-white/55">
-                            العناصر المتاحة
-                          </div>
-                          <div
-                            data-featured-manual-items-scroll=""
-                            className={`grid max-h-[28rem] gap-2 overflow-y-auto md:grid-cols-2 ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}
-                          >
-                            {manualOptions.map((item) => {
-                              const checked = manualIds.includes(item.id);
-                              return (
-                                <label
-                                  key={item.id}
-                                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/8 bg-black/15 p-3 text-sm text-white/70"
-                                >
-                                  <AdminCheckbox
-                                    label={`اختيار ${item.title}`}
-                                    checked={checked}
-                                    onChange={(event) =>
-                                      toggleManualItem(
-                                        item.id,
-                                        event.currentTarget.checked,
-                                      )
-                                    }
-                                  />
-                                  <span>{item.title}</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-sm text-amber-200/70">
-                          لا توجد عناصر منشورة مطابقة لهذا المصدر.
-                        </p>
-                      )}
-                    </fieldset>
-                  ) : null}
-                </ModuleEditorSection>
-              ),
-            },
-            {
-              id: "presentation",
-              content: (
-                <div className="space-y-6" data-featured-editor-presentation="">
+          <ModuleEditorTabs
+            moduleKind="featured"
+            activePanelContext={
+              <ModuleEditorFeedback
+                backHref="/admin/pages-blocks/blocks/featured"
+                saved={saved}
+              />
+            }
+            tabs={[
+              {
+                id: "content",
+                content: (
                   <ModuleEditorSection>
-                    <ModuleEditorFieldGrid>
-                      <ModuleEditorField nature="standard" span={4}>
-                        <div
-                          className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
-                        >
+                    <ModuleEditorSectionHeading intent="settings">
+                      مصدر المحتوى
+                    </ModuleEditorSectionHeading>
+
+                    <AdminFormGrid columns={4} className="mt-4">
+                      <div
+                        className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
+                      >
+                        <AdminFormListboxSelect
+                          name="source_kind"
+                          label="مصدر المحتوى"
+                          value={sourceKind}
+                          onChange={(value) =>
+                            setSourceKind(value as FeaturedSourceKind)
+                          }
+                          options={[
+                            { value: "categories", label: "التصنيفات" },
+                            { value: "media-center", label: "المركز الإعلامي" },
+                          ]}
+                          sizing="full"
+                        />
+                      </div>
+                      <div
+                        className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
+                      >
+                        {sourceKind === "categories" ? (
                           <AdminFormListboxSelect
-                            name="presentation_variant"
-                            label="طريقة العرض"
-                            value={presentationVariant}
+                            name="category_slug"
+                            label="التصنيف"
+                            value={categorySlug}
+                            onChange={setCategorySlug}
+                            searchable
+                            options={editorOptions.categories.map((item) => ({
+                              value: item.slug,
+                              label: `${"— ".repeat(item.depth)}${item.name}`,
+                            }))}
+                            sizing="full"
+                          />
+                        ) : (
+                          <AdminFormListboxSelect
+                            name="content_type"
+                            label="نوع محتوى المركز الإعلامي"
+                            value={contentType}
                             onChange={(value) =>
-                              setPresentationVariant(
-                                value as FeaturedPresentationVariant,
-                              )
+                              setContentType(value as typeof contentType)
                             }
-                            options={presentationOptions.map(
+                            options={MEDIA_EDITABLE_CONTENT_TYPES.map(
                               (value) => ({
                                 value,
-                                label: FEATURED_PRESENTATION_LABELS_AR[value],
+                                label: getContentTypeLabel(value),
                               }),
                             )}
                             sizing="full"
                           />
-                        </div>
-                      </ModuleEditorField>
-                    </ModuleEditorFieldGrid>
-                  </ModuleEditorSection>
-
-                  <ModuleEditorSection>
-                    <ModuleEditorSectionHeading intent="settings">
-                      إعدادات النمط المختار
-                    </ModuleEditorSectionHeading>
-                    <div
-                      key={presentationVariant}
-                      className="mt-4 space-y-4 rounded-2xl border border-[#D8B87A]/15 bg-[#D8B87A]/[0.035] p-4"
-                      data-featured-variant-settings={presentationVariant}
-                    >
-                      <p className="text-sm leading-6 text-white/58">
-                        {presentationProfile.summaryAr}
-                      </p>
-                      <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4">
-                        <div
-                          className={`${ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME} min-h-16`}
-                          data-featured-items-per-view-control={
-                            presentationProfile.itemsPerView.mode
-                          }
-                        >
-                          <FeaturedItemsPerViewControl
-                            profile={presentationProfile}
-                            value={itemsPerView}
-                            itemLimit={config.itemLimit}
-                          />
-                        </div>
-                        {presentationProfile.supportsNavigation ? (
-                          <>
-                            <AdminFormSwitch
-                              name="show_navigation_arrows"
-                              label="إظهار أسهم التنقل"
-                              value="true"
-                              uncheckedValue="false"
-                              defaultChecked={navigation.showArrows}
-                              surface
-                              className="min-h-16"
-                            />
-                            <AdminFormSwitch
-                              name="show_navigation_dots"
-                              label="إظهار نقاط التنقل"
-                              value="true"
-                              uncheckedValue="false"
-                              defaultChecked={navigation.showDots}
-                              surface
-                              className="min-h-16"
-                            />
-                            <AdminFormSwitch
-                              name="navigation_autoplay"
-                              label="تشغيل التنقل تلقائيًا"
-                              value="true"
-                              uncheckedValue="false"
-                              defaultChecked={navigation.autoplay}
-                              surface
-                              className="min-h-16"
-                            />
-                          </>
-                        ) : (
-                          <>
-                            <input
-                              type="hidden"
-                              name="show_navigation_arrows"
-                              value="false"
-                            />
-                            <input
-                              type="hidden"
-                              name="show_navigation_dots"
-                              value="false"
-                            />
-                            <input
-                              type="hidden"
-                              name="navigation_autoplay"
-                              value="false"
-                            />
-                          </>
                         )}
                       </div>
-                    </div>
-                  </ModuleEditorSection>
-
-                  <ModuleEditorSection>
-                    <ModuleEditorSectionHeading intent="settings">
-                      عنوان الموديول
-                    </ModuleEditorSectionHeading>
-                    <div className="mt-4 grid items-start gap-4 md:grid-cols-3">
-                      <ModuleEditorVisibilityAlignRow
-                        label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
-                        showName="show_eyebrow"
-                        boldName="eyebrow_bold"
-                        alignmentName="eyebrow_alignment"
-                        showDefault={eyebrowFormat.visible}
-                        boldDefault={eyebrowFormat.bold}
-                        alignmentDefault={eyebrowFormat.alignment}
+                      <div
+                        className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
                       >
-                        <input
-                          name="eyebrow"
-                          aria-label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
-                          defaultValue={config.presentation.eyebrow ?? ""}
-                          className={fieldClassName("h-10")}
-                        />
-                      </ModuleEditorVisibilityAlignRow>
-                      <ModuleEditorVisibilityAlignRow
-                        label="العنوان"
-                        showName="show_title"
-                        boldName="title_bold"
-                        alignmentName="title_alignment"
-                        showDefault={titleFormat.visible}
-                        boldDefault={titleFormat.bold}
-                        alignmentDefault={titleFormat.alignment}
-                      >
-                        <input
-                          name="title"
-                          aria-label={
-                            MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr
+                        <AdminFormListboxSelect
+                          name="selection_mode"
+                          label="طريقة الاختيار"
+                          value={selectionMode}
+                          onChange={(value) =>
+                            setSelectionMode(value as FeaturedSelectionMode)
                           }
-                          defaultValue={config.presentation.title}
-                          className={fieldClassName("h-10")}
+                          options={FEATURED_SELECTION_MODES.map((value) => ({
+                            value,
+                            label: FEATURED_SELECTION_LABELS_AR[value],
+                          }))}
+                          sizing="full"
                         />
-                      </ModuleEditorVisibilityAlignRow>
-                      <ModuleEditorVisibilityAlignRow
-                        label="الوصف"
-                        showName="show_description"
-                        boldName="description_bold"
-                        alignmentName="description_alignment"
-                        showDefault={descriptionFormat.visible}
-                        boldDefault={descriptionFormat.bold}
-                        alignmentDefault={descriptionFormat.alignment}
+                      </div>
+                      <div
+                        className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
                       >
-                        <input
-                          name="presentation_description"
-                          aria-label="الوصف"
-                          defaultValue={config.presentation.description}
-                          className={fieldClassName("h-10")}
-                        />
-                      </ModuleEditorVisibilityAlignRow>
-                    </div>
-                  </ModuleEditorSection>
+                        <label className="block space-y-2">
+                          <span className="block text-sm font-medium text-white/70">
+                            العدد المسموح به
+                          </span>
+                          <input
+                            name="item_limit"
+                            type="number"
+                            min={1}
+                            max={12}
+                            required
+                            defaultValue={config.itemLimit}
+                            className={fieldClassName(
+                              "h-11 [color-scheme:dark]",
+                            )}
+                            dir="ltr"
+                          />
+                        </label>
+                      </div>
+                    </AdminFormGrid>
 
-                  <ModuleEditorSection>
-                    <ModuleEditorSectionHeading intent="settings">
-                      تنسيق عناصر المحتوى
-                    </ModuleEditorSectionHeading>
-                    <div
-                      className="mt-4 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3"
-                      data-featured-display-settings=""
-                    >
-                      <ModuleEditorVisibilityAlignRow
-                        label="عنوان العنصر"
-                        showName="show_title_on_page"
-                        boldName="display_title_bold"
-                        alignmentName="display_title_alignment"
-                        showDefault={config.display.title}
-                        boldDefault={config.displayFormatting.titleBold}
-                        alignmentDefault={
-                          config.displayFormatting.titleAlignment
-                        }
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="الصورة"
-                        showName="show_image_on_page"
-                        showDefault={config.display.image}
-                        controlMode="visibility-only"
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="التصنيف"
-                        showName="show_category_on_page"
-                        boldName="display_category_bold"
-                        alignmentName="display_category_alignment"
-                        showDefault={config.display.category}
-                        boldDefault={config.displayFormatting.categoryBold}
-                        alignmentDefault={
-                          config.displayFormatting.categoryAlignment
-                        }
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="السلسلة"
-                        showName="show_series_on_page"
-                        boldName="display_series_bold"
-                        alignmentName="display_series_alignment"
-                        showDefault={config.display.series}
-                        boldDefault={config.displayFormatting.seriesBold}
-                        alignmentDefault={
-                          config.displayFormatting.seriesAlignment
-                        }
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="المقتطف"
-                        showName="show_excerpt_on_page"
-                        boldName="display_excerpt_bold"
-                        alignmentName="display_excerpt_alignment"
-                        showDefault={config.display.excerpt}
-                        boldDefault={config.displayFormatting.excerptBold}
-                        alignmentDefault={
-                          config.displayFormatting.excerptAlignment
-                        }
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="التاريخ"
-                        showName="show_date_on_page"
-                        boldName="display_date_bold"
-                        alignmentName="display_date_alignment"
-                        showDefault={config.display.date}
-                        boldDefault={config.displayFormatting.dateBold}
-                        alignmentDefault={
-                          config.displayFormatting.dateAlignment
-                        }
-                      />
-                      <ModuleEditorVisibilityAlignRow
-                        label="نص الإجراء"
-                        showName="show_cta"
-                        boldName="cta_bold"
-                        alignmentName="cta_alignment"
-                        showDefault={ctaFormat.visible}
-                        boldDefault={ctaFormat.bold}
-                        alignmentDefault={ctaFormat.alignment}
-                      >
-                        <input
-                          name="cta_text"
-                          aria-label="نص الإجراء"
-                          defaultValue={config.presentation.ctaText}
-                          className={fieldClassName("h-10")}
-                        />
-                      </ModuleEditorVisibilityAlignRow>
-                    </div>
+                    {selectionMode === "manual" ? (
+                      <fieldset className="mt-4 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+                        <legend className="sr-only">
+                          العناصر اليدوية
+                        </legend>
+                        <div
+                          data-featured-manual-heading=""
+                          className="mb-2 text-sm font-semibold text-white"
+                        >
+                          العناصر اليدوية
+                        </div>
+                        <p className="mb-4 text-xs leading-6 text-white/45">
+                          يظل ترتيب كل المعرّفات المحفوظة ثابتًا. العنصر غير
+                          المتاح حاليًا يبقى محفوظًا حتى تزيله صراحةً.
+                        </p>
+                        {manualIds.map((id) => (
+                          <input
+                            key={id}
+                            type="hidden"
+                            name="manual_topic_ids"
+                            value={id}
+                          />
+                        ))}
+                        {manualSelectionEntries.length ? (
+                          <div className="mb-4 space-y-2">
+                            <div className="text-xs font-semibold text-white/55">
+                              ترتيب الاختيار المحفوظ
+                            </div>
+                            <ol
+                              data-featured-manual-selection-order=""
+                              className="space-y-2"
+                            >
+                              {manualSelectionEntries.map((entry, index) => (
+                                <li
+                                  key={entry.id}
+                                  data-featured-manual-selection-item=""
+                                  data-featured-manual-item=""
+                                  data-featured-item-id={entry.id}
+                                  data-featured-resolution={entry.state}
+                                  className="flex flex-wrap items-center gap-3 rounded-xl border border-white/8 bg-black/20 p-3 text-sm text-white/70"
+                                >
+                                  <span
+                                    className="grid size-7 shrink-0 place-items-center rounded-full bg-white/8 font-en text-xs text-white/55"
+                                    aria-label={`الترتيب ${index + 1}`}
+                                  >
+                                    {index + 1}
+                                  </span>
+                                  <span className="min-w-0 flex-1">
+                                    {entry.state === "resolved" ? (
+                                      <>
+                                        <span className="block break-words text-white/80">
+                                          {entry.item.title}
+                                        </span>
+                                        <span className="font-en text-[11px] text-white/35">
+                                          ID {entry.id}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span
+                                        data-featured-manual-tombstone=""
+                                        className="block"
+                                      >
+                                        <span className="block text-amber-100/80">
+                                          عنصر محفوظ غير متاح حاليًا
+                                        </span>
+                                        <span className="font-en text-[11px] text-white/40">
+                                          ID {entry.id}
+                                        </span>
+                                      </span>
+                                    )}
+                                  </span>
+                                  {entry.state === "unresolved" ? (
+                                    <AdminStatusPill tone="gold">
+                                      غير متاح
+                                    </AdminStatusPill>
+                                  ) : null}
+                                  <button
+                                    type="button"
+                                    data-featured-manual-remove={entry.id}
+                                    onClick={() =>
+                                      toggleManualItem(entry.id, false)
+                                    }
+                                    className="shrink-0 rounded-lg border border-red-400/20 px-3 py-1.5 text-xs font-semibold text-red-200/75 transition hover:border-red-300/40 hover:text-red-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-300/60"
+                                    aria-label={`إزالة ${entry.state === "resolved" ? entry.item.title : `المعرّف ${entry.id}`}`}
+                                  >
+                                    إزالة
+                                  </button>
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        ) : (
+                          <p
+                            data-featured-manual-selection-empty=""
+                            className="mb-4 text-sm text-white/40"
+                          >
+                            لم يتم اختيار عناصر بعد.
+                          </p>
+                        )}
+                        {manualOptions.length ? (
+                          <>
+                            <div className="mb-2 text-xs font-semibold text-white/55">
+                              العناصر المتاحة
+                            </div>
+                            <div
+                              data-featured-manual-items-scroll=""
+                              className={`grid max-h-[28rem] gap-2 overflow-y-auto md:grid-cols-2 ${VENESIA_SCROLLBAR_VISUAL_CLASSES}`}
+                            >
+                              {manualOptions.map((item) => {
+                                const checked = manualIds.includes(item.id);
+                                return (
+                                  <label
+                                    key={item.id}
+                                    className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/8 bg-black/15 p-3 text-sm text-white/70"
+                                  >
+                                    <AdminCheckbox
+                                      label={`اختيار ${item.title}`}
+                                      checked={checked}
+                                      onChange={(event) =>
+                                        toggleManualItem(
+                                          item.id,
+                                          event.currentTarget.checked,
+                                        )
+                                      }
+                                    />
+                                    <span>{item.title}</span>
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          </>
+                        ) : (
+                          <p className="text-sm text-amber-200/70">
+                            لا توجد عناصر منشورة مطابقة لهذا المصدر.
+                          </p>
+                        )}
+                      </fieldset>
+                    ) : null}
                   </ModuleEditorSection>
-                </div>
-              ),
-            },
-            {
-              id: "pages",
-              content: (
-                <ModuleEditorPagesTab
-                  moduleName={block.name}
-                  assignmentContext={assignmentContext}
-                />
-              ),
-            },
-          ]}
-        />
-        <ModuleEditorSaveArea />
+                ),
+              },
+              {
+                id: "presentation",
+                content: (
+                  <div className="space-y-6" data-featured-editor-presentation="">
+                    <ModuleEditorSection>
+                      <ModuleEditorFieldGrid>
+                        <ModuleEditorField nature="standard" span={4}>
+                          <div
+                            className={`${MODULE_EDITOR_CONTROL_CARD_CLASS_NAME} h-full`}
+                          >
+                            <AdminFormListboxSelect
+                              name="presentation_variant"
+                              label="طريقة العرض"
+                              value={presentationVariant}
+                              onChange={(value) =>
+                                setPresentationVariant(
+                                  value as FeaturedPresentationVariant,
+                                )
+                              }
+                              options={presentationOptions.map(
+                                (value) => ({
+                                  value,
+                                  label: FEATURED_PRESENTATION_LABELS_AR[value],
+                                }),
+                              )}
+                              sizing="full"
+                            />
+                          </div>
+                        </ModuleEditorField>
+                      </ModuleEditorFieldGrid>
+                    </ModuleEditorSection>
+
+                    <ModuleEditorSection>
+                      <ModuleEditorSectionHeading intent="settings">
+                        إعدادات النمط المختار
+                      </ModuleEditorSectionHeading>
+                      <div
+                        key={presentationVariant}
+                        className="mt-4 space-y-4 rounded-2xl border border-[#D8B87A]/15 bg-[#D8B87A]/[0.035] p-4"
+                        data-featured-variant-settings={presentationVariant}
+                      >
+                        <p className="text-sm leading-6 text-white/58">
+                          {presentationProfile.summaryAr}
+                        </p>
+                        <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4">
+                          <div
+                            className={`${ADMIN_FORM_SWITCH_SURFACE_CLASS_NAME} min-h-16`}
+                            data-featured-items-per-view-control={
+                              presentationProfile.itemsPerView.mode
+                            }
+                          >
+                            <FeaturedItemsPerViewControl
+                              profile={presentationProfile}
+                              value={itemsPerView}
+                              itemLimit={config.itemLimit}
+                            />
+                          </div>
+                          {presentationProfile.supportsNavigation ? (
+                            <>
+                              <AdminFormSwitch
+                                name="show_navigation_arrows"
+                                label="إظهار أسهم التنقل"
+                                value="true"
+                                uncheckedValue="false"
+                                defaultChecked={navigation.showArrows}
+                                surface
+                                className="min-h-16"
+                              />
+                              <AdminFormSwitch
+                                name="show_navigation_dots"
+                                label="إظهار نقاط التنقل"
+                                value="true"
+                                uncheckedValue="false"
+                                defaultChecked={navigation.showDots}
+                                surface
+                                className="min-h-16"
+                              />
+                              <AdminFormSwitch
+                                name="navigation_autoplay"
+                                label="تشغيل التنقل تلقائيًا"
+                                value="true"
+                                uncheckedValue="false"
+                                defaultChecked={navigation.autoplay}
+                                surface
+                                className="min-h-16"
+                              />
+                            </>
+                          ) : (
+                            <>
+                              <input
+                                type="hidden"
+                                name="show_navigation_arrows"
+                                value="false"
+                              />
+                              <input
+                                type="hidden"
+                                name="show_navigation_dots"
+                                value="false"
+                              />
+                              <input
+                                type="hidden"
+                                name="navigation_autoplay"
+                                value="false"
+                              />
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </ModuleEditorSection>
+
+                    <ModuleEditorSection>
+                      <ModuleEditorSectionHeading intent="settings">
+                        عنوان الموديول
+                      </ModuleEditorSectionHeading>
+                      <div className="mt-4 grid items-start gap-4 md:grid-cols-3">
+                        <ModuleEditorVisibilityAlignRow
+                          label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
+                          showName="show_eyebrow"
+                          boldName="eyebrow_bold"
+                          alignmentName="eyebrow_alignment"
+                          showDefault={eyebrowFormat.visible}
+                          boldDefault={eyebrowFormat.bold}
+                          alignmentDefault={eyebrowFormat.alignment}
+                        >
+                          <input
+                            name="eyebrow"
+                            aria-label={MODULE_EDITOR_TERMINOLOGY.eyebrow.labelAr}
+                            defaultValue={config.presentation.eyebrow ?? ""}
+                            className={fieldClassName("h-10")}
+                          />
+                        </ModuleEditorVisibilityAlignRow>
+                        <ModuleEditorVisibilityAlignRow
+                          label="العنوان"
+                          showName="show_title"
+                          boldName="title_bold"
+                          alignmentName="title_alignment"
+                          showDefault={titleFormat.visible}
+                          boldDefault={titleFormat.bold}
+                          alignmentDefault={titleFormat.alignment}
+                        >
+                          <input
+                            name="title"
+                            aria-label={
+                              MODULE_EDITOR_TERMINOLOGY.sectionTitle.labelAr
+                            }
+                            defaultValue={config.presentation.title}
+                            className={fieldClassName("h-10")}
+                          />
+                        </ModuleEditorVisibilityAlignRow>
+                        <ModuleEditorVisibilityAlignRow
+                          label="الوصف"
+                          showName="show_description"
+                          boldName="description_bold"
+                          alignmentName="description_alignment"
+                          showDefault={descriptionFormat.visible}
+                          boldDefault={descriptionFormat.bold}
+                          alignmentDefault={descriptionFormat.alignment}
+                        >
+                          <input
+                            name="presentation_description"
+                            aria-label="الوصف"
+                            defaultValue={config.presentation.description}
+                            className={fieldClassName("h-10")}
+                          />
+                        </ModuleEditorVisibilityAlignRow>
+                      </div>
+                    </ModuleEditorSection>
+
+                    <ModuleEditorSection>
+                      <ModuleEditorSectionHeading intent="settings">
+                        تنسيق عناصر المحتوى
+                      </ModuleEditorSectionHeading>
+                      <div
+                        className="mt-4 grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3"
+                        data-featured-display-settings=""
+                      >
+                        <ModuleEditorVisibilityAlignRow
+                          label="عنوان العنصر"
+                          showName="show_title_on_page"
+                          boldName="display_title_bold"
+                          alignmentName="display_title_alignment"
+                          showDefault={config.display.title}
+                          boldDefault={config.displayFormatting.titleBold}
+                          alignmentDefault={
+                            config.displayFormatting.titleAlignment
+                          }
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="الصورة"
+                          showName="show_image_on_page"
+                          showDefault={config.display.image}
+                          controlMode="visibility-only"
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="التصنيف"
+                          showName="show_category_on_page"
+                          boldName="display_category_bold"
+                          alignmentName="display_category_alignment"
+                          showDefault={config.display.category}
+                          boldDefault={config.displayFormatting.categoryBold}
+                          alignmentDefault={
+                            config.displayFormatting.categoryAlignment
+                          }
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="السلسلة"
+                          showName="show_series_on_page"
+                          boldName="display_series_bold"
+                          alignmentName="display_series_alignment"
+                          showDefault={config.display.series}
+                          boldDefault={config.displayFormatting.seriesBold}
+                          alignmentDefault={
+                            config.displayFormatting.seriesAlignment
+                          }
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="المقتطف"
+                          showName="show_excerpt_on_page"
+                          boldName="display_excerpt_bold"
+                          alignmentName="display_excerpt_alignment"
+                          showDefault={config.display.excerpt}
+                          boldDefault={config.displayFormatting.excerptBold}
+                          alignmentDefault={
+                            config.displayFormatting.excerptAlignment
+                          }
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="التاريخ"
+                          showName="show_date_on_page"
+                          boldName="display_date_bold"
+                          alignmentName="display_date_alignment"
+                          showDefault={config.display.date}
+                          boldDefault={config.displayFormatting.dateBold}
+                          alignmentDefault={
+                            config.displayFormatting.dateAlignment
+                          }
+                        />
+                        <ModuleEditorVisibilityAlignRow
+                          label="نص الإجراء"
+                          showName="show_cta"
+                          boldName="cta_bold"
+                          alignmentName="cta_alignment"
+                          showDefault={ctaFormat.visible}
+                          boldDefault={ctaFormat.bold}
+                          alignmentDefault={ctaFormat.alignment}
+                        >
+                          <input
+                            name="cta_text"
+                            aria-label="نص الإجراء"
+                            defaultValue={config.presentation.ctaText}
+                            className={fieldClassName("h-10")}
+                          />
+                        </ModuleEditorVisibilityAlignRow>
+                      </div>
+                    </ModuleEditorSection>
+                  </div>
+                ),
+              },
+              {
+                id: "pages",
+                content: (
+                  <ModuleEditorPagesTab
+                    moduleName={block.name}
+                    assignmentContext={assignmentContext}
+                  />
+                ),
+              },
+            ]}
+          />
+          <ModuleEditorSaveArea />
+        </AdminFormPendingFields>
       </form>
     </div>
   );

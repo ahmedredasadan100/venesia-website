@@ -1,5 +1,7 @@
 "use client";
 
+import { AdminFormPendingFields } from "../../../../components/admin/ui/AdminFormRuntime";
+
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
 import {
@@ -62,43 +64,45 @@ export default function MenuBuilderClient({
       content: (
         <AdminCard className="p-5 md:p-6">
           <form action={updateMenu} className="grid max-w-2xl gap-4">
-            <input type="hidden" name="id" value={menu.id} />
-            <label className={menuLabelClassName()}>
-              الاسم
-              <input
-                name="name"
-                defaultValue={menu.name}
-                className={menuFieldClassName("w-full")}
+            <AdminFormPendingFields>
+              <input type="hidden" name="id" value={menu.id} />
+              <label className={menuLabelClassName()}>
+                الاسم
+                <input
+                  name="name"
+                  defaultValue={menu.name}
+                  className={menuFieldClassName("w-full")}
+                />
+              </label>
+              <label className={menuLabelClassName()}>
+                Slug
+                <input
+                  name="slug"
+                  defaultValue={menu.slug}
+                  className={menuFieldClassName("w-full text-left dir-ltr")}
+                />
+              </label>
+              <AdminFormListboxSelect
+                name="location"
+                label="Location"
+                defaultValue={menu.location}
+                options={[
+                  { value: "main", label: "Header / Main" },
+                  { value: "mobile", label: "Mobile" },
+                  { value: "footer", label: "Footer" },
+                  { value: "custom", label: "Custom" },
+                ]}
               />
-            </label>
-            <label className={menuLabelClassName()}>
-              Slug
-              <input
-                name="slug"
-                defaultValue={menu.slug}
-                className={menuFieldClassName("w-full text-left dir-ltr")}
+              <AdminFormSwitch
+                name="is_active"
+                label="نشطة"
+                defaultChecked={menu.is_active}
+                surface
               />
-            </label>
-            <AdminFormListboxSelect
-              name="location"
-              label="Location"
-              defaultValue={menu.location}
-              options={[
-                { value: "main", label: "Header / Main" },
-                { value: "mobile", label: "Mobile" },
-                { value: "footer", label: "Footer" },
-                { value: "custom", label: "Custom" },
-              ]}
-            />
-            <AdminFormSwitch
-              name="is_active"
-              label="نشطة"
-              defaultChecked={menu.is_active}
-              surface
-            />
-            <button className="min-h-11 w-fit rounded-2xl bg-[#D8B87A] px-5 text-sm font-semibold text-[#05070B] transition hover:bg-[#E6C985]">
-              حفظ بيانات القائمة
-            </button>
+              <button className="min-h-11 w-fit rounded-2xl bg-[#D8B87A] px-5 text-sm font-semibold text-[#05070B] transition hover:bg-[#E6C985]">
+                حفظ بيانات القائمة
+              </button>
+            </AdminFormPendingFields>
           </form>
         </AdminCard>
       ),

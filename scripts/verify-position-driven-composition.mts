@@ -204,9 +204,12 @@ assert.doesNotMatch(
   "Template reload must not collapse multiple assignments",
 );
 assert.ok(
-  templateAssignmentSync.includes('p_operation: "sync_template_pages"') &&
-    templateAssignmentSync.includes("page_ids: targetIds"),
-  "Template save must use the existing multi-page assignment sync contract",
+  templateAssignmentSync.includes('.rpc("mutate_page_composition"') &&
+    templateAssignmentSync.includes('p_operation: "save_template"') &&
+    templateAssignmentSync.includes("p_page_id: null") &&
+    templateAssignmentSync.includes("page_ids: pageIds") &&
+    templateAssignmentSync.includes("getDefaultAssignmentPosition(moduleKind)"),
+  "Template save must use the existing Composition owner's atomic multi-page contract, including unassigned templates",
 );
 const heroCreateStart = assignmentCreate.indexOf(
   "export async function assignHeroModule",
@@ -563,7 +566,7 @@ assert.doesNotMatch(
 );
 assert.ok(
   listingEditorAction.includes("buildMediaHubModuleConfig") &&
-    listingEditorAction.includes("syncMediaHubModulePageAssignments"),
+    listingEditorAction.replace(/\s+/gu, "").includes('saveModuleTemplateWithPageAssignments("media-hub"'),
   "Media Listing Edit/Save must retain the existing config and Assignment owners",
 );
 

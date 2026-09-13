@@ -1,4 +1,3 @@
-import AdminNotice from "../../../../../components/admin/AdminNotice";
 import ArticleCreateEditor from "../../../../../components/admin/content/editors/ArticleCreateEditor";
 import {
   AdminActionButton,
@@ -64,7 +63,6 @@ export default async function NewUnifiedContentPage({
           </>
         }
       />
-      {errorMessage ? <AdminNotice variant="danger" title="تعذر إنشاء المحتوى" message={errorMessage} /> : null}
       <MediaContentForm
         mode="create"
         contentType={contentType}

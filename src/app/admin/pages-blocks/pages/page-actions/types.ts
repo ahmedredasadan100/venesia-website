@@ -3,7 +3,7 @@ export type PageMutationResult =
   | { ok: false; code: string; message: string };
 
 export type PageDeleteResult =
-  | { ok: true; message: string; deletedIds: number[]; blockedIds: number[]; blockedCount: number }
+  | { ok: true; message: string; deletedIds: number[]; blockedIds: number[]; blockedCount: number; feedbackStatus?: "success" | "warning" }
   | { ok: false; code: string; message: string; blockedIds?: number[]; blockedCount?: number };
 
 export type PagesTableResult = PageDeleteResult;

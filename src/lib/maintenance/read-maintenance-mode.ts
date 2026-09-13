@@ -1,5 +1,8 @@
 import { MAINTENANCE_MODE_SETTING_KEY } from "./constants";
 import { parseMaintenanceModeValue } from "./parse-maintenance-value";
+import { createSupabaseFetch } from "../supabase-fetch";
+
+const fetchMaintenance = createSupabaseFetch();
 
 const CACHE_TTL_MS = 5_000;
 
@@ -24,7 +27,7 @@ export async function isMaintenanceModeEnabled() {
   }
 
   try {
-    const response = await fetch(
+    const response = await fetchMaintenance(
       `${supabaseUrl}/rest/v1/site_settings?select=value&key=eq.${encodeURIComponent(MAINTENANCE_MODE_SETTING_KEY)}&limit=1`,
       {
         headers: {

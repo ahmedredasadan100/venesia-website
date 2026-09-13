@@ -14,8 +14,8 @@ import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidat
 import { revalidateMediaCenterPublicPaths } from "../../../../../lib/media-center/revalidate-public-paths";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { revalidatePath } from "next/cache";
-import type { MediaReferenceSynchronizationResult } from "../../../../../lib/admin/media-catalog/reference-sync-contract";
-import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
+import { buildMediaReferenceSynchronizationWarning, type MediaReferenceSynchronizationResult } from "../../../../../lib/admin/media-catalog/reference-sync-contract";
+import { markMediaCatalogRuntimeUncertain, synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../../lib/admin/media-catalog/synchronization";
 import {
   getMediaReferenceWriteLeaseUserMessage,
   MediaReferenceWriteLeaseError,
@@ -128,7 +128,8 @@ export async function synchronizeDeletedMenuItemReferences(
       .filter((entityId) => Number.isInteger(entityId) && entityId > 0),
   )];
   if (!uniqueIds.length) return undefined;
-  return synchronizeMediaReferenceWriteScopesAfterDomainMutation(
+  try {
+  return await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     [],
     null,
     uniqueIds.map((entityId) => ({
@@ -136,6 +137,22 @@ export async function synchronizeDeletedMenuItemReferences(
       entityIdentity: entityId,
     })),
   );
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : "menu_media_cleanup_failed";
+    const uncertainties = [reason];
+    try {
+      await markMediaCatalogRuntimeUncertain(uncertainties);
+    } catch (markError) {
+      uncertainties.push("menu_media_cleanup_uncertainty_record_failed");
+      console.error("Menu cleanup could not persist Media uncertainty", markError);
+    }
+    return buildMediaReferenceSynchronizationWarning({
+      domainKey: "menu_items",
+      entityIdentity: uniqueIds.join(","),
+      failureReason: reason,
+      uncertainties,
+    });
+  }
 }
 
 function isRecord(value: Json): value is ImportedMenuItem {

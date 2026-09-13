@@ -538,6 +538,11 @@ export default function PagesTableClient({
         bulk: true,
         optimistic: (cache) => cache.removeRows(new Set(validIds)),
         execute: () => deletePages(ids),
+        reconcileSuccess: (result, { reconcileDeletedRows }) => {
+          // Locked DB identity decides protection; reconcile the exact deletion
+          // set even if identity changed after the list was read.
+          reconcileDeletedRows(new Set(result.deletedIds as number[]));
+        },
       });
       const hasBlockedPages =
         typeof result.blockedCount === "number" && result.blockedCount > 0;
