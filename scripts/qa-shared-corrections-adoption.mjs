@@ -9,7 +9,7 @@ const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
 const out = path.join(root, ".tmp-qa/shared-corrections-adoption/components");
 await mkdir(out, { recursive: true });
-const entry = String.raw`import React, {useState} from 'react';
+const entry = String.raw`import React, {useState,useLayoutEffect} from 'react';
 import {createRoot} from 'react-dom/client';
 import AdminFeedbackProvider from '@src/components/admin/AdminFeedbackProvider';
 import AdminFormRuntime,{AdminFormPendingFields} from '@src/components/admin/ui/AdminFormRuntime';
@@ -28,7 +28,8 @@ const settings={...EMPTY_FOOTER_SETTINGS,slots:structuredClone(DEFAULT_FOOTER_SL
 const security={username:'fixture',email:'fixture@example.test',fullName:'Original name',lastLoginAt:null};
 const seo={pageId:1,pageTitle:'Page',path:'/fixture',content:'',titleSuffix:'',resolvedFallback:{title:'',description:'',image:'',imageAlt:''},seoTitle:'Original SEO',seoDescription:'',focusKeyword:'',seoKeywords:[],canonicalUrl:'',robotsIndex:null,robotsFollow:null,ogImage:'',ogImageAlt:''};
 function FeedbackFixture(){return <AdminFormRuntime mode="edit" entityKey="media-error" initialState={createAdminFormErrorState('edit','Legacy','Legacy media failure')} action={async()=>{await window.action();return createAdminFormErrorState('edit','Current','Current save failure');}}><input name="title" defaultValue="Draft"/><button>Save feedback</button></AdminFormRuntime>;}
-function Fixture({kind,overrides={}}){
+function Fixture({kind,overrides={},onCommitted}){
+ useLayoutEffect(onCommitted,[kind,overrides,onCommitted]);
  if(kind==='footer')return <Footer settings={{...settings,...overrides}} footerMenuId={null} quickLinkItems={[]} menuOptions={[]}/>;
  if(kind==='security')return <Security {...security} {...overrides}/>;
  if(kind==='menu')return <Menu menu={menu} items={[]}/>;
@@ -37,7 +38,8 @@ function Fixture({kind,overrides={}}){
  if(kind==='feedback')return <FeedbackFixture/>;
  return <form action={window.action}><AdminFormPendingFields><input name="title" defaultValue="Initial"/><button>Save native</button></AdminFormPendingFields></form>;
 }
-window.mount=(kind,overrides={})=>{window.kind=kind;root.render(<AdminFeedbackProvider><Fixture kind={kind} overrides={overrides}/></AdminFeedbackProvider>);};
+// root.render schedules work; resolve only after React commits incoming props.
+window.mount=(kind,overrides={})=>new Promise(resolve=>{window.kind=kind;root.render(<AdminFeedbackProvider><Fixture kind={kind} overrides={overrides} onCommitted={resolve}/></AdminFeedbackProvider>);});
 window.footerFixture=settings;window.mount('native');
 `;
 await writeFile(path.join(out, "entry.tsx"), entry);
