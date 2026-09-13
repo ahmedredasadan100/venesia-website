@@ -81,14 +81,16 @@ export function createSlug(value: string) {
   return slugifyFromTitle(value);
 }
 
-type NavigationMessage = string | { message: string; mediaWarning: true };
+type NavigationMessage = string | { message: string; mediaWarning: true } | { message: string; cacheWarning: true };
 
 function navigationQuery(message?: NavigationMessage) {
   if (!message) return "";
   const text = typeof message === "string" ? message : message.message;
   const params = new URLSearchParams({ message: text });
-  if (typeof message !== "string" && message.mediaWarning) {
-    params.set("notice", "saved_with_media_sync_warning");
+  if (typeof message !== "string") {
+    params.set("notice", "cacheWarning" in message
+      ? "committed_cache_revalidation_pending"
+      : "saved_with_media_sync_warning");
   }
   return `?${params.toString()}`;
 }
@@ -214,7 +216,17 @@ export async function revalidateNavigation(
 export function navigationMutationMessage(
   mediaSynchronization: MediaReferenceSynchronizationResult | undefined,
   successMessage: string,
+  cacheRevalidationPending = false,
 ) {
+  if (cacheRevalidationPending) {
+    const mediaWarning = mediaSynchronization?.status === "saved_with_media_sync_warning"
+      ? " وتعذرت مزامنة ارتباطات الميديا، لذلك يظل الحذف الآمن متوقفًا."
+      : "";
+    return {
+      message: `${successMessage} لكن تعذر تحديث العرض فورًا. حدّث الصفحة قبل إعادة المحاولة.${mediaWarning}`,
+      cacheWarning: true as const,
+    };
+  }
   return mediaSynchronization?.status === "saved_with_media_sync_warning"
     ? {
         message: `${successMessage} لكن تعذرت مزامنة ارتباطات الميديا، لذلك يظل الحذف الآمن متوقفًا.`,

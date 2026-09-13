@@ -11,6 +11,9 @@ export const PROJECT_TRACKING_ENTITY_KEYS = {
 } as const;
 
 const positiveId = z.coerce.number().int().positive();
+const savedIdentity = z.number().int().positive();
+export const trackingSavedIdentitySchema = z.object({ id: savedIdentity });
+export const trackingSavedProfileIdentitySchema = z.object({ project_id: savedIdentity });
 const visibility = z.enum(["all", "visible", "hidden"]);
 const publication = z.enum(["all", "draft", "published", "unpublished", "archived"]);
 const itemStatus = z.enum(["all", "not_started", "in_progress", "completed"]);
@@ -60,6 +63,9 @@ export const trackingMediaAdminSchema = z.object({
   sort_order: z.coerce.number().int().nonnegative(),
 });
 export type TrackingMediaAdminRow = z.infer<typeof trackingMediaAdminSchema>;
+export const trackingSavedUpdateSchema = trackingSavedIdentitySchema.extend({
+  media: z.array(trackingMediaAdminSchema.extend({ id: savedIdentity, update_id: savedIdentity })),
+});
 
 export const trackingUpdateRowSchema = z.object({
   id: positiveId,

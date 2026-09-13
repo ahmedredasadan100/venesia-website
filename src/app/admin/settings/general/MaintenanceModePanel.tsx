@@ -9,6 +9,7 @@ import {
 } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminConfirmDialog from "../../../../components/admin/ui/AdminConfirmDialog";
 import { updateMaintenanceModeAction } from "./actions";
+import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 
 type MaintenanceModePanelProps = {
   initialReadState:
@@ -35,20 +36,11 @@ export default function MaintenanceModePanel({ initialReadState }: MaintenanceMo
     clearFeedback(FEEDBACK_CHANNEL);
     setPending(true);
     try {
-      await updateMaintenanceModeAction(nextValue);
+      const result = await updateMaintenanceModeAction(nextValue);
       setEnabled(nextValue);
       setConfirmNextEnabled(null);
       publishFeedback(
-        {
-          variant: "success",
-          title: nextValue ? "تم تشغيل وضع الصيانة" : "تم إيقاف وضع الصيانة",
-          message: nextValue
-            ? "أصبحت الصفحات العامة في وضع الصيانة وفق الإعداد الحالي."
-            : "عادت الصفحات العامة إلى وضع التشغيل المعتاد.",
-          layout: "inline",
-          dismissible: true,
-          lifecycle: "manual",
-        },
+        mapAdminActionResultToFeedback(result),
         { channel: FEEDBACK_CHANNEL, placement: "inline" },
       );
       router.refresh();

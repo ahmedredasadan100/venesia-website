@@ -1,6 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
+import { adminActionSuccess, adminActionWarning } from "../../../../lib/admin/admin-action-result";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
@@ -182,7 +184,24 @@ export async function updateMaintenanceModeAction(enabled: boolean) {
     metadata: { enabled },
   }, actor);
 
-  revalidatePath("/");
-  revalidatePath("/maintenance");
-  revalidatePath("/admin/settings/general");
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => {
+    revalidatePath("/");
+    revalidatePath("/maintenance");
+    revalidatePath("/admin/settings/general");
+  });
+  if (!cacheRevalidation.ok) {
+    console.error("Maintenance cache revalidation failed after commit", cacheRevalidation.error);
+    return adminActionWarning(
+      "تم حفظ وضع الصيانة مع تنبيه",
+      "تم حفظ الإعداد، لكن تعذر تحديث العرض فورًا. حدّث الصفحة قبل إعادة المحاولة.",
+      { code: "committed_cache_revalidation_pending" },
+    );
+  }
+  return adminActionSuccess(
+    enabled ? "تم تشغيل وضع الصيانة" : "تم إيقاف وضع الصيانة",
+    enabled
+      ? "أصبحت الصفحات العامة في وضع الصيانة وفق الإعداد الحالي."
+      : "عادت الصفحات العامة إلى وضع التشغيل المعتاد.",
+    { code: "saved" },
+  );
 }

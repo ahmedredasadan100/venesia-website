@@ -10,11 +10,12 @@ import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../.
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { withProjectMediaSynchronization } from "./helpers";
 import { revalidateProjectPaths } from "./revalidate";
+import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 
 const projectIdSchema = z.number().int().positive();
 
 const duplicateResultSchema = z.object({
-  project_id: z.coerce.number().int().positive(),
+  project_id: z.number().int().positive(),
   project_type: z.enum(["residential", "commercial"]),
   project_slug: z.string().min(1),
   featured: z.boolean(),
@@ -93,33 +94,28 @@ export async function duplicateProjectAjax(id: number) {
   const parsed = duplicateResultSchema.safeParse(data?.[0]);
   if (!parsed.success) {
     return {
-      ok: false as const,
+      ok: true as const,
+      feedbackStatus: "warning" as const,
       code: "project_duplicate_result_invalid",
       message: "اكتملت استجابة النسخ دون هوية موثوقة. حدّث القائمة قبل المحاولة مرة أخرى.",
     };
   }
 
   const duplicated = parsed.data;
-  const { data: publication, error: publicationError } = await getSupabaseAdmin()
+  const { data: publication, error: publicationError } = await Promise.resolve(getSupabaseAdmin()
     .from("projects")
     .select("publication_status,published_at,published_by,featured")
     .eq("id", duplicated.project_id)
-    .maybeSingle();
-  if (
+    .maybeSingle())
+    .catch(() => ({ data: null, error: { message: "project_duplicate_publication_read_failed" } }));
+  const publicationUnproven = Boolean(
     publicationError ||
     !publication ||
     publication.publication_status !== "unpublished" ||
     publication.published_at !== null ||
     publication.published_by !== null ||
     publication.featured !== false
-  ) {
-    return {
-      ok: false as const,
-      code: "project_duplicate_publication_result_invalid",
-      message:
-        "أُنشئت النسخة دون إثبات عقد غير المنشور النهائي. حدّث القائمة قبل أي إجراء آخر.",
-    };
-  }
+  );
   const mediaSynchronization = await synchronizeDuplicatedProjectMedia(
     duplicated.project_id,
   );
@@ -135,26 +131,22 @@ export async function duplicateProjectAjax(id: number) {
         type: duplicated.project_type,
         aggregateContract: "project_admin_entry_v2",
         mediaSynchronization: mediaSynchronization.status,
-        publicationStatus: publication.publication_status,
+        publicationStatus: publication?.publication_status ?? null,
+        publicationResultVerified: !publicationUnproven,
       },
     },
     actor,
   );
 
-  try {
+  const cache = await runBoundedPublicCacheRevalidation(() => {
     revalidateProjectPaths(
       duplicated.project_type,
       duplicated.project_id,
       duplicated.project_slug,
     );
-  } catch (revalidationError) {
-    console.error("Project duplicate cache revalidation failed", {
-      projectId: duplicated.project_id,
-      error: revalidationError,
-    });
-  }
+  });
 
-  return withProjectMediaSynchronization(
+  const result = withProjectMediaSynchronization(
     {
       ok: true as const,
       message: "تم نسخ المشروع وكل عناصره التابعة ذريًا. النسخة الجديدة غير مميزة حتى اعتمادها.",
@@ -162,12 +154,24 @@ export async function duplicateProjectAjax(id: number) {
       projectType: duplicated.project_type,
       slug: duplicated.project_slug,
       featured: duplicated.featured,
-      publicationStatus: publication.publication_status,
-      publishedAt: publication.published_at,
-      publishedBy: publication.published_by,
+      publicationStatus: publication?.publication_status ?? null,
+      publishedAt: publication?.published_at ?? null,
+      publishedBy: publication?.published_by ?? null,
       createdAt: duplicated.created_at,
       updatedAt: duplicated.updated_at,
     },
     mediaSynchronization,
   );
+  if (publicationUnproven) return {
+    ...result,
+    feedbackStatus: "warning" as const,
+    code: "project_duplicate_publication_result_invalid" as const,
+    message: ["أُنشئت النسخة، لكن تعذر التحقق من حالة نشرها. حدّث القائمة للتحقق ولا تعِد النسخ.", ...(result.feedbackStatus === "warning" ? [result.message] : []), ...(!cache.ok ? ["تعذر تحديث العرض فورًا."] : [])].join(" "),
+  };
+  return cache.ok ? result : {
+    ...result,
+    feedbackStatus: "warning" as const,
+    code: result.feedbackStatus === "warning" ? "saved_with_media_sync_warning" as const : "committed_cache_revalidation_pending" as const,
+    message: `${result.message} تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد نسخ المشروع.`,
+  };
 }

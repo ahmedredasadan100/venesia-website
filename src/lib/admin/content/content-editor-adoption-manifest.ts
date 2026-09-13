@@ -57,6 +57,14 @@ export const CONTENT_EDITOR_SOURCE_BLOCKERS: readonly ContentEditorClosureBlocke
 export const CONTENT_EDITOR_BEHAVIOR_PROOF_LEDGER: readonly ContentEditorBehaviorProof[] =
   [
     {
+      id: "remaining-media-create-action-fields",
+      owner: "scripts/qa-remaining-content-proof.mjs",
+      state: "behavior_verified",
+      requiredForGlobalClosure: false,
+      rationale:
+        "Actual mounted news/press/site_update/gallery editors and Media create adapter prove typed payloads, failed-save input retention, retry, one accepted insert, duplicate-slug rejection and create-to-edit output. Database/Auth/Media ports are in-memory and the test explicitly mounts the returned destination; real authenticated persistence/navigation and all optional state combinations remain unproved. A10 retains its independent six-type edit and Article/Video creation scope.",
+    },
+    {
       id: "gallery-public-projection",
       owner: "scripts/verify-public-content-delivery.mts",
       state: "source_proven_only",

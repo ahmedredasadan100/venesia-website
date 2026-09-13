@@ -132,11 +132,7 @@ export default function FooterBuilderClient({
         const warning = result.status === "warning";
         setSavedDraftKey(draftKey);
         setMessageWarning(warning);
-        setMessage(
-          warning
-            ? "تم حفظ إعدادات الفوتر، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا."
-            : "تم حفظ إعدادات الفوتر بنجاح.",
-        );
+        setMessage(result.message);
         router.refresh();
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : "تعذر حفظ إعدادات الفوتر.");
@@ -157,11 +153,7 @@ export default function FooterBuilderClient({
         setRestoreOpen(false);
         const warning = result.status === "warning";
         setMessageWarning(warning);
-        setMessage(
-          warning
-            ? "تمت استعادة التخطيط، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا."
-            : "تمت استعادة تخطيط الفوتر الافتراضي بنجاح.",
-        );
+        setMessage(result.message);
       } catch (restoreError) {
         setError(restoreError instanceof Error ? restoreError.message : "تعذر استعادة الفوتر الافتراضي.");
       }

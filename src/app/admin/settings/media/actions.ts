@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
 import { recordCmsAdminAudit } from "../../../../lib/admin/audit-log";
@@ -154,7 +155,20 @@ export async function updateMediaSettingsAction(
       },
       actor,
     );
-    revalidatePath("/admin/settings/media");
+    const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => {
+      revalidatePath("/admin/settings/media");
+    });
+    if (!cacheRevalidation.ok) {
+      console.error("Media settings cache revalidation failed after commit", cacheRevalidation.error);
+      return {
+        status: "warning",
+        mode: "edit",
+        revision: previous.revision + 1,
+        code: "committed_cache_revalidation_pending",
+        message: "تم حفظ إعدادات رفع الملفات، لكن تعذر تحديث العرض فورًا. حدّث الصفحة قبل إعادة المحاولة.",
+        savedRevision: new Date().toISOString(),
+      };
+    }
     return {
       status: "success",
       mode: "edit",

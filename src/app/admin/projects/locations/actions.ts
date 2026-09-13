@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   adminActionFailure,
   adminActionSuccess,
+  adminActionWarning,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
@@ -20,6 +21,7 @@ import {
 import { loadProjectLocationManagementRow } from "../../../../lib/admin/projects/location-management-adapter";
 import type { Json } from "../../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 
 export type ProjectLocationFormActionState =
   AdminFormActionState<ProjectLocationManagementRow>;
@@ -66,9 +68,11 @@ function parseActive(formData: FormData) {
 }
 
 function revalidateLocationDomain() {
-  revalidatePath("/admin/projects/locations", "layout");
-  revalidatePath("/admin/projects/new", "page");
-  revalidatePath("/admin/projects/[id]", "page");
+  return runBoundedPublicCacheRevalidation(() => {
+    revalidatePath("/admin/projects/locations", "layout");
+    revalidatePath("/admin/projects/new", "page");
+    revalidatePath("/admin/projects/[id]", "page");
+  });
 }
 
 function formFailure(
@@ -132,9 +136,6 @@ async function mutateLocation(
     },
   );
   if (error) throw error;
-  if (!data) {
-    throw new Error("Location command returned no canonical row.");
-  }
   return data;
 }
 
@@ -194,12 +195,14 @@ async function saveProjectLocation(
       id,
       parsed.payload,
     );
-    const savedId = Number(raw.id);
-    const saved = await loadProjectLocationManagementRow(
-      savedId,
-      parsed.level,
-    );
-    if (!saved) throw new Error("تعذر إعادة قراءة الموقع بعد الحفظ.");
+    const savedId = raw?.id;
+    if (!raw || typeof savedId !== "number" || !Number.isSafeInteger(savedId) || savedId <= 0 || (id !== null && savedId !== id) || raw.level !== parsed.level) {
+      await revalidateLocationDomain();
+      return { status: "warning", mode, revision, title: "تم الحفظ — يلزم التحقق من النتيجة", message: "استُقبل تأكيد الحفظ، لكن تعذر التحقق من البيانات المعادة. حدّث القائمة للتحقق ولا تعِد العملية.", code: "saved_requires_reconciliation_reload" };
+    }
+    // The RPC row proves the commit. A later read cannot undo that outcome.
+    const saved = await loadProjectLocationManagementRow(savedId, parsed.level)
+      .catch(() => null);
 
     await recordCmsAdminAudit(
       {
@@ -208,31 +211,35 @@ async function saveProjectLocation(
           mode === "create" ? "create" : "update",
         ),
         entityType: "project_location",
-        entityId: saved.id,
-        entityLabel: saved.name_ar,
+        entityId: savedId,
+        entityLabel: raw.name_ar,
         metadata: {
-          level: saved.level,
-          parent_id: saved.parent_id,
-          sort_order: saved.sort_order,
-          is_active: saved.is_active,
+          level: raw.level,
+          parent_id: raw.parent_id,
+          sort_order: raw.sort_order,
+          is_active: raw.is_active,
         },
       },
       actor,
     );
-    revalidateLocationDomain();
+    const cache = await revalidateLocationDomain();
+    const warning = !saved || !cache.ok;
     return {
-      status: "success",
+      status: warning ? "warning" : "success",
       mode,
       revision,
       title: "تم حفظ الموقع",
-      message:
-        mode === "create"
+      message: !saved
+        ? "تم حفظ الموقع، لكن تعذرت إعادة قراءة القائمة. حدّث القائمة ولا تعِد الإنشاء."
+        : !cache.ok
+          ? "تم حفظ الموقع، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد العملية."
+          : mode === "create"
           ? "تم إنشاء الموقع داخل التسلسل المعتمد."
           : "تم تحديث بيانات الموقع.",
-      code: mode === "create" ? "created" : "saved",
-      entityId: saved.id,
-      savedRevision: `${saved.id}:${saved.updated_at}`,
-      result: saved,
+      code: !saved ? "saved_requires_reconciliation_reload" : !cache.ok ? "committed_cache_revalidation_pending" : mode === "create" ? "created" : "saved",
+      entityId: savedId,
+      savedRevision: `${savedId}:${raw.updated_at}`,
+      ...(saved ? { result: saved } : {}),
     };
   } catch (error) {
     return mapDatabaseError(mode, revision, error);
@@ -282,8 +289,7 @@ export async function setProjectLocationActiveAction(
       }
     }
     await mutateLocation("update", id, { level, is_active: isActive });
-    const saved = await loadProjectLocationManagementRow(id, level);
-    if (!saved) throw new Error("الموقع غير موجود.");
+    const saved = await loadProjectLocationManagementRow(id, level).catch(() => null);
     await recordCmsAdminAudit(
       {
         action: buildCmsAuditAction(
@@ -292,12 +298,21 @@ export async function setProjectLocationActiveAction(
         ),
         entityType: "project_location",
         entityId: id,
-        entityLabel: saved.name_ar,
-        metadata: { level, is_active: saved.is_active },
+        entityLabel: saved?.name_ar,
+        metadata: { level, is_active: isActive },
       },
       actor,
     );
-    revalidateLocationDomain();
+    const cache = await revalidateLocationDomain();
+    if (!saved || !cache.ok) {
+      return {
+        ...adminActionWarning("تم حفظ حالة الموقع مع تنبيه", !saved
+          ? "حُفظت الحالة، لكن تعذرت إعادة قراءة القائمة. حدّث القائمة ولا تعِد العملية."
+          : "حُفظت الحالة، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات.",
+        { code: !saved ? "saved" : "committed_cache_revalidation_pending", entityId: id }),
+        ...(saved ? { location: saved } : {}),
+      };
+    }
     return {
       ...adminActionSuccess(
         isActive ? "تم تفعيل الموقع" : "تم تعطيل الموقع",
@@ -344,7 +359,8 @@ export async function deleteProjectLocationAction(
       },
       actor,
     );
-    revalidateLocationDomain();
+    const cache = await revalidateLocationDomain();
+    if (!cache.ok) return adminActionWarning("تم حذف الموقع مع تنبيه", "تم حذف الموقع، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد الحذف.", { code: "committed_cache_revalidation_pending", entityId: id });
     return adminActionSuccess(
       "تم حذف الموقع",
       "تم حذف الموقع غير المرتبط من التسلسل المعتمد.",

@@ -8,6 +8,7 @@ import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import { withProjectMediaSynchronization } from "./helpers";
 import { revalidateProjectPaths } from "./revalidate";
+import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 
 function isProjectCategory(value: string): value is ProjectCategory {
   return value === "residential" || value === "commercial";
@@ -96,9 +97,18 @@ export async function deleteProjectAjax(id: number, confirmPermanent = false) {
     entityId: id,
     metadata: { permanent: true, slug: existing.slug },
   });
-  revalidateProjectPaths(existing.type, undefined, existing.slug);
-  return withProjectMediaSynchronization(
+  const projectType = existing.type;
+  const cache = await runBoundedPublicCacheRevalidation(() =>
+    revalidateProjectPaths(projectType, undefined, existing.slug),
+  );
+  const result = withProjectMediaSynchronization(
     { ok: true as const, message: "تم الحذف النهائي وإزالة المشروع من القائمة." },
     mediaSynchronization,
   );
+  return cache.ok ? result : {
+    ...result,
+    feedbackStatus: "warning" as const,
+    code: result.feedbackStatus === "warning" ? "saved_with_media_sync_warning" as const : "committed_cache_revalidation_pending" as const,
+    message: `${result.message} تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. تم الحذف ولا تعِد العملية.`,
+  };
 }
