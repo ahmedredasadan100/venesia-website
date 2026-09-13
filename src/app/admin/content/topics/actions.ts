@@ -6,6 +6,7 @@ import {
   adminActionFailure,
   adminActionSuccess,
   adminActionWarning,
+  withAdminActionCacheWarning,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import { buildCmsAuditAction } from "../../../../lib/admin/audit/cms-audit-actions";
@@ -342,12 +343,14 @@ async function finishMutation(input: {
   entityLabel?: string | null;
   metadata?: Record<string, unknown>;
 }) {
-  revalidateTopicsCache();
-  revalidateMediaCenterCache();
-  revalidateMediaCenterPublicPaths();
-  revalidatePath("/topics");
-  revalidatePath(ADMIN_CONTENT_ROUTES.topics);
-  if (input.entityId) revalidatePath(adminContentTopicPath(input.entityId));
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => {
+    revalidateTopicsCache();
+    revalidateMediaCenterCache();
+    revalidateMediaCenterPublicPaths();
+    revalidatePath("/topics");
+    revalidatePath(ADMIN_CONTENT_ROUTES.topics);
+    if (input.entityId) revalidatePath(adminContentTopicPath(input.entityId));
+  });
   await recordCmsAdminAudit(
     {
       action: buildCmsAuditAction("topic", input.action),
@@ -358,6 +361,7 @@ async function finishMutation(input: {
     },
     input.actor,
   );
+  return cacheRevalidation;
 }
 
 export async function setUnifiedContentStatus(
@@ -415,21 +419,22 @@ export async function setUnifiedContentStatus(
   }
   payload.deleted_at = null;
 
-  const { error } = await getSupabaseAdmin().from("topics").update(payload).eq("id", id);
+  const { data: updated, error } = await getSupabaseAdmin().from("topics").update(payload).eq("id", id).select("id").maybeSingle();
   if (error) return invalidMutation(error.message);
+  if (updated?.id !== id) return invalidMutation("تعذر تأكيد نتيجة تحديث المحتوى. حدّث القائمة للتحقق قبل إعادة المحاولة.");
 
-  await finishMutation({
+  const cacheRevalidation = await finishMutation({
     actor,
     action: nextStatus === "published" ? "publish" : "unpublish",
     entityId: id,
     entityLabel: String(topic.title ?? ""),
     metadata: { status: nextStatus, content_type: topic.content_type },
   });
-  return adminActionSuccess(
+  return withAdminActionCacheWarning(adminActionSuccess(
     nextStatus === "published" ? "تم نشر المحتوى" : "تم إخفاء المحتوى",
     nextStatus === "published" ? "أصبح المحتوى ظاهرًا للعامة." : "لم يعد المحتوى ظاهرًا للعامة.",
     { code: nextStatus === "published" ? "published" : "unpublished", entityId: id },
-  );
+  ), cacheRevalidation.ok);
 }
 
 export async function toggleUnifiedContentFeatured(
@@ -442,28 +447,31 @@ export async function toggleUnifiedContentFeatured(
   const topic = await loadTopic(id);
   if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
   const isFeatured = !Boolean(topic.is_featured);
-  const { error } = await getSupabaseAdmin()
+  const { data: updated, error } = await getSupabaseAdmin()
     .from("topics")
     .update({
       is_featured: isFeatured,
       updated_at: new Date().toISOString(),
       updated_by: actor.id,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) return invalidMutation(error.message);
+  if (updated?.id !== id) return invalidMutation("تعذر تأكيد نتيجة تحديث التمييز. حدّث القائمة للتحقق قبل إعادة المحاولة.");
 
-  await finishMutation({
+  const cacheRevalidation = await finishMutation({
     actor,
     action: "update",
     entityId: id,
     entityLabel: String(topic.title ?? ""),
     metadata: { is_featured: isFeatured },
   });
-  return adminActionSuccess(
+  return withAdminActionCacheWarning(adminActionSuccess(
     "تم تحديث التمييز",
     isFeatured ? "تم تعيين المحتوى كمميز." : "تم إلغاء تمييز المحتوى.",
     { code: isFeatured ? "featured" : "unfeatured", entityId: id },
-  );
+  ), cacheRevalidation.ok);
 }
 
 async function createUniqueCopySlug(baseSlug: string) {
@@ -548,21 +556,24 @@ export async function duplicateUnifiedContent(
           : "تعذر نسخ المحتوى.",
     );
   }
-  const data = coordinated.value;
+  const data = coordinated?.value;
+  if (!data || !Number.isSafeInteger(data.id) || data.id <= 0) {
+    return invalidMutation("تعذر تأكيد هوية نسخة المحتوى. حدّث القائمة للتحقق قبل إعادة المحاولة.");
+  }
   const mediaSynchronization = coordinated.mediaSynchronization;
-  await finishMutation({
+  const cacheRevalidation = await finishMutation({
     actor,
     action: "duplicate",
     entityId: data.id,
     entityLabel: `${String(topic.title ?? "بدون عنوان")} - نسخة`,
     metadata: { source_topic_id: id, content_type: topic.content_type },
   });
-  return mediaAwareSuccess(
+  return withAdminActionCacheWarning(mediaAwareSuccess(
     mediaSynchronization,
     "تم نسخ المحتوى",
     "أُنشئت نسخة جديدة كغير منشورة.",
     { code: "created", entityId: data.id },
-  );
+  ), cacheRevalidation.ok);
 }
 
 export async function softDeleteUnifiedContent(
@@ -575,13 +586,16 @@ export async function softDeleteUnifiedContent(
   if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
 
   const now = new Date().toISOString();
-  const { error } = await getSupabaseAdmin()
+  const { data: updated, error } = await getSupabaseAdmin()
     .from("topics")
     .update({ status: "unpublished", deleted_at: now, updated_at: now, updated_by: actor.id })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
   if (error) return invalidMutation(error.message);
+  if (updated?.id !== id) return invalidMutation("تعذر تأكيد نقل المحتوى إلى المحذوفات. حدّث القائمة للتحقق قبل إعادة المحاولة.");
 
-  await finishMutation({
+  const cacheRevalidation = await finishMutation({
     actor,
     action: "delete",
     entityId: id,
@@ -592,11 +606,11 @@ export async function softDeleteUnifiedContent(
       slug_retained: true,
     },
   });
-  return adminActionSuccess(
+  return withAdminActionCacheWarning(adminActionSuccess(
     "تم نقل الموضوع إلى المحذوفات",
     "اختفى الموضوع من القائمة النشطة، وبقي الـSlug محجوزًا حتى الحذف النهائي.",
     { code: "deleted", entityId: id },
-  );
+  ), cacheRevalidation.ok);
 }
 
 async function restoreTopicsWithCanonicalOwner(input: {
@@ -661,7 +675,7 @@ async function restoreTopicsWithCanonicalOwner(input: {
   }
 
   const singleTopic = input.scope === "single" ? topics[0] : null;
-  await finishMutation({
+  const cacheRevalidation = await finishMutation({
     actor: input.actor,
     action: "restore",
     entityId: singleTopic?.id,
@@ -681,7 +695,7 @@ async function restoreTopicsWithCanonicalOwner(input: {
     },
   });
 
-  return adminActionSuccess(
+  return withAdminActionCacheWarning(adminActionSuccess(
     input.scope === "single" ? "تمت استعادة الموضوع" : "تمت استعادة المحدد",
     input.scope === "single"
       ? "عاد الموضوع إلى القائمة النشطة كغير منشور."
@@ -690,7 +704,7 @@ async function restoreTopicsWithCanonicalOwner(input: {
       code: "restored",
       entityId: singleTopic?.id,
     },
-  );
+  ), cacheRevalidation.ok);
 }
 
 async function permanentlyDeleteTopicsWithCanonicalOwner(input: {
@@ -770,7 +784,7 @@ async function permanentlyDeleteTopicsWithCanonicalOwner(input: {
       deletedIds.map((id) => ({ domainKey: "topics", entityIdentity: id })),
     );
   const singleTopic = input.scope === "single" ? topics[0] : null;
-  await finishMutation({
+  const cacheRevalidation = await finishMutation({
     actor: input.actor,
     action: "permanent_delete",
     entityId: singleTopic?.id,
@@ -813,19 +827,19 @@ async function permanentlyDeleteTopicsWithCanonicalOwner(input: {
       : `تم حذف ${topics.length} من الموضوعات نهائيًا وتحرير الـSlugs الخاصة بها.`;
 
   if (mediaSynchronization.status === "saved_with_media_sync_warning") {
-    return adminActionWarning(
+    return withAdminActionCacheWarning(adminActionWarning(
       `${title} مع تنبيه للميديا`,
       `${message} تعذر إثبات تنظيف بعض مراجع الميديا بالكامل ويلزم فحصها.`,
       {
         code: "saved_with_media_sync_warning",
         entityId: singleTopic?.id,
       },
-    );
+    ), cacheRevalidation.ok);
   }
-  return adminActionSuccess(title, message, {
+  return withAdminActionCacheWarning(adminActionSuccess(title, message, {
     code: "permanently_deleted",
     entityId: singleTopic?.id,
-  });
+  }), cacheRevalidation.ok);
 }
 
 export async function restoreUnifiedContent(
@@ -1186,7 +1200,7 @@ export async function bulkUpdateUnifiedContent(
     );
   }
 
-  await finishMutation({
+  const cacheRevalidation = await finishMutation({
     actor,
     action: action === "publish" ? "publish" : action === "unpublish" ? "unpublish" : moveToTrash ? "delete" : "update",
     metadata: {
@@ -1198,13 +1212,13 @@ export async function bulkUpdateUnifiedContent(
         : {}),
     },
   });
-  return adminActionSuccess(
+  return withAdminActionCacheWarning(adminActionSuccess(
     moveToTrash ? "تم نقل المحتوى إلى المحذوفات" : "تم تحديث المحتوى",
     moveToTrash
       ? `تم نقل ${ids.length} من عناصر المحتوى إلى المحذوفات مع إبقاء الـSlug محجوزًا.`
       : `تم تحديث ${ids.length} من عناصر المحتوى بنجاح.`,
     { code: moveToTrash ? "deleted" : "saved" },
-  );
+  ), cacheRevalidation.ok);
 }
 
 export async function saveContentTablePreferences(visibleColumns: string[]) {

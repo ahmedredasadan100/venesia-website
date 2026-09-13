@@ -253,6 +253,16 @@ export function useAdminEntityListController<
     placeholderData: keepPreviousData,
     staleTime: staleTimeMs,
   });
+  const [lastResolvedResult, setLastResolvedResult] = useState(initialResult);
+  // TanStack removes placeholder data on a terminal error for a cold query key.
+  // Remember only real results, so that error cannot restore the bootstrap page.
+  if (
+    request.isSuccess &&
+    !request.isPlaceholderData &&
+    request.data !== lastResolvedResult
+  ) {
+    setLastResolvedResult(request.data);
+  }
 
   const setSearch = useCallback(
     (search: string) =>
@@ -365,8 +375,9 @@ export function useAdminEntityListController<
 
   return {
     query,
-    result: request.data ?? initialResult,
+    result: request.data ?? lastResolvedResult,
     error: request.error,
+    retry: request.refetch,
     // Query intent is pending only while a query-key change is waiting for its
     // own result. Mutation reconciliation of the current key remains usable.
     ...interactionState,

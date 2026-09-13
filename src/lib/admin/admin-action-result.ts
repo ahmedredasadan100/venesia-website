@@ -82,3 +82,20 @@ export function adminActionWarning(
     ...options,
   };
 }
+
+/** Cache delivery can warn about a confirmed command, never establish success. */
+export function withAdminActionCacheWarning<T extends AdminActionResult>(
+  result: T,
+  cacheRevalidated: boolean,
+): T {
+  if (!result.ok || cacheRevalidated) return result;
+  return {
+    ...result,
+    feedbackStatus: "warning",
+    title: result.feedbackStatus === "warning" ? result.title : "تم الحفظ مع تنبيه لتحديث العرض",
+    message: `${result.message} تم حفظ العملية، لكن تعذر تحديث بعض القراءات المخبأة بعد المحاولة الآمنة المحدودة. حدّث القائمة للتحقق؛ لا تكرر العملية بسبب هذا التنبيه.`,
+    code: result.feedbackStatus === "warning"
+      ? result.code
+      : "committed_cache_revalidation_pending",
+  };
+}

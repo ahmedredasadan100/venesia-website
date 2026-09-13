@@ -114,6 +114,7 @@ function ContentEditorShellFrame({
       initialState={initialState}
       mode={mode}
       entityKey={`content:${contentType}`}
+      invalidateEntities={["topics", "categories", "series"]}
       closeHref={closeHref}
       navigation={CONTENT_FORM_NAVIGATION}
       formId={formId}

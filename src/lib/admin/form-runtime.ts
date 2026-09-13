@@ -21,6 +21,20 @@ export type AdminFormActionState<TResult = unknown> = {
   result?: TResult;
 };
 
+/** Only an action-confirmed save may be downgraded to a cache warning. */
+export function withAdminFormCacheWarning<TResult>(
+  state: AdminFormActionState<TResult>,
+): AdminFormActionState<TResult> {
+  if (state.status !== "success" && state.status !== "warning") return state;
+  const warning = "تم الحفظ، لكن تعذر تحديث كاش القوائم. حدّث القائمة للتحقق من أحدث البيانات؛ لا يلزم تكرار الحفظ.";
+  return {
+    ...state,
+    status: "warning",
+    title: "تم الحفظ مع تنبيه",
+    message: state.message ? `${state.message} ${warning}` : warning,
+  };
+}
+
 export type AdminFormFieldTarget = {
   tabId?: string;
   targetId: string;

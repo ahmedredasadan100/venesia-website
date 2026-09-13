@@ -535,6 +535,8 @@ export default function CategoriesListClient({
         >
           listId={LIST_ID}
           queryPending={controller.queryPending}
+          queryError={controller.error?.message}
+          onQueryRetry={controller.retry}
           sizingStrategy={{ mode: "flexible", columnKey: "name" }}
           toolbar={{
             basePath: BASE_PATH,

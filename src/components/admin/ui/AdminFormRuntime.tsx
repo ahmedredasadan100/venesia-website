@@ -2,6 +2,7 @@
 
 import { unstable_rethrow, useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
+import { QueryClientContext } from "@tanstack/react-query";
 import {
   createContext,
   useActionState,
@@ -28,13 +29,16 @@ import {
 } from "../../../lib/admin/form-dom-preservation";
 import {
   createAdminFormInitialState,
+  createAdminFormErrorState,
   resolveAdminFormNavigationDecision,
   shouldAcceptAdminFormSource,
+  withAdminFormCacheWarning,
   type AdminFormAction,
   type AdminFormActionState,
   type AdminFormMode,
   type AdminFormNavigationContract,
 } from "../../../lib/admin/form-runtime";
+import { invalidateAdminEntityListCaches } from "../../../lib/admin/entity-list/data-engine/instant-mutation-cache";
 import { resolveSafeInternalPath } from "../../../lib/security/safe-internal-path";
 import { useAdminFeedback } from "../AdminFeedbackProvider";
 import AdminConfirmDialog from "./AdminConfirmDialog";
@@ -404,6 +408,8 @@ export type AdminFormRuntimeProps<TResult = unknown> = {
   closeHref?: string;
   onClose?: () => void;
   onSuccess?: (state: AdminFormActionState<TResult>) => void;
+  /** Domain-declared list entities affected by a confirmed structured save. */
+  invalidateEntities?: readonly string[];
   runtimeRef?: Ref<AdminFormRuntimeHandle>;
   navigation?: AdminFormNavigationContract;
   formId?: string;
@@ -539,6 +545,7 @@ function AdminFormRuntimeInstance<TResult = unknown>({
   closeHref,
   onClose,
   onSuccess,
+  invalidateEntities,
   runtimeRef,
   navigation,
   formId,
@@ -551,6 +558,8 @@ function AdminFormRuntimeInstance<TResult = unknown>({
   onSettled: () => void;
 }) {
   const router = useRouter();
+  // Generic forms need no Query provider unless they adopt list invalidation.
+  const queryClient = useContext(QueryClientContext);
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const feedbackChannel = `form:${entityKey}`;
   const redirectingSubmission = useRef(false);
@@ -563,7 +572,37 @@ function AdminFormRuntimeInstance<TResult = unknown>({
   );
   const [state, formAction, actionPending] = useActionState(
     async (previousState: AdminFormActionState<TResult>, formData: FormData) => {
-      if (action) return action(previousState, formData);
+      if (action) {
+        const unconfirmed = () => ({
+          ...createAdminFormErrorState(
+            mode,
+            "تعذر تأكيد الحفظ",
+            "لم تتأكد نتيجة الكتابة. احتُفظ ببيانات النموذج؛ تحقّق من المصدر قبل إعادة الحفظ.",
+          ),
+          revision: previousState.revision + 1,
+        } as AdminFormActionState<TResult>);
+        let result: AdminFormActionState<TResult>;
+        try {
+          result = await action(previousState, formData);
+        } catch (error) {
+          unstable_rethrow(error);
+          // A transport/command failure is not evidence of a committed write.
+          return unconfirmed();
+        }
+        if (result?.status === "error") return result;
+        if (result?.status !== "success" && result?.status !== "warning") {
+          return unconfirmed();
+        }
+        if (!invalidateEntities?.length) return result;
+        try {
+          if (!queryClient) throw new Error("Admin list query provider is missing.");
+          await invalidateAdminEntityListCaches(queryClient, invalidateEntities);
+          return result;
+        } catch {
+          // Only cache settlement is inside this catch. Never replay the action.
+          return withAdminFormCacheWarning(result);
+        }
+      }
       // Existing schema-editor saves finish via Next's redirect contract. Only
       // application failures become form results; framework control flow stays intact.
       try {
@@ -597,10 +636,8 @@ function AdminFormRuntimeInstance<TResult = unknown>({
     useAdminUnsavedChangesGuard({
       rootRef: formRef,
       pending,
-      resetKey:
-        state.status === "success" || state.status === "warning"
-          ? state.savedRevision
-          : undefined,
+      // The instance follows accepted source revisions; only confirmed success
+      // below marks the submitted baseline clean. A later failure must not reset it.
       projectionRevision,
       onNavigate: clearFormFeedback,
     });

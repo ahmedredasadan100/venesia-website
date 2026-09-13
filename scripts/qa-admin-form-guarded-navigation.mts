@@ -118,6 +118,12 @@ import SeoPanel from "@seo-panel";
 import MediaVideoFields from "@media-video-fields";
 import AdminMediaGalleryField from "@admin-media-gallery-field";
 import { createTopicDraft } from "@topic-revision";
+import { useQueryClient } from "@tanstack/react-query";
+import AdminEntityListQueryProvider from "@admin-query-provider";
+import { useAdminEntityListController } from "@admin-list-controller";
+import { normalizeAdminEntityListQuery } from "@admin-query-contracts";
+import { adminEntityListQueryKeys } from "@admin-query-keys";
+import { topicsQueryContract } from "@topics-query-contract";
 
 const qa = {
   routerEvents: [],
@@ -444,6 +450,98 @@ function ContentHarness({ actionOutcomes = ["success"], deferAction = false }) {
 }
 
 const root = createRoot(document.getElementById("root"));
+const saveCacheQuery = normalizeAdminEntityListQuery(topicsQueryContract, new URLSearchParams());
+function saveCacheResult(title) {
+  return {
+    rows: [{ id: 42, title }],
+    pagination: { page: 1, pageSize: 10, totalRows: 1, totalPages: 1 },
+    meta: { generatedAt: new Date().toISOString(), mode: "server-page" },
+  };
+}
+function SaveCacheList({ onEdit }) {
+  const [initialResult] = React.useState(() => saveCacheResult(qa.saveCache.sourceTitle));
+  const controller = useAdminEntityListController({
+    entity: "topics", contract: topicsQueryContract, initialQuery: saveCacheQuery,
+    initialResult, staleTimeMs: 30_000,
+  });
+  return React.createElement(React.Fragment, null,
+    React.createElement("output", { id: "qa-save-cache-list" }, controller.result.rows[0]?.title ?? "Empty"),
+    React.createElement("button", { id: "qa-save-cache-edit", onClick: onEdit }, "Edit"),
+  );
+}
+function SaveCacheFlow({ outcome = "success", cacheFailure = false, mode = "edit", optOut = false, controlled = false }) {
+  const queryClient = useQueryClient();
+  const [ready, setReady] = React.useState(false);
+  const [view, setView] = React.useState("list");
+  const [controlledTitle, setControlledTitle] = React.useState("Before save");
+  React.useEffect(() => {
+    qa.saveCache.client = queryClient;
+    for (const entity of ["topics", "categories", "series", "projects"]) {
+      queryClient.setQueryData(adminEntityListQueryKeys.query(entity, saveCacheQuery), saveCacheResult("Before save"));
+    }
+    const invalidate = queryClient.invalidateQueries.bind(queryClient);
+    queryClient.invalidateQueries = async (filters, options) => {
+      qa.saveCache.invalidations.push(filters);
+      if (cacheFailure) throw new Error("ISOLATED_CLIENT_INVALIDATION_FAILURE");
+      return invalidate(filters, options);
+    };
+    setReady(true);
+  }, [cacheFailure, queryClient]);
+  const action = async (previous, formData) => {
+    qa.actionCalls += 1;
+    const requestedOutcome = qa.saveCache.nextOutcome ?? outcome;
+    if (requestedOutcome === "throw") throw new Error("ISOLATED_UNCONFIRMED_WRITE");
+    if (requestedOutcome === "no-confirmation") return { ...previous, status: "idle" };
+    if (requestedOutcome === "error") return {
+      status: "error", mode, revision: previous.revision + 1,
+      title: "Write failed", message: "The source did not confirm the write.",
+    };
+    qa.saveCache.sourceTitle = String(formData.get("title"));
+    return {
+      status: requestedOutcome === "warning" ? "warning" : "success",
+      mode, revision: previous.revision + 1, entityId: 42, savedRevision: "saved-42",
+      ...(mode === "create" ? { editHref: "/admin/content/topics/42" } : {}),
+      ...(requestedOutcome === "warning" ? { message: "Existing committed server warning." } : {}),
+    };
+  };
+  if (!ready) return null;
+  if (view === "list") return React.createElement(SaveCacheList, { onEdit: () => setView("form") });
+  return React.createElement(AdminFormRuntime, {
+    action, mode, entityKey: "qa-save-cache", formId: "qa-save-cache-form",
+    invalidateEntities: optOut ? undefined : ["topics", "categories", "series"],
+    onClose: () => setView("list"),
+  }, ({ state, pending, requestClose, isDirty }) => {
+    qa.saveCache.formState = state;
+    return React.createElement(React.Fragment, null,
+      React.createElement("input", { id: "qa-save-cache-title", name: "title",
+        ...(controlled ? { value: controlledTitle, onChange: (event) => setControlledTitle(event.target.value) }
+          : { defaultValue: "Before save" }) }),
+      React.createElement("button", { id: "qa-save-cache-submit", type: "submit", disabled: pending }, "Save"),
+      React.createElement("button", { id: "qa-save-cache-return", type: "button", onClick: requestClose }, "Return"),
+      React.createElement("output", { id: "qa-save-cache-state", "data-status": state.status,
+        "data-dirty": String(isDirty), "data-pending": String(pending) }, state.message ?? state.status),
+    );
+  });
+}
+qa.mountSaveCache = (options = {}) => {
+  qa.actionCalls = 0;
+  qa.routerEvents.length = 0;
+  qa.saveCache = { sourceTitle: "Before save", reads: 0, invalidations: [], client: null, formState: null };
+  root.render(React.createElement(AdminEntityListQueryProvider, null,
+    React.createElement(AdminFeedbackProvider, null, React.createElement(SaveCacheFlow, options))));
+};
+qa.saveCacheSnapshot = () => ({
+  sourceTitle: qa.saveCache.sourceTitle,
+  reads: qa.saveCache.reads,
+  actionCalls: qa.actionCalls,
+  invalidations: qa.saveCache.invalidations,
+  formState: qa.saveCache.formState,
+  routerEvents: qa.routerEvents,
+  cache: Object.fromEntries(["topics", "categories", "series", "projects"].map((entity) => {
+    const state = qa.saveCache.client.getQueryState(adminEntityListQueryKeys.query(entity, saveCacheQuery));
+    return [entity, { invalidated: state?.isInvalidated ?? false, title: state?.data?.rows[0]?.title }];
+  })),
+});
 qa.mount = (options) => {
   qa.routerEvents.length = 0;
   qa.actionCalls = 0;
@@ -473,7 +571,8 @@ qa.mountContent = (options = {}) => {
       ),
     );
   }
-  root.render(React.createElement(ContentHarness, options));
+  root.render(React.createElement(AdminEntityListQueryProvider, null,
+    React.createElement(ContentHarness, options)));
 };
 qa.mountAdminRetry = () => {
   qa.retryRefreshes = 0;
@@ -602,6 +701,11 @@ async function compileHarness(rootDir: string, tempDir: string) {
       extensions: [".tsx", ".ts", ".jsx", ".js"],
       modules: [path.join(rootDir, "node_modules"), "node_modules"],
       alias: {
+        "@admin-query-provider": path.join(rootDir, "src/components/admin/entity-list/AdminEntityListQueryProvider.tsx"),
+        "@admin-list-controller": path.join(rootDir, "src/lib/admin/entity-list/data-engine/client-controller.ts"),
+        "@admin-query-contracts": path.join(rootDir, "src/lib/admin/entity-list/data-engine/contracts.ts"),
+        "@admin-query-keys": path.join(rootDir, "src/lib/admin/entity-list/data-engine/query-keys.ts"),
+        "@topics-query-contract": path.join(rootDir, "src/lib/admin/content/entity-list-contracts/topics.ts"),
         "@admin-route-error": path.join(rootDir, "src/app/admin/error.tsx"),
         "@admin-feedback-provider": path.join(
           rootDir,
@@ -984,6 +1088,7 @@ async function closePage(page: Page) {
 }
 
 const rootDir = process.cwd();
+const saveCacheOnly = process.argv.includes("--save-cache-only");
 const tempDir = await mkdtemp(path.join(tmpdir(), TEMP_PREFIX));
 let browser: Browser | null = null;
 let server: Server | null = null;
@@ -999,6 +1104,142 @@ try {
   const browserIssues: BrowserIssue[] = [];
   browser = await chromium.launch({ headless: true });
 
+  const secondSaveFailures: string[] = [];
+  for (const scenario of [
+    { outcome: "success", expected: "success", returnToList: true },
+    { outcome: "warning", expected: "warning", returnToList: true },
+    { outcome: "success", expected: "warning", cacheFailure: true },
+    { outcome: "warning", expected: "warning", cacheFailure: true },
+    { outcome: "warning", expected: "warning", mode: "create" },
+    { outcome: "error", expected: "error", cacheFailure: true },
+    { outcome: "throw", expected: "error", cacheFailure: true },
+    { outcome: "no-confirmation", expected: "error", cacheFailure: true },
+    { outcome: "success", expected: "success", optOut: true },
+    { outcome: "success", expected: "success", secondFailure: "error", controlled: false },
+    { outcome: "success", expected: "success", secondFailure: "throw", controlled: false },
+    { outcome: "success", expected: "success", secondFailure: "error", controlled: true },
+    { outcome: "success", expected: "success", secondFailure: "throw", controlled: true },
+  ]) {
+    const page = await browser.newPage();
+    observeBrowserIssues(page, browserIssues);
+    await page.route("**/api/admin/entity-lists/topics?**", async (route) => {
+      const title = await page.evaluate(() => {
+        const qa = (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: {
+          saveCache: { reads: number; sourceTitle: string };
+        } }).__ADMIN_FORM_GUARDED_NAV_QA__;
+        qa.saveCache.reads += 1;
+        return qa.saveCache.sourceTitle;
+      });
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+        rows: [{ id: 42, title }],
+        pagination: { page: 1, pageSize: 10, totalRows: 1, totalPages: 1 },
+        meta: { generatedAt: new Date().toISOString(), mode: "server-page" },
+      }) });
+    });
+    await page.goto(harnessUrl);
+    await page.evaluate((options) => {
+      (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { mountSaveCache(value: unknown): void } })
+        .__ADMIN_FORM_GUARDED_NAV_QA__.mountSaveCache(options);
+    }, scenario);
+    await page.locator("#qa-save-cache-list").waitFor();
+    await page.locator("#qa-save-cache-edit").click();
+    await page.locator("#qa-save-cache-title").fill("Saved at source");
+    await page.locator("#qa-save-cache-submit").click();
+    await page.waitForFunction((status) => document.querySelector("#qa-save-cache-state")?.getAttribute("data-status") === status, scenario.expected);
+    type SaveCacheSnapshot = {
+      sourceTitle: string; reads: number; actionCalls: number;
+      invalidations: Array<{ refetchType?: string; queryKey?: string[] }>;
+      formState: { status: string; entityId?: number; savedRevision?: string; message?: string; editHref?: string };
+      routerEvents: RouterEvent[];
+      cache: Record<string, { invalidated: boolean; title: string }>;
+    };
+    const snapshot = await page.evaluate(() =>
+      (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { saveCacheSnapshot(): SaveCacheSnapshot } })
+        .__ADMIN_FORM_GUARDED_NAV_QA__.saveCacheSnapshot());
+    const label = `save cache ${scenario.outcome}/${scenario.cacheFailure ? "cache-failure" : "cache-ok"}/${scenario.mode ?? "edit"}${scenario.optOut ? "/opt-out" : ""}`;
+    check(`${label}: exactly one accepted action and no eager GET`, snapshot.actionCalls === 1 && snapshot.reads === 0);
+    check(`${label}: unrelated entity cache is untouched`, !snapshot.cache.projects.invalidated && snapshot.cache.projects.title === "Before save");
+    if (scenario.expected === "error") {
+      check(`${label}: unconfirmed write never becomes warning/success or invalidates cache`,
+        snapshot.invalidations.length === 0 && snapshot.sourceTitle === "Before save" && snapshot.routerEvents.length === 0);
+      check(`${label}: submitted fields and dirty state remain`,
+        await page.locator("#qa-save-cache-title").inputValue() === "Saved at source" &&
+        await page.locator("#qa-save-cache-state").getAttribute("data-dirty") === "true");
+    } else {
+      check(`${label}: confirmed identity/revision and source value survive settlement`,
+        snapshot.formState.entityId === 42 && snapshot.formState.savedRevision === "saved-42" && snapshot.sourceTitle === "Saved at source");
+      if (scenario.optOut) {
+        check(`${label}: undeclared consumers retain existing behavior`, snapshot.invalidations.length === 0);
+      } else if (!scenario.cacheFailure) {
+        check(`${label}: all declared warm entity caches invalidate before handoff`,
+          ["topics", "categories", "series"].every((entity) => snapshot.cache[entity].invalidated) &&
+          snapshot.invalidations.length === 3 && snapshot.invalidations.every((input) => input.refetchType === "none"));
+      } else {
+        check(`${label}: cache failure is a truthful warning without source rollback`,
+          snapshot.formState.message?.includes("القوائم") && snapshot.formState.status === "warning" &&
+          await page.locator("#qa-save-cache-state").getAttribute("data-dirty") === "false");
+      }
+      if (scenario.outcome === "warning") {
+        check(`${label}: existing server warning is retained`, snapshot.formState.message?.includes("Existing committed server warning."));
+      }
+      if (scenario.mode === "create") {
+        check(`${label}: one safe create-to-edit handoff preserves identity`, snapshot.routerEvents.length === 1 &&
+          snapshot.routerEvents[0]?.kind === "replace" && snapshot.routerEvents[0]?.href === "/admin/content/topics/42" &&
+          snapshot.formState.editHref === "/admin/content/topics/42");
+      }
+      if (scenario.returnToList) {
+        await page.locator("#qa-save-cache-return").click();
+        await page.waitForFunction(() => document.querySelector("#qa-save-cache-list")?.textContent === "Saved at source");
+        const after = await page.evaluate(() =>
+          (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { saveCacheSnapshot(): SaveCacheSnapshot } })
+            .__ADMIN_FORM_GUARDED_NAV_QA__.saveCacheSnapshot());
+        check(`${label}: returning within freshness window reads authoritative data once without resaving`,
+          after.reads === 1 && after.actionCalls === 1 && after.cache.topics.title === "Saved at source");
+      }
+    }
+    if (scenario.secondFailure) {
+      await page.waitForFunction(() => {
+        const state = document.querySelector("#qa-save-cache-state");
+        return state?.getAttribute("data-status") === "success" &&
+          state.getAttribute("data-pending") === "false" && state.getAttribute("data-dirty") === "false";
+      });
+      const beforeSecond = await page.evaluate(() =>
+        (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { saveCacheSnapshot(): SaveCacheSnapshot } })
+          .__ADMIN_FORM_GUARDED_NAV_QA__.saveCacheSnapshot());
+      await page.evaluate((outcome) => {
+        (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { saveCache: { nextOutcome: string } } })
+          .__ADMIN_FORM_GUARDED_NAV_QA__.saveCache.nextOutcome = outcome;
+      }, scenario.secondFailure);
+      await page.locator("#qa-save-cache-title").fill("Second unsaved edit");
+      await page.waitForFunction(() => document.querySelector("#qa-save-cache-state")?.getAttribute("data-dirty") === "true");
+      await page.locator("#qa-save-cache-submit").click();
+      await page.waitForFunction(() => {
+        const state = document.querySelector("#qa-save-cache-state");
+        return state?.getAttribute("data-status") === "error" && state.getAttribute("data-pending") === "false";
+      });
+      await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      const afterSecond = await page.evaluate(() =>
+        (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { saveCacheSnapshot(): SaveCacheSnapshot } })
+          .__ADMIN_FORM_GUARDED_NAV_QA__.saveCacheSnapshot());
+      const submittedValue = await page.locator("#qa-save-cache-title").inputValue();
+      const dirty = await page.locator("#qa-save-cache-state").getAttribute("data-dirty");
+      const secondLabel = `second save ${scenario.controlled ? "controlled" : "plain"}/${scenario.secondFailure}`;
+      console.log(`INFO ${secondLabel}: ${JSON.stringify({ status: afterSecond.formState.status, dirty, submittedValue,
+        sourceTitle: afterSecond.sourceTitle, calls: afterSecond.actionCalls, invalidations: afterSecond.invalidations.length })}`);
+      check(`${secondLabel}: one new action only and last confirmed source is preserved`,
+        afterSecond.actionCalls === 2 && afterSecond.sourceTitle === "Saved at source" && afterSecond.reads === 0);
+      check(`${secondLabel}: failed write does not invalidate or alter prior list cache`,
+        JSON.stringify(afterSecond.invalidations) === JSON.stringify(beforeSecond.invalidations) &&
+        JSON.stringify(afterSecond.cache) === JSON.stringify(beforeSecond.cache) && afterSecond.routerEvents.length === 0);
+      check(`${secondLabel}: submitted input survives`, submittedValue === "Second unsaved edit");
+      if (dirty !== "true") secondSaveFailures.push(`${secondLabel}: dirty=${dirty}`);
+    }
+    await closePage(page);
+  }
+  check(`all failed second saves preserve dirty state${secondSaveFailures.length ? `: ${secondSaveFailures.join("; ")}` : ""}`,
+    secondSaveFailures.length === 0);
+
+  if (!saveCacheOnly) {
   {
     // Real mounted Admin presentation and installed Next boundary; only the
     // AppRouter refresh/data response is controlled. This is not a live RSC/DB proof.
@@ -1836,6 +2077,7 @@ try {
     await closePage(page);
   }
 
+  }
   check(
     "actual-component bundle emits no Webpack warnings",
     webpackWarnings.length === 0,

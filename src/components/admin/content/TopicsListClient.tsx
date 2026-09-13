@@ -603,15 +603,6 @@ export default function TopicsListClient({
         <AdminMetricCardsGrid items={metricItems} className="min-w-[1146px]" />
       </AdminEntityListPrimarySection>
 
-      {controller.error ? (
-        <p
-          role="status"
-          className="rounded-[12px] border border-[#D8B87A]/20 bg-[#D8B87A]/8 px-3 py-2 text-sm text-[#F4E7C5]/85"
-        >
-          {controller.error.message}
-        </p>
-      ) : null}
-
       {/* Quiet pending indicator only; aria-busy is reserved for the row
           action that owns the in-flight mutation. */}
       <AdminEntityListTableRegion
@@ -622,6 +613,8 @@ export default function TopicsListClient({
         <UnifiedContentList
           rows={controller.result.rows}
           queryPending={controller.queryPending}
+          queryError={controller.error?.message}
+          onQueryRetry={controller.retry}
           categories={categories}
           currentListPath={currentListPath}
           sort={sort}

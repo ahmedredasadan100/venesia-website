@@ -36,6 +36,8 @@ export function createRemainingContentOwnerHarness(root) {
   const ports = new Map([
     ["server-only", {}],
     ["next/navigation", { redirect(href) { throw Object.assign(new Error("isolated redirect"), { href }); } }],
+    // Load the real bounded retry owner; only its Next infrastructure is isolated.
+    ["next/cache", { revalidatePath() {}, revalidateTag() {}, updateTag() {} }],
     ["src/lib/supabase-admin", { getSupabaseAdmin: () => ({ from }) }],
     ["src/lib/admin/auth/require-admin-session", { async requireAdminSession() { state.actorCalls++; return { id: 7, username: "synthetic" }; } }],
     ["src/lib/admin/audit-log", { async recordCmsAdminAudit() {} }],

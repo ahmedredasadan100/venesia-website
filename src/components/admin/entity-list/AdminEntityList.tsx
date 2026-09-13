@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAdminFeedback } from "../AdminFeedbackProvider";
+import AdminNotice from "../AdminNotice";
+import AdminActionButton from "../ui/AdminActionButton";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminInstantMutationBulkInteraction } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
@@ -65,6 +67,9 @@ export type AdminEntityListProps<
   rows: readonly TRow[];
   /** Retained results belong to the previous query until the controller resolves. */
   queryPending?: boolean;
+  /** A failed read retains the last resolved rows and counters. */
+  queryError?: string | null;
+  onQueryRetry?: () => void;
   columns: readonly AdminEntityColumnDef<TRow, TKey, TSortKey>[];
   getRowId: (row: TRow) => TId;
   getRowLabel: (row: TRow) => string;
@@ -251,6 +256,8 @@ function AdminEntityListInner<
     listId,
     rows,
     queryPending,
+    queryError,
+    onQueryRetry,
     columns,
     getRowId,
     getRowLabel,
@@ -501,6 +508,30 @@ function AdminEntityListInner<
       ) : null}
 
       {!toolbar ? bulkBar : null}
+
+      {queryError ? (
+        <div
+          data-admin-entity-list-query-error=""
+          className="flex flex-wrap items-center gap-3"
+        >
+          <div className="min-w-0 flex-1">
+            <AdminNotice
+              variant="danger"
+              title="تعذر تحديث النتائج"
+              message={`الصفوف والعدّادات المعروضة تخص النتائج السابقة. ${queryError}`}
+              dismissible={false}
+            />
+          </div>
+          {onQueryRetry ? (
+            <AdminActionButton
+              type="button"
+              onClick={() => onQueryRetry()}
+            >
+              إعادة المحاولة
+            </AdminActionButton>
+          ) : null}
+        </div>
+      ) : null}
 
       <AdminEntityListPrimarySection>
         <AdminEntityListTable

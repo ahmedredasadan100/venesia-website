@@ -6,6 +6,7 @@ import {
   adminActionFailure,
   adminActionSuccess,
   adminActionWarning,
+  withAdminActionCacheWarning,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
@@ -25,7 +26,7 @@ import {
 } from "../../../../lib/admin/content/taxonomy-mutations";
 import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../../../../lib/admin/media-catalog/synchronization";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
-import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
+import { revalidateTopicsCache, runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 type CategoryLifecycleRow = {
@@ -66,7 +67,7 @@ async function ensureUniqueSlug(slug: string, id?: number) {
   if (id) query = query.neq("id", id);
 
   const { data, error } = await query.maybeSingle();
-  if (error) return false;
+  if (error) throw new Error("تعذر التحقق من توفر Slug. حدّث الصفحة وحاول مرة أخرى.");
   return !data;
 }
 
@@ -244,10 +245,10 @@ async function mutateCategoriesWithCanonicalOwner(input: {
     actor,
   );
 
-  await revalidateCategories();
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(revalidateCategories);
 
   if (input.operation === "move_to_trash") {
-    return adminActionSuccess(
+    return withAdminActionCacheWarning(adminActionSuccess(
       input.scope === "single"
         ? "تم نقل التصنيف إلى المحذوفات"
         : "تم نقل المحدد إلى المحذوفات",
@@ -255,17 +256,17 @@ async function mutateCategoriesWithCanonicalOwner(input: {
         ? "اختفى التصنيف من القوائم النشطة وبقي الـSlug محجوزًا."
         : `تم نقل ${ids.length} من التصنيفات إلى المحذوفات مع إبقاء الـSlugs محجوزة.`,
       { code: "deleted", entityId: singleCategory?.id },
-    );
+    ), cacheRevalidation.ok);
   }
 
   if (input.operation === "restore") {
-    return adminActionSuccess(
+    return withAdminActionCacheWarning(adminActionSuccess(
       input.scope === "single" ? "تمت استعادة التصنيف" : "تمت استعادة المحدد",
       input.scope === "single"
         ? "عاد التصنيف إلى القائمة النشطة كغير منشور."
         : `تمت استعادة ${ids.length} من التصنيفات كغير منشورة.`,
       { code: "restored", entityId: singleCategory?.id },
-    );
+    ), cacheRevalidation.ok);
   }
 
   const mediaSynchronization =
@@ -282,16 +283,16 @@ async function mutateCategoriesWithCanonicalOwner(input: {
       ? `حُذف التصنيف نهائيًا وأصبح الـSlug "${categories[0].slug}" متاحًا للاستخدام.`
       : `تم حذف ${ids.length} من التصنيفات نهائيًا وتحرير الـSlugs الخاصة بها.`;
   if (mediaSynchronization.status === "saved_with_media_sync_warning") {
-    return adminActionWarning(
+    return withAdminActionCacheWarning(adminActionWarning(
       "تم الحذف النهائي مع تنبيه للميديا",
       `${message} تعذر إثبات تنظيف بعض مراجع الميديا بالكامل ويلزم فحصها.`,
       {
         code: "saved_with_media_sync_warning",
         entityId: singleCategory?.id,
       },
-    );
+    ), cacheRevalidation.ok);
   }
-  return adminActionSuccess(
+  return withAdminActionCacheWarning(adminActionSuccess(
     input.scope === "empty_trash"
       ? "تم إفراغ المحذوفات"
       : input.scope === "single"
@@ -299,7 +300,7 @@ async function mutateCategoriesWithCanonicalOwner(input: {
         : "تم الحذف النهائي للمحدد",
     message,
     { code: "permanently_deleted", entityId: singleCategory?.id },
-  );
+  ), cacheRevalidation.ok);
 }
 
 export type CategoryStatusMutationResult = AdminActionResult & {
@@ -342,7 +343,7 @@ export async function toggleCategoryStatusAjax(
     .is("deleted_at", null)
     .select("id, is_active, status, published_at, updated_at")
     .maybeSingle();
-  if (updateError || !updated || Boolean(updated.is_active) !== isActive) {
+  if (updateError || !updated || updated.id !== id || Boolean(updated.is_active) !== isActive) {
     return adminActionFailure(
       "تعذر تنفيذ العملية",
       "لم يتم تحديث حالة التصنيف. حاول مرة أخرى.",
@@ -359,13 +360,13 @@ export async function toggleCategoryStatusAjax(
     entityId: id,
     metadata: { is_active: isActive, published_at: updated.published_at },
   });
-  await revalidateCategories();
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(revalidateCategories);
   return {
-    ...adminActionSuccess(
+    ...withAdminActionCacheWarning(adminActionSuccess(
       "تم بنجاح",
       isActive ? "تم إظهار التصنيف بنجاح." : "تم إخفاء التصنيف بنجاح.",
       { code: isActive ? "published" : "unpublished", entityId: id },
-    ),
+    ), cacheRevalidation.ok),
     isActive,
     status: updated.status ?? status,
     publishedAt: updated.published_at,
@@ -398,11 +399,20 @@ export async function duplicateCategoryAjax(
     );
   }
 
-  let nextSlug = `${current.slug}-copy`;
-  let suffix = 2;
-  while (!(await ensureUniqueSlug(nextSlug))) {
-    nextSlug = `${current.slug}-copy-${suffix}`;
-    suffix += 1;
+  let nextSlug: string | null = null;
+  try {
+    for (let attempt = 1; attempt <= 50; attempt += 1) {
+      const candidate = `${current.slug}-copy${attempt === 1 ? "" : `-${attempt}`}`;
+      if (await ensureUniqueSlug(candidate)) {
+        nextSlug = candidate;
+        break;
+      }
+    }
+  } catch {
+    return adminActionFailure("تعذر نسخ التصنيف", "تعذر التحقق من توفر Slug. لم تُنشأ نسخة؛ حدّث الصفحة وحاول مرة أخرى.");
+  }
+  if (!nextSlug) {
+    return adminActionFailure("تعذر نسخ التصنيف", "لم يتوفر Slug للنسخة بعد 50 محاولة محدودة. راجع النسخ الموجودة أو أنشئ عنصرًا جديدًا باستخدام Slug مختلف.", { code: "slug_conflict" });
   }
 
   const now = new Date().toISOString();
@@ -432,6 +442,9 @@ export async function duplicateCategoryAjax(
       error?.message ?? "تعذر إنشاء نسخة التصنيف.",
     );
   }
+  if (!Number.isSafeInteger(inserted.id) || inserted.id <= 0) {
+    return adminActionFailure("تعذر تأكيد النسخة", "تعذر تأكيد هوية نسخة التصنيف. حدّث القائمة للتحقق قبل إعادة المحاولة.");
+  }
 
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic_category", "duplicate"),
@@ -440,12 +453,12 @@ export async function duplicateCategoryAjax(
     entityId: inserted.id,
     metadata: { slug: nextSlug, source_category_id: id },
   });
-  await revalidateCategories();
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(revalidateCategories);
   return {
-    ...adminActionSuccess("تم بنجاح", "تم نسخ التصنيف بنجاح.", {
+    ...withAdminActionCacheWarning(adminActionSuccess("تم بنجاح", "تم نسخ التصنيف بنجاح.", {
       code: "created",
       entityId: inserted.id,
-    }),
+    }), cacheRevalidation.ok),
     insertedId: inserted.id,
   };
 }

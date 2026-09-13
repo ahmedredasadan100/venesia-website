@@ -83,6 +83,8 @@ function defaultSortPath(currentListPath: string) {
 export default function UnifiedContentList({
   rows,
   queryPending,
+  queryError,
+  onQueryRetry,
   categories,
   currentListPath,
   sort,
@@ -98,6 +100,8 @@ export default function UnifiedContentList({
 }: {
   rows: UnifiedContentRow[];
   queryPending?: boolean;
+  queryError?: string | null;
+  onQueryRetry?: () => void;
   categories: AdminContentCategoryNode[];
   currentListPath: string;
   sort: ContentSortValue;
@@ -147,6 +151,8 @@ export default function UnifiedContentList({
     >
       listId={UNIFIED_CONTENT_LIST_ID}
       queryPending={queryPending}
+      queryError={queryError}
+      onQueryRetry={onQueryRetry}
       sizingStrategy={{ mode: "flexible", columnKey: "title" }}
       rows={rows}
       columns={columns}

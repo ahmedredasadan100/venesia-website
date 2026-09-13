@@ -167,7 +167,7 @@ check(
   "category-first-publish",
   "category writers and the canonical read model adopt stored published_at without a presentation fallback",
   taxonomyMutations.includes("published_at: z.string().nullable()") &&
-    taxonomyFormActions.includes('.select("id, published_at")') &&
+    taxonomyFormActions.includes('.select("id, published_at, updated_at")') &&
     taxonomyFormActions.includes("mutation.category.published_at") &&
     categoryActions.includes('.select("id, is_active, status, published_at, updated_at")') &&
     categoryClient.includes("publishedAt: actionResult.publishedAt") &&

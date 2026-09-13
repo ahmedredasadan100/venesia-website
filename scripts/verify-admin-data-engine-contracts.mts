@@ -1,4 +1,6 @@
 import { strict as assert } from "node:assert";
+import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
@@ -669,6 +671,79 @@ const normalizedCacheResult = await controllerQueryClient.fetchQuery({
 assert.equal(clientEndpointRequests, 1);
 assert.deepEqual(normalizedCacheResult, normalizedResult);
 controllerQueryClient.clear();
+
+// Execute the actual server bootstrap projection without loading its Auth/DB imports.
+const topicsPageSource = ts.createSourceFile(
+  "topics/page.tsx",
+  readFileSync(new URL("../src/app/admin/content/topics/page.tsx", import.meta.url), "utf8"),
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TSX,
+);
+let bootstrapProjection: ts.Expression | undefined;
+function findBootstrapProjection(node: ts.Node) {
+  if (
+    ts.isVariableDeclaration(node) && node.name.getText(topicsPageSource) === "query" &&
+    node.initializer && ts.isCallExpression(node.initializer) &&
+    node.initializer.expression.getText(topicsPageSource) === "normalizeAdminEntityListQuery"
+  ) bootstrapProjection = node.initializer.arguments[1];
+  ts.forEachChild(node, findBootstrapProjection);
+}
+findBootstrapProjection(topicsPageSource);
+assert.ok(bootstrapProjection, "Topics must seed its controller from the normalized server query.");
+const projectTopicsParams = new Function("params", `return (${bootstrapProjection.getText(topicsPageSource)});`) as
+  (params: Record<string, string | undefined>) => URLSearchParams;
+const imageBootstrap = projectTopicsParams({ image: "without", page: "3", limit: "20", status: "published", q: "عنوان" });
+assert.equal(imageBootstrap.get("image"), "without", "A direct/reloaded image=without URL must reach the Topics server read.");
+assert.equal(imageBootstrap.get("page"), "3");
+assert.equal(imageBootstrap.get("limit"), "20");
+assert.equal(imageBootstrap.get("status"), "published");
+assert.equal(imageBootstrap.get("q"), "عنوان");
+assert.equal(projectTopicsParams({}).has("image"), false);
+
+// Execute the actual Series adapters with committed-warning action results.
+// Server actions and the mutation transport are isolated; no writes are issued.
+const seriesClientSource = ts.createSourceFile(
+  "SeriesTableClient.tsx",
+  readFileSync(new URL("../src/app/admin/content/series/SeriesTableClient.tsx", import.meta.url), "utf8"),
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TSX,
+);
+const committedWarning = { ok: true, feedbackStatus: "warning", message: "تم الحفظ؛ تعذر تحديث العرض.", entityId: 73 };
+let adapterWriteCalls = 0;
+const confirmedAction = async () => { adapterWriteCalls += 1; return committedWarning; };
+const adapterBindings = {
+  instant: { mutateAsync: async (options: { execute: () => Promise<unknown> }) => options.execute() },
+  controller: { query: { filters: { status: "all" } } },
+  toggleSeriesStatusAjax: confirmedAction,
+  duplicateSeriesAjax: confirmedAction,
+  bulkSeriesActionAjax: confirmedAction,
+};
+for (const [name, args] of [
+  ["toggleSeries", [{ id: 7, status: "published" }]],
+  ["duplicateSeries", [{ id: 7 }]],
+  ["executeBulkMutation", ["publish", [7]]],
+] as const) {
+  let callback: ts.Expression | undefined;
+  function findAdapter(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(seriesClientSource) === name &&
+      node.initializer && ts.isCallExpression(node.initializer)) callback = node.initializer.arguments[0];
+    ts.forEachChild(node, findAdapter);
+  }
+  findAdapter(seriesClientSource);
+  assert.ok(callback, `${name} must remain an executable shared mutation adapter.`);
+  const executable = ts.transpileModule(`const adapter = ${callback.getText(seriesClientSource)};`, {
+    compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None },
+  }).outputText;
+  const adapter = new Function(...Object.keys(adapterBindings), `${executable}; return adapter;`)(...Object.values(adapterBindings)) as
+    (...values: unknown[]) => Promise<{ ok: boolean; feedbackStatus?: string; message?: string }>;
+  const actionResult = await adapter(...args);
+  assert.equal(actionResult.ok, true, `${name}: a confirmed commit cannot become a failed write.`);
+  assert.equal(actionResult.feedbackStatus, "warning", `${name}: do not erase the post-commit warning.`);
+  assert.equal(actionResult.message, committedWarning.message);
+}
+assert.equal(adapterWriteCalls, 3, "Each adapter must issue exactly one explicit action call.");
 
 console.log("verify-admin-data-engine-contracts passed (shared query/sort and instant rollback contracts).");
 console.log(`out-of-range client endpoint request count: ${clientEndpointRequests}`);
