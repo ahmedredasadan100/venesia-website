@@ -286,6 +286,7 @@ const activity = read("src/components/admin/ui/AdminActivityPopover.tsx");
 const emptyStateCore = read("src/lib/admin/entity-list/empty-state.ts");
 const listEmptyState = read("src/components/admin/ui/AdminListEmptyState.tsx");
 const dataGrid = read("src/components/admin/ui/AdminDataGrid.tsx");
+const dataGridQueryStatus = read("src/components/admin/ui/AdminDataGridQueryStatus.tsx");
 const primaryColumnPresentationDeclarations =
   findPrimaryColumnPresentationDeclarations();
 const rowActions = read(
@@ -748,13 +749,16 @@ check(
 );
 check(
   "Query feedback belongs inside DataGrid while TableRegion retains its original layout",
-  appearsInOrder(dataGrid, [
-    'data-admin-data-grid-scroll=""',
-    '{children}',
-    'data-admin-data-grid-query-indicator=""',
+  dataGrid.includes('import AdminDataGridQueryStatus from "./AdminDataGridQueryStatus"') &&
+    appearsInOrder(dataGrid, [
+      'data-admin-data-grid-scroll=""',
+      '{children}',
+      '{queryPending ? <AdminDataGridQueryStatus /> : null}',
+    ]) && appearsInOrder(dataGridQueryStatus, [
     'role="status"',
     'aria-live="polite"',
     'data-admin-data-grid-query-status=""',
+    'data-admin-data-grid-query-indicator=""',
     "الصفوف والعدّادات المعروضة تخص النتائج السابقة.",
   ]) &&
     !entitySurface.includes('role="status"') &&

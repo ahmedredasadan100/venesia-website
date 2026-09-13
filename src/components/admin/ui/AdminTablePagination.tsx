@@ -44,6 +44,8 @@ export type AdminTablePaginationProps = {
   pageParamName?: string;
   limitParamName?: string;
   onPageChange?: (page: number) => void;
+  /** Optional data intent for an adjacent page; never changes navigation. */
+  onPageIntent?: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
   className?: string;
 };
@@ -106,6 +108,7 @@ export default function AdminTablePagination({
   pageParamName = "page",
   limitParamName = "limit",
   onPageChange,
+  onPageIntent,
   onPageSizeChange,
   className = "",
 }: AdminTablePaginationProps) {
@@ -152,6 +155,17 @@ export default function AdminTablePagination({
         : totalCount > currentPageSize;
   const shouldShowFooter = totalCount > currentPageSize || totalPages > 1;
   const isMounted = useClientMounted();
+
+  function signalPageIntent(page: number) {
+    if (
+      Number.isInteger(page) &&
+      page >= 1 &&
+      page <= totalPages &&
+      Math.abs(page - currentPage) === 1
+    ) {
+      onPageIntent?.(page);
+    }
+  }
 
   useEffect(() => {
     if (!isLimitOpen) return;
@@ -361,6 +375,8 @@ export default function AdminTablePagination({
               <button
                 type="button"
                 onClick={() => onPageChange(currentPage - 1)}
+                onMouseEnter={() => signalPageIntent(currentPage - 1)}
+                onFocus={() => signalPageIntent(currentPage - 1)}
                 className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 السابق
@@ -403,6 +419,8 @@ export default function AdminTablePagination({
                   key={item}
                   type="button"
                   onClick={() => onPageChange(item)}
+                  onMouseEnter={() => signalPageIntent(item)}
+                  onFocus={() => signalPageIntent(item)}
                   aria-current={isActive ? "page" : undefined}
                   disabled={isActive}
                   data-admin-pagination-slot="page"
@@ -450,6 +468,8 @@ export default function AdminTablePagination({
               <button
                 type="button"
                 onClick={() => onPageChange(currentPage + 1)}
+                onMouseEnter={() => signalPageIntent(currentPage + 1)}
+                onFocus={() => signalPageIntent(currentPage + 1)}
                 className="inline-flex h-9 w-[76px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-[#D8B87A]/14 bg-black/20 px-2 text-sm text-[#F4E7C5]/72 transition hover:border-[#D8B87A]/28 hover:bg-black/28 hover:text-[#F4E7C5] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-45"
               >
                 التالي

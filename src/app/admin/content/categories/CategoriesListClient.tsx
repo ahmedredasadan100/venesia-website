@@ -635,6 +635,7 @@ export default function CategoriesListClient({
           totalPages={controller.result.pagination.totalPages}
           emptySummaryText="لا توجد تصنيفات"
           onPageChange={controller.setPage}
+          onPageIntent={controller.prefetchPage}
           onPageSizeChange={controller.setPageSize}
         />
       </AdminEntityListTableRegion>
