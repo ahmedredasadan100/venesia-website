@@ -52,16 +52,44 @@ export function AdminEntityListPrimarySection({
  * region owns the 16px internal table-to-footer rhythm.
  */
 export function AdminEntityListTableRegion({
+  children,
   className = "",
+  "data-admin-entity-list-pending": queryPending,
   ...props
-}: ComponentPropsWithoutRef<"div">) {
+}: ComponentPropsWithoutRef<"div"> & {
+  "data-admin-entity-list-pending"?: "true" | "false";
+}) {
   return (
     <div
       {...props}
       className={`${PRIMARY_SECTION_MARKER_CLASS} ${TABLE_REGION_LAYOUT_CLASSES} ${className}`.trim()}
       data-admin-entity-list-primary-section=""
       data-admin-entity-list-table-region=""
-    />
+      data-admin-entity-list-pending={queryPending}
+    >
+      {queryPending === "true" ? (
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          dir="rtl"
+          data-admin-entity-list-query-status=""
+          className="sticky top-3 z-20 flex items-center gap-3 rounded-xl border border-[#D8B87A]/25 bg-[#11151B] px-4 py-3 text-sm leading-6 text-[#F4E7C5] shadow-lg"
+        >
+          <span
+            aria-hidden="true"
+            className="size-4 shrink-0 animate-spin rounded-full border-2 border-[#D8B87A]/30 border-t-[#D8B87A] motion-reduce:animate-none"
+          />
+          <p>
+            <span className="font-semibold">جارٍ تحديث النتائج… </span>
+            <span className="text-[#F4E7C5]/75">
+              الصفوف والعدّادات المعروضة تخص النتائج السابقة.
+            </span>
+          </p>
+        </div>
+      ) : null}
+      {children}
+    </div>
   );
 }
 

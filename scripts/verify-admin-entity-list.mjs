@@ -314,6 +314,7 @@ const entityTrashHeader = read(
 const categoriesColumns = read("src/app/admin/content/categories/categories-columns.tsx");
 const categoriesActions = read("src/app/admin/content/categories/CategoryRowActions.tsx");
 const seriesClient = read("src/app/admin/content/series/SeriesTableClient.tsx");
+const trackingCollections = read("src/components/admin/projects/tracking/TrackingCollections.tsx");
 const seriesPage = read("src/app/admin/content/series/page.tsx");
 const seriesListOwner = read("src/lib/admin/content/load-series-list.ts");
 const seriesListConfigModule = loadPureTypeScriptModule(
@@ -743,6 +744,25 @@ check(
         source.includes("AdminEntityListTableRegion") &&
         !source.includes("pending={controller.queryPending}") &&
         !source.includes("pending: controller.queryPending"),
+    ),
+);
+check(
+  "Query transitions expose one shared polite status explaining retained results without blocking controls",
+  appearsInOrder(entitySurface, [
+    '"data-admin-entity-list-pending": queryPending',
+    'queryPending === "true"',
+    'role="status"',
+    'aria-live="polite"',
+    'data-admin-entity-list-query-status=""',
+    "الصفوف والعدّادات المعروضة تخص النتائج السابقة.",
+    "{children}",
+  ]) && !/\b(?:inert|disabled|aria-busy)=/u.test(entitySurface),
+);
+check(
+  "Every shared tracking collection forwards query transition state to the canonical table region",
+  (trackingCollections.match(/<AdminEntityListTableRegion\b/gu)?.length ?? 0) === 3 &&
+    [...trackingCollections.matchAll(/<AdminEntityListTableRegion\b([^>]+)>/gu)].every(
+      (match) => match[1].includes('data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}'),
     ),
 );
 

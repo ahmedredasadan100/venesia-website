@@ -685,7 +685,9 @@ export function TrackingStagesCollection({
           </AdminCard>
         </AdminEntityListPrimarySection>
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.stages}>
-          <AdminEntityListTableRegion>
+          <AdminEntityListTableRegion
+            data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}
+          >
             <AdminEntityList
               listId="project-tracking-stages"
               sizingStrategy={{ mode: "flexible", columnKey: "name" }}
@@ -1175,7 +1177,9 @@ export function TrackingItemsCollection({
           }
         />
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.items}>
-          <AdminEntityListTableRegion>
+          <AdminEntityListTableRegion
+            data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}
+          >
             <AdminEntityList
               listId="project-tracking-items"
               sizingStrategy={{ mode: "flexible", columnKey: "name" }}
@@ -1584,7 +1588,9 @@ export function TrackingUpdatesCollection({
           }
         />
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.updates}>
-          <AdminEntityListTableRegion>
+          <AdminEntityListTableRegion
+            data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}
+          >
             <AdminEntityList
               listId="project-tracking-updates"
               sizingStrategy={{ mode: "flexible", columnKey: "title" }}
