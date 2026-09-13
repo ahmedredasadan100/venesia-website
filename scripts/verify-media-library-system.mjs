@@ -984,8 +984,16 @@ class FixtureMediaSettingsSaveError extends Error {
 }
 const mediaSettingsMutations = [];
 let mediaSettingsSaveFailure = null;
+const mediaSettingsCachePorts = {
+  revalidatePath: (value) => mediaSettingsMutations.push(["revalidate", value]),
+};
+const publicCacheRevalidationModule = loadTypeScriptModule(
+  "src/lib/cache/revalidate-public-cache-tags.ts",
+  { "server-only": {}, "next/cache": mediaSettingsCachePorts },
+);
 const mediaSettingsActionModule = loadTypeScriptModule("src/app/admin/settings/media/actions.ts", {
-  "next/cache": { revalidatePath: (value) => mediaSettingsMutations.push(["revalidate", value]) },
+  "next/cache": mediaSettingsCachePorts,
+  "../../../../lib/cache/revalidate-public-cache-tags": publicCacheRevalidationModule,
   "../../../../lib/admin/auth/require-admin-session": {
     requireAdminSession: async () => ({ id: 1, username: "qa" }),
   },

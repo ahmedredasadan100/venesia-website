@@ -8,6 +8,9 @@ import { chromium } from "playwright";
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
 const out = path.join(root, ".tmp-qa/remaining-system-proof/projects-browser");
+const widthArgument = process.argv.find(argument => argument.startsWith("--width="));
+const widths = widthArgument ? [Number(widthArgument.slice("--width=".length))] : [1280, 390];
+assert.ok(widths.every(width => width === 1280 || width === 390), "Supported proof viewports are 1280 and 390 pixels");
 await mkdir(out, { recursive: true });
 await writeFile(path.join(out, "entry.tsx"), String.raw`
 import React, { useState } from 'react';
@@ -51,8 +54,9 @@ let browser;
 const results = [];
 try {
   browser = await chromium.launch({ headless: true });
-  for (const kind of ["location", "tracking", "project"]) {
-    const context = await browser.newContext();
+  for (const { width, kind } of widths.flatMap(width => ["location", "tracking", "project"].map(kind => ({ width, kind })))) {
+    const viewport = { width, height: 900 };
+    const context = await browser.newContext({ viewport });
     await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
     const page = await context.newPage();
     const errors = [];
@@ -70,8 +74,8 @@ try {
       assert.equal(await page.getByRole("alertdialog").count(), 0);
       assert.equal(await page.evaluate(() => window.calls), 1);
       assert.deepEqual(errors, []);
-      results.push({ kind, status: "PASS", claims: ["actual Project form and Form Runtime", "committed warning without identity invokes existing close owner to known list", "no discard prompt or guessed edit link"] });
-      console.log("PASS project: unknown saved identity closes through existing Form navigation owner");
+      results.push({ kind, viewport, status: "PASS", claims: ["actual Project form and Form Runtime", "committed warning without identity invokes existing close owner to known list", "no discard prompt or guessed edit link"] });
+      console.log(`PASS project (${width}px): unknown saved identity closes through existing Form navigation owner`);
       await context.close();
       continue;
     }
@@ -89,12 +93,12 @@ try {
     assert.equal(await page.evaluate(() => window.calls), 1);
     assert.equal(await page.locator("[data-admin-feedback-entry]").count(), 1);
     assert.deepEqual(errors, []);
-    results.push({ kind, status: "PASS", claims: ["actual modal and Form/Feedback owners", "pending preserves submitted values and blocks duplicate button submit", "warning without result closes once and triggers existing list invalidation callback once", "one warning"] });
-    console.log(`PASS ${kind}: committed warning without result completes once through existing Form owner`);
+    results.push({ kind, viewport, status: "PASS", claims: ["actual modal and Form/Feedback owners", "pending preserves submitted values and blocks duplicate button submit", "warning without result closes once and triggers existing list invalidation callback once", "one warning"] });
+    console.log(`PASS ${kind} (${width}px): committed warning without result completes once through existing Form owner`);
     await context.close();
   }
 } finally {
   await browser?.close();
   await new Promise(resolve => server.close(resolve));
-  await writeFile(path.join(out, "results.json"), JSON.stringify({ results, limits: "Mounted real components; deferred Action and Next navigation ports isolated. Separate verifier proves actual Actions/SQL. No authenticated HTTP, full page, live DB or production claim." }, null, 2));
+  await writeFile(path.join(out, widthArgument ? `results-${widths[0]}.json` : "results.json"), JSON.stringify({ results, limits: "Mounted real components; deferred Action and Next navigation ports isolated. Separate verifier proves actual Actions/SQL. No authenticated HTTP, full page, live DB or production claim." }, null, 2));
 }
