@@ -12,6 +12,13 @@ import type { AdminEntityPrimaryColumnPresentation } from "../../../lib/admin/en
 import AdminCheckbox from "./AdminCheckbox";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 
+const ADMIN_DATA_GRID_NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
+
+/** Keep Admin table values in Latin digits without changing the RTL interface. */
+export function formatAdminDataGridNumber(value: number): string {
+  return ADMIN_DATA_GRID_NUMBER_FORMATTER.format(value);
+}
+
 type BaseProps = {
   children: ReactNode;
   className?: string;

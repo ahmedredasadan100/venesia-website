@@ -9,11 +9,16 @@ export type PublicPaginationQuery = Readonly<
   Record<string, PublicPaginationQueryValue>
 >;
 
+export type PublicPaginationRequestedQuery = Readonly<
+  Record<string, string | readonly string[] | undefined>
+>;
+
 export type PublicPaginationContract = Readonly<{
   currentPage: number;
   totalPages: number;
   basePath: string;
   query?: PublicPaginationQuery;
+  requestedQuery?: PublicPaginationRequestedQuery;
   pageParam?: string;
   previousLabel?: string;
   nextLabel?: string;
@@ -55,6 +60,44 @@ export function buildPublicPaginationHref(
   const queryString = params.toString();
 
   return queryString ? `${basePath}?${queryString}` : basePath;
+}
+
+/** Reconcile only this paging key with the page already resolved by its reader. */
+export function buildPublicPaginationCorrectionHref(
+  location: Readonly<{ pathname: string; search: string; hash: string }>,
+  basePath: string,
+  resolvedPage: number,
+  pageParam = "page",
+  requestedQuery?: PublicPaginationRequestedQuery,
+) {
+  if (location.pathname !== basePath || !requestedQuery) return null;
+
+  const params = new URLSearchParams(location.search);
+  const requestParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(requestedQuery)) {
+    if (value === undefined) continue;
+    for (const item of typeof value === "string" ? [value] : value) {
+      requestParams.append(key, item);
+    }
+  }
+  const currentParams = new URLSearchParams(params);
+  currentParams.sort();
+  requestParams.sort();
+  // A restored or pending result must not correct a newer navigation's URL.
+  if (currentParams.toString() !== requestParams.toString()) return null;
+
+  const values = params.getAll(pageParam);
+  const canonicalPage = resolvedPage > 1 ? String(resolvedPage) : null;
+  if (
+    canonicalPage === null
+      ? values.length === 0 || (values.length === 1 && values[0] === "1")
+      : values.length === 1 && values[0] === canonicalPage
+  ) return null;
+
+  if (canonicalPage === null) params.delete(pageParam);
+  else params.set(pageParam, canonicalPage);
+  const search = params.toString();
+  return `${location.pathname}${search ? `?${search}` : ""}${location.hash}`;
 }
 
 export function buildPublicPaginationItems(

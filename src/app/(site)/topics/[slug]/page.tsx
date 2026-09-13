@@ -134,7 +134,7 @@ export default async function TopicDetailsPage({
       <JsonLd data={pageJsonLd} />
 
       <div className="page-layout-main-sidebar-grid grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px] lg:[direction:ltr]">
-        <main dir="rtl" className="space-y-10 text-right">
+        <section dir="rtl" className="space-y-10 text-right">
           {topic.showIntroCardOnPage ? (
             <div className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.025]">
               {topic.showImageOnPage ? (
@@ -235,7 +235,7 @@ export default async function TopicDetailsPage({
               </div>
             </section>
           )}
-        </main>
+        </section>
 
         <aside dir="rtl" className="page-layout-slot--sidebar space-y-6 text-right">
           <PageSlotContent

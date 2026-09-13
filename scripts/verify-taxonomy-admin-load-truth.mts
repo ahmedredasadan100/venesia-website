@@ -1231,10 +1231,86 @@ async function runCategoryPresentationChecks() {
   });
 }
 
-async function runAdminErrorBoundaryCheck() {
-  await verify("Admin error boundary exposes the Next.js reset retry contract", () => {
+async function runTopicPreviewRouteChecks() {
+  async function renderPreview(result: QueryResult) {
+    const navigation = makeNotFound();
     const recorder = createJsxRecorder();
-    let resetCalls = 0;
+    let authCalls = 0;
+    const page = loadTypeScriptModule(
+      "src/app/admin/content/topics/[id]/preview/page.tsx",
+      {
+        "react/jsx-runtime": recorder.runtime,
+        "next/image": defaultModule(marker("Image")),
+        "next/link": defaultModule(marker("Link")),
+        "next/navigation": { notFound: navigation.notFound },
+        "../../../../../../components/admin/content/AdminCategoryBadge":
+          defaultModule(marker("AdminCategoryBadge")),
+        "../../../../../../components/admin/ui": {
+          AdminPageHeader: marker("AdminPageHeader"),
+          AdminStatusPill: marker("AdminStatusPill"),
+        },
+        "../../../../../../components/content/RichTextContent":
+          defaultModule(marker("RichTextContent")),
+        "../../../../../../lib/admin/media-topic-payload": {
+          parseMediaTopicPayload: () => null,
+          resolveYouTubeEmbedUrl: () => null,
+        },
+        "../../../../../../lib/admin/auth/require-admin-session": {
+          requireAdminSession: async () => { authCalls += 1; },
+        },
+        "../../../../../../lib/admin/content/content-types": {
+          isContentType: (value: unknown) => value === "article",
+          getContentTypeLabel: () => "Article",
+        },
+        "../../../../../../lib/admin/content/content-status-metadata": {
+          getContentStatusMetadata: () => ({ tone: "green", label: "Published" }),
+        },
+        "../../../../../../lib/supabase-admin": {
+          getSupabaseAdmin: () => createSupabase({ admin_content_topics: [result] }),
+        },
+      },
+      true,
+    );
+    const error = await captureError(() =>
+      callPage(page, { params: Promise.resolve({ id: "31" }) }),
+    );
+    return { error, navigation, recorder, authCalls };
+  }
+
+  await verify("Topic Preview read failure reaches the Admin error boundary, not notFound", async () => {
+    const cause = databaseError();
+    const outcome = await renderPreview({ data: null, error: cause });
+    assert.equal(outcome.authCalls, 1);
+    assert.equal(outcome.navigation.calls, 0);
+    assert.ok(outcome.error instanceof Error);
+    assert.equal(outcome.error.cause, cause);
+    assert.equal(outcome.error.message.includes(RAW_DATABASE_SENTINEL), false);
+    assert.equal(outcome.recorder.renders.length, 0);
+  });
+
+  await verify("Topic Preview true absence remains notFound", async () => {
+    const outcome = await renderPreview({ data: null, error: null });
+    assert.equal(outcome.authCalls, 1);
+    assert.equal(outcome.error, outcome.navigation.signal);
+    assert.equal(outcome.navigation.calls, 1);
+  });
+
+  await verify("Topic Preview healthy read still renders saved content", async () => {
+    const outcome = await renderPreview({
+      data: { id: 31, title: "Preview fixture", content_type: "article", content: "Saved body" },
+      error: null,
+    });
+    assert.equal(outcome.authCalls, 1);
+    assert.equal(outcome.error, null);
+    assert.equal(outcome.navigation.calls, 0);
+    assert.ok(outcome.recorder.renders.some((render) => render.type === "article"));
+  });
+}
+
+async function runAdminErrorBoundaryCheck() {
+  await verify("Admin error boundary exposes the Next.js fresh-read retry contract", () => {
+    const recorder = createJsxRecorder();
+    let retryCalls = 0;
     const page = loadTypeScriptModule(
       "src/app/admin/error.tsx",
       {
@@ -1257,8 +1333,8 @@ async function runAdminErrorBoundaryCheck() {
 
     callPage(page, {
       error: new Error("safe boundary fixture"),
-      reset: () => {
-        resetCalls += 1;
+      retry: () => {
+        retryCalls += 1;
       },
     });
     const retryButton = recorder.renders.find(
@@ -1266,7 +1342,7 @@ async function runAdminErrorBoundaryCheck() {
     );
     assert.equal(typeof retryButton?.props.onClick, "function");
     (retryButton?.props.onClick as () => void)();
-    assert.equal(resetCalls, 1);
+    assert.equal(retryCalls, 1);
   });
 }
 
@@ -1274,6 +1350,7 @@ await runOwnerChecks();
 await runCategoryRouteChecks();
 await runSeriesRouteChecks();
 await runTopicRouteChecks();
+await runTopicPreviewRouteChecks();
 await runCategoryPresentationChecks();
 await runAdminErrorBoundaryCheck();
 

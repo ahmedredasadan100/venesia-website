@@ -4,6 +4,7 @@ import { dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  buildPublicPaginationCorrectionHref,
   buildPublicPaginationHref,
   buildPublicPaginationItems,
 } from "../src/components/pagination-model.ts";
@@ -64,6 +65,7 @@ for (const field of [
   "totalPages",
   "basePath",
   "query",
+  "requestedQuery",
   "pageParam",
   "previousLabel",
   "nextLabel",
@@ -116,6 +118,12 @@ check(
     owner.includes("if (totalPages <= 1)") &&
     owner.includes('previousLabel = "السابق"') &&
     owner.includes('nextLabel = "التالي"'),
+);
+check(
+  "URL correction uses Next route replacement instead of address-only history mutation",
+  owner.includes('import { useRouter } from "next/navigation"') &&
+    owner.includes('router.replace(href, { scroll: false })') &&
+    !owner.includes("history.replaceState"),
 );
 check(
   "one presentation contract owns every Public Pagination visual state",
@@ -192,6 +200,78 @@ check(
     { stage: 8, stagePage: 4, itemPage: 2 },
     "stagePage",
   ) === "/track-your-project/i87?stage=8&itemPage=2",
+);
+
+const correctionLocation = {
+  pathname: "/topics",
+  search: "?q=term&category=a&category=b&page=9999",
+  hash: "#listing",
+};
+const requestedQuery = { q: "term", category: ["a", "b"], page: "9999" };
+check(
+  "resolved page corrects an out-of-range URL while preserving filters and hash",
+  buildPublicPaginationCorrectionHref(correctionLocation, "/topics", 43, "page", requestedQuery) ===
+    "/topics?q=term&category=a&category=b&page=43#listing",
+);
+check(
+  "corrected URL is stable without another navigation",
+  buildPublicPaginationCorrectionHref(
+    { ...correctionLocation, search: "?q=term&page=43" }, "/topics", 43, "page", { q: "term", page: "43" },
+  ) === null,
+);
+check(
+  "single-page and empty results remove an out-of-range page even without controls",
+  buildPublicPaginationCorrectionHref(correctionLocation, "/topics", 1, "page", requestedQuery) ===
+    "/topics?q=term&category=a&category=b#listing",
+);
+check(
+  "normalization touches only its custom pagination key",
+  buildPublicPaginationCorrectionHref(
+    { pathname: "/track", search: "?stagePage=9&itemPage=2", hash: "" },
+    "/track", 3, "stagePage", { stagePage: "9", itemPage: "2" },
+  ) === "/track?stagePage=3&itemPage=2",
+);
+check(
+  "pagination cannot normalize another route",
+  buildPublicPaginationCorrectionHref(correctionLocation, "/search", 1, "page", requestedQuery) === null,
+);
+check(
+  "valid explicit page one avoids corrective navigation across independent paging keys",
+  buildPublicPaginationCorrectionHref(
+    { pathname: "/track/fixture", search: "?stagePage=1&historyPage=2", hash: "" },
+    "/track/fixture",
+    1,
+    "stagePage",
+    { stagePage: "1", historyPage: "2" },
+  ) === null,
+);
+check(
+  "consumers without a request snapshot keep their existing navigation behavior",
+  buildPublicPaginationCorrectionHref(correctionLocation, "/topics", 43) === null,
+);
+for (const search of [
+  "?q=term&category=a&category=b&page=2",
+  "?q=changed&category=a&category=b&page=9999",
+  "?q=term&category=b&category=a&page=9999",
+  "?q=term&category=a&category=b&page=9999&extra=1",
+]) {
+  check(
+    `stale rendered result cannot correct newer URL ${search}`,
+    buildPublicPaginationCorrectionHref({ ...correctionLocation, search }, "/topics", 43, "page", requestedQuery) === null,
+  );
+}
+check(
+  "equivalent query key ordering and encoding match the request snapshot",
+  buildPublicPaginationCorrectionHref(
+    { pathname: "/topics", search: "?page=9999&q=two%20words&category=a&category=b", hash: "" },
+    "/topics", 43, "page", { q: "two words", category: ["a", "b"], page: "9999" },
+  ) === "/topics?page=43&q=two+words&category=a&category=b",
+);
+check(
+  "only Topics and Search opt into snapshot-guarded URL correction",
+  topics.includes("requestedQuery={searchParams}") &&
+    searchPlatform.includes("requestedQuery={searchParams}") &&
+    !media.includes("requestedQuery=") && !tracking.includes("requestedQuery="),
 );
 
 const productionSources = sourceFiles("src");

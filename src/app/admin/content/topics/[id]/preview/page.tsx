@@ -29,13 +29,16 @@ export default async function UnifiedContentPreviewPage(props: PageProps) {
   const topicId = Number(id);
   if (!Number.isSafeInteger(topicId) || topicId <= 0) notFound();
 
-  const { data: topic } = await getSupabaseAdmin()
+  const { data: topic, error } = await getSupabaseAdmin()
     .from("admin_content_topics")
     .select("id,title,slug,excerpt,content,image,image_alt,category_name,category_color_token,content_type,status,media_payload")
     .eq("id", topicId)
     .is("deleted_at", null)
     .maybeSingle();
 
+  if (error) {
+    throw new Error("تعذر تحميل معاينة المحتوى. أعد المحاولة.", { cause: error });
+  }
   if (!topic || !isContentType(topic.content_type)) notFound();
   const payload = parseMediaTopicPayload(topic.media_payload);
   const publication = getContentStatusMetadata(topic.status);

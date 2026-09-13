@@ -68,7 +68,10 @@ export default async function TopicsListingContent({
   const displayedTotalCount = isSearching
     ? Math.max(totalCount, topics.length)
     : totalCount;
-  const pageQuery = buildTopicsQuery(sort, categorySlug, seriesSlug);
+  const pageQuery = {
+    ...buildTopicsQuery(sort, categorySlug, seriesSlug),
+    q: searchQuery || undefined,
+  };
 
   return (
     <div
@@ -130,14 +133,6 @@ export default async function TopicsListingContent({
 
           <TopicsListingModule topics={topics} config={listingConfig} />
 
-          {!isSearching ? (
-            <PublicPagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              basePath={context.publicPath}
-              query={pageQuery}
-            />
-          ) : null}
         </>
       ) : isSearching ? (
         <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-10 text-center">
@@ -152,6 +147,13 @@ export default async function TopicsListingContent({
           </p>
         </div>
       ) : null}
+      <PublicPagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        basePath={context.publicPath}
+        query={pageQuery}
+        requestedQuery={searchParams}
+      />
     </div>
   );
 }

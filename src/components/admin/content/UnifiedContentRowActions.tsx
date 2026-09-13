@@ -13,6 +13,7 @@ import type { UnifiedContentRow } from "../../../lib/admin/content/load-unified-
 import type { AdminInstantMutationRowInteraction } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import { formatAdminDateTime } from "../../../lib/content-dates";
 import { getContentPublicVisibilityState } from "../../../lib/content-public-visibility";
+import { formatAdminDataGridNumber } from "../ui/AdminDataGrid";
 
 export type UnifiedContentRowActionHandlers = {
   view: "active" | "trash";
@@ -107,7 +108,7 @@ export default function UnifiedContentRowActions({
           },
           {
             label: "عدد المشاهدات:",
-            value: `${new Intl.NumberFormat("ar-EG").format(row.views_count ?? 0)} مشاهدة`,
+            value: `${formatAdminDataGridNumber(row.views_count ?? 0)} مشاهدة`,
           },
           ...(isTrashView
             ? [

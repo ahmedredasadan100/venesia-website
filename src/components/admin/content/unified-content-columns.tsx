@@ -9,6 +9,7 @@ import AdminSeoScorePill from "../seo/AdminSeoScorePill";
 import {
   ADMIN_DATA_GRID_PRIMARY_COLUMN_PRESETS,
   ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH,
+  formatAdminDataGridNumber,
 } from "../ui/AdminDataGrid";
 import AdminCategoryBadge from "./AdminCategoryBadge";
 import UnifiedContentRowActions, {
@@ -273,7 +274,7 @@ export function createUnifiedContentColumns(
       minWidth: 120,
       renderCell: ({ row }) => (
         <span className="font-en tabular-nums text-white/68">
-          {new Intl.NumberFormat("ar-EG").format(row.views_count ?? 0)}
+          {formatAdminDataGridNumber(row.views_count ?? 0)}
         </span>
       ),
     },
