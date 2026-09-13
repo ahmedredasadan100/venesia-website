@@ -3848,7 +3848,7 @@ export type Database = {
           p_actor_admin_user_id?: number
           p_actor_username?: string
           p_operation: string
-          p_page_id: number
+          p_page_id: number | null
           p_payload?: Json
         }
         Returns: Json

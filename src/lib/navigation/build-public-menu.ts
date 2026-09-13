@@ -1,9 +1,4 @@
 import type { PublicNavigationItem } from "../public-navigation";
-import {
-  getPublicDynamicPageRoute,
-  getPublicPageRoute,
-  interpolatePublicRoute,
-} from "../admin/links/static-routes";
 
 export type MenuItemRow = {
   id: number;
@@ -21,11 +16,8 @@ export type MenuItemRow = {
   sort_order: number | null;
 };
 
-type SlugMaps = {
-  topics: Map<number, string>;
-  topicCategories: Map<number, string>;
-  projects: Map<number, string>;
-};
+export type NavigationTargetTable = "topics" | "topic_categories" | "projects" | "pages" | "topic_series";
+export type PublicNavigationTargetMaps = Record<NavigationTargetTable, Map<number, string>>;
 
 function uniqueIds(rows: MenuItemRow[], linkedType: string) {
   return Array.from(
@@ -37,17 +29,19 @@ function uniqueIds(rows: MenuItemRow[], linkedType: string) {
   );
 }
 
-export async function getSlugMaps(
+export async function getNavigationTargetMaps(
   rows: MenuItemRow[],
-  fetchSlugs: (table: "topics" | "topic_categories" | "projects", ids: number[]) => Promise<Map<number, string>>,
-): Promise<SlugMaps> {
-  const [topics, topicCategories, projects] = await Promise.all([
-    fetchSlugs("topics", uniqueIds(rows, "topics")),
-    fetchSlugs("topic_categories", uniqueIds(rows, "topic_categories")),
-    fetchSlugs("projects", uniqueIds(rows, "projects")),
+  fetchPaths: (table: NavigationTargetTable, ids: number[]) => Promise<Map<number, string>>,
+): Promise<PublicNavigationTargetMaps> {
+  const [topics, topicCategories, projects, pages, topicSeries] = await Promise.all([
+    fetchPaths("topics", uniqueIds(rows, "topics")),
+    fetchPaths("topic_categories", uniqueIds(rows, "topic_categories")),
+    fetchPaths("projects", uniqueIds(rows, "projects")),
+    fetchPaths("pages", uniqueIds(rows, "pages")),
+    fetchPaths("topic_series", uniqueIds(rows, "topic_series")),
   ]);
 
-  return { topics, topicCategories, projects };
+  return { topics, topic_categories: topicCategories, projects, pages, topic_series: topicSeries };
 }
 
 function appendAnchor(href: string, anchor?: string | null) {
@@ -57,36 +51,16 @@ function appendAnchor(href: string, anchor?: string | null) {
   return `${href.split("#")[0]}#${cleanAnchor}`;
 }
 
-function resolveHref(item: MenuItemRow, maps: SlugMaps): string | null {
+function resolveHref(item: MenuItemRow, maps: PublicNavigationTargetMaps): string | null {
   if (item.item_type === "parent") return "#";
 
   let href = item.href?.trim() || "#";
 
-  if (item.linked_type === "topics") {
+  if (item.linked_type && Object.hasOwn(maps, item.linked_type)) {
     if (!item.linked_id) return null;
-    const slug = maps.topics.get(Number(item.linked_id));
-    if (!slug) return null;
-    href = interpolatePublicRoute(
-      getPublicDynamicPageRoute("topic-detail").href,
-      { slug },
-    );
-  }
-
-  if (item.linked_type === "topic_categories") {
-    if (!item.linked_id) return null;
-    const slug = maps.topicCategories.get(Number(item.linked_id));
-    if (!slug) return null;
-    href = `${getPublicPageRoute("topics").href}?category=${slug}`;
-  }
-
-  if (item.linked_type === "projects") {
-    if (!item.linked_id) return null;
-    const slug = maps.projects.get(Number(item.linked_id));
-    if (!slug) return null;
-    href = interpolatePublicRoute(
-      getPublicDynamicPageRoute("project-detail").href,
-      { slug },
-    );
+    const resolved = maps[item.linked_type as NavigationTargetTable].get(Number(item.linked_id));
+    if (!resolved) return null;
+    href = resolved;
   }
 
   return appendAnchor(href, item.anchor);
@@ -94,7 +68,7 @@ function resolveHref(item: MenuItemRow, maps: SlugMaps): string | null {
 
 export function buildPublicMenuTree(
   rows: MenuItemRow[],
-  maps: SlugMaps,
+  maps: PublicNavigationTargetMaps,
   parentId: number | null = null,
 ): PublicNavigationItem[] {
   return rows

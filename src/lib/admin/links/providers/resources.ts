@@ -3,6 +3,7 @@ import { isContentType } from "../../content/content-types";
 import { resolvePublicContentPath } from "../../../content/public-content-path";
 import { ADMIN_STATIC_ROUTES } from "../static-routes";
 import type { AdminLinkProvider } from "../types";
+import { buildAdminListSearchOrFilter } from "../../admin-list-search";
 import { getProjectHref } from "../../../projects/public-helpers";
 
 function matchesQuery(parts: Array<string | null | undefined>, query: string) {
@@ -23,18 +24,17 @@ export const pagesLinkProvider: AdminLinkProvider = {
   label: "صفحة",
   labelPlural: "الصفحات",
   async search(query, limit) {
-    const { data, error } = await getSupabaseAdmin()
+    let request = getSupabaseAdmin()
       .from("pages")
       .select("id,title,slug,path")
-      .order("id", { ascending: true })
-      .limit(200);
+      .order("id", { ascending: true });
+    const filter = buildAdminListSearchOrFilter(["title", "slug", "path"], query);
+    if (filter) request = request.or(filter);
+    const { data, error } = await request.limit(limit);
 
     if (error) throw new Error(error.message);
 
-    return (data ?? [])
-      .filter((row) => matchesQuery([row.title, row.slug, row.path], query))
-      .slice(0, limit)
-      .map((row) => ({
+    return (data ?? []).map((row) => ({
         id: `pages:${row.id}`,
         resourceType: "pages" as const,
         resourceId: row.id,
@@ -58,18 +58,17 @@ export const projectsLinkProvider: AdminLinkProvider = {
   label: "مشروع",
   labelPlural: "المشاريع",
   async search(query, limit) {
-    const { data, error } = await getSupabaseAdmin()
+    let request = getSupabaseAdmin()
       .from("projects")
       .select("id,arabic_name,code,slug,type")
-      .order("homepage_order", { ascending: true })
-      .limit(200);
+      .order("homepage_order", { ascending: true });
+    const filter = buildAdminListSearchOrFilter(["arabic_name", "code", "slug", "type"], query);
+    if (filter) request = request.or(filter);
+    const { data, error } = await request.limit(limit);
 
     if (error) throw new Error(error.message);
 
-    return (data ?? [])
-      .filter((row) => matchesQuery([row.arabic_name, row.code, row.slug, row.type], query))
-      .slice(0, limit)
-      .map((row) => ({
+    return (data ?? []).map((row) => ({
         id: `projects:${row.id}`,
         resourceType: "projects" as const,
         resourceId: row.id,
@@ -94,18 +93,18 @@ export const topicsLinkProvider: AdminLinkProvider = {
   label: "موضوع",
   labelPlural: "الموضوعات",
   async search(query, limit) {
-    const { data, error } = await getSupabaseAdmin()
+    let request = getSupabaseAdmin()
       .from("topics")
       .select("id,title,slug,category,content_type")
       .is("deleted_at", null)
-      .order("published_at", { ascending: false })
-      .limit(200);
+      .order("published_at", { ascending: false });
+    const filter = buildAdminListSearchOrFilter(["title", "slug", "category"], query);
+    if (filter) request = request.or(filter);
+    const { data, error } = await request.limit(limit);
 
     if (error) throw new Error(error.message);
 
     return (data ?? [])
-      .filter((row) => matchesQuery([row.title, row.slug, row.category], query))
-      .slice(0, limit)
       .flatMap((row) => {
         if (!isContentType(row.content_type)) return [];
         return [{
@@ -200,19 +199,18 @@ export const seriesLinkProvider: AdminLinkProvider = {
   label: "سلسلة",
   labelPlural: "السلاسل",
   async search(query, limit) {
-    const { data, error } = await getSupabaseAdmin()
+    let request = getSupabaseAdmin()
       .from("topic_series")
       .select("id,name,slug")
       .is("deleted_at", null)
-      .order("sort_order", { ascending: true })
-      .limit(200);
+      .order("sort_order", { ascending: true });
+    const filter = buildAdminListSearchOrFilter(["name", "slug"], query);
+    if (filter) request = request.or(filter);
+    const { data, error } = await request.limit(limit);
 
     if (error) throw new Error(error.message);
 
-    return (data ?? [])
-      .filter((row) => matchesQuery([row.name, row.slug], query))
-      .slice(0, limit)
-      .map((row) => ({
+    return (data ?? []).map((row) => ({
         id: `topic_series:${row.id}`,
         resourceType: "topic_series" as const,
         resourceId: row.id,

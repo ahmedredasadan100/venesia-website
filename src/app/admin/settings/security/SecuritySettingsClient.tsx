@@ -2,6 +2,8 @@
 
 import { useRouter } from "next/navigation";
 import { type ReactNode, useRef, useState, useTransition } from "react";
+import { AdminFormPendingFields } from "../../../../components/admin/ui/AdminFormRuntime";
+import { shouldAcceptAdminFormSource } from "../../../../lib/admin/form-runtime";
 
 import {
   AdminFeedbackChannelViewport,
@@ -79,15 +81,16 @@ export default function SecuritySettingsClient({
   const [isPending, startTransition] = useTransition();
   const revokeTriggerRef = useRef<HTMLButtonElement>(null);
 
-  const accountPropsKey = `${email}|${fullName ?? ""}`;
+  const accountPropsKey = JSON.stringify([email, fullName ?? ""]);
+  const [savedAccountKey, setSavedAccountKey] = useState(accountPropsKey);
   const [lastAccountPropsKey, setLastAccountPropsKey] = useState(accountPropsKey);
   if (accountPropsKey !== lastAccountPropsKey) {
     setLastAccountPropsKey(accountPropsKey);
-    setAccountForm((prev) => ({
-      ...prev,
-      full_name: fullName ?? "",
-      email,
-    }));
+    if (shouldAcceptAdminFormSource({ pending: isPending,
+      dirty: JSON.stringify([accountForm.email, accountForm.full_name]) !== savedAccountKey })) {
+      setAccountForm((prev) => ({ ...prev, full_name: fullName ?? "", email }));
+      setSavedAccountKey(accountPropsKey);
+    }
     setSavedEmail(email);
   }
 
@@ -250,6 +253,7 @@ export default function SecuritySettingsClient({
             className="grid max-w-xl gap-4"
             onSubmit={(event) => {
               event.preventDefault();
+              if (isPending) return;
               resetFeedback();
               setAccountFieldErrors({});
 
@@ -286,6 +290,7 @@ export default function SecuritySettingsClient({
                     currentPassword: "",
                   });
                   setSavedEmail(result.email);
+                  setSavedAccountKey(JSON.stringify([result.email, result.fullName ?? ""]));
                   setAccountFieldErrors({});
                   announce(
                     "success",
@@ -305,70 +310,72 @@ export default function SecuritySettingsClient({
               });
             }}
           >
-            <div className="space-y-2 text-right">
-              <span className="block text-xs font-medium text-white/48">اسم المستخدم</span>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3">
-                <p className="text-sm text-white/85" dir="ltr">
-                  {username}
+            <AdminFormPendingFields pending={isPending} className="grid max-w-xl gap-4">
+              <div className="space-y-2 text-right">
+                <span className="block text-xs font-medium text-white/48">اسم المستخدم</span>
+                <div className="rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3">
+                  <p className="text-sm text-white/85" dir="ltr">
+                    {username}
+                  </p>
+                </div>
+                <p className="text-[11px] leading-5 text-white/45">
+                  لا يمكن تغيير اسم المستخدم من هذه الصفحة.
                 </p>
               </div>
-              <p className="text-[11px] leading-5 text-white/45">
-                لا يمكن تغيير اسم المستخدم من هذه الصفحة.
-              </p>
-            </div>
 
-            <label className="block space-y-2 text-right text-xs font-medium text-white/48">
-              <span>الاسم الكامل</span>
-              <FormFieldError error={accountFieldErrors.full_name}>
-                <input
-                  type="text"
-                  value={accountForm.full_name}
-                  onChange={(event) => updateAccountField("full_name", event.target.value)}
-                  placeholder="الاسم الكامل"
-                  aria-invalid={Boolean(accountFieldErrors.full_name)}
-                  className={fieldClassNameWithError(Boolean(accountFieldErrors.full_name))}
-                />
-              </FormFieldError>
-            </label>
-
-            <label className="block space-y-2 text-right text-xs font-medium text-white/48">
-              <span>البريد الإلكتروني</span>
-              <FormFieldError error={accountFieldErrors.email}>
-                <input
-                  type="email"
-                  value={accountForm.email}
-                  onChange={(event) => updateAccountField("email", event.target.value)}
-                  placeholder="البريد الإلكتروني"
-                  aria-invalid={Boolean(accountFieldErrors.email)}
-                  className={`${fieldClassNameWithError(Boolean(accountFieldErrors.email))} font-en`}
-                  dir="ltr"
-                />
-              </FormFieldError>
-            </label>
-
-            {emailChanged ? (
               <label className="block space-y-2 text-right text-xs font-medium text-white/48">
-                <span>كلمة المرور الحالية</span>
-                <FormFieldError error={accountFieldErrors.currentPassword}>
+                <span>الاسم الكامل</span>
+                <FormFieldError error={accountFieldErrors.full_name}>
                   <input
-                    type="password"
-                    value={accountForm.currentPassword}
-                    onChange={(event) => updateAccountField("currentPassword", event.target.value)}
-                    placeholder="مطلوبة لتأكيد تغيير البريد"
-                    aria-invalid={Boolean(accountFieldErrors.currentPassword)}
-                    className={fieldClassNameWithError(Boolean(accountFieldErrors.currentPassword))}
+                    type="text"
+                    value={accountForm.full_name}
+                    onChange={(event) => updateAccountField("full_name", event.target.value)}
+                    placeholder="الاسم الكامل"
+                    aria-invalid={Boolean(accountFieldErrors.full_name)}
+                    className={fieldClassNameWithError(Boolean(accountFieldErrors.full_name))}
                   />
                 </FormFieldError>
               </label>
-            ) : null}
 
-            <button
-              type="submit"
-              disabled={isPending}
-              className="w-fit rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 py-3 text-sm font-semibold text-[#06101C] disabled:opacity-60"
-            >
-              حفظ بيانات الحساب
-            </button>
+              <label className="block space-y-2 text-right text-xs font-medium text-white/48">
+                <span>البريد الإلكتروني</span>
+                <FormFieldError error={accountFieldErrors.email}>
+                  <input
+                    type="email"
+                    value={accountForm.email}
+                    onChange={(event) => updateAccountField("email", event.target.value)}
+                    placeholder="البريد الإلكتروني"
+                    aria-invalid={Boolean(accountFieldErrors.email)}
+                    className={`${fieldClassNameWithError(Boolean(accountFieldErrors.email))} font-en`}
+                    dir="ltr"
+                  />
+                </FormFieldError>
+              </label>
+
+              {emailChanged ? (
+                <label className="block space-y-2 text-right text-xs font-medium text-white/48">
+                  <span>كلمة المرور الحالية</span>
+                  <FormFieldError error={accountFieldErrors.currentPassword}>
+                    <input
+                      type="password"
+                      value={accountForm.currentPassword}
+                      onChange={(event) => updateAccountField("currentPassword", event.target.value)}
+                      placeholder="مطلوبة لتأكيد تغيير البريد"
+                      aria-invalid={Boolean(accountFieldErrors.currentPassword)}
+                      className={fieldClassNameWithError(Boolean(accountFieldErrors.currentPassword))}
+                    />
+                  </FormFieldError>
+                </label>
+              ) : null}
+
+              <button
+                type="submit"
+                disabled={isPending}
+                className="w-fit rounded-2xl border border-[#D8B87A]/30 bg-[#D8B87A] px-5 py-3 text-sm font-semibold text-[#06101C] disabled:opacity-60"
+              >
+                حفظ بيانات الحساب
+              </button>
+            </AdminFormPendingFields>
           </form>
         </section>
       ),

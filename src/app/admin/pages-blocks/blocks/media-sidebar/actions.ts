@@ -1,5 +1,7 @@
 "use server";
 
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
@@ -19,15 +21,14 @@ import {
   parsePageBlockBulkIds,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   buildMediaSidebarModuleConfig,
-  isPersistedMediaSidebarModuleConfigEqual,
   parseMediaSidebarWidgetKey,
 } from "../../../../../lib/media-sidebar-modules/parse-config";
 import {
   parsePageIdsFromForm,
-  syncMediaSidebarModulePageAssignments,
+  saveModuleTemplateWithPageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 
 export async function updateMediaSidebarModule(formData: FormData) {
@@ -54,31 +55,14 @@ export async function updateMediaSidebarModule(formData: FormData) {
     intendedRow: nextRow,
     actorId: actor.id,
     requestIdentity: `media-sidebar-module:update:${id}`,
-    mutate: async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("media_sidebar_module_templates")
-        .update(nextRow)
-        .eq("id", id)
-        .select("id,config")
-        .maybeSingle();
-      if (error || !data) throw new Error(error?.message ?? "Unable to update media sidebar module.");
-      return data;
-    },
+    mutate: () => saveModuleTemplateWithPageAssignments(
+      "media-sidebar", id, nextRow, parsePageIdsFromForm(formData), actor,
+    ),
     resolveEntityIdentity: (value) => String(value.id),
   });
-  if (
-    !isPersistedMediaSidebarModuleConfigEqual(
-      coordinated.value.config,
-      widgetKey,
-      config,
-    )
-  ) {
-    throw new Error(
-      "قراءة إعدادات الشريط الجانبي المحفوظة لم تطابق الطلب.",
-    );
-  }
 
-  await syncMediaSidebarModulePageAssignments(id, parsePageIdsFromForm(formData), actor);
+
+
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("content_block_template", "update"),
     entityType: "content_block_template",
@@ -86,10 +70,14 @@ export async function updateMediaSidebarModule(formData: FormData) {
     entityLabel: name,
     metadata: { blockType: "media-sidebar", widgetKey },
   }, actor);
-  await revalidateBlockModulePaths("media-sidebar");
-  revalidatePath(`/admin/pages-blocks/blocks/media-sidebar/${id}`, "page");
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
+    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
+    await revalidateBlockModulePaths("media-sidebar");
+    revalidatePath(`/admin/pages-blocks/blocks/media-sidebar/${id}`, "page");
+  });
+  if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);
   redirect(withModuleEditorReturnContextFromForm(
-    `/admin/pages-blocks/blocks/media-sidebar/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    `/admin/pages-blocks/blocks/media-sidebar/${id}?saved=1${cacheRevalidation.ok ? "" : "&cache_warning=1"}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
     formData,
   ));
 }

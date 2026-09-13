@@ -1,4 +1,7 @@
 import type { ActiveRedirectRule } from "./redirect-types";
+import { createSupabaseFetch } from "../supabase-fetch";
+
+const fetchRedirect = createSupabaseFetch();
 
 type RedirectRow = {
   source_path: string;
@@ -24,7 +27,7 @@ export async function loadActiveRedirectForRuntime(
       order: "updated_at.desc",
       limit: "1",
     });
-    const response = await fetch(`${supabaseUrl}/rest/v1/url_redirects?${search}`, {
+    const response = await fetchRedirect(`${supabaseUrl}/rest/v1/url_redirects?${search}`, {
       headers: {
         apikey: serviceRoleKey,
         Authorization: `Bearer ${serviceRoleKey}`,

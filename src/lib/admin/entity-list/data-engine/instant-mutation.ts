@@ -62,6 +62,7 @@ export type AdminEntityMutationRequest<Row> = {
     tools: {
       cache: AdminInstantMutationPatch<Row>;
       restoreSnapshot: () => void;
+      reconcileDeletedRows: (ids: ReadonlySet<number | string>) => void;
     },
   ) => void;
 };
@@ -137,17 +138,36 @@ export function useAdminEntityInstantMutation<
     onError: (_error, _request, context) => {
       if (context) restoreSnapshot(context.snapshot);
     },
-    onSuccess: (result, request, context) => {
-      if (request.reconcileSuccess && context) {
-        request.reconcileSuccess(result, {
-          cache: helpers,
-          restoreSnapshot: () => restoreSnapshot(context.snapshot),
-        });
+    onSuccess: async (result, request, context) => {
+      // React Query treats a rejected onSuccess callback as a mutation error.
+      // Post-commit reconciliation/refetch must never invoke snapshot rollback.
+      try {
+        if (request.reconcileSuccess && context) {
+          request.reconcileSuccess(result, {
+            cache: helpers,
+            restoreSnapshot: () => restoreSnapshot(context.snapshot),
+            reconcileDeletedRows: (ids) => {
+              context.snapshot.forEach(([key, value]) => {
+                if (value) queryClient.setQueryData(key, removeAdminEntityRows(value, ids));
+              });
+            },
+          });
+        }
+      } catch (error) {
+        result.feedbackStatus = "warning";
+        result.message += " تم حفظ العملية، لكن تعذر تحديث العرض المحلي.";
+        console.error("Committed mutation reconciliation failed", error);
       }
-      return queryClient.invalidateQueries({
-        queryKey: adminEntityListQueryKeys.entity(entity),
-        refetchType: "active",
-      });
+      try {
+        await queryClient.invalidateQueries({
+          queryKey: adminEntityListQueryKeys.entity(entity),
+          refetchType: "active",
+        });
+      } catch (error) {
+        result.feedbackStatus = "warning";
+        result.message += " تعذر إعادة القراءة؛ أعد تحديث القائمة للتحقق من النتيجة المحفوظة.";
+        console.error("Committed mutation refetch failed", error);
+      }
     },
   });
 

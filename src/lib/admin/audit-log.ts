@@ -5,6 +5,7 @@ import { getCurrentAdminUserFromCookies } from "./auth/admin-users";
 import type { CmsAuditAction } from "./audit/cms-audit-actions";
 import { recordAdminAuditEvent } from "./audit/record-admin-audit-event";
 import { resolveServerActionAuditContext } from "./audit/resolve-server-action-audit-context";
+import { logError } from "../logging";
 
 export type CmsAdminAuditInput = {
   action: CmsAuditAction;
@@ -22,6 +23,7 @@ export async function recordCmsAdminAudit(
   input: CmsAdminAuditInput,
   actor?: AdminUserRecord | null,
 ): Promise<void> {
+  try {
   const user = actor ?? (await getCurrentAdminUserFromCookies());
   if (!user) return;
 
@@ -38,4 +40,8 @@ export async function recordCmsAdminAudit(
     ipAddress: auditContext.ipAddress,
     userAgent: auditContext.userAgent,
   });
+  } catch (error) {
+    // Context resolution is part of the same established non-blocking boundary.
+    logError("CMS audit context failed", error, { action: input.action });
+  }
 }

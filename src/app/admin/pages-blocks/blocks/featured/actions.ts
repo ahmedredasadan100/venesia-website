@@ -1,5 +1,7 @@
 "use server";
 
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
+
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -34,10 +36,10 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
-  syncBlockModulePageAssignments,
+  saveModuleTemplateWithPageAssignments,
 } from "../../../../../lib/page-blocks/sync-module-page-assignments";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 
@@ -193,22 +195,13 @@ export async function updateFeaturedModule(formData: FormData) {
     intendedRow: nextRow,
     actorId: actor.id,
     requestIdentity: `featured-module:update:${id}`,
-    mutate: async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("featured_module_templates")
-        .update(nextRow)
-        .eq("id", id)
-        .select("id,config")
-        .maybeSingle();
-      if (error || !data) throw new Error(error?.message ?? "تعذر تحديث Featured.");
-      return data;
-    },
+    mutate: () => saveModuleTemplateWithPageAssignments(
+      "featured", id, nextRow, parsePageIdsFromForm(formData), actor,
+    ),
     resolveEntityIdentity: (value) => String(value.id),
   });
-  if (!isPersistedFeaturedModuleConfigEqual(coordinated.value.config, config)) {
-    throw new Error("قراءة الإعدادات المحفوظة لم تطابق الطلب؛ لم يتم إعلان نجاح الحفظ.");
-  }
-  await syncBlockModulePageAssignments("featured", id, parsePageIdsFromForm(formData), actor);
+
+
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("content_block_template", "update"),
     entityType: "content_block_template",
@@ -216,10 +209,14 @@ export async function updateFeaturedModule(formData: FormData) {
     entityLabel: name,
     metadata: { blockType: "featured", slug },
   }, actor);
-  await revalidateBlockModulePaths("featured");
-  revalidatePath(`/admin/pages-blocks/blocks/featured/${id}`, "page");
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
+    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
+    await revalidateBlockModulePaths("featured");
+    revalidatePath(`/admin/pages-blocks/blocks/featured/${id}`, "page");
+  });
+  if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);
   redirect(withModuleEditorReturnContextFromForm(
-    `/admin/pages-blocks/blocks/featured/${id}?saved=1${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
+    `/admin/pages-blocks/blocks/featured/${id}?saved=1${cacheRevalidation.ok ? "" : "&cache_warning=1"}${coordinated.mediaSynchronization.status === "saved_with_media_sync_warning" ? "&notice=saved_with_media_sync_warning" : ""}`,
     formData,
   ));
 }

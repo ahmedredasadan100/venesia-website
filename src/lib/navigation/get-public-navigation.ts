@@ -6,9 +6,15 @@ import { unstable_cache } from "next/cache";
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
 import type { PublicNavigationItem } from "../public-navigation";
+import { isContentType } from "../admin/content/content-types";
+import { resolvePublicContentPath } from "../content/public-content-path";
+import { resolvePagePublicPath } from "../pages/page-admin-policy";
+import { getProjectHref } from "../projects/public-helpers";
+import { getPublicPageRoute } from "../admin/links/static-routes";
 import {
   buildPublicMenuTree,
-  getSlugMaps,
+  getNavigationTargetMaps,
+  type NavigationTargetTable,
   type MenuItemRow,
 } from "./build-public-menu";
 
@@ -25,41 +31,56 @@ export type PublicNavigationSnapshot = {
   items: PublicNavigationItem[];
 };
 
-async function fetchSlugMap(table: "topics" | "topic_categories" | "projects", ids: number[]) {
-  const slugMap = new Map<number, string>();
-  if (!ids.length) return slugMap;
+export async function fetchPublicNavigationTargetPaths(table: NavigationTargetTable, ids: number[]) {
+  const targetPaths = new Map<number, string>();
+  if (!ids.length) return targetPaths;
 
   const supabase = getSupabaseAdmin();
   const { data, error } = table === "topics"
     ? await supabase
         .from("topics")
-        .select("id, slug")
+        .select("id, slug, content_type")
         .in("id", ids)
         .eq("status", "published")
         .is("deleted_at", null)
-    : table === "topic_categories"
+    : table === "topic_categories" || table === "topic_series"
       ? await supabase
-          .from("topic_categories")
+          .from(table)
           .select("id, slug")
           .in("id", ids)
           .eq("status", "published")
           .is("deleted_at", null)
-      : await supabase
+      : table === "pages"
+        ? await supabase.from("pages").select("id, slug, path").in("id", ids).eq("status", "published")
+        : await supabase
           .from("projects")
           .select("id, slug")
           .in("id", ids)
           .eq("publication_status", "published");
 
   if (error) {
-    logError(`Failed to resolve ${table} slugs for navigation`, error, { ids, table, resource: `nav-slugs:${table}` });
+    logError(`Failed to resolve ${table} target paths for navigation`, error, { ids, table, resource: `nav-targets:${table}` });
     throw new Error(error.message);
   }
 
   for (const row of data ?? []) {
-    slugMap.set(Number(row.id), row.slug);
+    let href: string | null = null;
+    if (table === "topics") {
+      if ("content_type" in row && isContentType(row.content_type)) {
+        href = resolvePublicContentPath(row.content_type, row.slug);
+      }
+    } else if (table === "pages") {
+      href = resolvePagePublicPath({ slug: row.slug, path: "path" in row && typeof row.path === "string" ? row.path : null });
+    } else if (table === "projects") {
+      href = getProjectHref(row);
+    } else {
+      const key = table === "topic_categories" ? "category" : "series";
+      href = `${getPublicPageRoute("topics").href}?${key}=${encodeURIComponent(row.slug)}`;
+    }
+    if (href) targetPaths.set(Number(row.id), href);
   }
 
-  return slugMap;
+  return targetPaths;
 }
 
 async function getPublicNavigationItemsForMenuId(menuId: number): Promise<PublicNavigationItem[]> {
@@ -76,7 +97,7 @@ async function getPublicNavigationItemsForMenuId(menuId: number): Promise<Public
   }
 
   const cleanRows: MenuItemRow[] = rows ?? [];
-  const maps = await getSlugMaps(cleanRows, fetchSlugMap);
+  const maps = await getNavigationTargetMaps(cleanRows, fetchPublicNavigationTargetPaths);
 
   return buildPublicMenuTree(cleanRows, maps);
 }
@@ -106,7 +127,7 @@ export const getPublicNavigationItemsByMenuId = cache(async function getPublicNa
         return getPublicNavigationItemsForMenuId(menuId);
       },
       ["public-navigation-menu-id", String(menuId)],
-      { revalidate: 300, tags: ["navigation", "menus"] },
+      { revalidate: 300, tags: ["navigation", "menus", "public-content", "topics", "projects", "page-composition"] },
     )();
   } catch (error) {
     logError("Navigation safe rendering after source failure", error, { menuId });
@@ -149,7 +170,7 @@ export const getPublicNavigationSnapshot = cache(async function getPublicNavigat
     return await unstable_cache(
       async () => queryPublicNavigationSnapshot(location),
       ["public-navigation-snapshot", location],
-      { revalidate: 300, tags: ["navigation", "menus"] },
+      { revalidate: 300, tags: ["navigation", "menus", "public-content", "topics", "projects", "page-composition"] },
     )();
   } catch (error) {
     logError("Navigation safe rendering after source failure", error, { location });

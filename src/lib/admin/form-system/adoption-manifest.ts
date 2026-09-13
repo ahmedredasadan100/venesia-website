@@ -913,6 +913,34 @@ export type AdminGovernanceBehaviorProof = {
 
 export const ADMIN_FORM_BEHAVIOR_PROOF_LEDGER = [
   {
+    id: "shared-corrections-atomic-template-save",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["scripts/verify-shared-atomic-adoption.mts", "scripts/verify-shared-atomic-persistence.mjs", "scripts/qa-shared-atomic-persistence.mjs", "docs/reports/SHARED_CORRECTIONS_PROOF.md"],
+    rationale: "Local delta from d60938a: real signed Admin Auth, eight update Actions, isolated PostgREST/PostgreSQL and assignment reread. Existing Composition owns template plus assignments in one transaction, including empty assignments, actual later-write rollback/retry, persisted config checks, observed lock contention and unchanged Audit/ACL. Next transport/cache and Media side services are isolated explicitly. Mounted Feedback proves committed warning/dismissal; this does not extend broad form persistence or every Content branch parity.",
+  },
+  {
+    id: "shared-corrections-native-pending-fields",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["scripts/verify-shared-corrections-adoption.mts", "scripts/qa-shared-corrections-adoption.mjs", "docs/reports/SHARED_CORRECTIONS_PROOF.md"],
+    rationale: "Menu metadata, Menu item create/edit and Page SEO adopt native-action pending field protection at AdminFormRuntime. The seven CTA/Cards/Breadcrumb/Feed/Featured/MediaSidebar/MediaHub form bodies adopt the same lower-level owner; their aggregate Actions retain their specialized contract. Mounted proof covers submitted values, disabled/inert controls and duplicate submission while pending; operation-scoped source proof covers every form body. This does not close template/assignment atomicity or native redirect-error persistence.",
+  },
+  {
+    id: "shared-corrections-specialized-draft-source",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["scripts/verify-shared-corrections-adoption.mts", "scripts/qa-shared-corrections-adoption.mjs", "docs/reports/SHARED_CORRECTIONS_PROOF.md"],
+    rationale: "Actual Footer aggregate and Security account name/email components preserve dirty drafts against incoming props and use the existing Form owner's source-acceptance policy. Mounted deferred Action ports prove pending locks, failure/retry and newer input after save surviving a late read. Auth, permissions, password/session commands and database persistence are not part of this component evidence.",
+  },
+  {
+    id: "shared-corrections-media-legacy-feedback",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["scripts/verify-shared-corrections-adoption.mts", "scripts/qa-shared-corrections-adoption.mjs", "docs/reports/SHARED_CORRECTIONS_PROOF.md"],
+    rationale: "Both Media routes feed the legacy error to the existing ContentEditorShell/Form/Feedback owner without an additional AdminNotice. Source binding plus mounted Form/Feedback proof demonstrates one error, dismissal clearing the legacy query, and replacement on the next save. This is not an additional authenticated Media persistence claim.",
+  },
+  {
     id: "a10-authenticated-content-persistence",
     state: "behavior_verified",
     requiredForGlobalClosure: false,

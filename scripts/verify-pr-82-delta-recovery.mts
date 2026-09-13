@@ -115,9 +115,11 @@ const menu = buildPublicMenuTree(
     row({ id: 3, label: "Published", linked_type: "topics", linked_id: 7 }),
   ],
   {
-    topics: new Map([[7, "published-topic"]]),
-    topicCategories: new Map(),
+    topics: new Map([[7, "/topics/published-topic"]]),
+    topic_categories: new Map(),
     projects: new Map(),
+    pages: new Map(),
+    topic_series: new Map(),
   },
 );
 assert.deepEqual(menu.map(({ label, href }) => ({ label, href })), [

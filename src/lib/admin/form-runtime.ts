@@ -1,5 +1,10 @@
 export type AdminFormMode = "create" | "edit";
 
+/** Incoming reads may replace a draft only outside a save and before local edits. */
+export function shouldAcceptAdminFormSource(input: { pending: boolean; dirty: boolean }) {
+  return !input.pending && !input.dirty;
+}
+
 export type AdminFormActionState<TResult = unknown> = {
   status: "idle" | "error" | "warning" | "success";
   mode: AdminFormMode;

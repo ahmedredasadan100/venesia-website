@@ -57,9 +57,9 @@ export const ADMIN_SCOPED_INTERACTION_BEHAVIOR_PROOF = {
   version: "shared-capability-completion-local-v1",
   baseline: "6ec44b8afbf153e02b194759cc88a90058086835",
   state: "behavior_verified",
-  evidence: ["scripts/qa-shared-capability-completion.mjs"],
-  scope: "Mounted canonical owners with isolated transport: Row Actions, Data optimism/rollback/retry, Confirmation pending/focus, Feedback single-result lifecycle, and Entity Preview eligibility/navigation.",
-  limits: "No real authenticated domain writes or persistence equivalence across all registered consumers. Evidence applies to the local delta; rerun when an owner or its contract changes.",
+  evidence: ["scripts/qa-shared-capability-completion.mjs", "scripts/verify-shared-atomic-adoption.mts", "scripts/verify-shared-atomic-persistence.mjs", "scripts/qa-shared-atomic-persistence.mjs", "docs/reports/SHARED_CORRECTIONS_PROOF.md"],
+  scope: "Mounted canonical owners with isolated transport: Row Actions, Data optimism/rollback/retry, Confirmation pending/focus, Feedback and Entity Preview. Additional d60938a local delta: real authenticated Page/Menu batch Actions and isolated PostgreSQL rollback/retry. Mounted Instant Mutation receives the real Page result, reconciles the locked deletion set, and preserves commitment through cache/refetch failure.",
+  limits: "No persistence equivalence across all registered consumers. Additional atomic evidence uses real Auth/Actions/RPC/database; Next transport/cache and Media side services are isolated. Full Pages/Menus screens have source adoption binding, with their shared mutation owner mounted once. Rerun affected evidence when an owner or contract changes.",
 } as const;
 
 // One complete ledger registration per existing runtime. Broad consumer/domain
@@ -2138,7 +2138,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "Generic page collection now delegates table placement, optional columns, persistence, selection, and Row Actions to existing shared owners.",
+        "Generic page collection delegates presentation and interaction to shared owners. Batch delete adopts Composition delete_pages and reconciles the exact locked deletion set via Instant Mutation; real Action/PostgreSQL and mounted owner evidence is scoped in SHARED_CORRECTIONS_PROOF.md, not generalized to other Page commands.",
     },
     {
       ...ADMIN_FULL_COLLECTION_SURFACE_DEFAULTS,
@@ -2935,7 +2935,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       requiredAdoption: [],
       exceptionRationale: null,
       rationale:
-        "The menu records declare one bounded-client query contract owned by the shared Collection runtime while domain writes remain with the Menu owner.",
+        "The menu records declare one bounded-client query contract owned by shared Collection. Batch delete adopts the existing Menu owner's delete_menus transaction and post-commit Media/cache warning contract. Actual Auth/Action/PostgreSQL rollback/retry is scoped in SHARED_CORRECTIONS_PROOF.md; other Menu commands retain their evidence boundaries.",
     },
     {
       ...ADMIN_PAGE_SYSTEM_SURFACE_DEFAULTS,

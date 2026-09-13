@@ -2,6 +2,7 @@
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 import {
   auditMenuAction,
   backToMenus,
@@ -18,10 +19,10 @@ import {
 export async function bulkMenuAction(formData: FormData) {
   const actor = await requireAdminSession();
   const action = getString(formData, "bulk_action");
-  const ids = formData
+  const ids = [...new Set(formData
     .getAll("menu_ids")
     .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value));
+    .filter((value) => Number.isSafeInteger(value) && value > 0))];
 
   if (!ids.length) {
     return menuInteractionFailure(
@@ -48,26 +49,17 @@ export async function bulkMenuAction(formData: FormData) {
   }
 
   if (action === "delete") {
-    const { data: affectedItems, error: itemsReadError } = await getSupabaseAdmin()
-      .from("menu_items")
-      .select("id")
-      .in("menu_id", ids);
-    if (itemsReadError) {
-      return menuInteractionFailure("menu_items_read_failed", itemsReadError.message);
+    let committed;
+    try {
+      committed = await mutateMenuTree(ids[0], "delete_menus", { menu_ids: ids }, actor);
+    } catch (error) {
+      return menuInteractionFailure(
+        "menu_bulk_delete_failed",
+        error instanceof Error ? error.message : "تعذر حذف القوائم.",
+      );
     }
 
-    for (const menuId of ids) {
-      try {
-        await mutateMenuTree(menuId, "delete_menu", {}, actor);
-      } catch (error) {
-        return menuInteractionFailure(
-          "menu_bulk_delete_failed",
-          error instanceof Error ? error.message : "تعذر حذف القوائم.",
-        );
-      }
-    }
-
-    const affectedIds = (affectedItems ?? []).map((item) => Number(item.id));
+    const affectedIds = committed.deleted_item_ids as number[];
     const mediaSynchronization = await synchronizeDeletedMenuItemReferences(affectedIds);
     await auditMenuAction("menu", "delete", {
       metadata: {
@@ -76,11 +68,18 @@ export async function bulkMenuAction(formData: FormData) {
         deleted_menu_item_count: affectedIds.length,
       },
     });
-    await revalidateNavigation(mediaSynchronization);
-    return menuInteractionSuccess(
+    const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => revalidateNavigation(mediaSynchronization).then(() => undefined));
+    if (!cacheRevalidation.ok) console.error("Menus deleted; cache revalidation failed", cacheRevalidation.error);
+    const result = menuInteractionSuccess(
       mediaSynchronization,
       "تم حذف القوائم المحددة.",
+      { deletedIds: committed.deleted_menu_ids as number[] },
     );
+    return cacheRevalidation.ok ? result : {
+      ...result,
+      feedbackStatus: "warning" as const,
+      message: `${result.message} تعذر تحديث الكاش بعد إعادة المحاولة؛ قد تتأخر القراءة العامة.`,
+    };
   }
 
   return menuInteractionFailure(
