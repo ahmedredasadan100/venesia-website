@@ -12,16 +12,16 @@ This file records the minimum current facts needed to begin work safely. Archite
 The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
 
 ```text
-6ec44b8afbf153e02b194759cc88a90058086835
+672cf81dff4e39c300adb68e5f41750ef980e9c1
 ```
 
-Verified once at this phase entering gate on 2026-09-12 (02:19 UTC):
+Verified during the authorized Shared Corrections cutover on 2026-09-13 (01:38 UTC):
 
 | Surface                       | SHA / state                                                                                                                                                             |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Current official baseline     | `6ec44b8afbf153e02b194759cc88a90058086835`                                                                                         |
-| `origin/main` / GitHub `main` | `6ec44b8afbf153e02b194759cc88a90058086835`                                                                                         |
-| Delivery state                | P2-S + ADM-01 is merged and closed through PR #152. The current capability-completion delta is local and uncommitted. |
+| Verified cutover baseline     | `672cf81dff4e39c300adb68e5f41750ef980e9c1` |
+| `origin/main` / GitHub `main` | `672cf81dff4e39c300adb68e5f41750ef980e9c1` |
+| Delivery state                | Shared Corrections & Adoption merged through PR #155 after migration 103. Automatic Production deployment is READY on that merge. Final gate and closure evidence remain recorded separately. |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
@@ -31,13 +31,13 @@ P2-S + ADM-01 closed through PR #152 with DB first, standard merge commit, autom
 
 ## Active phase
 
-- **Title:** Shared Capability Completion & Adoption + Remaining Runtime Fixes
-- **Baseline:** `6ec44b8afbf153e02b194759cc88a90058086835`
-- **Branch:** `codex/shared-capability-completion-runtime-fixes`
-- **Scope:** VEN-A01/A02/A05/A06/A07/A08/A09/A10 at their current owners.
-- **Authorization:** local implementation, isolated verification and Product Review delivery only; no Git delivery, Production mutation or migration.
-- **Outside scope:** VEN-A04 Footer child-menu presentation requires a Product decision.
-- **Closure:** `globalClosed=false`; owner tests do not imply authenticated save/domain parity across every registered consumer.
+- **Title:** Shared Corrections & Adoption — controlled activation and closure.
+- **Implementation baseline:** `d60938a6781db3630a64c1cf1798f7ef269c38b4`.
+- **Branch:** `codex/shared-corrections-adoption`.
+- **Scope:** the accepted 59-path delivery and its existing Composition/Menu, Form, Data/Feedback, Navigation and Audit owners; operation-specific limits remain in `reports/SHARED_CORRECTIONS_PROOF.md`.
+- **Authorization:** the project owner authorized the exact migration, Git delivery, Standard Merge Commit and automatic Production verification. The owner confirmed that Production and Preview share the original database; the hidden Vercel value was not independently extracted.
+- **Outside scope:** A04 remains deferred; no subsequent audit or capability phase begins through this closure.
+- **Closure:** `globalClosed=false`; original items 12–13 remain measurement without additional optimization, with Production performance impact unproven. Original item 14 is per-operation adoption proof, not a global adoption claim.
 
 ## Current architecture truth
 
@@ -94,27 +94,27 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The 2026-09-05 authorized Migration 100 application and registry reconciliation established the Production facts below. The repository now contains 103 migrations. Production registry facts below remain a historical snapshot, not a new live verification; Migration 102 was subsequently closed through PR #152 as recorded above.
+The authorized cutover readback on 2026-09-13 established the current Production registry and catalog counts below. The former 2026-09-05 snapshot described migration 100 and is superseded for these volatile metrics. Repository SQL and all 103 registry versions match exactly; the canonical live verifier retains its original assertions.
 
-The Shared Corrections & Adoption continuation on local baseline `d60938a6781db3630a64c1cf1798f7ef269c38b4` adds `20260912224809_shared_composition_menu_atomic_completion.sql` as migration 103. It extends the existing Composition/Menu RPC owners for atomic template saves and Page/Menu batch deletion, preserving their signatures, ACL and Audit policy. It has been applied and tested only in an isolated local database. No original/shared/Production application or Git delivery is authorized by this local continuation; A04 is deferred and `globalClosed=false`. The scoped evidence is in `reports/SHARED_CORRECTIONS_PROOF.md` and the local delivery bundle.
+The Shared Corrections & Adoption continuation on baseline `d60938a6781db3630a64c1cf1798f7ef269c38b4` added `20260912224809_shared_composition_menu_atomic_completion.sql` as migration 103. After isolated proof and separate owner authorization, the exact approved SQL was applied once on 2026-09-13 at 01:33:23 UTC, with its canonical registry record in the same transaction. It extends the existing Composition/Menu RPC owners for atomic template saves and Page/Menu batch deletion, preserving their signatures, ACL and Audit policy. Independent readback matched both expected function hashes and permissions; PostgREST exposes the unchanged signatures. PR #155 then standard-merged feature `a451527489ce7b5e7545e737a056c6ed6cdc6467` as `672cf81dff4e39c300adb68e5f41750ef980e9c1`, followed by automatic Production deployment. No CMS write test or historical migration replay was performed. Isolated behavioral evidence remains scoped as documented in `reports/SHARED_CORRECTIONS_PROOF.md`; A04 is deferred and `globalClosed=false`.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
 | Repository migration files                        |                                               103 |
-| Production registry versions                      |                                               100 |
-| Migration 101 rollout state                       |                         PR candidate / unapplied |
-| Migration 103 rollout state                       |                Local isolated proof / shared unapplied |
-| Current Production live state                     |                    Verified on 2026-09-05 |
-| Registry SQL provenance                           | Exact repository SQL for all 100 recorded versions |
-| Public tables                                     |                                                58 |
-| Public tables with RLS enabled                    |                                                58 |
-| Public catalog objects with repository provenance |                                               298 |
+| Production registry versions                      |                                               103 |
+| Migration 101 rollout state                       |                 Applied / exact registry provenance |
+| Migration 103 rollout state                       |                 Applied once before PR #155 merge |
+| Current Production live state                     |                    Verified on 2026-09-13 |
+| Registry SQL provenance                           | Exact repository SQL for all 103 recorded versions |
+| Public tables                                     |                                                61 |
+| Public tables with RLS enabled                    |                                                61 |
+| Public catalog objects with repository provenance |                                               310 |
 | Invalid, unready, or non-live indexes             |                                                 0 |
 | Unvalidated public constraints                    |                                                 0 |
 | Parallel public function overload names           |                                                 0 |
 | Public RLS policies                               |                                                 3 |
 | Anonymous-callable application data functions     |                                                 0 |
-| Registry reconciliation audit records             |                                                24 |
+| Registry reconciliation audit records             |                                                25 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 
@@ -122,7 +122,7 @@ Production migration `20260905090000_topics_bulk_publish_atomicity.sql` was appl
 
 Migration 101, `20260907214608_p1_e_taxonomy_consistency.sql`, was already present with matching provenance in the P2-S delivery registry comparison. It is not a pending candidate.
 
-Closed P2-S + ADM-01 applied corrected migration 102 once before PR #152, `20260911194004_topic_view_integrity.sql`. The existing `increment_topic_view` owner receives private, expiring visitor/topic deduplication and request-limit state. The user-approved PUB-07 policy is a signed server-issued browser cookie for 30 days; one qualified public Production view per visitor/topic per rolling 24 hours; 30 requests per visitor and 300 per trusted IP per rolling 60 seconds, including duplicates. Admin Preview, Vercel Preview, localhost and CI are excluded. The policy row is the sole configurable value source. Counts and editorial `is_popular` are preserved. Cookie deletion or a different browser can create a new identity; this is inflation reduction, not proof of a unique person or universal bot prevention. Daily authenticated cleanup bounds expired-state retention when the existing Cron scheduler runs successfully. P2-S cutover authorization was consumed by its closed delivery. That closure grants no authorization for later database actions; the separate local-only migration 103 continuation is recorded above. `globalClosed=false`.
+Closed P2-S + ADM-01 applied corrected migration 102 once before PR #152, `20260911194004_topic_view_integrity.sql`. The existing `increment_topic_view` owner receives private, expiring visitor/topic deduplication and request-limit state. The user-approved PUB-07 policy is a signed server-issued browser cookie for 30 days; one qualified public Production view per visitor/topic per rolling 24 hours; 30 requests per visitor and 300 per trusted IP per rolling 60 seconds, including duplicates. Admin Preview, Vercel Preview, localhost and CI are excluded. The policy row is the sole configurable value source. Counts and editorial `is_popular` are preserved. Cookie deletion or a different browser can create a new identity; this is inflation reduction, not proof of a unique person or universal bot prevention. Daily authenticated cleanup bounds expired-state retention when the existing Cron scheduler runs successfully. P2-S cutover authorization was consumed by its closed delivery. The independently authorized migration 103 cutover is recorded above; neither closure grants permission for future database actions. `globalClosed=false`.
 
 The RPC owns the bounded, revision-checked Topic transitions and their per-Topic Mutation Audit rows inside one database transaction. Application code remains the sole owner of semantic Publish Validation, and post-commit Media Center cache invalidation remains with the existing `revalidateMediaCenterPublicPaths` owner.
 
