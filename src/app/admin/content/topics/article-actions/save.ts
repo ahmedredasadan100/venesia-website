@@ -32,6 +32,7 @@ import {
   getTopicById,
 } from "./validation";
 import { revalidateUnifiedContentPaths } from "../editor-actions/revalidate";
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 import type { TopicPayload } from "./helpers";
 import type { TopicStatus } from "./types";
 import {
@@ -344,16 +345,23 @@ export async function saveArticleContentAdapter(
     }
     return formFailure(error instanceof Error ? error.message : "تعذر حفظ الموضوع.");
   }
+  if (!coordinated?.value) {
+    return formFailure("تعذر تأكيد نتيجة الحفظ. حدّث الصفحة للتحقق قبل إعادة المحاولة.");
+  }
   const entityId = coordinated.value.id;
   const savedSlug = coordinated.value.slug;
   const mediaSynchronization = coordinated.mediaSynchronization;
+  if (!Number.isSafeInteger(entityId) || entityId <= 0 ||
+    (mode === "edit" && entityId !== Number(id)) || typeof savedSlug !== "string" || !savedSlug) {
+    return formFailure("تعذر تأكيد هوية نتيجة الحفظ. حدّث الصفحة للتحقق قبل إعادة المحاولة.");
+  }
 
-  revalidateUnifiedContentPaths({
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => revalidateUnifiedContentPaths({
     contentType: "article",
     id: entityId,
     oldSlug: currentTopic?.slug,
     newSlug: savedSlug,
-  });
+  }));
 
   await recordCmsAdminAudit(
     {
@@ -371,21 +379,23 @@ export async function saveArticleContentAdapter(
 
   return {
     status:
-      mediaSynchronization.status === "saved_with_media_sync_warning"
+      mediaSynchronization.status === "saved_with_media_sync_warning" || !cacheRevalidation.ok
         ? "warning"
         : "success",
     revision,
     title:
       mediaSynchronization.status === "saved_with_media_sync_warning"
         ? "تم حفظ الموضوع مع تنبيه للميديا"
-        : "تم الحفظ بنجاح",
+        : cacheRevalidation.ok ? "تم الحفظ بنجاح" : "تم الحفظ مع تنبيه لتحديث العرض",
     message:
-      mediaSynchronization.status === "saved_with_media_sync_warning"
+      (mediaSynchronization.status === "saved_with_media_sync_warning"
         ? "تم حفظ بيانات الموضوع، لكن تعذرت مزامنة ارتباطات الميديا. يظل الحذف الآمن متوقفًا حتى اكتمال الإصلاح أو الفحص."
-        : successMessage(mode, nextStatus),
+        : successMessage(mode, nextStatus)) + (cacheRevalidation.ok ? "" : " تعذر تحديث بعض القراءات المخبأة بعد المحاولة الآمنة المحدودة. حدّث القائمة للتحقق؛ لا تكرر الحفظ بسبب هذا التنبيه."),
     code:
       mediaSynchronization.status === "saved_with_media_sync_warning"
         ? "saved_with_media_sync_warning"
+        : !cacheRevalidation.ok
+          ? "committed_cache_revalidation_pending"
         : mode === "create"
         ? nextStatus === "published"
           ? "published"

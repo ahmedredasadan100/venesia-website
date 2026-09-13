@@ -33,6 +33,12 @@ export type LinkUsageQuery = {
 
 type JsonObject = { [key: string]: Json | undefined };
 
+async function readLinkUsageData<T>(request: PromiseLike<{ data: T; error?: unknown }>): Promise<T> {
+  const { data, error } = await request;
+  if (error) throw error;
+  return data;
+}
+
 function jsonObject(value: Json | undefined): JsonObject | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value;
@@ -120,28 +126,28 @@ async function resolveResourcePublicPath(query: LinkUsageQuery) {
 
   switch (query.linkedType) {
     case "pages": {
-      const { data } = await supabase.from("pages").select("path,slug").eq("id", query.linkedId).maybeSingle();
+      const data = await readLinkUsageData(supabase.from("pages").select("path,slug").eq("id", query.linkedId).maybeSingle());
       if (!data) return null;
       const cleanPath = data.path?.trim();
       if (cleanPath) return cleanPath;
       return data.slug === "home" ? "/" : `/${data.slug}`;
     }
     case "projects": {
-      const { data } = await supabase.from("projects").select("slug").eq("id", query.linkedId).maybeSingle();
+      const data = await readLinkUsageData(supabase.from("projects").select("slug").eq("id", query.linkedId).maybeSingle());
       return data?.slug ? getProjectHref(data) : null;
     }
     case "topics": {
-      const { data } = await supabase.from("topics").select("slug,content_type").eq("id", query.linkedId).maybeSingle();
+      const data = await readLinkUsageData(supabase.from("topics").select("slug,content_type").eq("id", query.linkedId).maybeSingle());
       return data?.slug && isContentType(data.content_type)
         ? resolvePublicContentPath(data.content_type, data.slug)
         : null;
     }
     case "topic_categories": {
-      const { data } = await supabase.from("topic_categories").select("slug").eq("id", query.linkedId).maybeSingle();
+      const data = await readLinkUsageData(supabase.from("topic_categories").select("slug").eq("id", query.linkedId).maybeSingle());
       return data?.slug ? `/topics?category=${data.slug}` : null;
     }
     case "topic_series": {
-      const { data } = await supabase.from("topic_series").select("slug").eq("id", query.linkedId).maybeSingle();
+      const data = await readLinkUsageData(supabase.from("topic_series").select("slug").eq("id", query.linkedId).maybeSingle());
       return data?.slug ? `/topics?series=${data.slug}` : null;
     }
     default:
@@ -153,21 +159,21 @@ async function scanMenuItems(query: LinkUsageQuery, publicPath: string | null) {
   const matches: LinkUsageReference[] = [];
   const supabase = getSupabaseAdmin();
 
-  const [{ data: typedItems }, hrefResult] = await Promise.all([
-    supabase
+  const [typedItems, hrefItems] = await Promise.all([
+    readLinkUsageData(supabase
       .from("menu_items")
       .select("id,label,menu_id,href,linked_type,linked_id,menus(name)")
       .eq("linked_type", query.linkedType)
-      .eq("linked_id", query.linkedId),
+      .eq("linked_id", query.linkedId)),
     publicPath
-      ? supabase
+      ? readLinkUsageData(supabase
           .from("menu_items")
           .select("id,label,menu_id,href,linked_type,linked_id,menus(name)")
-          .eq("href", publicPath)
-      : Promise.resolve({ data: [] }),
+          .eq("href", publicPath))
+      : Promise.resolve([]),
   ]);
 
-  const combined = [...(typedItems ?? []), ...(hrefResult.data ?? [])];
+  const combined = [...(typedItems ?? []), ...(hrefItems ?? [])];
   const seenIds = new Set<number>();
 
   combined.forEach((item) => {
@@ -190,7 +196,7 @@ async function scanMenuItems(query: LinkUsageQuery, publicPath: string | null) {
 
 async function scanHeroTemplates(query: LinkUsageQuery, publicPath: string | null) {
   const matches: LinkUsageReference[] = [];
-  const { data: heroes } = await getSupabaseAdmin().from("hero_templates").select("id,name,config");
+  const heroes = await readLinkUsageData(getSupabaseAdmin().from("hero_templates").select("id,name,config"));
 
   (heroes ?? []).forEach((hero) => {
     const config = jsonObject(hero.config) ?? {};
@@ -218,7 +224,7 @@ async function scanBlockTemplates(
   publicPath: string | null,
 ) {
   const matches: LinkUsageReference[] = [];
-  const { data: rows } = await getSupabaseAdmin().from(table).select("id,name,config");
+  const rows = await readLinkUsageData(getSupabaseAdmin().from(table).select("id,name,config"));
 
   (rows ?? []).forEach((row) => {
     const config = jsonObject(row.config) ?? {};
@@ -313,15 +319,14 @@ async function scanBlockTemplates(
 
 async function scanFooterSettings(query: LinkUsageQuery, publicPath: string | null) {
   const matches: LinkUsageReference[] = [];
-  const { data } = await getSupabaseAdmin()
+  const data = await readLinkUsageData(getSupabaseAdmin()
     .from("site_settings")
     .select("value")
     .eq("key", "footer.slots")
-    .maybeSingle();
+    .maybeSingle());
 
   const footer = jsonObject(data?.value);
-  if (!footer) return matches;
-  const slots = Array.isArray(footer.slots) ? footer.slots : [];
+  const slots = Array.isArray(footer?.slots) ? footer.slots : [];
 
   slots.forEach((slot, index) => {
     const record = jsonObject(slot);
@@ -380,11 +385,11 @@ async function scanFooterSettings(query: LinkUsageQuery, publicPath: string | nu
     );
   });
 
-  const { data: contactSetting } = await getSupabaseAdmin()
+  const contactSetting = await readLinkUsageData(getSupabaseAdmin()
     .from("site_settings")
     .select("value")
     .eq("key", "footer.contact_items")
-    .maybeSingle();
+    .maybeSingle());
 
   const contacts = Array.isArray(contactSetting?.value) ? contactSetting.value : [];
   contacts.forEach((item, index) => {
@@ -404,31 +409,35 @@ async function scanFooterSettings(query: LinkUsageQuery, publicPath: string | nu
 }
 
 export async function findLinkUsages(query: LinkUsageQuery): Promise<LinkUsageReference[]> {
-  const publicPath = await resolveResourcePublicPath(query);
+  try {
+    const publicPath = await resolveResourcePublicPath(query);
 
-  const batches = await Promise.all([
-    scanMenuItems(query, publicPath),
-    scanHeroTemplates(query, publicPath),
-    scanBlockTemplates("cta_block_templates", "cta_block", "/admin/pages-blocks/blocks/cta", query, publicPath),
-    scanBlockTemplates("content_block_templates", "content_block", "/admin/pages-blocks/blocks/content", query, publicPath),
-    scanBlockTemplates("cards_block_templates", "cards_block", "/admin/pages-blocks/blocks/cards", query, publicPath),
-    scanBlockTemplates(
-      "breadcrumb_block_templates",
-      "breadcrumb_block",
-      "/admin/pages-blocks/blocks/breadcrumb",
-      query,
-      publicPath,
-    ),
-    scanFooterSettings(query, publicPath),
-  ]);
+    const batches = await Promise.all([
+      scanMenuItems(query, publicPath),
+      scanHeroTemplates(query, publicPath),
+      scanBlockTemplates("cta_block_templates", "cta_block", "/admin/pages-blocks/blocks/cta", query, publicPath),
+      scanBlockTemplates("content_block_templates", "content_block", "/admin/pages-blocks/blocks/content", query, publicPath),
+      scanBlockTemplates("cards_block_templates", "cards_block", "/admin/pages-blocks/blocks/cards", query, publicPath),
+      scanBlockTemplates(
+        "breadcrumb_block_templates",
+        "breadcrumb_block",
+        "/admin/pages-blocks/blocks/breadcrumb",
+        query,
+        publicPath,
+      ),
+      scanFooterSettings(query, publicPath),
+    ]);
 
-  const seen = new Set<string>();
-  return batches.flat().filter((item) => {
-    const key = `${item.sourceType}:${item.sourceId}:${item.fieldPath}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const seen = new Set<string>();
+    return batches.flat().filter((item) => {
+      const key = `${item.sourceType}:${item.sourceId}:${item.fieldPath}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  } catch (error) {
+    throw new Error("تعذر التحقق من استخدام الروابط. أعد المحاولة قبل المتابعة.", { cause: error });
+  }
 }
 
 export async function isResourceLinked(query: LinkUsageQuery): Promise<boolean> {

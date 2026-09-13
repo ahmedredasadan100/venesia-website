@@ -49,6 +49,7 @@ export default function CategoryForm({
       action={action}
       mode={mode}
       entityKey="category"
+      invalidateEntities={["categories", "topics", "series"]}
       closeHref="/admin/content/categories"
       formId="category-taxonomy-form"
       className={ADMIN_FORM_STACK_CLASS_NAME}

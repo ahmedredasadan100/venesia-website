@@ -26,7 +26,7 @@ import {
   updateTopicCategoryAtomically,
   updateTopicSeriesAtomically,
 } from "../../../lib/admin/content/taxonomy-mutations";
-import { revalidateTopicsCache } from "../../../lib/cache/revalidate-public-cache-tags";
+import { revalidateTopicsCache, runBoundedPublicCacheRevalidation } from "../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
 import { TOPIC_SERIES_CATEGORY_MISMATCH_MESSAGE } from "../../../lib/admin/content/category-hierarchy";
 
@@ -96,18 +96,28 @@ function buildFormSuccess(
   entityId: number,
   editHref: string,
   savedRevision: string,
+  cacheRevalidated = true,
 ): AdminFormActionState {
   return {
-    status: "success",
+    status: cacheRevalidated ? "success" : "warning",
     revision,
-    title: "تم الحفظ بنجاح",
-    message,
-    code,
+    title: cacheRevalidated ? "تم الحفظ بنجاح" : "تم الحفظ مع تنبيه لتحديث العرض",
+    message: message + (cacheRevalidated ? "" : " تعذر تحديث بعض القراءات المخبأة بعد المحاولة الآمنة المحدودة. حدّث القائمة للتحقق؛ لا تكرر الحفظ بسبب هذا التنبيه."),
+    code: cacheRevalidated ? code : "committed_cache_revalidation_pending",
     entityId,
     mode,
     ...(code === "created" ? { editHref } : {}),
     savedRevision,
   };
+}
+
+function hasConfirmedTaxonomyResult(
+  row: { id: number; updated_at: string | null } | null | undefined,
+  expectedId?: number,
+): row is { id: number; updated_at: string } {
+  return Boolean(row && Number.isSafeInteger(row.id) && row.id > 0 &&
+    (expectedId === undefined || row.id === expectedId) &&
+    typeof row.updated_at === "string" && Number.isFinite(Date.parse(row.updated_at)));
 }
 
 function buildTaxonomyMutationFailure(
@@ -322,8 +332,8 @@ export async function createCategoryForm(
   const revision = _previousState.revision + 1;
   const formFailure = (message: string, fieldErrors?: Record<string, string[]>) =>
     buildFormFailure(mode, revision, message, fieldErrors);
-  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string) =>
-    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision);
+  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string, cacheRevalidated: boolean) =>
+    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision, cacheRevalidated);
   const databaseFormFailure = (error: unknown, fallback: string) =>
     buildDatabaseFormFailure(mode, revision, error, fallback);
   const actor = await requireAdminSession();
@@ -364,9 +374,12 @@ export async function createCategoryForm(
         created_at: now,
         updated_at: now,
       })
-      .select("id, published_at")
+      .select("id, published_at, updated_at")
       .single();
     if (error) throw error;
+    if (!hasConfirmedTaxonomyResult(data)) {
+      return formFailure("تعذر تأكيد هوية أو مراجعة نتيجة الحفظ. حدّث الصفحة للتحقق قبل إعادة المحاولة.");
+    }
 
     await recordCmsAdminAudit(
       {
@@ -383,13 +396,14 @@ export async function createCategoryForm(
       },
       actor,
     );
-    revalidateTaxonomyPaths(`/admin/content/categories/${data.id}`);
+    const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => revalidateTaxonomyPaths(`/admin/content/categories/${data.id}`));
     return formSuccess(
       "تم إنشاء التصنيف بنجاح.",
       "created",
       data.id,
       `/admin/content/categories/${data.id}`,
-      now,
+      data.updated_at,
+      cacheRevalidation.ok,
     );
   } catch (error) {
     return databaseFormFailure(error, "تعذر إنشاء التصنيف. حاول مرة أخرى.");
@@ -404,8 +418,8 @@ export async function updateCategoryForm(
   const revision = _previousState.revision + 1;
   const formFailure = (message: string, fieldErrors?: Record<string, string[]>) =>
     buildFormFailure(mode, revision, message, fieldErrors);
-  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string) =>
-    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision);
+  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string, cacheRevalidated: boolean) =>
+    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision, cacheRevalidated);
   const databaseFormFailure = (error: unknown, fallback: string) =>
     buildDatabaseFormFailure(mode, revision, error, fallback);
   const actor = await requireAdminSession();
@@ -462,6 +476,9 @@ export async function updateCategoryForm(
     if (!mutation.ok) {
       return buildTaxonomyMutationFailure(mode, revision, mutation.code);
     }
+    if (!hasConfirmedTaxonomyResult(mutation.category, id)) {
+      return formFailure("تعذر تأكيد هوية أو مراجعة نتيجة الحفظ. حدّث الصفحة للتحقق قبل إعادة المحاولة.");
+    }
     const nextStatus = parsed.data.is_published
       ? "published"
       : "unpublished";
@@ -488,13 +505,14 @@ export async function updateCategoryForm(
       },
       actor,
     );
-    revalidateTaxonomyPaths(`/admin/content/categories/${id}`);
+    const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => revalidateTaxonomyPaths(`/admin/content/categories/${id}`));
     return formSuccess(
       "تم تحديث التصنيف بنجاح.",
       "updated",
       id,
       `/admin/content/categories/${id}`,
       mutation.category.updated_at,
+      cacheRevalidation.ok,
     );
   } catch (error) {
     return databaseFormFailure(error, "تعذر تحديث التصنيف. حاول مرة أخرى.");
@@ -509,8 +527,8 @@ export async function createSeriesForm(
   const revision = _previousState.revision + 1;
   const formFailure = (message: string, fieldErrors?: Record<string, string[]>) =>
     buildFormFailure(mode, revision, message, fieldErrors);
-  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string) =>
-    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision);
+  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string, cacheRevalidated: boolean) =>
+    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision, cacheRevalidated);
   const databaseFormFailure = (error: unknown, fallback: string) =>
     buildDatabaseFormFailure(mode, revision, error, fallback);
   const actor = await requireAdminSession();
@@ -536,6 +554,9 @@ export async function createSeriesForm(
     if (!mutation.ok) {
       return buildTaxonomyMutationFailure(mode, revision, mutation.code);
     }
+    if (!hasConfirmedTaxonomyResult(mutation.series)) {
+      return formFailure("تعذر تأكيد هوية أو مراجعة نتيجة الحفظ. حدّث الصفحة للتحقق قبل إعادة المحاولة.");
+    }
 
     // This remains the canonical audit owner; it records only after the RPC's
     // governing result is ok:true and internally contains audit write failures.
@@ -549,13 +570,14 @@ export async function createSeriesForm(
       },
       actor,
     );
-    revalidateTaxonomyPaths(`/admin/content/series/${mutation.series.id}`);
+    const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => revalidateTaxonomyPaths(`/admin/content/series/${mutation.series.id}`));
     return formSuccess(
       "تم إنشاء السلسلة بنجاح.",
       "created",
       mutation.series.id,
       `/admin/content/series/${mutation.series.id}`,
       mutation.series.updated_at,
+      cacheRevalidation.ok,
     );
   } catch (error) {
     return databaseFormFailure(error, "تعذر إنشاء السلسلة. حاول مرة أخرى.");
@@ -570,8 +592,8 @@ export async function updateSeriesForm(
   const revision = _previousState.revision + 1;
   const formFailure = (message: string, fieldErrors?: Record<string, string[]>) =>
     buildFormFailure(mode, revision, message, fieldErrors);
-  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string) =>
-    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision);
+  const formSuccess = (message: string, code: "created" | "updated", entityId: number, editHref: string, savedRevision: string, cacheRevalidated: boolean) =>
+    buildFormSuccess(mode, revision, message, code, entityId, editHref, savedRevision, cacheRevalidated);
   const databaseFormFailure = (error: unknown, fallback: string) =>
     buildDatabaseFormFailure(mode, revision, error, fallback);
   const actor = await requireAdminSession();
@@ -641,6 +663,9 @@ export async function updateSeriesForm(
     if (!mutation.ok) {
       return buildTaxonomyMutationFailure(mode, revision, mutation.code);
     }
+    if (!hasConfirmedTaxonomyResult(mutation.series, id)) {
+      return formFailure("تعذر تأكيد هوية أو مراجعة نتيجة الحفظ. حدّث الصفحة للتحقق قبل إعادة المحاولة.");
+    }
 
     await recordCmsAdminAudit(
       {
@@ -656,13 +681,14 @@ export async function updateSeriesForm(
       },
       actor,
     );
-    revalidateTaxonomyPaths(`/admin/content/series/${id}`);
+    const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => revalidateTaxonomyPaths(`/admin/content/series/${id}`));
     return formSuccess(
       "تم تحديث السلسلة بنجاح.",
       "updated",
       id,
       `/admin/content/series/${id}`,
       mutation.series.updated_at,
+      cacheRevalidation.ok,
     );
   } catch (error) {
     return databaseFormFailure(error, "تعذر تحديث السلسلة. حاول مرة أخرى.");

@@ -42,6 +42,8 @@ type TaxonomyActionResult = {
   revision: number;
   code?: string;
   savedRevision?: string;
+  entityId?: number;
+  editHref?: string;
 };
 
 type TaxonomyActionMockState = {
@@ -58,6 +60,7 @@ type TaxonomyActionMockState = {
   auditCalls: Array<Record<string, unknown>>;
   revalidatePaths: string[];
   topicRevalidations: number;
+  cacheFailures: number;
 };
 
 type TaxonomyActionHarness = {
@@ -256,6 +259,7 @@ export const qa = {
     qa.auditCalls = [];
     qa.revalidatePaths = [];
     qa.topicRevalidations = 0;
+    qa.cacheFailures = 0;
   },
 };
 qa.reset();
@@ -292,8 +296,10 @@ export async function createTopicSeriesAtomically(input) {
 
 const taxonomyCacheMockSource = String.raw`
 import { qa } from "./taxonomy-action-state.mock.js";
+export { runBoundedPublicCacheRevalidation } from "@bounded-cache-owner";
 export function revalidateTopicsCache() {
   qa.topicRevalidations += 1;
+  if (qa.topicRevalidations <= qa.cacheFailures) throw new Error("Injected cache failure");
 }
 `;
 
@@ -302,6 +308,8 @@ import { qa } from "./taxonomy-action-state.mock.js";
 export function revalidatePath(value) {
   qa.revalidatePaths.push(String(value));
 }
+export function revalidateTag() {}
+export function updateTag() {}
 `;
 
 const supabaseAdminMockSource = String.raw`
@@ -402,6 +410,8 @@ async function compileServerActionHarness(rootDir: string, tempDir: string) {
           "src/app/admin/content/taxonomy-form-actions.ts",
         ),
         "@taxonomy-action-state": mockPaths.state,
+        "@bounded-cache-owner": path.join(rootDir, "src/lib/cache/revalidate-public-cache-tags.ts"),
+        "server-only": false,
         "../../../lib/admin/auth/require-admin-session$": mockPaths.auth,
         "../../../lib/admin/audit-log$": mockPaths.audit,
         "../../../lib/admin/content/taxonomy-mutations$": mockPaths.mutations,
@@ -761,6 +771,26 @@ try {
       qa.revalidatePaths.length > 0,
   );
 
+  for (const cacheFailures of [1, 99]) {
+    for (const entity of ["category", "series", "create-series"] as const) {
+      qa.reset();
+      qa.cacheFailures = cacheFailures;
+      const result = entity === "category"
+        ? await actionHarness.updateCategoryForm(editInitialState, categoryEditForm(INITIAL_REVISION))
+        : entity === "series"
+          ? await actionHarness.updateSeriesForm(editInitialState, seriesEditForm(INITIAL_REVISION))
+          : await actionHarness.createSeriesForm(editInitialState, seriesCreateForm());
+      check(
+        `${entity}: cache failures preserve confirmed save, revision and one mutation/audit`,
+        result.status === (cacheFailures === 99 ? "warning" : "success") &&
+          result.savedRevision === FIRST_SAVED_REVISION &&
+          qa.categoryMutationInputs.length + qa.seriesMutationInputs.length + qa.createSeriesMutationInputs.length === 1 &&
+          qa.auditCalls.length === 1 && qa.topicRevalidations === 2 &&
+          (entity !== "create-series" || (result.entityId === 10 && result.editHref === "/admin/content/series/10")),
+      );
+    }
+  }
+
   qa.reset();
   qa.seriesMutationResult = {
     ok: false,
@@ -966,4 +996,4 @@ try {
   await rm(validateTempPath(tempDir), { recursive: true, force: true });
 }
 
-console.log(`Taxonomy form revision QA passed (${passed}/22).`);
+console.log(`Taxonomy form revision QA passed (${passed} checks).`);

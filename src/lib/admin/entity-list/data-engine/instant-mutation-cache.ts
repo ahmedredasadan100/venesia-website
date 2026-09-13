@@ -7,6 +7,23 @@ import {
 } from "./contracts.ts";
 import { adminEntityListQueryKeys } from "./query-keys.ts";
 
+/** Settle a confirmed form write without fetching or replaying the command. */
+export async function invalidateAdminEntityListCaches(
+  queryClient: Pick<QueryClient, "cancelQueries" | "invalidateQueries">,
+  entities: readonly string[],
+) {
+  const outcomes = await Promise.allSettled(
+    [...new Set(entities)].map(async (entity) => {
+      const queryKey = adminEntityListQueryKeys.entity(entity);
+      // An older in-flight response must not make the pre-save data fresh again.
+      await queryClient.cancelQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey, refetchType: "none" });
+    }),
+  );
+  const failure = outcomes.find((outcome) => outcome.status === "rejected");
+  if (failure?.status === "rejected") throw failure.reason;
+}
+
 export function removeAdminEntityRows<
   Row extends { id: number | string },
   Metrics,

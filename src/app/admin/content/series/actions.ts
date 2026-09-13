@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import {
   adminActionFailure,
   adminActionSuccess,
+  withAdminActionCacheWarning,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
@@ -22,7 +23,7 @@ import {
   TaxonomyMutationDatabaseError,
 } from "../../../../lib/admin/content/taxonomy-mutations";
 import { saveAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
-import { revalidateTopicsCache } from "../../../../lib/cache/revalidate-public-cache-tags";
+import { revalidateTopicsCache, runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 
 type SeriesStatus = "published" | "unpublished";
@@ -58,7 +59,7 @@ async function ensureUniqueSlug(slug: string) {
     .eq("slug", slug)
     .limit(1)
     .maybeSingle();
-  if (error) return false;
+  if (error) throw new Error("تعذر التحقق من توفر Slug. حدّث الصفحة وحاول مرة أخرى.");
   return !data;
 }
 
@@ -218,10 +219,10 @@ async function mutateSeriesWithCanonicalOwner(input: {
     },
     actor,
   );
-  revalidateSeriesPaths();
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(revalidateSeriesPaths);
 
   if (input.operation === "move_to_trash") {
-    return adminActionSuccess(
+    return withAdminActionCacheWarning(adminActionSuccess(
       input.scope === "single"
         ? "تم نقل السلسلة إلى المحذوفات"
         : "تم نقل المحدد إلى المحذوفات",
@@ -229,18 +230,18 @@ async function mutateSeriesWithCanonicalOwner(input: {
         ? "اختفت السلسلة من القوائم النشطة وبقي الـSlug محجوزًا."
         : `تم نقل ${ids.length} من السلاسل إلى المحذوفات مع إبقاء الـSlugs محجوزة.`,
       { code: "deleted", entityId: singleSeries?.id },
-    );
+    ), cacheRevalidation.ok);
   }
   if (input.operation === "restore") {
-    return adminActionSuccess(
+    return withAdminActionCacheWarning(adminActionSuccess(
       input.scope === "single" ? "تمت استعادة السلسلة" : "تمت استعادة المحدد",
       input.scope === "single"
         ? "عادت السلسلة إلى القائمة النشطة كغير منشورة."
         : `تمت استعادة ${ids.length} من السلاسل كغير منشورة.`,
       { code: "restored", entityId: singleSeries?.id },
-    );
+    ), cacheRevalidation.ok);
   }
-  return adminActionSuccess(
+  return withAdminActionCacheWarning(adminActionSuccess(
     input.scope === "empty_trash"
       ? "تم إفراغ المحذوفات"
       : input.scope === "single"
@@ -250,7 +251,7 @@ async function mutateSeriesWithCanonicalOwner(input: {
       ? `حُذفت السلسلة نهائيًا وأصبح الـSlug "${seriesRows[0].slug}" متاحًا للاستخدام.`
       : `تم حذف ${ids.length} من السلاسل نهائيًا وتحرير الـSlugs الخاصة بها.`,
     { code: "permanently_deleted", entityId: singleSeries?.id },
-  );
+  ), cacheRevalidation.ok);
 }
 
 export async function toggleSeriesStatusAjax(
@@ -272,7 +273,7 @@ export async function toggleSeriesStatusAjax(
     .is("deleted_at", null)
     .select("id")
     .maybeSingle();
-  if (error || !data) {
+  if (error || !data || data.id !== id) {
     return adminActionFailure(
       "تعذر تنفيذ العملية",
       error?.message ?? "السلسلة غير موجودة أو داخل المحذوفات.",
@@ -288,14 +289,14 @@ export async function toggleSeriesStatusAjax(
     entityId: id,
     metadata: { status: nextStatus },
   });
-  revalidateSeriesPaths();
-  return adminActionSuccess(
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(revalidateSeriesPaths);
+  return withAdminActionCacheWarning(adminActionSuccess(
     "تم بنجاح",
     nextStatus === "published"
       ? "تم إظهار السلسلة بنجاح."
       : "تم إخفاء السلسلة بنجاح.",
     { code: nextStatus === "published" ? "published" : "unpublished", entityId: id },
-  );
+  ), cacheRevalidation.ok);
 }
 
 export async function duplicateSeriesAjax(id: number): Promise<AdminActionResult> {
@@ -323,11 +324,20 @@ export async function duplicateSeriesAjax(id: number): Promise<AdminActionResult
     );
   }
 
-  let slug = `${data.slug}-copy`;
-  let counter = 2;
-  while (!(await ensureUniqueSlug(slug))) {
-    slug = `${data.slug}-copy-${counter}`;
-    counter += 1;
+  let slug: string | null = null;
+  try {
+    for (let attempt = 1; attempt <= 50; attempt += 1) {
+      const candidate = `${data.slug}-copy${attempt === 1 ? "" : `-${attempt}`}`;
+      if (await ensureUniqueSlug(candidate)) {
+        slug = candidate;
+        break;
+      }
+    }
+  } catch {
+    return adminActionFailure("تعذر نسخ السلسلة", "تعذر التحقق من توفر Slug. لم تُنشأ نسخة؛ حدّث الصفحة وحاول مرة أخرى.");
+  }
+  if (!slug) {
+    return adminActionFailure("تعذر نسخ السلسلة", "لم يتوفر Slug للنسخة بعد 50 محاولة محدودة. راجع النسخ الموجودة أو أنشئ عنصرًا جديدًا باستخدام Slug مختلف.", { code: "slug_conflict" });
   }
 
   const now = new Date().toISOString();
@@ -358,6 +368,9 @@ export async function duplicateSeriesAjax(id: number): Promise<AdminActionResult
       insertError?.message ?? "تعذر نسخ السلسلة.",
     );
   }
+  if (!Number.isSafeInteger(inserted.id) || inserted.id <= 0) {
+    return adminActionFailure("تعذر تأكيد النسخة", "تعذر تأكيد هوية نسخة السلسلة. حدّث القائمة للتحقق قبل إعادة المحاولة.");
+  }
   await recordCmsAdminAudit({
     action: buildCmsAuditAction("topic_series", "duplicate"),
     entityType: "topic_series",
@@ -365,11 +378,11 @@ export async function duplicateSeriesAjax(id: number): Promise<AdminActionResult
     entityId: inserted.id,
     metadata: { slug, source_series_id: id },
   });
-  revalidateSeriesPaths();
-  return adminActionSuccess("تم بنجاح", "تم نسخ السلسلة بنجاح.", {
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(revalidateSeriesPaths);
+  return withAdminActionCacheWarning(adminActionSuccess("تم بنجاح", "تم نسخ السلسلة بنجاح.", {
     code: "created",
     entityId: inserted.id,
-  });
+  }), cacheRevalidation.ok);
 }
 
 export async function deleteSeriesAjax(id: number) {
@@ -473,13 +486,13 @@ export async function bulkSeriesActionAjax(
     },
     actor,
   );
-  revalidateSeriesPaths();
-  return adminActionSuccess(
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(revalidateSeriesPaths);
+  return withAdminActionCacheWarning(adminActionSuccess(
     "تم بنجاح",
     status === "published"
       ? "تم إظهار السلاسل المحددة بنجاح."
       : "تم إخفاء السلاسل المحددة بنجاح.",
-  );
+  ), cacheRevalidation.ok);
 }
 
 export async function emptySeriesTrashAjax(

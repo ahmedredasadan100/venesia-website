@@ -44,6 +44,7 @@ export default function SeriesForm({
       action={action}
       mode={mode}
       entityKey="series"
+      invalidateEntities={["series", "topics", "categories"]}
       closeHref="/admin/content/series"
       formId="series-taxonomy-form"
       className={ADMIN_FORM_STACK_CLASS_NAME}

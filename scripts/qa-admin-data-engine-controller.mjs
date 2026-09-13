@@ -7,6 +7,10 @@
  * and covers race / failure contracts with route interception.
  */
 import { randomBytes } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { createRequire } from "node:module";
+import path from "node:path";
 import { chromium } from "playwright";
 
 const baseUrl = process.env.QA_BASE_URL || "http://127.0.0.1:3000";
@@ -481,7 +485,185 @@ async function main() {
   if (failed) process.exitCode = 1;
 }
 
-main().catch((error) => {
+/** Actual shared owners with synthetic GET results; never connects to Admin/DB. */
+async function isolatedFailureContracts() {
+  const root = process.cwd();
+  const output = path.join(root, ".tmp-qa/admin-query-save-failure-contracts-20260913", process.env.QA_PHASE || "query-isolated");
+  await mkdir(output, { recursive: true });
+  const require = createRequire(import.meta.url);
+  const entry = String.raw`
+import React, { useLayoutEffect } from "react";
+import { createRoot } from "react-dom/client";
+import Provider from "@query-provider";
+import Feedback from "@feedback";
+import AdminEntityList from "@entity-list";
+import AdminTablePagination from "@pagination";
+import { useAdminEntityListController } from "@controller";
+import { normalizeAdminEntityListQuery } from "@contracts";
+import { topicsQueryContract } from "@topics-contract";
+import { categoriesQueryContract } from "@categories-contract";
+import { seriesQueryContract } from "@series-contract";
+const contracts = {topics:topicsQueryContract,categories:categoriesQueryContract,series:seriesQueryContract};
+const entity = location.pathname.split("/").at(-1);
+const contract = contracts[entity];
+const initialQuery = normalizeAdminEntityListQuery(contract,new URLSearchParams());
+const initialResult = window.__INITIAL_RESULT__;
+const columns = [
+ {key:"title",label:"الاسم",primary:true,primaryPresentation:"compact-icon",sticky:"start",flexible:true,minWidth:200,width:400,defaultVisible:true,hideable:false,renderCell:({row})=>row.title},
+ {key:"actions",label:"الإجراءات",sticky:"end",minWidth:144,width:144,defaultVisible:true,hideable:false,renderCell:()=>null},
+];
+function Harness() {
+ const controller = useAdminEntityListController({entity,contract,initialQuery,initialResult,staleTimeMs:30000});
+ useLayoutEffect(()=>{window.__queryFixture={...controller};});
+ return <main dir="rtl">
+  <button type="button" data-fixture-refetch onClick={()=>controller.invalidate()}>إعادة القراءة للاختبار</button>
+  <AdminEntityList listId={entity+"-failure-fixture"} rows={controller.result.rows} queryPending={controller.queryPending}
+   queryError={controller.error?.message} onQueryRetry={()=>controller.retry?.()}
+   columns={columns} getRowId={row=>row.id} getRowLabel={row=>row.title} sizingStrategy={{mode:"flexible",columnKey:"title"}} actionsColumnWidth={144}
+   mapResultToFeedback={()=>({variant:"success",message:"fixture"})}
+   emptyState={{mode:"filtered",systemEmpty:"لا توجد بيانات",filteredEmpty:"لا توجد نتائج"}} />
+  <AdminTablePagination basePath={location.pathname} currentPage={controller.result.pagination.page}
+   pageSize={String(controller.result.pagination.pageSize)} totalCount={controller.result.pagination.totalRows}
+   totalPages={controller.result.pagination.totalPages} onPageChange={controller.setPage} onPageSizeChange={controller.setPageSize}/>
+ </main>;
+}
+createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/></Feedback></Provider>);
+`;
+  const navigationPath = path.join(output, "navigation.js");
+  const linkPath = path.join(output, "link.jsx");
+  const entryPath = path.join(output, "entry.jsx");
+  await Promise.all([
+    writeFile(entryPath, entry),
+    writeFile(navigationPath, 'export const usePathname=()=>location.pathname; export const useSearchParams=()=>new URLSearchParams(location.search); export const useRouter=()=>({push(){throw new Error("Unexpected router push")},replace(){throw new Error("Unexpected router replace")},refresh(){throw new Error("Unexpected router refresh")}});'),
+    writeFile(linkPath, 'import React from "react"; export default function Link({href,children,prefetch,scroll,onNavigate,...props}){return <a href={href} {...props}>{children}</a>}'),
+  ]);
+  await require("next/dist/build/swc").loadBindings();
+  const webpack = require("next/dist/compiled/webpack/webpack").webpack;
+  const compiler = webpack({
+    mode: "development", target: "web", context: root, entry: entryPath,
+    output: { path: output, filename: "bundle.js" }, devtool: false,
+    optimization: { minimize: false },
+    plugins: [new webpack.DefinePlugin({ "process.env": JSON.stringify({}) })],
+    resolve: {
+      extensions: [".tsx", ".ts", ".jsx", ".js"], modules: [path.join(root, "node_modules"), "node_modules"],
+      alias: {
+        "next/navigation": navigationPath, "next/link": linkPath,
+        "@query-provider": path.join(root, "src/components/admin/entity-list/AdminEntityListQueryProvider.tsx"),
+        "@feedback": path.join(root, "src/components/admin/AdminFeedbackProvider.tsx"),
+        "@entity-list": path.join(root, "src/components/admin/entity-list/AdminEntityList.tsx"),
+        "@pagination": path.join(root, "src/components/admin/ui/AdminTablePagination.tsx"),
+        "@controller": path.join(root, "src/lib/admin/entity-list/data-engine/client-controller.ts"),
+        "@contracts": path.join(root, "src/lib/admin/entity-list/data-engine/contracts.ts"),
+        ...Object.fromEntries(["topics", "categories", "series"].map((entity) => [`@${entity}-contract`, path.join(root, `src/lib/admin/content/entity-list-contracts/${entity}.ts`)])),
+      },
+    },
+    module: { rules: [{ test: /\.[jt]sx?$/, exclude: /node_modules/, use: [{
+      loader: require.resolve("next/dist/build/webpack/loaders/next-swc-loader"),
+      options: { rootDir: root, isServer: false, compilerType: "client", hasReactRefresh: false, nextConfig: {}, jsConfig: {}, swcCacheDir: path.join(output, "swc-cache"), serverComponents: false, serverReferenceHashSalt: "query-failure-contract", esm: false, transpilePackages: [] },
+    }] }] },
+  });
+  await new Promise((resolve, reject) => compiler.run((error, stats) => compiler.close((closeError) => {
+    if (error || closeError || stats?.hasErrors()) reject(error || closeError || new Error(JSON.stringify(stats.toJson({ all: false, errors: true }).errors)));
+    else resolve();
+  })));
+  const bundle = await readFile(path.join(output, "bundle.js"));
+  const requests = [], blocked = [], observations = [], errors = [];
+  const failures = new Map(), held = new Map();
+  function result(entity, page = 1) {
+    return { rows: Array.from({ length: 10 }, (_, i) => ({ id: (page - 1) * 10 + i + 1, title: `${entity} ${((page - 1) * 10 + i + 1)}` })), pagination: { page, pageSize: 10, totalRows: 100, totalPages: 10 }, metrics: { total: 100 }, meta: { generatedAt: new Date().toISOString(), mode: "server-page" } };
+  }
+  const sendResult = (res, entity, page) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(result(entity, page))); };
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, "http://fixture");
+    requests.push({ method: req.method, pathname: url.pathname, search: url.search });
+    if (req.method !== "GET") { res.writeHead(405); res.end(); return; }
+    if (url.pathname === "/bundle.js") { res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" }); res.end(bundle); return; }
+    if (url.pathname.startsWith("/api/admin/entity-lists/")) {
+      const entity = url.pathname.split("/").at(-1), page = Number(url.searchParams.get("page") || 1);
+      if (failures.get(entity) === page) { res.writeHead(500, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: { code: "list_load_failed" } })); return; }
+      if (held.has(entity)) { held.set(entity, () => sendResult(res, entity, page)); return; }
+      sendResult(res, entity, page); return;
+    }
+    if (/^\/admin\/content\/(topics|categories|series)$/.test(url.pathname)) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.end(`<html dir="rtl"><body><div id="root"></div><script>window.__INITIAL_RESULT__=${JSON.stringify(result(url.pathname.split("/").at(-1)))}</script><script src="/bundle.js"></script></body></html>`); return;
+    }
+    res.writeHead(404); res.end();
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext();
+    await context.route("**/*", (route) => {
+      if (new URL(route.request().url()).origin !== origin) { blocked.push(route.request().url()); return route.abort(); }
+      return route.continue();
+    });
+    const page = await context.newPage();
+    page.on("pageerror", (error) => errors.push(error.message));
+    const snapshot = async (label) => {
+      const value = await page.evaluate(() => ({ url: location.href, ids: [...document.querySelectorAll("[data-entity-row-id]")].map((row) => Number(row.getAttribute("data-entity-row-id"))), footer: document.querySelector("[data-admin-table-pagination]")?.textContent || "", resultPage: window.__queryFixture.result.pagination.page, requestedPage: window.__queryFixture.query.page, pending: window.__queryFixture.queryPending, error: window.__queryFixture.error?.message || null, notice: document.querySelector("[data-admin-entity-list-query-error]")?.textContent || "" }));
+      observations.push({ label, ...value }); return value;
+    };
+    for (const entity of ["topics", "categories", "series"]) {
+      await page.goto(`${origin}/admin/content/${entity}`);
+      await page.waitForFunction(() => Boolean(window.__queryFixture));
+      const calls = () => requests.filter((r) => r.pathname === `/api/admin/entity-lists/${entity}`).length;
+      check(`${entity}: fresh RSC seed does not fetch again`, calls() === 0);
+      await page.getByRole("button", { name: "3", exact: true }).click();
+      await page.waitForFunction(() => window.__queryFixture.result.pagination.page === 3 && !window.__queryFixture.queryPending);
+      const lastResolved = await snapshot(`${entity}: page3 resolved`);
+      check(`${entity}: non-bootstrap result has page3 IDs`, lastResolved.ids.join() === "21,22,23,24,25,26,27,28,29,30");
+      failures.set(entity, 4);
+      await page.getByRole("button", { name: "4", exact: true }).click();
+      await page.waitForFunction(() => window.__queryFixture.error && !window.__queryFixture.queryPending);
+      const failedQuery = await snapshot(`${entity}: cold page4 terminal failure`);
+      check(`${entity}: failed cold key retains last resolved row IDs`, failedQuery.ids.join() === lastResolved.ids.join());
+      check(`${entity}: failed cold key retains resolved page3 footer`, failedQuery.resultPage === 3 && failedQuery.footer === lastResolved.footer);
+      check(`${entity}: failed cold key preserves page4 intent`, failedQuery.requestedPage === 4 && new URL(failedQuery.url).searchParams.get("page") === "4");
+      check(`${entity}: shared error explains retained rows and counters`, failedQuery.notice.includes("الصفوف والعدّادات") && failedQuery.notice.includes("السابقة"));
+      const retry = page.getByRole("button", { name: "إعادة المحاولة", exact: true });
+      const retryVisible = await retry.isVisible();
+      check(`${entity}: shared error offers read-only retry`, retryVisible);
+      failures.delete(entity);
+      held.set(entity, null);
+      const beforeRetry = calls();
+      if (retryVisible) await retry.click();
+      else await page.locator("[data-fixture-refetch]").click(); // Baseline continues to expose subsequent failures.
+      await page.waitForFunction(() => window.__queryFixture.queryPending);
+      const retrying = await snapshot(`${entity}: retry pending`);
+      check(`${entity}: retry keeps last resolved IDs/footer`, retrying.ids.join() === lastResolved.ids.join() && retrying.resultPage === 3);
+      const retryDeadline = Date.now() + 10000;
+      while (!held.get(entity) && Date.now() < retryDeadline) await new Promise((resolve) => setTimeout(resolve, 10));
+      if (!held.get(entity)) throw new Error(`${entity}: retry GET did not reach the isolated transport`);
+      held.get(entity)(); held.delete(entity);
+      await page.waitForFunction(() => window.__queryFixture.result.pagination.page === 4 && !window.__queryFixture.queryPending && !window.__queryFixture.error);
+      const recovered = await snapshot(`${entity}: retry resolved`);
+      check(`${entity}: retry resolves requested page4`, recovered.ids.join() === "31,32,33,34,35,36,37,38,39,40" && recovered.resultPage === 4);
+      check(`${entity}: retry executes one GET`, calls() - beforeRetry === 1);
+      check(`${entity}: success clears shared error`, recovered.notice === "");
+      failures.set(entity, 4);
+      await page.locator("[data-fixture-refetch]").click();
+      await page.waitForFunction(() => window.__queryFixture.error && !window.__queryFixture.revalidating);
+      const refetchFailure = await snapshot(`${entity}: same-key refetch failure`);
+      check(`${entity}: same-key failure keeps its existing result`, refetchFailure.ids.join() === recovered.ids.join() && refetchFailure.resultPage === 4 && !refetchFailure.pending);
+      check(`${entity}: same-key failure is announced by shared error`, refetchFailure.notice.includes("الصفوف والعدّادات"));
+      failures.delete(entity);
+    }
+    check("isolated owner fixture never requests an external origin", blocked.length === 0);
+    check("isolated owner fixture performs no writes", requests.every((r) => r.method === "GET"));
+    check("isolated owner fixture has no runtime exceptions", errors.length === 0, errors.join(" | "));
+  } finally {
+    await browser.close();
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+    await writeFile(path.join(output, "evidence.json"), JSON.stringify({ passed, failed, observations, requests, blocked, errors, scope: "Mounted shared controller/EntityList/Pagination with synthetic GET transport; Next navigation isolated, no Auth/DB or live-screen claim" }, null, 2));
+  }
+  console.log(`qa-admin-data-engine-controller isolated: ${passed}/${passed + failed} passed`);
+  if (failed) process.exitCode = 1;
+}
+
+(process.argv.includes("--isolated-failure-contracts") ? isolatedFailureContracts() : main()).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

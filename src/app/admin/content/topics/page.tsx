@@ -58,6 +58,7 @@ export default async function UnifiedContentTopicsPage({
         series: params?.series,
         status: params?.status,
         featured: params?.featured,
+        image: params?.image,
         sort: params?.sort,
         page: params?.page,
         limit: params?.limit,

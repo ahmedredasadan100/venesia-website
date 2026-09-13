@@ -146,6 +146,10 @@ export default function SeriesTableClient({
               ? {
                   ok: true as const,
                   message: actionResult.message ?? "تم تحديث حالة السلسلة.",
+                  feedbackStatus:
+                    actionResult.feedbackStatus === "warning"
+                      ? ("warning" as const)
+                      : ("success" as const),
                 }
               : {
                   ok: false as const,
@@ -158,6 +162,7 @@ export default function SeriesTableClient({
           ok: true,
           title: "تم بنجاح",
           message: result.message,
+          feedbackStatus: result.feedbackStatus,
           code: nextStatus === "published" ? "published" : "unpublished",
           entityId: row.id,
         };
@@ -189,6 +194,10 @@ export default function SeriesTableClient({
               ? {
                   ok: true as const,
                   message: actionResult.message ?? "تم نسخ السلسلة بنجاح.",
+                  feedbackStatus:
+                    actionResult.feedbackStatus === "warning"
+                      ? ("warning" as const)
+                      : ("success" as const),
                   affectedIds:
                     actionResult.entityId == null
                       ? undefined
@@ -208,6 +217,7 @@ export default function SeriesTableClient({
           ok: true,
           title: "تم بنجاح",
           message: result.message,
+          feedbackStatus: result.feedbackStatus,
           code: "created",
           entityId: insertedId,
         };
@@ -375,6 +385,10 @@ export default function SeriesTableClient({
               ? {
                   ok: true as const,
                   message: actionResult.message ?? "تم تنفيذ العملية.",
+                  feedbackStatus:
+                    actionResult.feedbackStatus === "warning"
+                      ? ("warning" as const)
+                      : ("success" as const),
                 }
               : {
                   ok: false as const,
@@ -387,6 +401,7 @@ export default function SeriesTableClient({
           ok: true,
           title: "تم بنجاح",
           message: result.message,
+          feedbackStatus: result.feedbackStatus,
           code:
             action === "delete"
               ? "deleted"
@@ -447,6 +462,8 @@ export default function SeriesTableClient({
         <AdminEntityList<SeriesListRow, SeriesColumnKey, SeriesSortKey, number>
           listId="content-series-table"
           queryPending={controller.queryPending}
+          queryError={controller.error?.message}
+          onQueryRetry={controller.retry}
           sizingStrategy={{ mode: "flexible", columnKey: "name" }}
           toolbar={{
             basePath: BASE_PATH,
