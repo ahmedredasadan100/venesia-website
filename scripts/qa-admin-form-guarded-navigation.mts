@@ -106,6 +106,9 @@ function validateTempPath(tempPath: string) {
 const entrySource = String.raw`
 import * as React from "react";
 import { createRoot } from "react-dom/client";
+import { ErrorBoundaryHandler } from "next/dist/client/components/error-boundary.js";
+import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime.js";
+import AdminRouteError from "@admin-route-error";
 import AdminFeedbackProvider from "@admin-feedback-provider";
 import AdminFormRuntime, { useAdminFormRuntime } from "@admin-form-runtime";
 import TopicContentTypeControl from "@topic-content-type-control";
@@ -472,6 +475,31 @@ qa.mountContent = (options = {}) => {
   }
   root.render(React.createElement(ContentHarness, options));
 };
+qa.mountAdminRetry = () => {
+  qa.retryRefreshes = 0;
+  qa.retryReads = 1;
+  let recovered = false;
+  function FailedServerSegment() {
+    if (!recovered) throw new Error("ADMIN_ROUTE_RETRY_FIXTURE");
+    return React.createElement("output", { id: "qa-admin-route-recovered" }, "Fresh server result");
+  }
+  const router = {
+    ...qa.router,
+    refresh() {
+      qa.retryRefreshes += 1;
+      qa.retryReads += 1;
+      recovered = true;
+    },
+  };
+  root.render(React.createElement(
+    AppRouterContext.Provider,
+    { value: router },
+    React.createElement(ErrorBoundaryHandler, {
+      pathname: "/admin/content/topics/31/preview",
+      errorComponent: AdminRouteError,
+    }, React.createElement(FailedServerSegment)),
+  ));
+};
 `;
 
 const navigationMockSource = String.raw`
@@ -574,6 +602,7 @@ async function compileHarness(rootDir: string, tempDir: string) {
       extensions: [".tsx", ".ts", ".jsx", ".js"],
       modules: [path.join(rootDir, "node_modules"), "node_modules"],
       alias: {
+        "@admin-route-error": path.join(rootDir, "src/app/admin/error.tsx"),
         "@admin-feedback-provider": path.join(
           rootDir,
           "src/components/admin/AdminFeedbackProvider.tsx",
@@ -969,6 +998,33 @@ try {
   const destinationUrl = `${harnessServer.baseUrl}/destination`;
   const browserIssues: BrowserIssue[] = [];
   browser = await chromium.launch({ headless: true });
+
+  {
+    // Real mounted Admin presentation and installed Next boundary; only the
+    // AppRouter refresh/data response is controlled. This is not a live RSC/DB proof.
+    const page = await browser.newPage();
+    await page.goto(harnessUrl);
+    await page.waitForFunction(() => Boolean(
+      (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__?: { mountAdminRetry?: unknown } })
+        .__ADMIN_FORM_GUARDED_NAV_QA__?.mountAdminRetry,
+    ));
+    await page.evaluate(() => {
+      (window as unknown as { __ADMIN_FORM_GUARDED_NAV_QA__: { mountAdminRetry(): void } })
+        .__ADMIN_FORM_GUARDED_NAV_QA__.mountAdminRetry();
+    });
+    await page.getByRole("button", { name: "إعادة المحاولة", exact: true }).click();
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    const retryResult = await page.evaluate(() => {
+      const state = (window as unknown as {
+        __ADMIN_FORM_GUARDED_NAV_QA__: { retryRefreshes: number; retryReads: number };
+      }).__ADMIN_FORM_GUARDED_NAV_QA__;
+      return { refreshes: state.retryRefreshes, reads: state.retryReads };
+    });
+    check("mounted Admin retry invokes Next refresh once and accepts the fresh result",
+      retryResult.refreshes === 1 && retryResult.reads === 2 &&
+      await page.locator("#qa-admin-route-recovered").count() === 1);
+    await closePage(page);
+  }
 
   {
     const { page } = await openHarness(

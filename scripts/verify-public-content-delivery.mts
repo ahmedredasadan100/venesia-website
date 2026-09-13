@@ -951,6 +951,110 @@ check(
 );
 assertPlanConsumed("collection null exact count");
 
+const outOfRangeResult: QueryResult = {
+  data: null,
+  error: { code: "PGRST103", message: "Requested range not satisfiable" },
+  count: null,
+};
+const outOfRangeInput = {
+  contentTypes: ["article"],
+  page: 9999,
+  pageSize: 6,
+  search: "فينيسيا",
+  seriesSlug: "inspection-series",
+  excludeIds: [501],
+};
+resetScenario();
+replaceQueryPlan([
+  {
+    label: "out-of-range rejection",
+    table: "topics",
+    result: outOfRangeResult,
+    inspect: rangeIs(59988, 59993),
+  },
+  {
+    label: "out-of-range filtered exact count",
+    table: "topics",
+    result: success(null, { count: 9 }),
+    inspect: (operations) => {
+      assert.deepEqual(
+        operations.find((operation) => operation.method === "select")?.args,
+        ["id", { count: "exact", head: true }],
+      );
+      const filters = (items: readonly QueryOperation[]) => items.filter(
+        (operation) => !["select", "range", "order"].includes(operation.method),
+      );
+      assert.deepEqual(filters(operations), filters(queryLog[0]!.operations));
+    },
+  },
+  {
+    label: "out-of-range final page",
+    table: "topics",
+    result: success([
+      topicRow({ id: 507 }), topicRow({ id: 508 }), topicRow({ id: 509 }),
+    ]),
+    inspect: rangeIs(6, 11),
+  },
+]);
+const normalizedRange = await loadPublicContentCollection(outOfRangeInput);
+check(
+  "PostgREST out-of-range resolves the same filtered final page with bounded recovery",
+  normalizedRange.page === 2 && normalizedRange.totalPages === 2 &&
+    normalizedRange.totalCount === 9 && normalizedRange.items.length === 3 &&
+    normalizedRange.startIndex === 6 && normalizedRange.endIndex === 9 &&
+    queryLog.length === 3 && cacheWrites === 0,
+);
+assertPlanConsumed("out-of-range filtered final page");
+
+resetScenario();
+replaceQueryPlan([
+  { label: "empty out-of-range rejection", table: "topics", result: outOfRangeResult },
+  { label: "empty out-of-range count", table: "topics", result: success(null, { count: 0 }) },
+]);
+const emptyRange = await loadPublicContentCollection(outOfRangeInput);
+check(
+  "out-of-range zero count resolves genuine Empty without another row request",
+  emptyRange.page === 1 && emptyRange.totalPages === 1 &&
+    emptyRange.totalCount === 0 && emptyRange.items.length === 0 &&
+    queryLog.length === 2,
+);
+assertPlanConsumed("out-of-range Empty");
+
+resetScenario();
+replaceQueryPlan([
+  { label: "out-of-range before count failure", table: "topics", result: outOfRangeResult },
+  { label: "out-of-range count failure", table: "topics", result: failure("count source unavailable") },
+]);
+await expectQueryFailure("out-of-range count Query Failure", () =>
+  loadPublicContentCollection(outOfRangeInput),
+);
+check("failed out-of-range count is never cached", cacheWrites === 0);
+assertPlanConsumed("out-of-range count Query Failure");
+
+resetScenario();
+replaceQueryPlan([
+  { label: "out-of-range before invalid count", table: "topics", result: outOfRangeResult },
+  { label: "out-of-range invalid count", table: "topics", result: success(null, { count: null }) },
+]);
+const invalidRangeCount = await captureFailure(() =>
+  loadPublicContentCollection(outOfRangeInput),
+);
+check(
+  "out-of-range invalid exact count remains a contract failure",
+  (invalidRangeCount as { code?: unknown } | null)?.code === "contract_failed" && cacheWrites === 0,
+);
+assertPlanConsumed("out-of-range invalid count");
+
+resetScenario();
+replaceQueryPlan([
+  { label: "first-page invalid range", table: "topics", result: outOfRangeResult },
+]);
+await expectQueryFailure("first-page invalid range", () =>
+  loadPublicContentCollection({ ...outOfRangeInput, page: 1 }),
+);
+check("first-page range errors do not start an out-of-range recovery loop", queryLog.length === 1);
+assertPlanConsumed("first-page invalid range");
+
 resetScenario();
 const thrownRecoveryInput = {
   contentTypes: ["article"],
@@ -2125,6 +2229,137 @@ check(
     !mediaDetailArticleSource.includes("function renderMarkdown") &&
     !mediaDetailArticleSource.includes("renderArticleMarkdownHtml("),
 );
+
+const listingConfigs = await jiti.import<Record<string, unknown>>(
+  "../src/lib/page-blocks/configs.ts",
+);
+const paginationModel = await jiti.import<
+  typeof import("../src/components/pagination-model.ts")
+>("../src/components/pagination-model.ts");
+const PaginationProbe = () => null;
+const listingReadInputs: Array<Record<string, unknown>> = [];
+const listingRenderer = loadTranspiledModule(
+  "src/components/topics/TopicsListingContent.tsx",
+  {
+    "next/link": "a",
+    "../Pagination": PaginationProbe,
+    "./TopicsListingModule": () => null,
+    "../../lib/page-blocks/configs": listingConfigs,
+    "../../lib/content/public-content-read": publicContract,
+    "../../lib/topics/load-public-topics": {
+      loadPublicTopicsListing: async (input: Record<string, unknown>) => {
+        listingReadInputs.push(input);
+        const secondPage = input.page === 2;
+        const empty = input.search === "no-matches";
+        return {
+          visibleTopics: Array.from({ length: empty ? 0 : secondPage ? 3 : 6 }, (_, index) => ({ id: index + 1 })),
+          totalRegularTopics: empty ? 0 : 9,
+          currentPage: empty ? 1 : secondPage ? 2 : 1,
+          totalPages: empty ? 1 : 2,
+          startIndex: empty ? 0 : secondPage ? 6 : 0,
+          endIndex: empty ? 0 : secondPage ? 9 : 6,
+        };
+      },
+    },
+  },
+).default as (props: Record<string, unknown>) => Promise<unknown>;
+
+function collectRenderedElements(node: unknown, type: unknown): Array<{ props: Record<string, unknown> }> {
+  if (Array.isArray(node)) return node.flatMap((child) => collectRenderedElements(child, type));
+  if (!node || typeof node !== "object" || !("props" in node)) return [];
+  const element = node as { type: unknown; props: Record<string, unknown> };
+  return [
+    ...(element.type === type ? [element] : []),
+    ...collectRenderedElements(element.props.children, type),
+  ];
+}
+
+for (const page of [1, 2]) {
+  const rendered = await listingRenderer({
+    block: null,
+    context: {
+      publicPath: "/topics",
+      searchParams: { q: "فينيسيا", page: String(page), category: "investment", series: "guide" },
+    },
+  });
+  const paginations = collectRenderedElements(rendered, PaginationProbe);
+  check(
+    `Topics search page ${page} exposes the shared pagination with resolved page truth`,
+    paginations.length === 1 && paginations[0]?.props.currentPage === page &&
+      paginations[0]?.props.totalPages === 2,
+  );
+  const pagination = paginations[0]!.props;
+  const destination = new URL(paginationModel.buildPublicPaginationHref(
+    String(pagination.basePath),
+    page === 1 ? 2 : 1,
+    pagination.query as Parameters<typeof paginationModel.buildPublicPaginationHref>[2],
+  ), "https://example.test");
+  check(
+    `Topics search page ${page} preserves query and taxonomy in the next navigation`,
+    destination.pathname === "/topics" && destination.searchParams.get("q") === "فينيسيا" &&
+      destination.searchParams.get("category") === "investment" &&
+      destination.searchParams.get("series") === "guide" &&
+      destination.searchParams.get("page") === (page === 1 ? "2" : null),
+  );
+}
+check(
+  "Topics search delegates each requested page and configured page size to the existing read adapter",
+  listingReadInputs.length === 2 && listingReadInputs[0]?.page === 1 &&
+    listingReadInputs[1]?.page === 2 && listingReadInputs.every(
+      (input) => input.search === "فينيسيا" && input.itemsPerPage === 6,
+    ),
+);
+const emptyListing = await listingRenderer({
+  block: null,
+  context: { publicPath: "/topics", searchParams: { q: "no-matches", page: "9999" } },
+});
+const emptyListingPagination = collectRenderedElements(emptyListing, PaginationProbe);
+check(
+  "Topics genuine Empty retains the shared pagination owner to reconcile its resolved first page",
+  emptyListingPagination.length === 1 && emptyListingPagination[0]?.props.currentPage === 1 &&
+    emptyListingPagination[0]?.props.totalPages === 1,
+);
+
+const searchPlatformConfig = await jiti.import<Record<string, unknown>>(
+  "../src/lib/page-blocks/search-platform-config.ts",
+);
+const searchRenderer = loadTranspiledModule(
+  "src/components/search-platform/SearchPlatformModule.tsx",
+  {
+    "next/image": "img",
+    "next/link": "a",
+    "../../lib/admin/content/content-types": contentTypes,
+    "../../lib/content/public-content-read": publicContract,
+    "../../lib/content/public-content-read/owner": owner,
+    "../../lib/page-blocks/search-platform-config": searchPlatformConfig,
+    "../../lib/page-blocks/configs": listingConfigs,
+    "../Pagination": PaginationProbe,
+    "../public/PublicContentSearchInput": () => null,
+  },
+).default as (props: Record<string, unknown>) => Promise<unknown>;
+for (const hasReadError of [false, true]) {
+  resetScenario();
+  replaceQueryPlan([{
+    label: hasReadError ? "Search module read error" : "Search module genuine Empty",
+    table: "topics",
+    result: hasReadError ? failure("Search source unavailable") : success([], { count: 0 }),
+  }]);
+  const renderedSearch = await searchRenderer({
+    block: { template: { config: {} } },
+    publicPath: "/search",
+    searchParams: { q: "no-matches", page: "9999" },
+  });
+  const paginations = collectRenderedElements(renderedSearch, PaginationProbe);
+  check(
+    hasReadError
+      ? "Search read errors do not mount a pagination owner with invented first-page truth"
+      : "Search genuine Empty mounts the shared pagination owner with resolved first-page truth",
+    hasReadError ? paginations.length === 0 :
+      paginations.length === 1 && paginations[0]?.props.currentPage === 1 &&
+        paginations[0]?.props.totalPages === 1,
+  );
+  assertPlanConsumed(hasReadError ? "Search module read error" : "Search module genuine Empty");
+}
 
 check(
   "failure diagnostics remain observable at the owner boundary",

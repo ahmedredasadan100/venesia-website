@@ -1,8 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useLayoutEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import {
+  buildPublicPaginationCorrectionHref,
   buildPublicPaginationHref,
   buildPublicPaginationItems,
   type PublicPaginationContract,
@@ -60,16 +62,40 @@ export default function PublicPagination({
   totalPages,
   basePath,
   query,
+  requestedQuery,
   pageParam = "page",
   previousLabel = "السابق",
   nextLabel = "التالي",
   ariaLabel = "Pagination",
 }: PublicPaginationContract) {
+  const router = useRouter();
   const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
 
   const navigationRef = useRef<HTMLElement>(null);
   const previousPageRef = useRef(safeCurrentPage);
   const retainedViewportTopRef = useRef<number | null>(null);
+  const pendingCorrectionRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    // A new server result can resolve to the same page after an invalid URL.
+    // Check each commit; the model makes an already-canonical URL a no-op.
+    const href = buildPublicPaginationCorrectionHref(
+      window.location,
+      basePath,
+      safeCurrentPage,
+      pageParam,
+      requestedQuery,
+    );
+    if (!href) {
+      pendingCorrectionRef.current = null;
+      return;
+    }
+    const correctionKey = `${window.location.href}\n${href}`;
+    if (pendingCorrectionRef.current === correctionKey) return;
+    pendingCorrectionRef.current = correctionKey;
+    // Replace through Next so URL, rendered route, and refresh share one state.
+    router.replace(href, { scroll: false });
+  });
 
   function retainViewportPosition() {
     retainedViewportTopRef.current =

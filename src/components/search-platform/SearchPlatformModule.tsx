@@ -568,13 +568,6 @@ export default async function SearchPlatformModule({
                 <SearchResultCard key={`${item.contentType}:${item.id}`} item={item} presentation={presentation} />
               ))}
             </div>
-            <PublicPagination
-              currentPage={listing.page}
-              totalPages={listing.totalPages}
-              basePath="/search"
-              query={paginationQuery}
-              ariaLabel="صفحات نتائج البحث"
-            />
           </>
         ) : (
           <div
@@ -591,6 +584,16 @@ export default async function SearchPlatformModule({
           اكتب كلمة البحث لعرض النتائج.
         </div>
       )}
+      {!hasReadError && query ? (
+        <PublicPagination
+          currentPage={listing.page}
+          totalPages={listing.totalPages}
+          basePath="/search"
+          query={paginationQuery}
+          requestedQuery={searchParams}
+          ariaLabel="صفحات نتائج البحث"
+        />
+      ) : null}
     </section>
   );
 }

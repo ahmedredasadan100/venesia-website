@@ -776,7 +776,9 @@ async function queryPublicContentCollection(
 
   let result = await buildCollectionQuery(listInput, true)
     .range(requestedFrom, requestedFrom + listInput.pageSize - 1);
-  if (result.error) {
+  const rangeOutOfBounds =
+    result.error?.code === "PGRST103" && listInput.page > 1;
+  if (result.error && !rangeOutOfBounds) {
     failPublicContentRead("query_failed", {
       context: "Public Content collection query failed",
       error: result.error,
@@ -787,14 +789,34 @@ async function queryPublicContentCollection(
     });
   }
 
-  if (!Number.isInteger(result.count) || Number(result.count) < 0) {
+  let exactCount = result.count;
+  if (rangeOutOfBounds) {
+    // PostgREST rejects an offset past the final row before returning count.
+    // Resolve only that range failure through the same filtered count contract.
+    const countResult = await applyPublicFilters(
+      getSupabaseAdmin()
+        .from("topics")
+        .select("id", { count: "exact", head: true }),
+      listInput,
+    );
+    if (countResult.error) {
+      failPublicContentRead("query_failed", {
+        context: "Public Content out-of-range count query failed",
+        error: countResult.error,
+        details: { contentTypes: input.contentTypes, page: input.page },
+      });
+    }
+    exactCount = countResult.count;
+  }
+
+  if (!Number.isInteger(exactCount) || Number(exactCount) < 0) {
     failPublicContentRead("contract_failed", {
       context: "Public Content collection query returned an invalid count",
       error: new Error("Public Content collection count does not satisfy the read contract."),
-      details: { contentTypes: input.contentTypes, count: result.count },
+      details: { contentTypes: input.contentTypes, count: exactCount },
     });
   }
-  const totalCount = Number(result.count);
+  const totalCount = Number(exactCount);
   const totalPages = Math.max(1, Math.ceil(totalCount / listInput.pageSize));
   const page = Math.min(listInput.page, totalPages);
   const startIndex = totalCount === 0 ? 0 : (page - 1) * listInput.pageSize;
@@ -811,7 +833,9 @@ async function queryPublicContentCollection(
     }
   }
 
-  const items = mapCollectionRows(result.data);
+  const items = rangeOutOfBounds && totalCount === 0
+    ? []
+    : mapCollectionRows(result.data);
   return {
     featured,
     items,
