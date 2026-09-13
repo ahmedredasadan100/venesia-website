@@ -412,6 +412,7 @@ export default function RedirectsClient({
               number
             >
               listId="redirects-table"
+              queryPending={controller.queryPending}
               sizingStrategy={{ mode: "flexible", columnKey: "destination" }}
               toolbar={createRedirectsCollectionToolbar({
                 search: controller.query.search,

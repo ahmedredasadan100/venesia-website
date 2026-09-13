@@ -481,6 +481,7 @@ export default function UsersManagementClient({
               number
             >
               listId="admin-users-table"
+              queryPending={controller.queryPending}
               sizingStrategy={{ mode: "flexible", columnKey: "role" }}
               toolbar={{
                 basePath: "/admin/users-roles",

@@ -534,6 +534,7 @@ export default function CategoriesListClient({
           number
         >
           listId={LIST_ID}
+          queryPending={controller.queryPending}
           sizingStrategy={{ mode: "flexible", columnKey: "name" }}
           toolbar={{
             basePath: BASE_PATH,

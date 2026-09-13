@@ -32,6 +32,8 @@ type SortLabelProps = BaseProps & {
 };
 
 type GridProps = BaseProps & {
+  /** Query changes retain rows; same-query background refreshes stay quiet. */
+  queryPending?: boolean;
   summary?: ReactNode;
   scrollLabel?: string;
   /** Standalone owns its card boundary; embedded delegates it to a parent surface. */
@@ -603,6 +605,7 @@ export function AdminDataGridActionIcon({
 
 export function AdminDataGrid({
   children,
+  queryPending = false,
   summary,
   scrollLabel = "منطقة بيانات الإدارة",
   surface = "standalone",
@@ -613,7 +616,8 @@ export function AdminDataGrid({
   return (
     <section
       data-admin-data-grid-surface={surface}
-      className={`${
+      data-admin-data-grid-query-pending={queryPending ? "true" : "false"}
+      className={`${queryPending ? "relative " : ""}${
         embedded
           ? "min-w-0"
           : "rounded-[20px] border border-[#D8B87A]/12 bg-[#080B10]/86 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.035)] backdrop-blur-xl"
@@ -631,6 +635,34 @@ export function AdminDataGrid({
       >
         {children}
       </div>
+      {queryPending ? (
+        <>
+          <div
+            aria-hidden="true"
+            data-admin-data-grid-query-indicator=""
+            className="pointer-events-none absolute inset-x-3 top-1 z-10 flex -translate-y-1/2 justify-center"
+          >
+            <span className="flex items-center gap-2 rounded-full border border-[#D8B87A]/40 bg-[#11151B] px-3 py-1 text-xs font-semibold leading-5 text-[#F4E7C5] shadow-lg">
+              <span className="size-3 shrink-0 animate-spin rounded-full border-2 border-[#D8B87A]/30 border-t-[#D8B87A] motion-reduce:animate-none" />
+              جارٍ تحديث النتائج…
+            </span>
+          </div>
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            dir="rtl"
+            data-admin-data-grid-query-status=""
+            className="pointer-events-none absolute inset-x-3 bottom-0 z-10 flex translate-y-1/2 justify-center"
+          >
+            <span aria-hidden="true" className="flex items-center gap-2 rounded-full border border-[#D8B87A]/40 bg-[#11151B] px-3 py-1 text-xs font-semibold leading-5 text-[#F4E7C5] shadow-lg">
+              <span className="size-3 shrink-0 animate-spin rounded-full border-2 border-[#D8B87A]/30 border-t-[#D8B87A] motion-reduce:animate-none" />
+              جارٍ التحديث… الصفوف والعدّادات سابقة
+            </span>
+            <span className="sr-only">جارٍ تحديث النتائج… الصفوف والعدّادات المعروضة تخص النتائج السابقة.</span>
+          </div>
+        </>
+      ) : null}
       {summary ? (
         <div className="mt-4 rounded-[12px] border border-white/8 bg-black/14 px-5 py-5 text-center text-sm font-semibold text-white/48">
           {summary}

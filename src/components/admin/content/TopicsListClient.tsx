@@ -621,6 +621,7 @@ export default function TopicsListClient({
       >
         <UnifiedContentList
           rows={controller.result.rows}
+          queryPending={controller.queryPending}
           categories={categories}
           currentListPath={currentListPath}
           sort={sort}

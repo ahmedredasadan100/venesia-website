@@ -63,6 +63,8 @@ export type AdminEntityListProps<
 > = {
   listId: string;
   rows: readonly TRow[];
+  /** Retained results belong to the previous query until the controller resolves. */
+  queryPending?: boolean;
   columns: readonly AdminEntityColumnDef<TRow, TKey, TSortKey>[];
   getRowId: (row: TRow) => TId;
   getRowLabel: (row: TRow) => string;
@@ -248,6 +250,7 @@ function AdminEntityListInner<
   const {
     listId,
     rows,
+    queryPending,
     columns,
     getRowId,
     getRowLabel,
@@ -501,6 +504,7 @@ function AdminEntityListInner<
 
       <AdminEntityListPrimarySection>
         <AdminEntityListTable
+          queryPending={queryPending}
           key={visibleColumnDefs.map((column) => column.key).join("|")}
           rows={rows}
           columns={visibleColumnDefs}

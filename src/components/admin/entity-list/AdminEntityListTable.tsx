@@ -66,6 +66,7 @@ export type AdminEntityListTableProps<
   TId extends AdminGridId = AdminGridId,
 > = {
   rows: readonly TRow[];
+  queryPending?: boolean;
   columns: readonly AdminEntityColumnDef<TRow, TKey, TSortKey>[];
   getRowId: (row: TRow) => TId;
   getRowLabel: (row: TRow) => string;
@@ -102,6 +103,7 @@ export default function AdminEntityListTable<
   TId extends AdminGridId = AdminGridId,
 >({
   rows,
+  queryPending = false,
   columns,
   getRowId,
   getRowLabel,
@@ -356,6 +358,7 @@ export default function AdminEntityListTable<
 
   return (
     <AdminDataGrid
+      queryPending={queryPending}
       scrollLabel={scrollLabel}
       className={`max-w-full ${className}`.trim()}
     >
@@ -504,7 +507,7 @@ export default function AdminEntityListTable<
             ) : null}
           </tr>
         </thead>
-        <tbody>
+        <tbody className={queryPending ? "opacity-35" : undefined}>
           {rows.map((row) => {
             const rowId = getRowId(row);
             const depth = getRowDepth?.(row) ?? 0;

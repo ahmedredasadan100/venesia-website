@@ -497,6 +497,7 @@ export default function ProjectLocationsManagementClient({
           <AdminEntityListTableRegion data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}>
             <AdminEntityList<ProjectLocationManagementRow, ProjectLocationManagementColumnKey, ProjectLocationSortField, number>
               listId={`${entityKey}-table`}
+              queryPending={controller.queryPending}
               sizingStrategy={{
                 mode: "flexible",
                 columnKey: flexibleColumnKey,

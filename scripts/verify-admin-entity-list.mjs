@@ -314,6 +314,7 @@ const entityTrashHeader = read(
 const categoriesColumns = read("src/app/admin/content/categories/categories-columns.tsx");
 const categoriesActions = read("src/app/admin/content/categories/CategoryRowActions.tsx");
 const seriesClient = read("src/app/admin/content/series/SeriesTableClient.tsx");
+const trackingCollections = read("src/components/admin/projects/tracking/TrackingCollections.tsx");
 const seriesPage = read("src/app/admin/content/series/page.tsx");
 const seriesListOwner = read("src/lib/admin/content/load-series-list.ts");
 const seriesListConfigModule = loadPureTypeScriptModule(
@@ -744,6 +745,33 @@ check(
         !source.includes("pending={controller.queryPending}") &&
         !source.includes("pending: controller.queryPending"),
     ),
+);
+check(
+  "Query feedback belongs inside DataGrid while TableRegion retains its original layout",
+  appearsInOrder(dataGrid, [
+    'data-admin-data-grid-scroll=""',
+    '{children}',
+    'data-admin-data-grid-query-indicator=""',
+    'role="status"',
+    'aria-live="polite"',
+    'data-admin-data-grid-query-status=""',
+    "الصفوف والعدّادات المعروضة تخص النتائج السابقة.",
+  ]) &&
+    !entitySurface.includes('role="status"') &&
+    !entitySurface.includes("queryPending") &&
+    !/\b(?:inert|disabled|aria-busy)=/u.test(entitySurface),
+);
+check(
+  "Retained query rows are distinguished through the existing shared table chain",
+  [entityList, entityTable, topicsList].every(
+    (source) => source.includes("queryPending?: boolean") && source.includes("queryPending={queryPending}"),
+  ) &&
+    entityTable.includes('<tbody className={queryPending ? "opacity-35" : undefined}>') &&
+    [topicsClient, categoriesClient, seriesClient].every(
+      (source) => source.includes("queryPending={controller.queryPending}"),
+    ) &&
+    (trackingCollections.match(/queryPending=\{controller\.queryPending\}/gu)?.length ?? 0) ===
+      (trackingCollections.match(/<AdminEntityListTableRegion\b/gu)?.length ?? 0),
 );
 
 check(

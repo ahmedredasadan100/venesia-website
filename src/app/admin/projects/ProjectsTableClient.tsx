@@ -417,6 +417,7 @@ export default function ProjectsTableClient({
           number
         >
           listId={`${type}-projects-table`}
+          queryPending={controller.queryPending}
           sizingStrategy={{
             mode: "flexible",
             columnKey: "publication_status",

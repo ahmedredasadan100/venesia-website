@@ -327,6 +327,7 @@ export default function TopicsWithoutImageReportClient({
           number
         >
           listId="topics-without-image-table"
+          queryPending={controller.queryPending}
           sizingStrategy={{ mode: "flexible", columnKey: "content_type" }}
           toolbar={{
             basePath: "/admin/reports/topics-without-image",
