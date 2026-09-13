@@ -30,11 +30,17 @@ import {resolveHeroContentControlsForVariant} from '@src/lib/hero/hero-content-c
 const root=createRoot(document.getElementById('root'));
 const assignmentContext={assignments:[],pages:[]};
 const block={id:51,name:'Proof block',slug:'',description:null,style_preset:'premium-dark',status:'unpublished',updated_at:'2026-09-13T00:00:00.000Z'};
-window.calls=0;window.payloads=[];window.mode='failure';
+window.calls=0;window.payloads=[];window.mode='failure';window.holdMediaResult=false;
+window.__remainingContentProofNavigation={href:null,calls:[]};
+window.__remainingContentProofNativeNavigation=window.navigation;
 window.action=async(...args)=>{
  const data=args.find(value=>value instanceof FormData);window.calls++;window.payloads.push([...data.entries()].filter(([,value])=>typeof value==='string'));
  await new Promise(resolve=>window.release=resolve);
- if(window.kind.startsWith('media:')){const result=await window.ownerMedia(args[0],window.payloads.at(-1),window.mode);window.lastActionResult=result;return result;}
+ if(window.kind.startsWith('media:')){
+  const result=await window.ownerMedia(args[0],window.payloads.at(-1),window.mode);window.lastActionResult=result;
+  if(window.holdMediaResult)await new Promise(resolve=>window.releaseMediaResult=resolve);
+  return result;
+ }
  if(window.mode==='failure')throw new Error('isolated_action_failure');
 };
 function Fixture({kind,config,values,onCommitted}){
@@ -50,7 +56,15 @@ window.mount=(kind,config={},values={})=>new Promise(resolve=>{window.kind=kind;
 window.capture=()=>[...new FormData(document.querySelector('form[data-admin-form-runtime]')).entries()].filter(([,value])=>typeof value==='string');
 `;
 await writeFile(path.join(out, "entry.tsx"), entry);
-await writeFile(path.join(out, "navigation.ts"), `export {unstable_rethrow} from 'next/dist/client/components/unstable-rethrow.browser';const router={push(href){window.navigation=href},replace(href){window.navigation=href},refresh(){}};export const useRouter=()=>router;export const usePathname=()=>'/proof';export const useSearchParams=()=>new URLSearchParams();`);
+await writeFile(path.join(out, "navigation.ts"), `
+export {unstable_rethrow} from 'next/dist/client/components/unstable-rethrow.browser';
+function recordNavigation(method,href,options){
+ const record=window.__remainingContentProofNavigation;
+ record.href=href;record.calls.push({method,href,options});
+}
+const router={push(href,options){recordNavigation('push',href,options)},replace(href,options){recordNavigation('replace',href,options)},refresh(){}};
+export const useRouter=()=>router;export const usePathname=()=>'/proof';export const useSearchParams=()=>new URLSearchParams();
+`);
 await writeFile(path.join(out, "link.tsx"), `import React from 'react';export default function Link({href,children,prefetch,...props}){return <a href={href} {...props}>{children}</a>}`);
 await writeFile(path.join(out, "image.tsx"), `import React from 'react';export default function Image({fill,priority,unoptimized,quality,loader,...props}){return <img {...props}/>}`);
 await writeFile(path.join(out, "actions.ts"), `export const updateHeroTemplateDetails=(...args)=>window.action(...args);export const saveContentForm=(...args)=>window.action(...args);`);
@@ -123,7 +137,8 @@ async function submit(page) {
   await page.locator('form[data-admin-form-runtime] button[type="submit"]').first().click();
   await page.waitForFunction(before => window.calls === before + 1, before);
 }
-async function release(page) { await page.evaluate(() => window.release()); await page.waitForFunction(() => !document.querySelector('form[data-admin-form-runtime][aria-busy="true"]') || (window.kind.startsWith('media:') && window.mode === 'success' && Boolean(window.navigation))); }
+async function release(page) { await page.evaluate(() => window.release()); await page.waitForFunction(() => !document.querySelector('form[data-admin-form-runtime][aria-busy="true"]')); }
+const hasRecordedMediaCreateNavigation = expectedHref => window.__remainingContentProofNavigation.href === expectedHref;
 const branches = [
   { key: "home-projects", fields: { projects_limit: "4", card_cta_label: "Scoped card action" }, config: {} },
   { key: "projects-hub-hero", fields: { limit: "3", autoplay_ms: "7500", empty_state: "Scoped empty projects" }, config: {} },
@@ -183,11 +198,25 @@ try {
     const before = owners.state.writes;
     await submit(page); await release(page);
     assert.equal(owners.state.writes, before); assert.equal(await page.locator('[name="title"]').inputValue(), `Preserved ${type} create input`);
-    await page.evaluate(() => window.mode = "success"); await submit(page); await release(page);
+    await page.evaluate(() => { window.mode = "success"; window.holdMediaResult = true; });
+    await submit(page); await page.evaluate(() => window.release());
+    // Hold the persisted result before React can run the create-to-edit effect.
+    await page.waitForFunction(() => typeof window.releaseMediaResult === "function");
     assert.equal(owners.state.writes, before + 1, JSON.stringify(await page.evaluate(() => window.lastActionResult)));
     const row = structuredClone(owners.state.rows.at(-1));
     assert.equal(row.content_type, type); assert.equal(row.status, "unpublished"); assert.equal(row.created_by, 7); assert.equal(row.title, `Preserved ${type} create input`);
-    assert.equal(await page.evaluate(() => window.navigation), `/admin/content/topics/${row.id}`);
+    const expectedHref = `/admin/content/topics/${row.id}`;
+    assert.equal(await page.evaluate(() => window.lastActionResult.editHref), expectedHref);
+    assert.equal(await page.evaluate(() => Boolean(window.navigation)), true, "Chromium exposes the native Navigation object before the handoff");
+    assert.deepEqual(await page.evaluate(() => window.__remainingContentProofNavigation), { href: null, calls: [] });
+    assert.equal(await page.evaluate(hasRecordedMediaCreateNavigation, expectedHref), false, "Native navigation and a persisted row cannot satisfy the exact handoff wait");
+    await page.evaluate(() => window.releaseMediaResult());
+    await page.waitForFunction(hasRecordedMediaCreateNavigation, expectedHref);
+    assert.equal(await page.evaluate(() => window.__remainingContentProofNavigation.href), expectedHref);
+    assert.deepEqual(await page.evaluate(() => window.__remainingContentProofNavigation.calls), [{ method: "replace", href: expectedHref, options: { scroll: false } }]);
+    assert.equal(await page.evaluate(() => window.navigation === window.__remainingContentProofNativeNavigation), true, "The fixture must preserve the browser's native Navigation object");
+    assert.equal(owners.state.writes, before + 1, "Delayed create handoff must not repeat persistence");
+    assert.equal(await page.evaluate(() => window.calls), 2, "One rejected submission and one successful retry");
     if (type === "news" || type === "site_update") assert.equal(row.media_project, "P101");
     if (type === "gallery") { assert.equal(row.content, ""); assert.equal(row.media_payload.images[0].caption, "Preserved gallery caption"); }
     await mount(page, `media:${type}`, {}, JSON.parse(JSON.stringify(row)));
@@ -197,7 +226,7 @@ try {
     const duplicate = form(await page.evaluate(() => window.payloads.at(-1))); duplicate.delete("id");
     const duplicateResult = await owners.media.saveMediaContentAdapter({ status: "idle", mode: "create", revision: 0 }, duplicate);
     assert.equal(duplicateResult.status, "error"); assert.ok(duplicateResult.fieldErrors?.slug); assert.equal(owners.state.writes, before + 1);
-    return { isolatedCreateAction: true, mountedFailureRetry: true, createToEditResult: true, duplicateRejected: true, row };
+    return { isolatedCreateAction: true, mountedFailureRetry: true, createToEditResult: true, delayedHandoffVerified: true, nativeNavigationPreserved: true, exactNavigationCalls: 1, successfulWrites: 1, duplicateRejected: true, row };
   });
 } finally {
   await browser.close(); await new Promise(resolve => server.close(resolve)); globalThis.fetch = originalFetch;

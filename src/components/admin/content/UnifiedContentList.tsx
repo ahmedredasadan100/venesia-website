@@ -82,6 +82,7 @@ function defaultSortPath(currentListPath: string) {
 
 export default function UnifiedContentList({
   rows,
+  queryPending,
   categories,
   currentListPath,
   sort,
@@ -96,6 +97,7 @@ export default function UnifiedContentList({
   trashView,
 }: {
   rows: UnifiedContentRow[];
+  queryPending?: boolean;
   categories: AdminContentCategoryNode[];
   currentListPath: string;
   sort: ContentSortValue;
@@ -144,6 +146,7 @@ export default function UnifiedContentList({
       number
     >
       listId={UNIFIED_CONTENT_LIST_ID}
+      queryPending={queryPending}
       sizingStrategy={{ mode: "flexible", columnKey: "title" }}
       rows={rows}
       columns={columns}

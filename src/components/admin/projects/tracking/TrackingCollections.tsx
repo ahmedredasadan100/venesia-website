@@ -690,6 +690,7 @@ export function TrackingStagesCollection({
           >
             <AdminEntityList
               listId="project-tracking-stages"
+              queryPending={controller.queryPending}
               sizingStrategy={{ mode: "flexible", columnKey: "name" }}
               rows={rows}
               columns={columns}
@@ -1182,6 +1183,7 @@ export function TrackingItemsCollection({
           >
             <AdminEntityList
               listId="project-tracking-items"
+              queryPending={controller.queryPending}
               sizingStrategy={{ mode: "flexible", columnKey: "name" }}
               rows={rows}
               columns={columns}
@@ -1593,6 +1595,7 @@ export function TrackingUpdatesCollection({
           >
             <AdminEntityList
               listId="project-tracking-updates"
+              queryPending={controller.queryPending}
               sizingStrategy={{ mode: "flexible", columnKey: "title" }}
               rows={controller.result.rows}
               columns={columns}

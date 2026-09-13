@@ -446,6 +446,7 @@ export default function SeriesTableClient({
       >
         <AdminEntityList<SeriesListRow, SeriesColumnKey, SeriesSortKey, number>
           listId="content-series-table"
+          queryPending={controller.queryPending}
           sizingStrategy={{ mode: "flexible", columnKey: "name" }}
           toolbar={{
             basePath: BASE_PATH,

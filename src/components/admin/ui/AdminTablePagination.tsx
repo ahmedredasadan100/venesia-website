@@ -333,7 +333,7 @@ export default function AdminTablePagination({
                   setIsLimitOpen(!isLimitOpen);
                 }}
                 onKeyDown={handleLimitKeyDown}
-                className={`flex h-9 min-w-[72px] items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
+                className={`flex h-9 min-w-[72px] cursor-pointer items-center justify-between gap-2 rounded-[10px] border px-3 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-not-allowed disabled:opacity-50 ${
                   isLimitOpen
                     ? "border-[#D8B87A]/35 bg-black/30 text-[#F4E7C5]"
                     : "border-[#D8B87A]/16 bg-black/22 text-[#F4E7C5]/90 hover:border-[#D8B87A]/28 hover:bg-black/28"
@@ -406,7 +406,7 @@ export default function AdminTablePagination({
                   aria-current={isActive ? "page" : undefined}
                   disabled={isActive}
                   data-admin-pagination-slot="page"
-                  className={`inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-default disabled:opacity-70 ${
+                  className={`inline-flex h-9 w-9 flex-none cursor-pointer items-center justify-center rounded-[10px] border p-0 text-sm font-semibold tabular-nums transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70 disabled:cursor-default disabled:opacity-70 ${
                     isActive
                       ? "border-[#D8B87A]/35 bg-[#D8B87A]/18 text-[#F4E7C5] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                       : "border-[#D8B87A]/12 bg-black/18 text-[#F4E7C5]/65 hover:border-[#D8B87A]/24 hover:bg-black/24 hover:text-[#F4E7C5]"

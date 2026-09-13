@@ -617,6 +617,7 @@ export default function PagesTableClient({
             number
           >
             listId="pages-table"
+            queryPending={controller.queryPending}
             sizingStrategy={{ mode: "flexible", columnKey: "path" }}
             toolbar={{
               basePath: "/admin/pages-blocks/pages",

@@ -747,23 +747,31 @@ check(
     ),
 );
 check(
-  "Query transitions expose one shared polite status explaining retained results without blocking controls",
-  appearsInOrder(entitySurface, [
-    '"data-admin-entity-list-pending": queryPending',
-    'queryPending === "true"',
+  "Query feedback belongs inside DataGrid while TableRegion retains its original layout",
+  appearsInOrder(dataGrid, [
+    'data-admin-data-grid-scroll=""',
+    '{children}',
+    'data-admin-data-grid-query-indicator=""',
     'role="status"',
     'aria-live="polite"',
-    'data-admin-entity-list-query-status=""',
+    'data-admin-data-grid-query-status=""',
     "الصفوف والعدّادات المعروضة تخص النتائج السابقة.",
-    "{children}",
-  ]) && !/\b(?:inert|disabled|aria-busy)=/u.test(entitySurface),
+  ]) &&
+    !entitySurface.includes('role="status"') &&
+    !entitySurface.includes("queryPending") &&
+    !/\b(?:inert|disabled|aria-busy)=/u.test(entitySurface),
 );
 check(
-  "Every shared tracking collection forwards query transition state to the canonical table region",
-  (trackingCollections.match(/<AdminEntityListTableRegion\b/gu)?.length ?? 0) === 3 &&
-    [...trackingCollections.matchAll(/<AdminEntityListTableRegion\b([^>]+)>/gu)].every(
-      (match) => match[1].includes('data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}'),
-    ),
+  "Retained query rows are distinguished through the existing shared table chain",
+  [entityList, entityTable, topicsList].every(
+    (source) => source.includes("queryPending?: boolean") && source.includes("queryPending={queryPending}"),
+  ) &&
+    entityTable.includes('<tbody className={queryPending ? "opacity-35" : undefined}>') &&
+    [topicsClient, categoriesClient, seriesClient].every(
+      (source) => source.includes("queryPending={controller.queryPending}"),
+    ) &&
+    (trackingCollections.match(/queryPending=\{controller\.queryPending\}/gu)?.length ?? 0) ===
+      (trackingCollections.match(/<AdminEntityListTableRegion\b/gu)?.length ?? 0),
 );
 
 check(

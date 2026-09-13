@@ -317,6 +317,7 @@ export default function ActivityLogClient({
             number
           >
             listId="activity-log-table"
+            queryPending={controller.queryPending}
             sizingStrategy={{ mode: "flexible", columnKey: "actor" }}
             toolbar={{
               basePath: "/admin/activity-log",
