@@ -40,6 +40,7 @@ export class AdminEntityListRequestError extends Error {
 }
 
 type HistoryBehavior = "push" | "replace";
+type EntityListQueryKey = ReturnType<typeof adminEntityListQueryKeys.query>;
 
 export type AdminEntityListControllerOptions<
   Entity extends string,
@@ -65,10 +66,13 @@ export function useAdminEntityListInvalidation(entity: string) {
   const queryClient = useQueryClient();
 
   return useCallback(
-    () =>
-      queryClient.invalidateQueries({
-        queryKey: adminEntityListQueryKeys.entity(entity),
-      }),
+    async () => {
+      const queryKey = adminEntityListQueryKeys.entity(entity);
+      // Includes inactive speculative reads (for example after Empty Trash).
+      // A pre-write response must not make an invalidated cache fresh again.
+      await queryClient.cancelQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey });
+    },
     [entity, queryClient],
   );
 }
@@ -129,6 +133,32 @@ export function useAdminEntityListController<
   const [query, setQuery] = useState(bootstrap.query);
   const queryRef = useRef(bootstrap.query);
   const initialKey = bootstrap.key;
+  const speculativeReadRef = useRef<{
+    queryKey: EntityListQueryKey;
+    promise: Promise<void>;
+  } | null>(null);
+  const cancelSpeculativeRead = useCallback(
+    (keepQueryKey?: EntityListQueryKey) => {
+      const speculative = speculativeReadRef.current;
+      if (
+        !speculative ||
+        (keepQueryKey &&
+          JSON.stringify(keepQueryKey) === JSON.stringify(speculative.queryKey))
+      ) {
+        return;
+      }
+      speculativeReadRef.current = null;
+      // Another observer may have adopted this request as foreground work.
+      void queryClient.cancelQueries({
+        queryKey: speculative.queryKey,
+        exact: true,
+        type: "inactive",
+      });
+    },
+    [queryClient],
+  );
+
+  useEffect(() => () => cancelSpeculativeRead(), [cancelSpeculativeRead]);
 
   const commitQuery = useCallback(
     (
@@ -142,6 +172,7 @@ export function useAdminEntityListController<
       const current = queryRef.current;
       const candidate = typeof next === "function" ? next(current) : next;
       const resolved = applyQueryConstraint(candidate);
+      cancelSpeculativeRead(adminEntityListQueryKeys.query(entity, resolved));
       const params = writeAdminEntityListQuery(
         contract,
         resolved,
@@ -155,7 +186,7 @@ export function useAdminEntityListController<
       queryRef.current = resolved;
       setQuery(resolved);
     },
-    [applyQueryConstraint, contract],
+    [applyQueryConstraint, cancelSpeculativeRead, contract, entity],
   );
 
   useEffect(() => {
@@ -185,6 +216,7 @@ export function useAdminEntityListController<
       const currentParams = new URLSearchParams(window.location.search);
       const normalized = normalizeBrowserQuery(currentParams);
       const restored = applyQueryConstraint(normalized);
+      cancelSpeculativeRead(adminEntityListQueryKeys.query(entity, restored));
       if (JSON.stringify(normalized) !== JSON.stringify(restored)) {
         const params = writeAdminEntityListQuery(
           contract,
@@ -200,16 +232,14 @@ export function useAdminEntityListController<
     }
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [applyQueryConstraint, contract, normalizeBrowserQuery]);
+  }, [applyQueryConstraint, cancelSpeculativeRead, contract, entity, normalizeBrowserQuery]);
 
-  const queryKey = adminEntityListQueryKeys.query(
-    entity,
-    query as AdminEntityListQuery<Record<string, unknown>, string>,
-  );
-  const request = useQuery({
-    queryKey,
-    queryFn: async ({ signal }) => {
-      const params = writeAdminEntityListQuery(contract, query);
+  const loadResult = useCallback(
+    async (
+      requestedQuery: AdminEntityListQuery<Filters, SortField>,
+      signal: AbortSignal,
+    ): Promise<AdminEntityListResult<Row, Metrics>> => {
+      const params = writeAdminEntityListQuery(contract, requestedQuery);
       const response = await fetch(
         `/api/admin/entity-lists/${encodeURIComponent(entity)}?${params}`,
         {
@@ -228,23 +258,18 @@ export function useAdminEntityListController<
           payload?.error?.code ?? null,
         );
       }
-      const result = (await response.json()) as AdminEntityListResult<
-        Row,
-        Metrics
-      >;
-      const normalizedQuery = cacheNormalizedAdminEntityListResult(
-        queryClient,
-        entity,
-        query,
-        result,
-      );
-      if (normalizedQuery) {
-        queueMicrotask(() => {
-          commitQuery(normalizedQuery, "replace");
-        });
-      }
-      return result;
+      return response.json();
     },
+    [contract, entity],
+  );
+
+  const queryKey = adminEntityListQueryKeys.query(
+    entity,
+    query as AdminEntityListQuery<Record<string, unknown>, string>,
+  );
+  const request = useQuery({
+    queryKey,
+    queryFn: ({ signal }) => loadResult(query, signal),
     initialData:
       JSON.stringify(queryKey) === JSON.stringify(initialKey)
         ? initialResult
@@ -263,6 +288,124 @@ export function useAdminEntityListController<
   ) {
     setLastResolvedResult(request.data);
   }
+
+  useEffect(() => {
+    // A warm or already in-flight read may satisfy useQuery without invoking
+    // its queryFn. Only the current, resolved foreground result can correct URL.
+    if (
+      queryRef.current !== query ||
+      !request.isSuccess ||
+      request.isFetching ||
+      request.isPlaceholderData
+    ) {
+      return;
+    }
+    const normalizedQuery = cacheNormalizedAdminEntityListResult(
+      queryClient,
+      entity,
+      query,
+      request.data,
+    );
+    if (normalizedQuery) commitQuery(normalizedQuery, "replace");
+  }, [
+    commitQuery,
+    entity,
+    query,
+    queryClient,
+    request.data,
+    request.isFetching,
+    request.isPlaceholderData,
+    request.isSuccess,
+  ]);
+
+  const prefetchPage = useCallback(
+    (page: number): Promise<void> => {
+      const currentKey = adminEntityListQueryKeys.query(entity, query);
+      const currentState = queryClient.getQueryState(currentKey);
+      if (
+        queryRef.current !== query ||
+        query.mode !== "server-page" ||
+        request.isPending ||
+        request.isPlaceholderData ||
+        request.isFetching ||
+        request.isError ||
+        !request.data ||
+        request.data.pagination.page !== query.page ||
+        !Number.isInteger(page) ||
+        Math.abs(page - query.page) !== 1 ||
+        page < 1 ||
+        page > request.data.pagination.totalPages ||
+        currentState?.isInvalidated ||
+        currentState?.status === "error" ||
+        queryClient.isMutating() > 0 ||
+        queryClient.isFetching({ queryKey: currentKey, exact: true }) > 0
+      ) {
+        return Promise.resolve();
+      }
+
+      const candidate = applyQueryConstraint({ ...query, page });
+      if (candidate.page !== page) return Promise.resolve();
+      const targetKey = adminEntityListQueryKeys.query(entity, candidate);
+      const keyIdentity = JSON.stringify(targetKey);
+      const existing = speculativeReadRef.current;
+      if (existing && JSON.stringify(existing.queryKey) === keyIdentity) {
+        return existing.promise;
+      }
+      cancelSpeculativeRead(targetKey);
+      if (
+        queryClient.getQueryCache()
+          .find({ queryKey: targetKey, exact: true })?.isActive()
+      ) {
+        return Promise.resolve();
+      }
+
+      const options = queryClient.defaultQueryOptions({
+        queryKey: targetKey,
+        queryFn: ({ signal }: { signal: AbortSignal }) => loadResult(candidate, signal),
+        staleTime: staleTimeMs,
+      });
+      const inheritedRetry = options.retry;
+      const promise = queryClient.prefetchQuery({
+        ...options,
+        retry: (failureCount, error) => {
+          // No speculative retries. If the user adopts the running request,
+          // preserve the foreground retry policy captured before this override.
+          const activeKey = adminEntityListQueryKeys.query(entity, queryRef.current);
+          if (JSON.stringify(activeKey) !== keyIdentity) {
+            return false;
+          }
+          if (typeof inheritedRetry === "function") {
+            return inheritedRetry(failureCount, error);
+          }
+          if (inheritedRetry === false) return false;
+          return inheritedRetry === true ||
+            failureCount < (typeof inheritedRetry === "number" ? inheritedRetry : 3);
+        },
+      });
+      const speculative = { queryKey: targetKey, promise };
+      speculativeReadRef.current = speculative;
+      void promise.finally(() => {
+        if (speculativeReadRef.current === speculative) {
+          speculativeReadRef.current = null;
+        }
+      });
+      return promise;
+    },
+    [
+      applyQueryConstraint,
+      cancelSpeculativeRead,
+      entity,
+      loadResult,
+      query,
+      queryClient,
+      request.data,
+      request.isError,
+      request.isFetching,
+      request.isPending,
+      request.isPlaceholderData,
+      staleTimeMs,
+    ],
+  );
 
   const setSearch = useCallback(
     (search: string) =>
@@ -378,6 +521,7 @@ export function useAdminEntityListController<
     result: request.data ?? lastResolvedResult,
     error: request.error,
     retry: request.refetch,
+    prefetchPage,
     // Query intent is pending only while a query-key change is waiting for its
     // own result. Mutation reconciliation of the current key remains usable.
     ...interactionState,

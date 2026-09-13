@@ -591,6 +591,7 @@ export default function SeriesTableClient({
           totalPages={controller.result.pagination.totalPages}
           emptySummaryText="لا توجد سلاسل"
           onPageChange={controller.setPage}
+          onPageIntent={controller.prefetchPage}
           onPageSizeChange={controller.setPageSize}
         />
       </AdminEntityListTableRegion>

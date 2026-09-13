@@ -485,36 +485,220 @@ async function main() {
   if (failed) process.exitCode = 1;
 }
 
+/** Deterministic intent/race checks against the mounted shared owners, not live Admin. */
+async function runIntentPrefetchCases({page,origin,requests,observations,snapshot,configure,plan,delayedResponses,requestWaiters}) {
+  let start = 0;
+  const calls = () => requests.slice(start).filter(request => request.pathname.startsWith("/api/admin/entity-lists/"));
+  const paint = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const open = async (entity="topics", search="", options={}) => {
+    // The prior scenario may leave the real mouse over page 2. Move it away
+    // before mounting so this assertion measures mount, not a new mouseenter.
+    await page.mouse.move(0,0);
+    configure({optIn:true,...options}); start=requests.length;
+    await page.goto(`${origin}/admin/content/${entity}${search?`?${search}`:""}`);
+    await page.waitForFunction(()=>typeof window.__queryFixture?.prefetchPage==="function");
+    await paint();
+    check(`${entity}: mounting does not speculate or duplicate the fresh seed`,calls().length===0);
+  };
+  const waitCalls = (count) => new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{requestWaiters.delete(notify);reject(new Error(`Expected ${count} fixture GETs, saw ${calls().length}`))},10000);
+    const notify=()=>{if(calls().length>=count){clearTimeout(timer);requestWaiters.delete(notify);resolve()}};
+    requestWaiters.add(notify);notify();
+  });
+  const intent = (target) => page.evaluate(target=>{window.__intentPromise=window.__queryFixture.prefetchPage(target)},target);
+  const finishIntent = () => page.evaluate(()=>window.__intentPromise);
+  const activate = (target) => page.evaluate(target=>window.__queryFixture.setPage(target),target);
+  const settled = (target) => page.waitForFunction(target=>window.__queryFixture.query.page===target && window.__queryFixture.result.pagination.page===target && !window.__queryFixture.queryPending && !window.__queryFixture.revalidating && !window.__queryFixture.error,target);
+  const unchanged = (label,before,after) => {
+    const matches=JSON.stringify(before)===JSON.stringify(after);
+    check(label,matches,matches?undefined:JSON.stringify({before,after}));
+  };
+  const reply = (index=0) => {const pending=delayedResponses[index];if(!pending)throw new Error(`Missing held response ${index}`);pending.reply();};
+
+  for(const entity of ["topics","categories","series"]) {
+    await open(entity);
+    const before=await snapshot(`${entity}: before intent`);
+    await page.evaluate(async()=>{for(const target of [0,-1,1,3,999,1.5,NaN,Infinity])await window.__queryFixture.prefetchPage(target)});
+    await paint();
+    check(`${entity}: current/nonadjacent/invalid pages issue no GET`,calls().length===0);
+    unchanged(`${entity}: rejected intentions change no projection`,before,await snapshot(`${entity}: invalid intentions`));
+    plan({hold:true});
+    await page.getByRole("button",{name:"2",exact:true}).hover();
+    await waitCalls(1);
+    await page.getByRole("button",{name:"2",exact:true}).focus();
+    await intent(2);await paint();
+    check(`${entity}: hover + focus + repeated intent share one GET`,calls().length===1);
+    unchanged(`${entity}: in-flight intent leaves URL/IDs/footer/metrics/error/Pending unchanged`,before,await snapshot(`${entity}: intent in-flight`));
+    reply();await finishIntent();await paint();
+    unchanged(`${entity}: completed prefetch leaves projection unchanged`,before,await snapshot(`${entity}: intent warm`));
+    await page.getByRole("button",{name:"2",exact:true}).click();await settled(2);await paint();
+    check(`${entity}: warm click uses its single prefetched GET`,calls().length===1);
+    const warm=await snapshot(`${entity}: warm click`);
+    check(`${entity}: warm click adopts matching rows and metrics`,warm.ids.join()==="11,12,13,14,15,16,17,18,19,20" && warm.metrics.page===2);
+    await activate(1);await settled(1);await page.goBack();await settled(2);await page.goForward();await settled(1);
+    check(`${entity}: warm Back/Forward reuses the existing key`,calls().length===1);
+
+    await open(entity);
+    plan({hold:true});await intent(2);await waitCalls(1);await activate(2);
+    await page.waitForFunction(()=>window.__queryFixture.queryPending);
+    const waiting=await snapshot(`${entity}: foreground adopts in-flight`);
+    check(`${entity}: early click retains resolved footer while awaiting same request`,waiting.resultPage===1 && waiting.requestedPage===2 && waiting.metrics.page===1 && calls().length===1);
+    reply();await finishIntent();await settled(2);
+    check(`${entity}: adopted request is neither canceled nor duplicated`,calls().length===1 && !calls()[0].aborted);
+
+    await open(entity,"",{optIn:false,intentProbe:true});
+    await page.getByRole("button",{name:"2",exact:true}).hover();await page.getByRole("button",{name:"2",exact:true}).focus();await paint();
+    check(`${entity}: optional Pagination intent remains opt-in`,calls().length===0);
+  }
+
+  await open();
+  const beforeFailure=await snapshot("before speculative failure");
+  plan({status:500});await intent(2);await finishIntent();await paint();
+  check("speculative failure makes exactly one attempt",calls().length===1);
+  unchanged("speculative failure is silent and does not replace the displayed result",beforeFailure,await snapshot("after speculative failure"));
+  plan({status:500},{status:500},{status:500});await activate(2);
+  await page.waitForFunction(()=>window.__queryFixture.error && !window.__queryFixture.queryPending);
+  check("later foreground request preserves the provider retry policy",calls().length===4);
+  const terminal=await snapshot("foreground terminal failure");
+  check("#160 foreground failure retains source IDs/footer and reports shared error",terminal.ids.join()===beforeFailure.ids.join() && terminal.footer===beforeFailure.footer && terminal.metrics.page===1 && terminal.requestedPage===2 && terminal.notice.includes("السابقة"));
+  await intent(2);await finishIntent();check("foreground error suppresses speculative requests",calls().length===4);
+  plan({});await page.evaluate(()=>window.__queryFixture.retry());await settled(2);
+  check("foreground retry reads once and clears failure",calls().length===5);
+
+  await open();
+  plan({hold:true,status:500},{status:500},{});await intent(2);await waitCalls(1);await activate(2);
+  await page.waitForFunction(()=>window.__queryFixture.queryPending);reply();await settled(2);await finishIntent();
+  check("failed in-flight prefetch adopted by click gets foreground retries",calls().length===3);
+
+  for(const mode of ["warm","inflight"]) {
+    await open();const before=await snapshot(`${mode} normalization baseline`);
+    plan({hold:mode==="inflight",page:1,totalRows:8,version:"normalized"});await intent(2);await waitCalls(1);
+    if(mode==="warm")await finishIntent();
+    await paint();unchanged(`${mode} out-of-range prefetch never normalizes before activation`,before,await snapshot(`${mode} normalization before click`));
+    const historyBefore=await page.evaluate(()=>window.__intentHistory.length);
+    await activate(2);if(mode==="inflight")reply();
+    await page.waitForFunction(()=>window.__queryFixture.query.page===1 && window.__queryFixture.result.metrics.total===8 && !window.__queryFixture.queryPending);
+    await paint();
+    const history=await page.evaluate(index=>window.__intentHistory.slice(index),historyBefore);
+    check(`${mode} activation normalizes exactly once without GET loop`,calls().length===1 && history.filter(item=>item.kind==="replaceState").length===1 && new URL(page.url()).searchParams.get("page")===null,JSON.stringify(history));
+  }
+
+  await open();plan({hold:true,page:1,totalRows:8,version:"obsolete"},{});
+  await intent(2);await waitCalls(1);await activate(2);await activate(3);await settled(3);
+  reply();await finishIntent();await paint();
+  const latest=await snapshot("newer page wins over old normalized response");
+  check("late normalized result cannot overwrite newer navigation",latest.requestedPage===3 && latest.resultPage===3 && latest.metrics.page===3 && new URL(latest.url).searchParams.get("page")==="3" && calls().length===2);
+
+  await open();plan({page:1,totalRows:8,version:"warm-obsolete"},{});await intent(2);await finishIntent();
+  await page.evaluate(()=>{window.__queryFixture.setPage(2);window.__queryFixture.setPage(3)});await settled(3);await paint();
+  check("warm normalized data cannot overwrite a newer same-turn intent",new URL(page.url()).searchParams.get("page")==="3" && calls().length===2);
+
+  await open("topics","page=3");
+  plan({hold:true},{hold:true});await intent(2);await waitCalls(1);await intent(4);await waitCalls(2);
+  await paint();
+  check("only latest speculative target remains in-flight",calls()[0].aborted && !calls()[1].aborted);
+  await activate(4);reply(0);reply(1);await finishIntent();await settled(4);
+  check("replacement target is preserved when it becomes foreground",calls().length===2 && !calls()[1].aborted);
+
+  for(const staleTimeMs of [15000,30000]) {
+    await open("topics","",{staleTimeMs});await intent(2);await finishIntent();
+    await page.evaluate(age=>window.__queryFixture.agePage(2,age),staleTimeMs-5000);await intent(2);await finishIntent();
+    check(`${staleTimeMs}ms policy reuses still-fresh prefetch`,calls().length===1);
+    await page.evaluate(age=>window.__queryFixture.agePage(2,age),staleTimeMs+1000);await intent(2);await finishIntent();
+    check(`${staleTimeMs}ms policy refetches expired prefetch`,calls().length===2);
+  }
+
+  await open("topics","content_type=video&category=9&series=4&status=published&image=without&featured=yes&sort=id_desc&limit=20&q=proof&extra=keep",{constrained:true});
+  const constrainedBefore=await snapshot("constraint before intent");await intent(2);await finishIntent();
+  const params=new URLSearchParams(calls()[0].search);
+  check("prefetch preserves the complete canonical query/route constraint",
+    Object.entries({content_type:"article",category:"9",series:"4",status:"published",image:"without",featured:"yes",sort:"id_desc",limit:"20",q:"proof",page:"2"}).every(([key,value])=>params.get(key)===value),params.toString());
+  unchanged("constrained intent preserves browser extras and displayed result",constrainedBefore,await snapshot("constraint after intent"));
+  await page.evaluate(()=>window.__queryFixture.setFilter("image","all"));await waitCalls(2);await settled(1);await intent(2);await finishIntent();
+  check("different filter scope cannot reuse an incompatible warmed page",calls().length===3 && new URLSearchParams(calls()[2].search).get("image")===null);
+  await page.evaluate(()=>window.__queryFixture.setSort({field:"title",direction:"asc"}));await waitCalls(4);await settled(1);await intent(2);await finishIntent();
+  check("different sort scope has an independent warmed key",calls().length===5);
+  await page.evaluate(()=>window.__queryFixture.setPageSize(10));await page.waitForFunction(()=>window.__queryFixture.result.pagination.pageSize===10 && !window.__queryFixture.queryPending);await intent(2);await finishIntent();
+  check("limit change resets page1 and uses the new page-size key",calls().length===7 && new URLSearchParams(calls()[6].search).get("limit")===null);
+  await page.evaluate(()=>window.__queryFixture.setSearch("another proof"));await waitCalls(8);await settled(1);await intent(2);await finishIntent();
+  check("search change cannot reuse another search's warmed page",calls().length===9 && new URLSearchParams(calls()[8].search).get("q")==="another proof");
+
+  await open();await page.evaluate(()=>window.__queryFixture.beginMutation());
+  await page.waitForFunction(()=>window.__queryFixture.mutationPending);await intent(2);await finishIntent();
+  check("an unkeyed TanStack mutation blocks speculation",calls().length===0);
+  await page.evaluate(()=>window.__releaseFixtureMutation());await page.waitForFunction(()=>!window.__queryFixture.mutationPending);
+  plan({hold:true});await page.evaluate(()=>{window.__refetchPromise=window.__queryFixture.invalidate()});await waitCalls(1);
+  await page.waitForFunction(()=>window.__queryFixture.revalidating);await intent(2);await finishIntent();
+  check("same-key revalidation blocks speculation",calls().length===1);
+  reply();await page.evaluate(()=>window.__refetchPromise);await settled(1);
+  plan({hold:true});await activate(2);await waitCalls(2);await page.waitForFunction(()=>window.__queryFixture.queryPending);
+  await intent(2);await finishIntent();check("foreground query Pending blocks speculation",calls().length===2);reply(1);await settled(2);
+
+  for(const kind of ["saveInvalidate","invalidate"]) {
+    await open();plan({hold:true,version:"pre-write"});await intent(2);await waitCalls(1);
+    if(kind==="invalidate")plan({version:"post-write-current"});
+    await page.evaluate(kind=>window.__queryFixture[kind](),kind);
+    await paint();reply();await finishIntent();await paint();
+    const cache=await page.evaluate(()=>window.__queryFixture.cachePage(2));
+    check(`${kind}: pre-write speculation is canceled and never accepted as fresh`,calls()[0].aborted && (!cache?.data || cache.invalidated),JSON.stringify(cache));
+    if(kind==="saveInvalidate") {
+      const beforeIntent=calls().length;await intent(2);await finishIntent();
+      check("confirmed save invalidation blocks new speculation until foreground settlement",calls().length===beforeIntent);
+    }
+    const beforeClick=calls().length;plan({version:"post-write"});await activate(2);await settled(2);
+    const after=await snapshot(`${kind}: foreground after invalidation`);
+    check(`${kind}: next click performs one authoritative read`,calls().length===beforeClick+1 && after.metrics.version==="post-write");
+  }
+  observations.push({label:"intent test boundary",note:"Synthetic GET transport and actual shared owners; Topics fixture coverage does not authorize or prove live Topics opt-in or DB workload."});
+}
+
 /** Actual shared owners with synthetic GET results; never connects to Admin/DB. */
-async function isolatedFailureContracts() {
+async function isolatedFailureContracts(intentPrefetch = false) {
   const root = process.cwd();
-  const output = path.join(root, ".tmp-qa/admin-query-save-failure-contracts-20260913", process.env.QA_PHASE || "query-isolated");
+  const output = path.join(root, intentPrefetch ? ".tmp-qa/admin-instant-ux-prefetch-strategy-20260913" : ".tmp-qa/admin-query-save-failure-contracts-20260913", process.env.QA_PHASE || (intentPrefetch ? "intent-prefetch" : "query-isolated"));
   await mkdir(output, { recursive: true });
   const require = createRequire(import.meta.url);
   const entry = String.raw`
 import React, { useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import Provider from "@query-provider";
 import Feedback from "@feedback";
 import AdminEntityList from "@entity-list";
 import AdminTablePagination from "@pagination";
 import { useAdminEntityListController } from "@controller";
-import { normalizeAdminEntityListQuery } from "@contracts";
+import { normalizeAdminEntityListQuery, normalizeAdminEntityListQueryWithRouteParams } from "@contracts";
+import { adminEntityListQueryKeys } from "@query-keys";
+import { invalidateAdminEntityListCaches } from "@mutation-cache";
 import { topicsQueryContract } from "@topics-contract";
 import { categoriesQueryContract } from "@categories-contract";
 import { seriesQueryContract } from "@series-contract";
 const contracts = {topics:topicsQueryContract,categories:categoriesQueryContract,series:seriesQueryContract};
 const entity = location.pathname.split("/").at(-1);
 const contract = contracts[entity];
-const initialQuery = normalizeAdminEntityListQuery(contract,new URLSearchParams());
+const options = window.__FIXTURE_OPTIONS__ || {};
+const routeOwnedParams = options.constrained ? {content_type:"article"} : undefined;
+const constrainQuery = options.constrained ? query => ({...query,filters:{...query.filters,contentType:"article"}}) : undefined;
+const initialQuery = routeOwnedParams
+ ? normalizeAdminEntityListQueryWithRouteParams(contract,new URLSearchParams(location.search),routeOwnedParams)
+ : normalizeAdminEntityListQuery(contract,new URLSearchParams(location.search));
 const initialResult = window.__INITIAL_RESULT__;
+window.__intentHistory=[];
+for(const kind of ["pushState","replaceState"]){const original=history[kind].bind(history);history[kind]=(...args)=>{window.__intentHistory.push({kind,href:String(args[2])});return original(...args)}}
 const columns = [
  {key:"title",label:"الاسم",primary:true,primaryPresentation:"compact-icon",sticky:"start",flexible:true,minWidth:200,width:400,defaultVisible:true,hideable:false,renderCell:({row})=>row.title},
  {key:"actions",label:"الإجراءات",sticky:"end",minWidth:144,width:144,defaultVisible:true,hideable:false,renderCell:()=>null},
 ];
 function Harness() {
- const controller = useAdminEntityListController({entity,contract,initialQuery,initialResult,staleTimeMs:30000});
- useLayoutEffect(()=>{window.__queryFixture={...controller};});
+ const client = useQueryClient();
+ const controller = useAdminEntityListController({entity,contract,initialQuery,initialResult,staleTimeMs:options.staleTimeMs??30000,constrainQuery,routeOwnedParams});
+ const mutation = useMutation({mutationFn:()=>new Promise(resolve=>{window.__releaseFixtureMutation=()=>resolve({ok:true})})});
+ useLayoutEffect(()=>{window.__queryFixture={...controller,
+  beginMutation:()=>{void mutation.mutateAsync()},mutationPending:mutation.isPending,
+  saveInvalidate:()=>invalidateAdminEntityListCaches(client,[entity]),
+  cachePage:page=>{const state=client.getQueryState(adminEntityListQueryKeys.query(entity,{...controller.query,page}));return state?{status:state.status,fetchStatus:state.fetchStatus,invalidated:state.isInvalidated,data:state.data}:null},
+  agePage:(page,age)=>{const key=adminEntityListQueryKeys.query(entity,{...controller.query,page});client.setQueryData(key,client.getQueryData(key),{updatedAt:Date.now()-age})},
+ };});
  return <main dir="rtl">
   <button type="button" data-fixture-refetch onClick={()=>controller.invalidate()}>إعادة القراءة للاختبار</button>
   <AdminEntityList listId={entity+"-failure-fixture"} rows={controller.result.rows} queryPending={controller.queryPending}
@@ -524,7 +708,8 @@ function Harness() {
    emptyState={{mode:"filtered",systemEmpty:"لا توجد بيانات",filteredEmpty:"لا توجد نتائج"}} />
   <AdminTablePagination basePath={location.pathname} currentPage={controller.result.pagination.page}
    pageSize={String(controller.result.pagination.pageSize)} totalCount={controller.result.pagination.totalRows}
-   totalPages={controller.result.pagination.totalPages} onPageChange={controller.setPage} onPageSizeChange={controller.setPageSize}/>
+   totalPages={controller.result.pagination.totalPages} onPageChange={controller.setPage} onPageSizeChange={controller.setPageSize}
+   onPageIntent={options.optIn?controller.prefetchPage:undefined}/>
  </main>;
 }
 createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/></Feedback></Provider>);
@@ -554,6 +739,8 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
         "@pagination": path.join(root, "src/components/admin/ui/AdminTablePagination.tsx"),
         "@controller": path.join(root, "src/lib/admin/entity-list/data-engine/client-controller.ts"),
         "@contracts": path.join(root, "src/lib/admin/entity-list/data-engine/contracts.ts"),
+        "@query-keys": path.join(root, "src/lib/admin/entity-list/data-engine/query-keys.ts"),
+        "@mutation-cache": path.join(root, "src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts"),
         ...Object.fromEntries(["topics", "categories", "series"].map((entity) => [`@${entity}-contract`, path.join(root, `src/lib/admin/content/entity-list-contracts/${entity}.ts`)])),
       },
     },
@@ -569,8 +756,10 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
   const bundle = await readFile(path.join(output, "bundle.js"));
   const requests = [], blocked = [], observations = [], errors = [];
   const failures = new Map(), held = new Map();
-  function result(entity, page = 1) {
-    return { rows: Array.from({ length: 10 }, (_, i) => ({ id: (page - 1) * 10 + i + 1, title: `${entity} ${((page - 1) * 10 + i + 1)}` })), pagination: { page, pageSize: 10, totalRows: 100, totalPages: 10 }, metrics: { total: 100 }, meta: { generatedAt: new Date().toISOString(), mode: "server-page" } };
+  let fixtureOptions = {};
+  const responsePlans = [], delayedResponses = [], requestWaiters = new Set();
+  function result(entity, page = 1, pageSize = 10, version = "source", totalRows = 100) {
+    return { rows: Array.from({ length: Math.max(0, Math.min(pageSize, totalRows - (page - 1) * pageSize)) }, (_, i) => ({ id: (page - 1) * pageSize + i + 1, title: `${entity} ${((page - 1) * pageSize + i + 1)} ${version}` })), pagination: { page, pageSize, totalRows, totalPages: Math.max(1,Math.ceil(totalRows/pageSize)) }, metrics: { total: totalRows, version, page }, meta: { generatedAt: new Date().toISOString(), mode: "server-page" } };
   }
   const sendResult = (res, entity, page) => { res.writeHead(200, { "Content-Type": "application/json" }); res.end(JSON.stringify(result(entity, page))); };
   const server = createServer((req, res) => {
@@ -580,13 +769,27 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
     if (url.pathname === "/bundle.js") { res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" }); res.end(bundle); return; }
     if (url.pathname.startsWith("/api/admin/entity-lists/")) {
       const entity = url.pathname.split("/").at(-1), page = Number(url.searchParams.get("page") || 1);
+      if (fixtureOptions.optIn || fixtureOptions.intentProbe) {
+        const plan = responsePlans.shift() ?? {};
+        const request = requests.at(-1);
+        request.aborted = false;
+        res.on("close",()=>{if(!res.writableEnded)request.aborted=true;});
+        const reply = () => {
+          if(res.destroyed)return;
+          res.writeHead(plan.status ?? 200, {"Content-Type":"application/json"});
+          res.end(JSON.stringify(plan.status ? {error:{code:"intent_fixture_failure"}} : result(entity,plan.page??page,Number(url.searchParams.get("limit")||10),plan.version,plan.totalRows)));
+        };
+        if(plan.hold)delayedResponses.push({request,reply});else reply();
+        for(const notify of requestWaiters)notify();
+        return;
+      }
       if (failures.get(entity) === page) { res.writeHead(500, { "Content-Type": "application/json" }); res.end(JSON.stringify({ error: { code: "list_load_failed" } })); return; }
       if (held.has(entity)) { held.set(entity, () => sendResult(res, entity, page)); return; }
       sendResult(res, entity, page); return;
     }
     if (/^\/admin\/content\/(topics|categories|series)$/.test(url.pathname)) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(`<html dir="rtl"><body><div id="root"></div><script>window.__INITIAL_RESULT__=${JSON.stringify(result(url.pathname.split("/").at(-1)))}</script><script src="/bundle.js"></script></body></html>`); return;
+      res.end(`<html dir="rtl"><body><div id="root"></div><script>window.__INITIAL_RESULT__=${JSON.stringify(result(url.pathname.split("/").at(-1),Number(url.searchParams.get("page")||1),Number(url.searchParams.get("limit")||10)))};window.__FIXTURE_OPTIONS__=${JSON.stringify(fixtureOptions)}</script><script src="/bundle.js"></script></body></html>`); return;
     }
     res.writeHead(404); res.end();
   });
@@ -602,13 +805,19 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
     const snapshot = async (label) => {
-      const value = await page.evaluate(() => ({ url: location.href, ids: [...document.querySelectorAll("[data-entity-row-id]")].map((row) => Number(row.getAttribute("data-entity-row-id"))), footer: document.querySelector("[data-admin-table-pagination]")?.textContent || "", resultPage: window.__queryFixture.result.pagination.page, requestedPage: window.__queryFixture.query.page, pending: window.__queryFixture.queryPending, error: window.__queryFixture.error?.message || null, notice: document.querySelector("[data-admin-entity-list-query-error]")?.textContent || "" }));
+      const value = await page.evaluate(() => ({ url: location.href, ids: [...document.querySelectorAll("[data-entity-row-id]")].map((row) => Number(row.getAttribute("data-entity-row-id"))), footer: document.querySelector("[data-admin-table-pagination]")?.textContent || "", resultPage: window.__queryFixture.result.pagination.page, requestedPage: window.__queryFixture.query.page, metrics:window.__queryFixture.result.metrics, pending: window.__queryFixture.queryPending, revalidating:window.__queryFixture.revalidating, error: window.__queryFixture.error?.message || null, notice: document.querySelector("[data-admin-entity-list-query-error]")?.textContent || "" }));
       observations.push({ label, ...value }); return value;
     };
+    if(intentPrefetch)await runIntentPrefetchCases({page,origin,requests,observations,snapshot,
+      configure:options=>{fixtureOptions=options;responsePlans.length=0;delayedResponses.length=0},
+      plan:(...plans)=>responsePlans.push(...plans),delayedResponses,requestWaiters,
+    });
+    fixtureOptions={};
     for (const entity of ["topics", "categories", "series"]) {
+      const callStart=requests.length;
       await page.goto(`${origin}/admin/content/${entity}`);
       await page.waitForFunction(() => Boolean(window.__queryFixture));
-      const calls = () => requests.filter((r) => r.pathname === `/api/admin/entity-lists/${entity}`).length;
+      const calls = () => requests.slice(callStart).filter((r) => r.pathname === `/api/admin/entity-lists/${entity}`).length;
       check(`${entity}: fresh RSC seed does not fetch again`, calls() === 0);
       await page.getByRole("button", { name: "3", exact: true }).click();
       await page.waitForFunction(() => window.__queryFixture.result.pagination.page === 3 && !window.__queryFixture.queryPending);
@@ -663,7 +872,7 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
   if (failed) process.exitCode = 1;
 }
 
-(process.argv.includes("--isolated-failure-contracts") ? isolatedFailureContracts() : main()).catch((error) => {
+(process.argv.includes("--intent-prefetch") ? isolatedFailureContracts(true) : process.argv.includes("--isolated-failure-contracts") ? isolatedFailureContracts() : main()).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

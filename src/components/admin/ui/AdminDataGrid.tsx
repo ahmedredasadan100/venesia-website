@@ -10,6 +10,7 @@ import type {
 } from "react";
 import type { AdminEntityPrimaryColumnPresentation } from "../../../lib/admin/entity-list";
 import AdminCheckbox from "./AdminCheckbox";
+import AdminDataGridQueryStatus from "./AdminDataGridQueryStatus";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "./admin-scrollbar-styles";
 
 const ADMIN_DATA_GRID_NUMBER_FORMATTER = new Intl.NumberFormat("en-US");
@@ -635,34 +636,7 @@ export function AdminDataGrid({
       >
         {children}
       </div>
-      {queryPending ? (
-        <>
-          <div
-            aria-hidden="true"
-            data-admin-data-grid-query-indicator=""
-            className="pointer-events-none absolute inset-x-3 top-1 z-10 flex -translate-y-1/2 justify-center"
-          >
-            <span className="flex items-center gap-2 rounded-full border border-[#D8B87A]/40 bg-[#11151B] px-3 py-1 text-xs font-semibold leading-5 text-[#F4E7C5] shadow-lg">
-              <span className="size-3 shrink-0 animate-spin rounded-full border-2 border-[#D8B87A]/30 border-t-[#D8B87A] motion-reduce:animate-none" />
-              جارٍ تحديث النتائج…
-            </span>
-          </div>
-          <div
-            role="status"
-            aria-live="polite"
-            aria-atomic="true"
-            dir="rtl"
-            data-admin-data-grid-query-status=""
-            className="pointer-events-none absolute inset-x-3 bottom-0 z-10 flex translate-y-1/2 justify-center"
-          >
-            <span aria-hidden="true" className="flex items-center gap-2 rounded-full border border-[#D8B87A]/40 bg-[#11151B] px-3 py-1 text-xs font-semibold leading-5 text-[#F4E7C5] shadow-lg">
-              <span className="size-3 shrink-0 animate-spin rounded-full border-2 border-[#D8B87A]/30 border-t-[#D8B87A] motion-reduce:animate-none" />
-              جارٍ التحديث… الصفوف والعدّادات سابقة
-            </span>
-            <span className="sr-only">جارٍ تحديث النتائج… الصفوف والعدّادات المعروضة تخص النتائج السابقة.</span>
-          </div>
-        </>
-      ) : null}
+      {queryPending ? <AdminDataGridQueryStatus /> : null}
       {summary ? (
         <div className="mt-4 rounded-[12px] border border-white/8 bg-black/14 px-5 py-5 text-center text-sm font-semibold text-white/48">
           {summary}
