@@ -36,7 +36,7 @@ type ProjectLocationFormModalProps = {
   location?: ProjectLocationManagementRow;
   parentOptions: ProjectLocationParentOption[];
   onClose: () => void;
-  onSaved: (location: ProjectLocationManagementRow) => void;
+  onSaved: (location?: ProjectLocationManagementRow) => void;
 };
 
 function parentOptionLabel(option: ProjectLocationParentOption) {
@@ -67,7 +67,6 @@ export default function ProjectLocationFormModal({
   }));
 
   function handleSuccess(state: ProjectLocationFormActionState) {
-    if (!state.result) return;
     onSaved(state.result);
     onClose();
   }

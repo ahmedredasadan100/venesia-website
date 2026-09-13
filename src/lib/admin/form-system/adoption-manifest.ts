@@ -913,6 +913,27 @@ export type AdminGovernanceBehaviorProof = {
 
 export const ADMIN_FORM_BEHAVIOR_PROOF_LEDGER = [
   {
+    id: "remaining-project-committed-result-truth",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["scripts/verify-remaining-project-proof.mjs", "scripts/qa-remaining-project-proof.mjs"],
+    rationale: "Actual Projects, Locations and Tracking Actions preserve committed warnings across failed post-write reads and bounded cache retries without repeating the mutation or inventing saved identities. Tracking/Location SQL executes in disposable PGlite; Project Actions use isolated mutation ports and retain the independent aggregate SQL proof. Mounted Location/Tracking forms settle once without a result row, and Project create with an unknown saved identity delegates closure to the existing Form Runtime. Auth, Media services and Next navigation/cache ports are isolated; this does not prove authenticated full-page persistence, every field/state combination or global adoption closure.",
+  },
+  {
+    id: "remaining-settings-committed-result-truth",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["scripts/verify-remaining-settings-menu-proof.mts", "scripts/qa-remaining-settings-result-truth.mjs"],
+    rationale: "Actual Footer save/reset, Maintenance, Media settings and Menu metadata actions distinguish a rejected write from failed post-commit cache refresh using the existing bounded retry owner. Menu metadata rejects invalid identities and missing update rows. Mounted Footer, Maintenance and Media settings preserve committed warning outcomes at desktop and 390px through existing Form/Feedback owners. Auth, database transport, Media side services and Next cache/navigation are isolated; this is not authenticated persistence or all Menu operation closure.",
+  },
+  {
+    id: "remaining-content-branch-field-proof",
+    state: "behavior_verified",
+    requiredForGlobalClosure: false,
+    evidence: ["scripts/qa-remaining-content-proof.mjs", "scripts/fixtures/remaining-content-owner-harness.mjs"],
+    rationale: "Mounted home-projects and the four Projects Hub Content editors prove current-field serialization, isolated transport rejection with retained input, resubmission, canonical parsing and explicit read-back mounting; the redirect Action is not acknowledged as saved. Project-detail Hero proves presentation-only authoring and separate Project content rendering. Actual Media create adapter/validation covers news, press, site_update and gallery through in-memory database/Auth/Media ports and explicit destination mounting. These scoped results do not prove authenticated database persistence, real Next navigation or every optional field/status combination.",
+  },
+  {
     id: "shared-corrections-atomic-template-save",
     state: "behavior_verified",
     requiredForGlobalClosure: false,

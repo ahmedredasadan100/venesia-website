@@ -43,7 +43,7 @@ export default async function MenusPage({
     <MenusTableClient
       menus={rows}
       message={message}
-      messageWarning={query.notice === "saved_with_media_sync_warning"}
+      messageWarning={query.notice === "saved_with_media_sync_warning" || query.notice === "committed_cache_revalidation_pending"}
       loadError={error ? `حدث خطأ أثناء قراءة القوائم: ${error.message}` : null}
       initialVisibleColumns={preference.visibleColumns}
       preferenceError={preference.error}

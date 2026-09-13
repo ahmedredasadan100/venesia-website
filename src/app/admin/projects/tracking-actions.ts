@@ -8,10 +8,11 @@ import { buildCmsAuditAction } from "../../../lib/admin/audit/cms-audit-actions"
 import { requireAdminSession } from "../../../lib/admin/auth/require-admin-session";
 import { recordCmsAdminAudit } from "../../../lib/admin/audit-log";
 import type { AdminFormActionState } from "../../../lib/admin/form-runtime";
-import { revalidatePublicCacheTags } from "../../../lib/cache/revalidate-public-cache-tags";
+import { revalidatePublicCacheTags, runBoundedPublicCacheRevalidation } from "../../../lib/cache/revalidate-public-cache-tags";
 import type { Json } from "../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../lib/supabase-admin";
-import { trackingMediaAdminSchema } from "../../../lib/admin/projects/tracking-contract";
+import { trackingSavedIdentitySchema, trackingSavedProfileIdentitySchema, trackingSavedUpdateSchema } from "../../../lib/admin/projects/tracking-contract";
+import { MediaDomainMutationError } from "../../../lib/admin/media-catalog/domain-write-coordination";
 import {
   cleanupDeletedTrackingUpdateMedia,
   coordinateTrackingUpdateSave,
@@ -89,13 +90,20 @@ async function projectSlug(projectId: number) {
   return data;
 }
 function revalidateTracking(projectId: number, slug: string) {
-  revalidatePath(`/admin/projects/${projectId}/tracking`, "layout");
-  revalidatePath("/admin/projects/construction-updates");
-  revalidatePath(`/track-your-project/${slug}`);
-  revalidatePublicCacheTags(["project-tracking", `project-tracking:${slug}`]);
+  return runBoundedPublicCacheRevalidation(() => {
+    revalidatePath(`/admin/projects/${projectId}/tracking`, "layout");
+    revalidatePath("/admin/projects/construction-updates");
+    revalidatePath(`/track-your-project/${slug}`);
+    revalidatePublicCacheTags(["project-tracking", `project-tracking:${slug}`]);
+  });
 }
 async function audit(actor: Awaited<ReturnType<typeof requireAdminSession>>, verb: "create" | "update" | "delete" | "reorder", entityType: string, entityId: number, label: string, metadata: Record<string, unknown> = {}) {
   await recordCmsAdminAudit({ action: buildCmsAuditAction("project_children", verb), entityType, entityId, entityLabel: label, metadata }, actor);
+}
+
+async function committedReadWarning(mode: "create" | "edit", revision: number, projectId: number, slug: string): Promise<TrackingFormActionState> {
+  await revalidateTracking(projectId, slug);
+  return { status: "warning", mode, revision, title: "تم الحفظ — يلزم التحقق من النتيجة", message: "استُقبل تأكيد الحفظ، لكن تعذر التحقق من البيانات المعادة. حدّث القائمة للتحقق ولا تعِد العملية.", code: "saved_requires_reconciliation_reload" };
 }
 
 export async function saveTrackingProfileAction(previous: TrackingFormActionState, formData: FormData): Promise<TrackingFormActionState> {
@@ -109,9 +117,11 @@ export async function saveTrackingProfileAction(previous: TrackingFormActionStat
     const identity = await projectSlug(project.data);
     const { data, error } = await getSupabaseAdmin().rpc("save_project_tracking_profile", { p_project_id: project.data, p_actor_id: actor.id, p_payload: parsed.data as Json });
     if (error) throw error;
+    const saved = trackingSavedProfileIdentitySchema.safeParse(data);
+    if (!saved.success || saved.data.project_id !== project.data) return committedReadWarning(mode, revision, project.data, identity.slug);
     await audit(actor, "update", "project_tracking_profile", project.data, identity.arabic_name);
-    revalidateTracking(project.data, identity.slug);
-    return { status: "success", mode, revision, title: "تم حفظ بيانات المتابعة", message: "حُفظت بيانات الاستلام والمقاول داخل ملف المتابعة.", code: "saved", entityId: project.data, savedRevision: String(Date.now()), result: { id: Number((data as { project_id?: number } | null)?.project_id ?? project.data) } };
+    const cache = await revalidateTracking(project.data, identity.slug);
+    return { status: cache.ok ? "success" : "warning", mode, revision, title: "تم حفظ بيانات المتابعة", message: cache.ok ? "حُفظت بيانات الاستلام والمقاول داخل ملف المتابعة." : "حُفظت بيانات المتابعة، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد الحفظ.", code: cache.ok ? "saved" : "committed_cache_revalidation_pending", entityId: project.data, savedRevision: String(Date.now()), result: { id: saved.data.project_id } };
   } catch (error) { return failure(mode, revision, "تعذر حفظ بيانات المتابعة", errorMessage(error)); }
 }
 
@@ -126,19 +136,22 @@ async function saveStage(mode: "create" | "edit", previous: TrackingFormActionSt
     const identity = await projectSlug(project.data);
     const { data, error } = await getSupabaseAdmin().rpc("mutate_project_tracking_stage", { p_project_id: project.data, p_actor_id: actor.id, p_action: mode === "create" ? "create" : "update", p_stage_id: stage?.data ?? null, p_payload: parsed.data as Json });
     if (error) throw error;
-    const id = Number((data as { id?: number } | null)?.id);
+    const saved = trackingSavedIdentitySchema.safeParse(data);
+    if (!saved.success || (stage?.success && saved.data.id !== stage.data)) return committedReadWarning(mode, revision, project.data, identity.slug);
+    const id = saved.data.id;
     await audit(actor, mode === "create" ? "create" : "update", "project_tracking_stage", id, parsed.data.name, { project_id: project.data });
-    revalidateTracking(project.data, identity.slug);
+    const cache = await revalidateTracking(project.data, identity.slug);
     return {
-      status: "success",
+      status: cache.ok ? "success" : "warning",
       mode,
       revision,
       title: "تم حفظ المرحلة",
-      message:
-        mode === "create"
+      message: !cache.ok
+        ? "تم الحفظ، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد الإنشاء."
+        : mode === "create"
           ? "أُضيفت المرحلة إلى رحلة التنفيذ."
           : "تم تحديث بيانات المرحلة.",
-      code: mode === "create" ? "created" : "saved",
+      code: !cache.ok ? "committed_cache_revalidation_pending" : mode === "create" ? "created" : "saved",
       entityId: id,
       savedRevision: `${id}:${Date.now()}`,
       result: { id },
@@ -165,19 +178,22 @@ async function saveItem(mode: "create" | "edit", previous: TrackingFormActionSta
     const identity = await projectSlug(project.data);
     const { data, error } = await getSupabaseAdmin().rpc("mutate_project_tracking_item", { p_project_id: project.data, p_stage_id: stage.data, p_actor_id: actor.id, p_action: mode === "create" ? "create" : "update", p_item_id: item?.data ?? null, p_payload: parsed.data as Json });
     if (error) throw error;
-    const id = Number((data as { id?: number } | null)?.id);
+    const saved = trackingSavedIdentitySchema.safeParse(data);
+    if (!saved.success || (item?.success && saved.data.id !== item.data)) return committedReadWarning(mode, revision, project.data, identity.slug);
+    const id = saved.data.id;
     await audit(actor, mode === "create" ? "create" : "update", "project_tracking_item", id, parsed.data.name, { project_id: project.data, stage_id: stage.data, status: parsed.data.status });
-    revalidateTracking(project.data, identity.slug);
+    const cache = await revalidateTracking(project.data, identity.slug);
     return {
-      status: "success",
+      status: cache.ok ? "success" : "warning",
       mode,
       revision,
       title: "تم حفظ البند",
-      message:
-        mode === "create"
+      message: !cache.ok
+        ? "تم الحفظ، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد الإنشاء."
+        : mode === "create"
           ? "أُضيف البند إلى المرحلة."
           : "تم تحديث حالة وبيانات البند.",
-      code: mode === "create" ? "created" : "saved",
+      code: !cache.ok ? "committed_cache_revalidation_pending" : mode === "create" ? "created" : "saved",
       entityId: id,
       savedRevision: `${id}:${Date.now()}`,
       result: { id },
@@ -228,14 +244,26 @@ async function saveUpdate(mode: "create" | "edit", previous: TrackingFormActionS
     const coordinated = await coordinateTrackingUpdateSave({ actorId: actor.id, updateId: update?.data ?? null, intendedMedia: media, mutate: async () => {
       const { data, error } = await getSupabaseAdmin().rpc("mutate_project_tracking_update", { p_project_id: project.data, p_item_id: item.data, p_actor_id: actor.id, p_action: mode === "create" ? "create" : "update", p_update_id: update?.data ?? null, p_payload: { occurred_at: `${parsed.data.occurred_on}T12:00:00Z`, title: parsed.data.title, body: parsed.data.body, publication_status: parsed.data.publication_status, media } as Json });
       if (error) throw error;
-      const raw = data as { id?: number; media?: unknown } | null;
-      return { id: Number(raw?.id), media: z.array(trackingMediaAdminSchema).parse(raw?.media ?? []) };
+      const saved = trackingSavedUpdateSchema.safeParse(data);
+      if (!saved.success || (update?.success && saved.data.id !== update.data) || saved.data.media.some((entry) => entry.update_id !== saved.data.id)) {
+        throw new MediaDomainMutationError("tracking_update_committed_result_invalid", true);
+      }
+      return saved.data;
     } });
     await audit(actor, mode === "create" ? "create" : "update", "project_tracking_update", coordinated.value.id, parsed.data.title, { project_id: project.data, item_id: item.data, publication_status: parsed.data.publication_status, media_count: media.length });
-    revalidateTracking(project.data, identity.slug);
-    const warning = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
-    return { status: warning ? "warning" : "success", mode, revision, title: warning ? "تم الحفظ مع تنبيه وسائط" : "تم حفظ التحديث", message: warning ? coordinated.mediaSynchronization.failureReason ?? "تم حفظ التحديث ويلزم تشغيل Media reconciliation." : "حُفظ التحديث التاريخي ووسائطه دون استبدال أي تحديث سابق.", code: warning ? "saved_with_media_sync_warning" : mode === "create" ? "created" : "saved", entityId: coordinated.value.id, savedRevision: `${coordinated.value.id}:${Date.now()}`, result: { id: coordinated.value.id } };
-  } catch (error) { return failure(mode, revision, "تعذر حفظ التحديث", errorMessage(error)); }
+    const cache = await revalidateTracking(project.data, identity.slug);
+    const mediaWarning = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
+    const warning = mediaWarning || !cache.ok;
+    return { status: warning ? "warning" : "success", mode, revision, title: warning ? "تم الحفظ مع تنبيه" : "تم حفظ التحديث", message: [mediaWarning ? coordinated.mediaSynchronization.failureReason ?? "تم حفظ التحديث ويلزم تشغيل Media reconciliation." : "حُفظ التحديث التاريخي ووسائطه دون استبدال أي تحديث سابق.", ...(!cache.ok ? ["تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد إنشاء التحديث."] : [])].join(" "), code: mediaWarning ? "saved_with_media_sync_warning" : !cache.ok ? "committed_cache_revalidation_pending" : mode === "create" ? "created" : "saved", entityId: coordinated.value.id, savedRevision: `${coordinated.value.id}:${Date.now()}`, result: { id: coordinated.value.id } };
+  } catch (error) {
+    if (error instanceof MediaDomainMutationError && error.domainWriteCommitted) {
+      // The Media owner retains its lease/uncertainty; no guessed output identity.
+      const identity = await projectSlug(project.data).catch(() => null);
+      if (identity) return committedReadWarning(mode, revision, project.data, identity.slug);
+      return { status: "warning", mode, revision, title: "تم الحفظ — يلزم التحقق من النتيجة", message: "تعذر التحقق من نتيجة الحفظ والوسائط. حدّث القائمة للتحقق ولا تعِد العملية.", code: "saved_requires_reconciliation_reload" };
+    }
+    return failure(mode, revision, "تعذر حفظ التحديث", errorMessage(error));
+  }
 }
 export async function createTrackingUpdateAction(previous: TrackingFormActionState, formData: FormData) { return saveUpdate("create", previous, formData); }
 export async function updateTrackingUpdateAction(previous: TrackingFormActionState, formData: FormData) { return saveUpdate("edit", previous, formData); }
@@ -269,7 +297,8 @@ export async function setTrackingStageVisibilityAction(
       project_id: projectId,
       is_visible: visible,
     });
-    revalidateTracking(projectId, identity.slug);
+    const cache = await revalidateTracking(projectId, identity.slug);
+    if (!cache.ok) return adminActionWarning("تم الحفظ مع تنبيه", "حُفظ التغيير، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد العملية.", { code: "committed_cache_revalidation_pending", entityId: stageId });
     return adminActionSuccess(
       visible ? "تم إظهار المرحلة" : "تم إخفاء المرحلة",
       visible
@@ -316,7 +345,8 @@ export async function setTrackingItemVisibilityAction(
       stage_id: stageId,
       is_visible: visible,
     });
-    revalidateTracking(projectId, identity.slug);
+    const cache = await revalidateTracking(projectId, identity.slug);
+    if (!cache.ok) return adminActionWarning("تم الحفظ مع تنبيه", "حُفظ التغيير، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد العملية.", { code: "committed_cache_revalidation_pending", entityId: itemId });
     return adminActionSuccess(
       visible ? "تم إظهار البند" : "تم إخفاء البند",
       visible
@@ -378,7 +408,8 @@ export async function setTrackingUpdatePublicationVisibilityAction(
       item_id: itemId,
       publication_status: publicationStatus,
     });
-    revalidateTracking(projectId, identity.slug);
+    const cache = await revalidateTracking(projectId, identity.slug);
+    if (!cache.ok) return adminActionWarning("تم الحفظ مع تنبيه", "حُفظ التغيير، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد العملية.", { code: "committed_cache_revalidation_pending", entityId: updateId });
     return adminActionSuccess(
       published ? "تم نشر التحديث" : "تم إخفاء التحديث",
       published
@@ -408,8 +439,9 @@ async function deleteCommand(input: { kind: "stage" | "item" | "update"; project
     if (error) throw error;
     const synchronization = input.kind === "update" ? await cleanupDeletedTrackingUpdateMedia(media) : null;
     await audit(actor, "delete", `project_tracking_${input.kind}`, input.id, input.label, { project_id: input.projectId });
-    revalidateTracking(input.projectId, identity.slug);
-    if (synchronization?.status === "saved_with_media_sync_warning") return adminActionWarning("تم الحذف مع تنبيه وسائط", synchronization.failureReason ?? "تم حذف الربط ويلزم reconciliation.", { code: "saved_with_media_sync_warning", entityId: input.id });
+    const cache = await revalidateTracking(input.projectId, identity.slug);
+    if (synchronization?.status === "saved_with_media_sync_warning") return adminActionWarning("تم الحذف مع تنبيه وسائط", [synchronization.failureReason ?? "تم حذف الربط ويلزم reconciliation.", ...(!cache.ok ? ["تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات."] : [])].join(" "), { code: "saved_with_media_sync_warning", entityId: input.id });
+    if (!cache.ok) return adminActionWarning("تم الحذف مع تنبيه", "تم الحذف، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد الحذف.", { code: "committed_cache_revalidation_pending", entityId: input.id });
     return adminActionSuccess("تم الحذف", "تم حذف العنصر وفق قواعد سلامة الأبناء. لم يُحذف أي أصل وسائط فعلي.", { code: "deleted", entityId: input.id });
   } catch (error) { return adminActionFailure("تعذر الحذف", errorMessage(error), { entityId: input.id }); }
 }
@@ -427,7 +459,8 @@ async function reorder(kind: "stages" | "items", projectId: number, parentId: nu
       : await getSupabaseAdmin().rpc("reorder_project_tracking_items", { p_project_id: projectId, p_stage_id: parentId!, p_actor_id: actor.id, p_item_ids: ids });
     if (result.error) throw result.error;
     await audit(actor, "reorder", `project_tracking_${kind}`, parentId ?? projectId, identity.arabic_name, { ids });
-    revalidateTracking(projectId, identity.slug);
+    const cache = await revalidateTracking(projectId, identity.slug);
+    if (!cache.ok) return adminActionWarning("تم حفظ الترتيب مع تنبيه", "حُفظ الترتيب، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات.", { code: "committed_cache_revalidation_pending", entityId: parentId ?? projectId });
     return adminActionSuccess("تم حفظ الترتيب", "تم تطبيق الترتيب كاملًا وبصورة ذرية.", { code: "saved", entityId: parentId ?? projectId });
   } catch (error) { return adminActionFailure("تعذر إعادة الترتيب", errorMessage(error)); }
 }

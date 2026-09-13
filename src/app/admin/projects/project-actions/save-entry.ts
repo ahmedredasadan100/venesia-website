@@ -28,6 +28,8 @@ import {
 } from "../../../../lib/admin/projects/project-publishing-capability";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { revalidateProjectPaths } from "./revalidate";
+import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
+import { MediaDomainMutationError } from "../../../../lib/admin/media-catalog/domain-write-coordination";
 
 export type ProjectEntrySaveResult = {
   mediaSynchronizationStatus: "synced" | "warning";
@@ -225,11 +227,11 @@ export async function saveProjectEntry(
           });
         }
         const row = data?.[0];
-        const savedId = Number(row?.project_id);
+        const savedId = row?.project_id;
         const slug = String(row?.slug ?? payload.project.slug);
         const updatedAt = String(row?.updated_at ?? new Date().toISOString());
-        if (!Number.isSafeInteger(savedId) || savedId <= 0) {
-          throw new Error("project_entry_rpc_identity_missing");
+        if (typeof savedId !== "number" || !Number.isSafeInteger(savedId) || savedId <= 0 || (projectId !== null && savedId !== projectId)) {
+          throw new MediaDomainMutationError("project_entry_rpc_identity_missing", true);
         }
         return { id: savedId, slug, updatedAt };
       },
@@ -251,7 +253,6 @@ export async function saveProjectEntry(
       }
     }
     const reconciliationWarning = mode === "edit" && !reconciledBundle;
-    const savedWithWarning = mediaWarning || reconciliationWarning;
     const nextPublicationStatus =
       reconciledBundle?.project.publication_status ??
       trustedPayload.project.publication_status;
@@ -265,12 +266,13 @@ export async function saveProjectEntry(
       previousPublishedAt ??
       (nextPublicationStatus === "published" ? saved.updatedAt : null);
 
-    revalidateProjectPaths(
+    const cache = await runBoundedPublicCacheRevalidation(() => revalidateProjectPaths(
       payload.project.type,
       saved.id,
       saved.slug,
       previousSlug,
-    );
+    ));
+    const savedWithWarning = mediaWarning || reconciliationWarning || !cache.ok;
 
     await recordCmsAdminAudit(
       {
@@ -312,6 +314,8 @@ export async function saveProjectEntry(
         ? "حُفظ المشروع وكل عناصره، لكن تعذرت إعادة قراءة عقد التعديل بأمان. سيُعاد تحميل المحرر قبل السماح بحفظ آخر."
         : mediaWarning
           ? "حُفظ Project Aggregate ذريًا، لكن تعذر إثبات اكتمال مزامنة مراجع الميديا. يظل الحذف الآمن متوقفًا حتى reconciliation."
+          : !cache.ok
+            ? "تم حفظ المشروع وكل عناصره، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد الإنشاء أو الحفظ."
           : nextPublicationStatus === "published"
             ? "حُفظ Project Aggregate وأصبح المشروع ظاهرًا للعامة."
             : nextPublicationStatus === "unpublished"
@@ -321,7 +325,7 @@ export async function saveProjectEntry(
         ? "saved_requires_reconciliation_reload"
         : mediaWarning
           ? "saved_with_media_sync_warning"
-          : "saved",
+          : !cache.ok ? "committed_cache_revalidation_pending" : "saved",
       entityId: saved.id,
       ...(mode === "create" ? { editHref: `/admin/projects/${saved.id}` } : {}),
       savedRevision: `${saved.id}:${saved.updatedAt}`,
@@ -332,6 +336,10 @@ export async function saveProjectEntry(
       },
     };
   } catch (error) {
+    if (error instanceof MediaDomainMutationError && error.domainWriteCommitted) {
+      await runBoundedPublicCacheRevalidation(() => revalidateProjectPaths(payload.project.type, projectId ?? undefined));
+      return { status: "warning", mode, revision, title: "تم الحفظ — يلزم التحقق من النتيجة", message: "استُقبل تأكيد الحفظ، لكن تعذر التحقق من البيانات المعادة. حدّث القائمة للتحقق ولا تعِد إنشاء المشروع.", code: "saved_requires_reconciliation_reload" };
+    }
     if (error instanceof MediaReferenceWriteLeaseError) {
       const message = getMediaReferenceWriteLeaseUserMessage(error.code);
       return failure(

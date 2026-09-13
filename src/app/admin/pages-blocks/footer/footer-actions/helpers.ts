@@ -10,6 +10,35 @@ import type { FooterContactItem, FooterSocialLink } from "../../../../../lib/foo
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type { AdminUserRecord } from "../../../../../lib/admin/auth/admin-users";
 import type { Json } from "../../../../../lib/database.types";
+import type { MediaReferenceSynchronizationResult } from "../../../../../lib/admin/media-catalog/reference-sync-contract";
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
+import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidate-footer";
+import { revalidatePath } from "next/cache";
+
+export async function completeFooterSettingsMutationResult(
+  mediaSynchronization: MediaReferenceSynchronizationResult,
+  successMessage: string,
+) {
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(() => {
+    revalidateFooterPublicPaths();
+    revalidatePath("/admin/pages-blocks/footer");
+  });
+  if (!cacheRevalidation.ok) {
+    console.error("Footer cache revalidation failed after commit", cacheRevalidation.error);
+  }
+  const mediaWarning = mediaSynchronization.status === "saved_with_media_sync_warning";
+  const warnings = [
+    ...(mediaWarning ? ["تعذرت مزامنة ارتباطات الميديا، لذلك يظل الحذف الآمن متوقفًا"] : []),
+    ...(!cacheRevalidation.ok ? ["تعذر تحديث العرض فورًا. حدّث الصفحة قبل إعادة المحاولة"] : []),
+  ];
+  return {
+    ok: true as const,
+    status: warnings.length ? ("warning" as const) : ("success" as const),
+    code: !cacheRevalidation.ok ? "committed_cache_revalidation_pending" as const : mediaSynchronization.status,
+    message: warnings.length ? `${successMessage} لكن ${warnings.join(" و")}.` : successMessage,
+    mediaSynchronization,
+  };
+}
 
 export async function saveFooterSettingsWithAudit(input: {
   settings: { key: string; value: Json }[];

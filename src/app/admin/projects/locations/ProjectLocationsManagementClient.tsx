@@ -21,6 +21,7 @@ import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-acti
 import {
   adminActionFailure,
   adminActionSuccess,
+  adminActionWarning,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import type {
@@ -389,6 +390,8 @@ export default function ProjectLocationsManagementClient({
           return {
             ok: true as const,
             message: actionResult.message,
+            feedbackStatus: actionResult.feedbackStatus === "warning" ? "warning" as const : "success" as const,
+            code: actionResult.code,
             location:
               "location" in actionResult ? actionResult.location : undefined,
           };
@@ -401,10 +404,10 @@ export default function ProjectLocationsManagementClient({
             : current);
         },
       });
-      return adminActionSuccess(
+      return (result.feedbackStatus === "warning" ? adminActionWarning : adminActionSuccess)(
         nextActive ? "تم تفعيل الموقع" : "تم تعطيل الموقع",
         result.message,
-        { code: nextActive ? "published" : "unpublished", entityId: row.id },
+        { code: result.feedbackStatus === "warning" ? "saved" : nextActive ? "published" : "unpublished", entityId: row.id },
       );
     } catch (error) {
       return adminActionFailure(
@@ -424,7 +427,7 @@ export default function ProjectLocationsManagementClient({
         execute: async () => {
           const actionResult = await deleteProjectLocationAction(row.id, level);
           return actionResult.ok
-            ? { ok: true as const, message: actionResult.message }
+            ? { ok: true as const, message: actionResult.message, feedbackStatus: actionResult.feedbackStatus === "warning" ? "warning" as const : "success" as const, code: actionResult.code }
             : {
                 ok: false as const,
                 code: actionResult.code ?? "project_location_delete_failed",
@@ -432,7 +435,7 @@ export default function ProjectLocationsManagementClient({
               };
         },
       });
-      return adminActionSuccess("تم حذف الموقع", result.message, {
+      return (result.feedbackStatus === "warning" ? adminActionWarning : adminActionSuccess)("تم حذف الموقع", result.message, {
         code: "deleted",
         entityId: row.id,
       });

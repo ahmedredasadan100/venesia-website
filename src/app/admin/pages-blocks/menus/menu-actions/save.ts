@@ -4,6 +4,7 @@ import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin
 import type { AdminFormActionState } from "../../../../../lib/admin/form-runtime";
 import { validateSlugFormat } from "../../../../../lib/admin/slug";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 import {
   assertValidMenuSlug,
   auditMenuAction,
@@ -139,20 +140,30 @@ export async function updateMenu(formData: FormData) {
   const slug = createSlug(getString(formData, "slug") || name);
   const location = getString(formData, "location") || "main";
 
-  if (!id || !name) backToMenus("بيانات القائمة غير مكتملة.");
+  if (id === null || !Number.isSafeInteger(id) || id <= 0 || formData.getAll("id").length !== 1 || !name) {
+    backToMenus("بيانات القائمة غير مكتملة.");
+  }
   assertValidMenuSlug(slug);
 
   const { data: existingMenu, error: lookupError } = await getSupabaseAdmin().from("menus").select("id").eq("slug", slug).neq("id", id).maybeSingle();
   if (lookupError) backToMenus(lookupError.message);
   if (existingMenu?.id) backToMenus("الـ slug مستخدم بالفعل في قائمة أخرى. اختار slug مختلف.");
 
-  const { error } = await getSupabaseAdmin()
+  const { data, error } = await getSupabaseAdmin()
     .from("menus")
     .update({ name, slug, location, is_active: getBoolean(formData, "is_active"), updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .eq("id", id)
+    .select("id")
+    .maybeSingle();
 
   if (error) backToMenus(error.message);
+  if (!data || data.id !== id) backToMenus("القائمة غير موجودة.");
   await auditMenuAction("menu", "update", { entityId: id, entityLabel: name, metadata: { slug, location } });
-  const mediaSynchronization = await revalidateNavigation();
-  backToMenus(navigationMutationMessage(mediaSynchronization, "تم تحديث القائمة."));
+  const cacheRevalidation = await runBoundedPublicCacheRevalidation(() =>
+    revalidateNavigation().then(() => undefined),
+  );
+  if (!cacheRevalidation.ok) {
+    console.error("Menu update cache revalidation failed after commit", cacheRevalidation.error);
+  }
+  backToMenus(navigationMutationMessage(undefined, "تم تحديث القائمة.", !cacheRevalidation.ok));
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode } from "react";
+import type { AdminFormRuntimeHandle } from "../../../components/admin/ui/AdminFormRuntime";
 
 import AdminRichTextEditor from "../../../components/admin/AdminRichTextEditor";
 import AdminMediaImageField from "../../../components/admin/media/AdminMediaImageField";
@@ -529,6 +530,7 @@ export default function ProjectEditForm({
     generation: 0,
   }));
   const invalidateProjectsList = useAdminEntityListInvalidation("projects");
+  const runtimeRef = useRef<AdminFormRuntimeHandle>(null);
   const mode = bundle.project.id === null ? "create" : "edit";
   const formId =
     mode === "create" ? "project-create-form" : "project-edit-form";
@@ -539,7 +541,12 @@ export default function ProjectEditForm({
   const handleSaveSuccess = useCallback(
     (state: AdminFormActionState<ProjectEntrySaveResult>) => {
       void invalidateProjectsList();
-      if (state.mode !== "edit") return;
+      if (state.mode !== "edit") {
+        if (state.code === "saved_requires_reconciliation_reload" && !state.entityId) {
+          runtimeRef.current?.requestClose();
+        }
+        return;
+      }
 
       const reconciledBundle = state.result?.reconciledBundle;
       if (!reconciledBundle || reconciledBundle.project.id !== state.entityId) {
@@ -734,6 +741,7 @@ export default function ProjectEditForm({
 
   return (
     <AdminFormRuntime
+      runtimeRef={runtimeRef}
       key={`${bundle.project.id ?? `${bundle.project.type}-new`}:${generation}`}
       action={saveProjectEntry}
       mode={mode}

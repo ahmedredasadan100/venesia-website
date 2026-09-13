@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { coordinateMediaReferenceDomainMutation } from "../../../../../lib/admin/media-catalog/domain-write-coordination";
 import { buildMediaReferenceWriteScope } from "../../../../../lib/admin/media-catalog/reference-providers";
@@ -10,7 +9,6 @@ import {
   MediaReferenceWriteLeaseError,
 } from "../../../../../lib/admin/media-catalog/write-lease";
 import { isFooterContactItemPublic } from "../../../../../lib/footer/parse-footer-settings";
-import { revalidateFooterPublicPaths } from "../../../../../lib/footer/revalidate-footer";
 import { FOOTER_SLOTS_SETTING_KEY, type FooterLegal } from "../../../../../lib/footer/types";
 import type { Json } from "../../../../../lib/database.types";
 import { assertValidFooterSlots } from "../../../../../lib/footer/validate-footer-slots";
@@ -19,6 +17,7 @@ import {
   sanitizeContactItems,
   sanitizeSocialLinks,
   saveFooterSettingsWithAudit,
+  completeFooterSettingsMutationResult,
   usesGlobalContactPool,
 } from "./helpers";
 
@@ -86,16 +85,8 @@ export async function saveFooterBuilderAction(input: FooterBuilderSaveInput) {
     }
   })();
 
-  revalidateFooterPublicPaths();
-  revalidatePath("/admin/pages-blocks/footer");
-
-  return {
-    ok: true as const,
-    status:
-      coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
-        ? ("warning" as const)
-        : ("success" as const),
-    code: coordinated.mediaSynchronization.status,
-    mediaSynchronization: coordinated.mediaSynchronization,
-  };
+  return completeFooterSettingsMutationResult(
+    coordinated.mediaSynchronization,
+    "تم حفظ إعدادات الفوتر بنجاح.",
+  );
 }
