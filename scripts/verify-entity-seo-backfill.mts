@@ -217,8 +217,12 @@ export async function verifyEntitySeoBackfill() {
     encoding: "utf8", env: { ...process.env, ENTITY_SEO_BACKFILL_DATABASE_URL: "invalid-url-PRIVATE_SECRET" },
   });
   check(cliFailure.status === 1, "CLI invalid identity exits unsuccessfully before a database connection.");
-  check(!cliFailure.stderr.includes("PRIVATE_SECRET"), "CLI failures do not print a supplied secret.");
-  const cliCounts = JSON.parse(cliFailure.stderr.trim().split(/\r?\n/u).at(-1)!) as { counts: Record<string, number>; readyForEnforcement: boolean };
+  check(!`${cliFailure.stdout}${cliFailure.stderr}`.includes("PRIVATE_SECRET"), "CLI failures do not print a supplied secret.");
+  // Node diagnostics can arrive after the report on stderr. Require exactly
+  // one structured report instead of depending on warning delivery order.
+  const cliReports = cliFailure.stderr.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.startsWith("{"));
+  check(cliReports.length === 1, "CLI failure emits exactly one structured report alongside any Node diagnostics.");
+  const cliCounts = JSON.parse(cliReports[0]) as { counts: Record<string, number>; readyForEnforcement: boolean };
   check(["targeted", "calculated", "written", "unchanged", "conflicted", "failed", "unresolved"].every((field) => typeof cliCounts.counts[field] === "number") && !cliCounts.readyForEnforcement,
     "Even pre-connection CLI failures report every required count and block enforcement.");
   console.log(`Entity SEO backfill verified (${checks} assertions; actual shared owner and tooling, isolated pg transport only).`);
