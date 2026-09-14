@@ -207,7 +207,6 @@ try {
     assert.equal(h.trace.length, 1);
     assert.ok(h.trace[0].rpc);
     const expected = { ...metrics, error: null };
-    delete expected.staleScores;
     assert.deepEqual(result, expected);
   });
   await check("Count and page failures return no fabricated successful rows", async () => {
@@ -219,7 +218,7 @@ try {
       assert.equal(h.trace.length, expectedRequests);
     }
   });
-  await check("A single missing, stale or invalid persisted score rejects the entire page without analysis fallback", async () => {
+  await check("A partial, obsolete or invalid persisted score rejects the page without analysis fallback", async () => {
     for (const changes of [{ seo_score: null }, { seo_score_version: version + 1 }, { seo_score: -1 }, { seo_score: 101 }, { seo_score: 1.5 }]) {
       const badRows = structuredClone(rows);
       Object.assign(badRows.find((row) => row.id === 4), changes);
@@ -229,8 +228,35 @@ try {
       assert.deepEqual(result.rows, []);
     }
   });
-  await check("Metrics reject stale scores, malformed aggregates and RPC errors", async () => {
-    for (const options of [{ metrics: { ...metrics, staleScores: 1 } }, { metrics: { ...metrics, seoAverage: 101 } }, { metrics: {} }, { metricsError: true }]) {
+  await check("EXPAND unresolved rows stay visible and sort last without fabricated scores or analysis", async () => {
+    const transitionalRows = structuredClone(rows);
+    Object.assign(transitionalRows.find((row) => row.id === 4), {
+      seo_score: null, seo_score_version: null, seo_score_input_hash: null,
+    });
+    const h = backend({ rows: transitionalRows, metrics: { ...metrics, seoAverage: null, staleScores: 1 } });
+    const result = await loadTopicsEntityListResult(listQuery({ sort: "id_asc" }), categories);
+    assert.equal(result.rows.find((row) => row.id === 4).seo_score, null);
+    assert.equal(result.metrics.total, metrics.total);
+    assert.equal(result.metrics.seoAverage, null);
+    assert.equal(result.metrics.staleScores, 1);
+    assert.equal(result.metrics.error, null);
+    assert.equal(topicsEntityListAdapter.resultSchema.safeParse(result).success, true);
+    assert.equal(h.trace.length, 3);
+    for (const sort of ["seo_asc", "seo_desc"]) {
+      backend({ rows: transitionalRows });
+      const lastPage = await loader.loadUnifiedContentList({ ...baseFilters, sort, page: 3 }, categories);
+      assert.equal(lastPage.error, null);
+      assert.equal(lastPage.rows.at(-1).id, 4);
+      assert.equal(lastPage.rows.at(-1).seo_score, null);
+    }
+  });
+  await check("Metrics preserve non-SEO counts while the score average is unresolved", async () => {
+    backend({ metrics: { ...metrics, seoAverage: null, staleScores: 25 } });
+    const result = await loader.loadUnifiedContentMetrics();
+    assert.deepEqual(result, { ...metrics, seoAverage: null, staleScores: 25, error: null });
+  });
+  await check("Metrics reject malformed aggregates and RPC errors", async () => {
+    for (const options of [{ metrics: { ...metrics, staleScores: -1 } }, { metrics: { ...metrics, seoAverage: 101 } }, { metrics: {} }, { metricsError: true }]) {
       const h = backend(options);
       const result = await loader.loadUnifiedContentMetrics();
       assert.ok(result.error);
@@ -252,8 +278,8 @@ try {
     assert.equal(h.trace.length, 4);
     assert.equal(h.trace.filter((request) => request.table === "topic_categories").length, 1);
   });
-  await check("Entity List propagates category, page and stale-metrics failure instead of successful empty data", async () => {
-    for (const options of [{ categoryError: true }, { pageError: true }, { metrics: { ...metrics, staleScores: 1 } }]) {
+  await check("Entity List propagates category, page and malformed-metrics failure instead of successful empty data", async () => {
+    for (const options of [{ categoryError: true }, { pageError: true }, { metrics: {} }]) {
       backend(options);
       await assert.rejects(loadTopicsEntityListResult(listQuery(), options.categoryError ? undefined : categories));
     }

@@ -9,6 +9,7 @@ import {
 import { PERSISTED_ENTITY_SEO_FIELDS, isPersistedEntitySeoScore } from "../src/lib/seo/entity-seo-types.ts";
 import { collectExecutableSourceGraph, graphUsesExecutableBinding } from "./lib/typescript-executable-graph.mts";
 import { assertIsolatedSeoBackfillTarget, loadEntitySeoPersistenceOwner } from "./backfill-entity-seo-scores.mts";
+import { verifyEntitySeoBackfill } from "./verify-entity-seo-backfill.mts";
 
 const ROOT = process.cwd();
 const persistence = "src/lib/admin/seo/entity-seo-persistence.ts";
@@ -79,6 +80,16 @@ assert.throws(() => assertIsolatedSeoBackfillTarget("postgresql://test@db.exampl
 assert.throws(() => assertIsolatedSeoBackfillTarget("postgresql://test@127.0.0.1/production", "entity_seo_test"), /identity/);
 
 const schema = readFileSync(resolve(ROOT, "sql/migrations/20260914004050_entity_seo_persisted_score.sql"), "utf8");
-assert.match(schema, /deferrable initially deferred/u);
+const enforcement = readFileSync(resolve(ROOT, "sql/migrations/20260914151556_entity_seo_score_enforcement.sql"), "utf8");
+assert.match(schema, /create trigger topics_entity_seo_score_transition/u);
+assert.match(schema, /create trigger projects_entity_seo_score_transition/u);
+assert.match(schema, /invalidate_entity_seo_score_write/u);
+assert.doesNotMatch(schema, /create constraint trigger (?:topics|projects)_entity_seo_score_write/u,
+  "EXPAND must preserve old-writer compatibility before adoption and backfill.");
+assert.match(enforcement, /create constraint trigger topics_entity_seo_score_write/u);
+assert.match(enforcement, /create constraint trigger projects_entity_seo_score_write/u);
+assert.match(enforcement, /deferrable initially deferred/u);
 assert.doesNotMatch(schema, /analyzeEntitySeo\s*\(|keywordDensity|readinessScore|seoScore\s*\*/u, "SQL must not implement the SEO algorithm.");
+assert.doesNotMatch(enforcement, /analyzeEntitySeo\s*\(|keywordDensity|readinessScore|seoScore\s*\*/u, "Enforcement must not implement a second SEO algorithm.");
 console.log(`Entity SEO persistence: ${eligible.length - gaps.length} adopted surfaces, ${gaps.length} explicit semantic resolver gap; executable ownership, provenance, invariance, failure and isolated-target checks passed.`);
+await verifyEntitySeoBackfill();

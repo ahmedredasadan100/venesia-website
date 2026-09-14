@@ -67,7 +67,7 @@ export type UnifiedContentRow = {
   series_name: string | null;
   status: string | null;
   is_featured: boolean | null;
-  seo_score: number;
+  seo_score: number | null;
   views_count: number | null;
   created_at: string | null;
   updated_at: string | null;
@@ -94,8 +94,14 @@ type UnifiedContentListDatabaseRow = Pick<
 
 function toUnifiedContentRow(source: UnifiedContentListDatabaseRow): UnifiedContentRow | null {
   const { seo_score_version, ...row } = source;
-  if (source.id === null || !isContentType(source.content_type)
-    || seo_score_version !== ENTITY_SEO_SCORE_VERSION
+  if (source.id === null || !isContentType(source.content_type)) return null;
+  // EXPAND invalidates legacy proofs to an explicit all-null tuple. Keep the
+  // entity visible through the shared unavailable-score presentation; never
+  // turn an unresolved score into zero or calculate SEO in this read path.
+  if (source.seo_score === null && seo_score_version === null) {
+    return { ...row, id: source.id, content_type: source.content_type, seo_score: null };
+  }
+  if (seo_score_version !== ENTITY_SEO_SCORE_VERSION
     || source.seo_score === null || !Number.isInteger(source.seo_score)
     || source.seo_score < 0 || source.seo_score > 100) return null;
   return { ...row, id: source.id, content_type: source.content_type, seo_score: source.seo_score };
@@ -267,7 +273,7 @@ const contentMetricsSchema = z.object({
   withoutImage: z.number().int().nonnegative(),
   withSeries: z.number().int().nonnegative(),
   featured: z.number().int().nonnegative(),
-  seoAverage: z.number().int().min(0).max(100),
+  seoAverage: z.number().int().min(0).max(100).nullable(),
   staleScores: z.number().int().nonnegative(),
 });
 
@@ -276,13 +282,11 @@ export async function loadUnifiedContentMetrics() {
     p_seo_score_version: ENTITY_SEO_SCORE_VERSION,
   });
   const parsed = contentMetricsSchema.safeParse(data);
-  const empty = { total: 0, trashed: 0, published: 0, unpublished: 0, withoutImage: 0, withSeries: 0, featured: 0, seoAverage: 0 };
+  const empty = { total: 0, trashed: 0, published: 0, unpublished: 0, withoutImage: 0, withSeries: 0, featured: 0, seoAverage: null, staleScores: 0 };
   if (error || !parsed.success) {
     return { ...empty, error: error?.message ?? "تعذر قراءة إحصاءات الموضوعات." };
   }
-  const { staleScores, ...metrics } = parsed.data;
-  if (staleScores > 0) {
-    return { ...empty, error: "درجات SEO المحفوظة للموضوعات غير مكتملة أو غير محدثة." };
-  }
-  return { ...metrics, error: null };
+  // The aggregate exposes an unavailable average while active rows need
+  // backfill. Other counts remain authoritative during the transition.
+  return { ...parsed.data, error: null };
 }

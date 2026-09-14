@@ -417,22 +417,26 @@ check(
     !loader.includes(".slice(from"),
 );
 check(
-  "Metrics must use one aggregate RPC and reject stale or invalid persisted score summaries",
-  loader.includes('.rpc("admin_content_topic_metrics", {') &&
+  "Metrics must validate one aggregate RPC and preserve explicit unresolved counts with a nullable average",
+  (loader.match(/\.rpc\("admin_content_topic_metrics"/gu)?.length ?? 0) === 1 &&
     loader.includes("p_seo_score_version: ENTITY_SEO_SCORE_VERSION") &&
     loader.includes("contentMetricsSchema.safeParse(data)") &&
-    loader.includes("staleScores > 0") &&
+    loader.includes("seoAverage: z.number().int().min(0).max(100).nullable()") &&
+    loader.includes("staleScores: z.number().int().nonnegative()") &&
+    loader.includes("if (error || !parsed.success)") &&
+    loader.includes("return { ...parsed.data, error: null }") &&
     !loader.includes('supabase.from("topics")') &&
     !loader.includes("activeRows") &&
     !loader.includes("CONTENT_METRICS_SELECT"),
 );
 check(
-  "Topics list reads must omit full SEO source payloads and fail closed for missing or stale stored scores",
+  "Topics list reads must expose explicit unresolved scores and reject partial or stale tuples without full SEO source payloads",
   ["seo_score", "seo_score_version"].every((column) => topicListSelectedColumns.includes(column)) &&
     ["content", "excerpt", "faq", "seo_title", "seo_description", "seo_keywords", "focus_keyword", "og_image", "media_payload"].every(
       (column) => !topicListSelectedColumns.includes(column),
     ) &&
     loader.includes("const { seo_score_version, ...row } = source;") &&
+    loader.includes("source.seo_score === null && seo_score_version === null") &&
     loader.includes("seo_score_version !== ENTITY_SEO_SCORE_VERSION") &&
     loader.includes("rows.some((row) => row === null)") &&
     !loader.includes("analyzeEntitySeo") &&

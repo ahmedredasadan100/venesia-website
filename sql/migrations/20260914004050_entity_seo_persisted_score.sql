@@ -1,6 +1,9 @@
--- Schema only. Data is derived by scripts/backfill-entity-seo-scores.mts using
--- the existing TypeScript analyzeEntitySeo owner. No SQL scoring algorithm.
+-- EXPAND: old and adopted writers may coexist until deployment and backfill.
+-- Data is derived by scripts/backfill-entity-seo-scores.mts using the existing
+-- TypeScript analyzeEntitySeo owner. No SQL scoring algorithm.
 begin;
+set local lock_timeout = '5s';
+set local statement_timeout = '60s';
 
 alter table public.topics
   add column seo_score smallint,
@@ -141,8 +144,8 @@ $function$;
 revoke all on function public.entity_seo_score_input_hash(text, jsonb) from public, anon, authenticated;
 grant execute on function public.entity_seo_score_input_hash(text, jsonb) to service_role;
 
--- Deferred so existing aggregate/duplicate RPCs can attach a trusted derived
--- tuple after their insert but before commit. Unknown SEO writers fail closed.
+-- Final validator, installed only by the separate ENFORCE migration after
+-- deployment and backfill. Deferred validation observes the final aggregate.
 create function public.check_entity_seo_score_write()
 returns trigger language plpgsql security invoker
 set search_path = public, pg_temp
@@ -191,17 +194,50 @@ $function$;
 revoke all on function public.check_entity_seo_score_write() from public, anon, authenticated;
 grant execute on function public.check_entity_seo_score_write() to service_role;
 
-create constraint trigger topics_entity_seo_score_write
-after insert or update of content_type,title,excerpt,slug,content,image,image_alt,og_image,
+-- During EXPAND every writer follows the same compatibility rule. A complete,
+-- well-shaped tuple with a mismatched fingerprint becomes explicitly unresolved;
+-- this also covers legacy SELECT * duplication of another row's old tuple.
+-- Intent cannot be inferred from row values: an adopted writer with the same
+-- mismatch is invalidated too. Partial/malformed tuples always fail, while
+-- matching canonical proofs remain intact. ENFORCE removes this transition.
+create function public.invalidate_entity_seo_score_write()
+returns trigger language plpgsql security invoker
+set search_path = public, pg_temp
+as $function$
+begin
+  if NEW.seo_score is null and NEW.seo_score_version is null
+     and NEW.seo_score_input_hash is null then
+    return NEW;
+  end if;
+  if NEW.seo_score is null or NEW.seo_score not between 0 and 100
+     or NEW.seo_score_version is null or NEW.seo_score_version <= 0
+     or NEW.seo_score_input_hash is null
+     or NEW.seo_score_input_hash !~ '^[a-f0-9]{64}$' then
+    raise exception using errcode = '23514', message = 'Entity SEO derived tuple is incomplete or malformed.';
+  end if;
+  if NEW.seo_score_input_hash is distinct from
+     public.entity_seo_score_input_hash(TG_TABLE_NAME, to_jsonb(NEW)) then
+    NEW.seo_score := null;
+    NEW.seo_score_version := null;
+    NEW.seo_score_input_hash := null;
+  end if;
+  return NEW;
+end;
+$function$;
+revoke all on function public.invalidate_entity_seo_score_write() from public, anon, authenticated;
+grant execute on function public.invalidate_entity_seo_score_write() to service_role;
+
+create trigger topics_entity_seo_score_transition
+before insert or update of content_type,title,excerpt,slug,content,image,image_alt,og_image,
   og_image_alt,seo_title,seo_description,seo_keywords,focus_keyword,faq,
   seo_score,seo_score_version,seo_score_input_hash on public.topics
-deferrable initially deferred for each row execute function public.check_entity_seo_score_write();
+for each row execute function public.invalidate_entity_seo_score_write();
 
-create constraint trigger projects_entity_seo_score_write
-after insert or update of arabic_name,general_description,overview_body,slug,hero_image,
+create trigger projects_entity_seo_score_transition
+before insert or update of arabic_name,general_description,overview_body,slug,hero_image,
   hero_image_alt,og_image,og_image_alt,seo_title,seo_description,seo_keywords,focus_keyword,
   seo_score,seo_score_version,seo_score_input_hash on public.projects
-deferrable initially deferred for each row execute function public.check_entity_seo_score_write();
+for each row execute function public.invalidate_entity_seo_score_write();
 
 -- Extend the existing canonical view in its established column order. Retain
 -- its taxonomy/audit joins, owner and ACLs; read the tuple from the same Topics
@@ -278,7 +314,10 @@ as $function$
     'withoutImage', count(*) filter (where deleted_at is null and (image is null or image = '')),
     'withSeries', count(*) filter (where deleted_at is null and series_id is not null),
     'featured', count(*) filter (where deleted_at is null and is_featured is true),
-    'seoAverage', coalesce(round(avg(seo_score) filter (where deleted_at is null)), 0),
+    'seoAverage', case when count(*) filter (where deleted_at is null and
+      (seo_score is null or seo_score_version is distinct from p_seo_score_version)) > 0
+      then null else coalesce(round(avg(seo_score) filter (where deleted_at is null
+        and seo_score_version = p_seo_score_version)), 0) end,
     'staleScores', count(*) filter (where seo_score is null or seo_score_version is distinct from p_seo_score_version)
   ) from public.topics;
 $function$;
