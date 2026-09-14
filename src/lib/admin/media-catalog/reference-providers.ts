@@ -9,6 +9,12 @@ import { isContentType } from "../content/content-types";
 import { resolvePublicContentPath } from "../../content/public-content-path";
 import { getCanonicalMediaIdentityKey, parseLegacyPublicMediaAsset } from "./identity";
 import type { CanonicalMediaIdentity, MediaReferenceState } from "./types";
+import {
+  deriveEntitySeoScore,
+  PERSISTED_ENTITY_SEO_FIELDS,
+  TOPIC_SEO_SOURCE_COLUMNS,
+  toTopicSeoScoreInput,
+} from "../seo/entity-seo-persistence";
 
 const PROVIDER_PAGE_SIZE = 200;
 
@@ -66,6 +72,11 @@ type ProviderConfig = {
   stateFields?: readonly string[];
   supportsRebind?: boolean;
   revisionField?: "updated_at";
+  derivedWrite?: {
+    sourceColumns: readonly string[];
+    fields: readonly string[];
+    derive: (row: ProviderRow) => Record<string, Json | undefined>;
+  };
   adoptsCanonicalLegacyPublic?: boolean;
   editHref: (row: ProviderRow) => string | null;
   publicHref?: (row: ProviderRow) => string | null;
@@ -321,9 +332,19 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
         );
       }
       const supabase = getSupabaseAdmin();
+      const derivedWrite = config.derivedWrite?.sourceColumns.includes(reference.fieldKey)
+        ? config.derivedWrite
+        : null;
+      const readColumns = [...new Set([
+        idField,
+        reference.fieldKey,
+        ...(derivedWrite
+          ? [...derivedWrite.sourceColumns, ...derivedWrite.fields, config.revisionField]
+          : []),
+      ].filter(Boolean))].join(", ");
       const { data: row, error: readError } = await supabase
         .from(config.table)
-        .select(`${idField}, ${reference.fieldKey}`)
+        .select(readColumns)
         .eq(idField, reference.entityIdentity)
         .single();
       if (readError || !row) {
@@ -332,7 +353,8 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
           false,
         );
       }
-      const currentValue = providerJsonValue(providerRow(row)[reference.fieldKey]);
+      const currentRow = providerRow(row);
+      const currentValue = providerJsonValue(currentRow[reference.fieldKey]);
       const nextValue = replaceMediaValue(currentValue, reference.publicValue, nextPublicValue);
       if (isDeepStrictEqual(currentValue, nextValue)) {
         throw new MediaReferenceProviderRebindError(
@@ -342,6 +364,21 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
       }
       const update: TablesUpdate<MediaReferenceProviderTable> = {};
       Object.assign(update, { [reference.fieldKey]: nextValue });
+      const derivedFields = derivedWrite?.derive({
+        ...currentRow,
+        [reference.fieldKey]: nextValue,
+      });
+      if (derivedFields) Object.assign(update, derivedFields);
+      const expectedRevision = config.revisionField
+        ? currentRow[config.revisionField]
+        : undefined;
+      if (derivedWrite && (!config.revisionField ||
+        (expectedRevision !== null && typeof expectedRevision !== "string"))) {
+        throw new MediaReferenceProviderRebindError(
+          `media_reference_rebind_revision_invalid:${config.domainKey}`,
+          false,
+        );
+      }
       if (config.revisionField) {
         Object.assign(update, {
           [config.revisionField]: new Date().toISOString(),
@@ -367,18 +404,40 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
         }
         comparisonValue = currentValue;
       }
-      const { data: updatedRow, error: updateError } = await supabase
+      let updateQuery = supabase
         .from(config.table)
         .update(update)
         .eq(idField, reference.entityIdentity)
-        .eq(reference.fieldKey, comparisonValue)
+        .eq(reference.fieldKey, comparisonValue);
+      if (derivedWrite && config.revisionField) {
+        const revisionColumn: string = config.revisionField;
+        updateQuery = typeof expectedRevision === "string"
+          ? updateQuery.eq(revisionColumn, expectedRevision)
+          : updateQuery.is(revisionColumn, null);
+        // The provenance hash covers every SEO input, including another field
+        // changed within the same millisecond as this snapshot revision.
+        for (const field of derivedWrite.fields) {
+          const previousValue = currentRow[field];
+          if (previousValue !== null && typeof previousValue !== "string" &&
+            typeof previousValue !== "number") {
+            throw new MediaReferenceProviderRebindError(
+              `media_reference_rebind_revision_invalid:${config.domainKey}`,
+              false,
+            );
+          }
+          updateQuery = previousValue === null
+            ? updateQuery.is(field, null)
+            : updateQuery.eq(field, previousValue);
+        }
+      }
+      const { data: updatedRow, error: updateError } = await updateQuery
         .select(idField)
         .maybeSingle();
       if (!updateError && updatedRow) return;
 
       const { data: observedRow, error: verificationError } = await supabase
         .from(config.table)
-        .select(`${idField}, ${reference.fieldKey}`)
+        .select(readColumns)
         .eq(idField, reference.entityIdentity)
         .maybeSingle();
       if (verificationError || !observedRow) {
@@ -387,10 +446,16 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
           true,
         );
       }
-      const observedValue = providerJsonValue(
-        providerRow(observedRow)[reference.fieldKey],
-      );
-      if (isDeepStrictEqual(observedValue, nextValue)) return;
+      const observed = providerRow(observedRow);
+      const observedValue = providerJsonValue(observed[reference.fieldKey]);
+      if (isDeepStrictEqual(observedValue, nextValue)) {
+        if (!derivedFields || derivedWrite?.fields.every((field) =>
+          isDeepStrictEqual(observed[field], derivedFields[field]))) return;
+        throw new MediaReferenceProviderRebindError(
+          `media_reference_rebind_state_uncertain:${config.domainKey}`,
+          true,
+        );
+      }
       throw new MediaReferenceProviderRebindError(
         updateError
           ? `media_reference_rebind_write_failed:${config.domainKey}`
@@ -410,6 +475,14 @@ const PROVIDER_CONFIGS = [
     fields: ["image", "excerpt", "content", "media_payload", "og_image"],
     jsonFields: ["media_payload"],
     revisionField: "updated_at",
+    derivedWrite: {
+      sourceColumns: TOPIC_SEO_SOURCE_COLUMNS,
+      fields: PERSISTED_ENTITY_SEO_FIELDS,
+      derive: (row) => deriveEntitySeoScore(
+        toTopicSeoScoreInput({ ...row, content_type: valueText(row.content_type) }),
+        row,
+      ),
+    },
     extraFields: ["slug", "content_type"],
     stateFields: ["status", "deleted_at"],
     editHref: (row) => `/admin/content/topics/${row.id}`,

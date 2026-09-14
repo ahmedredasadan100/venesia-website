@@ -64,6 +64,10 @@ import {
 import { getResourceLinkUsageCount } from "../../../../lib/admin/links/usage";
 import type { Tables, TablesUpdate } from "../../../../lib/database.types";
 import { parseMediaTopicPayload } from "../../../../lib/admin/media-topic-payload";
+import {
+  deriveEntitySeoScore,
+  toTopicSeoScoreInput,
+} from "../../../../lib/admin/seo/entity-seo-persistence";
 
 function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -530,6 +534,7 @@ export async function duplicateUnifiedContent(
   const leaseEntityIdentity = `duplicate:${id}:${crypto.randomUUID()}`;
   let coordinated;
   try {
+    Object.assign(nextRow, deriveEntitySeoScore(toTopicSeoScoreInput(nextRow)));
     coordinated = await coordinateMediaReferenceEntityMutation({
       domainKey: "topics",
       leaseEntityIdentity,

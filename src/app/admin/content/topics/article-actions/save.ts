@@ -266,19 +266,18 @@ export async function saveArticleContentAdapter(
   const currentStatus = currentTopic
     ? getNormalizedStatus(String(currentTopic.status ?? "unpublished"), "unpublished")
     : null;
-  const writePayload = currentTopic
-    ? buildTopicWritePayload(
-        payload,
-        category,
-        series,
-        nextStatus,
-        now,
-        currentTopic,
-      )
-    : null;
-
   let coordinated;
   try {
+    const writePayload = currentTopic
+      ? buildTopicWritePayload(
+          payload,
+          category,
+          series,
+          nextStatus,
+          now,
+          currentTopic,
+        )
+      : null;
     if (mode === "create") {
       coordinated = await createArticleDomainRecord({
         payload,

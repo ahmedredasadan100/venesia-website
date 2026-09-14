@@ -822,6 +822,11 @@ type ReferenceProvidersRuntime = {
 const previousMediaValue = "/images/topics/original.jpg";
 const nextMediaValue = "/images/topics/rebound.jpg";
 const previousRevision = "2020-01-01T00:00:00.000Z";
+const reboundSeo = {
+  seo_score: 70,
+  seo_score_version: 1,
+  seo_score_input_hash: "a".repeat(64),
+};
 const rebindCapture: { update: Record<string, unknown> | null } = {
   update: null,
 };
@@ -848,8 +853,10 @@ const rebindSupabase = {
         return Promise.resolve({
           data: {
             id: 42,
+            content_type: "article",
             image: previousMediaValue,
             updated_at: previousRevision,
+            ...reboundSeo,
           },
           error: null,
         });
@@ -881,6 +888,12 @@ const referenceProvidersRuntime =
   loadTypeScriptModule<ReferenceProvidersRuntime>(REFERENCE_PROVIDERS_PATH, {
     "server-only": {},
     "node:util": nativeRequire("node:util"),
+    "../seo/entity-seo-persistence": {
+      TOPIC_SEO_SOURCE_COLUMNS: ["content_type", "image"],
+      PERSISTED_ENTITY_SEO_FIELDS: Object.keys(reboundSeo),
+      toTopicSeoScoreInput: (row: Record<string, unknown>) => row,
+      deriveEntitySeoScore: () => reboundSeo,
+    },
     "../../storage/upload-cms-asset": {
       parseManagedStorageAsset: () => null,
     },
@@ -922,7 +935,10 @@ await topicReferenceProvider.rebind(
 const rebindFinishedAt = Date.now();
 const capturedRebindUpdate = rebindCapture.update;
 assert.ok(capturedRebindUpdate);
-assert.deepEqual(Object.keys(capturedRebindUpdate).sort(), ["image", "updated_at"]);
+assert.deepEqual(Object.keys(capturedRebindUpdate).sort(), ["image", "updated_at", ...Object.keys(reboundSeo)].sort());
+for (const [field, value] of Object.entries(reboundSeo)) {
+  assert.equal(capturedRebindUpdate[field], value);
+}
 assert.equal(capturedRebindUpdate.image, nextMediaValue);
 const rebindRevision = capturedRebindUpdate.updated_at;
 assert.ok(typeof rebindRevision === "string");
@@ -934,6 +950,8 @@ assert.ok(rebindRevisionTime <= rebindFinishedAt);
 assert.deepEqual(capturedRebindComparisons, [
   ["id", "42"],
   ["image", previousMediaValue],
+  ["updated_at", previousRevision],
+  ...Object.entries(reboundSeo),
 ]);
 
 const actualDynamicTopicWriters =

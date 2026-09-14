@@ -33,6 +33,7 @@ const pageClient = read("src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.
 const pageAdminQueries = read("src/lib/page-blocks/admin-queries.ts");
 const seoResolver = read("src/lib/seo/resolve-seo-metadata.ts");
 const seoUtils = read("src/lib/seo/seo-utils.ts");
+const persistedSeoOwner = read("src/lib/admin/seo/entity-seo-persistence.ts");
 
 const source = Object.fromEntries(
   Object.entries(paths).map(([key, path]) => [key, read(path)]),
@@ -82,15 +83,20 @@ check(
 check(
   "Editor, Entity List, and Metrics consume the same SEO Score contract and official score",
   source.shared.includes("analyzeEntitySeo(analysisInput)") &&
+    source.shared.includes("resolveEntitySeoScoreInput({") &&
+    persistedSeoOwner.includes("resolveEntitySeoScoreInput({") &&
     source.shared.includes("{analysis.score}") &&
     source.shared.includes("analysis.metrics.map") &&
     source.shared.includes("analysisExtension.resolveFaq(analysisState)") &&
     !source.shared.includes(".overallScore") &&
     !source.shared.includes(".seoScore") &&
     !source.shared.includes("analysisExtension?.analyze") &&
-    source.loader.includes("return analyzeEntitySeo({") &&
-    source.loader.includes("}).score") &&
-    source.loader.includes("getUnifiedContentSeoScore(row)") &&
+    persistedSeoOwner.includes("const analysis = analyzeEntitySeo(input)") &&
+    persistedSeoOwner.includes("seo_score: analysis.score") &&
+    source.loader.includes("seo_score: source.seo_score") &&
+    source.loader.includes("seo_score_version !== ENTITY_SEO_SCORE_VERSION") &&
+    source.loader.includes('"admin_content_topic_metrics"') &&
+    !source.loader.includes("analyzeEntitySeo") &&
     !source.loader.includes("analyzeTopicSeo") &&
     !source.loader.includes(".overallScore") &&
     !source.loader.includes(".seoScore"),

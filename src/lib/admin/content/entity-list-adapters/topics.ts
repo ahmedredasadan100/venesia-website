@@ -38,7 +38,7 @@ const topicRowSchema = z.object({
   series_name: z.string().nullable(),
   status: z.string().nullable(),
   is_featured: z.boolean().nullable(),
-  seo_score: z.number().int().min(0).max(100),
+  seo_score: z.number().int().min(0).max(100).nullable(),
   views_count: z.number().nullable(),
   created_at: z.string().nullable(),
   updated_at: z.string().nullable(),
@@ -57,7 +57,8 @@ const topicMetricsSchema = z.object({
   withoutImage: z.number().int().nonnegative(),
   withSeries: z.number().int().nonnegative(),
   featured: z.number().int().nonnegative(),
-  seoAverage: z.number().int().nonnegative(),
+  seoAverage: z.number().int().min(0).max(100).nullable(),
+  staleScores: z.number().int().nonnegative(),
   error: z.string().nullable(),
 });
 
@@ -99,6 +100,7 @@ export async function loadTopicsEntityListResult(
     loadUnifiedContentMetrics(),
   ]);
   if (list.error) throw new Error(list.error);
+  if (metrics.error) throw new Error(metrics.error);
 
   return {
     rows: list.rows,

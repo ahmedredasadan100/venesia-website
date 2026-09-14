@@ -1,12 +1,9 @@
 import "server-only";
 
-import {
-  analyzeEntitySeo,
-  sortRowsBySeoScore,
-} from "../seo-score";
-import type { Json, Tables } from "../../database.types";
+import { ENTITY_SEO_SCORE_VERSION } from "../seo-score";
+import { z } from "zod";
+import type { Tables } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
-import { parseTopicFaq } from "../content-workflow/topic-publish-validation";
 import {
   getCategoryAndDescendantIds,
   type AdminContentCategory,
@@ -45,15 +42,6 @@ export const CONTENT_SORT_VALUES = [
 ] as const;
 
 export type ContentSortValue = (typeof CONTENT_SORT_VALUES)[number];
-type SeoContentSortValue = "seo_asc" | "seo_desc";
-const SEO_SORT_VALUES = new Set<ContentSortValue>(["seo_asc", "seo_desc"]);
-
-function isSeoContentSortValue(
-  value: ContentSortValue,
-): value is SeoContentSortValue {
-  return SEO_SORT_VALUES.has(value);
-}
-
 export type UnifiedContentFilters = {
   q: string;
   view: "active" | "trash";
@@ -79,7 +67,7 @@ export type UnifiedContentRow = {
   series_name: string | null;
   status: string | null;
   is_featured: boolean | null;
-  seo_score: number;
+  seo_score: number | null;
   views_count: number | null;
   created_at: string | null;
   updated_at: string | null;
@@ -99,197 +87,24 @@ export type UnifiedContentListResult = {
   error: string | null;
 };
 
-type UnifiedContentSeoInputRow = {
-  title: string | null;
-  content_type: ContentType;
-  slug: string | null;
-  excerpt: string | null;
-  content: string | null;
-  image: string | null;
-  image_alt: string | null;
-  seo_title: string | null;
-  seo_description: string | null;
-  seo_keywords: string[] | null;
-  focus_keyword: string | null;
-  og_image: string | null;
-  og_image_alt: string | null;
-  faq: Json | null;
-};
-
-type UnifiedContentSeoSourceRow = Omit<UnifiedContentRow, "seo_score"> &
-  UnifiedContentSeoInputRow;
-
-type UnifiedContentMetricsSourceRow = UnifiedContentSeoInputRow & {
-  id: number;
-  status: string | null;
-  is_featured: boolean | null;
-  series_id: number | null;
-};
-
-type AdminContentTopicDatabaseRow = Tables<"admin_content_topics">;
-type TopicDatabaseRow = Tables<"topics">;
-
 type UnifiedContentListDatabaseRow = Pick<
-  AdminContentTopicDatabaseRow,
-  | "id"
-  | "title"
-  | "slug"
-  | "excerpt"
-  | "content"
-  | "image"
-  | "image_alt"
-  | "content_type"
-  | "category_id"
-  | "category_name"
-  | "category_color_token"
-  | "series_id"
-  | "series_name"
-  | "status"
-  | "is_featured"
-  | "views_count"
-  | "created_at"
-  | "updated_at"
-  | "published_at"
-  | "created_by_display"
-  | "updated_by_display"
-  | "published_by_display"
-  | "deleted_at"
-  | "seo_title"
-  | "seo_description"
-  | "seo_keywords"
-  | "focus_keyword"
-  | "og_image"
-  | "og_image_alt"
-  | "faq"
+  Tables<"admin_content_topics">,
+  keyof UnifiedContentRow | "seo_score_version"
 >;
 
-type UnifiedContentMetricsDatabaseRow = Pick<
-  TopicDatabaseRow,
-  | "id"
-  | "title"
-  | "slug"
-  | "excerpt"
-  | "content"
-  | "image"
-  | "image_alt"
-  | "content_type"
-  | "status"
-  | "is_featured"
-  | "series_id"
-  | "seo_title"
-  | "seo_description"
-  | "seo_keywords"
-  | "focus_keyword"
-  | "og_image"
-  | "og_image_alt"
-  | "faq"
->;
-
-function normalizeUnifiedContentListSourceRow(
-  row: UnifiedContentListDatabaseRow,
-): UnifiedContentSeoSourceRow | null {
-  if (row.id === null || !isContentType(row.content_type)) return null;
-  return {
-    ...row,
-    id: row.id,
-    content_type: row.content_type,
-  };
-}
-
-function normalizeUnifiedContentListSourceRows(
-  rows: readonly UnifiedContentListDatabaseRow[],
-): UnifiedContentSeoSourceRow[] | null {
-  const normalized = rows.flatMap((row) => {
-    const item = normalizeUnifiedContentListSourceRow(row);
-    return item ? [item] : [];
-  });
-  return normalized.length === rows.length ? normalized : null;
-}
-
-function normalizeUnifiedContentMetricsSourceRow(
-  row: UnifiedContentMetricsDatabaseRow,
-): UnifiedContentMetricsSourceRow | null {
-  if (!Number.isSafeInteger(row.id) || !isContentType(row.content_type)) {
-    return null;
+function toUnifiedContentRow(source: UnifiedContentListDatabaseRow): UnifiedContentRow | null {
+  const { seo_score_version, ...row } = source;
+  if (source.id === null || !isContentType(source.content_type)) return null;
+  // EXPAND invalidates legacy proofs to an explicit all-null tuple. Keep the
+  // entity visible through the shared unavailable-score presentation; never
+  // turn an unresolved score into zero or calculate SEO in this read path.
+  if (source.seo_score === null && seo_score_version === null) {
+    return { ...row, id: source.id, content_type: source.content_type, seo_score: null };
   }
-  return {
-    ...row,
-    content_type: row.content_type,
-  };
-}
-
-function normalizeUnifiedContentMetricsSourceRows(
-  rows: readonly UnifiedContentMetricsDatabaseRow[],
-): UnifiedContentMetricsSourceRow[] | null {
-  const normalized = rows.flatMap((row) => {
-    const item = normalizeUnifiedContentMetricsSourceRow(row);
-    return item ? [item] : [];
-  });
-  return normalized.length === rows.length ? normalized : null;
-}
-
-function normalizeSeoKeywords(value: string[] | null) {
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
-    return [];
-  }
-  return value.filter(Boolean);
-}
-
-function getUnifiedContentSeoScore(row: UnifiedContentSeoInputRow) {
-  return analyzeEntitySeo({
-    profile: row.content_type === "article" ? "article" : "entity",
-    title: row.title ?? "",
-    description: row.excerpt ?? "",
-    content: row.content ?? "",
-    slug: row.slug ?? "",
-    image: row.image ?? "",
-    imageAlt: row.image_alt ?? "",
-    ogImage: row.og_image ?? "",
-    ogImageAlt: row.og_image_alt ?? "",
-    seoTitle: row.seo_title ?? "",
-    seoDescription: row.seo_description ?? "",
-    seoKeywords: normalizeSeoKeywords(row.seo_keywords),
-    focusKeyword: row.focus_keyword ?? "",
-    faq: parseTopicFaq(row.faq ?? null) ?? [],
-  }).score;
-}
-
-function toUnifiedContentRow(
-  source: UnifiedContentSeoSourceRow,
-): UnifiedContentRow {
-  return {
-    id: source.id,
-    title: source.title,
-    content_type: source.content_type,
-    category_id: source.category_id,
-    category_name: source.category_name,
-    category_color_token: source.category_color_token,
-    series_id: source.series_id,
-    series_name: source.series_name,
-    status: source.status,
-    is_featured: source.is_featured,
-    seo_score: getUnifiedContentSeoScore(source),
-    views_count: source.views_count,
-    created_at: source.created_at,
-    updated_at: source.updated_at,
-    published_at: source.published_at,
-    created_by_display: source.created_by_display,
-    updated_by_display: source.updated_by_display,
-    published_by_display: source.published_by_display,
-    deleted_at: source.deleted_at,
-  };
-}
-
-export function sortUnifiedContentRowsBySeo(
-  rows: readonly UnifiedContentRow[],
-  direction: "asc" | "desc",
-) {
-  return sortRowsBySeoScore(
-    rows,
-    direction,
-    (row) => row.seo_score,
-    (row) => row.id,
-  );
+  if (seo_score_version !== ENTITY_SEO_SCORE_VERSION
+    || source.seo_score === null || !Number.isInteger(source.seo_score)
+    || source.seo_score < 0 || source.seo_score > 100) return null;
+  return { ...row, id: source.id, content_type: source.content_type, seo_score: source.seo_score };
 }
 
 export type ContentListSearchParams = {
@@ -357,6 +172,7 @@ function applyFilters<Query extends UnifiedContentFilterQuery>(
 
 type UnifiedContentSortColumn =
   | "id"
+  | "seo_score"
   | "title"
   | "content_type"
   | "category_name"
@@ -377,12 +193,14 @@ interface UnifiedContentSortQuery {
 
 function applySort<Query extends UnifiedContentSortQuery>(
   query: Query,
-  sort: Exclude<ContentSortValue, SeoContentSortValue>,
+  sort: ContentSortValue,
 ): Query {
   const sortMap: Record<
-    Exclude<ContentSortValue, SeoContentSortValue>,
+    ContentSortValue,
     { column: UnifiedContentSortColumn; ascending: boolean }
   > = {
+    seo_asc: { column: "seo_score", ascending: true },
+    seo_desc: { column: "seo_score", ascending: false },
     id_asc: { column: "id", ascending: true },
     id_desc: { column: "id", ascending: false },
     title_asc: { column: "title", ascending: true },
@@ -417,204 +235,58 @@ function applySort<Query extends UnifiedContentSortQuery>(
 }
 
 const CONTENT_LIST_SELECT =
-  "id,title,slug,excerpt,content,image,image_alt,content_type,category_id,category_name,category_color_token,series_id,series_name,status,is_featured,views_count,created_at,updated_at,published_at,created_by_display,updated_by_display,published_by_display,deleted_at,seo_title,seo_description,seo_keywords,focus_keyword,og_image,og_image_alt,faq";
-const CONTENT_METRICS_SELECT =
-  "id,title,slug,excerpt,content,image,image_alt,content_type,status,is_featured,series_id,seo_title,seo_description,seo_keywords,focus_keyword,og_image,og_image_alt,faq";
+  "id,title,content_type,category_id,category_name,category_color_token,series_id,series_name,status,is_featured,seo_score,seo_score_version,views_count,created_at,updated_at,published_at,created_by_display,updated_by_display,published_by_display,deleted_at";
 
 export async function loadUnifiedContentList(
   filters: UnifiedContentFilters,
   categories: AdminContentCategory[],
 ): Promise<UnifiedContentListResult> {
   const supabase = getSupabaseAdmin();
-  let totalCount = 0;
-  let seoSourceRows: UnifiedContentSeoSourceRow[] | null = null;
-  let dataError: string | null = null;
-
-  if (isSeoContentSortValue(filters.sort)) {
-    const { data, count, error } = await applyFilters(
-      supabase
-        .from("admin_content_topics")
-        .select(CONTENT_LIST_SELECT, { count: "exact" }),
-      filters,
-      categories,
-    ).order("id", { ascending: true });
-
-    if (error) {
-      dataError = error.message;
-    } else {
-      const normalizedRows = normalizeUnifiedContentListSourceRows(data ?? []);
-      if (!normalizedRows) {
-        dataError = "The Topics list returned an invalid generated Database row.";
-      } else {
-        seoSourceRows = normalizedRows;
-        totalCount = count ?? seoSourceRows.length;
-
-        // PostgREST may cap a response. Continue only when the authoritative
-        // count proves that the first response was truncated; no fixed fan-out.
-        while (seoSourceRows.length < totalCount) {
-          const offset = seoSourceRows.length;
-          const { data: nextData, error: nextError } = await applyFilters(
-            supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
-            filters,
-            categories,
-          )
-            .order("id", { ascending: true })
-            .range(offset, totalCount - 1);
-          if (nextError) {
-            dataError = nextError.message;
-            break;
-          }
-          const nextRows = normalizeUnifiedContentListSourceRows(nextData ?? []);
-          if (!nextRows) {
-            dataError = "The Topics list returned an invalid generated Database row.";
-            break;
-          }
-          if (!nextRows.length) {
-            dataError = "The complete SEO sorting source could not be read.";
-            break;
-          }
-          seoSourceRows.push(...nextRows);
-        }
-      }
-    }
-  } else {
-    const { count, error: countError } = await applyFilters(
-      supabase
-        .from("admin_content_topics")
-        .select("id", { count: "exact", head: true }),
-      filters,
-      categories,
-    );
-    if (countError) dataError = countError.message;
-    else totalCount = count ?? 0;
-  }
-
-  if (dataError) {
-    return {
-      rows: [],
-      totalCount,
-      page: 1,
-      pageSize: filters.pageSize,
-      totalPages: Math.max(1, Math.ceil(totalCount / filters.pageSize)),
-      error: dataError,
-    };
-  }
-
+  const { count, error: countError } = await applyFilters(
+    supabase.from("admin_content_topics").select("id", { count: "exact", head: true }),
+    filters, categories,
+  );
+  const totalCount = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalCount / filters.pageSize));
   const page = Math.min(filters.page, totalPages);
+  const result = { totalCount, page, pageSize: filters.pageSize, totalPages };
+  if (countError) return { ...result, rows: [], error: countError.message };
+
   const from = (page - 1) * filters.pageSize;
-  const to = from + filters.pageSize - 1;
-  let rows: UnifiedContentRow[] = [];
-
-  if (isSeoContentSortValue(filters.sort)) {
-    const direction = filters.sort === "seo_asc" ? "asc" : "desc";
-    rows = sortUnifiedContentRowsBySeo(
-      (seoSourceRows ?? []).map(toUnifiedContentRow),
-      direction,
-    ).slice(from, to + 1);
-  } else {
-    const { data, error } = await applySort(
-      applyFilters(
-        supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT),
-        filters,
-        categories,
-      ),
-      filters.sort,
-    ).range(from, to);
-    const sourceRows = error
-      ? null
-      : normalizeUnifiedContentListSourceRows(data ?? []);
-    dataError = error?.message ?? (
-      sourceRows === null
-        ? "The Topics list returned an invalid generated Database row."
-        : null
-    );
-    rows = sourceRows?.map(toUnifiedContentRow) ?? [];
+  const { data, error } = await applySort(
+    applyFilters(supabase.from("admin_content_topics").select(CONTENT_LIST_SELECT), filters, categories),
+    filters.sort,
+  ).range(from, from + filters.pageSize - 1);
+  if (error) return { ...result, rows: [], error: error.message };
+  const rows = (data ?? []).map(toUnifiedContentRow);
+  if (rows.some((row) => row === null)) {
+    return { ...result, rows: [], error: "درجات SEO المحفوظة للموضوعات غير مكتملة أو غير محدثة." };
   }
-
-  return {
-    rows,
-    totalCount,
-    page,
-    pageSize: filters.pageSize,
-    totalPages,
-    error: dataError,
-  };
+  return { ...result, rows: rows as UnifiedContentRow[], error: null };
 }
 
+const contentMetricsSchema = z.object({
+  total: z.number().int().nonnegative(),
+  trashed: z.number().int().nonnegative(),
+  published: z.number().int().nonnegative(),
+  unpublished: z.number().int().nonnegative(),
+  withoutImage: z.number().int().nonnegative(),
+  withSeries: z.number().int().nonnegative(),
+  featured: z.number().int().nonnegative(),
+  seoAverage: z.number().int().min(0).max(100).nullable(),
+  staleScores: z.number().int().nonnegative(),
+});
+
 export async function loadUnifiedContentMetrics() {
-  const supabase = getSupabaseAdmin();
-  const [active, trashed] = await Promise.all([
-    supabase
-      .from("topics")
-      .select(CONTENT_METRICS_SELECT, { count: "exact" })
-      .is("deleted_at", null)
-      .order("id", { ascending: true }),
-    supabase.from("topics").select("id", { count: "exact", head: true }).not("deleted_at", "is", null),
-  ]);
-
-  const activeCount = active.count ?? active.data?.length ?? 0;
-  const normalizedActiveRows = active.error
-    ? null
-    : normalizeUnifiedContentMetricsSourceRows(active.data ?? []);
-  const activeRows = normalizedActiveRows ?? [];
-  let activeError = active.error?.message ?? (
-    normalizedActiveRows === null
-      ? "The Topics metrics query returned an invalid generated Database row."
-      : null
-  );
-
-  while (!activeError && activeRows.length < activeCount) {
-    const offset = activeRows.length;
-    const { data, error } = await supabase
-      .from("topics")
-      .select(CONTENT_METRICS_SELECT)
-      .is("deleted_at", null)
-      .order("id", { ascending: true })
-      .range(offset, activeCount - 1);
-    if (error) {
-      activeError = error.message;
-      break;
-    }
-    const nextRows = normalizeUnifiedContentMetricsSourceRows(data ?? []);
-    if (!nextRows) {
-      activeError = "The Topics metrics query returned an invalid generated Database row.";
-      break;
-    }
-    if (!nextRows.length) {
-      activeError = "The complete Topics metrics source could not be read.";
-      break;
-    }
-    activeRows.push(...nextRows);
+  const { data, error } = await getSupabaseAdmin().rpc("admin_content_topic_metrics", {
+    p_seo_score_version: ENTITY_SEO_SCORE_VERSION,
+  });
+  const parsed = contentMetricsSchema.safeParse(data);
+  const empty = { total: 0, trashed: 0, published: 0, unpublished: 0, withoutImage: 0, withSeries: 0, featured: 0, seoAverage: null, staleScores: 0 };
+  if (error || !parsed.success) {
+    return { ...empty, error: error?.message ?? "تعذر قراءة إحصاءات الموضوعات." };
   }
-
-  const completeRows = activeError ? [] : activeRows;
-  const published = completeRows.filter((row) => row.status === "published").length;
-  const unpublished = completeRows.filter((row) => row.status === "unpublished").length;
-  const withoutImage = completeRows.filter((row) => !row.image).length;
-  const withSeries = completeRows.filter((row) => row.series_id !== null).length;
-  const featured = completeRows.filter((row) => row.is_featured === true).length;
-  const seoAverage = completeRows.length
-    ? Math.round(
-        completeRows.reduce(
-          (sum, row) => sum + getUnifiedContentSeoScore(row),
-          0,
-        ) / completeRows.length,
-      )
-    : 0;
-
-  return {
-    total: activeError ? 0 : activeCount,
-    trashed: trashed.count ?? 0,
-    published,
-    unpublished,
-    withoutImage,
-    withSeries,
-    featured,
-    seoAverage,
-    error:
-      activeError ??
-      trashed.error?.message ??
-      null,
-  };
+  // The aggregate exposes an unavailable average while active rows need
+  // backfill. Other counts remain authoritative during the transition.
+  return { ...parsed.data, error: null };
 }

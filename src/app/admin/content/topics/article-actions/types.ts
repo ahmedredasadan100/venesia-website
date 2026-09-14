@@ -1,8 +1,10 @@
+import type { PersistedEntitySeoScoreSource } from "../../../../../lib/admin/seo/entity-seo-persistence";
+
 export const VALID_STATUSES = ["published", "unpublished"] as const;
 
 export type TopicStatus = (typeof VALID_STATUSES)[number];
 
-export type TopicRow = {
+export type TopicRow = PersistedEntitySeoScoreSource & {
   id: number;
   title: string | null;
   slug: string | null;

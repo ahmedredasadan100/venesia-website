@@ -1,5 +1,30 @@
 import type { SeoOpenGraphType, SeoRobotsDirective } from "../../config/seo/seo-types";
 
+export const PERSISTED_ENTITY_SEO_FIELDS = [
+  "seo_score", "seo_score_version", "seo_score_input_hash",
+] as const;
+
+/** Derived summary only; the entity's original SEO inputs remain authoritative. */
+export type PersistedEntitySeoScore = {
+  seo_score: number;
+  seo_score_version: number;
+  seo_score_input_hash: string;
+};
+
+export type PersistedEntitySeoScoreSource = {
+  [K in keyof PersistedEntitySeoScore]?: PersistedEntitySeoScore[K] | null;
+};
+
+export function isPersistedEntitySeoScore(
+  value: PersistedEntitySeoScoreSource | null | undefined,
+): value is PersistedEntitySeoScore {
+  return Boolean(value && Number.isInteger(value.seo_score)
+    && value.seo_score! >= 0 && value.seo_score! <= 100
+    && Number.isInteger(value.seo_score_version) && value.seo_score_version! > 0
+    && typeof value.seo_score_input_hash === "string"
+    && /^[a-f0-9]{64}$/.test(value.seo_score_input_hash));
+}
+
 export const ENTITY_SEO_FIELD_NAMES = {
   seoTitle: "seo_title",
   seoDescription: "seo_description",

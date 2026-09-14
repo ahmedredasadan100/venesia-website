@@ -2672,6 +2672,9 @@ export type Database = {
           robots_index: boolean | null
           seo_description: string
           seo_keywords: string[]
+          seo_score: number | null
+          seo_score_input_hash: string | null
+          seo_score_version: number | null
           seo_title: string
           short_description: string
           show_location_label: boolean
@@ -2728,6 +2731,9 @@ export type Database = {
           robots_index?: boolean | null
           seo_description?: string
           seo_keywords?: string[]
+          seo_score?: number | null
+          seo_score_input_hash?: string | null
+          seo_score_version?: number | null
           seo_title?: string
           short_description: string
           show_location_label?: boolean
@@ -2784,6 +2790,9 @@ export type Database = {
           robots_index?: boolean | null
           seo_description?: string
           seo_keywords?: string[]
+          seo_score?: number | null
+          seo_score_input_hash?: string | null
+          seo_score_version?: number | null
           seo_title?: string
           short_description?: string
           show_location_label?: boolean
@@ -3080,6 +3089,9 @@ export type Database = {
           robots_index: boolean | null
           seo_description: string
           seo_keywords: string[]
+          seo_score: number | null
+          seo_score_input_hash: string | null
+          seo_score_version: number | null
           seo_title: string
           series: string | null
           series_id: number | null
@@ -3129,6 +3141,9 @@ export type Database = {
           robots_index?: boolean | null
           seo_description?: string
           seo_keywords?: string[]
+          seo_score?: number | null
+          seo_score_input_hash?: string | null
+          seo_score_version?: number | null
           seo_title?: string
           series?: string | null
           series_id?: number | null
@@ -3178,6 +3193,9 @@ export type Database = {
           robots_index?: boolean | null
           seo_description?: string
           seo_keywords?: string[]
+          seo_score?: number | null
+          seo_score_input_hash?: string | null
+          seo_score_version?: number | null
           seo_title?: string
           series?: string | null
           series_id?: number | null
@@ -3303,6 +3321,9 @@ export type Database = {
           robots_index: boolean | null
           seo_description: string | null
           seo_keywords: string[] | null
+          seo_score: number | null
+          seo_score_input_hash: string | null
+          seo_score_version: number | null
           seo_title: string | null
           series_id: number | null
           series_name: string | null
@@ -3488,6 +3509,18 @@ export type Database = {
       }
     }
     Functions: {
+      entity_seo_score_source: {
+        Args: { p_entity: string; p_row: Json }
+        Returns: Json
+      }
+      entity_seo_score_input_hash: {
+        Args: { p_entity: string; p_row: Json }
+        Returns: string
+      }
+      admin_content_topic_metrics: {
+        Args: { p_seo_score_version: number }
+        Returns: Json
+      }
       mutate_project_tracking_item: {
         Args: { p_action: string; p_actor_id: number; p_item_id?: number | null; p_payload?: Json; p_project_id: number; p_stage_id: number }
         Returns: Json
@@ -3723,7 +3756,7 @@ export type Database = {
         }[]
       }
       duplicate_project_admin_entry: {
-        Args: { p_project_id: number }
+        Args: { p_project_id: number; p_seo_proof?: Json }
         Returns: {
           created_at: string
           featured: boolean

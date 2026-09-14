@@ -563,6 +563,8 @@ export default function TopicsListClient({
     [controller],
   );
   const metricsError = Boolean(controller.result.metrics?.error);
+  const seoAverage = controller.result.metrics?.seoAverage;
+  const seoAverageUnavailable = metricsError || seoAverage == null;
   const metricItems: AdminMetricCardsGridItem[] = [
     { label: "إجمالي الموضوعات", value: metricsError ? "—" : (controller.result.metrics?.total ?? 0), tone: "gold", compact: true, onClick: () => resetToView("active"), active: !isTrashView && !controller.query.search && controller.query.filters.contentType === "all" && !controller.query.filters.categoryId && !controller.query.filters.seriesId && controller.query.filters.status === "all" && controller.query.filters.featured === "all" && controller.query.filters.image === "all" },
     { label: "منشور", value: metricsError ? "—" : (controller.result.metrics?.published ?? 0), tone: "green", compact: true, onClick: () => controller.setFilter("status", "published"), active: !isTrashView && controller.query.filters.status === "published" },
@@ -570,7 +572,7 @@ export default function TopicsListClient({
     { label: "بدون صورة", value: metricsError ? "—" : (controller.result.metrics?.withoutImage ?? 0), tone: "amber", compact: true, onClick: () => controller.setFilter("image", "without"), active: !isTrashView && controller.query.filters.image === "without" },
     { label: "مرتبطة بسلسلة", value: metricsError ? "—" : (controller.result.metrics?.withSeries ?? 0), tone: "cyan", compact: true, onClick: () => controller.setFilter("seriesId", "any"), active: !isTrashView && controller.query.filters.seriesId === "any" },
     { label: "مميزة", value: metricsError ? "—" : (controller.result.metrics?.featured ?? 0), tone: "gold", compact: true, onClick: () => controller.setFilter("featured", "yes"), active: !isTrashView && controller.query.filters.featured === "yes" },
-    { label: "متوسط SEO", value: metricsError ? "—" : (controller.result.metrics?.seoAverage ?? 0), suffix: metricsError ? undefined : "/100", tone: "blue", compact: true },
+    { label: "متوسط SEO", value: seoAverageUnavailable ? "—" : seoAverage, suffix: seoAverageUnavailable ? undefined : "/100", tone: "blue", compact: true },
   ];
   const trashCount = metricsError
     ? 0

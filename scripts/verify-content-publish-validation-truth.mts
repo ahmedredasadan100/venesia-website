@@ -170,6 +170,7 @@ type InMemoryBulkHarness = {
   action: (formData: FormData) => Promise<Record<string, unknown>>;
   rpcCalls: () => number;
   directMutationCalls: () => number;
+  seoCalls: () => number;
 };
 
 function loadInMemoryBulkPublishAction(
@@ -177,6 +178,11 @@ function loadInMemoryBulkPublishAction(
 ): InMemoryBulkHarness {
   let rpcCallCount = 0;
   let directMutationCallCount = 0;
+  let seoCallCount = 0;
+  const unexpectedSeoCalculation = () => {
+    seoCallCount += 1;
+    throw new Error("Non-SEO bulk publish must not resolve or calculate Entity SEO.");
+  };
   const supabase = {
     from(table: string) {
       assert.equal(table, "topics");
@@ -236,6 +242,10 @@ function loadInMemoryBulkPublishAction(
     code = "in_memory";
   }
   const actionDependencies: Readonly<Record<string, unknown>> = {
+    "../../../../lib/admin/seo/entity-seo-persistence": {
+      toTopicSeoScoreInput: unexpectedSeoCalculation,
+      deriveEntitySeoScore: unexpectedSeoCalculation,
+    },
     "next/cache": { revalidatePath: () => undefined },
     "../../../../lib/admin/auth/require-admin-session": {
       requireAdminSession: async () => ({ id: 73 }),
@@ -369,6 +379,7 @@ function loadInMemoryBulkPublishAction(
     action: isolatedModule.exports.bulkUpdateUnifiedContent,
     rpcCalls: () => rpcCallCount,
     directMutationCalls: () => directMutationCallCount,
+    seoCalls: () => seoCallCount,
   };
 }
 
@@ -951,7 +962,8 @@ check(
     invalidBulkResult.entityId === 2 &&
     invalidBulkResult.focusTarget === "content-title" &&
     invalidBulkHarness.rpcCalls() === 0 &&
-    invalidBulkHarness.directMutationCalls() === 0,
+    invalidBulkHarness.directMutationCalls() === 0 &&
+    invalidBulkHarness.seoCalls() === 0,
 );
 
 const invalidAlreadyPublishedBulkHarness = loadInMemoryBulkPublishAction([
@@ -966,7 +978,8 @@ check(
     invalidAlreadyPublishedBulkResult.code === "publish_validation" &&
     invalidAlreadyPublishedBulkResult.entityId === 2 &&
     invalidAlreadyPublishedBulkHarness.rpcCalls() === 0 &&
-    invalidAlreadyPublishedBulkHarness.directMutationCalls() === 0,
+    invalidAlreadyPublishedBulkHarness.directMutationCalls() === 0 &&
+    invalidAlreadyPublishedBulkHarness.seoCalls() === 0,
 );
 
 const publishedLegacyNonTitleDebt = {
@@ -991,7 +1004,8 @@ check(
   legacyNoOpBulkResult.status === "success" &&
     legacyNoOpBulkResult.code === "published" &&
     legacyNoOpBulkHarness.rpcCalls() === 1 &&
-    legacyNoOpBulkHarness.directMutationCalls() === 0,
+    legacyNoOpBulkHarness.directMutationCalls() === 0 &&
+    legacyNoOpBulkHarness.seoCalls() === 0,
 );
 
 const validBulkHarness = loadInMemoryBulkPublishAction([
@@ -1004,7 +1018,8 @@ check(
   validBulkResult.status === "success" &&
     validBulkResult.code === "published" &&
     validBulkHarness.rpcCalls() === 1 &&
-    validBulkHarness.directMutationCalls() === 0,
+    validBulkHarness.directMutationCalls() === 0 &&
+    validBulkHarness.seoCalls() === 0,
 );
 
 check(

@@ -22,6 +22,10 @@ import {
 import type { MediaEditableContentType } from "../../../../../lib/admin/content/content-types";
 import type { MediaStatus, MediaTopicRow } from "./types";
 import { VALID_STATUSES } from "./types";
+import {
+  deriveEntitySeoScore,
+  toTopicSeoScoreInput,
+} from "../../../../../lib/admin/seo/entity-seo-persistence";
 
 export function getString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -185,7 +189,7 @@ export function buildMediaWritePayload(
   const isRichMedia = contentType === "video" || contentType === "gallery";
   const seo = toEntitySeoPersistence(payload);
 
-  return {
+  const writePayload = {
     title: payload.title,
     slug: payload.slug,
     excerpt: payload.excerpt,
@@ -222,5 +226,9 @@ export function buildMediaWritePayload(
     }),
     deleted_at: currentTopic?.deleted_at ?? null,
     updated_at: now,
+  };
+  return {
+    ...writePayload,
+    ...deriveEntitySeoScore(toTopicSeoScoreInput(writePayload), currentTopic),
   };
 }

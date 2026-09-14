@@ -81,6 +81,11 @@ function fixture(options: FixtureOptions = {}) {
   let deletes = 0;
   let audits = 0;
   let synchronizations = 0;
+  let seoCalls = 0;
+  const unexpectedSeoCalculation = () => {
+    seoCalls += 1;
+    throw new Error("Permanent deletion must not resolve or calculate Entity SEO.");
+  };
   const topic = {
     id: TOPIC_ID,
     title: "موضوع مرتبط",
@@ -185,6 +190,10 @@ function fixture(options: FixtureOptions = {}) {
     "next/cache": { revalidatePath: () => undefined, revalidateTag: () => undefined, updateTag: () => undefined },
   });
   const dependencies: Record<string, unknown> = {
+    "../../../../lib/admin/seo/entity-seo-persistence": {
+      toTopicSeoScoreInput: unexpectedSeoCalculation,
+      deriveEntitySeoScore: unexpectedSeoCalculation,
+    },
     "next/cache": { revalidatePath: () => undefined },
     "../../../../lib/admin/auth/require-admin-session": { requireAdminSession: async () => ({ id: 73 }) },
     "../../../../lib/admin/admin-action-result": actionResults,
@@ -230,7 +239,9 @@ function fixture(options: FixtureOptions = {}) {
       const input = new FormData();
       input.set("id", String(TOPIC_ID));
       input.set("confirm_permanent", "true");
-      return actions.permanentlyDeleteUnifiedContent(input);
+      const result = await actions.permanentlyDeleteUnifiedContent(input);
+      assert.equal(seoCalls, 0, "Non-SEO permanent deletion must never enter scoring, including failure paths.");
+      return result;
     },
   };
 }
