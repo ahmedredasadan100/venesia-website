@@ -241,20 +241,20 @@ export async function saveMediaContentAdapter(
   const currentStatus = currentTopic?.status ?? null;
   const becamePublished =
     payload.status === "published" && currentStatus !== "published";
-  const domainPayload = buildMediaWritePayload(
-    payload,
-    section.category,
-    section.contentType,
-    writePayload.mediaPayload,
-    now,
-    currentTopic,
-    series,
-  );
   const leaseEntityIdentity =
     mode === "edit" ? id : `create:${crypto.randomUUID()}`;
 
   let coordinated;
   try {
+    const domainPayload = buildMediaWritePayload(
+      payload,
+      section.category,
+      section.contentType,
+      writePayload.mediaPayload,
+      now,
+      currentTopic,
+      series,
+    );
     coordinated = await coordinateMediaReferenceEntityMutation({
       domainKey: "topics",
       leaseEntityIdentity,

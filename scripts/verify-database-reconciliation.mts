@@ -280,10 +280,19 @@ function verifyRuntimeReachability() {
 function verifyStructuralContract(migrations: Migration[]) {
   const runtimeReachability = verifyRuntimeReachability();
   assert.ok(migrations.length > 0, "The canonical migration corpus is empty.");
+  // The official state file is a dated Production readback, not a requirement
+  // to apply every new branch migration to Production before local validation.
+  // Validate its complete recorded prefix; live reconciliation below still
+  // requires every repository migration and exact SQL provenance.
+  const documentedSql = readFileSync(CURRENT_PROJECT_STATE_PATH, "utf8");
+  const documentedVersions = [...documentedSql.matchAll(/\b(\d{14})_[a-z0-9_]+\.sql\b/gu)]
+    .map((match) => match[1]).sort();
+  const documentedHead = documentedVersions.at(-1);
+  assert.ok(documentedHead, "The official migration snapshot has no recorded migration head.");
   assert.equal(
     loadDocumentedStateMetric("Repository migration files"),
-    migrations.length,
-    "CURRENT_PROJECT_STATE migration count drifted from the canonical migration corpus.",
+    migrations.filter((migration) => migration.version <= documentedHead).length,
+    "CURRENT_PROJECT_STATE migration prefix drifted from the canonical migration corpus.",
   );
   assert.equal(
     new Set(migrations.map((migration) => migration.version)).size,

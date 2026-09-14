@@ -1,4 +1,5 @@
 import type { Json } from "../../../../../lib/database.types";
+import type { PersistedEntitySeoScoreSource } from "../../../../../lib/admin/seo/entity-seo-persistence";
 
 export const VALID_STATUSES = ["published", "unpublished"] as const;
 
@@ -12,7 +13,7 @@ export type CategoryRow = {
   is_active: boolean | null;
 };
 
-export type MediaTopicRow = {
+export type MediaTopicRow = PersistedEntitySeoScoreSource & {
   id: number;
   title: string | null;
   slug: string | null;

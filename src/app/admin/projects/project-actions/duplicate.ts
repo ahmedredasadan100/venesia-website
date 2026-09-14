@@ -11,6 +11,12 @@ import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { withProjectMediaSynchronization } from "./helpers";
 import { revalidateProjectPaths } from "./revalidate";
 import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
+import {
+  buildProjectDuplicateSeoProof,
+  projectDuplicateSlug,
+  PROJECT_DUPLICATE_MAX_COPY_NUMBER,
+  PROJECT_DUPLICATE_SEO_MAX_ATTEMPTS,
+} from "../../../../lib/admin/projects/project-duplicate-seo";
 
 const projectIdSchema = z.number().int().positive();
 
@@ -22,6 +28,45 @@ const duplicateResultSchema = z.object({
   created_at: z.string().min(1),
   updated_at: z.string().min(1),
 });
+
+async function duplicateProjectWithSeo(projectId: number) {
+  const supabase = getSupabaseAdmin();
+  for (let attempt = 0; attempt < PROJECT_DUPLICATE_SEO_MAX_ATTEMPTS; attempt += 1) {
+    const source = await supabase.from("projects")
+      .select("updated_at,arabic_name,general_description,overview_body,slug,hero_image,hero_image_alt,og_image,og_image_alt,seo_title,seo_description,seo_keywords,focus_keyword")
+      .eq("id", projectId)
+      .maybeSingle();
+    if (source.error) return { data: null, error: source.error };
+    if (!source.data) return { data: null, error: { code: "P0002" } };
+    const sourceRow = source.data;
+
+    // Bounded batches avoid reading unrelated Projects or relying on a capped
+    // prefix query. The existing SQL allocator remains the uniqueness owner.
+    let copyNumber = 0;
+    for (let first = 1; first <= PROJECT_DUPLICATE_MAX_COPY_NUMBER; first += 100) {
+      const candidates = Array.from({ length: 100 }, (_, index) =>
+        projectDuplicateSlug(sourceRow.slug, first + index));
+      const occupied = await supabase.from("projects").select("slug").in("slug", candidates);
+      if (occupied.error) return { data: null, error: occupied.error };
+      const slugs = new Set((occupied.data ?? []).map((row) => row.slug));
+      const available = candidates.findIndex((slug) => !slugs.has(slug));
+      if (available !== -1) {
+        copyNumber = first + available;
+        break;
+      }
+    }
+    if (!copyNumber) return { data: null, error: { code: "54000" } };
+
+    const result = await supabase.rpc("duplicate_project_admin_entry", {
+      p_project_id: projectId,
+      p_seo_proof: buildProjectDuplicateSeoProof(sourceRow, copyNumber),
+    });
+    // This code is raised only before commit by our atomic proof checks. An
+    // ambiguous transport/result error must never repeat a committed duplicate.
+    if (result.error?.code !== "VSE01") return result;
+  }
+  return { data: null, error: { code: "VSE01" } };
+}
 
 async function synchronizeDuplicatedProjectMedia(projectId: number) {
   const supabase = getSupabaseAdmin();
@@ -76,10 +121,7 @@ export async function duplicateProjectAjax(id: number) {
     };
   }
 
-  const { data, error } = await getSupabaseAdmin().rpc(
-    "duplicate_project_admin_entry",
-    { p_project_id: projectId.data },
-  );
+  const { data, error } = await duplicateProjectWithSeo(projectId.data);
   if (error) {
     return {
       ok: false as const,

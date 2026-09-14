@@ -113,7 +113,9 @@ export default function MediaContentForm({
   errorMessage,
 }: MediaContentFormProps) {
   const adapter = getContentEditorAdapter(contentType);
-  const content = values?.content?.trim() ? values.content : DEFAULT_CONTENT;
+  const content = mode === "edit"
+    ? values?.content ?? ""
+    : values?.content?.trim() ? values.content : DEFAULT_CONTENT;
   const videoDefaults = getVideoDefaults(values?.media_payload);
   const galleryDefaults = getGalleryDefaults(values?.media_payload);
   const formId = mode === "edit" ? "content-edit-form" : "content-create-form";

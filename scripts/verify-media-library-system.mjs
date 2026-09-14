@@ -5,6 +5,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
 import ts from "typescript";
+import { loadEntitySeoPersistenceOwner } from "./backfill-entity-seo-scores.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const checks = [];
@@ -33,6 +34,7 @@ function loadTypeScriptModule(relativePath, dependencies) {
 }
 
 const contentTypesModule = loadTypeScriptModule("src/lib/admin/content/content-types.ts", {});
+const seoPersistenceModule = loadEntitySeoPersistenceOwner();
 const publicRoutesModule = loadTypeScriptModule(
   "src/lib/admin/links/static-routes.ts",
   {},
@@ -55,6 +57,7 @@ const identityModule = loadTypeScriptModule("src/lib/admin/media-catalog/identit
 
 const providerModule = loadTypeScriptModule("src/lib/admin/media-catalog/reference-providers.ts", {
   "server-only": {},
+  "../seo/entity-seo-persistence": seoPersistenceModule,
   "node:util": { isDeepStrictEqual },
   "../../storage/upload-cms-asset": {
     parseManagedStorageAsset(value) {
@@ -137,6 +140,7 @@ const usageSupabase = {
 };
 const usageProviderModule = loadTypeScriptModule("src/lib/admin/media-catalog/reference-providers.ts", {
   "server-only": {},
+  "../seo/entity-seo-persistence": seoPersistenceModule,
   "node:util": { isDeepStrictEqual },
   "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
   "../../supabase-admin": { getSupabaseAdmin: () => usageSupabase },

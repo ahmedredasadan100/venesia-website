@@ -232,10 +232,38 @@ try {
   // actual Project Actions are tested at their existing committed-result ports.
   let projectCalls = 0;
   const projectRow = { project_id: 91, project_type: "residential", project_slug: "proof-project", slug: "proof-project", featured: false, created_at: "2026-09-13", updated_at: "2026-09-13" };
-  const projectSetup = portsFor(async () => { projectCalls++; return { data: [projectRow], error: null }; }, (table) => {
-    const builder = { select() { return builder; }, eq() { return builder; }, maybeSingle: async () => ({ data: table === "projects" ? { type: "residential", slug: "proof-project", publication_status: "unpublished", published_at: null, published_by: null, featured: false } : null, error: null }), then(resolve) { return Promise.resolve({ data: [], error: null }).then(resolve); } };
+  const projectSource = { type: "residential", slug: "proof-project", arabic_name: "proof", general_description: "", overview_body: "", hero_image: "", hero_image_alt: "", og_image: "", og_image_alt: "", seo_title: "", seo_description: "", seo_keywords: [], focus_keyword: "", updated_at: "2026-09-13", publication_status: "unpublished", published_at: null, published_by: null, featured: false };
+  const projectTables = {
+    projects: [{ ...projectSource, id: 1 }, { ...projectSource, id: 2, slug: "proof-project-copy" }, { ...projectSource, id: 91 }],
+    project_floor_plans: [], project_media: [], project_videos: [],
+  };
+  const projectFrom = (table) => {
+    assert.ok(Object.hasOwn(projectTables, table), `Unexpected Project table: ${table}`);
+    const predicates = [];
+    let columns = [];
+    const result = (single) => {
+      const rows = projectTables[table].filter(row => predicates.every(predicate => predicate(row)))
+        .map(row => Object.fromEntries(columns.map(column => [column, row[column]])));
+      if (single) assert.ok(rows.length <= 1, "Project maybeSingle must have at most one matching row");
+      return { data: single ? rows[0] ?? null : rows, error: null };
+    };
+    const builder = {
+      select(value) { assert.match(value, /^[a-z_, ]+$/); columns = value.split(",").map(column => column.trim()); return builder; },
+      eq(key, value) { predicates.push(row => row[key] === value); return builder; },
+      in(key, values) { assert.ok(Array.isArray(values)); const members = new Set(values); predicates.push(row => members.has(row[key])); return builder; },
+      maybeSingle: async () => result(true),
+      then(resolve, reject) { return Promise.resolve(result(false)).then(resolve, reject); },
+    };
     return builder;
-  });
+  };
+  check("Project candidate query filters and projects occupied slugs", (await projectFrom("projects").select("slug").in("slug", ["proof-project-copy", "proof-project-copy-2"])).data, [{ slug: "proof-project-copy" }]);
+  check("Project empty candidate list returns no rows", (await projectFrom("projects").select("slug").in("slug", [])).data, []);
+  check("Project equality and candidate filters intersect", (await projectFrom("projects").select("slug").eq("id", 1).in("slug", ["proof-project-copy"])).data, []);
+  const projectSetup = portsFor(async (name, args) => {
+    projectCalls++;
+    if (!baseline && name === "duplicate_project_admin_entry") check("Project duplicate skips the occupied candidate before its RPC", args.p_seo_proof.expected_result.slug, "proof-project-copy-2");
+    return { data: [projectRow], error: null };
+  }, projectFrom);
   const payload = { project: { id: null, type: "residential", slug: "proof-project", arabic_name: "proof", publication_status: "unpublished", seo_title: "", seo_description: "" } };
   projectSetup.ports["/project-entry-contract"] = { projectEntryPayloadFromFormData: () => payload, assessProjectEntryPayload: () => ({ fieldErrors: {}, checks: [] }), projectEntryFirstErrorTarget: () => null };
   projectSetup.ports["/project-entry-data"] = { loadProjectEntry: async () => ({ ...payload, project: { ...payload.project, id: 91 } }) };
@@ -253,7 +281,7 @@ try {
     check("Project create invalid result preserves committed warning without guessed identity", [result.status, result.code, result.entityId, result.editHref], ["warning", "saved_requires_reconciliation_reload", undefined, undefined]);
   }
   for (const raw of [null, [], [{ project_id: "bad" }], ...[true, "92", [92]].map(project_id => [{ ...projectRow, project_id }])]) {
-    const malformed = { ...projectSetup.ports, "/supabase-admin": { getSupabaseAdmin: () => ({ rpc: async () => ({ data: raw, error: null }) }) } };
+    const malformed = { ...projectSetup.ports, "/supabase-admin": { getSupabaseAdmin: () => ({ from: projectFrom, rpc: async () => ({ data: raw, error: null }) }) } };
     const result = await loader(malformed)("src/app/admin/projects/project-actions/duplicate.ts").duplicateProjectAjax(1);
     check("Project duplicate invalid result is warning without invented identity", [result.ok, result.feedbackStatus, result.projectId], [true, "warning", undefined]);
   }

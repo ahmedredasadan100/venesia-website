@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 
 import {
   analyzeEntitySeo,
+  resolveEntitySeoScoreInput,
   type SeoScoreInput,
   type SeoIssue,
 } from "../../../lib/admin/seo-score";
@@ -24,10 +25,7 @@ import {
   useOptionalAdminFormRuntime,
 } from "../ui/AdminFormRuntime";
 import AdminSingleOpenAccordion from "../ui/AdminSingleOpenAccordion";
-import {
-  composeSeoTitle,
-  stripSeoTitleSuffix,
-} from "../../../lib/seo/seo-utils";
+import { stripSeoTitleSuffix } from "../../../lib/seo/seo-utils";
 import { hasEntitySeoData } from "../../../lib/seo/entity-seo-types";
 
 export const ADMIN_ENTITY_SEO_TERMINOLOGY = {
@@ -525,52 +523,36 @@ export default function AdminEntitySeoPanel<TAnalysisState = undefined>({
     ogImage: live.ogImage,
     ogImageAlt: live.ogImageAlt,
   });
-  const effectiveSeoTitle = resolvedFallback && !hasLocalSeo
-    ? resolvedFallback.title
-    : composeSeoTitle(
-        live.seoTitle,
-        live.title,
-        seoTitleSuffix,
-      );
-  const effectiveSeoDescription =
-    live.seoDescription.trim() ||
-    live.description.trim() ||
-    resolvedFallback?.description ||
-    "";
-  const effectiveImage =
-    live.image.trim() || resolvedFallback?.image || "";
-  const effectiveImageAlt =
-    live.imageAlt.trim() || resolvedFallback?.imageAlt || "";
-
   const analysisInput = useMemo<SeoScoreInput>(
-    () => ({
+    () => resolveEntitySeoScoreInput({
       profile: live.profile,
       title: live.title,
       description: live.description,
       content: live.content,
       slug: live.slug,
-      image: effectiveImage,
-      imageAlt: effectiveImageAlt,
+      image: live.image,
+      imageAlt: live.imageAlt,
       ogImage: live.ogImage,
       ogImageAlt: live.ogImageAlt,
-      seoTitle: effectiveSeoTitle,
-      seoDescription: effectiveSeoDescription,
+      seoTitle: live.seoTitle,
+      seoDescription: live.seoDescription,
       seoKeywords: live.seoKeywords,
       focusKeyword: live.focusKeyword,
       faq: analysisExtension
         ? analysisExtension.resolveFaq(analysisState)
         : live.faq,
-    }),
+    }, { seoTitleSuffix, resolvedFallback, hasLocalSeo }),
     [
       analysisExtension,
       analysisState,
-      effectiveImage,
-      effectiveImageAlt,
-      effectiveSeoDescription,
-      effectiveSeoTitle,
+      hasLocalSeo,
       live,
+      resolvedFallback,
+      seoTitleSuffix,
     ],
   );
+  const effectiveSeoTitle = analysisInput.seoTitle;
+  const effectiveSeoDescription = analysisInput.seoDescription;
   const analysis = useMemo(
     () => analyzeEntitySeo(analysisInput),
     [analysisInput],

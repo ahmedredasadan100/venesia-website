@@ -10,6 +10,7 @@ import {
   normalizeArticleMarkdown,
   stripHtml,
 } from "../rich-text/html-utils";
+import { composeSeoTitle } from "../seo/seo-utils";
 
 export type FaqItem = {
   question?: string;
@@ -17,6 +18,11 @@ export type FaqItem = {
 };
 
 export type SeoScoreProfile = "article" | "entity";
+
+// Bump when the algorithm or an adopted entity input projection changes.
+// Persisted scores from older versions are rebuilt by the controlled backfill,
+// never by collection reads.
+export const ENTITY_SEO_SCORE_VERSION = 1 as const;
 
 export type SeoScoreInput = {
   profile: SeoScoreProfile;
@@ -34,6 +40,34 @@ export type SeoScoreInput = {
   focusKeyword: string;
   faq: FaqItem[];
 };
+
+export type SeoScoreInputContext = {
+  seoTitleSuffix?: string;
+  hasLocalSeo?: boolean;
+  resolvedFallback?: {
+    title: string;
+    description: string;
+    image: string;
+    imageAlt: string;
+  };
+};
+
+/** Shared editor input resolution, also used before persisting a derived score. */
+export function resolveEntitySeoScoreInput(
+  input: SeoScoreInput,
+  context: SeoScoreInputContext = {},
+): SeoScoreInput {
+  const fallback = context.resolvedFallback;
+  return {
+    ...input,
+    seoTitle: fallback && context.hasLocalSeo === false
+      ? fallback.title
+      : composeSeoTitle(input.seoTitle, input.title, context.seoTitleSuffix ?? ""),
+    seoDescription: input.seoDescription.trim() || input.description.trim() || fallback?.description || "",
+    image: input.image.trim() || fallback?.image || "",
+    imageAlt: input.imageAlt.trim() || fallback?.imageAlt || "",
+  };
+}
 
 export type SeoIssue = {
   id?: string;

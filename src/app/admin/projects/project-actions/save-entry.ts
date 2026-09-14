@@ -30,6 +30,11 @@ import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
 import { revalidateProjectPaths } from "./revalidate";
 import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { MediaDomainMutationError } from "../../../../lib/admin/media-catalog/domain-write-coordination";
+import {
+  deriveEntitySeoScore,
+  toProjectSeoScoreInput,
+  type PersistedEntitySeoScoreSource,
+} from "../../../../lib/admin/seo/entity-seo-persistence";
 
 export type ProjectEntrySaveResult = {
   mediaSynchronizationStatus: "synced" | "warning";
@@ -180,10 +185,11 @@ export async function saveProjectEntry(
     let previousPublicationStatus: ProjectPublicationStatus | null = null;
     let previousPublishedAt: string | null = null;
     let previousSlug: string | null = null;
+    let previousSeoScore: PersistedEntitySeoScoreSource | null = null;
     if (mode === "edit" && projectId) {
       const { data: current, error: currentError } = await getSupabaseAdmin()
         .from("projects")
-        .select("publication_status,published_at,slug")
+        .select("publication_status,published_at,slug,seo_score,seo_score_version,seo_score_input_hash")
         .eq("id", projectId)
         .maybeSingle();
       if (
@@ -196,6 +202,7 @@ export async function saveProjectEntry(
       previousPublicationStatus = current.publication_status;
       previousPublishedAt = current.published_at;
       previousSlug = current.slug;
+      previousSeoScore = current;
     }
 
     const requestedPublicationStatus = payload.project.publication_status;
@@ -203,6 +210,7 @@ export async function saveProjectEntry(
       ...payload,
       project: {
         ...payload.project,
+        ...deriveEntitySeoScore(toProjectSeoScoreInput(payload.project), previousSeoScore),
         publication_status: requestedPublicationStatus,
       },
       publication_actor_id: actor.id,

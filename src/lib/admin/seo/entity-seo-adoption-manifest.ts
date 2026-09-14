@@ -20,6 +20,14 @@ export type AdminEntitySeoAdoptionEntry = {
   sourceFiles: readonly string[];
   surfaces: readonly string[];
   rationale: string;
+  persistedScore?: {
+    status: "adopted" | "gap";
+    table?: "topics" | "projects";
+    inputAdapter?: string;
+    writeOwners?: readonly string[];
+    readOwners?: readonly string[];
+    reason?: string;
+  };
 };
 
 export const ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE = {
@@ -31,6 +39,19 @@ export const ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE = {
   allowedClaim: "eligible_entity_seo_capability_closed",
   globalClosed: true,
   globalClosureBlockers: [],
+  // Presentation closure above is unchanged. Derived persistence has a
+  // separately proven scope and must never inherit that presentation claim.
+  persistedScore: {
+    owner: "src/lib/admin/seo-score.ts",
+    contract: "src/lib/seo/entity-seo-types.ts",
+    adoption: "src/lib/admin/seo/entity-seo-persistence.ts",
+    backfill: "scripts/backfill-entity-seo-scores.mts",
+    globalClosed: false,
+    blockers: [
+      "page-seo:canonical-semantic-content-resolver",
+      "project-seo:create-duplicate-verification-blocked-by-existing-required-code-insert",
+    ],
+  },
 } as const;
 
 export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
@@ -51,6 +72,17 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
   },
   {
     id: "topic-article-seo",
+    persistedScore: {
+      status: "adopted", table: "topics", inputAdapter: "toTopicSeoScoreInput",
+      writeOwners: [
+        "src/app/admin/content/topics/article-actions/helpers.ts",
+        "src/app/admin/content/topics/article-actions/create-domain.ts",
+        "src/app/admin/content/topics/article-actions/save.ts",
+        "src/app/admin/content/topics/actions.ts",
+        "src/lib/admin/media-catalog/reference-providers.ts",
+      ],
+      readOwners: ["src/lib/admin/content/load-unified-content.ts"],
+    },
     label: "Topic Article create and edit SEO",
     surfaceKind: "entity_seo_editor",
     classification: "adopted",
@@ -65,6 +97,15 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
   },
   {
     id: "project-seo",
+    persistedScore: {
+      status: "adopted", table: "projects", inputAdapter: "toProjectSeoScoreInput",
+      writeOwners: [
+        "src/app/admin/projects/project-actions/save-entry.ts",
+        "src/app/admin/projects/project-actions/duplicate.ts",
+        "src/lib/admin/projects/project-duplicate-seo.ts",
+      ],
+      readOwners: [],
+    },
     label: "Project create and edit SEO",
     surfaceKind: "entity_seo_editor",
     classification: "adopted",
@@ -83,6 +124,10 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
   },
   {
     id: "page-seo",
+    persistedScore: {
+      status: "gap",
+      reason: "The current Page Block config extractor covers five authored module kinds, not all resolved public semantic content or metadata. Feed, Featured and other dynamic sources plus navigation-derived Breadcrumb labels require a canonical semantic resolver before atomic Page SEO adoption; template names are never a substitute.",
+    },
     label: "Per-page SEO overrides",
     surfaceKind: "entity_seo_editor",
     classification: "adopted",
@@ -96,6 +141,16 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
   },
   {
     id: "media-topic-seo",
+    persistedScore: {
+      status: "adopted", table: "topics", inputAdapter: "toTopicSeoScoreInput",
+      writeOwners: [
+        "src/app/admin/content/topics/media-actions/helpers.ts",
+        "src/app/admin/content/topics/media-actions/save.ts",
+        "src/app/admin/content/topics/actions.ts",
+        "src/lib/admin/media-catalog/reference-providers.ts",
+      ],
+      readOwners: ["src/lib/admin/content/load-unified-content.ts"],
+    },
     label: "Media Topic SEO fields",
     surfaceKind: "entity_seo_editor",
     classification: "adopted",

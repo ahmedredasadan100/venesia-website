@@ -99,6 +99,7 @@ export async function loadTopicsEntityListResult(
     loadUnifiedContentMetrics(),
   ]);
   if (list.error) throw new Error(list.error);
+  if (metrics.error) throw new Error(metrics.error);
 
   return {
     rows: list.rows,

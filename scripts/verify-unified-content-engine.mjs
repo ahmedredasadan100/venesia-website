@@ -359,6 +359,8 @@ check(
 );
 
 const loader = read("src/lib/admin/content/load-unified-content.ts");
+const persistedSeoOwner = read("src/lib/admin/seo/entity-seo-persistence.ts");
+const topicListSelectedColumns = loader.match(/const CONTENT_LIST_SELECT\s*=\s*"([^"]+)"/)?.[1].split(",") ?? [];
 check("Unified query must use the admin read model", loader.includes('.from("admin_content_topics")'));
 check(
   "Search must target title only",
@@ -373,7 +375,7 @@ check(
 );
 check(
   "Sorting must happen before pagination",
-  loader.indexOf("applySort(") < loader.indexOf(").range(from, to)"),
+  /await applySort\([\s\S]*?\)\.range\(from, from \+ filters\.pageSize - 1\)/.test(loader),
 );
 check(
   "Sort values must be explicitly allow-listed",
@@ -405,34 +407,36 @@ check(
   ]),
 );
 check(
-  "Derived SEO sorting must reuse the existing score owner over the complete filtered server dataset before pagination",
-  loader.includes("isSeoContentSortValue(filters.sort)") &&
-    loader.includes("(seoSourceRows ?? []).map(toUnifiedContentRow)") &&
-    loader.includes("sortUnifiedContentRowsBySeo(") &&
-    loader.includes('.select(CONTENT_LIST_SELECT, { count: "exact" })') &&
-    loader.includes("while (seoSourceRows.length < totalCount)") &&
-    !loader.includes("const batchSize = 500") &&
-    loader.includes(".slice(from, to + 1)") &&
-    loader.includes("seo_score: getUnifiedContentSeoScore(source)"),
+  "SEO sorting must order the persisted database score with stable ID ties before one bounded page read",
+  loader.includes('seo_asc: { column: "seo_score", ascending: true }') &&
+    loader.includes('seo_desc: { column: "seo_score", ascending: false }') &&
+    loader.includes('sorted.order("id", { ascending: true })') &&
+    loader.includes('.select("id", { count: "exact", head: true })') &&
+    !loader.includes("sortUnifiedContentRowsBySeo") &&
+    !loader.includes("seoSourceRows") &&
+    !loader.includes(".slice(from"),
 );
 check(
-  "Metrics must derive active summaries and SEO average from one complete Topics scan",
-  loader.includes('supabase.from("topics")') &&
-    loader.includes('.select(CONTENT_METRICS_SELECT, { count: "exact" })') &&
-    loader.includes('.is("deleted_at", null)') &&
-    loader.includes("while (!activeError && activeRows.length < activeCount)") &&
-    loader.includes('row.status === "published"') &&
-    loader.includes('row.status === "unpublished"') &&
-    !loader.includes("const base = () =>"),
+  "Metrics must use one aggregate RPC and reject stale or invalid persisted score summaries",
+  loader.includes('.rpc("admin_content_topic_metrics", {') &&
+    loader.includes("p_seo_score_version: ENTITY_SEO_SCORE_VERSION") &&
+    loader.includes("contentMetricsSchema.safeParse(data)") &&
+    loader.includes("staleScores > 0") &&
+    !loader.includes('supabase.from("topics")') &&
+    !loader.includes("activeRows") &&
+    !loader.includes("CONTENT_METRICS_SELECT"),
 );
 check(
-  "Unified Content SEO inputs narrow generated FAQ and keyword contracts without partial coercion",
-  loader.includes("faq: Json | null") &&
-    loader.includes("seo_keywords: string[] | null") &&
-    loader.includes("parseTopicFaq(row.faq ?? null) ?? []") &&
-    loader.includes('value.every((item) => typeof item === "string")') &&
-    !loader.includes("value.map(String)") &&
-    !loader.includes("function normalizeFaq"),
+  "Topics list reads must omit full SEO source payloads and fail closed for missing or stale stored scores",
+  ["seo_score", "seo_score_version"].every((column) => topicListSelectedColumns.includes(column)) &&
+    ["content", "excerpt", "faq", "seo_title", "seo_description", "seo_keywords", "focus_keyword", "og_image", "media_payload"].every(
+      (column) => !topicListSelectedColumns.includes(column),
+    ) &&
+    loader.includes("const { seo_score_version, ...row } = source;") &&
+    loader.includes("seo_score_version !== ENTITY_SEO_SCORE_VERSION") &&
+    loader.includes("rows.some((row) => row === null)") &&
+    !loader.includes("analyzeEntitySeo") &&
+    !loader.includes("deriveEntitySeoScore"),
 );
 
 const filters = read("src/components/admin/content/UnifiedContentFilters.tsx");
@@ -568,14 +572,15 @@ check(
 check(
   "Topics rows and metrics must expose one official SEO score through the current owner contract",
   containsAll(loader, [
-    "analyzeEntitySeo",
-    'profile: row.content_type === "article" ? "article" : "entity"',
-    "}).score",
-    "seo_score: getUnifiedContentSeoScore(source)",
-    "getUnifiedContentSeoScore(row)",
+    "ENTITY_SEO_SCORE_VERSION",
+    "seo_score: source.seo_score",
+    '"admin_content_topic_metrics"',
     '.from("admin_content_topics")',
     ".select(CONTENT_LIST_SELECT)",
   ]) &&
+    persistedSeoOwner.includes("const analysis = analyzeEntitySeo(input)") &&
+    persistedSeoOwner.includes("seo_score: analysis.score") &&
+    !loader.includes("analyzeEntitySeo") &&
     !loader.includes("analyzeTopicSeo") &&
     !loader.includes(".seoScore") &&
     !loader.includes(".overallScore") &&
