@@ -127,6 +127,7 @@ export default function TopicsListClient({
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    adjacentPrefetch: true,
   });
   const instant = useAdminEntityInstantMutation<UnifiedContentRow, TopicMetrics>(
     "topics",
