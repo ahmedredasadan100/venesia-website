@@ -68,8 +68,10 @@ export async function loadTopicsEntityListResult(
   query: AdminEntityListQuery<TopicFilters, TopicSortField>,
   providedCategories?: AdminContentCategory[],
 ) {
-  let categories = providedCategories;
-  if (!categories) {
+  let categories = providedCategories ?? [];
+  // Only category filtering needs the hierarchy for descendant expansion.
+  // Row category labels already come from the list read model.
+  if (!providedCategories && query.filters.categoryId !== null) {
     const { data, error: categoriesError } = await getSupabaseAdmin()
       .from("topic_categories")
       .select("id,name,slug,parent_id,sort_order,is_active,status,color_token")

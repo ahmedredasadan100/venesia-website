@@ -657,6 +657,7 @@ export default function TopicsListClient({
               : "لا توجد موضوعات مطابقة"
           }
           onPageChange={controller.setPage}
+          onPageIntent={controller.prefetchPage}
           onPageSizeChange={controller.setPageSize}
         />
       </AdminEntityListTableRegion>
