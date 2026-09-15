@@ -652,16 +652,204 @@ async function runIntentPrefetchCases({page,origin,requests,observations,snapsho
   observations.push({label:"intent test boundary",note:"Synthetic GET transport and actual shared owners; Topics fixture coverage does not authorize or prove live Topics opt-in or DB workload."});
 }
 
+/** Adjacent scheduling and mutation races use the same mounted production owners. */
+async function runAdjacentPrefetchCases({page,origin,requests,observations,snapshot,configure,plan,delayedResponses,requestWaiters}) {
+  let start=0;
+  const calls=()=>requests.slice(start).filter(request=>request.pathname.startsWith("/api/admin/entity-lists/"));
+  const requestedPages=()=>calls().map(request=>Number(new URLSearchParams(request.search).get("page")||1));
+  const paint=()=>page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  const quiet=async()=>{await paint();await page.waitForTimeout(150);};
+  const waitCalls=count=>new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{requestWaiters.delete(notify);reject(new Error(`Expected ${count} adjacent fixture GETs, saw ${calls().length}`))},10000);
+    const notify=()=>{if(calls().length>=count){clearTimeout(timer);requestWaiters.delete(notify);resolve()}};
+    requestWaiters.add(notify);notify();
+  });
+  const open=async(search="",options={},plans=[])=>{
+    await page.mouse.move(0,0);
+    configure({optIn:true,adjacentPrefetch:true,...options});plan(...plans);start=requests.length;
+    await page.goto(`${origin}/admin/content/topics${search?`?${search}`:""}`);
+    await page.waitForFunction(()=>typeof window.__queryFixture?.prefetchPage==="function");
+  };
+  const activate=target=>page.evaluate(target=>window.__queryFixture.setPage(target),target);
+  const settled=target=>page.waitForFunction(target=>window.__queryFixture.query.page===target && window.__queryFixture.result.pagination.page===target && !window.__queryFixture.queryPending && !window.__queryFixture.revalidating && !window.__queryFixture.error,target);
+  const cache=target=>page.evaluate(target=>window.__queryFixture.cachePage(target),target);
+  const warmed=target=>page.waitForFunction(target=>{const c=window.__queryFixture.cachePage(target);return c?.status==="success" && c.fetchStatus==="idle" && !c.invalidated},target);
+  const reply=index=>{const pending=delayedResponses[index];if(!pending)throw new Error(`Missing adjacent held response ${index}`);pending.reply();};
+  const beginMutation=async(options={})=>{
+    await page.evaluate(options=>{window.__instantPromise=window.__queryFixture.runInstant(options)},options);
+    await page.waitForFunction(()=>typeof window.__releaseInstantMutation==="function");
+  };
+  const releaseMutation=()=>page.evaluate(()=>window.__releaseInstantMutation());
+  const finishMutation=()=>page.evaluate(()=>window.__instantPromise);
+  const same=(left,right)=>JSON.stringify(left)===JSON.stringify(right);
+
+  await open("page=8",{},[{hold:true}]);await waitCalls(1);
+  const initial=await snapshot("adjacent: page8 visible while page9 prepares");
+  check("adjacent starts N+1 automatically without rereading current N",same(requestedPages(),[9]));
+  check("background adjacent keeps current rows/footer/metrics and pending stable",initial.requestedPage===8 && initial.resultPage===8 && initial.metrics.page===8 && !initial.pending && !initial.revalidating && !initial.error);
+  reply(0);await warmed(9);await quiet();
+  check("completed N+1 does not chain into N+2",same(requestedPages(),[9]));
+  const warmedProjection=await snapshot("adjacent: cached next page leaves current visible");
+  check("cache warming changes no visible projection or URL",same(initial,warmedProjection));
+  plan({hold:true});await activate(9);await settled(9);await waitCalls(2);
+  check("only foreground adoption moves automatic window to page10",same(requestedPages(),[9,10]));
+  reply(1);await warmed(10);await activate(10);await settled(10);await quiet();
+  check("last page never requests beyond bounds",same(requestedPages(),[9,10]));
+
+  await open("page=8",{},[{hold:true}]);await waitCalls(1);
+  await page.getByRole("button",{name:"9",exact:true}).hover();
+  await page.getByRole("button",{name:"9",exact:true}).focus();
+  await page.evaluate(()=>{window.__intentPromise=window.__queryFixture.prefetchPage(9)});
+  await activate(9);await page.waitForFunction(()=>window.__queryFixture.queryPending);await quiet();
+  check("auto + hover + focus + click deduplicate the same in-flight key",same(requestedPages(),[9]) && !calls()[0].aborted);
+  plan({});reply(0);await settled(9);await warmed(10);
+  check("adopted auto request completes once and then schedules only next target",same(requestedPages(),[9,10]) && !calls()[0].aborted);
+
+  await open();await warmed(2);
+  for(let target=2;target<=10;target++) {await activate(target);await settled(target);if(target<10)await warmed(target+1);}
+  check("sequential pages1 through10 use exactly nine adjacent reads",same(requestedPages(),[2,3,4,5,6,7,8,9,10]));
+  const countBeforeReturn=calls().length;await activate(1);await settled(1);await quiet();
+  check("visited page1 and its fresh page2 cache survive the moving window",calls().length===countBeforeReturn);
+  const defaults=await page.evaluate(()=>window.__queryFixture.queryDefaults());
+  check("adjacent retains shared30s freshness and5min garbage collection",defaults.staleTime===30000 && defaults.gcTime===300000);
+  await page.evaluate(()=>window.__queryFixture.agePage(2,31000));
+  await page.evaluate(()=>window.__queryFixture.prefetchPage(2));await warmed(2);
+  check("expired target still refetches through existing shared prefetch contract",calls().length===countBeforeReturn+1);
+
+  for(const totalRows of [0,1,10]) {
+    await open("",{totalRows});await quiet();
+    check(`adjacent bounds reject next page when totalRows=${totalRows}`,calls().length===0);
+  }
+  await open("",{boundedClient:true});await settled(1);await quiet();
+  const bounded=await page.evaluate(()=>({mode:window.__queryFixture.query.mode,totalPages:window.__queryFixture.result.pagination.totalPages,rows:window.__queryFixture.result.rows.length}));
+  check("bounded-client opt-in does not speculate despite a complete dataset with multiple local pages",bounded.mode==="bounded-client" && bounded.totalPages===10 && bounded.rows===100 && calls().length===0);
+  await open("page=8",{},[{page:8,totalRows:75}]);await warmed(9);await quiet();
+  check("out-of-range adjacent result does not normalize current URL before activation",new URL(page.url()).searchParams.get("page")==="8" && same(requestedPages(),[9]));
+  await activate(9);await settled(8);await quiet();
+  check("normalized adjacent activation reuses response once without extra read or beyond-range prediction",same(requestedPages(),[9]) && new URL(page.url()).searchParams.get("page")==="8");
+  for(const limit of [20,30,50]) {
+    await open(`limit=${limit}`);await warmed(2);await quiet();
+    check(`adjacent limit${limit} uses its exact page-size query`,calls().length===1 && new URLSearchParams(calls()[0].search).get("limit")===String(limit));
+  }
+
+  const identities=[
+    {label:"search",search:"q=proof"},
+    {label:"status",search:"status=published"},
+    {label:"category",search:"category=9"},
+    {label:"series",search:"series=4"},
+    {label:"series any",search:"series=any"},
+    {label:"image",search:"image=without"},
+    {label:"featured",search:"featured=yes"},
+    {label:"content type",search:"content_type=video"},
+    {label:"trash",search:"view=trash"},
+    {label:"sort direction",search:"sort=id_desc"},
+  ];
+  for(const identity of identities) {
+    await open(identity.search);await warmed(2);
+    const expected=new URLSearchParams(identity.search),actual=new URLSearchParams(calls()[0].search);
+    check(`automatic target preserves canonical ${identity.label}`,calls().length===1 && actual.get("page")==="2" && [...expected].every(([key,value])=>actual.get(key)===value));
+  }
+  await open("content_type=video&category=9&series=4&status=published&image=without&featured=yes&sort=id_desc&limit=20&q=proof&extra=keep",{constrained:true});await warmed(2);
+  const constrainedParams=new URLSearchParams(calls()[0].search);
+  check("automatic target preserves full constrained query while omitting unowned browser extras",Object.entries({content_type:"article",category:"9",series:"4",status:"published",image:"without",featured:"yes",sort:"id_desc",limit:"20",q:"proof",page:"2"}).every(([key,value])=>constrainedParams.get(key)===value) && !constrainedParams.has("extra"));
+
+  await open("page=8",{},[{hold:true},{hold:true},{hold:true}]);await waitCalls(1);await activate(2);await waitCalls(2);await quiet();
+  check("distant foreground request supersedes obsolete adjacent without speculative overlap",same(requestedPages(),[9,2]) && calls()[0].aborted && !calls()[1].aborted);
+  reply(0);reply(1);await settled(2);await waitCalls(3);
+  check("foreground settlement schedules only its new adjacent target",same(requestedPages(),[9,2,3]));
+  reply(2);await warmed(3);
+  const latest=await snapshot("adjacent: late obsolete response cannot replace distant current");
+  check("obsolete page9 never overwrites current page2 projection",latest.resultPage===2 && latest.metrics.page===2);
+
+  await open("page=8",{},[{hold:true},{hold:true}]);await waitCalls(1);
+  await page.evaluate(()=>{window.__intentPromise=window.__queryFixture.prefetchPage(7)});await waitCalls(2);await quiet();
+  check("newer explicit previous-page intent wins over automatic next prediction",same(requestedPages(),[9,7]) && calls()[0].aborted && !calls()[1].aborted);
+  reply(0);reply(1);await warmed(7);await quiet();
+  check("automatic effect does not oscillate back after explicit intent completion",same(requestedPages(),[9,7]));
+
+  await open("page=8",{},[{hold:true},{hold:true},{hold:true}]);await waitCalls(1);
+  await page.evaluate(()=>window.__queryFixture.setFilter("status","published"));await waitCalls(2);await quiet();
+  check("filter change cancels old prediction and prioritizes new page1",calls()[0].aborted && same(requestedPages(),[9,1]) && new URLSearchParams(calls()[1].search).get("status")==="published");
+  reply(0);reply(1);await settled(1);await waitCalls(3);reply(2);await warmed(2);
+  check("after filter settlement prediction belongs only to the new identity",new URLSearchParams(calls()[2].search).get("status")==="published" && Number(new URLSearchParams(calls()[2].search).get("page"))===2);
+
+  await open("page=8",{otherForeground:true},[{hold:true},{hold:true}]);await waitCalls(1);
+  await page.waitForFunction(()=>window.__queryFixture.otherForegroundState.fetchStatus==="fetching");await quiet();
+  check("an active query under the shared root suppresses adjacent work at mount",calls().length===1 && calls()[0].pathname.endsWith("/categories") && !calls()[0].aborted);
+  reply(0);await page.waitForFunction(()=>window.__queryFixture.otherForegroundState.status==="success");await waitCalls(2);
+  check("settling the other foreground query releases exactly the current adjacent target",calls().length===2 && calls()[1].pathname.endsWith("/topics") && Number(new URLSearchParams(calls()[1].search).get("page"))===9 && !calls()[0].aborted);
+  reply(1);await warmed(9);
+
+  await open("page=8",{foregroundProbe:true},[{hold:true},{hold:true}]);await waitCalls(1);
+  await page.evaluate(()=>window.__queryFixture.beginOtherForeground());await waitCalls(2);
+  await page.waitForFunction(()=>window.__queryFixture.otherForegroundState.fetchStatus==="fetching");await quiet();
+  check("starting another active root query cancels inactive adjacent work only",calls().length===2 && calls()[0].pathname.endsWith("/topics") && calls()[0].aborted && calls()[1].pathname.endsWith("/categories") && !calls()[1].aborted);
+  reply(0);reply(1);await page.waitForFunction(()=>window.__queryFixture.otherForegroundState.status==="success");
+  check("the higher-priority foreground observer completes without cancellation",!calls()[1].aborted);
+
+  await open("page=8",{},[{hold:true}]);await waitCalls(1);await page.goto("about:blank");await quiet();
+  check("unmount cancels the inactive automatic target without new work",calls().length===1 && calls()[0].aborted);
+
+  await open("",{},[{status:500}]);await waitCalls(1);await page.waitForFunction(()=>window.__queryFixture.cachePage(2)?.status==="error");await quiet();
+  const failedSpeculation=await snapshot("adjacent: failed background read remains silent");
+  check("automatic failure has one attempt and no speculative retry loop",calls().length===1);
+  check("automatic failure preserves current data without shared foreground error",failedSpeculation.resultPage===1 && !failedSpeculation.error && !failedSpeculation.pending);
+  plan({status:500},{status:500},{status:500});await activate(2);await page.waitForFunction(()=>window.__queryFixture.error && !window.__queryFixture.queryPending);await quiet();
+  check("foreground adoption retains provider retries and suppresses further prediction on failure",calls().length===4);
+
+  await open("page=8",{},[{hold:true,version:"pre-write"}]);await waitCalls(1);
+  const rollbackBefore=await snapshot("adjacent: real mutation rollback baseline");
+  const rollbackCacheBefore=(await cache(8)).data;
+  await beginMutation({rowId:71,outcome:"failure"});await page.waitForFunction(()=>window.__queryFixture.instantInteraction(71).isPending);await quiet();
+  check("real instant mutation cancels pre-write inactive adjacent request",calls()[0].aborted);
+  const optimistic=await snapshot("adjacent: real instant mutation optimistic state");
+  check("real instant mutation patches its existing current cache",!same(optimistic.ids,[]) && (await cache(8)).data.rows[0].title.endsWith(" optimistic"));
+  const countDuringMutation=calls().length;await quiet();
+  check("automatic scheduling does not run while mutation is pending",calls().length===countDuringMutation);
+  reply(0);await releaseMutation();const rejected=await finishMutation();await page.waitForFunction(()=>!window.__queryFixture.instantInteraction(71).isPending);
+  const rollbackAfter=await snapshot("adjacent: real mutation restored snapshot");
+  check("rejected real mutation restores exact visible and full cache snapshots",rejected.ok===false && same(rollbackBefore,rollbackAfter) && same(rollbackCacheBefore,(await cache(8)).data));
+  check("canceled pre-write response cannot seed a fresh target after rollback",!(await cache(9))?.data || (await cache(9)).data.metrics.version!=="pre-write");
+
+  await open("page=8",{},[{hold:true,version:"pre-write"}]);await waitCalls(1);
+  await beginMutation({rowId:71});await quiet();
+  plan({hold:true,version:"committed-current"},{hold:true,version:"committed-next"});await releaseMutation();await waitCalls(2);
+  check("committed mutation awaits current revalidation before new adjacent work",calls().length===2 && (await page.evaluate(()=>window.__queryFixture.instantInteraction(71))).isPending);
+  reply(0);reply(1);const committed=await finishMutation();await settled(8);await waitCalls(3);reply(2);await warmed(9);
+  check("post-commit adjacent cache is authoritative and never pre-write",committed.ok===true && (await cache(9)).data.metrics.version==="committed-next" && calls()[0].aborted);
+
+  await open("page=8",{},[{}]);await warmed(9);
+  const cachedBefore=await cache(8);await beginMutation({rowId:71});
+  plan({status:500},{status:500},{status:500});await releaseMutation();const readFailedCommit=await finishMutation();
+  await page.waitForFunction(()=>window.__queryFixture.error && !window.__queryFixture.revalidating);await quiet();
+  const afterReadFailure=await cache(8);
+  check("post-commit read failure remains committed and never rolls back optimistic state",readFailedCommit.ok===true && afterReadFailure.data.rows[0].title===cachedBefore.data.rows[0].title+" optimistic");
+  check("post-commit failed read leaves old adjacent invalidated and stops speculation",(await cache(9)).invalidated && calls().length===4);
+
+  await open("page=8",{},[{}]);await warmed(9);await beginMutation({rowId:71,reconcileFailure:true});
+  plan({version:"committed-current"},{version:"committed-next"});await releaseMutation();const reconcileFailed=await finishMutation();await settled(8);
+  check("real post-commit reconcile failure returns warning without retrying execute",reconcileFailed.ok===true && reconcileFailed.feedbackStatus==="warning");
+
+  await open("page=8",{},[{}]);await warmed(9);const deleteBefore=await snapshot("adjacent: real removeRows rollback baseline");
+  const deleteCachesBefore=[(await cache(8)).data,(await cache(9)).data];
+  await beginMutation({rowId:71,action:"delete",remove:true,outcome:"failure"});
+  check("real removeRows updates current IDs and same-scope cached totals",!(await cache(8)).data.rows.some(row=>row.id===71) && (await cache(9)).data.pagination.totalRows===99);
+  await releaseMutation();await finishMutation();
+  check("failed removal restores full current and adjacent snapshots",same(deleteBefore,await snapshot("adjacent: real removeRows rollback result")) && same(deleteCachesBefore,[(await cache(8)).data,(await cache(9)).data]));
+
+  observations.push({label:"adjacent proof boundary",note:"Actual shared controller, QueryClient, cache keys and instant mutation owners; GET transport and execute results are synthetic. No Auth, DB, domain action, physical paint or production-latency claim. Quiet no-chain observation is150ms after two animation frames."});
+}
+
 /** Actual shared owners with synthetic GET results; never connects to Admin/DB. */
-async function isolatedFailureContracts(intentPrefetch = false) {
+async function isolatedFailureContracts(intentPrefetch = false, adjacentPrefetch = false) {
   const root = process.cwd();
-  const output = path.join(root, intentPrefetch ? ".tmp-qa/admin-instant-ux-prefetch-strategy-20260913" : ".tmp-qa/admin-query-save-failure-contracts-20260913", process.env.QA_PHASE || (intentPrefetch ? "intent-prefetch" : "query-isolated"));
+  const output = path.join(root, adjacentPrefetch ? ".tmp-qa/bounded-adjacent-prefetch" : intentPrefetch ? ".tmp-qa/admin-instant-ux-prefetch-strategy-20260913" : ".tmp-qa/admin-query-save-failure-contracts-20260913", process.env.QA_PHASE || (adjacentPrefetch ? "mounted-owner-proof" : intentPrefetch ? "intent-prefetch" : "query-isolated"));
   await mkdir(output, { recursive: true });
   const require = createRequire(import.meta.url);
   const entry = String.raw`
-import React, { useLayoutEffect } from "react";
+import React, { useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Provider from "@query-provider";
 import Feedback from "@feedback";
 import AdminEntityList from "@entity-list";
@@ -670,13 +858,14 @@ import { useAdminEntityListController } from "@controller";
 import { normalizeAdminEntityListQuery, normalizeAdminEntityListQueryWithRouteParams } from "@contracts";
 import { adminEntityListQueryKeys } from "@query-keys";
 import { invalidateAdminEntityListCaches } from "@mutation-cache";
+import { useAdminEntityInstantMutation } from "@instant-mutation";
 import { topicsQueryContract } from "@topics-contract";
 import { categoriesQueryContract } from "@categories-contract";
 import { seriesQueryContract } from "@series-contract";
 const contracts = {topics:topicsQueryContract,categories:categoriesQueryContract,series:seriesQueryContract};
 const entity = location.pathname.split("/").at(-1);
-const contract = contracts[entity];
 const options = window.__FIXTURE_OPTIONS__ || {};
+const contract = options.boundedClient ? {...contracts[entity],mode:"bounded-client"} : contracts[entity];
 const routeOwnedParams = options.constrained ? {content_type:"article"} : undefined;
 const constrainQuery = options.constrained ? query => ({...query,filters:{...query.filters,contentType:"article"}}) : undefined;
 const initialQuery = routeOwnedParams
@@ -689,17 +878,47 @@ const columns = [
  {key:"title",label:"الاسم",primary:true,primaryPresentation:"compact-icon",sticky:"start",flexible:true,minWidth:200,width:400,defaultVisible:true,hideable:false,renderCell:({row})=>row.title},
  {key:"actions",label:"الإجراءات",sticky:"end",minWidth:144,width:144,defaultVisible:true,hideable:false,renderCell:()=>null},
 ];
+function OtherForeground({enabled}) {
+ const otherQuery = normalizeAdminEntityListQuery(categoriesQueryContract,new URLSearchParams("page=3"));
+ const otherForeground = useQuery({
+  queryKey:adminEntityListQueryKeys.query("categories",otherQuery),enabled,
+  queryFn:async({signal})=>{
+   const response=await fetch("/api/admin/entity-lists/categories?page=3",{signal});
+   if(!response.ok)throw new Error("Expected fixture foreground response");
+   return response.json();
+  },
+ });
+ useLayoutEffect(()=>{window.__otherForegroundState={status:otherForeground.status,fetchStatus:otherForeground.fetchStatus};});
+ return null;
+}
 function Harness() {
  const client = useQueryClient();
- const controller = useAdminEntityListController({entity,contract,initialQuery,initialResult,staleTimeMs:options.staleTimeMs??30000,constrainQuery,routeOwnedParams});
+ const [otherForegroundEnabled,setOtherForegroundEnabled] = useState(options.otherForeground===true);
+ const controller = useAdminEntityListController({entity,contract,initialQuery,initialResult,staleTimeMs:options.staleTimeMs??30000,constrainQuery,routeOwnedParams,adjacentPrefetch:options.adjacentPrefetch===true});
+ const instant = useAdminEntityInstantMutation(entity,controller.query);
  const mutation = useMutation({mutationFn:()=>new Promise(resolve=>{window.__releaseFixtureMutation=()=>resolve({ok:true})})});
  useLayoutEffect(()=>{window.__queryFixture={...controller,
   beginMutation:()=>{void mutation.mutateAsync()},mutationPending:mutation.isPending,
   saveInvalidate:()=>invalidateAdminEntityListCaches(client,[entity]),
   cachePage:page=>{const state=client.getQueryState(adminEntityListQueryKeys.query(entity,{...controller.query,page}));return state?{status:state.status,fetchStatus:state.fetchStatus,invalidated:state.isInvalidated,data:state.data}:null},
   agePage:(page,age)=>{const key=adminEntityListQueryKeys.query(entity,{...controller.query,page});client.setQueryData(key,client.getQueryData(key),{updatedAt:Date.now()-age})},
+  queryDefaults:()=>({staleTime:client.getDefaultOptions().queries.staleTime,gcTime:client.getDefaultOptions().queries.gcTime}),
+  beginOtherForeground:()=>setOtherForegroundEnabled(true),
+  get otherForegroundState(){return window.__otherForegroundState??{status:"pending",fetchStatus:"idle"}},
+  instantInteraction:rowId=>instant.getRowInteraction(rowId),
+  runInstant:({rowId=controller.result.rows[0]?.id,action="featured",outcome="success",remove=false,reconcileFailure=false}={})=>{
+   window.__instantOutcome=null;
+   return instant.mutateAsync({
+    rowId,action,
+    optimistic:cache=>remove?cache.removeRows(new Set([rowId])):cache.patchRows(row=>row.id===rowId?{...row,title:row.title+" optimistic"}:row),
+    execute:()=>new Promise(resolve=>{window.__releaseInstantMutation=()=>resolve(outcome==="failure"?{ok:false,code:"fixture_rejected",message:"fixture rejected"}:{ok:true,message:"fixture committed"})}),
+    reconcileSuccess:reconcileFailure?()=>{throw new Error("Expected fixture reconciliation failure")}:undefined,
+   }).then(result=>{window.__instantOutcome=result;return result},error=>{window.__instantOutcome={ok:false,code:error.code,message:error.message};return window.__instantOutcome});
+  },
  };});
- return <main dir="rtl">
+ return <>
+  {(options.foregroundProbe||options.otherForeground)&&<OtherForeground enabled={otherForegroundEnabled}/>}
+  <main dir="rtl">
   <button type="button" data-fixture-refetch onClick={()=>controller.invalidate()}>إعادة القراءة للاختبار</button>
   <AdminEntityList listId={entity+"-failure-fixture"} rows={controller.result.rows} queryPending={controller.queryPending}
    queryError={controller.error?.message} onQueryRetry={()=>controller.retry?.()}
@@ -710,7 +929,7 @@ function Harness() {
    pageSize={String(controller.result.pagination.pageSize)} totalCount={controller.result.pagination.totalRows}
    totalPages={controller.result.pagination.totalPages} onPageChange={controller.setPage} onPageSizeChange={controller.setPageSize}
    onPageIntent={options.optIn?controller.prefetchPage:undefined}/>
- </main>;
+ </main></>;
 }
 createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/></Feedback></Provider>);
 `;
@@ -741,6 +960,7 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
         "@contracts": path.join(root, "src/lib/admin/entity-list/data-engine/contracts.ts"),
         "@query-keys": path.join(root, "src/lib/admin/entity-list/data-engine/query-keys.ts"),
         "@mutation-cache": path.join(root, "src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts"),
+        "@instant-mutation": path.join(root, "src/lib/admin/entity-list/data-engine/instant-mutation.ts"),
         ...Object.fromEntries(["topics", "categories", "series"].map((entity) => [`@${entity}-contract`, path.join(root, `src/lib/admin/content/entity-list-contracts/${entity}.ts`)])),
       },
     },
@@ -769,15 +989,18 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
     if (url.pathname === "/bundle.js") { res.writeHead(200, { "Content-Type": "application/javascript; charset=utf-8" }); res.end(bundle); return; }
     if (url.pathname.startsWith("/api/admin/entity-lists/")) {
       const entity = url.pathname.split("/").at(-1), page = Number(url.searchParams.get("page") || 1);
-      if (fixtureOptions.optIn || fixtureOptions.intentProbe) {
+      if (fixtureOptions.optIn || fixtureOptions.intentProbe || fixtureOptions.adjacentPrefetch) {
         const plan = responsePlans.shift() ?? {};
         const request = requests.at(-1);
         request.aborted = false;
+        request.startedAtMs = performance.now();
         res.on("close",()=>{if(!res.writableEnded)request.aborted=true;});
         const reply = () => {
           if(res.destroyed)return;
-          res.writeHead(plan.status ?? 200, {"Content-Type":"application/json"});
-          res.end(JSON.stringify(plan.status ? {error:{code:"intent_fixture_failure"}} : result(entity,plan.page??page,Number(url.searchParams.get("limit")||10),plan.version,plan.totalRows)));
+          const body=JSON.stringify(plan.status ? {error:{code:"intent_fixture_failure"}} : result(entity,plan.page??page,Number(url.searchParams.get("limit")||10),plan.version,plan.totalRows));
+          request.status=plan.status??200;request.responseBytes=Buffer.byteLength(body);request.finishedAtMs=performance.now();
+          res.writeHead(request.status, {"Content-Type":"application/json"});
+          res.end(body);
         };
         if(plan.hold)delayedResponses.push({request,reply});else reply();
         for(const notify of requestWaiters)notify();
@@ -789,7 +1012,12 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
     }
     if (/^\/admin\/content\/(topics|categories|series)$/.test(url.pathname)) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
-      res.end(`<html dir="rtl"><body><div id="root"></div><script>window.__INITIAL_RESULT__=${JSON.stringify(result(url.pathname.split("/").at(-1),Number(url.searchParams.get("page")||1),Number(url.searchParams.get("limit")||10)))};window.__FIXTURE_OPTIONS__=${JSON.stringify(fixtureOptions)}</script><script src="/bundle.js"></script></body></html>`); return;
+      const initial=result(url.pathname.split("/").at(-1),Number(url.searchParams.get("page")||1),Number(url.searchParams.get("limit")||10),"source",fixtureOptions.totalRows??100);
+      if(fixtureOptions.boundedClient){
+        initial.rows=result(url.pathname.split("/").at(-1),1,initial.pagination.totalRows).rows;
+        initial.meta.mode="bounded-client";
+      }
+      res.end(`<html dir="rtl"><body><div id="root"></div><script>window.__INITIAL_RESULT__=${JSON.stringify(initial)};window.__FIXTURE_OPTIONS__=${JSON.stringify(fixtureOptions)}</script><script src="/bundle.js"></script></body></html>`); return;
     }
     res.writeHead(404); res.end();
   });
@@ -809,6 +1037,10 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
       observations.push({ label, ...value }); return value;
     };
     if(intentPrefetch)await runIntentPrefetchCases({page,origin,requests,observations,snapshot,
+      configure:options=>{fixtureOptions=options;responsePlans.length=0;delayedResponses.length=0},
+      plan:(...plans)=>responsePlans.push(...plans),delayedResponses,requestWaiters,
+    });
+    if(adjacentPrefetch)await runAdjacentPrefetchCases({page,origin,requests,observations,snapshot,
       configure:options=>{fixtureOptions=options;responsePlans.length=0;delayedResponses.length=0},
       plan:(...plans)=>responsePlans.push(...plans),delayedResponses,requestWaiters,
     });
@@ -872,7 +1104,7 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
   if (failed) process.exitCode = 1;
 }
 
-(process.argv.includes("--intent-prefetch") ? isolatedFailureContracts(true) : process.argv.includes("--isolated-failure-contracts") ? isolatedFailureContracts() : main()).catch((error) => {
+(process.argv.includes("--adjacent-prefetch") ? isolatedFailureContracts(true,true) : process.argv.includes("--intent-prefetch") ? isolatedFailureContracts(true) : process.argv.includes("--isolated-failure-contracts") ? isolatedFailureContracts() : main()).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

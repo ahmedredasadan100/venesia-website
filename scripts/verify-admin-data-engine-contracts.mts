@@ -712,13 +712,31 @@ for (const sourcePath of [
     readFileSync(new URL(sourcePath, import.meta.url), "utf8"),
     ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const paginationNodes: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
+  const controllerCalls: ts.CallExpression[] = [];
   function findPagination(node: ts.Node) {
     if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
       node.tagName.getText(source) === "AdminTablePagination") paginationNodes.push(node);
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
+      node.expression.text === "useAdminEntityListController") controllerCalls.push(node);
     ts.forEachChild(node, findPagination);
   }
   findPagination(source);
   assert.equal(paginationNodes.length, 1, `${sourcePath}: one canonical pagination surface`);
+  assert.equal(controllerCalls.length, 1, `${sourcePath}: one existing Data Runtime controller`);
+  const controllerOptions = controllerCalls[0].arguments[0];
+  assert.ok(controllerOptions && ts.isObjectLiteralExpression(controllerOptions),
+    `${sourcePath}: controller adoption options must remain explicit`);
+  const adjacentOption = controllerOptions.properties.find((property) =>
+    ts.isPropertyAssignment(property) && property.name.getText(source) === "adjacentPrefetch");
+  if (sourcePath.endsWith("/TopicsListClient.tsx")) {
+    assert.ok(adjacentOption && ts.isPropertyAssignment(adjacentOption) &&
+      adjacentOption.initializer.kind === ts.SyntaxKind.TrueKeyword,
+    "Topics must opt directly into the shared bounded adjacent prefetch option");
+  } else {
+    assert.ok(!adjacentOption || (ts.isPropertyAssignment(adjacentOption) &&
+      adjacentOption.initializer.kind === ts.SyntaxKind.FalseKeyword),
+    `${sourcePath}: this proof phase must not enable adjacent adoption outside Topics`);
+  }
   for (const [prop, method] of [["onPageChange", "setPage"], ["onPageIntent", "prefetchPage"], ["onPageSizeChange", "setPageSize"]]) {
     const attribute = paginationNodes[0].attributes.properties.find((item) =>
       ts.isJsxAttribute(item) && item.name.getText(source) === prop);
@@ -728,6 +746,26 @@ for (const sourcePath of [
     `${sourcePath}: ${prop} must adopt the shared controller directly`);
   }
 }
+
+// A direct owner option is the only Topics prediction binding. Scheduling/fetching
+// stays with the shared controller; do not prove adoption through a local effect.
+const adjacentTopicsSource = ts.createSourceFile("TopicsListClient.tsx",
+  readFileSync(new URL("../src/components/admin/content/TopicsListClient.tsx", import.meta.url), "utf8"),
+  ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+function verifyNoTopicsPredictionOwner(node: ts.Node) {
+  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+    assert.notEqual(node.expression.getText(adjacentTopicsSource), "controller.prefetchPage",
+      "Topics must not add its own predictive scheduling calls");
+    assert.notEqual(node.expression.name.text, "prefetchQuery",
+      "Topics must not own a parallel prefetch query lifecycle");
+  }
+  if (ts.isNewExpression(node) && ts.isIdentifier(node.expression)) {
+    assert.notEqual(node.expression.text, "QueryClient",
+      "Topics must reuse the existing Admin QueryClient boundary");
+  }
+  ts.forEachChild(node, verifyNoTopicsPredictionOwner);
+}
+verifyNoTopicsPredictionOwner(adjacentTopicsSource);
 
 // Execute the actual Series adapters with committed-warning action results.
 // Server actions and the mutation transport are isolated; no writes are issued.

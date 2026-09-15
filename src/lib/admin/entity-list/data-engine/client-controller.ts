@@ -2,6 +2,8 @@
 
 import {
   keepPreviousData,
+  useIsFetching,
+  useIsMutating,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -41,6 +43,7 @@ export class AdminEntityListRequestError extends Error {
 
 type HistoryBehavior = "push" | "replace";
 type EntityListQueryKey = ReturnType<typeof adminEntityListQueryKeys.query>;
+type PagePrefetchReason = "intent" | "adjacent";
 
 export type AdminEntityListControllerOptions<
   Entity extends string,
@@ -54,6 +57,8 @@ export type AdminEntityListControllerOptions<
   initialQuery: AdminEntityListQuery<Filters, SortField>;
   initialResult: AdminEntityListResult<Row, Metrics>;
   staleTimeMs: number;
+  /** Prepare only the next page after the current query settles. */
+  adjacentPrefetch?: boolean;
   /** Re-applies a route-owned invariant to every query lifecycle transition. */
   constrainQuery?: (
     query: AdminEntityListQuery<Filters, SortField>,
@@ -89,6 +94,7 @@ export function useAdminEntityListController<
   initialQuery,
   initialResult,
   staleTimeMs,
+  adjacentPrefetch = false,
   constrainQuery,
   routeOwnedParams,
 }: AdminEntityListControllerOptions<
@@ -99,6 +105,18 @@ export function useAdminEntityListController<
   Metrics
 >) {
   const queryClient = useQueryClient();
+  const matchesAdjacentPrefetch = useCallback(
+    () => adjacentPrefetch,
+    [adjacentPrefetch],
+  );
+  const activeForegroundRequests = useIsFetching({
+    queryKey: adminEntityListQueryKeys.root,
+    type: "active",
+    predicate: matchesAdjacentPrefetch,
+  });
+  const activeMutations = useIsMutating({
+    predicate: matchesAdjacentPrefetch,
+  });
   const invalidate = useAdminEntityListInvalidation(entity);
   const applyQueryConstraint = useCallback(
     (candidate: AdminEntityListQuery<Filters, SortField>) =>
@@ -136,7 +154,9 @@ export function useAdminEntityListController<
   const speculativeReadRef = useRef<{
     queryKey: EntityListQueryKey;
     promise: Promise<void>;
+    reason: PagePrefetchReason;
   } | null>(null);
+  const adjacentAttemptRef = useRef<string | null>(null);
   const cancelSpeculativeRead = useCallback(
     (keepQueryKey?: EntityListQueryKey) => {
       const speculative = speculativeReadRef.current;
@@ -318,8 +338,8 @@ export function useAdminEntityListController<
     request.isSuccess,
   ]);
 
-  const prefetchPage = useCallback(
-    (page: number): Promise<void> => {
+  const requestPagePrefetch = useCallback(
+    (page: number, reason: PagePrefetchReason): Promise<void> => {
       const currentKey = adminEntityListQueryKeys.query(entity, query);
       const currentState = queryClient.getQueryState(currentKey);
       if (
@@ -348,7 +368,26 @@ export function useAdminEntityListController<
       const targetKey = adminEntityListQueryKeys.query(entity, candidate);
       const keyIdentity = JSON.stringify(targetKey);
       const existing = speculativeReadRef.current;
+      if (reason === "adjacent") {
+        const epoch = JSON.stringify([currentKey, request.dataUpdatedAt]);
+        if (
+          request.fetchStatus !== "idle" ||
+          currentState?.fetchStatus !== "idle" ||
+          activeForegroundRequests > 0 ||
+          queryClient.isFetching({
+            queryKey: adminEntityListQueryKeys.root,
+            type: "active",
+          }) > 0 ||
+          adjacentAttemptRef.current === epoch ||
+          (existing && JSON.stringify(existing.queryKey) !== keyIdentity)
+        ) {
+          return Promise.resolve();
+        }
+        // A speculative completion or failure cannot advance or retry this epoch.
+        adjacentAttemptRef.current = epoch;
+      }
       if (existing && JSON.stringify(existing.queryKey) === keyIdentity) {
+        if (reason === "intent") existing.reason = "intent";
         return existing.promise;
       }
       cancelSpeculativeRead(targetKey);
@@ -382,7 +421,7 @@ export function useAdminEntityListController<
             failureCount < (typeof inheritedRetry === "number" ? inheritedRetry : 3);
         },
       });
-      const speculative = { queryKey: targetKey, promise };
+      const speculative = { queryKey: targetKey, promise, reason };
       speculativeReadRef.current = speculative;
       void promise.finally(() => {
         if (speculativeReadRef.current === speculative) {
@@ -393,12 +432,15 @@ export function useAdminEntityListController<
     },
     [
       applyQueryConstraint,
+      activeForegroundRequests,
       cancelSpeculativeRead,
       entity,
       loadResult,
       query,
       queryClient,
       request.data,
+      request.dataUpdatedAt,
+      request.fetchStatus,
       request.isError,
       request.isFetching,
       request.isPending,
@@ -406,6 +448,31 @@ export function useAdminEntityListController<
       staleTimeMs,
     ],
   );
+
+  const prefetchPage = useCallback(
+    (page: number) => requestPagePrefetch(page, "intent"),
+    [requestPagePrefetch],
+  );
+
+  useEffect(() => {
+    if (!adjacentPrefetch) return;
+    if (activeForegroundRequests > 0 || activeMutations > 0) {
+      // Foreground and explicit intent retain priority over automatic speculation.
+      if (speculativeReadRef.current?.reason === "adjacent") {
+        cancelSpeculativeRead(adminEntityListQueryKeys.query(entity, query));
+      }
+      return;
+    }
+    void requestPagePrefetch(query.page + 1, "adjacent");
+  }, [
+    activeForegroundRequests,
+    activeMutations,
+    adjacentPrefetch,
+    cancelSpeculativeRead,
+    entity,
+    query,
+    requestPagePrefetch,
+  ]);
 
   const setSearch = useCallback(
     (search: string) =>
