@@ -272,16 +272,52 @@ try {
     assert.equal(h.trace.filter((request) => request.table === "admin_content_topics").length, 2);
     assert.equal(topicsEntityListAdapter.resultSchema.safeParse(result).success, true);
   });
-  await check("Entity List reads categories once only when callers do not provide them", async () => {
+  await check("Queries without a category filter preserve supplied-hierarchy results with three reads and no hierarchy dependency", async () => {
+    for (const values of [
+      {}, { page: "2" }, { page: "999" }, { limit: "20" }, { limit: "30" }, { limit: "50" },
+      { q: "Alpha Guide" }, { q: "No matching title" }, { status: "published" },
+      { featured: "yes" }, { view: "trash" }, { content_type: "news" }, { series: "any" }, { image: "without" },
+    ]) {
+      const query = listQuery(values);
+      backend();
+      const supplied = await loadTopicsEntityListResult(query, categories);
+      const h = backend({ categoryError: true });
+      const omitted = await loadTopicsEntityListResult(query);
+      assert.deepEqual(omitted.rows, supplied.rows);
+      assert.deepEqual(omitted.pagination, supplied.pagination);
+      assert.deepEqual(omitted.metrics, supplied.metrics);
+      assert.equal(topicsEntityListAdapter.resultSchema.safeParse(omitted).success, true);
+      assert.equal(h.trace.length, 3);
+      assert.equal(h.trace.filter((request) => request.table === "topic_categories").length, 0);
+      assert.equal(h.trace.filter((request) => request.rpc).length, 1);
+      assert.equal(h.trace.filter((request) => request.table === "admin_content_topics").length, 2);
+    }
+  });
+  await check("Category-filtered queries read the missing hierarchy once and preserve root and descendant membership", async () => {
+    const query = listQuery({ category: "1", limit: "50" });
+    backend();
+    const supplied = await loadTopicsEntityListResult(query, categories);
     const h = backend();
-    await loadTopicsEntityListResult(listQuery());
+    const omitted = await loadTopicsEntityListResult(query);
+    assert.deepEqual(omitted.rows, supplied.rows);
+    assert.deepEqual(omitted.pagination, supplied.pagination);
+    assert.deepEqual(omitted.metrics, supplied.metrics);
+    assert.equal(omitted.pagination.totalRows, 19);
+    assert.deepEqual([...new Set(omitted.rows.map((row) => row.category_id))].sort(), [1, 2, 3]);
     assert.equal(h.trace.length, 4);
     assert.equal(h.trace.filter((request) => request.table === "topic_categories").length, 1);
+    const contentReads = h.trace.filter((request) => request.table === "admin_content_topics");
+    assert.deepEqual(contentReads[0].filters, contentReads[1].filters);
+    assert.ok(contentReads[0].filters.some(([operator, key, value]) =>
+      operator === "in" && key === "category_id" && value.join() === "1,2,3"));
   });
   await check("Entity List propagates category, page and malformed-metrics failure instead of successful empty data", async () => {
     for (const options of [{ categoryError: true }, { pageError: true }, { metrics: {} }]) {
       backend(options);
-      await assert.rejects(loadTopicsEntityListResult(listQuery(), options.categoryError ? undefined : categories));
+      await assert.rejects(loadTopicsEntityListResult(
+        listQuery(options.categoryError ? { category: "1" } : {}),
+        options.categoryError ? undefined : categories,
+      ));
     }
   });
   console.log(`Topics persisted SEO read verified (${passed} checks; isolated query backend, no live DB timing).`);

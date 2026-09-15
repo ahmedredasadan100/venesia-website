@@ -701,6 +701,34 @@ assert.equal(imageBootstrap.get("status"), "published");
 assert.equal(imageBootstrap.get("q"), "عنوان");
 assert.equal(projectTopicsParams({}).has("image"), false);
 
+// Live consumers must wire pagination intent directly to the same Data Runtime
+// controller used for activation; synthetic runtime fixtures alone cannot prove adoption.
+for (const sourcePath of [
+  "../src/components/admin/content/TopicsListClient.tsx",
+  "../src/app/admin/content/categories/CategoriesListClient.tsx",
+  "../src/app/admin/content/series/SeriesTableClient.tsx",
+]) {
+  const source = ts.createSourceFile(sourcePath,
+    readFileSync(new URL(sourcePath, import.meta.url), "utf8"),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const paginationNodes: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
+  function findPagination(node: ts.Node) {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+      node.tagName.getText(source) === "AdminTablePagination") paginationNodes.push(node);
+    ts.forEachChild(node, findPagination);
+  }
+  findPagination(source);
+  assert.equal(paginationNodes.length, 1, `${sourcePath}: one canonical pagination surface`);
+  for (const [prop, method] of [["onPageChange", "setPage"], ["onPageIntent", "prefetchPage"], ["onPageSizeChange", "setPageSize"]]) {
+    const attribute = paginationNodes[0].attributes.properties.find((item) =>
+      ts.isJsxAttribute(item) && item.name.getText(source) === prop);
+    assert.ok(attribute && ts.isJsxAttribute(attribute) && attribute.initializer &&
+      ts.isJsxExpression(attribute.initializer) &&
+      attribute.initializer.expression?.getText(source) === `controller.${method}`,
+    `${sourcePath}: ${prop} must adopt the shared controller directly`);
+  }
+}
+
 // Execute the actual Series adapters with committed-warning action results.
 // Server actions and the mutation transport are isolated; no writes are issued.
 const seriesClientSource = ts.createSourceFile(
