@@ -12,6 +12,65 @@ update public.projects
 set publication_status = 'unpublished'
 where publication_status is distinct from 'published';
 
+-- History compatibility: the baseline Page CHECK does not allow unpublished.
+-- Keep the original first-touch order, then lock and verify that exact legacy
+-- contract before replacing it. The final CHECK guards every subsequent write;
+-- NOT VALID defers only the existing-row scan until normalization has finished.
+lock table public.pages in access exclusive mode;
+do $page_publication_transition$
+declare
+  v_pages_oid oid := pg_catalog.to_regclass('public.pages');
+  v_status_attnum smallint;
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_class relation
+    where relation.oid = v_pages_oid and relation.relkind = 'r'
+      and not relation.relispartition
+      and not exists (
+        select 1 from pg_catalog.pg_inherits inheritance
+        where inheritance.inhrelid = relation.oid or inheritance.inhparent = relation.oid
+      )
+  ) then
+    raise exception 'Page publication transition refused: expected a non-inherited ordinary Page table';
+  end if;
+
+  select attribute.attnum into v_status_attnum
+  from pg_catalog.pg_attribute attribute
+  where attribute.attrelid = v_pages_oid and attribute.attname = 'status'
+    and attribute.attnum > 0 and not attribute.attisdropped
+    and attribute.atttypid = 'pg_catalog.text'::regtype and attribute.atttypmod = -1
+    and attribute.attnotnull and attribute.attislocal and attribute.attinhcount = 0
+    and attribute.attidentity = '' and attribute.attgenerated = '';
+  if v_status_attnum is null then
+    raise exception 'Page publication transition refused: legacy status column contract differs';
+  end if;
+
+  if (select count(*) from pg_catalog.pg_constraint existing
+      where existing.conrelid = v_pages_oid and existing.contype = 'c'
+        and v_status_attnum = any(existing.conkey)) <> 1
+    or not exists (
+      select 1 from pg_catalog.pg_constraint existing
+      where existing.conrelid = v_pages_oid
+        and existing.connamespace = 'public'::regnamespace
+        and existing.conname = 'pages_status_check' and existing.contype = 'c'
+        and existing.conkey = array[v_status_attnum]::smallint[]
+        and existing.convalidated and existing.conislocal and existing.coninhcount = 0
+        and existing.conparentid = 0 and not existing.connoinherit
+        and not existing.condeferrable and not existing.condeferred
+        and existing.contypid = 0 and existing.conindid = 0
+        and existing.confrelid = 0 and existing.confkey is null
+        and pg_catalog.pg_get_constraintdef(existing.oid, false) =
+          'CHECK ((status = ANY (ARRAY[''draft''::text, ''published''::text, ''hidden''::text, ''archived''::text])))'
+    ) then
+    raise exception 'Page publication transition refused: legacy status CHECK is missing, changed, or ambiguous';
+  end if;
+end;
+$page_publication_transition$;
+
+alter table public.pages
+  drop constraint pages_status_check,
+  add constraint pages_status_check check (status in ('published', 'unpublished')) not valid;
+
 update public.pages
 set status = 'unpublished'
 where status is distinct from 'published';
@@ -68,8 +127,7 @@ alter table public.topics drop constraint if exists topics_status_check;
 alter table public.topics add constraint topics_status_check check (status in ('published', 'unpublished'));
 alter table public.projects drop constraint if exists projects_publication_status_check;
 alter table public.projects add constraint projects_publication_status_check check (publication_status in ('published', 'unpublished'));
-alter table public.pages drop constraint if exists pages_status_check;
-alter table public.pages add constraint pages_status_check check (status in ('published', 'unpublished'));
+alter table public.pages validate constraint pages_status_check;
 alter table public.topic_categories drop constraint if exists topic_categories_status_check;
 alter table public.topic_categories add constraint topic_categories_status_check check (status in ('published', 'unpublished'));
 alter table public.topic_series drop constraint if exists topic_series_status_check;

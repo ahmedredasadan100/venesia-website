@@ -3823,6 +3823,8 @@ export type Database = {
         Returns: number
       }
       global_seo_infrastructure_health: { Args: never; Returns: Json }
+      public_media_closure_provenance: { Args: never; Returns: Json }
+      footer_public_composition_provenance: { Args: never; Returns: Json }
       global_truth_atomic_closure_health: { Args: never; Returns: Json }
       increment_topic_view: {
         Args: { p_topic_id: number | null; p_visitor_key: string | null; p_ip_key: string }

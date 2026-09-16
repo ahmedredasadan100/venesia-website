@@ -1,0 +1,50 @@
+{
+  "formatVersion": 2,
+  "kind": "bounded-migration-history-compatibility",
+  "existingDatabasePolicy": "preserve-recorded-revision-without-replay-or-registry-rewrite",
+  "freshDatabasePolicy": "execute-corrected-canonical-source",
+  "entries": [
+    {
+      "version": "20260729150000",
+      "name": "project_admin_schema_parity_forward_fix",
+      "historicalSourceSha256": "357d8892ab6165e9488d0612e0d20a27b269dc7d9a06a62f272642eb43ff3990",
+      "correctedSourceSha256": "c5d60db7b64d5b4b4e95c12d6aa62ac7340ae2310b1a910306f2a892ec4eca13",
+      "reason": "Recognize the three exact Migration 50 CHECK identities without adding duplicate constraints."
+    },
+    {
+      "version": "20260804180000",
+      "name": "public_media_truth_closure",
+      "historicalSourceSha256": "be93099c984202f88520267a2dcf7d738bd136c7376ced48756020159fef8f94",
+      "correctedSourceSha256": "2dec6fd8ada3c185e4e284b80874985a3c41c8ac98838adb072096fd72c6dd65",
+      "reason": "Support validated-empty legacy input without fabricated historical rows, retaining strict populated conversion and provenance."
+    },
+    {
+      "version": "20260805090000",
+      "name": "footer_public_composition_truth_closure",
+      "historicalSourceSha256": "bd4b8f209b2bff5e52ee805ff6847daae5efbd90c1dbc0c0cb38b1bb1bced404",
+      "correctedSourceSha256": "70c5046946c7a03d470bf8bb29a318c91d6c5bdd5e954fa869e056c39fb83c65",
+      "reason": "Preserve strict historical closure; qualify exact canonical fresh input and initialize manageable Footer/Home without business publication or fabricated historical events."
+    },
+    {
+      "version": "20260807120000",
+      "name": "system_publication_summary_cards_closure",
+      "historicalSourceSha256": "4ac009d3f68e5efab454caff91cbe020081450b13cf7980e6f91b5d61e26eb9b",
+      "correctedSourceSha256": "6eef44c912c5e20be27018086662a70fb4aa608719f552d0f2b1988b023d0df0",
+      "reason": "Replace the exact legacy Page status CHECK with the final unvalidated CHECK before normalization, then validate it without changing publication semantics."
+    },
+    {
+      "version": "20260819041808",
+      "name": "harden_rls_auto_enable_execute_acl",
+      "historicalSourceSha256": "b89ae35c983e17900c9ecc4412f28b4c3c0e5725d70a65f945ac57f3586c188e",
+      "correctedSourceSha256": "b1f30542995efb59492cfc408d4c9ca4f70aa67c90dc469c68719a286ee356e1",
+      "reason": "Preserve historical EXECUTE hardening; accept complete historical-pair absence only with exact fresh lineage, registered security revision, and matching classified RLS/grants catalog. Reject partial or ambiguous state without creating compatibility objects."
+    },
+    {
+      "version": "20260830232134",
+      "name": "search_platform_module",
+      "historicalSourceSha256": "040f32e6169b5ccccb226ec908d05931bd74b5712489614fafca9da42ca383e2",
+      "correctedSourceSha256": "55149926caec2f664a20379c995aad170f7a6f6aefe88f98caf5f70e9cc99745",
+      "reason": "Preserve existing Topics and all Search/Media adoption; omit only the Topics assignment on source-proven canonical fresh absence without manufacturing a Page, publication or adoption event."
+    }
+  ]
+}

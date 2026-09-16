@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { chromium, type Browser, type Page } from "playwright";
+import ts from "typescript";
 
 const require = createRequire(import.meta.url);
 const TEMP_PREFIX = "venesia-admin-form-navigation-";
@@ -124,6 +125,7 @@ import { useAdminEntityListController } from "@admin-list-controller";
 import { normalizeAdminEntityListQuery } from "@admin-query-contracts";
 import { adminEntityListQueryKeys } from "@admin-query-keys";
 import { topicsQueryContract } from "@topics-query-contract";
+import { topicsWithoutImageQueryContract } from "@report-query-contract";
 
 const qa = {
   routerEvents: [],
@@ -450,6 +452,108 @@ function ContentHarness({ actionOutcomes = ["success"], deferAction = false }) {
 }
 
 const root = createRoot(document.getElementById("root"));
+const reportEntity = "topics_without_image";
+const reportQuery = normalizeAdminEntityListQuery(topicsWithoutImageQueryContract, new URLSearchParams());
+const reportNextQuery = { ...reportQuery, page: 2 };
+function reportResult(hasImage = false, page = 1, title = "Missing image") {
+  return {
+    rows: hasImage ? [] : [{ id: 42, title, image: null }],
+    pagination: { page, pageSize: reportQuery.pageSize, totalRows: hasImage ? 0 : reportQuery.pageSize + 1,
+      totalPages: hasImage ? 1 : 2 },
+    meta: { generatedAt: new Date().toISOString(), mode: "server-page" },
+  };
+}
+function ReportFreshnessList({ onEdit }) {
+  const controller = useAdminEntityListController({
+    entity: reportEntity, contract: topicsWithoutImageQueryContract, initialQuery: reportQuery,
+    initialResult: qa.reportFreshness.initialResult, staleTimeMs: 30_000,
+  });
+  return React.createElement(React.Fragment, null,
+    React.createElement("output", { id: "qa-report-list" }, controller.result.rows.map((row) => row.title).join(",") || "Empty"),
+    React.createElement("button", { id: "qa-report-edit", onClick: onEdit }, "Edit"),
+  );
+}
+function ReportFreshnessFlow({ entities, outcome, contentType }) {
+  const client = useQueryClient();
+  const [ready, setReady] = React.useState(false);
+  const [view, setView] = React.useState("list");
+  React.useEffect(() => {
+    const fixture = qa.reportFreshness;
+    fixture.client = client;
+    for (const entity of [...entities, "projects"]) {
+      client.setQueryData(adminEntityListQueryKeys.query(entity, reportQuery), fixture.initialResult);
+    }
+    client.setQueryData(adminEntityListQueryKeys.query(reportEntity, reportNextQuery), reportResult(false, 2));
+    const cancel = client.cancelQueries.bind(client);
+    const invalidate = client.invalidateQueries.bind(client);
+    client.cancelQueries = async (filters, options) => {
+      fixture.events.push({ kind: "cancel", entity: filters.queryKey[1] });
+      return cancel(filters, options);
+    };
+    client.invalidateQueries = async (filters, options) => {
+      fixture.events.push({ kind: "invalidate", entity: filters.queryKey[1], refetchType: filters.refetchType });
+      if (outcome === "cache-failure" && filters.queryKey[1] === reportEntity) {
+        throw new Error("ISOLATED_REPORT_INVALIDATION_FAILURE");
+      }
+      return invalidate(filters, options);
+    };
+    fixture.startRead = () => {
+      // Controlled data transport only; QueryClient owns the real request/cancel/cache lifecycle.
+      fixture.inFlight = client.prefetchQuery({
+        queryKey: adminEntityListQueryKeys.query(reportEntity, reportNextQuery), staleTime: 0,
+        queryFn: ({ signal }) => new Promise((resolve) => {
+          fixture.readStarted = true;
+          signal.addEventListener("abort", () => { fixture.aborted = true; });
+          fixture.releaseRead = () => resolve(reportResult(false, 2, "Late stale response"));
+        }),
+      });
+    };
+    qa.router.push = (href, options) => {
+      qa.routerEvents.push({ kind: "push", href: String(href), options: options ?? null });
+      setView("list");
+    };
+    setReady(true);
+  }, [client, entities, outcome]);
+  const action = async (previous, formData) => {
+    const fixture = qa.reportFreshness;
+    qa.actionCalls += 1;
+    if (outcome === "error") return { status: "error", mode: "edit", revision: previous.revision + 1,
+      message: "The synthetic image write was not confirmed." };
+    fixture.image = String(formData.get("image"));
+    fixture.events.push({ kind: "commit" });
+    return { status: "success", mode: "edit", revision: previous.revision + 1,
+      entityId: 42, savedRevision: "image-saved-42" };
+  };
+  if (!ready) return null;
+  if (view === "list") return React.createElement(ReportFreshnessList, { onEdit: () => setView("form") });
+  // Real consumer declaration and real Runtime; the action's persistence is synthetic.
+  return React.createElement(ContentEditorShell, {
+    action, contentType, mode: "edit", entityId: 42, baselineRevision: null,
+    closeHref: "/admin/reports/topics-without-image", formId: "qa-report-image-form",
+    tabs: [{ id: "basic", navigationLabel: "Image", content: React.createElement(React.Fragment, null,
+      React.createElement("input", { id: "qa-report-image", name: "image", defaultValue: "" }),
+      React.createElement(RuntimeProbe)) }],
+  });
+}
+qa.mountReportFreshness = (options) => {
+  qa.actionCalls = 0;
+  qa.routerEvents.length = 0;
+  qa.reportFreshness = { initialResult: reportResult(), image: "", reads: 0, events: [],
+    entities: options.entities, client: null, readStarted: false, aborted: false, releaseRead: null };
+  root.render(React.createElement(AdminEntityListQueryProvider, null,
+    React.createElement(AdminFeedbackProvider, null, React.createElement(ReportFreshnessFlow, options))));
+};
+qa.reportFreshnessSnapshot = () => {
+  const fixture = qa.reportFreshness;
+  const summarize = (entity, query) => {
+    const state = fixture.client.getQueryState(adminEntityListQueryKeys.query(entity, query));
+    return { invalidated: state?.isInvalidated, data: state?.data, fetchStatus: state?.fetchStatus };
+  };
+  return { image: fixture.image, reads: fixture.reads, actionCalls: qa.actionCalls,
+    events: fixture.events, aborted: fixture.aborted, formState: qa.runtime?.state,
+    cache: Object.fromEntries(fixture.entities.map((entity) => [entity, summarize(entity, reportQuery)])),
+    next: summarize(reportEntity, reportNextQuery), unrelated: summarize("projects", reportQuery) };
+};
 const saveCacheQuery = normalizeAdminEntityListQuery(topicsQueryContract, new URLSearchParams());
 function saveCacheResult(title) {
   return {
@@ -706,6 +810,7 @@ async function compileHarness(rootDir: string, tempDir: string) {
         "@admin-query-contracts": path.join(rootDir, "src/lib/admin/entity-list/data-engine/contracts.ts"),
         "@admin-query-keys": path.join(rootDir, "src/lib/admin/entity-list/data-engine/query-keys.ts"),
         "@topics-query-contract": path.join(rootDir, "src/lib/admin/content/entity-list-contracts/topics.ts"),
+        "@report-query-contract": path.join(rootDir, "src/lib/admin/media-catalog/topics-without-image-entity-list-contract.ts"),
         "@admin-route-error": path.join(rootDir, "src/app/admin/error.tsx"),
         "@admin-feedback-provider": path.join(
           rootDir,
@@ -1087,8 +1192,144 @@ async function closePage(page: Page) {
   await page.close({ runBeforeUnload: false });
 }
 
+async function readContentEditorInvalidationDeclaration(rootDir: string) {
+  const filename = path.join(rootDir, "src/components/admin/content/editors/ContentEditorShell.tsx");
+  const source = ts.createSourceFile(filename, await readFile(filename, "utf8"),
+    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declarations: string[][] = [];
+  const visit = (node: ts.Node) => {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+        node.tagName.getText(source) === "AdminFormRuntime") {
+      const attribute = node.attributes.properties.find((item) =>
+        ts.isJsxAttribute(item) && item.name.getText(source) === "invalidateEntities");
+      assert.ok(attribute && ts.isJsxAttribute(attribute) && attribute.initializer &&
+        ts.isJsxExpression(attribute.initializer) && attribute.initializer.expression &&
+        ts.isArrayLiteralExpression(attribute.initializer.expression),
+      "ContentEditorShell must declare its runtime invalidation entities explicitly");
+      declarations.push(attribute.initializer.expression.elements.map((item) => {
+        assert.ok(ts.isStringLiteral(item), "Invalidation declaration must contain entity literals");
+        return item.text;
+      }));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  assert.equal(declarations.length, 1, "Exactly one canonical shell invalidation declaration");
+  const entities = declarations[0];
+  assert.equal(new Set(entities).size, entities.length, "No duplicate entity declaration");
+  check("source AST: ContentEditorShell declares report invalidation at its real Form Runtime", entities.includes("topics_without_image"));
+  return entities;
+}
+
+type ReportFreshnessSnapshot = {
+  image: string; reads: number; actionCalls: number; aborted: boolean;
+  events: Array<{ kind: string; entity?: string; refetchType?: string }>;
+  formState: { status: string; message?: string; entityId?: number; savedRevision?: string };
+  cache: Record<string, { invalidated: boolean; data: { rows: Array<{ title: string }> }; fetchStatus: string }>;
+  next: { invalidated: boolean; data: { rows: Array<{ title: string }> }; fetchStatus: string };
+  unrelated: { invalidated: boolean; data: { rows: Array<{ title: string }> }; fetchStatus: string };
+};
+type ReportHarnessWindow = Window & { __ADMIN_FORM_GUARDED_NAV_QA__: {
+  mountReportFreshness(options: { entities: string[]; outcome: string; contentType: string }): void;
+  reportFreshnessSnapshot(): ReportFreshnessSnapshot;
+  reportFreshness: {
+    image: string; reads: number; readStarted: boolean; startRead(): void;
+    releaseRead(): void; inFlight: Promise<void>;
+  };
+} };
+
+async function runReportFreshnessCases(browser: Browser, harnessUrl: string, rootDir: string, issues: BrowserIssue[]) {
+  const entities = await readContentEditorInvalidationDeclaration(rootDir);
+  for (const scenario of [
+    { outcome: "success", contentType: "article", status: "success" },
+    { outcome: "success", contentType: "news", status: "success" },
+    { outcome: "error", contentType: "article", status: "error" },
+    { outcome: "cache-failure", contentType: "article", status: "warning" },
+  ]) {
+    const page = await browser.newPage();
+    observeBrowserIssues(page, issues);
+    await page.route("**/api/admin/entity-lists/topics_without_image?**", async (route) => {
+      const hasImage = await page.evaluate(() => {
+        const fixture = (window as unknown as ReportHarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.reportFreshness;
+        fixture.reads += 1;
+        return Boolean(fixture.image);
+      });
+      await route.fulfill({ contentType: "application/json", body: JSON.stringify({
+        rows: hasImage ? [] : [{ id: 42, title: "Missing image", image: null }],
+        pagination: { page: 1, pageSize: 10, totalRows: hasImage ? 0 : 1, totalPages: 1 },
+        meta: { generatedAt: new Date().toISOString(), mode: "server-page" },
+      }) });
+    });
+    await page.goto(harnessUrl);
+    await page.evaluate((options) => (window as unknown as ReportHarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__
+      .mountReportFreshness(options), { ...scenario, entities });
+    await page.locator("#qa-report-list").waitFor();
+    const snapshot = () => page.evaluate(() =>
+      (window as unknown as ReportHarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.reportFreshnessSnapshot());
+    const before = await snapshot();
+    const label = `image/report ${scenario.contentType}/${scenario.outcome}`;
+    check(`${label}: warm report starts with affected topic and no GET`,
+      await page.locator("#qa-report-list").textContent() === "Missing image" && before.reads === 0);
+    await page.locator("#qa-report-edit").click();
+    await page.locator("#qa-report-image").fill("/images/isolated-image.jpg");
+    await page.evaluate(() => (window as unknown as ReportHarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.reportFreshness.startRead());
+    await page.waitForFunction(() => (window as unknown as ReportHarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.reportFreshness.readStarted);
+    const pending = await snapshot();
+    check(`${label}: actual QueryClient has an inactive pre-write read`, pending.next.fetchStatus === "fetching" && !pending.aborted);
+    await page.locator('[data-admin-form-action="save"]').click();
+    await waitForRuntime(page, { status: scenario.status as "success" | "warning" | "error", pending: "false",
+      dirty: scenario.outcome === "error" ? "true" : "false" });
+    const after = await snapshot();
+    check(`${label}: one command, no eager report GET, unrelated cache unchanged`,
+      after.actionCalls === 1 && after.reads === 0 && JSON.stringify(after.unrelated) === JSON.stringify(before.unrelated));
+    if (scenario.outcome === "error") {
+      check(`${label}: command failure neither cancels nor invalidates nor writes source`,
+        after.image === "" && after.events.length === 0 && !after.aborted &&
+        JSON.stringify(after.cache) === JSON.stringify(before.cache) &&
+        JSON.stringify(after.next) === JSON.stringify(pending.next));
+    } else {
+      check(`${label}: committed image and identity survive settlement without replay`,
+        after.image === "/images/isolated-image.jpg" && after.formState.entityId === 42 &&
+        after.formState.savedRevision === "image-saved-42" && after.events.filter((event) => event.kind === "commit").length === 1);
+      check(`${label}: real Form Runtime cancels then invalidates every source-declared entity`,
+        entities.every((entity) => {
+          const cancel = after.events.findIndex((event) => event.kind === "cancel" && event.entity === entity);
+          const invalidate = after.events.findIndex((event) => event.kind === "invalidate" && event.entity === entity);
+          return cancel > 0 && invalidate > cancel;
+        }) && after.events.filter((event) => event.kind === "invalidate").length === entities.length &&
+        after.events.filter((event) => event.kind === "invalidate").every((event) => event.refetchType === "none") &&
+        after.aborted && after.next.fetchStatus === "idle");
+      await page.evaluate(async () => {
+        const fixture = (window as unknown as ReportHarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.reportFreshness;
+        fixture.releaseRead();
+        await fixture.inFlight;
+      });
+      const late = await snapshot();
+      check(`${label}: late canceled response cannot replace cached report rows`,
+        late.next.data.rows[0]?.title === "Missing image" && late.actionCalls === 1);
+      if (scenario.outcome === "cache-failure") {
+        check(`${label}: postcommit cache failure stays a warning, with no source rollback/retry`,
+          late.formState.status === "warning" && Boolean(late.formState.message?.includes("القوائم")) &&
+          late.image === "/images/isolated-image.jpg" && late.actionCalls === 1 &&
+          !late.cache.topics_without_image.invalidated && !late.next.invalidated);
+      } else {
+        check(`${label}: all declared warm caches and report pages invalidated`,
+          entities.every((entity) => late.cache[entity].invalidated) && late.next.invalidated);
+        await page.locator('[data-admin-form-action="close"]').click();
+        await page.waitForFunction(() => document.querySelector("#qa-report-list")?.textContent === "Empty");
+        const returned = await snapshot();
+        check(`${label}: mounted report return settles authoritative empty result within warm TTL`,
+          returned.reads === 1 && returned.actionCalls === 1 && returned.cache.topics_without_image.data.rows.length === 0 &&
+          !returned.cache.topics_without_image.invalidated);
+      }
+    }
+    await closePage(page);
+  }
+}
+
 const rootDir = process.cwd();
 const saveCacheOnly = process.argv.includes("--save-cache-only");
+const reportFreshnessOnly = process.argv.includes("--report-freshness-only");
 const tempDir = await mkdtemp(path.join(tmpdir(), TEMP_PREFIX));
 let browser: Browser | null = null;
 let server: Server | null = null;
@@ -1103,9 +1344,10 @@ try {
   const destinationUrl = `${harnessServer.baseUrl}/destination`;
   const browserIssues: BrowserIssue[] = [];
   browser = await chromium.launch({ headless: true });
+  if (reportFreshnessOnly) await runReportFreshnessCases(browser, harnessUrl, rootDir, browserIssues);
 
   const secondSaveFailures: string[] = [];
-  for (const scenario of [
+  for (const scenario of reportFreshnessOnly ? [] : [
     { outcome: "success", expected: "success", returnToList: true },
     { outcome: "warning", expected: "warning", returnToList: true },
     { outcome: "success", expected: "warning", cacheFailure: true },
@@ -1236,10 +1478,10 @@ try {
     }
     await closePage(page);
   }
-  check(`all failed second saves preserve dirty state${secondSaveFailures.length ? `: ${secondSaveFailures.join("; ")}` : ""}`,
+  if (!reportFreshnessOnly) check(`all failed second saves preserve dirty state${secondSaveFailures.length ? `: ${secondSaveFailures.join("; ")}` : ""}`,
     secondSaveFailures.length === 0);
 
-  if (!saveCacheOnly) {
+  if (!saveCacheOnly && !reportFreshnessOnly) {
   {
     // Real mounted Admin presentation and installed Next boundary; only the
     // AppRouter refresh/data response is controlled. This is not a live RSC/DB proof.

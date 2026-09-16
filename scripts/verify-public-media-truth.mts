@@ -149,6 +149,16 @@ assert.ok(links.includes("resolvePublicContentPath(row.content_type, row.slug)")
 assert.ok(!links.includes("mediaLinkProvider") && !linkTypes.includes('"media_items"'));
 
 const diagnostics = read("src/lib/seo/run-global-seo-health.ts");
+const closureProof = read("src/lib/seo/public-media-closure-proof.ts");
+assert.ok(diagnostics.includes('supabase.rpc("public_media_closure_provenance")')
+  && diagnostics.includes("evaluatePublicMediaClosureProof({")
+  && closureProof.includes("historical-evidence-compatible")
+  && closureProof.includes("validated-empty-legacy")
+  && closureProof.includes('error.code === "PGRST202"')
+  && closureProof.includes("value.migration_registered !== true")
+  && closureProof.includes("value.structural_complete !== true")
+  && closureProof.includes("value.historical_audit_total !== expectedTotal"),
+"Global SEO must distinguish completed empty initialization from historical evidence without inferring the path from zero counts");
 for (const check of [
   "public_media_single_source",
   "public_media_module_contract",

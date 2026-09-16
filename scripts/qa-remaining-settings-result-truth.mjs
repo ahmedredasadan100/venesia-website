@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
+import { expect } from "playwright/test";
 
 const root = path.resolve(import.meta.dirname, "..");
 const out = path.join(root, ".tmp-qa/evidence-adoption-gaps/settings-results");
@@ -105,9 +106,11 @@ try {
       assert.equal(await copyright.isDisabled(), true);
       await settle(page, { ok: true, status: "warning", code: "committed_cache_revalidation_pending", message: warningMessage });
       await page.getByText(warningMessage, { exact: true }).waitFor();
+      await expect(copyright).toBeEnabled({ timeout: 5_000 });
       assert.equal(await copyright.inputValue(), "Saved warning draft"); assert.equal(await copyright.isDisabled(), false);
       assert.equal(await page.getByText("يظل الحذف الآمن متوقفًا", { exact: false }).count(), 0);
       assert.equal(await page.evaluate(() => window.calls), 1);
+      assert.equal(await page.evaluate(() => window.refreshes), 1);
       await page.getByRole("button", { name: "استعادة الافتراضي", exact: true }).click();
       await page.getByRole("button", { name: "تأكيد الاستعادة", exact: true }).click(); await waitForCall(page, 2);
       await page.evaluate(message => window.finish({ ok: true, status: "warning", code: "committed_cache_revalidation_pending", message, slots: window.footerSlots }), "Restored once; cache update pending.");

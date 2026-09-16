@@ -212,6 +212,7 @@ export default function ActivityLogClient({
     initialQuery,
     initialResult,
     staleTimeMs: 15_000,
+    adjacentPrefetch: true,
   });
   const entityTypes = useMemo(() => {
     const merged = new Set([
@@ -403,6 +404,7 @@ export default function ActivityLogClient({
             pageSize={String(pagination.pageSize)}
             emptySummaryText="لا توجد أحداث"
             onPageChange={controller.setPage}
+            onPageIntent={controller.prefetchPage}
             onPageSizeChange={controller.setPageSize}
           />
         </AdminEntityListTableRegion>

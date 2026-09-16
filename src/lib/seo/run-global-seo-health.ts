@@ -19,6 +19,8 @@ import type {
 } from "./global-seo-health-types";
 import { getProjectHref } from "../projects/public-helpers";
 import { resolvePublicContentPath } from "../content/public-content-path";
+import { evaluatePublicMediaClosureProof } from "./public-media-closure-proof";
+import { evaluateFooterCompositionProof } from "./footer-public-composition-proof";
 
 const DIMENSIONS: GlobalSeoHealthDimension[] = [
   "identity",
@@ -160,7 +162,12 @@ function parseInfrastructureProof(value: Json): InfrastructureProof {
 }
 
 async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
-  const { data, error } = await getSupabaseAdmin().rpc("global_seo_infrastructure_health");
+  const supabase = getSupabaseAdmin();
+  const [{ data, error }, closureProvenance, footerProvenance] = await Promise.all([
+    supabase.rpc("global_seo_infrastructure_health"),
+    supabase.rpc("public_media_closure_provenance"),
+    supabase.rpc("footer_public_composition_provenance"),
+  ]);
   if (error) {
     return [{ id: "infrastructure_rpc", dimension: "infrastructure", status: "fail", weight: 10, title: "Infrastructure proof unavailable", detail: error.message }];
   }
@@ -185,39 +192,32 @@ async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
     detail: proof[key] === true ? "مثبت من قاعدة البيانات الحالية." : "لم يثبت الشرط من قاعدة البيانات الحالية.",
   }));
   const publishedCount = proof.public_media_published_count;
-  checks.push({
-    id: "public_media_category_migration_audit_evidence",
-    dimension: "infrastructure",
-    status: proof.public_media_migrated_category_count === 13 ? "pass" : "fail",
-    weight: 4,
-    title: "Public Media category migration audit evidence",
-    detail:
-      proof.public_media_migrated_category_count === 13
-        ? "13 سجل Audit تربط كل media_category موروث بتصنيف topic_categories النهائي."
-        : `المتوقع 13 سجل Category Migration Audit؛ المثبت ${String(proof.public_media_migrated_category_count ?? "غير متاح")}.`,
-  });
-  checks.push({
-    id: "public_media_migration_audit_evidence",
-    dimension: "infrastructure",
-    status: proof.public_media_migrated_count === 28 ? "pass" : "fail",
-    weight: 6,
-    title: "Public Media migration audit evidence",
-    detail:
-      proof.public_media_migrated_count === 28
-        ? "28 سجل Audit تربط كل media_item موروث بسجل topics النهائي."
-        : `المتوقع 28 سجل Migration Audit؛ المثبت ${String(proof.public_media_migrated_count ?? "غير متاح")}.`,
-  });
-  checks.push({
-    id: "public_media_seo_normalization_evidence",
-    dimension: "infrastructure",
-    status: proof.public_media_seo_normalization_count === 14 ? "pass" : "fail",
-    weight: 6,
-    title: "Public Media SEO normalization evidence",
-    detail:
-      proof.public_media_seo_normalization_count === 14
-        ? "14 سجل Audit تحفظ عنوان SEO الأصلي والمطبّع، وكل قيمة جديدة لا تتجاوز 60 حرفًا."
-        : `المتوقع 14 سجل Audit صالحًا؛ المثبت ${String(proof.public_media_seo_normalization_count ?? "غير متاح")}.`,
-  });
+  const closure = evaluatePublicMediaClosureProof({
+    singleSource: proof.public_media_single_source,
+    moduleContract: proof.public_media_module_contract,
+    linkContract: proof.public_media_link_contract,
+    counts: {
+      categories: proof.public_media_migrated_category_count,
+      items: proof.public_media_migrated_count,
+      seo: proof.public_media_seo_normalization_count,
+    },
+  }, closureProvenance);
+  const auditChecks = [
+    ["public_media_category_migration_audit_evidence", "Public Media category migration audit evidence", "categories", 4],
+    ["public_media_migration_audit_evidence", "Public Media migration audit evidence", "items", 6],
+    ["public_media_seo_normalization_evidence", "Public Media SEO normalization evidence", "seo", 6],
+  ] as const;
+  for (const [id, title, countKey, weight] of auditChecks) {
+    checks.push({
+      id, title, weight, dimension: "infrastructure",
+      status: closure.ok ? "pass" : "fail",
+      detail: !closure.ok
+        ? "لم يثبت تطابق دليل اكتمال ترحيل Public Media مع الحالة الحالية."
+        : closure.path === "validated-empty-legacy"
+          ? "ثبت اكتمال التهيئة دون بيانات موروثة؛ العدد المتوقع والمثبت لسجلات الترحيل هو صفر."
+          : `${closure.expectedAudits[countKey]} سجل Audit يطابق عقد ترحيل البيانات الموروثة.${closure.revisionAttested ? " مسار الترحيل مثبت من قاعدة البيانات." : " توافق الأدلة التاريخية مثبت؛ لا يوجد تصديق مستقل لإصدار الهجرة."}`,
+    });
+  }
   checks.push({
     id: "public_media_published_inventory",
     dimension: "infrastructure",
@@ -230,11 +230,48 @@ async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
         : `${publishedCount} عنصر Public Media منشور من topics.`
   });
   const compositionCounts = [
-    ["home_composition_assignment_count", "Home CMS composition", 4],
     ["media_hub_composition_assignment_count", "Media Hub composition", 5],
     ["media_sidebar_composition_assignment_count", "Media Sidebar composition", 18],
     ["media_hero_composition_assignment_count", "Media Center hero composition", 6],
   ] as const;
+  const footerComposition = evaluateFooterCompositionProof({
+    singleSource: proof.footer_single_source,
+    orphanSettings: proof.footer_orphan_setting_count,
+    unresolvedReferences: proof.public_composition_unresolved_reference_count,
+    historicalAudits: proof.footer_public_composition_audit_count,
+    publishedHomeAssignments: proof.home_composition_assignment_count,
+    mediaHubAssignments: proof.media_hub_composition_assignment_count,
+    mediaSidebarAssignments: proof.media_sidebar_composition_assignment_count,
+    mediaHeroAssignments: proof.media_hero_composition_assignment_count,
+  }, footerProvenance);
+  const homeStatus = footerComposition.ok ? footerComposition.homeStatus : "fail";
+  checks.push({
+    id: "home_composition_assignment_count",
+    dimension: "infrastructure",
+    status: homeStatus,
+    weight: 6,
+    title: "Home CMS composition",
+    detail: homeStatus === "pass"
+      ? "4 canonical published assignments are active."
+      : homeStatus === "warning"
+        ? "هوية Home سليمة وقابلة للإدارة، لكنها غير منشورة؛ لم يثبت اكتمال شروط النشر."
+        : "لم يثبت عقد Home؛ النشر يظل مشروطًا بأربعة إسنادات منشورة وصالحة وفق العقد الحالي.",
+  });
+  if (!footerComposition.ok || footerComposition.footerStatus !== null) {
+    const footerStatus = footerComposition.ok ? footerComposition.footerStatus! : "fail";
+    checks.push({
+      id: "footer_publication_readiness",
+      dimension: "infrastructure",
+      status: footerStatus,
+      weight: 6,
+      title: "Footer publication readiness",
+      detail: footerStatus === "pass"
+        ? "مدخلات Footer الحالية صالحة ومكتملة وفق مالك جاهزية النشر."
+        : footerStatus === "warning"
+          ? "بنية Footer سليمة وقابلة للإدارة، ومدخلات النشر لم تكتمل بعد."
+          : "تعذر إثبات سلامة بنية Footer أو دليل التهيئة الحالي.",
+    });
+  }
   for (const [key, title, expected] of compositionCounts) {
     checks.push({
       id: key,
@@ -270,12 +307,14 @@ async function buildInfrastructureChecks(): Promise<GlobalSeoHealthCheck[]> {
   checks.push({
     id: "footer_public_composition_audit_evidence",
     dimension: "infrastructure",
-    status: proof.footer_public_composition_audit_count === 2 ? "pass" : "fail",
+    status: footerComposition.ok ? "pass" : "fail",
     weight: 6,
     title: "Footer/Public Composition migration evidence",
-    detail: proof.footer_public_composition_audit_count === 2
-      ? "Audit preserves the removed Footer owner and the verified CMS bootstrap-retirement inventory."
-      : `Expected 2 closure Audit rows; database proof returned ${String(proof.footer_public_composition_audit_count ?? "unavailable")}.`,
+    detail: !footerComposition.ok
+      ? "لم يثبت تطابق دليل تهيئة Footer/Home مع الحالة الحالية."
+      : footerComposition.path === "proven_fresh"
+        ? "تهيئة جديدة مثبتة بلا أحداث ترحيل تاريخية مصطنعة؛ الجاهزية للنشر تُفحص منفصلة."
+        : `Audit preserves the removed Footer owner and the verified CMS bootstrap-retirement inventory.${footerComposition.revisionAttested ? " Migration revision attested." : " Historical evidence compatible; migration revision is not independently attested."}`,
   });
   return checks;
 }

@@ -1628,6 +1628,16 @@ export type AdminCollectionTransportConsumer = {
   callerSourceFiles: readonly string[];
 };
 
+/** Adoption evidence only; runtime options remain bound at the consumer. */
+export type AdminCollectionNavigationPrefetch = {
+  intent:
+    | { state: "adopted" }
+    | { state: "deferred"; reason: string };
+  adjacent:
+    | { state: "immediate_next" }
+    | { state: "deferred"; reason: string };
+};
+
 export type AdminCollectionSurfaceInventoryEntry = {
   id: string;
   /** Omitted means active; deprecated entries require owner-backed evidence. */
@@ -1663,6 +1673,8 @@ export type AdminCollectionSurfaceInventoryEntry = {
   queryMode: AdminCollectionQueryMode;
   /** Exact Data Runtime registry keys represented by this surface. */
   dataRegistryEntities: readonly AdminEntityListEntityKey[];
+  /** Required by source proof for registered server-page surfaces. */
+  navigationPrefetch?: AdminCollectionNavigationPrefetch;
   gridOwner:
     "AdminEntityList" | "AdminDataGrid" | "MediaCatalog" | "not_applicable";
   layoutOwner: string;
@@ -2009,6 +2021,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["topics"],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2052,6 +2068,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["categories"],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2093,6 +2113,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["series"],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2134,6 +2158,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["pages"],
+      navigationPrefetch: {
+        intent: { state: "deferred", reason: "Pages SEO-sort/full-read contract requires a separate decision before navigation prefetch adoption." },
+        adjacent: { state: "deferred", reason: "Pages SEO-sort/full-read contract requires a separate decision before navigation prefetch adoption." },
+      },
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2181,6 +2209,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["projects"],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2240,6 +2272,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
         "project_locations_main_area",
         "project_locations_sub_area",
       ],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2291,6 +2327,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["redirects"],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2463,6 +2503,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["activity_log"],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -2651,6 +2695,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
         "project_tracking_items",
         "project_tracking_updates",
       ],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       reorderOwner: "domain_owned_atomic_reorder",
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       consumerAdoptionEvidence: [
@@ -3322,6 +3370,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["admin_users"],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminEntityListPageLayout + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,
@@ -3720,6 +3772,10 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       paginationOwner: "AdminTablePagination",
       queryMode: "server-page",
       dataRegistryEntities: ["topics_without_image"],
+      navigationPrefetch: {
+        intent: { state: "adopted" },
+        adjacent: { state: "immediate_next" },
+      },
       layoutOwner: "AdminPageExperience + AdminEntityListSurface",
       requiredAdoption: [],
       exceptionRationale: null,

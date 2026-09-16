@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "qa:isolated-supabase": "node --experimental-strip-types scripts/qa-isolated-supabase.mts",
+    "verify:isolated-supabase": "node --experimental-strip-types scripts/verify-isolated-supabase.mts",
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",

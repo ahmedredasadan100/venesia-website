@@ -294,6 +294,7 @@ export default function TopicsWithoutImageReportClient({
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    adjacentPrefetch: true,
   });
   const columns = useMemo(() => createReportColumns(), []);
   const hasFilters =
@@ -404,6 +405,7 @@ export default function TopicsWithoutImageReportClient({
           totalPages={controller.result.pagination.totalPages}
           emptySummaryText="لا توجد موضوعات بلا صورة"
           onPageChange={controller.setPage}
+          onPageIntent={controller.prefetchPage}
           onPageSizeChange={controller.setPageSize}
         />
       </AdminEntityListTableRegion>

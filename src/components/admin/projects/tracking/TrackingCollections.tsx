@@ -261,11 +261,13 @@ function TrackingPagination({
   basePath,
   result,
   onPage,
+  onPageIntent,
   onSize,
 }: {
   basePath: string;
   result: AdminEntityListResult<unknown, unknown>;
   onPage: (page: number) => void;
+  onPageIntent: (page: number) => Promise<void>;
   onSize: (size: number) => void;
 }) {
   return (
@@ -278,6 +280,7 @@ function TrackingPagination({
       totalPages={result.pagination.totalPages}
       emptySummaryText="لا توجد عناصر"
       onPageChange={onPage}
+      onPageIntent={onPageIntent}
       onPageSizeChange={onSize}
     />
   );
@@ -303,6 +306,7 @@ export function TrackingStagesCollection({
     initialQuery,
     initialResult,
     staleTimeMs: 15_000,
+    adjacentPrefetch: true,
     routeOwnedParams,
     constrainQuery: useCallback(
       (
@@ -769,6 +773,7 @@ export function TrackingStagesCollection({
               basePath={basePath}
               result={controller.result}
               onPage={controller.setPage}
+              onPageIntent={controller.prefetchPage}
               onSize={controller.setPageSize}
             />
           </AdminEntityListTableRegion>
@@ -819,6 +824,7 @@ export function TrackingItemsCollection({
     initialQuery,
     initialResult,
     staleTimeMs: 15_000,
+    adjacentPrefetch: true,
     routeOwnedParams,
     constrainQuery: useCallback(
       (query: AdminEntityListQuery<TrackingItemFilters, TrackingItemSort>) => ({
@@ -1263,6 +1269,7 @@ export function TrackingItemsCollection({
               basePath={basePath}
               result={controller.result}
               onPage={controller.setPage}
+              onPageIntent={controller.prefetchPage}
               onSize={controller.setPageSize}
             />
           </AdminEntityListTableRegion>
@@ -1311,6 +1318,7 @@ export function TrackingUpdatesCollection({
     initialQuery,
     initialResult,
     staleTimeMs: 15_000,
+    adjacentPrefetch: true,
     routeOwnedParams,
     constrainQuery: useCallback(
       (
@@ -1673,6 +1681,7 @@ export function TrackingUpdatesCollection({
               basePath={basePath}
               result={controller.result}
               onPage={controller.setPage}
+              onPageIntent={controller.prefetchPage}
               onSize={controller.setPageSize}
             />
           </AdminEntityListTableRegion>

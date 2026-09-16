@@ -4,6 +4,11 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertMigrationSourceProvenance,
+  classifyWholeFileMigrationProvenance,
+  loadMigrationHistoryCompatibility,
+} from "./lib/migration-provenance.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path: string) =>
@@ -99,6 +104,13 @@ for (const path of [
 const migration = read(migrationPath);
 const aclCorrection = read(aclCorrectionPath);
 const schemaParityForwardFix = read(schemaParityForwardFixPath);
+const schemaParityHistoryCompatibility = loadMigrationHistoryCompatibility();
+const schemaParitySource = {
+  version: schemaParityHistoryCompatibility.version,
+  name: schemaParityHistoryCompatibility.name,
+  sql: schemaParityForwardFix,
+};
+assertMigrationSourceProvenance(schemaParitySource);
 const saveRpcConflictArbiterFix = read(saveRpcConflictArbiterFixPath);
 const projectRowActionsMigration = read(projectRowActionsMigrationPath);
 const projectDomainHardeningMigration = read(
@@ -869,12 +881,50 @@ const saveRpcConflictConstraintNames = [
   "project_videos_client_unique",
 ];
 check(
-  "applied schema parity forward-fix fingerprint remains frozen",
+  "applied schema parity forward-fix fingerprint remains frozen in its immutable archive",
   createHash("sha256")
-    .update(schemaParityForwardFix)
+    .update(schemaParityHistoryCompatibility.historicalSql)
     .digest("hex")
     .toUpperCase() ===
     "357D8892AB6165E9488D0612E0D20A27B269DC7D9A06A62F272642EB43FF3990",
+);
+check(
+  "corrected schema parity source is frozen by the single migration provenance record",
+  createHash("sha256").update(schemaParityForwardFix).digest("hex")
+    === schemaParityHistoryCompatibility.correctedSourceSha256
+    && schemaParityHistoryCompatibility.historicalSourceSha256
+      !== schemaParityHistoryCompatibility.correctedSourceSha256
+    && schemaParityHistoryCompatibility.existingDatabasePolicy
+      === "preserve-recorded-revision-without-replay-or-registry-rewrite"
+    && schemaParityHistoryCompatibility.freshDatabasePolicy
+      === "execute-corrected-canonical-source",
+);
+check(
+  "schema parity registry recognizes exact historical and corrected revisions without erasing their provenance",
+  classifyWholeFileMigrationProvenance({
+    version: schemaParitySource.version, name: schemaParitySource.name,
+    statements: [schemaParityHistoryCompatibility.historicalSql],
+  }, schemaParitySource)?.revision === "historical-applied"
+    && classifyWholeFileMigrationProvenance({
+      version: schemaParitySource.version, name: schemaParitySource.name,
+      statements: [schemaParityForwardFix],
+    }, schemaParitySource)?.revision === "fresh-bootstrap-corrected"
+    && classifyWholeFileMigrationProvenance({
+      version: schemaParitySource.version, name: schemaParitySource.name,
+      statements: [`${schemaParityForwardFix}\n-- unapproved revision`],
+    }, schemaParitySource) === null,
+);
+check(
+  "schema parity audit adopts the migration-owned historical identities with strict semantic and catalog controls",
+  constraintDefinitionSemanticSelfTest.status === 0
+    && constraintDefinitionSemanticSelfTest.stdout.includes(
+      "historical CHECK identity self-test passed 6 positive and 75 negative controls",
+    )
+    && schemaParityAudit.includes("extractHistoricalCheckIdentities")
+    && schemaParityAudit.includes("actual_constraint_name")
+    && schemaParityAudit.includes("constraint_column_names")
+    && schemaParityAudit.includes("referenced_keys_is_null")
+    && schemaParityAudit.includes("classifyWholeFileMigrationProvenance"),
 );
 check(
   "save RPC conflict-arbiter correction is one additive fail-closed transaction",

@@ -1,6 +1,7 @@
 import { strict as assert } from "node:assert";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
+import { fileURLToPath } from "node:url";
 import { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
@@ -33,6 +34,11 @@ import {
   buildAdminListSearchOrFilter,
   escapeAdminListSearchTerm,
 } from "../src/lib/admin/admin-list-search.ts";
+import {
+  ADMIN_COLLECTION_SURFACE_ADOPTION,
+  type AdminCollectionSurfaceInventoryEntry,
+} from "../src/lib/admin/interaction-system/adoption-manifest.ts";
+import { collectAdminNavigationAdoptionFailures } from "./lib/admin-navigation-source-proof.mts";
 
 type Filters = { status: "all" | "published"; category: number | null };
 type SortField =
@@ -701,71 +707,132 @@ assert.equal(imageBootstrap.get("status"), "published");
 assert.equal(imageBootstrap.get("q"), "عنوان");
 assert.equal(projectTopicsParams({}).has("image"), false);
 
-// Live consumers must wire pagination intent directly to the same Data Runtime
-// controller used for activation; synthetic runtime fixtures alone cannot prove adoption.
-for (const sourcePath of [
-  "../src/components/admin/content/TopicsListClient.tsx",
-  "../src/app/admin/content/categories/CategoriesListClient.tsx",
-  "../src/app/admin/content/series/SeriesTableClient.tsx",
-]) {
-  const source = ts.createSourceFile(sourcePath,
-    readFileSync(new URL(sourcePath, import.meta.url), "utf8"),
-    ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-  const paginationNodes: (ts.JsxOpeningElement | ts.JsxSelfClosingElement)[] = [];
-  const controllerCalls: ts.CallExpression[] = [];
-  function findPagination(node: ts.Node) {
-    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
-      node.tagName.getText(source) === "AdminTablePagination") paginationNodes.push(node);
-    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) &&
-      node.expression.text === "useAdminEntityListController") controllerCalls.push(node);
-    ts.forEachChild(node, findPagination);
-  }
-  findPagination(source);
-  assert.equal(paginationNodes.length, 1, `${sourcePath}: one canonical pagination surface`);
-  assert.equal(controllerCalls.length, 1, `${sourcePath}: one existing Data Runtime controller`);
-  const controllerOptions = controllerCalls[0].arguments[0];
-  assert.ok(controllerOptions && ts.isObjectLiteralExpression(controllerOptions),
-    `${sourcePath}: controller adoption options must remain explicit`);
-  const adjacentOption = controllerOptions.properties.find((property) =>
-    ts.isPropertyAssignment(property) && property.name.getText(source) === "adjacentPrefetch");
-  if (sourcePath.endsWith("/TopicsListClient.tsx")) {
-    assert.ok(adjacentOption && ts.isPropertyAssignment(adjacentOption) &&
-      adjacentOption.initializer.kind === ts.SyntaxKind.TrueKeyword,
-    "Topics must opt directly into the shared bounded adjacent prefetch option");
-  } else {
-    assert.ok(!adjacentOption || (ts.isPropertyAssignment(adjacentOption) &&
-      adjacentOption.initializer.kind === ts.SyntaxKind.FalseKeyword),
-    `${sourcePath}: this proof phase must not enable adjacent adoption outside Topics`);
-  }
-  for (const [prop, method] of [["onPageChange", "setPage"], ["onPageIntent", "prefetchPage"], ["onPageSizeChange", "setPageSize"]]) {
-    const attribute = paginationNodes[0].attributes.properties.find((item) =>
-      ts.isJsxAttribute(item) && item.name.getText(source) === prop);
-    assert.ok(attribute && ts.isJsxAttribute(attribute) && attribute.initializer &&
-      ts.isJsxExpression(attribute.initializer) &&
-      attribute.initializer.expression?.getText(source) === `controller.${method}`,
-    `${sourcePath}: ${prop} must adopt the shared controller directly`);
-  }
-}
+// Adoption is derived from the existing ledger and actual Admin route graph.
+// Runtime behavior/latency still requires the separate mounted/browser proof.
+const navigationRoot = fileURLToPath(new URL("../", import.meta.url));
+const navigationSurfaces: readonly AdminCollectionSurfaceInventoryEntry[] = ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces;
+assert.deepEqual(collectAdminNavigationAdoptionFailures({
+  root: navigationRoot,
+  surfaces: navigationSurfaces,
+}), [], "Every registered server-page consumer must prove its declared navigation bindings.");
 
-// A direct owner option is the only Topics prediction binding. Scheduling/fetching
-// stays with the shared controller; do not prove adoption through a local effect.
-const adjacentTopicsSource = ts.createSourceFile("TopicsListClient.tsx",
-  readFileSync(new URL("../src/components/admin/content/TopicsListClient.tsx", import.meta.url), "utf8"),
-  ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-function verifyNoTopicsPredictionOwner(node: ts.Node) {
-  if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-    assert.notEqual(node.expression.getText(adjacentTopicsSource), "controller.prefetchPage",
-      "Topics must not add its own predictive scheduling calls");
-    assert.notEqual(node.expression.name.text, "prefetchQuery",
-      "Topics must not own a parallel prefetch query lifecycle");
-  }
-  if (ts.isNewExpression(node) && ts.isIdentifier(node.expression)) {
-    assert.notEqual(node.expression.text, "QueryClient",
-      "Topics must reuse the existing Admin QueryClient boundary");
-  }
-  ts.forEachChild(node, verifyNoTopicsPredictionOwner);
+const navigationFixturePage = "src/app/admin/navigation-fixture/page.tsx";
+const navigationFixtureController = "src/lib/admin/entity-list/data-engine/client-controller.ts";
+const navigationFixturePagination = "src/components/admin/ui/AdminTablePagination.tsx";
+const navigationFixtureRegistry = "src/lib/admin/entity-list/data-engine/registry.ts";
+const navigationReference = navigationSurfaces.find((surface) => surface.navigationPrefetch?.adjacent.state === "immediate_next");
+assert.ok(navigationReference, "An adopted navigation reference must exist.");
+const navigationFixtureSurface: AdminCollectionSurfaceInventoryEntry = {
+  ...navigationReference,
+  id: "navigation-fixture",
+  routes: ["/admin/navigation-fixture"],
+  pageSourceFiles: [navigationFixturePage],
+  presentationSourceFiles: [navigationFixturePage],
+  consumerAdoptionEvidence: [],
+  dataRegistryEntities: ["topics"],
+  navigationPrefetch: { intent: { state: "adopted" }, adjacent: { state: "immediate_next" } },
+};
+const navigationFixtureSource = `
+import { useAdminEntityListController as useCollection } from "../../../lib/admin/entity-list/data-engine/client-controller";
+import Pagination from "../../../components/admin/ui/AdminTablePagination";
+export default function Collection() {
+  const data = useCollection({ entity: "topics", adjacentPrefetch: true });
+  return <Pagination onPageChange={data.setPage} onPageSizeChange={data.setPageSize} onPageIntent={data.prefetchPage} />;
+}`;
+function navigationFixtureFailures(source: string, surfaces: readonly AdminCollectionSurfaceInventoryEntry[] = [navigationFixtureSurface]) {
+  return collectAdminNavigationAdoptionFailures({
+    root: navigationRoot, surfaces, pageSourceFiles: [navigationFixturePage],
+    sourceOverrides: new Map([
+      [navigationFixturePage, source],
+      [navigationFixtureController, "export function useAdminEntityListController() {}"],
+      [navigationFixturePagination, "export default function AdminTablePagination() {}"],
+      [navigationFixtureRegistry, "export const adminEntityListAdapterRegistry = { topics: {} } as const;"],
+      ["src/lib/admin/navigation-fixture-keys.ts", "export const ENTITY_KEYS = { stages: 'topics', items: 'pages' } as const;"],
+    ]),
+  });
 }
-verifyNoTopicsPredictionOwner(adjacentTopicsSource);
+assert.deepEqual(navigationFixtureFailures(navigationFixtureSource), [], "Aliased direct owner bindings must pass.");
+const navigationNamespaceFixture = navigationFixtureSource.replace(
+  'import { useAdminEntityListController as useCollection } from "../../../lib/admin/entity-list/data-engine/client-controller";',
+  'import * as DataOwner from "../../../lib/admin/entity-list/data-engine/client-controller";',
+).replace("useCollection({", "DataOwner.useAdminEntityListController({");
+assert.deepEqual(navigationFixtureFailures(navigationNamespaceFixture), [], "A live namespace owner binding must retain its original context.");
+const navigationMemberFixture = `import { ENTITY_KEYS } from "../../../lib/admin/navigation-fixture-keys";\n` +
+  navigationFixtureSource.replace('entity: "topics"', "entity: ENTITY_KEYS.stages");
+assert.deepEqual(navigationFixtureFailures(navigationMemberFixture), [], "An imported entity map must resolve the selected member exactly.");
+assert.ok(navigationFixtureFailures(navigationMemberFixture.replace("ENTITY_KEYS.stages", "ENTITY_KEYS.items"))
+  .some((failure) => failure.endsWith("controller_entity_scope")), "Selecting the sibling Tracking-style entity must fail instead of proving the map's union.");
+const navigationParameterShadow = navigationFixtureSource.replace("function Collection()", "function Collection({ useCollection })");
+const navigationPagerShadow = navigationFixtureSource.replace("function Collection()", "function Collection({ Pagination })");
+const navigationDeadReturn = navigationFixtureSource.replace("return <Pagination", "if (false) return <Pagination").replace("/>;\n}", "/>;\n  return null;\n}");
+for (const [label, source, suffix] of [
+  ["missing intent", navigationFixtureSource.replace("onPageIntent={data.prefetchPage}", ""), "pagination_intent_binding"],
+  ["no-op intent", navigationFixtureSource.replace("{data.prefetchPage}", "{() => undefined}"), "pagination_intent_binding"],
+  ["wrong controller", navigationFixtureSource.replace("{data.prefetchPage}", "{other.prefetchPage}"), "pagination_intent_binding"],
+  ["missing adjacent option", navigationFixtureSource.replace(", adjacentPrefetch: true", ""), "adjacent_owner_option"],
+  ["local prediction", navigationFixtureSource.replace("return <Pagination", "data.prefetchPage(2); return <Pagination"), "consumer_prediction_owner"],
+  ["parallel client", navigationFixtureSource.replace("return <Pagination", "new QueryClient(); return <Pagination"), "consumer_query_client"],
+  ["local hook lookalike", navigationFixtureSource.replace("import { useAdminEntityListController as useCollection } from \"../../../lib/admin/entity-list/data-engine/client-controller\";", "function useCollection() { return {}; }"), "controller_unreachable"],
+  ["type-only owner", navigationFixtureSource.replace("import { useAdminEntityListController", "import type { useAdminEntityListController"), "controller_unreachable"],
+  ["hook parameter shadow", navigationParameterShadow, "controller_unreachable"],
+  ["hook local shadow", navigationFixtureSource.replace("const data = useCollection", "const useCollection = () => ({}); const data = useCollection"), "controller_unreachable"],
+  ["pager parameter shadow", navigationPagerShadow, "canonical_pagination_count"],
+  ["dead pagination return", navigationDeadReturn, "controller_unreachable"],
+  ["sibling hook cannot supply proof", navigationParameterShadow + "\nexport function registerCanonical(register) { register(useCollection); }", "controller_unreachable"],
+  ["sibling pager cannot supply proof", navigationPagerShadow + "\nexport function CanonicalPager(props) { return <Pagination {...props} />; }", "canonical_pagination_count"],
+] as const) {
+  assert.ok(navigationFixtureFailures(source).some((failure) => failure.endsWith(suffix)), `${label} must fail source proof.`);
+}
+assert.ok(navigationFixtureFailures(navigationFixtureSource, [{ ...navigationFixtureSurface, navigationPrefetch: undefined }])
+  .some((failure) => failure.endsWith("navigation_declaration_missing")));
+const deferredNavigation: AdminCollectionSurfaceInventoryEntry = {
+  ...navigationFixtureSurface,
+  navigationPrefetch: { intent: { state: "deferred", reason: "Measured budget pending." }, adjacent: { state: "deferred", reason: "Measured budget pending." } },
+};
+assert.ok(navigationFixtureFailures(navigationFixtureSource, [deferredNavigation]).some((failure) => failure.endsWith("adjacent_owner_option")), "An undeclared opt-in must fail.");
+assert.ok(navigationFixtureFailures(navigationFixtureSource, [{ ...deferredNavigation,
+  navigationPrefetch: { intent: { state: "deferred", reason: " " }, adjacent: { state: "immediate_next" } },
+}]).some((failure) => failure.endsWith("intent_deferred_reason")));
+assert.ok(navigationFixtureFailures(navigationFixtureSource, [{ ...deferredNavigation,
+  navigationPrefetch: { intent: { state: "deferred", reason: "Pending." }, adjacent: { state: "immediate_next" } },
+}]).some((failure) => failure.endsWith("adjacent_requires_intent")));
+assert.ok(navigationFixtureFailures(navigationFixtureSource, [{ ...navigationFixtureSurface, pageSourceFiles: ["src/app/admin/elsewhere/page.tsx"] }])
+  .some((failure) => failure.endsWith("unregistered_navigation_consumer")), "A new route using an existing entity must not escape registration.");
+
+const navigationWrapperSource = navigationFixtureSource.replace(
+  "<Pagination onPageChange={data.setPage} onPageSizeChange={data.setPageSize} onPageIntent={data.prefetchPage} />",
+  "<TrackingPagination onPage={data.setPage} onSize={data.setPageSize} onIntent={data.prefetchPage} />",
+) + `
+function TrackingPagination({ onPage, onSize, onIntent }) {
+  return <Pagination onPageChange={onPage} onPageSizeChange={onSize} onPageIntent={onIntent} />;
+}`;
+assert.deepEqual(navigationFixtureFailures(navigationWrapperSource), [], "The existing thin Tracking-style wrapper must prove both forwarding edges.");
+assert.ok(navigationFixtureFailures(navigationWrapperSource.replace("onPageIntent={onIntent}", "")).some((failure) => failure.endsWith("pagination_intent_binding")),
+  "Mentioning intent at the caller cannot hide missing wrapper forwarding.");
+const navigationGroupedReference = navigationSurfaces.flatMap((surface) => surface.consumerAdoptionEvidence)
+  .find((consumer) => consumer.dataRegistryEntities.length > 0);
+assert.ok(navigationGroupedReference, "Grouped server-page adoption must remain represented.");
+const navigationGroupedFixture: AdminCollectionSurfaceInventoryEntry = {
+  ...navigationFixtureSurface,
+  consumerAdoptionEvidence: [{
+    ...navigationGroupedReference,
+    route: "/admin/navigation-fixture",
+    pageSourceFile: navigationFixturePage,
+    presentationOwner: navigationFixturePage,
+    executableBindings: [{ sourceFile: navigationFixturePage, exportNames: ["Collection"] }],
+    dataRegistryEntities: ["topics"],
+  }],
+};
+assert.deepEqual(navigationFixtureFailures(navigationWrapperSource, [navigationGroupedFixture]), [], "Grouped proof binds the consumer's own function and its wrapper.");
+assert.ok(navigationFixtureFailures(navigationWrapperSource, [{ ...navigationGroupedFixture,
+  consumerAdoptionEvidence: navigationGroupedFixture.consumerAdoptionEvidence.map((consumer) => ({ ...consumer,
+    executableBindings: [{ sourceFile: navigationFixturePage, exportNames: ["DifferentCollection"] }],
+  })),
+}]).some((failure) => failure.endsWith("grouped_consumer_binding")), "Another grouped export cannot supply this consumer's proof.");
+assert.deepEqual(navigationFixtureFailures(navigationFixtureSource, [navigationFixtureSurface, {
+  ...navigationFixtureSurface, id: "bounded-fixture", queryMode: "bounded-client", dataRegistryEntities: [],
+  pageSourceFiles: [], navigationPrefetch: undefined,
+}]), [], "Complete bounded-client collections do not claim an adjacent-page adoption.");
 
 // Execute the actual Series adapters with committed-warning action results.
 // Server actions and the mutation transport are isolated; no writes are issued.

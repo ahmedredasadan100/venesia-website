@@ -1,5 +1,17 @@
 import { expect, test } from "playwright/test";
 
+// Only the canonical isolated lifecycle supplies this expectation after DB readback.
+// Configured environments retain the existing launcher and detail expectations.
+const isolatedTopicsCmsState = process.env.E2E_TOPICS_CMS_STATE;
+if (isolatedTopicsCmsState !== undefined) {
+  if (isolatedTopicsCmsState !== "absent") throw new Error("Unknown isolated Topics CMS expectation.");
+  const target = new URL(process.env.E2E_BASE_URL ?? "http://invalid.local");
+  if (target.protocol !== "http:" || target.hostname !== "127.0.0.1" || !target.port
+    || target.username || target.password || target.pathname !== "/" || target.search || target.hash) {
+    throw new Error("The absent Topics CMS expectation requires an explicit isolated loopback server.");
+  }
+}
+
 test.describe("public and unauthenticated browser foundation", () => {
   test("rejects unauthenticated Admin page and API access", async ({ page }) => {
     await page.goto("/admin/content/topics");
@@ -70,7 +82,11 @@ test.describe("public and unauthenticated browser foundation", () => {
       .locator('a[href^="/topics/"]')
       .first()
       .getAttribute("href");
-    test.skip(!firstTopicHref, "No published Topic is available for read-only detail coverage.");
+    if (isolatedTopicsCmsState === "absent") {
+      expect(firstTopicHref, "The isolated fixture must provide real published article coverage.").toBeTruthy();
+    } else {
+      test.skip(!firstTopicHref, "No published Topic is available for read-only detail coverage.");
+    }
 
     const detailResponse = await page.goto(firstTopicHref!, { waitUntil: "domcontentloaded" });
     expect(detailResponse?.ok()).toBeTruthy();
@@ -79,7 +95,7 @@ test.describe("public and unauthenticated browser foundation", () => {
     expect(await page.locator("article .article-rich-text h2, article .article-rich-text h3, article .article-rich-text h4").count()).toBeGreaterThan(0);
   });
 
-  test("Search Platform launchers converge on /search and the central listbox remains unclipped", async ({ page }) => {
+  test("Search Platform launchers converge on /search and the central listbox remains unclipped", async ({ page, baseURL }) => {
     test.setTimeout(90_000);
 
     async function verifyLauncher(basePath: string) {
@@ -99,7 +115,22 @@ test.describe("public and unauthenticated browser foundation", () => {
       expect(destination.searchParams.get("types")).toBe(configuredScope || null);
     }
 
-    await verifyLauncher("/topics");
+    if (isolatedTopicsCmsState === "absent") {
+      expect(new URL(baseURL!).origin).toBe(new URL(process.env.E2E_BASE_URL!).origin);
+      const response = await page.goto("/topics", { waitUntil: "domcontentloaded" });
+      expect(response?.ok()).toBeTruthy();
+      await expect(page.locator('[data-search-platform-module="launcher"]')).toHaveCount(0);
+      await expect(page.locator("h1")).toHaveCount(1);
+      const listing = page.locator('[data-topics-listing-assignment="fallback"][data-topics-listing-public-path="/topics"]');
+      await expect(listing).toHaveCount(1);
+      await expect(listing).toBeVisible();
+      await expect(listing.locator('a[href^="/topics/"]').first()).toBeVisible();
+      await expect(page.locator('[data-topics-listing-assignment]:not([data-topics-listing-assignment="fallback"])')).toHaveCount(0);
+      await expect(listing.getByRole("link", { name: "الأحدث", exact: true })).toBeVisible();
+      await expect(listing.getByRole("link", { name: "الأقدم", exact: true })).toBeVisible();
+    } else {
+      await verifyLauncher("/topics");
+    }
     await verifyLauncher("/media-center/news");
 
     await page.goto(`/search?q=${encodeURIComponent("\u0645\u0644\u0643\u064a\u0629")}`, {

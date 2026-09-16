@@ -348,6 +348,7 @@ export default function ProjectLocationsManagementClient({
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    adjacentPrefetch: true,
   });
   const instant = useAdminEntityInstantMutation<ProjectLocationManagementRow>(
     entityKey,
@@ -569,6 +570,7 @@ export default function ProjectLocationsManagementClient({
               totalPages={controller.result.pagination.totalPages}
               emptySummaryText="لا توجد مواقع"
               onPageChange={controller.setPage}
+              onPageIntent={controller.prefetchPage}
               onPageSizeChange={controller.setPageSize}
             />
           </AdminEntityListTableRegion>

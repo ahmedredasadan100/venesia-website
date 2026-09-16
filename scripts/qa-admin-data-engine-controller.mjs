@@ -6,7 +6,7 @@
  *   - fresh cached query → 0 endpoint requests
  * and covers race / failure contracts with route interception.
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
@@ -840,10 +840,409 @@ async function runAdjacentPrefetchCases({page,origin,requests,observations,snaps
   observations.push({label:"adjacent proof boundary",note:"Actual shared controller, QueryClient, cache keys and instant mutation owners; GET transport and execute results are synthetic. No Auth, DB, domain action, physical paint or production-latency claim. Quiet no-chain observation is150ms after two animation frames."});
 }
 
+/** Source inventory only: importing the server registry would initialize DB owners. */
+async function navigationAdoptionPlan(root, eligibilityOnly = false) {
+  const require = createRequire(import.meta.url);
+  const ts = require("typescript");
+  const registryFile = "src/lib/admin/entity-list/data-engine/registry.ts";
+  const manifestFile = "src/lib/admin/interaction-system/adoption-manifest.ts";
+  const registrySource = await readFile(path.join(root, registryFile), "utf8");
+  const manifestSource = await readFile(path.join(root, manifestFile), "utf8");
+  const registryAst = ts.createSourceFile(registryFile, registrySource, ts.ScriptTarget.Latest, true);
+  let registryNode;
+  const visit = node => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(registryAst) === "adminEntityListAdapterRegistry") registryNode = node.initializer;
+    ts.forEachChild(node, visit);
+  };
+  visit(registryAst);
+  while (registryNode && (ts.isAsExpression(registryNode) || ts.isSatisfiesExpression(registryNode))) registryNode = registryNode.expression;
+  if (!registryNode || !ts.isObjectLiteralExpression(registryNode)) throw new Error("Navigation fixture cannot derive the current registry");
+  const entities = registryNode.properties.map(property => {
+    if (!ts.isPropertyAssignment(property) || !ts.isIdentifier(property.name)) throw new Error("Unclassified registry member");
+    return property.name.text;
+  });
+  const manifestAst = ts.createSourceFile(manifestFile, manifestSource, ts.ScriptTarget.Latest, true);
+  if (manifestAst.statements.some(node => ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly)) throw new Error("Manifest acquired a runtime import; review isolated inventory loading");
+  const manifest = { exports: {} };
+  const compiled = ts.transpileModule(manifestSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  new Function("module", "exports", "require", compiled)(manifest, manifest.exports, () => { throw new Error("Unexpected manifest dependency"); });
+  const surfaces = manifest.exports.ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces;
+  const actions = manifest.exports.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.entities;
+  const specs = [
+    ["topics", "content/entity-list-contracts/topics.ts", "topicsQueryContract", "src/components/admin/content/TopicsListClient.tsx"],
+    ["categories", "content/entity-list-contracts/categories.ts", "categoriesQueryContract", "src/app/admin/content/categories/CategoriesListClient.tsx"],
+    ["series", "content/entity-list-contracts/series.ts", "seriesQueryContract", "src/app/admin/content/series/SeriesTableClient.tsx"],
+    ["pages", "pages/entity-list-contract.ts", "pagesQueryContract", "src/app/admin/pages-blocks/pages/PagesTableClient.tsx"],
+    ["projects", "projects/entity-list-contract.ts", "projectsQueryContract", "src/app/admin/projects/ProjectsTableClient.tsx"],
+    ...entities.filter(entity => entity.startsWith("project_locations_")).map(entity => [entity, "projects/location-management-contract.ts", "projectLocationsQueryContract", "src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx"]),
+    ...["stages", "items", "updates"].map(kind => [`project_tracking_${kind}`, "projects/tracking-contract.ts", `tracking${kind[0].toUpperCase()}${kind.slice(1)}QueryContract`, "src/components/admin/projects/tracking/TrackingCollections.tsx"]),
+    ["redirects", "redirects/entity-list-contract.ts", "redirectsQueryContract", "src/app/admin/seo/redirects/RedirectsClient.tsx"],
+    ["activity_log", "audit/entity-list-contract.ts", "activityLogQueryContract", "src/app/admin/activity-log/ActivityLogClient.tsx"],
+    ["topics_without_image", "media-catalog/topics-without-image-entity-list-contract.ts", "topicsWithoutImageQueryContract", "src/app/admin/reports/topics-without-image/TopicsWithoutImageReportClient.tsx"],
+    ["admin_users", "users/entity-list-contract.ts", "adminUsersQueryContract", "src/app/admin/users-roles/UsersManagementClient.tsx"],
+  ];
+  const byEntity = new Map(specs.map(([entity, contractFile, contractExport, consumerSourceFile]) => [entity, { entity, contractFile: `src/lib/admin/${contractFile}`, contractExport, consumerSourceFile }]));
+  if (byEntity.size !== specs.length || entities.some(entity => !byEntity.has(entity)) || [...byEntity.keys()].some(entity => !entities.includes(entity))) throw new Error("Registry/profile drift: classify every current key before running");
+  const profiles = [];
+  const sourceHashes = {};
+  for (const file of [
+    "scripts/qa-admin-data-engine-controller.mjs", "package.json", "package-lock.json",
+    "src/components/admin/entity-list/AdminEntityListQueryProvider.tsx",
+    "src/components/admin/entity-list/AdminEntityList.tsx",
+    "src/components/admin/ui/AdminTablePagination.tsx",
+    "src/components/admin/AdminFeedbackProvider.tsx",
+    "src/lib/admin/entity-list/data-engine/client-controller.ts",
+    "src/lib/admin/entity-list/data-engine/contracts.ts",
+    "src/lib/admin/entity-list/data-engine/query-keys.ts",
+    "src/lib/admin/entity-list/data-engine/normalized-result-cache.ts",
+    "src/lib/admin/entity-list/data-engine/instant-mutation.ts",
+    "src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts",
+    "src/lib/admin/entity-list/data-engine/interaction-state.ts",
+  ]) sourceHashes[file] = createHash("sha256").update(await readFile(path.join(root,file))).digest("hex");
+  for (const spec of byEntity.values()) {
+    const consumerSource = await readFile(path.join(root, spec.consumerSourceFile), "utf8");
+    const contractSource = await readFile(path.join(root, spec.contractFile), "utf8");
+    for (const [file, source] of [[spec.consumerSourceFile, consumerSource], [spec.contractFile, contractSource]]) sourceHashes[file] = createHash("sha256").update(source).digest("hex");
+    const consumers = surfaces.filter(surface => surface.dataRegistryEntities?.includes(spec.entity) && surface.presentationSourceFiles?.includes(spec.consumerSourceFile)).map(surface => surface.id);
+    if (!consumers.length) throw new Error(`No current Collection manifest binding: ${spec.entity}`);
+    const staleTimeMs = spec.entity.startsWith("project_tracking_") || spec.entity === "activity_log" ? 15_000 : 30_000;
+    if (!new RegExp(`staleTimeMs:\\s*${staleTimeMs === 15_000 ? "15_?000" : "30_?000"}`).test(consumerSource)) throw new Error(`Review actual consumer TTL: ${spec.entity}`);
+    const actionEntry = actions.find(entry => entry.entity === spec.entity);
+    const mutable = Boolean(actionEntry && ["visibility", "featured", "duplicate", "archive", "delete"].some(action => actionEntry.actions[action] === "adopted"));
+    const mutationAction = actionEntry && ["visibility", "featured", "duplicate", "archive", "delete"].find(action => actionEntry.actions[action] === "adopted");
+    const common = { ...spec, consumers, staleTimeMs, mutable, mutationAction };
+    if (spec.entity === "projects") {
+      for (const projectType of ["residential", "commercial"]) profiles.push({ ...common, id: `projects:${projectType}`, routeOwnedParams: { type: projectType }, routeFilters: { projectType } });
+    } else if (spec.entity.startsWith("project_tracking_")) {
+      const routeOwnedParams = { project_id: "101" }, routeFilters = { projectId: 101 };
+      if (spec.entity === "project_tracking_items") { routeOwnedParams.stage_id = "201"; routeFilters.stageId = 201; }
+      if (spec.entity === "project_tracking_updates") { routeOwnedParams.item_id = "301"; routeFilters.itemId = 301; }
+      profiles.push({ ...common, id: spec.entity, routeOwnedParams, routeFilters });
+    } else profiles.push({ ...common, id: spec.entity, routeOwnedParams: {}, routeFilters: {} });
+  }
+  const readArgument = name => {
+    const index = process.argv.indexOf(name);
+    if (index < 0) return null;
+    const value = process.argv[index + 1];
+    if (!value || value.startsWith("--")) throw new Error(`${name} requires an explicit comma-separated selection`);
+    return value.split(",").filter(Boolean);
+  };
+  const requestedProfiles = readArgument("--profiles"), requestedConsumers = readArgument("--consumers");
+  if (Boolean(requestedProfiles) === Boolean(requestedConsumers)) throw new Error("Use exactly one of --profiles <ids|all> or --consumers <manifest ids>");
+  if (requestedProfiles?.some(id => id !== "all" && !profiles.some(profile => profile.id === id))) throw new Error("Unknown navigation profile");
+  if (requestedConsumers?.some(id => !profiles.some(profile => profile.consumers.includes(id)))) throw new Error("Consumer is not mapped to a current server-page profile");
+  const selected = profiles.filter(profile => requestedProfiles ? requestedProfiles.includes("all") || requestedProfiles.includes(profile.id) : profile.consumers.some(id => requestedConsumers.includes(id)));
+  if (!selected.length) throw new Error("Empty navigation selection");
+  let reachableAdoptionProof;
+  if (eligibilityOnly) {
+    if (requestedProfiles?.includes("all")) throw new Error("Eligibility proof requires an explicit bounded selection, never all profiles");
+    const proofFile = "scripts/lib/admin-navigation-source-proof.mts";
+    const { collectAdminNavigationAdoptionFailures } = await import("./lib/admin-navigation-source-proof.mts");
+    const failures = collectAdminNavigationAdoptionFailures({ root, surfaces });
+    if (failures.length) throw new Error(`Current reachable navigation adoption proof failed: ${failures.join("; ")}`);
+    for (const profile of selected) {
+      const declarations = profile.consumers.map(id => surfaces.find(surface => surface.id === id));
+      if (declarations.some(surface => surface.navigationPrefetch?.intent.state !== "adopted" || surface.navigationPrefetch?.adjacent.state !== "immediate_next")) {
+        throw new Error(`Selected consumer has not adopted both existing capabilities: ${profile.id}`);
+      }
+      const parsed=ts.createSourceFile(profile.consumerSourceFile,await readFile(path.join(root,profile.consumerSourceFile),"utf8"),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+      const importedNames=(owner,exportName)=>parsed.statements.flatMap(statement=>{
+        if(!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier) || !statement.moduleSpecifier.text.startsWith(".") || statement.importClause?.isTypeOnly)return [];
+        const imported=path.resolve(root,path.dirname(profile.consumerSourceFile),statement.moduleSpecifier.text).replace(/\.(?:ts|tsx)$/u,"");
+        if(imported!==path.resolve(root,owner).replace(/\.(?:ts|tsx)$/u,""))return [];
+        const bindings=statement.importClause?.namedBindings;
+        return bindings && ts.isNamedImports(bindings)?bindings.elements.filter(element=>!element.isTypeOnly && (element.propertyName?.text??element.name.text)===exportName).map(element=>element.name.text):[];
+      });
+      const controllers=importedNames("src/lib/admin/entity-list/data-engine/client-controller.ts","useAdminEntityListController");
+      const contracts=importedNames(profile.contractFile,profile.contractExport);
+      const boundOptions=[];
+      const findBinding=node=>{
+        if(ts.isCallExpression(node) && ts.isIdentifier(node.expression) && controllers.includes(node.expression.text) && node.arguments[0] && ts.isObjectLiteralExpression(node.arguments[0])) {
+          const members=node.arguments[0].properties;
+          const value=name=>members.find(member=>ts.isPropertyAssignment(member) && member.name.getText(parsed)===name)?.initializer;
+          const actualContract=value("contract");
+          if(actualContract && ts.isIdentifier(actualContract) && contracts.includes(actualContract.text))boundOptions.push({adjacent:value("adjacentPrefetch"),staleTime:value("staleTimeMs")});
+        }
+        ts.forEachChild(node,findBinding);
+      };
+      findBinding(parsed);
+      if(boundOptions.length!==1 || boundOptions[0].adjacent?.kind!==ts.SyntaxKind.TrueKeyword || !boundOptions[0].staleTime || !ts.isNumericLiteral(boundOptions[0].staleTime) || Number(boundOptions[0].staleTime.text.replaceAll("_",""))!==profile.staleTimeMs) {
+        throw new Error(`The fixture contract/TTL does not bind to this consumer's adopted controller: ${profile.id}`);
+      }
+      profile.controllerInputProof={sourceFile:profile.consumerSourceFile,contractFile:profile.contractFile,contractExport:profile.contractExport,staleTimeMs:profile.staleTimeMs,adjacentPrefetch:true};
+      // These options come from the current manifest only after its reachable
+      // production controller/pagination bindings pass the existing AST owner.
+      profile.navigationPolicy = {
+        intent: declarations.every(surface => surface.navigationPrefetch.intent.state === "adopted"),
+        adjacent: declarations.every(surface => surface.navigationPrefetch.adjacent.state === "immediate_next"),
+      };
+      for (const file of declarations.flatMap(surface => surface.pageSourceFiles)) {
+        sourceHashes[file] = createHash("sha256").update(await readFile(path.join(root,file))).digest("hex");
+      }
+    }
+    for (const file of [registryFile,manifestFile,proofFile,"scripts/lib/typescript-executable-graph.mts"]) {
+      sourceHashes[file] = createHash("sha256").update(await readFile(path.join(root,file))).digest("hex");
+    }
+    reachableAdoptionProof = { owner: proofFile, failures, selectedConsumers: [...new Set(selected.flatMap(profile=>profile.consumers))],
+      claim: "Current manifest declarations verified against reachable production controller/pagination bindings; consumer UI is not mounted by this fixture" };
+  }
+  return {
+    profiles: selected, specs: [...byEntity.values()], sourceHashes, eligibilityOnly,
+    coverage: {
+      registryFile, manifestFile, registrySha256: createHash("sha256").update(registrySource).digest("hex"), manifestSha256: createHash("sha256").update(manifestSource).digest("hex"),
+      registryEntities: entities, selectedProfiles: selected.map(profile => profile.id),
+      selection: { requestedProfiles, requestedConsumers },
+      exemptions: profiles.filter(profile => !selected.includes(profile)).map(profile => ({ profile: profile.id, consumers: profile.consumers, reason: "Outside this explicit fixture selection; neither adoption nor behavioral closure claimed" })),
+      nonRegistrySurfaces: surfaces.filter(surface => !profiles.some(profile => profile.consumers.includes(surface.id))).map(surface => ({ consumer: surface.id, classification: surface.workflowClassification, reason: "Not a current server-page registry binding in this fixture; preserved outside scope" })),
+      capabilityAxes: Object.keys(manifest.exports.ADMIN_CURRENT_SHARED_CAPABILITY_SET),
+      ...(reachableAdoptionProof ? { reachableAdoptionProof } : {}),
+      claim: "Actual query-contract/shared-owner behavior with synthetic rows and transport; no consumer UI/domain/Auth/DB proof",
+    },
+  };
+}
+
+async function runNavigationAdoptionCases({page,origin,requests,observations,snapshot,configure,plan,delayedResponses,requestWaiters,navigation}) {
+  let start = 0;
+  const calls = () => requests.slice(start).filter(request => request.pathname.startsWith("/api/admin/entity-lists/"));
+  const quiet = () => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  const waitCalls = count => new Promise((resolve,reject) => {
+    const timeout=setTimeout(()=>{requestWaiters.delete(notify);reject(new Error(`Navigation fixture expected ${count} GETs, saw ${calls().length}`));},10_000);
+    const notify=()=>{if(calls().length>=count){clearTimeout(timeout);requestWaiters.delete(notify);resolve();}};
+    requestWaiters.add(notify);notify();
+  });
+  const reply = index => { const pending=delayedResponses[index]; if(!pending)throw new Error(`Missing navigation reply ${index}`);pending.reply(); };
+  const intent = target => page.evaluate(target=>{window.__intentPromise=window.__queryFixture.prefetchPage(target);},target);
+  const finishIntent = () => page.evaluate(()=>window.__intentPromise);
+  const activate = target => page.evaluate(target=>window.__queryFixture.setPage(target),target);
+  const settled = target => page.waitForFunction(target=>window.__queryFixture.query.page===target && window.__queryFixture.result.pagination.page===target && !window.__queryFixture.queryPending && !window.__queryFixture.revalidating && !window.__queryFixture.error,target);
+  const open = async (profile, options={}, plans=[]) => {
+    await page.mouse.move(0,0);
+    configure({navigationAdoption:true,optIn:true,intentProbe:true,totalRows:40,...profile,...options});plan(...plans);start=requests.length;
+    const params=new URLSearchParams({limit:"10",...profile.routeOwnedParams});
+    if(options.page)params.set("page",String(options.page));
+    await page.goto(`${origin}/admin/content/${profile.entity}?${params}`);
+    await page.waitForFunction(()=>Boolean(window.__queryFixture?.navigation));await quiet();
+  };
+  for(const profile of navigation.profiles) {
+    const label=profile.id;
+    await open(profile);
+    const binding=await page.evaluate(()=>window.__queryFixture.navigation.describe());
+    observations.push({label:`${label}: actual contract binding`,profile,binding});
+    check(`${label}: actual contract seed avoids duplicate initial GET`,calls().length===0 && binding.query.mode==="server-page");
+    check(`${label}: existing freshness and route identity are preserved`,binding.staleTimeMs===profile.staleTimeMs && Object.entries(profile.routeFilters).every(([key,value])=>binding.query.filters[key]===value));
+    check(`${label}: location entity resolves to its canonical level`,!profile.entity.startsWith("project_locations_") || Boolean(binding.locationLevel));
+    const identity=await page.evaluate(()=>window.__queryFixture.navigation.identityCases());
+    check(`${label}: query key distinguishes every current contract dimension`,identity.cases.every(item=>item.distinct && item.roundTrip) && identity.coveredFilters.length===Object.keys(binding.query.filters).length,JSON.stringify(identity));
+    check(`${label}: mandatory scoped filters cannot be omitted`,!Object.keys(profile.routeFilters).some(key=>key.endsWith("Id")) || binding.missingScopeRejected);
+    await page.evaluate(async()=>{for(const target of [0,-1,1,3,999,1.5])await window.__queryFixture.prefetchPage(target);});await quiet();
+    check(`${label}: invalid, current and nonadjacent intent do not request`,calls().length===0);
+    plan({hold:true});await intent(2);await waitCalls(1);await intent(2);await quiet();
+    check(`${label}: repeated intent deduplicates the in-flight key`,calls().length===1);
+    const requestIdentity=await page.evaluate(search=>window.__queryFixture.navigation.matchesRequest(search,2),calls()[0].search);
+    check(`${label}: requested next page retains the complete canonical query`,requestIdentity);
+    await activate(2);await page.waitForFunction(()=>window.__queryFixture.queryPending);
+    check(`${label}: foreground adopts the same pending request`,calls().length===1 && !calls()[0].aborted);
+    reply(0);await finishIntent();await settled(2);await activate(1);await settled(1);await quiet();
+    check(`${label}: visited return reuses fresh cache`,calls().length===1);
+    await page.evaluate(age=>window.__queryFixture.agePage(2,age),profile.staleTimeMs-1000);await intent(2);await finishIntent();
+    check(`${label}: its own fresh TTL deduplicates intent`,calls().length===1);
+    await page.evaluate(age=>window.__queryFixture.agePage(2,age),profile.staleTimeMs+1000);await intent(2);await finishIntent();
+    check(`${label}: its own stale TTL permits a new read`,calls().length===2);
+
+    await open(profile);plan({hold:true});await intent(2);await waitCalls(1);
+    await page.evaluate(()=>window.__queryFixture.setSearch("navigation fixture"));await waitCalls(2);await settled(1);await quiet();
+    check(`${label}: query-scope change cancels inactive old speculation`,calls()[0].aborted && calls()[1].status===200);
+    await intent(2);await finishIntent();
+    check(`${label}: changed-scope prefetch uses the full new identity`,calls().length===3 && await page.evaluate(search=>window.__queryFixture.navigation.matchesRequest(search,2),calls()[2].search));
+    await page.evaluate(()=>window.__queryFixture.navigation.challengeConstraints());await settled(1);await quiet();
+    const constrained=await page.evaluate(()=>window.__queryFixture.query.filters);
+    check(`${label}: mounted controller preserves route scope after attempted override`,Object.entries(profile.routeFilters).every(([key,value])=>constrained[key]===value));
+
+    await open(profile,{adjacentPrefetch:true,otherForeground:true},[{hold:true}]);await waitCalls(1);await quiet();
+    check(`${label}: active query under the existing root blocks automatic adjacency`,calls().length===1 && !calls()[0].aborted);
+    reply(0);await page.waitForFunction(()=>window.__otherForegroundState?.fetchStatus==="idle");await waitCalls(2);await page.waitForFunction(()=>window.__queryFixture.cachePage(2)?.status==="success");await quiet();
+    check(`${label}: foreground settlement releases only the current adjacent target`,calls().length===2 && !calls()[0].aborted);
+
+    await open(profile);plan({hold:true});await intent(2);await waitCalls(1);
+    await page.evaluate(()=>{window.__navigationInvalidation=window.__queryFixture.invalidate();});await page.evaluate(()=>window.__navigationInvalidation);await settled(1);await quiet();
+    check(`${label}: shared invalidation cancels inactive pre-invalidation transport`,calls()[0].aborted);
+    const invalidated=await page.evaluate(()=>window.__queryFixture.cachePage(2));
+    check(`${label}: invalidated speculative response cannot become fresh`,!invalidated?.data || invalidated.invalidated);
+    const beforeNext=calls().length;await intent(2);await finishIntent();
+    check(`${label}: next intent rereads after invalidation`,calls().length===beforeNext+1);
+
+    if(profile.mutable) {
+      await open(profile);plan({hold:true});await intent(2);await waitCalls(1);
+      const before=await page.evaluate(()=>window.__queryFixture.cachePage(1).data);
+      const outside=await page.evaluate(()=>window.__queryFixture.navigation.seedOutsideScope());
+      await page.evaluate(()=>{window.__navigationMutation=window.__queryFixture.runInstant({rowId:1,outcome:"failure"});});
+      await page.waitForFunction(()=>typeof window.__releaseInstantMutation==="function" && window.__queryFixture.instantInteraction(1).isPending);await quiet();
+      check(`${label}: actual instant mutation cancels speculative transport`,calls()[0].aborted);
+      const optimistic=await page.evaluate(()=>window.__queryFixture.cachePage(1).data);
+      check(`${label}: actual owner applies optimistic update`,optimistic.rows[0].title===before.rows[0].title+" optimistic");
+      check(`${label}: optimistic patch does not cross the actual cache scope`,JSON.stringify(outside)===JSON.stringify(await page.evaluate(()=>window.__queryFixture.navigation.outsideScope())));
+      const pendingCalls=calls().length;await intent(2);await finishIntent();
+      check(`${label}: mutation pending blocks speculative starts`,calls().length===pendingCalls);
+      await page.evaluate(()=>window.__releaseInstantMutation());const rejected=await page.evaluate(()=>window.__navigationMutation);
+      const restored=await page.evaluate(()=>window.__queryFixture.cachePage(1).data);
+      check(`${label}: rejected outcome rolls back the exact scope snapshot`,rejected.ok===false && JSON.stringify(before)===JSON.stringify(restored));
+
+      plan({hold:true,version:"committed"});
+      await page.evaluate(()=>{window.__navigationMutation=window.__queryFixture.runInstant({rowId:1});});
+      await page.waitForFunction(()=>typeof window.__releaseInstantMutation==="function" && window.__queryFixture.instantInteraction(1).isPending);await page.evaluate(()=>window.__releaseInstantMutation());await waitCalls(pendingCalls+1);await quiet();
+      check(`${label}: committed write remains pending through active refetch`,await page.evaluate(()=>window.__queryFixture.instantInteraction(1).isPending));
+      reply(1);const committed=await page.evaluate(()=>window.__navigationMutation);await settled(1);
+      check(`${label}: commit reconciles via existing owner and clears pending`,committed.ok===true && !(await page.evaluate(()=>window.__queryFixture.instantInteraction(1).isPending)));
+      const priorCommit=await page.evaluate(()=>window.__queryFixture.cachePage(1).data);
+      plan({status:500},{status:500},{status:500});
+      await page.evaluate(()=>{window.__navigationMutation=window.__queryFixture.runInstant({rowId:1});});
+      await page.waitForFunction(()=>typeof window.__releaseInstantMutation==="function" && window.__queryFixture.instantInteraction(1).isPending);await page.evaluate(()=>window.__releaseInstantMutation());
+      const readFailureCommit=await page.evaluate(()=>window.__navigationMutation);
+      const committedCache=await page.evaluate(()=>window.__queryFixture.cachePage(1).data);
+      check(`${label}: post-commit read failure never rolls back committed optimism`,readFailureCommit.ok===true && committedCache.rows[0].title===priorCommit.rows[0].title+" optimistic");
+    } else observations.push({label:`${label}: mutation scope exemption`,reason:"No adopted mutating row command in current manifest; external shared invalidation tested, no fabricated domain mutation claim"});
+
+    await open(profile);const beforeFailure=await snapshot(`${label}: foreground failure baseline`);
+    plan({status:500},{status:500},{status:500});await activate(2);
+    await page.waitForFunction(()=>Boolean(window.__queryFixture.error) && !window.__queryFixture.queryPending);
+    const failedRead=await snapshot(`${label}: foreground failure`);
+    check(`${label}: failed new key preserves resolved rows/footer and requested query`,failedRead.ids.join()===beforeFailure.ids.join() && failedRead.resultPage===1 && failedRead.requestedPage===2 && Boolean(failedRead.notice));
+    const beforeRetry=calls().length;await page.evaluate(()=>window.__queryFixture.retry());await settled(2);
+    check(`${label}: explicit retry recovers with one GET`,calls().length===beforeRetry+1);
+
+    await open(profile,{adjacentPrefetch:true});await waitCalls(1);await page.waitForFunction(()=>window.__queryFixture.cachePage(2)?.status==="success");await quiet();
+    // Bounded observation, not a proof about an unlimited future interval.
+    await page.waitForTimeout(150);
+    check(`${label}: opted-in N+1 warms once without a background chain`,calls().length===1 && await page.evaluate(search=>window.__queryFixture.navigation.matchesRequest(search,2),calls()[0].search));
+    await open(profile,{adjacentPrefetch:true,page:4});await quiet();await page.waitForTimeout(150);
+    check(`${label}: final page has no adjacent request`,calls().length===0);
+  }
+  observations.push({label:"navigation adoption proof boundary",coverage:navigation.coverage,sourceHashes:navigation.sourceHashes,note:"Canonical contracts/keys/controller/mutation owners mounted; title-only rows and metrics are synthetic and intentionally do not assert adapter row schemas. Next navigation isolated. No Auth, DB, consumer rendering, production latency, or physical-paint claim."});
+}
+
+/** New adoption cases only; the previously accepted navigation suite is not run. */
+async function runNavigationEligibilityCases({page,origin,requests,observations,snapshot,configure,plan,delayedResponses,requestWaiters,navigation}) {
+  let start = 0;
+  const calls = () => requests.slice(start).filter(request=>request.pathname.startsWith("/api/admin/entity-lists/"));
+  const pages = () => calls().map(request=>Number(new URLSearchParams(request.search).get("page")||1));
+  const same = (a,b) => JSON.stringify(a)===JSON.stringify(b);
+  // Explicit bounded negative observation, not an assertion about infinite time.
+  const quiet = async () => {
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await page.waitForTimeout(150);
+  };
+  const waitCalls = count => new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>{requestWaiters.delete(notify);reject(new Error(`Eligibility expected ${count} GETs, saw ${calls().length}`));},10000);
+    const notify=()=>{if(calls().length>=count){clearTimeout(timer);requestWaiters.delete(notify);resolve();}};
+    requestWaiters.add(notify);notify();
+  });
+  const reply = index => {const pending=delayedResponses[index];if(!pending)throw new Error(`Missing eligibility response ${index}`);pending.reply();};
+  const cache = target => page.evaluate(target=>window.__queryFixture.cachePage(target),target);
+  const settled = target => page.waitForFunction(target=>window.__queryFixture.query.page===target && window.__queryFixture.result.pagination.page===target && !window.__queryFixture.queryPending && !window.__queryFixture.revalidating && !window.__queryFixture.error,target);
+  const warmed = target => page.waitForFunction(target=>{const c=window.__queryFixture.cachePage(target);return c?.status==="success" && c.fetchStatus==="idle" && !c.invalidated;},target);
+  const activate = target => page.evaluate(target=>window.__queryFixture.setPage(target),target);
+  const open = async (profile,options={},plans=[]) => {
+    await page.mouse.move(0,0);
+    configure({...profile,totalRows:30,...options,navigationAdoption:true,intentProbe:true,
+      optIn:profile.navigationPolicy.intent,adjacentPrefetch:profile.navigationPolicy.adjacent});
+    plan(...plans);start=requests.length;
+    const params=new URLSearchParams({limit:"10",...profile.routeOwnedParams});
+    await page.goto(`${origin}/admin/content/${profile.entity}?${params}`);
+    await page.waitForFunction(()=>Boolean(window.__queryFixture?.navigation));
+  };
+  const beginMutation = async (profile,outcome="success") => {
+    await page.evaluate(options=>{window.__eligibilityMutation=window.__queryFixture.runInstant(options);},{rowId:1,action:profile.mutationAction,outcome});
+    await page.waitForFunction(()=>typeof window.__releaseInstantMutation==="function" && window.__queryFixture.instantInteraction(1).isPending);
+  };
+  const releaseMutation = () => page.evaluate(()=>window.__releaseInstantMutation());
+  const finishMutation = () => page.evaluate(()=>window.__eligibilityMutation);
+
+  for(const profile of navigation.profiles) {
+    const label=profile.id;
+    observations.push({label:`${label}: reachable adoption binding`,profile,sourceProof:navigation.coverage.reachableAdoptionProof});
+    for(const totalRows of [0,1,10]) {
+      await open(profile,{totalRows});await quiet();
+      const state=await page.evaluate(()=>({query:window.__queryFixture.query,pagination:window.__queryFixture.result.pagination}));
+      await page.evaluate(()=>window.__queryFixture.prefetchPage(2));await quiet();
+      check(`${label}: ${totalRows} rows / no next page adds zero GETs`,state.query.page>=state.pagination.totalPages && calls().length===0);
+    }
+
+    await open(profile,{},[{hold:true,version:"next"}]);await waitCalls(1);
+    const binding=await page.evaluate(()=>window.__queryFixture.navigation.describe());
+    const current=await snapshot(`${label}: current page while automatic next is pending`);
+    check(`${label}: automatic N+1 keeps the actual query identity`,same(pages(),[2]) && binding.query.mode==="server-page" && binding.staleTimeMs===profile.staleTimeMs && await page.evaluate(search=>window.__queryFixture.navigation.matchesRequest(search,2),calls()[0].search));
+    check(`${label}: background work preserves visible source rows and pending`,current.resultPage===1 && current.requestedPage===1 && !current.pending && !current.revalidating && !current.error);
+    await page.getByRole("button",{name:"2",exact:true}).hover();
+    await page.getByRole("button",{name:"2",exact:true}).focus();
+    await page.evaluate(()=>{window.__eligibilityIntent=window.__queryFixture.prefetchPage(2);});await quiet();
+    check(`${label}: automatic + hover + focus intent deduplicate`,calls().length===1 && !calls()[0].aborted);
+    reply(0);await warmed(2);await quiet();
+    check(`${label}: completed N+1 never chains into N+2`,same(pages(),[2]) && same(current,await snapshot(`${label}: cached next leaves visible source unchanged`)));
+    plan({hold:true,version:"third"});await activate(2);await settled(2);await waitCalls(2);
+    check(`${label}: foreground adoption reuses N+1 then advances the window once`,same(pages(),[2,3]));
+    reply(1);await warmed(3);await activate(3);await settled(3);await quiet();
+    check(`${label}: the final page schedules nothing beyond its bound`,same(pages(),[2,3]));
+    await activate(1);await settled(1);await quiet();
+    check(`${label}: visited cached return adds no request`,calls().length===2);
+
+    await open(profile,{},[{hold:true,version:"old-scope"},{hold:true,version:"new-current"},{hold:true,version:"new-next"}]);await waitCalls(1);
+    await page.evaluate(()=>window.__queryFixture.setSearch("eligibility fixture"));await waitCalls(2);await quiet();
+    check(`${label}: changed scope cancels old adjacent and prioritizes foreground`,calls()[0].aborted && same(pages(),[2,1]));
+    reply(0);reply(1);await settled(1);await waitCalls(3);reply(2);await warmed(2);await quiet();
+    check(`${label}: only the new scoped result can become fresh`,(await cache(1)).data.metrics.version==="new-current" && (await cache(2)).data.metrics.version==="new-next" && await page.evaluate(search=>window.__queryFixture.navigation.matchesRequest(search,2),calls()[2].search));
+    const scoped=await page.evaluate(()=>window.__queryFixture.query.filters);
+    check(`${label}: route-owned parent scope survives navigation`,Object.entries(profile.routeFilters).every(([key,value])=>scoped[key]===value));
+
+    await open(profile,{},[{hold:true,version:"pre-invalidation"},{hold:true,version:"fresh-current"},{hold:true,version:"fresh-next"}]);await waitCalls(1);
+    await page.evaluate(()=>{window.__eligibilityInvalidation=window.__queryFixture.invalidate();});await waitCalls(2);await quiet();
+    check(`${label}: invalidation cancels inactive speculation before active refetch`,calls()[0].aborted && same(pages(),[2,1]));
+    reply(0);reply(1);await page.evaluate(()=>window.__eligibilityInvalidation);await settled(1);await waitCalls(3);reply(2);await warmed(2);await quiet();
+    check(`${label}: post-invalidation current and adjacent caches are authoritative`,(await cache(1)).data.metrics.version==="fresh-current" && (await cache(2)).data.metrics.version==="fresh-next" && !(await cache(2)).invalidated);
+
+    await open(profile,{otherForeground:true},[{hold:true},{hold:true}]);await waitCalls(1);await quiet();
+    check(`${label}: shared foreground work prevents speculative start`,calls().length===1 && Number(new URLSearchParams(calls()[0].search).get("page"))===3);
+    reply(0);await page.waitForFunction(()=>window.__otherForegroundState?.fetchStatus==="idle");await waitCalls(2);reply(1);await warmed(2);await quiet();
+    check(`${label}: foreground settlement releases only its current N+1`,calls().length===2 && !calls()[0].aborted && await page.evaluate(search=>window.__queryFixture.navigation.matchesRequest(search,2),calls()[1].search));
+
+    await open(profile,{},[{status:500}]);await waitCalls(1);await page.waitForFunction(()=>window.__queryFixture.cachePage(2)?.status==="error");await quiet();
+    const failedBackground=await snapshot(`${label}: failed speculative read`);
+    check(`${label}: failed speculation is silent, bounded and leaves current data`,calls().length===1 && failedBackground.resultPage===1 && !failedBackground.error && !failedBackground.pending);
+    plan({status:500},{status:500},{status:500});await activate(2);await page.waitForFunction(()=>window.__queryFixture.error && !window.__queryFixture.queryPending);await quiet();
+    const failedForeground=await snapshot(`${label}: failed foreground adoption`);
+    check(`${label}: foreground failure retains source rows and shared retry semantics`,calls().length===4 && failedForeground.resultPage===1 && failedForeground.requestedPage===2 && same(failedBackground.ids,failedForeground.ids) && Boolean(failedForeground.notice));
+
+    if(profile.mutable) {
+      await open(profile,{},[{hold:true,version:"pre-write"}]);await waitCalls(1);
+      const before=(await cache(1)).data;
+      const outside=await page.evaluate(()=>window.__queryFixture.navigation.seedOutsideScope());
+      await beginMutation(profile,"failure");await quiet();
+      check(`${label}: mutation cancels pre-write next read and owns optimistic row`,calls()[0].aborted && (await cache(1)).data.rows[0].title===before.rows[0].title+" optimistic");
+      check(`${label}: pending mutation cannot start speculative work or cross scope`,calls().length===1 && same(outside,await page.evaluate(()=>window.__queryFixture.navigation.outsideScope())));
+      reply(0);await releaseMutation();const rejected=await finishMutation();await quiet();
+      check(`${label}: rejected mutation restores exact current cache`,rejected.ok===false && same(before,(await cache(1)).data));
+      check(`${label}: canceled pre-write payload cannot remain a fresh next page`,!(await cache(2))?.data || (await cache(2)).data.metrics.version!=="pre-write");
+
+      await open(profile,{},[{hold:true,version:"pre-write"}]);await waitCalls(1);await beginMutation(profile);
+      plan({hold:true,version:"committed-current"},{hold:true,version:"committed-next"});await releaseMutation();await waitCalls(2);await quiet();
+      check(`${label}: committed mutation waits for active revalidation before prediction`,calls()[0].aborted && calls().length===2 && await page.evaluate(()=>window.__queryFixture.instantInteraction(1).isPending));
+      reply(0);reply(1);const committed=await finishMutation();await settled(1);await waitCalls(3);reply(2);await warmed(2);await quiet();
+      check(`${label}: post-write rows and next page never use stale payload`,committed.ok===true && (await cache(1)).data.metrics.version==="committed-current" && (await cache(2)).data.metrics.version==="committed-next" && !(await page.evaluate(()=>window.__queryFixture.instantInteraction(1).isPending)));
+
+      await open(profile,{},[{version:"pre-write-next"}]);await warmed(2);const prior=(await cache(1)).data;
+      await beginMutation(profile);plan({status:500},{status:500},{status:500});await releaseMutation();const readFailure=await finishMutation();
+      await page.waitForFunction(()=>window.__queryFixture.error && !window.__queryFixture.revalidating);await quiet();
+      check(`${label}: failed post-commit read never rolls back a successful mutation`,readFailure.ok===true && (await cache(1)).data.rows[0].title===prior.rows[0].title+" optimistic");
+      check(`${label}: failed post-commit read leaves next cache invalid and stops speculation`,(await cache(2)).invalidated && calls().length===4);
+    } else observations.push({label:`${label}: mutation applicability`,reason:"No adopted mutating row command; shared external invalidation and stale-result rejection are proven, no domain mutation is fabricated"});
+  }
+  observations.push({label:"eligibility proof boundary",note:"Reachable consumer bindings verified by the existing source owner; actual shared controller, contracts, provider, pagination and mutation owner mounted. Transport/rows/execute outcomes are synthetic. No consumer UI/domain/Auth/DB or latency claim. Negative scheduling window is150ms after two animation frames; retained531 cases not rerun."});
+}
+
 /** Actual shared owners with synthetic GET results; never connects to Admin/DB. */
-async function isolatedFailureContracts(intentPrefetch = false, adjacentPrefetch = false) {
+async function isolatedFailureContracts(intentPrefetch = false, adjacentPrefetch = false, navigationAdoption = false, eligibilityOnly = false) {
   const root = process.cwd();
-  const output = path.join(root, adjacentPrefetch ? ".tmp-qa/bounded-adjacent-prefetch" : intentPrefetch ? ".tmp-qa/admin-instant-ux-prefetch-strategy-20260913" : ".tmp-qa/admin-query-save-failure-contracts-20260913", process.env.QA_PHASE || (adjacentPrefetch ? "mounted-owner-proof" : intentPrefetch ? "intent-prefetch" : "query-isolated"));
+  const navigation = navigationAdoption ? await navigationAdoptionPlan(root,eligibilityOnly) : null;
+  const output = navigation ? path.join(root,".tmp-qa/system-wide-admin-navigation",eligibilityOnly?"eligibility-fixture":"controller-fixture",runId) : path.join(root, adjacentPrefetch ? ".tmp-qa/bounded-adjacent-prefetch" : intentPrefetch ? ".tmp-qa/admin-instant-ux-prefetch-strategy-20260913" : ".tmp-qa/admin-query-save-failure-contracts-20260913", process.env.QA_PHASE || (adjacentPrefetch ? "mounted-owner-proof" : intentPrefetch ? "intent-prefetch" : "query-isolated"));
   await mkdir(output, { recursive: true });
   const require = createRequire(import.meta.url);
   const entry = String.raw`
@@ -855,19 +1254,22 @@ import Feedback from "@feedback";
 import AdminEntityList from "@entity-list";
 import AdminTablePagination from "@pagination";
 import { useAdminEntityListController } from "@controller";
-import { normalizeAdminEntityListQuery, normalizeAdminEntityListQueryWithRouteParams } from "@contracts";
+import { normalizeAdminEntityListQuery, normalizeAdminEntityListQueryWithRouteParams${navigation ? ", writeAdminEntityListQuery, parseAdminEntityListQueryFromKey" : ""} } from "@contracts";
 import { adminEntityListQueryKeys } from "@query-keys";
 import { invalidateAdminEntityListCaches } from "@mutation-cache";
 import { useAdminEntityInstantMutation } from "@instant-mutation";
 import { topicsQueryContract } from "@topics-contract";
 import { categoriesQueryContract } from "@categories-contract";
 import { seriesQueryContract } from "@series-contract";
-const contracts = {topics:topicsQueryContract,categories:categoriesQueryContract,series:seriesQueryContract};
+${navigation ? navigation.specs.map((spec,index)=>`import { ${spec.contractExport} as navigationContract${index} } from "@navigation-contract-${index}";`).join("\n") : ""}
+${navigation ? `import { withLockedProjectType as lockNavigationProjectType } from "@navigation-contract-${navigation.specs.findIndex(spec=>spec.entity==="projects")}";
+import { PROJECT_LOCATION_ENTITY_KEYS as navigationLocationKeys } from "@navigation-contract-${navigation.specs.findIndex(spec=>spec.entity.startsWith("project_locations_"))}";` : ""}
+const contracts = {topics:topicsQueryContract,categories:categoriesQueryContract,series:seriesQueryContract${navigation ? navigation.specs.map((spec,index)=>`,${JSON.stringify(spec.entity)}:navigationContract${index}`).join("") : ""}};
 const entity = location.pathname.split("/").at(-1);
 const options = window.__FIXTURE_OPTIONS__ || {};
 const contract = options.boundedClient ? {...contracts[entity],mode:"bounded-client"} : contracts[entity];
-const routeOwnedParams = options.constrained ? {content_type:"article"} : undefined;
-const constrainQuery = options.constrained ? query => ({...query,filters:{...query.filters,contentType:"article"}}) : undefined;
+const routeOwnedParams = options.navigationAdoption ? options.routeOwnedParams : options.constrained ? {content_type:"article"} : undefined;
+const constrainQuery = options.navigationAdoption ? query => ({...query,filters:${navigation ? 'entity==="projects"?lockNavigationProjectType(query.filters,options.routeFilters.projectType):' : ""}{...query.filters,...options.routeFilters}}) : options.constrained ? query => ({...query,filters:{...query.filters,contentType:"article"}}) : undefined;
 const initialQuery = routeOwnedParams
  ? normalizeAdminEntityListQueryWithRouteParams(contract,new URLSearchParams(location.search),routeOwnedParams)
  : normalizeAdminEntityListQuery(contract,new URLSearchParams(location.search));
@@ -905,9 +1307,47 @@ function Harness() {
   queryDefaults:()=>({staleTime:client.getDefaultOptions().queries.staleTime,gcTime:client.getDefaultOptions().queries.gcTime}),
   beginOtherForeground:()=>setOtherForegroundEnabled(true),
   get otherForegroundState(){return window.__otherForegroundState??{status:"pending",fetchStatus:"idle"}},
-  instantInteraction:rowId=>instant.getRowInteraction(rowId),
-  runInstant:({rowId=controller.result.rows[0]?.id,action="featured",outcome="success",remove=false,reconcileFailure=false}={})=>{
-   window.__instantOutcome=null;
+   instantInteraction:rowId=>instant.getRowInteraction(rowId),
+   ${navigation ? `navigation:{
+    describe:()=>({query:controller.query,staleTimeMs:options.staleTimeMs,defaultPageSize:contract.defaultPageSize,pageSizeOptions:contract.pageSizeOptions,sortFields:contract.sortFields,locationLevel:Object.entries(navigationLocationKeys).find(([,key])=>key===entity)?.[0]??null,missingScopeRejected:!contract.filtersSchema.safeParse(contract.parseFilters(new URLSearchParams())).success}),
+    matchesRequest:(search,target)=>{
+      const actual=normalizeAdminEntityListQuery(contract,new URLSearchParams(search));
+      return JSON.stringify(adminEntityListQueryKeys.query(entity,actual))===JSON.stringify(adminEntityListQueryKeys.query(entity,{...controller.query,page:target}));
+    },
+    identityCases:()=>{
+      const query=controller.query,base=JSON.stringify(adminEntityListQueryKeys.query(entity,query)),cases=[],coveredFilters=[];
+      const add=(dimension,next)=>{
+        const params=writeAdminEntityListQuery(contract,next,new URLSearchParams());
+        const round=normalizeAdminEntityListQuery(contract,params);
+        const key=JSON.stringify(adminEntityListQueryKeys.query(entity,next));
+        cases.push({dimension,distinct:key!==base,roundTrip:key===JSON.stringify(adminEntityListQueryKeys.query(entity,round))});
+      };
+      add("page",{...query,page:query.page+1});add("search",{...query,search:"identity fixture"});
+      add("pageSize",{...query,pageSize:contract.pageSizeOptions.find(size=>size!==query.pageSize)});
+      add("direction",{...query,sort:{...query.sort,direction:query.sort.direction==="asc"?"desc":"asc"}});
+      const otherSort=contract.sortFields.find(field=>field!==query.sort.field);if(otherSort)add("sort",{...query,sort:{...query.sort,field:otherSort}});
+      for(const [field,value] of Object.entries(query.filters)){
+        const shape=contract.filtersSchema.shape[field];
+        const candidates=[...(shape.options??[]),typeof value==="number"?value+1:undefined,...["all","published","unpublished","active","inactive","visible","hidden","yes","no","trash","article","video","gallery","not_started","in_progress","completed","draft","archived","fixture-role","2026-01-01",101,201,true,false,null]].filter(candidate=>candidate!==undefined && candidate!==value);
+        const alternate=candidates.find(candidate=>contract.filtersSchema.safeParse({...query.filters,[field]:candidate}).success);
+        if(alternate===undefined)throw new Error("No valid alternate for actual filter "+field);
+        coveredFilters.push(field);add("filter:"+field,{...query,filters:{...query.filters,[field]:alternate}});
+      }
+      const otherEntity=entity==="topics"?"categories":"topics";cases.push({dimension:"entity",distinct:base!==JSON.stringify(adminEntityListQueryKeys.query(otherEntity,query)),roundTrip:true});
+      const otherMode={...query,mode:"bounded-client"},modeKey=adminEntityListQueryKeys.query(entity,otherMode);
+      cases.push({dimension:"mode-key-serialization-only",distinct:base!==JSON.stringify(modeKey),roundTrip:parseAdminEntityListQueryFromKey(modeKey)?.mode==="bounded-client",limit:"No bounded-client execution or adoption claimed for this server-page contract"});
+      return {cases,coveredFilters};
+    },
+    challengeConstraints:()=>{
+      const attempted={...controller.query,filters:{...controller.query.filters,...Object.fromEntries(Object.entries(options.routeFilters).map(([key,value])=>[key,typeof value==="number"?value+900:value==="residential"?"commercial":"residential"]))}};
+      controller.setSearchAndFilters(attempted.search,attempted.filters);
+    },
+    seedOutsideScope:()=>{const other={...controller.query,search:"different fixture scope"};window.__navigationOutsideKey=adminEntityListQueryKeys.query(entity,other);const data={...controller.result,rows:controller.result.rows.map(row=>({...row,title:row.title+" outside"}))};client.setQueryData(window.__navigationOutsideKey,data);return data;},
+    outsideScope:()=>client.getQueryData(window.__navigationOutsideKey),
+   },` : ""}
+   runInstant:({rowId=controller.result.rows[0]?.id,action="featured",outcome="success",remove=false,reconcileFailure=false}={})=>{
+    window.__instantOutcome=null;
+    if(options.navigationAdoption)delete window.__releaseInstantMutation;
    return instant.mutateAsync({
     rowId,action,
     optimistic:cache=>remove?cache.removeRows(new Set([rowId])):cache.patchRows(row=>row.id===rowId?{...row,title:row.title+" optimistic"}:row),
@@ -962,6 +1402,7 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
         "@mutation-cache": path.join(root, "src/lib/admin/entity-list/data-engine/instant-mutation-cache.ts"),
         "@instant-mutation": path.join(root, "src/lib/admin/entity-list/data-engine/instant-mutation.ts"),
         ...Object.fromEntries(["topics", "categories", "series"].map((entity) => [`@${entity}-contract`, path.join(root, `src/lib/admin/content/entity-list-contracts/${entity}.ts`)])),
+        ...(navigation ? Object.fromEntries(navigation.specs.map((spec,index)=>[`@navigation-contract-${index}`,path.join(root,spec.contractFile)])) : {}),
       },
     },
     module: { rules: [{ test: /\.[jt]sx?$/, exclude: /node_modules/, use: [{
@@ -997,7 +1438,7 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
         res.on("close",()=>{if(!res.writableEnded)request.aborted=true;});
         const reply = () => {
           if(res.destroyed)return;
-          const body=JSON.stringify(plan.status ? {error:{code:"intent_fixture_failure"}} : result(entity,plan.page??page,Number(url.searchParams.get("limit")||10),plan.version,plan.totalRows));
+          const body=JSON.stringify(plan.status ? {error:{code:"intent_fixture_failure"}} : result(entity,plan.page??page,Number(url.searchParams.get("limit")||10),plan.version,plan.totalRows??(navigation?fixtureOptions.totalRows:undefined)));
           request.status=plan.status??200;request.responseBytes=Buffer.byteLength(body);request.finishedAtMs=performance.now();
           res.writeHead(request.status, {"Content-Type":"application/json"});
           res.end(body);
@@ -1010,7 +1451,7 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
       if (held.has(entity)) { held.set(entity, () => sendResult(res, entity, page)); return; }
       sendResult(res, entity, page); return;
     }
-    if (/^\/admin\/content\/(topics|categories|series)$/.test(url.pathname)) {
+    if (/^\/admin\/content\/(topics|categories|series)$/.test(url.pathname) || (navigation && navigation.specs.some(spec=>url.pathname===`/admin/content/${spec.entity}`))) {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
       const initial=result(url.pathname.split("/").at(-1),Number(url.searchParams.get("page")||1),Number(url.searchParams.get("limit")||10),"source",fixtureOptions.totalRows??100);
       if(fixtureOptions.boundedClient){
@@ -1024,6 +1465,7 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${server.address().port}`;
   const browser = await chromium.launch({ headless: true });
+  let navigationCompleted = false;
   try {
     const context = await browser.newContext();
     await context.route("**/*", (route) => {
@@ -1036,6 +1478,10 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
       const value = await page.evaluate(() => ({ url: location.href, ids: [...document.querySelectorAll("[data-entity-row-id]")].map((row) => Number(row.getAttribute("data-entity-row-id"))), footer: document.querySelector("[data-admin-table-pagination]")?.textContent || "", resultPage: window.__queryFixture.result.pagination.page, requestedPage: window.__queryFixture.query.page, metrics:window.__queryFixture.result.metrics, pending: window.__queryFixture.queryPending, revalidating:window.__queryFixture.revalidating, error: window.__queryFixture.error?.message || null, notice: document.querySelector("[data-admin-entity-list-query-error]")?.textContent || "" }));
       observations.push({ label, ...value }); return value;
     };
+    if(navigation)await (eligibilityOnly?runNavigationEligibilityCases:runNavigationAdoptionCases)({page,origin,requests,observations,snapshot,navigation,
+      configure:options=>{fixtureOptions=options;responsePlans.length=0;delayedResponses.length=0},
+      plan:(...plans)=>responsePlans.push(...plans),delayedResponses,requestWaiters,
+    });
     if(intentPrefetch)await runIntentPrefetchCases({page,origin,requests,observations,snapshot,
       configure:options=>{fixtureOptions=options;responsePlans.length=0;delayedResponses.length=0},
       plan:(...plans)=>responsePlans.push(...plans),delayedResponses,requestWaiters,
@@ -1045,7 +1491,7 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
       plan:(...plans)=>responsePlans.push(...plans),delayedResponses,requestWaiters,
     });
     fixtureOptions={};
-    for (const entity of ["topics", "categories", "series"]) {
+    for (const entity of navigation ? [] : ["topics", "categories", "series"]) {
       const callStart=requests.length;
       await page.goto(`${origin}/admin/content/${entity}`);
       await page.waitForFunction(() => Boolean(window.__queryFixture));
@@ -1094,17 +1540,28 @@ createRoot(document.getElementById("root")).render(<Provider><Feedback><Harness/
     check("isolated owner fixture never requests an external origin", blocked.length === 0);
     check("isolated owner fixture performs no writes", requests.every((r) => r.method === "GET"));
     check("isolated owner fixture has no runtime exceptions", errors.length === 0, errors.join(" | "));
+    if(eligibilityOnly) {
+      const changed=[];
+      for(const [file,hash] of Object.entries(navigation.sourceHashes)) {
+        if(createHash("sha256").update(await readFile(path.join(root,file))).digest("hex")!==hash)changed.push(file);
+      }
+      check("eligibility proof retains its exact source bindings throughout execution",changed.length===0,changed.join(", "));
+    }
+    navigationCompleted = Boolean(navigation);
+  } catch (error) {
+    if (navigation) observations.push({label:"navigation fixture interrupted",error:error.message});
+    throw error;
   } finally {
     await browser.close();
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
-    await writeFile(path.join(output, "evidence.json"), JSON.stringify({ passed, failed, observations, requests, blocked, errors, scope: "Mounted shared controller/EntityList/Pagination with synthetic GET transport; Next navigation isolated, no Auth/DB or live-screen claim" }, null, 2));
+    await writeFile(path.join(output, "evidence.json"), JSON.stringify({ passed, failed, observations, requests, blocked, errors, ...(navigation?{navigationCompleted,navigationCoverage:navigation.coverage,sourceHashes:navigation.sourceHashes}:{}), scope: "Mounted shared controller/EntityList/Pagination with synthetic GET transport; Next navigation isolated, no Auth/DB or live-screen claim" }, null, 2));
   }
   console.log(`qa-admin-data-engine-controller isolated: ${passed}/${passed + failed} passed`);
   if (failed) process.exitCode = 1;
 }
 
-(process.argv.includes("--adjacent-prefetch") ? isolatedFailureContracts(true,true) : process.argv.includes("--intent-prefetch") ? isolatedFailureContracts(true) : process.argv.includes("--isolated-failure-contracts") ? isolatedFailureContracts() : main()).catch((error) => {
+(process.argv.includes("--navigation-eligibility") ? isolatedFailureContracts(false,false,true,true) : process.argv.includes("--navigation-adoption") ? isolatedFailureContracts(false,false,true) : process.argv.includes("--adjacent-prefetch") ? isolatedFailureContracts(true,true) : process.argv.includes("--intent-prefetch") ? isolatedFailureContracts(true) : process.argv.includes("--isolated-failure-contracts") ? isolatedFailureContracts() : main()).catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

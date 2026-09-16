@@ -1,0 +1,165 @@
+# QA profile derived from the locked upstream Compose, without platform SQL forks.
+# The lifecycle owner supplies every interpolation from generated local values.
+name: ${QA_RUN_ID:?owned run required}
+x-owned-labels: &owned-labels
+  com.venisia.qa.owner: isolated-supabase
+  com.venisia.qa.run: ${QA_RUN_ID:?owned run required}
+x-service: &service
+  platform: linux/amd64
+  restart: "no"
+  labels: *owned-labels
+  networks: [isolated]
+services:
+  db:
+    <<: *service
+    image: supabase/postgres@sha256:5a4314708484bec672de2c09653a5c01fb1c84a998564ac231b0325e2238ed5b
+    environment:
+      POSTGRES_HOST: /var/run/postgresql
+      PGPORT: "5432"
+      POSTGRES_PORT: "5432"
+      PGPASSWORD: ${POSTGRES_PASSWORD:?local generated value required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?local generated value required}
+      PGDATABASE: postgres
+      POSTGRES_DB: postgres
+      JWT_SECRET: ${JWT_SECRET:?local generated value required}
+      JWT_EXP: "3600"
+    command: [postgres, -c, config_file=/etc/postgresql/postgresql.conf, -c, log_min_messages=fatal]
+    volumes:
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:ro"
+      - database:/var/lib/postgresql/data
+      - database-config:/etc/postgresql-custom
+    healthcheck:
+      test: [CMD, pg_isready, -U, postgres, -h, localhost]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+  rest:
+    <<: *service
+    image: postgrest/postgrest@sha256:aa7e96af2d01219a09bc00c75de28171b1f9fda17ea455a931e4fb6d317089e0
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      PGRST_DB_URI: postgres://authenticator:${POSTGRES_PASSWORD:?local generated value required}@db:5432/postgres
+      PGRST_DB_SCHEMAS: public
+      PGRST_DB_MAX_ROWS: "1000"
+      PGRST_DB_EXTRA_SEARCH_PATH: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_ADMIN_SERVER_PORT: "3001"
+      PGRST_ADMIN_SERVER_HOST: localhost
+      PGRST_JWT_SECRET: ${JWT_SECRET:?local generated value required}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET:?local generated value required}
+      PGRST_APP_SETTINGS_JWT_EXP: "3600"
+    command: [postgrest]
+    healthcheck:
+      test: [CMD, postgrest, --ready]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+  storage:
+    <<: *service
+    image: supabase/storage-api@sha256:63da55733ce9d7592d860739acb94f0b6189d880b7565d247ee5b195be854db1
+    depends_on:
+      db: {condition: service_healthy}
+      rest: {condition: service_started}
+      imgproxy: {condition: service_started}
+    environment:
+      ANON_KEY: ${ANON_KEY:?local generated value required}
+      SERVICE_KEY: ${SERVICE_ROLE_KEY:?local generated value required}
+      POSTGREST_URL: http://rest:3000
+      AUTH_JWT_SECRET: ${JWT_SECRET:?local generated value required}
+      DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD:?local generated value required}@db:5432/postgres
+      STORAGE_PUBLIC_URL: http://127.0.0.1:${STORAGE_PORT:?owned port required}
+      REQUEST_ALLOW_X_FORWARDED_PATH: "true"
+      FILE_SIZE_LIMIT: "52428800"
+      STORAGE_BACKEND: file
+      GLOBAL_S3_BUCKET: isolated-public
+      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
+      TENANT_ID: ${QA_RUN_ID:?owned run required}
+      REGION: local
+      ENABLE_IMAGE_TRANSFORMATION: "true"
+      IMGPROXY_URL: http://imgproxy:5001
+      S3_PROTOCOL_ACCESS_KEY_ID: ${S3_PROTOCOL_ACCESS_KEY_ID:?local generated value required}
+      S3_PROTOCOL_ACCESS_KEY_SECRET: ${S3_PROTOCOL_ACCESS_KEY_SECRET:?local generated value required}
+      DB_INSTALL_ROLES: "false"
+      DB_ALLOW_MIGRATION_REFRESH: "false"
+    volumes: [storage-data:/var/lib/storage]
+    healthcheck:
+      test: [CMD, wget, --no-verbose, --tries=1, --spider, "http://storage:5000/status"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 10s
+  imgproxy:
+    <<: *service
+    image: darthsim/imgproxy@sha256:80200afeaa85c4abb58bbcb84deadab6d6cf5c79ac7af0694ff22e2b5de1477b
+    environment:
+      IMGPROXY_BIND: :5001
+      IMGPROXY_LOCAL_FILESYSTEM_ROOT: /
+      IMGPROXY_USE_ETAG: "true"
+      IMGPROXY_AUTO_WEBP: "true"
+      IMGPROXY_MAX_SRC_RESOLUTION: "16.8"
+    volumes: [storage-data:/var/lib/storage]
+    healthcheck:
+      test: [CMD, imgproxy, health]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+  api-gw:
+    <<: *service
+    image: envoyproxy/envoy@sha256:be87c8b52663c1164a5bdf3c5419017a269cb3d8c74be1ec93638a71f1ffbd4b
+    entrypoint: [/bin/sh, /docker-entrypoint.sh]
+    command: ["--log-level", critical]
+    logging: {driver: none}
+    environment:
+      ANON_KEY: ${ANON_KEY:?local generated value required}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY:?local generated value required}
+      SUPABASE_PUBLIC_URL: http://127.0.0.1:${API_PORT:?owned port required}
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:?local generated value required}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:?local generated value required}
+      SUPABASE_PUBLISHABLE_KEY: ""
+      SUPABASE_SECRET_KEY: ""
+      ANON_KEY_ASYMMETRIC: ""
+      SERVICE_ROLE_KEY_ASYMMETRIC: ""
+    volumes:
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/api/envoy/envoy.yaml:/etc/envoy/envoy.yaml:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/api/envoy/cds.yaml:/etc/envoy/cds.yaml:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/api/envoy/lds.template.yaml:/etc/envoy/lds.template.yaml:ro"
+      - "${UPSTREAM_ROOT:?verified upstream source required}/docker/volumes/api/envoy/docker-entrypoint.sh:/docker-entrypoint.sh:ro"
+    healthcheck:
+      test: [CMD-SHELL, "timeout 1 bash -c '</dev/tcp/127.0.0.1/8000'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+  qa-transport:
+    <<: *service
+    image: supabase/storage-api@sha256:63da55733ce9d7592d860739acb94f0b6189d880b7565d247ee5b195be854db1
+    user: "1000:1000"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    command: [node, /qa/isolated-supabase-transport.mjs, --hold]
+    volumes:
+      - "${TRANSPORT_MODULE:?verified owner transport required}:/qa/isolated-supabase-transport.mjs:ro"
+    healthcheck:
+      test: [CMD, node, -e, "process.exit(0)"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+networks:
+  isolated:
+    internal: true
+    labels: *owned-labels
+volumes:
+  database:
+    labels: *owned-labels
+  database-config:
+    labels: *owned-labels
+  storage-data:
+    labels: *owned-labels
