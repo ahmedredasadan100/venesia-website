@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { adminFormEditHref } from "../../../../../lib/admin/form-runtime";
 import {
   AdminFeedbackRegion,
 } from "../../../../../components/admin/AdminFeedbackProvider";
@@ -82,6 +83,7 @@ type PageRow = {
 type TemplateOption = { id: number; name: string; slug: string; status: string };
 
 type PageBlocksClientProps = {
+  returnTo?: string;
   page: PageRow;
   assignments: PageBlockAssignmentRow[];
   templates: {
@@ -124,6 +126,7 @@ type PageBlocksClientProps = {
 type SortKey = "module_kind" | "template_name" | "slot" | "visibility";
 
 export default function PageBlocksClient({
+  returnTo,
   page,
   assignments,
   templates,
@@ -186,7 +189,6 @@ export default function PageBlocksClient({
     assignments: instant.rows,
     templates,
     setActionMessage,
-    router,
   });
 
   const sortAccessors = useMemo(
@@ -412,7 +414,7 @@ export default function PageBlocksClient({
       });
       setActionFeedback({ message: result.message, ok: true });
       if (redirectTo) {
-        router.push(redirectTo);
+        router.push(adminFormEditHref(redirectTo, returnTo, "/admin/pages-blocks/pages"));
         return;
       }
     } catch (error) {
@@ -755,6 +757,7 @@ export default function PageBlocksClient({
   return (
     <AdminPageExperience dir="rtl">
       <PageBlocksHeader
+        returnTo={returnTo}
         page={page}
         previewHref={previewHref}
         onOpenAssignModal={openAssignModal}
@@ -791,6 +794,7 @@ export default function PageBlocksClient({
             icon: "seo",
             content: (
               <PageSeoPanel
+                returnTo={returnTo}
                 pageId={page.id}
                 pageTitle={page.title}
                 path={page.path}
@@ -819,7 +823,7 @@ export default function PageBlocksClient({
             icon: "plans",
             content: (
               <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <PageVisualSlotMap assignments={instant.rows} />
+                <PageVisualSlotMap assignments={instant.rows} returnTo={returnTo} />
               </section>
             ),
           },
@@ -910,6 +914,7 @@ export default function PageBlocksClient({
                 }
                 table={
                   <PageBlocksAssignmentsGrid
+                    returnTo={returnTo}
                     rows={paginatedRows}
                     previewHref={previewHref}
                     sort={table.sort}

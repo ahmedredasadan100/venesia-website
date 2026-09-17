@@ -25,6 +25,7 @@ type SortKey = "module_kind" | "template_name" | "slot" | "visibility";
 
 // 150px = secondary module-type column (no dedicated preset).
 type PageBlocksAssignmentsGridProps = {
+  returnTo?: string;
   rows: PageBlockAssignmentRow[];
   previewHref: string | null;
   sort: { key: SortKey | null; direction: AdminTableSortDirection };
@@ -47,6 +48,7 @@ type PageBlocksAssignmentsGridProps = {
 };
 
 export default function PageBlocksAssignmentsGrid({
+  returnTo,
   rows,
   previewHref,
   sort,
@@ -127,6 +129,7 @@ export default function PageBlocksAssignmentsGrid({
         const reorder = getReorderPosition(row);
         return (
           <PageBlocksAssignmentRow
+            returnTo={returnTo}
             key={rowId}
             row={row}
             rowId={rowId}

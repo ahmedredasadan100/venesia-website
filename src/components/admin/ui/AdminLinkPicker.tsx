@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { unstable_rethrow } from "next/navigation";
 
 import {
   browseAdminLinksAjax,
@@ -12,7 +13,7 @@ import {
   type PickerMenuSummary,
 } from "../../../lib/admin/links/actions";
 import { menuItemToAdminLink } from "../../../lib/admin/links/menu-bridge";
-import { adminLinkFromSearchResult } from "../../../lib/admin/links/serialize";
+import { adminLinkFromSearchResult, serializeAdminLink } from "../../../lib/admin/links/serialize";
 import {
   pushRecentAdminLink,
   readRecentAdminLinks,
@@ -40,7 +41,7 @@ type ExplorerResourceId =
 type AdminLinkPickerProps = {
   open: boolean;
   onClose: () => void;
-  onSelect: (value: AdminLinkValue) => void;
+  onSelect: (value: AdminLinkValue, display?: AdminLinkDisplay) => void;
   initialValue?: AdminLinkValue;
 };
 
@@ -149,6 +150,8 @@ export default function AdminLinkPicker({
   const [error, setError] = useState<string | null>(null);
   const [pendingLink, setPendingLink] = useState<AdminLinkValue | null>(null);
   const [preview, setPreview] = useState<AdminLinkDisplay | null>(null);
+  const previewRequest = useRef(0);
+  const resolvedPreview = useRef<{ key: string; display: AdminLinkDisplay } | null>(null);
   const [recentLinks] = useState<AdminLinkValue[]>(() =>
     readRecentAdminLinks(),
   );
@@ -208,89 +211,117 @@ export default function AdminLinkPicker({
   }, []);
 
   const updatePreview = useCallback(async (link: AdminLinkValue | null) => {
+    const request = ++previewRequest.current;
+    resolvedPreview.current = null;
+    setPreview(null);
     if (!link || link.link_kind === "none") {
-      setPreview(null);
       return;
     }
-    const response = await resolveAdminLinkAjax(link);
-    if (response.ok) setPreview(response.display);
+    try {
+      const response = await resolveAdminLinkAjax(link);
+      if (request !== previewRequest.current) return;
+      if (response.ok) {
+        resolvedPreview.current = { key: JSON.stringify(serializeAdminLink(link)), display: response.display };
+        setPreview(response.display);
+      }
+    } catch (error) {
+      unstable_rethrow(error);
+      // A failed descriptive preview cannot replace the selected link identity.
+    }
   }, []);
 
-  const loadBrowseItems = useCallback(async () => {
-    if (!open || isFormResource(resource)) return;
-
-    setLoading(true);
-    setError(null);
-
-    if (resource === "menus") {
-      if (!selectedMenuId) {
-        const response = await browseMenusPickerAjax();
-        setLoading(false);
-        if (!response.ok) {
-          setError(response.message);
-          setMenus([]);
-          return;
-        }
-        setMenus(response.menus);
-        return;
-      }
-
-      const response = await browseMenuItemsPickerAjax({
-        menuId: selectedMenuId,
-        query,
-      });
-      setLoading(false);
-      if (!response.ok) {
-        setError(response.message);
-        setMenuItems([]);
-        return;
-      }
-      setMenuItems(response.items);
-      return;
+  const initialValueJson = JSON.stringify(initialValue ?? null);
+  useEffect(() => {
+    const request = ++previewRequest.current;
+    resolvedPreview.current = null;
+    const initialLink = JSON.parse(initialValueJson) as AdminLinkValue | null;
+    if (open && initialLink && initialLink.link_kind !== "none" && isFormResource(defaultResourceForValue(initialLink))) {
+      void resolveAdminLinkAjax(initialLink).then(response => {
+        if (request !== previewRequest.current || !response.ok) return;
+        resolvedPreview.current = { key: JSON.stringify(serializeAdminLink(initialLink)), display: response.display };
+        setPreview(response.display);
+      }).catch(unstable_rethrow);
     }
-
-    if (resource === "topic_categories") {
-      const response = await browseTopicCategoriesPickerAjax({ query });
-      setLoading(false);
-      if (!response.ok) {
-        setError(response.message);
-        setItems([]);
-        return;
-      }
-      setItems(response.items);
-      return;
-    }
-
-    if (BROWSEABLE_TYPES.has(resource)) {
-      const response = await browseAdminLinksAjax({
-        type: resource,
-        query,
-        limit: 100,
-      });
-      setLoading(false);
-      if (!response.ok) {
-        setError(response.message);
-        setItems([]);
-        return;
-      }
-      setItems(response.results);
-    }
-
-    setLoading(false);
-  }, [open, resource, query, selectedMenuId]);
+    return () => {
+      previewRequest.current += 1;
+      resolvedPreview.current = null;
+    };
+  }, [open, initialValueJson]);
 
   useEffect(() => {
     if (!open || isFormResource(resource)) return;
+    const browseResource = resource;
+    // Server Actions do not expose transport cancellation. Discard responses
+    // after the picker closes or its resource/query changes instead.
+    let active = true;
+    async function loadBrowseItems() {
+      setLoading(true);
+      setError(null);
+      try {
+        if (browseResource === "menus") {
+          if (!selectedMenuId) {
+            const response = await browseMenusPickerAjax();
+            if (!active) return;
+            if (!response.ok) {
+              setError(response.message);
+              setMenus([]);
+              return;
+            }
+            setMenus(response.menus);
+            return;
+          }
 
-    const timer = window.setTimeout(() => {
-      void loadBrowseItems();
-    }, 220);
+          const response = await browseMenuItemsPickerAjax({ menuId: selectedMenuId, query });
+          if (!active) return;
+          if (!response.ok) {
+            setError(response.message);
+            setMenuItems([]);
+            return;
+          }
+          setMenuItems(response.items);
+          return;
+        }
+        if (browseResource === "topic_categories") {
+          const response = await browseTopicCategoriesPickerAjax({ query });
+          if (!active) return;
+          if (!response.ok) {
+            setError(response.message);
+            setItems([]);
+            return;
+          }
+          setItems(response.items);
+          return;
+        }
+        if (BROWSEABLE_TYPES.has(browseResource)) {
+          const response = await browseAdminLinksAjax({ type: browseResource, query, limit: 100 });
+          if (!active) return;
+          if (!response.ok) {
+            setError(response.message);
+            setItems([]);
+            return;
+          }
+          setItems(response.results);
+        }
+      } catch (loadError) {
+        unstable_rethrow(loadError);
+        if (!active) return;
+        setError("تعذر تحميل الموارد. أعد المحاولة.");
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
 
-    return () => window.clearTimeout(timer);
-  }, [open, resource, selectedMenuId, query, loadBrowseItems]);
+    // Debounce typing only; opening a resource already supplies its full query.
+    const timer = query ? window.setTimeout(() => void loadBrowseItems(), 220) : null;
+    if (timer === null) void loadBrowseItems();
+    return () => {
+      active = false;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [open, resource, selectedMenuId, query]);
 
   const resetKey = open
-    ? `open:${JSON.stringify(initialValue ?? null)}`
+    ? `open:${initialValueJson}`
     : "closed";
   const [lastResetKey, setLastResetKey] = useState(resetKey);
   if (resetKey !== lastResetKey) {
@@ -301,20 +332,13 @@ export default function AdminLinkPicker({
       setResource(nextResource);
       setPendingLink(null);
       setPreview(null);
-      if (
-        initialValue &&
-        initialValue.link_kind !== "none" &&
-        isFormResource(nextResource)
-      ) {
-        void updatePreview(initialValue);
-      }
     }
   }
 
   function handleResourceChange(next: ExplorerResourceId) {
     setResource(next);
     setPendingLink(null);
-    setPreview(null);
+    void updatePreview(null);
     setQuery("");
     setItems([]);
     setMenus([]);
@@ -395,7 +419,8 @@ export default function AdminLinkPicker({
       return;
     }
     pushRecentAdminLink(link);
-    onSelect(link);
+    const resolved = resolvedPreview.current;
+    onSelect(link, resolved?.key === JSON.stringify(serializeAdminLink(link)) ? resolved.display : undefined);
     onClose();
   }
 
@@ -786,7 +811,7 @@ export default function AdminLinkPicker({
                         setMenuItems([]);
                         setQuery("");
                         setPendingLink(null);
-                        setPreview(null);
+                        void updatePreview(null);
                       }}
                       className="text-xs font-semibold text-[#D8B87A] hover:underline"
                     >
@@ -817,7 +842,7 @@ export default function AdminLinkPicker({
             ) : null}
 
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {loading ? (
+            {loading && !isFormResource(resource) ? (
                 <p className="text-sm text-white/45">جاري التحميل...</p>
               ) : (
                 renderItemsPanel()

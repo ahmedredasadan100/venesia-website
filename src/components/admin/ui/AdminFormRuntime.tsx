@@ -410,6 +410,8 @@ export type AdminFormRuntimeProps<TResult = unknown> = {
   onSuccess?: (state: AdminFormActionState<TResult>) => void;
   /** Domain-declared list entities affected by a confirmed structured save. */
   invalidateEntities?: readonly string[];
+  /** Modal editors can settle their active list before exposing its next action. */
+  invalidationRefetchType?: "none" | "active";
   runtimeRef?: Ref<AdminFormRuntimeHandle>;
   navigation?: AdminFormNavigationContract;
   formId?: string;
@@ -546,6 +548,7 @@ function AdminFormRuntimeInstance<TResult = unknown>({
   onClose,
   onSuccess,
   invalidateEntities,
+  invalidationRefetchType = "none",
   runtimeRef,
   navigation,
   formId,
@@ -596,7 +599,11 @@ function AdminFormRuntimeInstance<TResult = unknown>({
         if (!invalidateEntities?.length) return result;
         try {
           if (!queryClient) throw new Error("Admin list query provider is missing.");
-          await invalidateAdminEntityListCaches(queryClient, invalidateEntities);
+          await invalidateAdminEntityListCaches(
+            queryClient,
+            invalidateEntities,
+            invalidationRefetchType,
+          );
           return result;
         } catch {
           // Only cache settlement is inside this catch. Never replay the action.

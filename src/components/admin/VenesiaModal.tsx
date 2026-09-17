@@ -15,6 +15,7 @@ import {
 import { AdminModalCancelButton, AdminModalDangerButton, AdminModalPrimaryButton } from "./ui/AdminModalButtons";
 import { useClientMounted } from "../../hooks/use-client-mounted";
 import { VENESIA_SCROLLBAR_VISUAL_CLASSES } from "../venesia-scrollbar-styles";
+import { useAdminFeedbackModalHost } from "./AdminFeedbackProvider";
 
 export type VenesiaModalSize = keyof typeof ADMIN_MODAL_SIZES;
 
@@ -277,6 +278,7 @@ export default function VenesiaModal({
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLElement | null>(null);
+  const feedbackHostRef = useAdminFeedbackModalHost();
   const returnFocusFrameRef = useRef<number | null>(null);
   const focusReturnSnapshotRef = useRef<FocusReturnSnapshot | null>(null);
   const configuredInitialFocusRef = useRef(initialFocusRef);
@@ -458,6 +460,7 @@ export default function VenesiaModal({
         <div
           className={`${ADMIN_MODAL.body} min-h-0 flex-1 overflow-y-auto ${VENESIA_SCROLLBAR_VISUAL_CLASSES} ${bodyClassName}`.trim()}
         >
+          <div ref={feedbackHostRef} data-admin-feedback-modal-host="" />
           {children}
         </div>
 

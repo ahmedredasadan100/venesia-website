@@ -16,8 +16,8 @@ import { loadTopicFilterOptionsForAdmin } from "../../../../../../lib/feed-modul
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
   searchParams?:
-    | Promise<{ saved?: string; notice?: string; returnPageId?: string }>
-    | { saved?: string; notice?: string; returnPageId?: string };
+    | Promise<{ saved?: string; notice?: string; returnPageId?: string; return_to?: string }>
+    | { saved?: string; notice?: string; returnPageId?: string; return_to?: string };
 };
 
 export default async function ContentBlockEditPage({
@@ -44,7 +44,7 @@ export default async function ContentBlockEditPage({
   });
   const topicCategoryOptions =
     getContentModuleEditorKey(block.slug, block.variant) === "topics-listing"
-      ? (await loadTopicFilterOptionsForAdmin()).categories
+      ? (await loadTopicFilterOptionsForAdmin({ includeSeries: false })).categories
       : [];
   let projectDetailHeroEditorLinks: {
     root: string;
@@ -71,10 +71,12 @@ export default async function ContentBlockEditPage({
       root: withModuleEditorReturnPageId(
         `/admin/pages-blocks/blocks/hero/${projectDetailHero.id}`,
         resolvedSearch.returnPageId,
+        resolvedSearch.return_to,
       ),
       buttons: withModuleEditorReturnPageId(
         `/admin/pages-blocks/blocks/hero/${projectDetailHero.id}?tab=buttons`,
         resolvedSearch.returnPageId,
+        resolvedSearch.return_to,
       ),
     };
   }

@@ -6,9 +6,9 @@ import {
   AdminPageExperience,
 } from "../../../../../components/admin/ui";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { resolveAdminFormReturnPath } from "../../../../../lib/admin/form-runtime";
 import {
-  loadSeriesCategoryFormOptions,
-  loadSeriesFormRecord,
+  loadSeriesEditorFormData,
 } from "../../../../../lib/admin/content/load-taxonomy-form-data";
 import SeriesForm from "../SeriesForm";
 
@@ -23,25 +23,21 @@ function truncateWords(value: string, limit = 4) {
 
 export default async function EditSeriesPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ return_to?: string | string[] }>;
 }) {
   await requireAdminSession();
   const { id: rawId } = await params;
   if (!/^\d+$/.test(rawId)) notFound();
   const id = Number(rawId);
-  const seriesResult = await loadSeriesFormRecord(id);
+  const seriesResult = await loadSeriesEditorFormData(id);
   if (seriesResult.status === "error") throw seriesResult.error;
   if (seriesResult.status === "not_found") notFound();
 
-  const series = seriesResult.data;
-  const categoryOptionsResult = await loadSeriesCategoryFormOptions(
-    series.category_id,
-  );
-  if (categoryOptionsResult.status === "error") {
-    throw categoryOptionsResult.error;
-  }
-  const categoryOptions = categoryOptionsResult.data;
+  const { series, categoryOptions } = seriesResult.data;
+  const closeHref = resolveAdminFormReturnPath((await searchParams)?.return_to, "/admin/content/series");
 
   return (
     <AdminPageExperience>
@@ -51,7 +47,7 @@ export default async function EditSeriesPage({
         description="تعديل سلسلة — حدّث بيانات السلسلة مع الحفاظ على Slug الثابت وروابط الموضوعات الحالية."
         actions={
           <>
-            <AdminActionButton href="/admin/content/series" variant="dark">
+            <AdminActionButton href={closeHref} variant="dark">
               عرض السلاسل
             </AdminActionButton>
             <AdminActionButton href="/admin/content/categories" variant="dark">
@@ -69,6 +65,7 @@ export default async function EditSeriesPage({
         mode="edit"
         series={series}
         categoryOptions={categoryOptions}
+        closeHref={closeHref}
       />
     </AdminPageExperience>
   );

@@ -186,7 +186,7 @@ export async function loadProjectEntry(
     locationState,
     locationPointsResult,
     featuresResult,
-    plansResult,
+    planState,
     deliveryResult,
     mediaResult,
     videosResult,
@@ -203,11 +203,24 @@ export async function loadProjectEntry(
       .select("id,client_key,body,sort_order")
       .eq("project_id", id)
       .order("sort_order"),
-    supabase
-      .from("project_floor_plans")
-      .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
-      .eq("project_id", id)
-      .order("sort_order"),
+    (async () => {
+      const plansResult = await supabase
+        .from("project_floor_plans")
+        .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
+        .eq("project_id", id)
+        .order("sort_order");
+      const planIds = (plansResult.data ?? []).map((row) => Number(row.id)).filter(Number.isFinite);
+      // Details depend on plan IDs, not on the unrelated media/reference reads.
+      const detailsResult = !plansResult.error && planIds.length
+        ? await supabase
+            .from("project_floor_plan_details")
+            .select("id,client_key,floor_plan_id,label,value,sort_order")
+            .in("floor_plan_id", planIds)
+            .order("floor_plan_id")
+            .order("sort_order")
+        : { data: [], error: null };
+      return { plansResult, detailsResult };
+    })(),
     supabase
       .from("project_delivery_items")
       .select("id,client_key,body,sort_order")
@@ -227,6 +240,8 @@ export async function loadProjectEntry(
       .order("sort_order"),
   ]);
 
+  const { plansResult, detailsResult } = planState;
+
   const childErrors = [
     locationPointsResult.error,
     featuresResult.error,
@@ -242,15 +257,6 @@ export async function loadProjectEntry(
   }
 
   const planRows = plansResult.data ?? [];
-  const planIds = planRows.map((row) => Number(row.id)).filter(Number.isFinite);
-  const detailsResult = planIds.length
-    ? await supabase
-        .from("project_floor_plan_details")
-        .select("id,client_key,floor_plan_id,label,value,sort_order")
-        .in("floor_plan_id", planIds)
-        .order("floor_plan_id")
-        .order("sort_order")
-    : { data: [], error: null };
   if (detailsResult.error) {
     throw new ProjectEntrySchemaUnavailableError(schemaMessage(detailsResult.error.message));
   }

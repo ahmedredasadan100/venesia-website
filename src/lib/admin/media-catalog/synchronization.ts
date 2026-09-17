@@ -134,10 +134,16 @@ export async function markMediaCatalogRuntimeUncertain(warnings: string[]) {
   });
 }
 
-export async function syncMediaReferencesForEntity(
+type MediaReferenceSynchronizationOptions = {
+  leaseToken?: string | null;
+  leaseEntityIdentity?: string | null;
+};
+
+async function syncMediaReferencesWithAssetMap(
   domainKey: string,
   entityIdentity: string,
-  options: { leaseToken?: string | null; leaseEntityIdentity?: string | null } = {},
+  options: MediaReferenceSynchronizationOptions,
+  readAssetMap: typeof getAllCatalogAssetIdentityMap,
 ) {
   const provider = getMediaReferenceProvider(domainKey);
   if (!provider) {
@@ -151,7 +157,7 @@ export async function syncMediaReferencesForEntity(
   try {
     [references, assetMap] = await Promise.all([
       provider.scanEntity(entityIdentity),
-      getAllCatalogAssetIdentityMap(),
+      readAssetMap(),
     ]);
   } catch (error) {
     const warning = `media_reference_entity_scan_failed:${provider.domainKey}:${entityIdentity}`;
@@ -203,13 +209,22 @@ export async function syncMediaReferencesForEntity(
   };
 }
 
-export async function synchronizeMediaReferencesAfterDomainMutation(
+export async function syncMediaReferencesForEntity(
+  domainKey: string,
+  entityIdentity: string,
+  options: MediaReferenceSynchronizationOptions = {},
+) {
+  return syncMediaReferencesWithAssetMap(domainKey, entityIdentity, options, getAllCatalogAssetIdentityMap);
+}
+
+async function synchronizeMediaReferencesWithAssetMap(
   domainKey: string,
   entityIdentity: string | number,
-  options: { leaseToken?: string | null; leaseEntityIdentity?: string | null } = {},
+  options: MediaReferenceSynchronizationOptions,
+  readAssetMap: typeof getAllCatalogAssetIdentityMap,
 ) {
   try {
-    const result = await syncMediaReferencesForEntity(domainKey, String(entityIdentity), options);
+    const result = await syncMediaReferencesWithAssetMap(domainKey, String(entityIdentity), options, readAssetMap);
     return {
       status: "synced" as const,
       code: "media_reference_sync_succeeded" as const,
@@ -238,6 +253,14 @@ export async function synchronizeMediaReferencesAfterDomainMutation(
   }
 }
 
+export async function synchronizeMediaReferencesAfterDomainMutation(
+  domainKey: string,
+  entityIdentity: string | number,
+  options: MediaReferenceSynchronizationOptions = {},
+) {
+  return synchronizeMediaReferencesWithAssetMap(domainKey, entityIdentity, options, getAllCatalogAssetIdentityMap);
+}
+
 export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
   targets: readonly {
     domainKey: string;
@@ -250,24 +273,31 @@ export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     entityIdentity: string | number;
   }[] = [],
 ) {
+  // One post-mutation Catalog snapshot serves this batch only. Standalone calls
+  // and later batches still read fresh data; provider scans and lease RPCs remain per target.
+  let assetMapPromise: ReturnType<typeof getAllCatalogAssetIdentityMap> | undefined;
+  const readAssetMap = () => assetMapPromise ??= getAllCatalogAssetIdentityMap();
   const [writeResults, cleanupResults] = await Promise.all([
     Promise.all(
       targets.map((target) =>
-        synchronizeMediaReferencesAfterDomainMutation(
+        synchronizeMediaReferencesWithAssetMap(
           target.domainKey,
           target.entityIdentity,
           {
             leaseToken,
             leaseEntityIdentity: target.leaseEntityIdentity,
           },
+          readAssetMap,
         ),
       ),
     ),
     Promise.all(
       cleanupTargets.map((target) =>
-        synchronizeMediaReferencesAfterDomainMutation(
+        synchronizeMediaReferencesWithAssetMap(
           target.domainKey,
           target.entityIdentity,
+          {},
+          readAssetMap,
         ),
       ),
     ),

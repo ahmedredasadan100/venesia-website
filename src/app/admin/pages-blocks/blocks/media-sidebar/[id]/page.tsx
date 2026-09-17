@@ -22,7 +22,7 @@ export default async function MediaSidebarModuleEditPage({ params, searchParams 
   const [{ data: block, error }, assignmentContext, filterOptions] = await Promise.all([
     getSupabaseAdmin().from("media_sidebar_module_templates").select("*").eq("id", id).maybeSingle(),
     getMediaSidebarModuleAssignmentContext(id),
-    loadTopicFilterOptionsForAdmin(),
+    loadTopicFilterOptionsForAdmin({ includeSeries: false }),
   ]);
 
   if (error) throw new Error(`Media Sidebar template read failed: ${error.message}`);

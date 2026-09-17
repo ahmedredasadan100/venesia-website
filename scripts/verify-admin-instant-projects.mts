@@ -10,6 +10,10 @@ import {
   projectsQueryContract,
   withLockedProjectType,
 } from "../src/lib/admin/projects/entity-list-contract.ts";
+import {
+  adminFormEditHref,
+  resolveAdminFormReturnPath,
+} from "../src/lib/admin/form-runtime.ts";
 
 const root = resolve(process.cwd());
 let passed = 0;
@@ -213,7 +217,7 @@ check(
 );
 check(
     table.includes("AdminDataGridRowActions") &&
-    table.includes('href: `/admin/projects/${row.id}`') &&
+    table.includes('href: adminFormEditHref(`/admin/projects/${row.id}`, handlers.currentListPath, `/admin/projects/${row.type}`)') &&
     table.includes("getProjectPreviewCapability") &&
     table.includes('title: "معلومات المشروع"') &&
     table.includes("copyPublicLink:") &&
@@ -223,6 +227,13 @@ check(
     table.includes("onDuplicate") &&
     table.includes('archive: { access: "hidden" }'),
   "Rows expose one shared Edit, Preview, Information, Copy Link, Visibility, Featured, Duplicate, and Delete declaration",
+);
+check(
+  table.includes('import { adminFormEditHref } from "../../../../lib/admin/form-runtime"') &&
+    table.includes('href={adminFormEditHref(`/admin/projects/${row.id}`, handlers.currentListPath, `/admin/projects/${row.type}`)}') &&
+    /writeAdminEntityListQuery\(\s*projectsQueryContract,\s*controller\.query\s*,?\s*\)/u.test(client) &&
+    client.includes("currentListPath"),
+  "Project title and shared Edit action use the same Form return owner and canonical list query writer",
 );
 check(
   client.includes("<AdminEntityList") &&
@@ -400,6 +411,28 @@ check(
     written.get("publication_status") === "published",
   "Project URL serialization preserves authoritative publication state",
 );
+for (const projectType of ["residential", "commercial"] as const) {
+  const listPath = `/admin/projects/${projectType}`;
+  const listQuery = normalizeAdminEntityListQuery(
+    projectsQueryContract,
+    `type=${projectType}&q=Nile%20Tower&page=2&limit=20&sort=english_name_asc&featured=yes&publication_status=published`,
+  );
+  const returnPath = `${listPath}?${writeAdminEntityListQuery(projectsQueryContract, listQuery).toString()}`;
+  const editPath = "/admin/projects/42";
+  const editHref = new URL(adminFormEditHref(editPath, returnPath, listPath), "http://internal.invalid");
+  check(
+    editHref.pathname === editPath &&
+      editHref.searchParams.get("return_to") === returnPath &&
+      resolveAdminFormReturnPath(editHref.searchParams.get("return_to"), listPath) === returnPath,
+    `${projectType} Edit retains exact entity identity and canonical filter/search/page/sort query through Form Close`,
+  );
+  check(
+    adminFormEditHref(editPath, undefined, listPath) === editPath &&
+      adminFormEditHref(editPath, "https://external.invalid/admin/projects", listPath) === editPath &&
+      resolveAdminFormReturnPath(returnPath, `/admin/projects/${projectType === "residential" ? "commercial" : "residential"}`) !== returnPath,
+    `${projectType} Edit keeps default destination and rejects external or cross-type return state`,
+  );
+}
 let invalidPublicationRejected = false;
 try {
   parseAdminEntityListRequestQuery(

@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyProjectEntryReadScheduling } from "./lib/verify-project-entry-read-scheduling.mts";
 import {
   assertMigrationSourceProvenance,
   classifyWholeFileMigrationProvenance,
@@ -1531,4 +1532,5 @@ check(
     projectRowActionsFixture.trimEnd().toLowerCase().endsWith("rollback;"),
 );
 
+passed += await verifyProjectEntryReadScheduling(ROOT);
 console.log(`OK: Project Admin Data Entry verifier passed ${passed} checks.`);

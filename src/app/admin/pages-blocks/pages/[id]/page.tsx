@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { resolveAdminFormReturnPath } from "../../../../../lib/admin/form-runtime";
 import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedbackProvider";
 import { AdminPageContextHeader, AdminPageExperience } from "../../../../../components/admin/ui";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
@@ -14,8 +15,8 @@ import PageBlocksClient from "./PageBlocksClient";
 type PageProps = {
   params: Promise<{ id: string }> | { id: string };
   searchParams?:
-    | Promise<{ seo_notice?: string; seo_error?: string; tab?: string }>
-    | { seo_notice?: string; seo_error?: string; tab?: string };
+    | Promise<{ seo_notice?: string; seo_error?: string; tab?: string; return_to?: string | string[] }>
+    | { seo_notice?: string; seo_error?: string; tab?: string; return_to?: string | string[] };
 };
 
 function resolveInitialTabId(tab: string | undefined, hasSeoFeedback: boolean) {
@@ -112,6 +113,7 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
 
   return (
     <PageBlocksClient
+      returnTo={resolveAdminFormReturnPath(resolvedSearchParams?.return_to, "/admin/pages-blocks/pages")}
       page={page}
       assignments={assignmentsData.assignments}
       templates={assignmentsData.templates}

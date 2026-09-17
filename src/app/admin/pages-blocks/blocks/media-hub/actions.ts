@@ -21,7 +21,7 @@ import {
   parsePageBlockBulkIds,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   buildMediaHubModuleConfig,
   parseMediaHubSectionKey,
@@ -124,8 +124,7 @@ export async function updateMediaHubModule(formData: FormData) {
     actor,
   );
   const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
-    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
-    await revalidateBlockModulePaths("media-hub");
+    await revalidateBlockModulePaths("media-hub", coordinated.value.affectedPageIds);
     revalidatePath(`/admin/pages-blocks/blocks/media-hub/${id}`, "page");
   });
   if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);

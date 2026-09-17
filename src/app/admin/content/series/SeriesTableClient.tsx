@@ -29,9 +29,10 @@ import {
   type AdminEntityFilterDef,
   type AdminEntityFilterOption,
 } from "../../../../lib/admin/entity-list";
-import type {
-  AdminEntityListQuery,
-  AdminEntityListResult,
+import {
+  writeAdminEntityListQuery,
+  type AdminEntityListQuery,
+  type AdminEntityListResult,
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
@@ -308,8 +309,13 @@ export default function SeriesTableClient({
     [runLifecycleMutation],
   );
 
+  const currentListPath = useMemo(() => {
+    const params = writeAdminEntityListQuery(seriesQueryContract, controller.query);
+    return params.size ? `${BASE_PATH}?${params.toString()}` : BASE_PATH;
+  }, [controller.query]);
   const rowHandlers = useMemo<SeriesRowActionHandlers>(
     () => ({
+      currentListPath,
       view: controller.query.filters.view,
       rowInteraction: instant.getRowInteraction,
       onToggle: toggleSeries,
@@ -319,6 +325,7 @@ export default function SeriesTableClient({
       onPermanentDelete: permanentlyDeleteSeries,
     }),
     [
+      currentListPath,
       deleteSeries,
       duplicateSeries,
       instant.getRowInteraction,

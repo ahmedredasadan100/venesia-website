@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 
 import type { AdminActionFeedback } from "../../lib/admin/admin-action-feedback";
 import AdminNotice from "./AdminNotice";
@@ -38,6 +39,8 @@ type AdminFeedbackContextValue = {
   ) => string;
   dismissFeedback: (id: string) => void;
   clearFeedback: (channel?: string) => void;
+  modalHost: HTMLElement | null;
+  registerModalHost: (host: HTMLElement) => () => void;
 };
 
 const AdminFeedbackContext = createContext<AdminFeedbackContextValue | null>(
@@ -61,6 +64,19 @@ export function useAdminFeedback() {
   return context;
 }
 
+/** Optional so the shared modal remains usable outside Admin feedback. */
+export function useAdminFeedbackModalHost() {
+  const registerModalHost = useContext(AdminFeedbackContext)?.registerModalHost;
+  const unregisterRef = useRef<(() => void) | null>(null);
+
+  return useCallback((host: HTMLDivElement | null) => {
+    unregisterRef.current?.();
+    unregisterRef.current = host && registerModalHost
+      ? registerModalHost(host)
+      : null;
+  }, [registerModalHost]);
+}
+
 function AdminFeedbackViewportEntry({
   entry,
   onDismiss,
@@ -68,12 +84,15 @@ function AdminFeedbackViewportEntry({
 }: {
   entry: AdminFeedbackEntry;
   onDismiss: (id: string) => void;
-  placement?: "global" | "inline";
+  placement?: "global" | "inline" | "modal";
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (placement !== "global" || !entry.critical) return;
+    if (placement === "inline" || !entry.critical) return;
+    if (placement === "modal") {
+      rootRef.current?.scrollIntoView({ block: "nearest" });
+    }
     rootRef.current?.focus({ preventScroll: true });
   }, [entry.critical, entry.id, placement]);
 
@@ -101,28 +120,33 @@ function AdminFeedbackViewportEntry({
 }
 
 export function AdminFeedbackViewport() {
-  const { entries, dismissFeedback } = useAdminFeedback();
+  const { entries, dismissFeedback, modalHost } = useAdminFeedback();
   const globalEntries = entries.filter(
     (entry) => entry.placement === "global",
   );
 
   if (!globalEntries.length) return null;
 
-  return (
+  const viewport = (
     <section
       aria-label="إشعارات لوحة الإدارة"
       data-admin-feedback-viewport=""
-      className="pointer-events-none fixed inset-x-4 top-4 bottom-auto z-[120] flex max-h-[min(70vh,560px)] flex-col gap-3 overflow-y-auto sm:inset-x-auto sm:top-auto sm:bottom-6 sm:left-6 sm:w-[min(480px,calc(100vw-3rem))]"
+      data-admin-feedback-placement={modalHost ? "modal" : "global"}
+      className={modalHost
+        ? "mb-4 flex flex-col gap-3"
+        : "pointer-events-none fixed inset-x-4 top-4 bottom-auto z-[120] flex max-h-[min(70vh,560px)] flex-col gap-3 overflow-y-auto sm:inset-x-auto sm:top-auto sm:bottom-6 sm:left-6 sm:w-[min(480px,calc(100vw-3rem))]"}
     >
       {[...globalEntries].reverse().map((entry) => (
         <AdminFeedbackViewportEntry
           key={entry.id}
           entry={entry}
           onDismiss={dismissFeedback}
+          placement={modalHost ? "modal" : "global"}
         />
       ))}
     </section>
   );
+  return modalHost ? createPortal(viewport, modalHost) : viewport;
 }
 
 export function AdminFeedbackChannelViewport({
@@ -241,6 +265,16 @@ export default function AdminFeedbackProvider({
 }) {
   const sequenceRef = useRef(0);
   const [entries, setEntries] = useState<AdminFeedbackEntry[]>([]);
+  const [modalHosts, setModalHosts] = useState<HTMLElement[]>([]);
+  const modalHost = modalHosts.at(-1) ?? null;
+  const registerModalHost = useCallback((host: HTMLElement) => {
+    setModalHosts((current) => [...current.filter((item) => item !== host), host]);
+    return () => {
+      setModalHosts((current) => current.includes(host)
+        ? current.filter((item) => item !== host)
+        : current);
+    };
+  }, []);
 
   const dismissFeedback = useCallback((id: string) => {
     setEntries((current) => current.filter((entry) => entry.id !== id));
@@ -342,8 +376,10 @@ export default function AdminFeedbackProvider({
       publishFeedback,
       dismissFeedback,
       clearFeedback,
+      modalHost,
+      registerModalHost,
     }),
-    [clearFeedback, dismissFeedback, entries, publishFeedback],
+    [clearFeedback, dismissFeedback, entries, modalHost, publishFeedback, registerModalHost],
   );
 
   return (

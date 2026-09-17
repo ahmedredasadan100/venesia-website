@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { adminFormEditHref } from "../../../../lib/admin/form-runtime";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import {
   AdminDataGridRowActions,
@@ -121,7 +122,7 @@ function SeriesRowActions({
         ? { access: "hidden" }
         : {
             access: "allowed",
-            href: `/admin/content/series/${row.id}`,
+            href: adminFormEditHref(`/admin/content/series/${row.id}`, handlers.currentListPath, "/admin/content/series"),
           },
       preview: isTrashView
         ? { access: "hidden" }
@@ -283,6 +284,7 @@ function SeriesRowActions({
 }
 
 export type SeriesRowActionHandlers = {
+  currentListPath?: string;
   view: "active" | "trash";
   rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onToggle: (row: SeriesListRow) => Promise<AdminActionResult>;
@@ -330,7 +332,7 @@ export function createSeriesColumns(
           </span>
         ) : (
           <Link
-            href={`/admin/content/series/${row.id}`}
+            href={adminFormEditHref(`/admin/content/series/${row.id}`, handlers.currentListPath, "/admin/content/series")}
             className="flex min-w-0 cursor-pointer items-center justify-start gap-3 text-right transition hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
           >
             {content}

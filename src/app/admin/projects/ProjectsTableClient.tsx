@@ -17,9 +17,10 @@ import {
   type AdminActionResult,
 } from "../../../lib/admin/admin-action-result";
 import type { ProjectCategory } from "../../../lib/projects/public-types";
-import type {
-  AdminEntityListQuery,
-  AdminEntityListResult,
+import {
+  writeAdminEntityListQuery,
+  type AdminEntityListQuery,
+  type AdminEntityListResult,
 } from "../../../lib/admin/entity-list/data-engine/contracts";
 import type { AdminEntityFilterDef } from "../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../lib/admin/entity-list/data-engine/client-controller";
@@ -360,9 +361,14 @@ export default function ProjectsTableClient({
     [],
   );
 
+  const currentListPath = useMemo(() => {
+    const params = writeAdminEntityListQuery(projectsQueryContract, controller.query);
+    return params.size ? `${basePath}?${params.toString()}` : basePath;
+  }, [basePath, controller.query]);
   const columns = useMemo(
     () =>
       createProjectColumns({
+        currentListPath,
         rowInteraction: instant.getRowInteraction,
         onCopyPublicLink: copyProjectPublicLink,
         onDelete: deleteProject,
@@ -371,6 +377,7 @@ export default function ProjectsTableClient({
         onVisibility: setProjectVisibility,
       }),
     [
+      currentListPath,
       copyProjectPublicLink,
       deleteProject,
       duplicateProject,

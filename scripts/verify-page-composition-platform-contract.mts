@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { verifyPageBlockReadAndRevalidationContract } from "./fixtures/page-block-performance-harness.mjs";
 
 import {
   PAGE_COMPOSITION_POSITIONS,
@@ -345,6 +346,9 @@ assert.ok(!assignmentContract.includes("venisia-theme-regions"));
 assert.ok(!positionInventory.includes("venisia-theme-regions"));
 assert.ok(!assignmentContract.includes("components/"));
 assert.ok(!positionInventory.includes("components/"));
+
+await verifyPageBlockReadAndRevalidationContract(root);
+console.log("PASS Page Block read/revalidation contract: summary-only picker payload, preserved SEO content, batched detached/assigned page invalidation, failure propagation, and every module save adopter.");
 
 console.log(
   "PASS Page Composition Platform Contract: semantic Region identifiers/order and Assignment Position/visibility/order are CMS-owned; Theme names, Templates, CSS, Grid/Columns, direction, breakpoints, geometry, and visual Region rendering are downstream-only. A Theme replacement consumes the same Regions and Assignments without changing the contract or rebuilding data.",

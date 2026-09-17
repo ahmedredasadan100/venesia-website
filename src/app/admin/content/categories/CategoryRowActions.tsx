@@ -1,5 +1,7 @@
 "use client";
 
+import { adminFormEditHref } from "../../../../lib/admin/form-runtime";
+
 import {
   AdminDataGridRowActions,
   type AdminRowActionsCapability,
@@ -17,6 +19,7 @@ import type {
 
 type CategoryRowActionsProps = {
   category: CategoryListRow;
+  currentListPath?: string;
   view: "active" | "trash";
   onMutationResult?: (result: AdminActionResult) => void;
   interaction: AdminInstantMutationRowInteraction;
@@ -34,6 +37,7 @@ type CategoryRowActionsProps = {
 
 export default function CategoryRowActions({
   category,
+  currentListPath,
   view,
   onMutationResult,
   interaction,
@@ -81,7 +85,7 @@ export default function CategoryRowActions({
         ? { access: "hidden" }
         : {
             access: "allowed",
-            href: `/admin/content/categories/${category.id}`,
+            href: adminFormEditHref(`/admin/content/categories/${category.id}`, currentListPath, "/admin/content/categories"),
           },
       preview: isTrashView
         ? { access: "hidden" }

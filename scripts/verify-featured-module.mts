@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { createJiti } from "jiti";
+import { verifyFeaturedReferenceReadContract } from "./fixtures/page-block-performance-harness.mjs";
 
 const ROOT = process.cwd();
 const read = (path: string) =>
@@ -1208,5 +1209,8 @@ check(
 );
 
 await import("./qa-featured-editor-preservation.mts");
+
+await verifyFeaturedReferenceReadContract(ROOT);
+check("Featured references preserve category/series semantics and start independent item reads together without unused series", true);
 
 console.log(`Featured Module verification passed (${passed} checks).`);

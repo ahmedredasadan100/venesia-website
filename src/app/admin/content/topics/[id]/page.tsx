@@ -13,8 +13,7 @@ import {
 } from "../../../../../lib/admin/content/category-hierarchy";
 import {
   invalidTopicFormRecord,
-  loadTopicFormRecord,
-  loadTopicTaxonomyFormDependencies,
+  loadTopicEditorFormData,
 } from "../../../../../lib/admin/content/load-taxonomy-form-data";
 import {
   getContentTypeLabel,
@@ -54,25 +53,20 @@ export default async function UnifiedContentEditorPage(props: PageProps) {
   const topicId = Number(id);
   if (!Number.isSafeInteger(topicId) || topicId <= 0) notFound();
 
-  const topicResult = await loadTopicFormRecord(topicId);
+  const topicResult = await loadTopicEditorFormData(topicId);
   if (topicResult.status === "error") throw topicResult.error;
   if (topicResult.status === "not_found") notFound();
 
-  const topic = topicResult.data;
+  const topic = topicResult.data.topic;
   const contentType = topic.content_type;
   if (!isContentType(contentType)) throw invalidTopicFormRecord().error;
   const editorKind = resolveContentEditor(contentType);
   if (!editorKind) throw invalidTopicFormRecord().error;
 
-  const taxonomyResult = await loadTopicTaxonomyFormDependencies({
-    currentCategoryId: topic.category_id,
-    currentSeriesId: topic.series_id,
-  });
-  if (taxonomyResult.status === "error") throw taxonomyResult.error;
   const {
     categories: selectableCategories,
     series: selectableSeries,
-  } = taxonomyResult.data;
+  } = topicResult.data;
   const errorMessage = query?.error ? decodeURIComponent(query.error) : null;
 
   if (editorKind === "article") {

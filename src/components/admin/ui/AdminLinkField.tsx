@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { unstable_rethrow } from "next/navigation";
 
 import { resolveAdminLinkAjax } from "../../../lib/admin/links/actions";
 import { adminLinkHiddenInputNames } from "../../../lib/admin/links/form-fields";
@@ -56,27 +57,31 @@ export default function AdminLinkField({
   const [internalValue, setInternalValue] = useState<AdminLinkValue>(initial);
   const value = controlledValue ?? internalValue;
   const isControlled = Boolean(onControlledChange);
-  const [display, setDisplay] = useState<AdminLinkDisplay | null>(null);
+  const [display, setDisplay] = useState<{ key: string; value: AdminLinkDisplay } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const names = adminLinkHiddenInputNames(prefix);
   const serialized = serializeAdminLink(value);
-  const previewDisplay = value.link_kind === "none" ? null : display;
+  const valueKey = JSON.stringify(serialized);
+  const previewDisplay = value.link_kind !== "none" && display?.key === valueKey ? display.value : null;
   const canEditAnchor = showAnchor && supportsPageAnchor(value);
 
   useEffect(() => {
     if (value.link_kind === "none") return;
+    if (display?.key === valueKey) return;
 
     let cancelled = false;
     void resolveAdminLinkAjax(value).then((response) => {
       if (cancelled) return;
-      if (response.ok) setDisplay(response.display);
+      if (response.ok) setDisplay({ key: valueKey, value: response.display });
+    }).catch((error) => {
+      unstable_rethrow(error);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [value]);
+  }, [value, valueKey, display]);
 
   function setLink(next: AdminLinkValue) {
     if (!isControlled) setInternalValue(next);
@@ -110,11 +115,17 @@ export default function AdminLinkField({
           open
           initialValue={value}
           onClose={() => setPickerOpen(false)}
-          onSelect={(next) => {
-            setLink({
+          onSelect={(next, selectedDisplay) => {
+            const accepted = {
               ...next,
               anchor: supportsPageAnchor(next) ? value.anchor ?? next.anchor ?? null : next.anchor ?? null,
-            });
+            };
+            // Reuse only the exact result already resolved in this picker action.
+            // A caller-owned anchor change still requires its own resolution.
+            if (selectedDisplay && JSON.stringify(serializeAdminLink(accepted)) === JSON.stringify(serializeAdminLink(next))) {
+              setDisplay({ key: JSON.stringify(serializeAdminLink(accepted)), value: selectedDisplay });
+            }
+            setLink(accepted);
             setPickerOpen(false);
           }}
         />

@@ -20,6 +20,10 @@ import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
 
 export { blockModuleHref, blockModuleListHref };
 
+function toTemplateSummary({ id, name, slug, status }: { id: number; name: string; slug: string; status: string }) {
+  return { id, name, slug, status };
+}
+
 type AssignmentQueryResult = {
   assignments: PageBlockAssignmentRow[];
   /** Latest saved visible/published authored copy for the shared SEO analyzer. */
@@ -41,19 +45,19 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   const results = await Promise.all([
     getSupabaseAdmin()
       .from("page_content_block_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,content_block_templates(config)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_cta_block_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,cta_block_templates(config)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_cards_block_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,cards_block_templates(config)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_breadcrumb_block_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,breadcrumb_block_templates(config)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_feed_module_assignments")
@@ -61,11 +65,11 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_featured_module_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,featured_module_templates(config)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("hero_assignments")
-      .select("id,hero_id,target_id,is_active,priority,updated_at")
+      .select("id,hero_id,target_id,is_active,priority,updated_at,hero_templates(config)")
       .eq("target_type", "page")
       .eq("target_id", pageId),
     getSupabaseAdmin()
@@ -76,13 +80,15 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       .from("page_media_hub_module_assignments")
       .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at")
       .eq("page_id", pageId),
-    getSupabaseAdmin().from("content_block_templates").select("id,name,slug,status,variant,config").order("name"),
-    getSupabaseAdmin().from("cta_block_templates").select("id,name,slug,status,variant,config").order("name"),
-    getSupabaseAdmin().from("cards_block_templates").select("id,name,slug,status,variant,config").order("name"),
-    getSupabaseAdmin().from("breadcrumb_block_templates").select("id,name,slug,status,variant,config").order("name"),
+    // Catalogs serve picker labels and assignment metadata. Authored config is
+    // read through the assignment relation only for this page's modules.
+    getSupabaseAdmin().from("content_block_templates").select("id,name,slug,status,variant").order("name"),
+    getSupabaseAdmin().from("cta_block_templates").select("id,name,slug,status,variant").order("name"),
+    getSupabaseAdmin().from("cards_block_templates").select("id,name,slug,status,variant").order("name"),
+    getSupabaseAdmin().from("breadcrumb_block_templates").select("id,name,slug,status,variant").order("name"),
     getSupabaseAdmin().from("feed_module_templates").select("id,name,slug,status,feed_type").order("name"),
-    getSupabaseAdmin().from("featured_module_templates").select("id,name,slug,status,config").order("name"),
-    getSupabaseAdmin().from("hero_templates").select("id,name,slug,status,variant,config").order("name"),
+    getSupabaseAdmin().from("featured_module_templates").select("id,name,slug,status").order("name"),
+    getSupabaseAdmin().from("hero_templates").select("id,name,slug,status,variant").order("name"),
     getSupabaseAdmin().from("media_sidebar_module_templates").select("id,name,slug,status,widget_key").order("name"),
     getSupabaseAdmin().from("media_hub_module_templates").select("id,name,slug,status,section_key").order("name"),
   ]);
@@ -131,12 +137,13 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   function appendSeoContent(
     row: { is_visible?: unknown; is_active?: unknown },
-    template: { status: string; config: unknown } | undefined,
+    template: { status: string } | undefined,
+    config: unknown,
   ) {
     if (!template) return;
     const assignmentVisible = row.is_visible ?? row.is_active;
     if (!isPageModulePubliclyVisible(assignmentVisible, template.status)) return;
-    const content = extractPageBlockSeoText(template.config);
+    const content = extractPageBlockSeoText(config);
     if (content) seoContentParts.push(content);
   }
 
@@ -144,7 +151,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
     const template = heroTemplateById.get(row.hero_id);
 
     if (!template) continue;
-    appendSeoContent(row, template);
+    appendSeoContent(row, template, row.hero_templates?.config);
 
     assignments.push({
       id: row.id,
@@ -168,7 +175,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   for (const row of contentRows ?? []) {
     const template = contentTemplateById.get(row.template_id);
     if (!template) continue;
-    appendSeoContent(row, template);
+    appendSeoContent(row, template, row.content_block_templates?.config);
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -190,7 +197,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of ctaRows ?? []) {
     const template = ctaTemplateById.get(row.template_id);
-    appendSeoContent(row, template);
+    appendSeoContent(row, template, row.cta_block_templates?.config);
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -212,7 +219,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of cardsRows ?? []) {
     const template = cardsTemplateById.get(row.template_id);
-    appendSeoContent(row, template);
+    appendSeoContent(row, template, row.cards_block_templates?.config);
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -234,7 +241,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of breadcrumbRows ?? []) {
     const template = breadcrumbTemplateById.get(row.template_id);
-    appendSeoContent(row, template);
+    appendSeoContent(row, template, row.breadcrumb_block_templates?.config);
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -277,6 +284,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of featuredRows ?? []) {
     const template = featuredTemplateById.get(row.template_id);
+    const config = row.featured_module_templates?.config;
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -291,8 +299,8 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       template_slug: template?.slug ?? "—",
       template_status: template?.status ?? "unpublished",
       template_variant:
-        template?.config && typeof template.config === "object" && !Array.isArray(template.config)
-          ? String((template.config.presentation as { variant?: unknown } | undefined)?.variant ?? "editorial")
+        template && config && typeof config === "object" && !Array.isArray(config)
+          ? String((config.presentation as { variant?: unknown } | undefined)?.variant ?? "editorial")
           : "editorial",
       manages_assignment_on_page: true,
       assignment_note: null,
@@ -363,20 +371,15 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
     assignments,
     seoContent: seoContentParts.join("\n"),
     templates: {
-      content: activeContentTemplates.map(({ id, name, slug, status }) => ({ id, name, slug, status })),
-      cta: (ctaTemplates ?? []).map(({ id, name, slug, status }) => ({ id, name, slug, status })),
-      cards: (cardsTemplates ?? []).map(({ id, name, slug, status }) => ({ id, name, slug, status })),
-      breadcrumb: breadcrumbTemplates ?? [],
-      feed: feedTemplates ?? [],
-      featured: (featuredTemplates ?? []).map(({ id, name, slug, status }) => ({ id, name, slug, status })),
-      hero: (heroTemplates ?? []).map((hero) => ({
-          id: hero.id,
-          name: hero.name,
-          slug: hero.slug,
-          status: hero.status,
-        })),
-      mediaSidebar: mediaSidebarTemplates ?? [],
-      mediaHub: mediaHubTemplates ?? [],
+      content: activeContentTemplates.map(toTemplateSummary),
+      cta: (ctaTemplates ?? []).map(toTemplateSummary),
+      cards: (cardsTemplates ?? []).map(toTemplateSummary),
+      breadcrumb: (breadcrumbTemplates ?? []).map(toTemplateSummary),
+      feed: (feedTemplates ?? []).map(toTemplateSummary),
+      featured: (featuredTemplates ?? []).map(toTemplateSummary),
+      hero: (heroTemplates ?? []).map(toTemplateSummary),
+      mediaSidebar: (mediaSidebarTemplates ?? []).map(toTemplateSummary),
+      mediaHub: (mediaHubTemplates ?? []).map(toTemplateSummary),
     },
   };
 }

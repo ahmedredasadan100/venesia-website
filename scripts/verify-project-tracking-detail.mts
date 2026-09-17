@@ -352,6 +352,32 @@ check(
   })(),
 );
 const trackingDateTree = ts.createSourceFile("TrackingForms.tsx", adminForms, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+check(
+  "Tracking modal saves settle their active canonical list before Close without a duplicate invalidation callback",
+  (() => {
+    const expected = new Map([
+      ["TrackingProfileFormModal", "stages"],
+      ["TrackingStageFormModal", "stages"],
+      ["TrackingItemFormModal", "items"],
+      ["TrackingUpdateFormModal", "updates"],
+    ]);
+    let proved = 0;
+    for (const statement of trackingDateTree.statements) {
+      if (!ts.isFunctionDeclaration(statement) || !statement.name) continue;
+      const key = expected.get(statement.name.text);
+      if (!key) continue;
+      function visit(node: ts.Node) {
+        if (ts.isJsxOpeningElement(node) && node.tagName.getText(trackingDateTree) === "AdminFormRuntime") {
+          const attrs = new Map(node.attributes.properties.filter(ts.isJsxAttribute).map(attribute => [attribute.name.getText(trackingDateTree), attribute.initializer?.getText(trackingDateTree)]));
+          if (attrs.get("invalidateEntities") === `{[PROJECT_TRACKING_ENTITY_KEYS.${key}]}` && attrs.get("invalidationRefetchType") === '"active"' && attrs.get("onSuccess") === "{onClose}") proved++;
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(statement);
+    }
+    return proved === expected.size && !adminForms.includes("onSaved") && !adminCollections.includes("onSaved=");
+  })(),
+);
 const trackingDateFields: string[] = [];
 let rawTrackingDates = 0;
 function inspectTrackingDates(node: ts.Node) {

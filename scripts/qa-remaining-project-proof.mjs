@@ -4,15 +4,19 @@ import { createRequire } from "node:module";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
+import { PROJECT_FORM_JOURNEY_ENTRY, verifyProjectFormJourney } from "./fixtures/project-form-journey.mjs";
+
+import { TRACKING_FORM_SETTLEMENT_ENTRY, verifyTrackingFormSettlement } from "./fixtures/tracking-form-settlement.mjs";
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(import.meta.dirname, "..");
-const out = path.join(root, ".tmp-qa/remaining-system-proof/projects-browser");
+const journeyOnly = process.argv.includes("--journey-only");
+const out = path.join(root, journeyOnly ? ".tmp-qa/remaining-system-proof/projects-journey" : ".tmp-qa/remaining-system-proof/projects-browser");
 const widthArgument = process.argv.find(argument => argument.startsWith("--width="));
 const widths = widthArgument ? [Number(widthArgument.slice("--width=".length))] : [1280, 390];
 assert.ok(widths.every(width => width === 1280 || width === 390), "Supported proof viewports are 1280 and 390 pixels");
 await mkdir(out, { recursive: true });
-await writeFile(path.join(out, "entry.tsx"), String.raw`
+await writeFile(path.join(out, "entry.tsx"), journeyOnly ? PROJECT_FORM_JOURNEY_ENTRY : String.raw`
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import AdminFeedbackProvider from '@src/components/admin/AdminFeedbackProvider';
@@ -20,13 +24,13 @@ import Location from '@src/app/admin/projects/locations/ProjectLocationFormModal
 import {TrackingStageFormModal} from '@src/components/admin/projects/tracking/TrackingForms';
 import Project from '@src/app/admin/projects/ProjectEditForm';
 import {createEmptyProjectEntry} from '@src/lib/admin/projects/project-entry-contract';
-import {QueryClient,QueryClientProvider} from '@tanstack/react-query';
-window.calls=0; window.saved=0; window.proofClosed=0; window.payloads=[];
+import {QueryClient,QueryClientProvider,useQuery} from '@tanstack/react-query';
+window.refetches=0; window.calls=0; window.saved=0; window.proofClosed=0; window.payloads=[];
 window.action=async(previous,data)=>{window.calls++;window.payloads.push([...data.entries()]);return new Promise(resolve=>window.finish=()=>resolve({status:'warning',mode:'create',revision:previous.revision+1,title:'تم الحفظ — يلزم التحقق من النتيجة',message:'حدّث القائمة للتحقق ولا تعِد العملية.',code:'saved_requires_reconciliation_reload'}));};
 const root=createRoot(document.getElementById('root'));
-function Fixture({kind}) {const [open,setOpen]=useState(true);const props={open,onClose:()=>{window.proofClosed++;setOpen(false);},onSaved:()=>{window.saved++;}};return <>{kind==='project'?<Project bundle={createEmptyProjectEntry('residential')}/>:kind==='location'?<Location {...props} mode="create" level="governorate" parentOptions={[]}/>:<TrackingStageFormModal {...props} projectId={1}/>}</>;}
-const client=new QueryClient();window.mount=kind=>{window.calls=0;window.saved=0;window.proofClosed=0;window.payloads=[];window.proofNavigations=[];root.render(<QueryClientProvider client={client}><AdminFeedbackProvider><Fixture key={kind} kind={kind}/></AdminFeedbackProvider></QueryClientProvider>);};
-`);
+function Fixture({kind}) {const [open,setOpen]=useState(true);useQuery({queryKey:['admin-entity-list','project_tracking_stages','query','fixture'],initialData:{rows:[]},staleTime:Infinity,enabled:kind==='tracking',queryFn:async()=>{window.saved++;return {rows:[]};}});const props={open,onClose:()=>{window.proofClosed++;setOpen(false);},onSaved:()=>{window.saved++;}};return <>{kind==='project'?<Project bundle={createEmptyProjectEntry('residential')}/>:kind==='location'?<Location {...props} mode="create" level="governorate" parentOptions={[]}/>:<TrackingStageFormModal {...props} projectId={1}/>}</>;}
+const client=new QueryClient();window.mount=kind=>{window.refetches=0;window.calls=0;window.saved=0;window.proofClosed=0;window.payloads=[];window.proofNavigations=[];if(kind.startsWith('tracking-settlement'))window.action=async(previous,data)=>{window.calls++;window.payloads.push([...data.entries()]);return new Promise(resolve=>window.finish=()=>resolve({status:'success',mode:'edit',revision:previous.revision+1,title:'Saved',result:{id:3}}));};root.render(<QueryClientProvider client={client}><AdminFeedbackProvider>{kind.startsWith('tracking-settlement')?<TrackingSettlementFixture client={client}/>:<Fixture key={kind} kind={kind}/>}</AdminFeedbackProvider></QueryClientProvider>);};
+` + TRACKING_FORM_SETTLEMENT_ENTRY);
 await writeFile(path.join(out, "navigation.ts"), `export { unstable_rethrow } from 'next/dist/client/components/unstable-rethrow.browser'; const router={push(href){window.proofNavigations.push(href);history.pushState({},'',href);},replace(href){window.proofNavigations.push(href);history.replaceState({},'',href);},refresh(){}};export const useRouter=()=>router;export const usePathname=()=>'/fixture';export const useSearchParams=()=>new URLSearchParams();`);
 await writeFile(path.join(out, "link.tsx"), `import React from 'react';export default function Link({href,children,prefetch,...props}){return <a href={href} {...props}>{children}</a>;}`);
 await writeFile(path.join(out, "image.tsx"), `import React from 'react';export default function Image({fill,priority,unoptimized,quality,loader,...props}){return <img {...props}/>;}`);
@@ -54,7 +58,7 @@ let browser;
 const results = [];
 try {
   browser = await chromium.launch({ headless: true });
-  for (const { width, kind } of widths.flatMap(width => ["location", "tracking", "project"].map(kind => ({ width, kind })))) {
+  for (const { width, kind } of widths.flatMap(width => (journeyOnly ? ["project-journey-residential", "project-journey-commercial"] : ["location", "tracking", "project", "tracking-settlement", "tracking-settlement-reject"]).map(kind => ({ width, kind })))) {
     const viewport = { width, height: 900 };
     const context = await browser.newContext({ viewport });
     await context.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
@@ -64,6 +68,22 @@ try {
     await page.goto(origin);
     await page.waitForFunction(() => typeof window.mount === "function").catch(error => { throw new Error(`${error.message}; browser errors: ${JSON.stringify(errors)}`); });
     await page.evaluate(kind => window.mount(kind), kind);
+    if (kind.startsWith("tracking-settlement")) {
+      const proof = await verifyTrackingFormSettlement(page, { rejectRefetch: kind.endsWith("-reject") });
+      assert.deepEqual(errors, []);
+      results.push({ kind, viewport, status: "PASS", ...proof });
+      console.log(`PASS ${kind} (${width}px): active-list settlement and committed-result truth`);
+      await context.close();
+      continue;
+    }
+    if (kind.startsWith("project-journey-")) {
+      const proof = await verifyProjectFormJourney(page, {projectType:kind.endsWith("commercial") ? "commercial" : "residential"});
+      assert.deepEqual(errors, []);
+      results.push({ kind, viewport, status: "PASS", ...proof });
+      console.log(`PASS project edit journey (${width}px): selected panel, aggregate and clean Close query retained`);
+      await context.close();
+      continue;
+    }
     if (kind === "project") {
       await page.locator("form").waitFor();
       await page.locator("form").evaluate(element => { element.noValidate = true; element.requestSubmit(); });
@@ -93,7 +113,7 @@ try {
     assert.equal(await page.evaluate(() => window.calls), 1);
     assert.equal(await page.locator("[data-admin-feedback-entry]").count(), 1);
     assert.deepEqual(errors, []);
-    results.push({ kind, viewport, status: "PASS", claims: ["actual modal and Form/Feedback owners", "pending preserves submitted values and blocks duplicate button submit", "warning without result closes once and triggers existing list invalidation callback once", "one warning"] });
+    results.push({ kind, viewport, status: "PASS", claims: ["actual modal and Form/Feedback owners", "pending preserves submitted values and blocks duplicate button submit", kind === "tracking" ? "warning without result awaits canonical active invalidation once before closing" : "warning without result closes once and triggers existing list invalidation callback once", "one warning"] });
     console.log(`PASS ${kind} (${width}px): committed warning without result completes once through existing Form owner`);
     await context.close();
   }

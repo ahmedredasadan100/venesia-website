@@ -784,20 +784,17 @@ export function TrackingStagesCollection({
         projectId={projectId}
         profile={controller.result.metrics!.profile}
         onClose={() => setProfileOpen(false)}
-        onSaved={() => void controller.invalidate()}
       />
       <TrackingStageFormModal
         open={createOpen}
         projectId={projectId}
         onClose={() => setCreateOpen(false)}
-        onSaved={() => void controller.invalidate()}
       />
       <TrackingStageFormModal
         open={Boolean(editing)}
         projectId={projectId}
         stage={editing ?? undefined}
         onClose={() => setEditing(null)}
-        onSaved={() => void controller.invalidate()}
       />
     </>
   );
@@ -1280,7 +1277,6 @@ export function TrackingItemsCollection({
         projectId={projectId}
         stageId={stageId}
         onClose={() => setCreateOpen(false)}
-        onSaved={() => void controller.invalidate()}
       />
       <TrackingItemFormModal
         open={Boolean(editing)}
@@ -1288,7 +1284,6 @@ export function TrackingItemsCollection({
         stageId={stageId}
         item={editing ?? undefined}
         onClose={() => setEditing(null)}
-        onSaved={() => void controller.invalidate()}
       />
     </>
   );
@@ -1692,7 +1687,6 @@ export function TrackingUpdatesCollection({
         projectId={projectId}
         itemId={itemId}
         onClose={() => setCreateOpen(false)}
-        onSaved={() => void controller.invalidate()}
       />
       <TrackingUpdateFormModal
         open={Boolean(editing)}
@@ -1700,7 +1694,6 @@ export function TrackingUpdatesCollection({
         itemId={itemId}
         update={editing ?? undefined}
         onClose={() => setEditing(null)}
-        onSaved={() => void controller.invalidate()}
       />
     </>
   );

@@ -12,6 +12,7 @@ import {
   updateTrackingStageAction,
   updateTrackingUpdateAction,
 } from "../../../../app/admin/projects/tracking-actions";
+import { PROJECT_TRACKING_ENTITY_KEYS } from "../../../../lib/admin/projects/tracking-contract";
 import type {
   TrackingItemRow,
   TrackingStageMetrics,
@@ -38,13 +39,12 @@ import AdminFormRuntime, {
 import TrackingVideoFields from "./TrackingVideoFields";
 
 const field = adminFormFieldClassName();
-type ModalBase = { open: boolean; onClose: () => void; onSaved: () => void };
+type ModalBase = { open: boolean; onClose: () => void };
 type SavedResult = { id: number };
 
 export function TrackingProfileFormModal({
   open,
   onClose,
-  onSaved,
   projectId,
   profile,
 }: ModalBase & {
@@ -63,16 +63,15 @@ export function TrackingProfileFormModal({
     >
       <AdminFormRuntime<SavedResult>
         action={saveTrackingProfileAction}
+        invalidateEntities={[PROJECT_TRACKING_ENTITY_KEYS.stages]}
+        invalidationRefetchType="active"
         mode="edit"
         entityKey={`project-tracking-profile:${projectId}`}
         runtimeRef={runtimeRef}
         formId={`project-tracking-profile-${projectId}`}
         className="space-y-5"
         onClose={onClose}
-        onSuccess={() => {
-          onSaved();
-          onClose();
-        }}
+        onSuccess={onClose}
       >
         {({ pending, requestClose }) => (
           <>
@@ -119,7 +118,6 @@ export function TrackingProfileFormModal({
 export function TrackingStageFormModal({
   open,
   onClose,
-  onSaved,
   projectId,
   stage,
 }: ModalBase & { projectId: number; stage?: TrackingStageRow }) {
@@ -139,16 +137,15 @@ export function TrackingStageFormModal({
     >
       <AdminFormRuntime<SavedResult>
         action={stage ? updateTrackingStageAction : createTrackingStageAction}
+        invalidateEntities={[PROJECT_TRACKING_ENTITY_KEYS.stages]}
+        invalidationRefetchType="active"
         mode={mode}
         entityKey={`tracking-stage:${stage?.id ?? "new"}`}
         runtimeRef={runtimeRef}
         formId={`tracking-stage-${mode}`}
         className="space-y-5"
         onClose={onClose}
-        onSuccess={() => {
-          onSaved();
-          onClose();
-        }}
+        onSuccess={onClose}
       >
         {({ pending, requestClose }) => (
           <>
@@ -229,7 +226,6 @@ export function TrackingStageFormModal({
 export function TrackingItemFormModal({
   open,
   onClose,
-  onSaved,
   projectId,
   stageId,
   item,
@@ -254,16 +250,15 @@ export function TrackingItemFormModal({
     >
       <AdminFormRuntime<SavedResult>
         action={item ? updateTrackingItemAction : createTrackingItemAction}
+        invalidateEntities={[PROJECT_TRACKING_ENTITY_KEYS.items]}
+        invalidationRefetchType="active"
         mode={mode}
         entityKey={`tracking-item:${item?.id ?? "new"}`}
         runtimeRef={runtimeRef}
         formId={`tracking-item-${mode}`}
         className="space-y-5"
         onClose={onClose}
-        onSuccess={() => {
-          onSaved();
-          onClose();
-        }}
+        onSuccess={onClose}
       >
         {({ pending, requestClose }) => (
           <>
@@ -348,7 +343,6 @@ export function TrackingItemFormModal({
 export function TrackingUpdateFormModal({
   open,
   onClose,
-  onSaved,
   projectId,
   itemId,
   update,
@@ -369,16 +363,15 @@ export function TrackingUpdateFormModal({
     >
       <AdminFormRuntime<SavedResult>
         action={update ? updateTrackingUpdateAction : createTrackingUpdateAction}
+        invalidateEntities={[PROJECT_TRACKING_ENTITY_KEYS.updates]}
+        invalidationRefetchType="active"
         mode={mode}
         entityKey={`tracking-update:${update?.id ?? "new"}`}
         runtimeRef={runtimeRef}
         formId={`tracking-update-${mode}`}
         className="space-y-5"
         onClose={onClose}
-        onSuccess={() => {
-          onSaved();
-          onClose();
-        }}
+        onSuccess={onClose}
       >
         {({ pending, requestClose }) => (
           <>

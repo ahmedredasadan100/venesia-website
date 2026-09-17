@@ -468,6 +468,7 @@ async function main() {
     async pushApplicationMigrations() { throw Error("Unowned handle must not reach the CLI."); },
     async runEntitySeoBackfill() { throw Error("Unowned handle must not reach the backfill."); },
     async preparePublicVerification() { throw Error("Unowned handle must not prepare Public verification."); },
+    async prepareAdminInteractions() { throw Error("Unowned handle must not prepare Admin measurement fixtures."); },
     async runPublicVerification() { throw Error("Unowned handle must not run Public verification."); },
     record() { recordCalls++; },
   };

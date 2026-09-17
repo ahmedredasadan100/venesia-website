@@ -1,8 +1,9 @@
 "use client";
 
-import { Children, useState, type ReactNode } from "react";
+import { Children, useCallback, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { useSearchParams } from "next/navigation";
+import { resolveAdminFormReturnPath } from "../../../lib/admin/form-runtime";
 
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import {
@@ -39,8 +40,10 @@ import {
 import {
   MODULE_EDITOR_RETURN_PAGE_FORM_FIELD,
   MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM,
+  MODULE_EDITOR_TAB_FORM_FIELD,
   parseModuleEditorReturnPageId,
   resolveModuleEditorReturnNavigation,
+  resolveModuleEditorTabId,
 } from "../../../lib/page-blocks/admin-utils";
 
 type ModuleEditorMetadataScope = {
@@ -81,6 +84,7 @@ export function ModuleEditorHeader({
 
   const returnNavigation = resolveModuleEditorReturnNavigation(
     searchParams.get(MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM),
+    searchParams.get("return_to"),
   );
 
   if (returnNavigation) {
@@ -123,8 +127,12 @@ export function ModuleEditorTabs({
   moduleKind,
   moduleSlug,
   tabs,
+  initialTabId,
+  activeTabId: controlledActiveTabId,
+  onActiveTabChange,
   ...props
 }: ModuleEditorTabsProps) {
+  const searchParams = useSearchParams();
   const resolvedTabs = tabs
     .map((tab, sourceIndex) => {
       const metadata = getModuleEditorSectionMetadata(
@@ -156,7 +164,31 @@ export function ModuleEditorTabs({
     )
     .map(({ tab }) => tab);
 
-  return <AdminModuleTabs {...props} tabs={resolvedTabs} />;
+  const tabIds = resolvedTabs.map((tab) => tab.id);
+  const [selectedTabId, setSelectedTabId] = useState(() =>
+    resolveModuleEditorTabId(searchParams.get("tab"), tabIds, initialTabId),
+  );
+  const activeTabId = resolveModuleEditorTabId(
+    controlledActiveTabId === undefined ? selectedTabId : controlledActiveTabId,
+    tabIds,
+  );
+  const handleActiveTabChange = useCallback((tabId: string) => {
+    if (controlledActiveTabId === undefined) setSelectedTabId(tabId);
+    onActiveTabChange?.(tabId);
+  }, [controlledActiveTabId, onActiveTabChange]);
+
+  return (
+    <>
+      {activeTabId ? <input type="hidden" name={MODULE_EDITOR_TAB_FORM_FIELD} value={activeTabId} /> : null}
+      <AdminModuleTabs
+        {...props}
+        tabs={resolvedTabs}
+        initialTabId={initialTabId}
+        activeTabId={activeTabId}
+        onActiveTabChange={handleActiveTabChange}
+      />
+    </>
+  );
 }
 
 export function ModuleEditorSection({
@@ -720,11 +752,18 @@ export function ModuleEditorSaveArea({
   return (
     <>
       {returnPageId ? (
-        <input
-          type="hidden"
-          name={MODULE_EDITOR_RETURN_PAGE_FORM_FIELD}
-          value={returnPageId}
-        />
+        <>
+          <input
+            type="hidden"
+            name={MODULE_EDITOR_RETURN_PAGE_FORM_FIELD}
+            value={returnPageId}
+          />
+          <input
+            type="hidden"
+            name="return_to"
+            value={resolveAdminFormReturnPath(searchParams.get("return_to"), "/admin/pages-blocks/pages")}
+          />
+        </>
       ) : null}
       <AdminStickyFormBar
         className="mt-8"

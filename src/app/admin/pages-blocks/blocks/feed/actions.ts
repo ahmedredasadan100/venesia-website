@@ -25,7 +25,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -251,8 +251,7 @@ export async function updateFeedModule(formData: FormData) {
     metadata: { blockType: "feed", slug },
   }, actor);
   const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
-    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
-    await revalidateBlockModulePaths("feed");
+    await revalidateBlockModulePaths("feed", coordinated.value.affectedPageIds);
     revalidatePath(`/admin/pages-blocks/blocks/feed/${id}`, "page");
   });
   if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);

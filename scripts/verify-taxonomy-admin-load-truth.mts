@@ -60,6 +60,10 @@ function callPage(page: Record<string, unknown>, ...args: unknown[]) {
 const categoryHierarchy = loadTypeScriptModule(
   "src/lib/admin/content/category-hierarchy.ts",
 );
+const contentTypes = loadTypeScriptModule("src/lib/admin/content/content-types.ts");
+const formRuntime = loadTypeScriptModule("src/lib/admin/form-runtime.ts", {
+  "../security/safe-internal-path.ts": loadTypeScriptModule("src/lib/security/safe-internal-path.ts"),
+});
 
 type QueryResult = {
   data: unknown;
@@ -68,6 +72,7 @@ type QueryResult = {
 
 function createSupabase(
   responses: Record<string, Array<QueryResult | Promise<QueryResult>>>,
+  onStart?: (table: string) => void,
 ) {
   return {
     from(table: string) {
@@ -82,7 +87,10 @@ function createSupabase(
       builder.then = (
         resolveResult: (value: QueryResult) => unknown,
         rejectResult: (reason: unknown) => unknown,
-      ) => Promise.resolve(response).then(resolveResult, rejectResult);
+      ) => {
+        onStart?.(table);
+        return Promise.resolve(response).then(resolveResult, rejectResult);
+      };
       return builder;
     },
   };
@@ -90,16 +98,37 @@ function createSupabase(
 
 function loadOwner(
   responses: Record<string, Array<QueryResult | Promise<QueryResult>>>,
+  onStart?: (table: string) => void,
 ) {
-  const supabase = createSupabase(responses);
+  const supabase = createSupabase(responses, onStart);
   return loadTypeScriptModule(
     "src/lib/admin/content/load-taxonomy-form-data.ts",
     {
       "server-only": {},
       "./category-hierarchy": categoryHierarchy,
+      "./content-types": contentTypes,
       "../../supabase-admin": { getSupabaseAdmin: () => supabase },
     },
   );
+}
+
+// Presentation fixtures express record/dependency failures independently. Actual
+// bundle read scheduling and projection are exercised against the owner below.
+function editorRouteMocks(loader: Record<string, unknown>) {
+  const makeBundle = (recordName: string, dependencyName: string, project: (record: RuntimeLoadResult["data"], dependency: RuntimeLoadResult["data"]) => unknown,
+    args: (record: RuntimeLoadResult<Record<string, unknown>>["data"], id: number) => unknown[]) => async (id: number) => {
+    const record = await callLoader<Record<string, unknown>>(loader, recordName, id);
+    if (record.status !== "data") return record;
+    const dependency = await callLoader(loader, dependencyName, ...args(record.data, id));
+    if (dependency.status !== "data") return dependency;
+    return { status: "data", data: project(record.data, dependency.data) };
+  };
+  return {
+    loadCategoryEditorFormData: makeBundle("loadCategoryFormRecord", "loadCategoryParentFormOptions", (category, parentOptions) => ({ category, parentOptions }), (record, id) => [{ excludeCategoryId: id, persistedParentId: record.parent_id }]),
+    loadSeriesEditorFormData: makeBundle("loadSeriesFormRecord", "loadSeriesCategoryFormOptions", (series, categoryOptions) => ({ series, categoryOptions }), (record) => [record.category_id]),
+    loadTopicEditorFormData: makeBundle("loadTopicFormRecord", "loadTopicTaxonomyFormDependencies", (topic, dependencies) => ({ topic, ...(dependencies as Record<string, unknown>) }), (record) => [{ currentCategoryId: record.category_id, currentSeriesId: record.series_id }]),
+    ...loader,
+  };
 }
 
 const publishedCategory = {
@@ -584,6 +613,84 @@ async function runOwnerChecks() {
   });
 }
 
+async function runEditorReadSchedulingChecks() {
+  const category = { ...publishedCategory, id: 31, parent_id: 11, updated_at: "2026-09-17T00:00:00.000001Z" };
+  const series = { ...unpublishedSeries, updated_at: category.updated_at };
+  const topic = { id: 7, content_type: "article", category_id: 11, series_id: 21 };
+  const cases = [
+    { name: "Category", loader: "loadCategoryEditorFormData", table: "topic_categories", record: category,
+      references: { topic_categories: [publishedCategory, unpublishedCategory, category] },
+      verifyData(data: Record<string, unknown>) {
+        assert.deepEqual(data.category, category);
+        assert.deepEqual((data.parentOptions as Array<{ value: string }>).map((option) => option.value), ["10", "11"]);
+      } },
+    { name: "Series", loader: "loadSeriesEditorFormData", table: "topic_series", record: series,
+      references: { topic_categories: [publishedCategory, unpublishedCategory] },
+      verifyData(data: Record<string, unknown>) {
+        assert.deepEqual(data.series, series);
+        assert.deepEqual((data.categoryOptions as Array<{ value: string }>).map((option) => option.value), ["10", "11"]);
+      } },
+    { name: "Topic", loader: "loadTopicEditorFormData", table: "topics", record: topic,
+      references: { topic_categories: [publishedCategory, unpublishedCategory], topic_series: [publishedSeries, unpublishedSeries] },
+      verifyData(data: Record<string, unknown>) {
+        assert.deepEqual(data.topic, topic);
+        assert.deepEqual((data.categories as Array<{ id: number }>).map((option) => option.id), [10, 11]);
+        assert.deepEqual((data.series as Array<{ id: number }>).map((option) => option.id), [20, 21]);
+      } },
+  ];
+  for (const fixture of cases) {
+    await verify(`${fixture.name} editor starts each independent read once before any result settles`, async () => {
+      const releases: Array<() => void> = [];
+      const delayed = (data: unknown) => new Promise<QueryResult>((resolve) => releases.push(() => resolve({ data, error: null })));
+      const responses: Record<string, Array<QueryResult | Promise<QueryResult>>> = {
+        [fixture.table]: [delayed(fixture.record)],
+      };
+      for (const [table, rows] of Object.entries(fixture.references)) {
+        if (rows) (responses[table] ??= []).push(delayed(rows));
+      }
+      const started: string[] = [];
+      const owner = loadOwner(responses, (table) => started.push(table));
+      const pending = callLoader<Record<string, unknown>>(owner, fixture.loader, fixture.record.id);
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      const startsBeforeRelease = [...started];
+      releases.forEach((release) => release());
+      const result = await pending;
+      const expected = [fixture.table, ...Object.keys(fixture.references)];
+      assert.deepEqual(startsBeforeRelease.sort(), expected.sort());
+      assert.equal(started.length, expected.length, "no duplicate or post-result reference read");
+      assert.equal(result.status, "data");
+      fixture.verifyData(result.data);
+    });
+    await verify(`${fixture.name} editor preserves absence when parallel references fail`, async () => {
+      const responses: Record<string, QueryResult[]> = { [fixture.table]: [{ data: null, error: null }] };
+      for (const [table, rows] of Object.entries(fixture.references)) {
+        if (rows) (responses[table] ??= []).push({ data: null, error: databaseError() });
+      }
+      const result = await callLoader(loadOwner(responses), fixture.loader, fixture.record.id);
+      assert.deepEqual(result, { status: "not_found" });
+    });
+    await verify(`${fixture.name} editor preserves safe record error priority over reference errors`, async () => {
+      const responses: Record<string, QueryResult[]> = { [fixture.table]: [{ data: null, error: databaseError() }] };
+      for (const [table, rows] of Object.entries(fixture.references)) {
+        if (rows) (responses[table] ??= []).push({ data: null, error: databaseError() });
+      }
+      const result = await callLoader(loadOwner(responses), fixture.loader, fixture.record.id);
+      assert.equal(result.status, "error");
+      assert.equal(result.error.scope, `${fixture.name.toLowerCase()}_record`);
+      assert.equal(result.error.message.includes(RAW_DATABASE_SENTINEL), false);
+    });
+  }
+  await verify("invalid Topic editor kind keeps record-contract priority over failed references", async () => {
+    const result = await callLoader(loadOwner({
+      topics: [{ data: { ...topic, content_type: "invalid" }, error: null }],
+      topic_categories: [{ data: null, error: databaseError() }],
+      topic_series: [{ data: null, error: databaseError() }],
+    }), "loadTopicEditorFormData", 7);
+    assert.equal(result.status, "error");
+    assert.equal(result.error.scope, "topic_record_contract");
+  });
+}
+
 async function runCategoryRouteChecks() {
   const CategoryForm = marker("CategoryForm");
 
@@ -602,7 +709,8 @@ async function runCategoryRouteChecks() {
         "../../../../../lib/admin/auth/require-admin-session": {
           requireAdminSession: async () => undefined,
         },
-        "../../../../../lib/admin/content/load-taxonomy-form-data": loader,
+        "../../../../../lib/admin/content/load-taxonomy-form-data": editorRouteMocks(loader),
+        "../../../../../lib/admin/form-runtime": formRuntime,
         "../CategoryForm": defaultModule(CategoryForm),
       },
       true,
@@ -781,7 +889,8 @@ async function runSeriesRouteChecks() {
         "../../../../../lib/admin/auth/require-admin-session": {
           requireAdminSession: async () => undefined,
         },
-        "../../../../../lib/admin/content/load-taxonomy-form-data": loader,
+        "../../../../../lib/admin/content/load-taxonomy-form-data": editorRouteMocks(loader),
+        "../../../../../lib/admin/form-runtime": formRuntime,
         "../SeriesForm": defaultModule(SeriesForm),
       },
       true,
@@ -905,7 +1014,7 @@ function topicDependencies(
       defaultModule(MediaContentForm),
     "../../../../../components/admin/ui": ui,
     "../../../../../lib/admin/content/category-hierarchy": categoryHierarchy,
-    "../../../../../lib/admin/content/load-taxonomy-form-data": loader,
+    "../../../../../lib/admin/content/load-taxonomy-form-data": editorRouteMocks(loader),
     "../../../../../lib/admin/content/content-types": {
       getContentTypeLabel: (value: string) => value,
       isContentType: (value: string) => ["article", "gallery"].includes(value),
@@ -1347,6 +1456,7 @@ async function runAdminErrorBoundaryCheck() {
 }
 
 await runOwnerChecks();
+await runEditorReadSchedulingChecks();
 await runCategoryRouteChecks();
 await runSeriesRouteChecks();
 await runTopicRouteChecks();

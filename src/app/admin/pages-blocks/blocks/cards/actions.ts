@@ -25,7 +25,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -266,8 +266,7 @@ export async function updateCardsBlock(formData: FormData) {
     metadata: { blockType: "cards", slug },
   }, actor);
   const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
-    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
-    await revalidateBlockModulePaths("cards");
+    await revalidateBlockModulePaths("cards", coordinated.value.affectedPageIds);
   });
   if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);
   redirect(withModuleEditorReturnContextFromForm(

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as crypto from "node:crypto";
 
 import * as ts from "typescript";
 
@@ -291,4 +292,182 @@ assert.ok(
   "Project detail mapping must not execute child reads",
 );
 
-console.log("Executable platform performance contracts passed.");
+// Execute the existing authorization owner with isolated database/cookie ports.
+// Counts and revocation semantics are deterministic; latency is diagnostic only.
+function loadIsolatedModule(sourceFile: string, dependencies: Record<string, unknown>) {
+  const output = ts.transpileModule(readFileSync(resolve(root, sourceFile), "utf8"), {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+      esModuleInterop: true,
+    },
+  }).outputText;
+  const loadedModule = { exports: {} as Record<string, unknown> };
+  Function("module", "exports", "require", output)(loadedModule, loadedModule.exports, (name: string) => {
+    assert.ok(name in dependencies, `Unexpected authorization dependency: ${name}`);
+    return dependencies[name];
+  });
+  return loadedModule.exports;
+}
+
+const sessionOwner = loadIsolatedModule("src/lib/admin/auth/session.ts", {
+  "node:crypto": crypto,
+  "./session-paths": {},
+}) as typeof import("../src/lib/admin/auth/session.ts");
+const secret = "isolated-performance-contract-secret";
+let token: string | undefined;
+let configured = true;
+let reads = 0;
+let cookieReads = 0;
+let databaseError: { message: string } | null = null;
+let rejectTransport = false;
+const selectedColumns: string[] = [];
+const activeUser = {
+  id: 42, username: "isolated", email: "isolated@example.invalid", full_name: "Isolated",
+  role: "admin", is_active: true, session_version: 3, last_login_at: null,
+  created_at: "2026-09-17T00:00:00Z", updated_at: "2026-09-17T00:00:00Z",
+};
+let currentUser: typeof activeUser | null = { ...activeUser };
+const authOwner = loadIsolatedModule("src/lib/admin/auth/admin-users.ts", {
+  "server-only": {},
+  "next/headers": { cookies: async () => {
+    cookieReads += 1;
+    return { get: () => token ? { value: token } : undefined };
+  } },
+  "../../supabase-admin": { getSupabaseAdmin: () => ({ from: (table: string) => {
+    assert.equal(table, "admin_users");
+    return { select: (columns: string) => {
+      selectedColumns.push(columns);
+      assert.ok(!columns.includes("password_hash") && columns !== "*", "Session reads exclude credentials");
+      return { eq: (column: string, id: number) => {
+        assert.equal(column, "id");
+        assert.equal(id, activeUser.id);
+        return { maybeSingle: async () => {
+          reads += 1;
+          if (rejectTransport) throw new Error("isolated transport rejected");
+          return { data: currentUser ? { ...currentUser } : null, error: databaseError };
+        } };
+      } };
+    } };
+  } }) },
+  "../users/admin-users-validation": {},
+  "./password": {},
+  "./session": { ...sessionOwner, getAdminAuthConfig: () => ({ configured, secret }) },
+}) as typeof import("../src/lib/admin/auth/admin-users.ts");
+const sign = (version = 3, ttl = 60) => sessionOwner.createAdminSessionToken(
+  { id: 42, username: "isolated", sessionVersion: version }, secret, ttl,
+);
+
+configured = false;
+assert.equal(await authOwner.getCurrentAdminUserFromCookies(), null);
+assert.equal(cookieReads, 0);
+configured = true;
+for (const invalidToken of [undefined, "invalid", `${sign()}tampered`, sign(3, -60)]) {
+  token = invalidToken;
+  assert.equal(await authOwner.getCurrentAdminUserFromCookies(), null);
+}
+assert.equal(reads, 0, "Missing, invalid and expired sessions cannot dispatch a user read");
+
+token = sign();
+const resolvedUser = await authOwner.getCurrentAdminUserFromCookies();
+assert.deepEqual(resolvedUser, { ...activeUser, password_hash: "" });
+assert.equal(reads, 1, "Resolving a valid current user must use one validated database row");
+assert.equal(selectedColumns.length, 1);
+
+currentUser = { ...activeUser, session_version: 4 };
+assert.equal(await authOwner.getCurrentAdminUserFromCookies(), null, "Revocation applies on the next invocation");
+assert.equal(reads, 2, "No cross-invocation authorization cache");
+currentUser = { ...activeUser, is_active: false };
+assert.equal(await authOwner.getCurrentAdminUserFromCookies(), null);
+currentUser = null;
+assert.equal(await authOwner.getCurrentAdminUserFromCookies(), null);
+
+currentUser = { ...activeUser };
+const payload = sessionOwner.verifyAdminSessionToken(sign(), secret);
+const beforeValidation = reads;
+assert.equal(await authOwner.validateAdminSessionPayload(null), false);
+assert.equal(reads, beforeValidation);
+assert.equal(await authOwner.validateAdminSessionPayload(payload), true);
+assert.equal(reads, beforeValidation + 1, "Proxy/API validation shares the same one-read authorization owner");
+currentUser.session_version = 4;
+assert.equal(await authOwner.validateAdminSessionPayload(payload), false);
+
+databaseError = { message: "isolated database failure" };
+await assert.rejects(authOwner.getCurrentAdminUserFromCookies(), (error: unknown) => {
+  assert.ok(error instanceof authOwner.AdminAuthDependencyError);
+  assert.equal(error.code, "admin_auth_dependency_unavailable");
+  assert.equal(error.operation, "admin_user_by_id");
+  assert.equal(error.message, "Admin authentication dependency is unavailable.");
+  return true;
+});
+databaseError = null;
+rejectTransport = true;
+await assert.rejects(authOwner.getCurrentAdminUserFromCookies(), (error: unknown) => (
+  error instanceof Error && error.message === "isolated transport rejected"
+));
+rejectTransport = false;
+currentUser = { ...activeUser };
+const beforeConcurrent = reads;
+const concurrentUsers = await Promise.all([
+  authOwner.getCurrentAdminUserFromCookies(), authOwner.getCurrentAdminUserFromCookies(),
+]);
+assert.equal(reads, beforeConcurrent + 2, "Independent authorization invocations each revalidate freshness");
+assert.ok(concurrentUsers.every((user) => user?.id === activeUser.id));
+
+// A chooser preview resolves the canonical path exactly once. Execute both
+// existing owners; only their authenticated resource provider is isolated.
+const staticRoutes = { findStaticRouteByKey: () => null, findStaticRouteByHref: () => null };
+const linkSerialization = loadIsolatedModule("src/lib/admin/links/serialize.ts", {
+  "./static-routes": staticRoutes,
+  "./types": loadIsolatedModule("src/lib/admin/links/types.ts", {}),
+});
+let pathReads = 0;
+let titleReads = 0;
+let linkSessions = 0;
+let linkAllowed = true;
+let linkReadFails = false;
+const provider = {
+  type: "pages", label: "Page",
+  async resolveMany(ids: number[]) {
+    pathReads += 1;
+    if (linkReadFails) throw new Error("isolated link resolution failed");
+    return new Map(ids.map(id => [id, `/page-${id}`]));
+  },
+  async search() { titleReads += 1; return [{ resourceId: 42, title: "Exact page" }]; },
+};
+const linkOwner = loadIsolatedModule("src/lib/admin/links/index.ts", {
+  "./static-routes": staticRoutes,
+  "./providers": { ensureAdminLinkProvidersRegistered() {} },
+  "./registry": { getAdminLinkProvider: () => provider, listAdminLinkProviders: () => [provider] },
+  "./serialize": linkSerialization,
+  "./validate": {}, "./menu-bridge": {}, "./usage": {},
+});
+const linkActions = loadIsolatedModule("src/lib/admin/links/actions.ts", {
+  "../../supabase-admin": {},
+  "../auth/require-admin-session": { async requireAdminSession() {
+    linkSessions += 1;
+    if (!linkAllowed) throw new Error("isolated session denied");
+  } },
+  "./index": linkOwner,
+}) as typeof import("../src/lib/admin/links/actions.ts");
+const linkValue = { link_kind: "internal" as const, linked_type: "pages" as const, linked_id: 42, anchor: "section", target: "_self" as const };
+const linkResult = await linkActions.resolveAdminLinkAjax(linkValue);
+assert.equal(linkResult.ok, true);
+if (linkResult.ok) {
+  assert.equal(linkResult.publicPath, "/page-42#section");
+  assert.equal(linkResult.publicPath, linkResult.display.publicPath);
+  assert.equal(linkResult.display.title, "Exact page");
+}
+assert.equal(pathReads, 1, "A descriptive link result must not resolve the path twice");
+assert.equal(titleReads, 1);
+await linkActions.resolveAdminLinkAjax(linkValue);
+assert.equal(pathReads, 2, "Independent link invocations retain fresh canonical resolution");
+assert.equal(linkSessions, 2);
+linkReadFails = true;
+assert.equal((await linkActions.resolveAdminLinkAjax(linkValue)).ok, false, "A failed reference cannot become a successful preview");
+linkAllowed = false;
+const priorPathReads = pathReads;
+await assert.rejects(linkActions.resolveAdminLinkAjax(linkValue), (error: unknown) => error instanceof Error && error.message === "isolated session denied");
+assert.equal(pathReads, priorPathReads, "Authorization precedes link resolution");
+
+console.log("Executable platform performance contracts passed, including single-read session resolution, fresh revocation and one-path link previews.");

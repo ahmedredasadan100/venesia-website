@@ -1,4 +1,32 @@
+import { resolveSafeInternalPath } from "../security/safe-internal-path.ts";
+
 export type AdminFormMode = "create" | "edit";
+
+/** A caller owns its exact list route; only that route's query may be restored. */
+export function resolveAdminFormReturnPath(
+  value: string | string[] | null | undefined,
+  listPath: string,
+): string {
+  if (typeof value !== "string") return listPath;
+  const safePath = resolveSafeInternalPath(value, "");
+  if (!safePath || safePath.split("?", 1)[0] !== listPath) return listPath;
+  return safePath;
+}
+
+/** Carry an existing list query through edit/open and the Form owner's Close. */
+export function adminFormEditHref(
+  editPath: string,
+  returnTo: string | undefined,
+  listPath: string,
+): string {
+  const safeEditPath = resolveSafeInternalPath(editPath, "");
+  if (!safeEditPath) return "";
+  const returnPath = resolveAdminFormReturnPath(returnTo, listPath);
+  if (returnPath === listPath) return safeEditPath;
+  const destination = new URL(safeEditPath, "http://internal.invalid");
+  destination.searchParams.set("return_to", returnPath);
+  return `${destination.pathname}${destination.search}`;
+}
 
 /** Incoming reads may replace a draft only outside a save and before local edits. */
 export function shouldAcceptAdminFormSource(input: { pending: boolean; dirty: boolean }) {
