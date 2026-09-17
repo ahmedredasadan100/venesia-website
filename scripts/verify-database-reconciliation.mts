@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { assertMigrationSourceProvenance, assertWholeFileMigrationProvenance } from "./lib/migration-provenance.mjs";
+import { assertMigrationCorpusProvenance, assertMigrationSourceProvenance, assertWholeFileMigrationProvenance } from "./lib/migration-provenance.mjs";
 
 // @ts-expect-error The pg runtime package has no declarations in this workspace.
 import pg from "pg";
@@ -288,20 +288,15 @@ function verifyStructuralContract(migrations: Migration[]) {
   const runtimeReachability = verifyRuntimeReachability();
   assert.ok(migrations.length > 0, "The canonical migration corpus is empty.");
   const security = loadDatabaseSecurityContract(migrations);
-  // The official state file is a dated Production readback, not a requirement
-  // to apply every new branch migration to Production before local validation.
-  // Validate its complete recorded prefix; live reconciliation below still
-  // requires every repository migration and exact SQL provenance.
+  // The dated readback identifies an immutable Git tree, not a prefix of today's
+  // execution order. Live registry evidence remains a separate read-only gate.
   const documentedSql = readFileSync(CURRENT_PROJECT_STATE_PATH, "utf8");
-  const documentedVersions = [...documentedSql.matchAll(/\b(\d{14})_[a-z0-9_]+\.sql\b/gu)]
-    .map((match) => match[1]).sort();
-  const documentedHead = documentedVersions.at(-1);
-  assert.ok(documentedHead, "The official migration snapshot has no recorded migration head.");
-  assert.equal(
-    loadDocumentedStateMetric("Repository migration files"),
-    migrations.filter((migration) => migration.version <= documentedHead).length,
-    "CURRENT_PROJECT_STATE migration prefix drifted from the canonical migration corpus.",
-  );
+  const snapshotRows = [...documentedSql.matchAll(/^\|\s*Verified cutover baseline\s*\|\s*`([a-f0-9]{40})`\s*\|\s*$/gmu)];
+  assert.equal(snapshotRows.length, 1, "The official historical snapshot must identify exactly one immutable cutover commit.");
+  const migrationProvenance = assertMigrationCorpusProvenance({
+    migrations, snapshotCommit: snapshotRows[0][1],
+    historicalCount: loadDocumentedStateMetric("Repository migration files"),
+  });
   assert.equal(
     new Set(migrations.map((migration) => migration.version)).size,
     migrations.length,
@@ -334,6 +329,7 @@ function verifyStructuralContract(migrations: Migration[]) {
 
   return {
     migrationCount: migrations.length,
+    migrationProvenance,
     corpusSha256: sha256(migrations.map(({ version, sha256: hash }) => `${version}:${hash}`).join("\n")),
     retiredLegacyPaths: RETIRED_LEGACY_PATHS.length,
     securityContract: { revision: security.contract.revision, migrationVersion: security.migrationVersion,
