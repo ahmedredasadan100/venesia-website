@@ -132,6 +132,7 @@ export default function ProjectsTableClient({
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    adjacentPrefetch: true,
     constrainQuery,
   });
   const instant = useAdminEntityInstantMutation<ProjectEntityListRow>(
@@ -506,6 +507,7 @@ export default function ProjectsTableClient({
           totalPages={controller.result.pagination.totalPages}
           emptySummaryText="لا توجد مشروعات"
           onPageChange={controller.setPage}
+          onPageIntent={controller.prefetchPage}
           onPageSizeChange={controller.setPageSize}
         />
       </AdminEntityListTableRegion>

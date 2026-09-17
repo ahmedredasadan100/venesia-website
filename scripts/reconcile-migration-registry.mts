@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  assertMigrationSourceProvenance,
+  assertWholeFileMigrationProvenance,
+  classifyWholeFileMigrationProvenance,
+  isMigrationHistoryCompatibilityVersion,
+} from "./lib/migration-provenance.mjs";
 
 // @ts-expect-error The pg runtime package has no declarations in this workspace.
 import pg from "pg";
@@ -51,7 +57,9 @@ function readMigrations(): Migration[] {
     const match = MIGRATION_FILE.exec(file);
     assert.ok(match, `Migration filename is not canonical: ${file}`);
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8").replace(/\r\n?/gu, "\n");
-    return { version: match[1], name: match[2], sql, sha256: sha256(sql) };
+    const migration = { version: match[1], name: match[2], sql, sha256: sha256(sql) };
+    assertMigrationSourceProvenance(migration);
+    return migration;
   });
 }
 
@@ -79,6 +87,16 @@ try {
   const recognizedVersions = new Set([...byVersion.keys(), ...VERSION_ALIASES.keys()]);
   const unknown = before.rows.filter((row) => !recognizedVersions.has(row.version));
   assert.deepEqual(unknown, [], `Unknown remote migration registry entries: ${unknown.map((row) => row.version).join(", ")}`);
+  // An applied revision is evidence, never a repair target. Unknown bytes for
+  // the compatibility version stop even the historical broad repair mode.
+  const preservedRevisions = new Map(before.rows
+    .filter((row) => isMigrationHistoryCompatibilityVersion(row.version))
+    .map((row) => {
+      const migration = byVersion.get(row.version);
+      assert.ok(migration);
+      const provenance = assertWholeFileMigrationProvenance(row, migration);
+      return [row.version, { row, provenance }] as const;
+    }));
 
   for (const [remoteVersion, repositoryVersion] of VERSION_ALIASES) {
     const aliasRow = before.rows.find((row) => row.version === remoteVersion);
@@ -100,6 +118,7 @@ try {
   const canonicalBefore = new Set(before.rows.map((row) => VERSION_ALIASES.get(row.version) ?? row.version));
   const missingVersions = migrations.filter((migration) => !canonicalBefore.has(migration.version));
   const nonCanonicalRows = before.rows.filter((row) => {
+    if (preservedRevisions.has(row.version)) return false;
     const canonicalVersion = VERSION_ALIASES.get(row.version) ?? row.version;
     const migration = byVersion.get(canonicalVersion);
     return row.version !== canonicalVersion
@@ -113,6 +132,7 @@ try {
     remoteVersionsBefore: before.rows.length,
     missingVersions: missingVersions.map((migration) => migration.version),
     nonCanonicalVersions: nonCanonicalRows.map((row) => row.version),
+    preservedRevisions: [...preservedRevisions.values()].map(({ row, provenance }) => ({ version: row.version, ...provenance })),
   };
 
   if (!process.argv.includes("--apply")) {
@@ -133,6 +153,7 @@ try {
     }
 
     for (const migration of migrations) {
+      if (preservedRevisions.has(migration.version)) continue;
       await client.query(
         `insert into supabase_migrations.schema_migrations(version, statements, name, created_by)
          values ($1, $2::text[], $3, 'final-legacy-database-reconciliation')
@@ -149,9 +170,9 @@ try {
     assert.deepEqual(after.rows.map((row) => row.version), migrations.map((migration) => migration.version));
     for (const [index, migration] of migrations.entries()) {
       const row = after.rows[index];
-      assert.equal(row.name, migration.name, `Name reconciliation failed: ${migration.version}`);
-      assert.equal(row.statements?.length, 1, `Statement reconciliation failed: ${migration.version}`);
-      assert.equal(sha256(row.statements?.[0] ?? ""), migration.sha256, `SQL reconciliation failed: ${migration.version}`);
+      assertWholeFileMigrationProvenance(row, migration);
+      const preserved = preservedRevisions.get(migration.version);
+      if (preserved) assert.deepEqual(row, preserved.row, "Applied revision provenance changed during unrelated reconciliation.");
     }
 
     const corpusSha256 = sha256(migrations.map((migration) => `${migration.version}:${migration.sha256}`).join("\n"));
@@ -212,6 +233,7 @@ export type SelectedCliRegistryReport = {
   wouldUpdate: number;
   updated: number;
   untouched: number;
+  preservedRevisions: Array<{ version: string; revision: "historical-applied" | "fresh-bootstrap-corrected"; sourceSha256: string }>;
 };
 
 type CompleteRegistryRow = RegistryRow & { full_row: Record<string, unknown> };
@@ -319,12 +341,14 @@ export async function reconcileSelectedMigrationRegistry(options: SelectedCliReg
     assert.equal(new Set(before.map((row) => row.version)).size, before.length);
     const historical = before.filter((row) => !phase.has(row.version));
     assert.deepEqual(selectedRegistryBaseline(historical), receipt.baseline);
-    // A receipt cannot authorize aliases or noncanonical historical SQL.
+    const preservedRevisions: SelectedCliRegistryReport["preservedRevisions"] = [];
+    // A receipt cannot authorize aliases or unknown historical SQL. The
+    // approved applied revisions remain exact history, not rewrite targets.
     for (const row of historical) {
       const migration = repository.get(row.version);
       assert.ok(migration);
-      assert.equal(row.name, migration.name);
-      assert.deepEqual(row.statements, [migration.sql]);
+      const provenance = assertWholeFileMigrationProvenance(row, migration);
+      if (provenance.revision !== "canonical-current") preservedRevisions.push({ version: row.version, revision: provenance.revision, sourceSha256: provenance.sourceSha256 });
     }
     const pending: CompleteRegistryRow[] = [];
     let alreadyCanonical = 0;
@@ -332,8 +356,15 @@ export async function reconcileSelectedMigrationRegistry(options: SelectedCliReg
       const entry = phase.get(row.version);
       if (!entry) continue;
       assert.equal(row.name, entry.migration.name);
-      const canonical = row.statements?.length === 1 && row.statements[0] === entry.migration.sql;
-      if (!canonical) assert.deepEqual(row.statements, entry.receipt.statements);
+      const provenance = classifyWholeFileMigrationProvenance(row, entry.migration);
+      const canonical = provenance !== null;
+      if (provenance && provenance.revision !== "canonical-current") preservedRevisions.push({ version: row.version, revision: provenance.revision, sourceSha256: provenance.sourceSha256 });
+      if (!canonical) {
+        // A selected CLI receipt must never authorize rewriting an approved revision,
+        // including an unknown historical revision disguised as CLI statements.
+        assert.equal(isMigrationHistoryCompatibilityVersion(row.version), false);
+        assert.deepEqual(row.statements, entry.receipt.statements);
+      }
       if (!selected.has(row.version)) continue;
       if (canonical) alreadyCanonical++;
       else pending.push(row);
@@ -343,6 +374,7 @@ export async function reconcileSelectedMigrationRegistry(options: SelectedCliReg
       status: !options.apply ? "dry_run" : pending.length ? "reconciled" : "already_canonical",
       selected: selected.size, registryRows: before.length, historicalRows: historical.length,
       alreadyCanonical, wouldUpdate: pending.length, updated: 0, untouched: before.length,
+      preservedRevisions,
     };
     if (!options.apply || pending.length === 0) {
       await client.query("rollback");

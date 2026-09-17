@@ -114,6 +114,7 @@ export default function SeriesTableClient({
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    adjacentPrefetch: true,
   });
   const instant = useAdminEntityInstantMutation<SeriesListRow, SeriesMetrics>(
     "series",

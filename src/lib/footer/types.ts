@@ -32,6 +32,12 @@ export type { FooterSlotsConfig };
 
 export type FooterSourceStatus = "database" | "missing" | "invalid" | "error";
 
+export type FooterReadiness = {
+  systemValid: boolean;
+  publicationReady: boolean;
+  issues: string[];
+};
+
 export type FooterSettings = {
   contactItems: FooterContactItem[];
   socialLinks: FooterSocialLink[];
@@ -39,7 +45,11 @@ export type FooterSettings = {
   slots: FooterSlotsConfig;
   sourceStatus: FooterSourceStatus;
   sourceIssues: string[];
+  /** Derived by the Footer owner from the current values; never persisted. */
+  readiness?: FooterReadiness;
 };
+
+export type FooterSettingsContent = Pick<FooterSettings, "slots" | "contactItems" | "socialLinks" | "legal">;
 
 export const FOOTER_SETTING_KEYS = [
   "footer.slots",

@@ -109,6 +109,7 @@ export default function CategoriesListClient({
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    adjacentPrefetch: true,
   });
   const instant = useAdminEntityInstantMutation<CategoryListRow, CategoryMetrics>(
     "categories",

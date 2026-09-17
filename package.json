@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "qa:isolated-supabase": "node --experimental-strip-types scripts/qa-isolated-supabase.mts",
+    "verify:isolated-supabase": "node --experimental-strip-types scripts/verify-isolated-supabase.mts",
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
@@ -12,7 +14,7 @@
     "lint": "eslint --max-warnings=0",
     "typecheck": "tsc --noEmit",
     "verify:migrations": "node scripts/verify-migrations-present.mjs",
-    "verify:database-reconciliation": "node --experimental-strip-types scripts/verify-database-reconciliation.mts && node --experimental-strip-types scripts/verify-selected-migration-registry.mts",
+    "verify:database-reconciliation": "node --experimental-strip-types scripts/verify-database-reconciliation.mts && node scripts/verify-migration-history-compatibility.mjs && node --experimental-strip-types scripts/verify-selected-migration-registry.mts",
     "verify:database-reconciliation-live": "node --env-file=.env.local --experimental-strip-types scripts/verify-database-reconciliation.mts --live",
     "reconcile:migration-registry": "node --env-file=.env.local --experimental-strip-types scripts/reconcile-migration-registry.mts --apply",
     "verify:legacy-media-admin": "node scripts/verify-no-active-legacy-media-admin.mjs",

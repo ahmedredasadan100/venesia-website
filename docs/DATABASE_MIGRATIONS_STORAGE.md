@@ -265,7 +265,7 @@ Structural mode verifies the canonical migration corpus and retired-owner guards
 - exact repository/registry version order;
 - exact SQL provenance for every registered migration;
 - repository provenance for application-owned public relations, functions, explicit indexes, triggers, and policies;
-- RLS on every public application table;
+- explicit RLS, policy, and privilege classifications for every public application table at the verified migration boundary;
 - valid/ready/live indexes;
 - validated constraints;
 - no parallel public function overload names;
@@ -274,7 +274,29 @@ Structural mode verifies the canonical migration corpus and retired-owner guards
 
 `scripts/reconcile-migration-registry.mts` is the only registry-repair tool. It requires an explicit `--apply`, takes a transaction-scoped advisory lock plus an exclusive registry lock, validates known aliases before mutation, writes canonical repository SQL, verifies the result before commit, and records one sanitized audit event. It never replays repository migrations or seeds.
 
-Supabase platform-owned `public.rls_auto_enable()` is an explicit catalog exception because the platform event trigger owns it. Application cleanup must not drop it.
+Historically present `public.rls_auto_enable()` and its event trigger require their own catalog and provenance evidence. Application cleanup must not drop them. Their historical presence does not prove that the pinned fresh Supabase image installs them, or that their absence has an equivalent automatic replacement.
+
+### 18.1 Approved public-table security contract (Hybrid D)
+
+The existing Database/Migration Security Contract owns explicit table security. The migration applies the reviewed RLS and least-privilege declarations; the reconciliation verifier reads the same declaration and rejects catalog drift. Verification never installs, repairs, or grants permissions.
+
+The executable `v_contract` JSON literal in [`20260819040000_database_rls_security_contract.sql`](../sql/migrations/20260819040000_database_rls_security_contract.sql) is the single classification source. [`database-rls-security-contract.mts`](../scripts/lib/database-rls-security-contract.mts) consumes that literal for the existing reconciliation owner. There is no second policy manifest, database metadata table, or replacement platform event trigger.
+
+| Classification | Required contract |
+|---|---|
+| A | RLS enabled; explicitly scoped client read grants and the declared SELECT policies. |
+| B | RLS enabled; no client grants or client policies; privileged server/RPC access remains explicitly bounded. |
+| C | A separately approved RLS-off exception with its reason and approval recorded in the migration declaration. |
+
+Missing, ambiguous, or unclassified tables fail closed. An unclassified table still fails when RLS is enabled: RLS alone does not establish its intended access contract. Owner, FORCE RLS, policy predicates/roles, effective grants, column privileges, role memberships, schema privileges, creator defaults, and sequence privileges must match the declared boundary. No blanket `FORCE ROW LEVEL SECURITY` is implied; owner and privileged-role bypass must be accounted for in the approved server/RPC contract.
+
+Application DDL must use the approved migration handoff. Restricted client defaults and the verification guard do not constitute automatic RLS enforcement for out-of-band DDL. Manual grants, permission-repair SQL, and manual table creation are not an installation path. An explicitly approved, rolled-back QA negative fixture may test guard rejection without joining the application migration corpus.
+
+Revision 1 is scoped to the captured **56-table isolated checkpoint before historical Migration 86**, with no C exception. That is a fixed verification boundary, not a Production inventory or a claim about later migrations. A future schema change must introduce an approved migration declaration revision that explicitly supersedes the previous revision, migration version, and source hash; the verifier selects the applicable declaration through the requested migration boundary. A later unclassified table is a blocked contract change, not permission to extend a copied allowlist.
+
+This migration was authored on **2026-09-16**. Its `20260819040000` filename is an explicit dependency-order version before historical Migration 86, not a backdated execution claim. Existing-database and Production application require separate authorization and target-state/provenance review. Historical Migration 86 remains unchanged; this declaration neither replays it nor satisfies an unproven prerequisite on its behalf.
+
+Source verification and isolated behavioral evidence remain separate. Role tests, policy visibility, canonical server/RPC writes, rollback, and cleanup must pass on the owned isolated fixture before that boundary can close. Neither the declaration nor its documentation claims that runtime verification, the later application chain, or the remaining Public gates have passed.
 
 ### Remaining decision boundaries
 

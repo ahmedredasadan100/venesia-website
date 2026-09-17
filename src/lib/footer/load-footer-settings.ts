@@ -16,6 +16,7 @@ import type { FooterSlotsConfig } from "./footer-slot-types";
 import type { FooterSettings } from "./types";
 import { FOOTER_LOADER_SETTING_KEYS, FOOTER_SLOTS_SETTING_KEY } from "./types";
 import { validateFooterSlots } from "./validate-footer-slots";
+import { evaluateFooterReadiness, projectFooterSettingsForPublic } from "./footer-settings-readiness";
 
 function cloneEmptyFooterSettings(
   sourceStatus: FooterSettings["sourceStatus"],
@@ -58,21 +59,15 @@ function buildSettingsFromRows(byKey: Map<string, unknown>): FooterSettings {
   const contactItems = parseFooterContactItems(byKey.get("footer.contact_items"), []);
   const socialLinks = parseFooterSocialLinks(byKey.get("footer.social_links"), []);
   const legal = parseFooterLegal(byKey.get("footer.legal"), { copyright: "", tagline: "" });
-  const issues = [
-    ...(slots.issue ? [slots.issue] : []),
-    ...(!Array.isArray(byKey.get("footer.contact_items")) || contactItems.length === 0
-      ? ["footer.contact_items is invalid or empty."]
-      : []),
-    ...(!Array.isArray(byKey.get("footer.social_links")) || socialLinks.length === 0
-      ? ["footer.social_links is invalid or empty."]
-      : []),
-    ...(!legal.copyright.trim() || !legal.tagline.trim()
-      ? ["footer.legal is incomplete."]
-      : []),
-  ];
+  const readiness = evaluateFooterReadiness({
+    slots: slots.value,
+    contactItems: byKey.get("footer.contact_items"),
+    socialLinks: byKey.get("footer.social_links"),
+    legal: byKey.get("footer.legal"),
+  });
 
-  if (!slots.value || issues.length) {
-    return cloneEmptyFooterSettings("invalid", issues);
+  if (!slots.value || !readiness.systemValid) {
+    return cloneEmptyFooterSettings("invalid", readiness.issues);
   }
 
   return {
@@ -81,11 +76,12 @@ function buildSettingsFromRows(byKey: Map<string, unknown>): FooterSettings {
     socialLinks,
     legal,
     sourceStatus: "database",
-    sourceIssues: [],
+    sourceIssues: readiness.issues,
+    readiness,
   };
 }
 
-async function queryFooterSettings(): Promise<FooterSettings> {
+async function queryFooterSettings(publicOnly = false): Promise<FooterSettings> {
   const { data, error } = await getSupabaseAdmin()
     .from("site_settings")
     .select("key,value")
@@ -101,15 +97,16 @@ async function queryFooterSettings(): Promise<FooterSettings> {
     return cloneEmptyFooterSettings("missing", ["No canonical Footer settings are persisted."]);
   }
 
-  const settings = buildSettingsFromRows(new Map(rows.map((row) => [row.key, row.value])));
-  if (settings.sourceStatus !== "database") return settings;
+  const persistedSettings = buildSettingsFromRows(new Map(rows.map((row) => [row.key, row.value])));
+  const settings = publicOnly ? projectFooterSettingsForPublic(persistedSettings) : persistedSettings;
+  if (settings.sourceStatus !== "database" || !settings.readiness?.publicationReady) return settings;
   return resolveFooterSettingsLinks(settings);
 }
 
 export const loadFooterSettings = cache(async function loadFooterSettings(): Promise<FooterSettings> {
   try {
     return await unstable_cache(
-      async () => queryFooterSettings(),
+      async () => queryFooterSettings(true),
       ["public-footer-settings-v2"],
       { revalidate: 300, tags: ["footer", "site-settings"] },
     )();

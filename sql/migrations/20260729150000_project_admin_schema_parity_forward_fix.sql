@@ -8,6 +8,12 @@
 -- insert-only reference locations. Their identity values are allocated by the
 -- existing project_locations_id_seq; this migration never resets, lowers, or
 -- otherwise alters any sequence and never changes an existing row or ID.
+--
+-- Reviewed history-compatibility revision: retain the three equivalent CHECK
+-- identities created without explicit names by migration 50. Their expressions,
+-- referenced columns and catalog properties must match; names alone never
+-- establish identity. Applied original provenance is retained separately, and
+-- this revision does not authorize replay or registry rewriting on existing DBs.
 
 begin;
 
@@ -43,8 +49,10 @@ declare
   v_function record;
   v_source_hash text;
   v_check record;
-  v_actual_expression text;
+  v_actual_constraint record;
+  v_constraint_oids oid[];
   v_expected_expression text;
+  v_expected_columns smallint[];
   v_probe_name text;
   v_trigger record;
   v_level_attnum smallint;
@@ -597,7 +605,7 @@ begin
   end if;
 
   for v_check in
-    select *
+    select expected.*, historical.historical_constraint_name
       from (values
         ('projects', 'projects_general_description_check', $$CHECK (btrim(general_description) <> ''::text AND char_length(general_description) <= 1000)$$),
         ('projects', 'projects_short_description_check', $$CHECK (btrim(short_description) <> ''::text AND char_length(short_description) <= 500)$$),
@@ -624,100 +632,106 @@ begin
         ('project_media', 'project_media_alt_text_check', $$CHECK (btrim(alt_text) <> ''::text)$$),
         ('project_videos', 'project_videos_poster_alt_check', $$CHECK (poster_image IS NULL OR btrim(poster_alt) <> ''::text)$$)
       ) expected(table_name, constraint_name, definition)
+      -- These are the only reviewed historical identities from migration 50.
+      -- An alias is accepted only after the full catalog contract below passes.
+      left join (values
+        ('project_floor_plans', 'project_floor_plans_architectural_image_alt_check', 'project_floor_plans_check'),
+        ('project_floor_plans', 'project_floor_plans_furnishing_image_alt_check', 'project_floor_plans_check1'),
+        ('project_videos', 'project_videos_poster_alt_check', 'project_videos_check')
+      ) historical(table_name, constraint_name, historical_constraint_name)
+        using (table_name, constraint_name)
   loop
-    select pg_catalog.pg_get_expr(
-             constraint_record.conbin,
-             constraint_record.conrelid,
-             true
-           )
-      into v_actual_expression
-      from pg_catalog.pg_constraint constraint_record
-     where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
-       and constraint_record.conname = v_check.constraint_name
-       and constraint_record.contype = 'c'
-       and constraint_record.convalidated
-       and not constraint_record.condeferrable
-       and not constraint_record.condeferred
-       and not constraint_record.connoinherit
-       and constraint_record.conislocal
-       and constraint_record.coninhcount = 0
-       and constraint_record.conparentid = 0;
-
+    -- Normalize the expected expression and its referenced columns on the
+    -- locked table. The deliberate exception removes the NOT VALID probe;
+    -- PL/pgSQL retains the captured values after the subtransaction rolls back.
+    v_probe_name := '__project_parity_probe_' || pg_catalog.substr(
+      pg_catalog.md5(v_check.table_name || '.' || v_check.constraint_name),
+      1,
+      24
+    );
     if exists (
       select 1
         from pg_catalog.pg_constraint constraint_record
        where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
-         and constraint_record.conname = v_check.constraint_name
+         and constraint_record.conname = v_probe_name
     ) then
-      if v_actual_expression is null then
-        raise exception using
-          errcode = 'P0001',
-          message = format(
-            'Constraint public.%I.%I has unexpected properties.',
-            v_check.table_name,
-            v_check.constraint_name
-          );
-      end if;
+      raise exception using
+        errcode = 'P0001',
+        message = format('Reserved parity probe constraint %I already exists.', v_probe_name);
+    end if;
 
-      -- Ask PostgreSQL itself to parse and deparse the final expression on the
-      -- same table. Comparing pg_get_expr output ignores parser source offsets
-      -- without weakening literal or operator equality. The deliberate inner
-      -- exception rolls the NOT VALID probe back without any DROP statement;
-      -- PL/pgSQL retains v_expected_expression for comparison.
-      v_probe_name := '__project_parity_probe_' || pg_catalog.substr(
-        pg_catalog.md5(v_check.table_name || '.' || v_check.constraint_name),
-        1,
-        24
+    begin
+      execute format(
+        'alter table public.%I add constraint %I %s not valid',
+        v_check.table_name,
+        v_probe_name,
+        v_check.definition
       );
-      if exists (
-        select 1
-          from pg_catalog.pg_constraint constraint_record
-         where constraint_record.conrelid = format(
-           'public.%I',
-           v_check.table_name
-         )::regclass
-           and constraint_record.conname = v_probe_name
-      ) then
+      select pg_catalog.pg_get_expr(constraint_record.conbin, constraint_record.conrelid, true),
+             constraint_record.conkey
+        into strict v_expected_expression, v_expected_columns
+        from pg_catalog.pg_constraint constraint_record
+       where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
+         and constraint_record.conname = v_probe_name;
+      raise exception using
+        errcode = 'PZ001',
+        message = 'Rollback the Project parity constraint probe.';
+    exception
+      when sqlstate 'PZ001' then
+        null;
+    end;
+
+    -- Search by both reviewed names and, for the three historical identities,
+    -- by expression so an unknown name or duplicate cannot be mistaken for an
+    -- absent constraint. Do not filter properties before counting candidates:
+    -- a wrong canonical constraint must not be hidden by a valid alias.
+    select pg_catalog.array_agg(constraint_record.oid order by constraint_record.oid)
+      into v_constraint_oids
+      from pg_catalog.pg_constraint constraint_record
+     where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
+       and (
+         constraint_record.conname = v_check.constraint_name
+         or constraint_record.conname = v_check.historical_constraint_name
+         or (
+           v_check.historical_constraint_name is not null
+           and constraint_record.contype = 'c'
+           and pg_catalog.pg_get_expr(constraint_record.conbin, constraint_record.conrelid, true) = v_expected_expression
+         )
+       );
+
+    if coalesce(pg_catalog.cardinality(v_constraint_oids), 0) > 1 then
+      raise exception using
+        errcode = 'P0001',
+        message = format('Ambiguous Project constraint identity public.%I.%I.', v_check.table_name, v_check.constraint_name);
+    end if;
+
+    if pg_catalog.cardinality(v_constraint_oids) = 1 then
+      select constraint_record.*
+        into strict v_actual_constraint
+        from pg_catalog.pg_constraint constraint_record
+       where constraint_record.oid = v_constraint_oids[1];
+
+      if not (v_actual_constraint.conname = any (pg_catalog.array_remove(
+           array[v_check.constraint_name, v_check.historical_constraint_name]::text[], null
+         )))
+         or v_actual_constraint.contype <> 'c'
+         or not v_actual_constraint.convalidated
+         or v_actual_constraint.condeferrable
+         or v_actual_constraint.condeferred
+         or v_actual_constraint.connoinherit
+         or not v_actual_constraint.conislocal
+         or v_actual_constraint.coninhcount <> 0
+         or v_actual_constraint.conparentid <> 0
+         or v_actual_constraint.contypid <> 0
+         or v_actual_constraint.conindid <> 0
+         or v_actual_constraint.confrelid <> 0
+         or v_actual_constraint.confkey is not null
+         or v_actual_constraint.conkey is distinct from v_expected_columns
+         or pg_catalog.pg_get_expr(v_actual_constraint.conbin, v_actual_constraint.conrelid, true) is distinct from v_expected_expression then
         raise exception using
           errcode = 'P0001',
           message = format(
-            'Reserved parity probe constraint %I already exists.',
-            v_probe_name
-          );
-      end if;
-
-      begin
-        execute format(
-          'alter table public.%I add constraint %I %s not valid',
-          v_check.table_name,
-          v_probe_name,
-          v_check.definition
-        );
-        select pg_catalog.pg_get_expr(
-                 constraint_record.conbin,
-                 constraint_record.conrelid,
-                 true
-               )
-          into strict v_expected_expression
-          from pg_catalog.pg_constraint constraint_record
-         where constraint_record.conrelid = format(
-           'public.%I',
-           v_check.table_name
-         )::regclass
-           and constraint_record.conname = v_probe_name;
-        raise exception using
-          errcode = 'PZ001',
-          message = 'Rollback the Project parity constraint probe.';
-      exception
-        when sqlstate 'PZ001' then
-          null;
-      end;
-
-      if v_actual_expression is distinct from v_expected_expression then
-        raise exception using
-          errcode = 'P0001',
-          message = format(
-            'Constraint public.%I.%I is outside the audited absent/final allowlist.',
+            'Constraint public.%I.%I is outside the audited absent/final identity contract.',
             v_check.table_name,
             v_check.constraint_name
           );
@@ -1204,144 +1218,156 @@ alter table public.projects
   alter column longitude set not null,
   alter column map_zoom set not null;
 
--- Add only absent final checks. A same-name existing check is accepted only if
--- PostgreSQL parses it to the exact final expression on the same locked table.
+-- Add only absent final checks. Preserve each unambiguous reviewed identity
+-- only after PostgreSQL expression, referenced-column and property validation.
 do $project_parity_checks$
 declare
   v_check record;
-  v_actual_expression text;
+  v_actual_constraint record;
+  v_constraint_oids oid[];
   v_expected_expression text;
+  v_expected_columns smallint[];
   v_probe_name text;
 begin
   for v_check in
-    select *
+    select expected.*, historical.historical_constraint_name
       from (values
-        ('projects', 'projects_general_description_check', $$check (btrim(general_description) <> '' and char_length(general_description) <= 1000)$$),
-        ('projects', 'projects_short_description_check', $$check (btrim(short_description) <> '' and char_length(short_description) <= 500)$$),
-        ('projects', 'projects_image_check', $$check (btrim(image) <> '')$$),
-        ('projects', 'projects_image_alt_check', $$check (btrim(image_alt) <> '')$$),
-        ('projects', 'projects_hero_image_check', $$check (btrim(hero_image) <> '')$$),
-        ('projects', 'projects_hero_image_alt_check', $$check (btrim(hero_image_alt) <> '')$$),
-        ('projects', 'projects_small_box_image_check', $$check (btrim(small_box_image) <> '')$$),
-        ('projects', 'projects_small_box_image_alt_check', $$check (btrim(small_box_image_alt) <> '')$$),
-        ('projects', 'projects_location_label_check', $$check (btrim(location_label) <> '')$$),
-        ('projects', 'projects_google_maps_url_check', $$check (btrim(google_maps_url) <> '' and google_maps_url ~* '^https?://')$$),
-        ('projects', 'projects_overview_title_check', $$check (btrim(overview_title) <> '')$$),
-        ('projects', 'projects_overview_body_check', $$check (btrim(regexp_replace(replace(overview_body, '&nbsp;', ' '), '<[^>]*>', '', 'g')) <> '')$$),
-        ('projects', 'projects_delivery_title_check', $$check (btrim(delivery_title) <> '')$$),
-        ('projects', 'projects_delivery_body_check', $$check (btrim(regexp_replace(replace(delivery_body, '&nbsp;', ' '), '<[^>]*>', '', 'g')) <> '')$$),
-        ('projects', 'projects_seo_title_check', $$check (char_length(seo_title) <= 60)$$),
-        ('projects', 'projects_seo_description_check', $$check (char_length(seo_description) <= 160)$$),
-        ('projects', 'projects_canonical_url_check', $$check (canonical_url is null or canonical_url ~* '^https?://')$$),
-        ('projects', 'projects_overview_image_required_check', $$check (overview_media_type <> 'image' or (coalesce(btrim(overview_main_image), '') <> '' and btrim(overview_main_image_alt) <> ''))$$),
-        ('projects', 'projects_overview_image_alt_check', $$check (overview_main_image is null or btrim(overview_main_image_alt) <> '')$$),
-        ('projects', 'projects_og_image_alt_check', $$check (og_image is null or btrim(og_image_alt) <> '')$$),
-        ('project_floor_plans', 'project_floor_plans_architectural_image_alt_check', $$check (architectural_image is null or btrim(architectural_image_alt) <> '')$$),
-        ('project_floor_plans', 'project_floor_plans_furnishing_image_alt_check', $$check (furnishing_image is null or btrim(furnishing_image_alt) <> '')$$),
-        ('project_media', 'project_media_alt_text_check', $$check (btrim(alt_text) <> '')$$),
-        ('project_videos', 'project_videos_poster_alt_check', $$check (poster_image is null or btrim(poster_alt) <> '')$$)
+        ('projects', 'projects_general_description_check', $$CHECK (btrim(general_description) <> ''::text AND char_length(general_description) <= 1000)$$),
+        ('projects', 'projects_short_description_check', $$CHECK (btrim(short_description) <> ''::text AND char_length(short_description) <= 500)$$),
+        ('projects', 'projects_image_check', $$CHECK (btrim(image) <> ''::text)$$),
+        ('projects', 'projects_image_alt_check', $$CHECK (btrim(image_alt) <> ''::text)$$),
+        ('projects', 'projects_hero_image_check', $$CHECK (btrim(hero_image) <> ''::text)$$),
+        ('projects', 'projects_hero_image_alt_check', $$CHECK (btrim(hero_image_alt) <> ''::text)$$),
+        ('projects', 'projects_small_box_image_check', $$CHECK (btrim(small_box_image) <> ''::text)$$),
+        ('projects', 'projects_small_box_image_alt_check', $$CHECK (btrim(small_box_image_alt) <> ''::text)$$),
+        ('projects', 'projects_location_label_check', $$CHECK (btrim(location_label) <> ''::text)$$),
+        ('projects', 'projects_google_maps_url_check', $$CHECK (btrim(google_maps_url) <> ''::text AND google_maps_url ~* '^https?://'::text)$$),
+        ('projects', 'projects_overview_title_check', $$CHECK (btrim(overview_title) <> ''::text)$$),
+        ('projects', 'projects_overview_body_check', $$CHECK (btrim(regexp_replace(replace(overview_body, '&nbsp;'::text, ' '::text), '<[^>]*>'::text, ''::text, 'g'::text)) <> ''::text)$$),
+        ('projects', 'projects_delivery_title_check', $$CHECK (btrim(delivery_title) <> ''::text)$$),
+        ('projects', 'projects_delivery_body_check', $$CHECK (btrim(regexp_replace(replace(delivery_body, '&nbsp;'::text, ' '::text), '<[^>]*>'::text, ''::text, 'g'::text)) <> ''::text)$$),
+        ('projects', 'projects_seo_title_check', $$CHECK (char_length(seo_title) <= 60)$$),
+        ('projects', 'projects_seo_description_check', $$CHECK (char_length(seo_description) <= 160)$$),
+        ('projects', 'projects_canonical_url_check', $$CHECK (canonical_url IS NULL OR canonical_url ~* '^https?://'::text)$$),
+        ('projects', 'projects_overview_image_required_check', $$CHECK (overview_media_type <> 'image'::text OR COALESCE(btrim(overview_main_image), ''::text) <> ''::text AND btrim(overview_main_image_alt) <> ''::text)$$),
+        ('projects', 'projects_overview_image_alt_check', $$CHECK (overview_main_image IS NULL OR btrim(overview_main_image_alt) <> ''::text)$$),
+        ('projects', 'projects_og_image_alt_check', $$CHECK (og_image IS NULL OR btrim(og_image_alt) <> ''::text)$$),
+        ('project_floor_plans', 'project_floor_plans_architectural_image_alt_check', $$CHECK (architectural_image IS NULL OR btrim(architectural_image_alt) <> ''::text)$$),
+        ('project_floor_plans', 'project_floor_plans_furnishing_image_alt_check', $$CHECK (furnishing_image IS NULL OR btrim(furnishing_image_alt) <> ''::text)$$),
+        ('project_media', 'project_media_alt_text_check', $$CHECK (btrim(alt_text) <> ''::text)$$),
+        ('project_videos', 'project_videos_poster_alt_check', $$CHECK (poster_image IS NULL OR btrim(poster_alt) <> ''::text)$$)
       ) expected(table_name, constraint_name, definition)
+      -- These are the only reviewed historical identities from migration 50.
+      -- An alias is accepted only after the full catalog contract below passes.
+      left join (values
+        ('project_floor_plans', 'project_floor_plans_architectural_image_alt_check', 'project_floor_plans_check'),
+        ('project_floor_plans', 'project_floor_plans_furnishing_image_alt_check', 'project_floor_plans_check1'),
+        ('project_videos', 'project_videos_poster_alt_check', 'project_videos_check')
+      ) historical(table_name, constraint_name, historical_constraint_name)
+        using (table_name, constraint_name)
   loop
-    select pg_catalog.pg_get_expr(
-             constraint_record.conbin,
-             constraint_record.conrelid,
-             true
-           )
-      into v_actual_expression
+    -- Normalize the expected expression and its referenced columns on the
+    -- locked table. The deliberate exception removes the NOT VALID probe;
+    -- PL/pgSQL retains the captured values after the subtransaction rolls back.
+    v_probe_name := '__project_parity_probe_' || pg_catalog.substr(
+      pg_catalog.md5(v_check.table_name || '.' || v_check.constraint_name),
+      1,
+      24
+    );
+    if exists (
+      select 1
+        from pg_catalog.pg_constraint constraint_record
+       where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
+         and constraint_record.conname = v_probe_name
+    ) then
+      raise exception using
+        errcode = 'P0001',
+        message = format('Reserved parity probe constraint %I already exists.', v_probe_name);
+    end if;
+
+    begin
+      execute format(
+        'alter table public.%I add constraint %I %s not valid',
+        v_check.table_name,
+        v_probe_name,
+        v_check.definition
+      );
+      select pg_catalog.pg_get_expr(constraint_record.conbin, constraint_record.conrelid, true),
+             constraint_record.conkey
+        into strict v_expected_expression, v_expected_columns
+        from pg_catalog.pg_constraint constraint_record
+       where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
+         and constraint_record.conname = v_probe_name;
+      raise exception using
+        errcode = 'PZ001',
+        message = 'Rollback the Project parity constraint probe.';
+    exception
+      when sqlstate 'PZ001' then
+        null;
+    end;
+
+    -- Search by both reviewed names and, for the three historical identities,
+    -- by expression so an unknown name or duplicate cannot be mistaken for an
+    -- absent constraint. Do not filter properties before counting candidates:
+    -- a wrong canonical constraint must not be hidden by a valid alias.
+    select pg_catalog.array_agg(constraint_record.oid order by constraint_record.oid)
+      into v_constraint_oids
       from pg_catalog.pg_constraint constraint_record
      where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
-       and constraint_record.conname = v_check.constraint_name
-       and constraint_record.contype = 'c'
-       and constraint_record.convalidated
-       and not constraint_record.condeferrable
-       and not constraint_record.condeferred
-       and not constraint_record.connoinherit
-       and constraint_record.conislocal
-       and constraint_record.coninhcount = 0
-       and constraint_record.conparentid = 0;
+       and (
+         constraint_record.conname = v_check.constraint_name
+         or constraint_record.conname = v_check.historical_constraint_name
+         or (
+           v_check.historical_constraint_name is not null
+           and constraint_record.contype = 'c'
+           and pg_catalog.pg_get_expr(constraint_record.conbin, constraint_record.conrelid, true) = v_expected_expression
+         )
+       );
 
-    if v_actual_expression is null then
-      if exists (
-        select 1
-          from pg_catalog.pg_constraint constraint_record
-         where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
-           and constraint_record.conname = v_check.constraint_name
-      ) then
+    if coalesce(pg_catalog.cardinality(v_constraint_oids), 0) > 1 then
+      raise exception using
+        errcode = 'P0001',
+        message = format('Ambiguous Project constraint identity public.%I.%I.', v_check.table_name, v_check.constraint_name);
+    end if;
+
+    if pg_catalog.cardinality(v_constraint_oids) = 1 then
+      select constraint_record.*
+        into strict v_actual_constraint
+        from pg_catalog.pg_constraint constraint_record
+       where constraint_record.oid = v_constraint_oids[1];
+
+      if not (v_actual_constraint.conname = any (pg_catalog.array_remove(
+           array[v_check.constraint_name, v_check.historical_constraint_name]::text[], null
+         )))
+         or v_actual_constraint.contype <> 'c'
+         or not v_actual_constraint.convalidated
+         or v_actual_constraint.condeferrable
+         or v_actual_constraint.condeferred
+         or v_actual_constraint.connoinherit
+         or not v_actual_constraint.conislocal
+         or v_actual_constraint.coninhcount <> 0
+         or v_actual_constraint.conparentid <> 0
+         or v_actual_constraint.contypid <> 0
+         or v_actual_constraint.conindid <> 0
+         or v_actual_constraint.confrelid <> 0
+         or v_actual_constraint.confkey is not null
+         or v_actual_constraint.conkey is distinct from v_expected_columns
+         or pg_catalog.pg_get_expr(v_actual_constraint.conbin, v_actual_constraint.conrelid, true) is distinct from v_expected_expression then
         raise exception using
           errcode = 'P0001',
           message = format(
-            'Existing constraint public.%I.%I has unexpected properties.',
+            'Constraint public.%I.%I is outside the audited absent/final identity contract.',
             v_check.table_name,
             v_check.constraint_name
           );
       end if;
-
+    else
       execute format(
         'alter table public.%I add constraint %I %s',
         v_check.table_name,
         v_check.constraint_name,
         v_check.definition
       );
-    else
-      v_probe_name := '__project_parity_probe_' || pg_catalog.substr(
-        pg_catalog.md5(v_check.table_name || '.' || v_check.constraint_name),
-        1,
-        24
-      );
-
-      if exists (
-        select 1
-          from pg_catalog.pg_constraint constraint_record
-         where constraint_record.conrelid = format(
-           'public.%I',
-           v_check.table_name
-         )::regclass
-           and constraint_record.conname = v_probe_name
-      ) then
-        raise exception using
-          errcode = 'P0001',
-          message = format(
-            'Reserved parity probe constraint %I already exists.',
-            v_probe_name
-          );
-      end if;
-
-      begin
-        execute format(
-          'alter table public.%I add constraint %I %s not valid',
-          v_check.table_name,
-          v_probe_name,
-          v_check.definition
-        );
-        select pg_catalog.pg_get_expr(
-                 constraint_record.conbin,
-                 constraint_record.conrelid,
-                 true
-               )
-          into strict v_expected_expression
-          from pg_catalog.pg_constraint constraint_record
-         where constraint_record.conrelid = format(
-           'public.%I',
-           v_check.table_name
-         )::regclass
-           and constraint_record.conname = v_probe_name;
-        raise exception using
-          errcode = 'PZ001',
-          message = 'Rollback the Project parity constraint probe.';
-      exception
-        when sqlstate 'PZ001' then
-          null;
-      end;
-
-      if v_actual_expression is distinct from v_expected_expression then
-        raise exception using
-          errcode = 'P0001',
-          message = format(
-            'Existing constraint public.%I.%I is outside the final contract.',
-            v_check.table_name,
-            v_check.constraint_name
-          );
-      end if;
     end if;
   end loop;
 end
@@ -2559,6 +2585,10 @@ $project_reference_seed$;
 do $project_parity_assert$
 declare
   v_column record;
+  v_check record;
+  v_actual_constraint record;
+  v_constraint_oids oid[];
+  v_final_check_oids oid[] := array[]::oid[];
   v_function record;
   v_source_hash text;
   v_trigger record;
@@ -2684,47 +2714,88 @@ begin
       message = 'A final Project NOT NULL property is missing.';
   end if;
 
-  if (
-    select count(*)
+  -- The preflight and add/check phases proved expression and referenced-column
+  -- identity under the still-held table locks. The only intervening CHECK DDL
+  -- adds a validated missing canonical constraint. Require exactly one final
+  -- member per logical obligation, so aliases cannot mask missing or duplicate
+  -- obligations. No name is accepted here without those earlier proofs.
+  for v_check in
+    select expected.*, historical.historical_constraint_name
+      from (values
+        ('projects', 'projects_general_description_check'),
+        ('projects', 'projects_short_description_check'),
+        ('projects', 'projects_image_check'),
+        ('projects', 'projects_image_alt_check'),
+        ('projects', 'projects_hero_image_check'),
+        ('projects', 'projects_hero_image_alt_check'),
+        ('projects', 'projects_small_box_image_check'),
+        ('projects', 'projects_small_box_image_alt_check'),
+        ('projects', 'projects_location_label_check'),
+        ('projects', 'projects_google_maps_url_check'),
+        ('projects', 'projects_overview_title_check'),
+        ('projects', 'projects_overview_body_check'),
+        ('projects', 'projects_delivery_title_check'),
+        ('projects', 'projects_delivery_body_check'),
+        ('projects', 'projects_seo_title_check'),
+        ('projects', 'projects_seo_description_check'),
+        ('projects', 'projects_canonical_url_check'),
+        ('projects', 'projects_overview_image_required_check'),
+        ('projects', 'projects_overview_image_alt_check'),
+        ('projects', 'projects_og_image_alt_check'),
+        ('project_floor_plans', 'project_floor_plans_architectural_image_alt_check'),
+        ('project_floor_plans', 'project_floor_plans_furnishing_image_alt_check'),
+        ('project_media', 'project_media_alt_text_check'),
+        ('project_videos', 'project_videos_poster_alt_check')
+      ) expected(table_name, constraint_name)
+      left join (values
+        ('project_floor_plans', 'project_floor_plans_architectural_image_alt_check', 'project_floor_plans_check'),
+        ('project_floor_plans', 'project_floor_plans_furnishing_image_alt_check', 'project_floor_plans_check1'),
+        ('project_videos', 'project_videos_poster_alt_check', 'project_videos_check')
+      ) historical(table_name, constraint_name, historical_constraint_name)
+        using (table_name, constraint_name)
+  loop
+    select pg_catalog.array_agg(constraint_record.oid order by constraint_record.oid)
+      into v_constraint_oids
       from pg_catalog.pg_constraint constraint_record
-     where (
-       constraint_record.conrelid,
-       constraint_record.conname
-     ) in (
-       ('public.projects'::regclass, 'projects_general_description_check'),
-       ('public.projects'::regclass, 'projects_short_description_check'),
-       ('public.projects'::regclass, 'projects_image_check'),
-       ('public.projects'::regclass, 'projects_image_alt_check'),
-       ('public.projects'::regclass, 'projects_hero_image_check'),
-       ('public.projects'::regclass, 'projects_hero_image_alt_check'),
-       ('public.projects'::regclass, 'projects_small_box_image_check'),
-       ('public.projects'::regclass, 'projects_small_box_image_alt_check'),
-       ('public.projects'::regclass, 'projects_location_label_check'),
-       ('public.projects'::regclass, 'projects_google_maps_url_check'),
-       ('public.projects'::regclass, 'projects_overview_title_check'),
-       ('public.projects'::regclass, 'projects_overview_body_check'),
-       ('public.projects'::regclass, 'projects_delivery_title_check'),
-       ('public.projects'::regclass, 'projects_delivery_body_check'),
-       ('public.projects'::regclass, 'projects_seo_title_check'),
-       ('public.projects'::regclass, 'projects_seo_description_check'),
-       ('public.projects'::regclass, 'projects_canonical_url_check'),
-       ('public.projects'::regclass, 'projects_overview_image_required_check'),
-       ('public.projects'::regclass, 'projects_overview_image_alt_check'),
-       ('public.projects'::regclass, 'projects_og_image_alt_check'),
-       ('public.project_floor_plans'::regclass, 'project_floor_plans_architectural_image_alt_check'),
-       ('public.project_floor_plans'::regclass, 'project_floor_plans_furnishing_image_alt_check'),
-       ('public.project_media'::regclass, 'project_media_alt_text_check'),
-       ('public.project_videos'::regclass, 'project_videos_poster_alt_check')
-     )
-       and constraint_record.contype = 'c'
-       and constraint_record.convalidated
-       and not constraint_record.condeferrable
-       and not constraint_record.condeferred
-       and not constraint_record.connoinherit
-       and constraint_record.conislocal
-       and constraint_record.coninhcount = 0
-       and constraint_record.conparentid = 0
-  ) <> 24 then
+     where constraint_record.conrelid = format('public.%I', v_check.table_name)::regclass
+       and (
+         constraint_record.conname = v_check.constraint_name
+         or constraint_record.conname = v_check.historical_constraint_name
+       );
+
+    if pg_catalog.cardinality(v_constraint_oids) is distinct from 1 then
+      raise exception using
+        errcode = 'P0001',
+        message = format('Missing or ambiguous final Project constraint public.%I.%I.', v_check.table_name, v_check.constraint_name);
+    end if;
+
+    select constraint_record.*
+      into strict v_actual_constraint
+      from pg_catalog.pg_constraint constraint_record
+     where constraint_record.oid = v_constraint_oids[1];
+
+    if v_actual_constraint.contype <> 'c'
+       or not v_actual_constraint.convalidated
+       or v_actual_constraint.condeferrable
+       or v_actual_constraint.condeferred
+       or v_actual_constraint.connoinherit
+       or not v_actual_constraint.conislocal
+       or v_actual_constraint.coninhcount <> 0
+       or v_actual_constraint.conparentid <> 0
+       or v_actual_constraint.contypid <> 0
+       or v_actual_constraint.conindid <> 0
+       or v_actual_constraint.confrelid <> 0
+       or v_actual_constraint.confkey is not null then
+      raise exception using
+        errcode = 'P0001',
+        message = format('Final Project constraint public.%I.%I has unexpected properties.', v_check.table_name, v_check.constraint_name);
+    end if;
+
+    v_final_check_oids := v_final_check_oids || v_constraint_oids;
+  end loop;
+
+  if pg_catalog.cardinality(v_final_check_oids) <> 24
+     or (select count(distinct constraint_oid) from unnest(v_final_check_oids) constraint_oid) <> 24 then
     raise exception using
       errcode = 'P0001',
       message = 'The complete final Project check-constraint set was not established.';

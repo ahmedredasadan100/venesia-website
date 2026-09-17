@@ -29,8 +29,47 @@
 --   20250705120000_topics_media_payload.sql
 --   20260717070000_unified_content_engine_foundation.sql
 --   20260804120000_global_seo_capability_closure.sql
+--
+-- Reviewed compatibility revision: accept only the original populated legacy
+-- contract or validated empty legacy input. Empty input still performs the
+-- structural consolidation and creates no historical transfer/SEO audit rows.
+-- The completed path is attested by a postgres-owned read-only projection;
+-- existing databases keep their applied SQL provenance without replay.
 
 begin;
+
+do $public_media_lock$
+begin
+  if current_user <> 'postgres' then
+    raise exception 'Public Media Truth closure requires the canonical postgres migration owner';
+  end if;
+  if pg_catalog.to_regclass('public.media_items') is null then
+    raise exception 'public.media_items is missing before Public Media Truth backfill';
+  end if;
+  if pg_catalog.to_regclass('public.media_categories') is null then
+    raise exception 'public.media_categories is missing before Public Media Truth backfill';
+  end if;
+  if exists (
+    select 1 from pg_catalog.pg_proc p
+    join pg_catalog.pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'public_media_closure_provenance'
+  ) then
+    raise exception 'Public Media Truth closure provenance already exists before migration';
+  end if;
+end;
+$public_media_lock$;
+
+-- Keep classification, reference checks, transfer and removal on one locked
+-- input state. An empty observation alone must never authorize later removal.
+lock table
+  public.media_items, public.media_categories, public.topics,
+  public.topic_categories, public.admin_audit_logs, public.menu_items,
+  public.media_references, public.media_hub_module_templates,
+  public.media_sidebar_module_templates, public.hero_templates,
+  public.page_sections, public.cta_block_templates,
+  public.content_block_templates, public.cards_block_templates,
+  public.breadcrumb_block_templates, public.site_settings
+in share row exclusive mode;
 
 alter table public.topics
   add column if not exists media_project text;
@@ -52,6 +91,17 @@ create temporary table public_media_seo_normalization_evidence (
   normalized_length integer not null
 ) on commit drop;
 
+-- Transaction-local control state, never a persisted historical data/audit row.
+create temporary table public_media_closure_input (
+  singleton boolean primary key check (singleton),
+  input_state text not null check (input_state in ('populated-legacy', 'validated-empty-legacy')),
+  category_count integer not null,
+  item_count integer not null,
+  seo_count integer not null,
+  hub_count integer not null,
+  sidebar_count integer not null
+) on commit drop;
+
 do $$
 declare
   collision_count integer;
@@ -61,6 +111,11 @@ declare
   seo_unnormalizable_count integer;
   seo_normalized_overflow_count integer;
   serialized_link_count integer;
+  legacy_item_count integer;
+  legacy_category_count integer;
+  prior_evidence_count integer;
+  validated_empty boolean;
+  schema_column record;
   brand_suffix constant text := convert_from(
     decode('207c20d981d98ad986d98ad8b3d98ad8a720d984d984d8aad8b7d988d98ad8b120d8a7d984d8b9d982d8a7d8b1d98a', 'hex'),
     'UTF8'
@@ -72,6 +127,19 @@ begin
 
   if to_regclass('public.media_categories') is null then
     raise exception 'public.media_categories is missing before Public Media Truth backfill';
+  end if;
+
+  select count(*) into legacy_item_count from public.media_items;
+  select count(*) into legacy_category_count from public.media_categories;
+  select count(*) into prior_evidence_count from public.admin_audit_logs
+  where metadata->>'migration' = '20260804180000_public_media_truth_closure';
+
+  if prior_evidence_count <> 0 then
+    raise exception 'Public Media Truth closure refused: pre-existing migration evidence makes the input state ambiguous';
+  end if;
+  validated_empty := legacy_item_count = 0 and legacy_category_count = 0;
+  if not validated_empty and (legacy_item_count <> 28 or legacy_category_count <> 13) then
+    raise exception 'Public Media Truth closure refused: expected populated legacy counts 13 categories / 28 items, found % / %', legacy_category_count, legacy_item_count;
   end if;
 
   select count(*) into collision_count
@@ -104,7 +172,7 @@ begin
   from public.media_items
   where char_length(seo_title) > 60;
 
-  if seo_overflow_count <> 14 then
+  if not validated_empty and seo_overflow_count <> 14 then
     raise exception 'Public Media Truth SEO normalization refused: expected 14 over-limit titles, found %', seo_overflow_count;
   end if;
 
@@ -139,6 +207,128 @@ begin
   if serialized_link_count > 0 then
     raise exception 'Public Media Truth backfill refused: % serialized legacy media link owner(s) require explicit migration', serialized_link_count;
   end if;
+
+  if exists (
+    select 1 from public.menu_items link
+    left join public.media_items legacy on legacy.id = link.linked_id
+    where link.linked_type = 'media_items' and legacy.id is null
+  ) or exists (
+    select 1 from public.media_references reference
+    left join public.media_items legacy on legacy.id::text = reference.entity_identity
+    where reference.domain_key = 'legacy_media_items' and legacy.id is null
+  ) then
+    raise exception 'Public Media Truth closure refused: dangling legacy references';
+  end if;
+
+  if exists (
+    select 1 from public.media_hub_module_templates
+    where config->>'source' is null
+       or config->>'source' not in ('media_items', 'topics')
+       or config->>'type' is null
+       or config->>'type' not in ('news', 'press', 'site-update', 'site_update', 'video', 'gallery')
+  ) or exists (
+    select 1 from public.media_sidebar_module_templates
+    where (widget_key = 'sections' and config->>'source' is distinct from 'navigation')
+       or (widget_key <> 'sections' and (config->>'source' is null or config->>'source' not in ('media_items', 'topics')))
+  ) then
+    raise exception 'Public Media Truth closure refused: structural module conversion prerequisites are invalid';
+  end if;
+
+  if validated_empty then
+    if seo_overflow_count <> 0
+       or not exists (
+         select 1 from public.topic_categories
+         where slug = 'media-center' and parent_id is null
+           and is_active is true and status = 'published'
+       ) then
+      raise exception 'Public Media Truth empty closure refused: root or empty-source invariants are invalid';
+    end if;
+
+    -- These prerequisites are the catalog-proven column contracts of the
+    -- unchanged canonical prefix. Empty data does not excuse schema drift.
+    for schema_column in
+      select * from (values
+        ('media_items', 'id', 'bigint'),
+        ('media_items', 'slug', 'text'),
+        ('media_items', 'title', 'text'),
+        ('media_items', 'excerpt', 'text'),
+        ('media_items', 'content', 'text[]'),
+        ('media_items', 'image', 'text'),
+        ('media_items', 'image_alt', 'text'),
+        ('media_items', 'type', 'text'),
+        ('media_items', 'category', 'text'),
+        ('media_items', 'category_slug', 'text'),
+        ('media_items', 'project', 'text'),
+        ('media_items', 'duration', 'text'),
+        ('media_items', 'date_label', 'text'),
+        ('media_items', 'published_at', 'date'),
+        ('media_items', 'status', 'text'),
+        ('media_items', 'is_featured', 'boolean'),
+        ('media_items', 'is_popular', 'boolean'),
+        ('media_items', 'sort_order', 'integer'),
+        ('media_items', 'seo_title', 'text'),
+        ('media_items', 'seo_description', 'text'),
+        ('media_items', 'seo_keywords', 'text[]'),
+        ('media_items', 'focus_keyword', 'text'),
+        ('media_items', 'og_image', 'text'),
+        ('media_items', 'schema_type', 'text'),
+        ('media_items', 'created_at', 'timestamp with time zone'),
+        ('media_items', 'updated_at', 'timestamp with time zone'),
+        ('media_items', 'deleted_at', 'timestamp with time zone'),
+        ('media_categories', 'id', 'bigint'),
+        ('media_categories', 'name', 'text'),
+        ('media_categories', 'slug', 'text'),
+        ('media_categories', 'description', 'text'),
+        ('media_categories', 'is_active', 'boolean'),
+        ('media_categories', 'sort_order', 'integer'),
+        ('media_categories', 'created_at', 'timestamp with time zone'),
+        ('media_categories', 'updated_at', 'timestamp with time zone'),
+        ('topics', 'id', 'bigint'),
+        ('topics', 'slug', 'text'),
+        ('topics', 'content', 'text'),
+        ('topics', 'content_type', 'text'),
+        ('topics', 'media_payload', 'jsonb'),
+        ('topics', 'media_project', 'text'),
+        ('topic_categories', 'id', 'bigint'),
+        ('topic_categories', 'slug', 'text'),
+        ('topic_categories', 'parent_id', 'bigint'),
+        ('topic_categories', 'is_active', 'boolean'),
+        ('topic_categories', 'status', 'text'),
+        ('admin_audit_logs', 'action', 'text'),
+        ('admin_audit_logs', 'metadata', 'jsonb'),
+        ('menu_items', 'linked_type', 'text'),
+        ('menu_items', 'linked_id', 'bigint'),
+        ('media_references', 'domain_key', 'text'),
+        ('media_references', 'entity_identity', 'text'),
+        ('media_hub_module_templates', 'config', 'jsonb'),
+        ('media_sidebar_module_templates', 'config', 'jsonb'),
+        ('media_sidebar_module_templates', 'widget_key', 'text')
+      ) expected(table_name, column_name, column_type)
+    loop
+      if not exists (
+        select 1 from pg_catalog.pg_attribute a
+        join pg_catalog.pg_class t on t.oid = a.attrelid
+        join pg_catalog.pg_namespace n on n.oid = t.relnamespace
+        where n.nspname = 'public' and t.relname = schema_column.table_name
+          and t.relkind = 'r' and t.relowner = 'postgres'::regrole
+          and a.attname = schema_column.column_name and a.attnum > 0
+          and not a.attisdropped and a.attgenerated = ''
+          and pg_catalog.format_type(a.atttypid, a.atttypmod) = schema_column.column_type
+      ) then
+        raise exception 'Public Media Truth empty closure refused: schema prerequisite %.% is invalid', schema_column.table_name, schema_column.column_name;
+      end if;
+    end loop;
+  end if;
+
+  insert into pg_temp.public_media_closure_input
+    (singleton, input_state, category_count, item_count, seo_count, hub_count, sidebar_count)
+  values (
+    true,
+    case when validated_empty then 'validated-empty-legacy' else 'populated-legacy' end,
+    legacy_category_count, legacy_item_count, seo_overflow_count,
+    (select count(*) from public.media_hub_module_templates),
+    (select count(*) from public.media_sidebar_module_templates)
+  );
 end;
 $$;
 
@@ -430,13 +620,16 @@ declare
   evidence_count integer;
   category_audit_count integer;
   migrated_audit_count integer;
+  closure_input record;
 begin
+  select * into strict closure_input from pg_temp.public_media_closure_input;
+
   select count(*) into category_audit_count
   from public.admin_audit_logs
   where action = 'public_media.legacy_category_migrated'
     and metadata->>'migration' = '20260804180000_public_media_truth_closure';
 
-  if category_audit_count <> 13 then
+  if closure_input.input_state = 'populated-legacy' and category_audit_count <> 13 then
     raise exception 'Public Media Truth category audit parity failed: expected 13 rows, found %', category_audit_count;
   end if;
 
@@ -445,7 +638,7 @@ begin
   where action = 'public_media.legacy_item_migrated'
     and metadata->>'migration' = '20260804180000_public_media_truth_closure';
 
-  if migrated_audit_count <> 28 then
+  if closure_input.input_state = 'populated-legacy' and migrated_audit_count <> 28 then
     raise exception 'Public Media Truth migration audit parity failed: expected 28 rows, found %', migrated_audit_count;
   end if;
 
@@ -455,8 +648,13 @@ begin
     and metadata->>'migration' = '20260804180000_public_media_truth_closure'
     and (metadata->>'normalized_length')::integer <= 60;
 
-  if evidence_count <> 14 then
+  if closure_input.input_state = 'populated-legacy' and evidence_count <> 14 then
     raise exception 'Public Media Truth SEO audit parity failed: expected 14 valid evidence rows, found %', evidence_count;
+  end if;
+
+  if closure_input.input_state = 'validated-empty-legacy'
+     and (category_audit_count <> 0 or migrated_audit_count <> 0 or evidence_count <> 0) then
+    raise exception 'Public Media Truth empty closure refused: historical audit evidence must remain zero';
   end if;
 end;
 $$;
@@ -616,5 +814,160 @@ grant execute on function public.global_seo_infrastructure_health() to service_r
 
 comment on function public.global_seo_infrastructure_health() is
   'Read-only proof for bounded Global SEO infrastructure and the single-source Public Media contract.';
+
+do $public_media_completed_path$
+declare
+  closure_input record;
+  frozen_path jsonb;
+  structural_complete boolean;
+  historical_audit_total bigint;
+  rpc_body text;
+  -- Reused verbatim for the migration's postcondition and the live projection.
+  structural_sql constant text := $structural$
+    pg_catalog.to_regclass('public.media_items') is null
+    and pg_catalog.to_regclass('public.media_categories') is null
+    and exists (
+      select 1 from pg_catalog.pg_attribute a
+      where a.attrelid = pg_catalog.to_regclass('public.topics')
+        and a.attname = 'media_project' and not a.attisdropped
+        and a.atttypid = 'pg_catalog.text'::pg_catalog.regtype
+        and a.attgenerated = ''
+    )
+    and (select count(*) from public.topic_categories where slug = 'media-center') = 1
+    and exists (
+      select 1 from public.topic_categories
+      where slug = 'media-center' and parent_id is null
+        and is_active is true and status = 'published'
+    )
+    and not exists (
+      select 1 from public.media_hub_module_templates
+      where config->>'source' is distinct from 'topics'
+         or config->>'type' is null
+         or config->>'type' not in ('news', 'press', 'site_update', 'video', 'gallery')
+    )
+    and not exists (
+      select 1 from public.media_sidebar_module_templates
+      where (widget_key = 'sections' and config->>'source' is distinct from 'navigation')
+         or (widget_key <> 'sections' and config->>'source' is distinct from 'topics')
+    )
+    and not exists (select 1 from public.menu_items where linked_type = 'media_items')
+    and not exists (select 1 from public.media_references where domain_key = 'legacy_media_items')
+    and not exists (select 1 from public.hero_templates where config::text like '%media_items%')
+    and not exists (select 1 from public.page_sections where config::text like '%media_items%')
+    and not exists (select 1 from public.cta_block_templates where config::text like '%media_items%')
+    and not exists (select 1 from public.content_block_templates where config::text like '%media_items%')
+    and not exists (select 1 from public.cards_block_templates where config::text like '%media_items%')
+    and not exists (select 1 from public.breadcrumb_block_templates where config::text like '%media_items%')
+    and not exists (select 1 from public.site_settings where value::text like '%media_items%')
+  $structural$;
+begin
+  select * into strict closure_input from pg_temp.public_media_closure_input;
+  if not (
+    (closure_input.input_state = 'populated-legacy'
+      and closure_input.category_count = 13 and closure_input.item_count = 28 and closure_input.seo_count = 14)
+    or (closure_input.input_state = 'validated-empty-legacy'
+      and closure_input.category_count = 0 and closure_input.item_count = 0 and closure_input.seo_count = 0)
+  ) then
+    raise exception 'Public Media Truth closure refused: completed path does not match either approved input contract';
+  end if;
+
+  execute 'select ' || structural_sql into structural_complete;
+  if structural_complete is distinct from true
+     or (select count(*) from public.media_hub_module_templates) <> closure_input.hub_count
+     or (select count(*) from public.media_sidebar_module_templates) <> closure_input.sidebar_count then
+    raise exception 'Public Media Truth closure refused: final structural conversion is incomplete';
+  end if;
+
+  select count(*) into historical_audit_total from public.admin_audit_logs
+  where metadata->>'migration' = '20260804180000_public_media_truth_closure';
+  if historical_audit_total <> closure_input.category_count + closure_input.item_count + closure_input.seo_count then
+    raise exception 'Public Media Truth closure refused: unexpected migration-specific historical audit rows';
+  end if;
+
+  frozen_path := pg_catalog.jsonb_build_object(
+    'contract_version', 1,
+    'migration_version', '20260804180000',
+    'migration_revision', 'validated-legacy-input-v1',
+    'input_state', closure_input.input_state,
+    'source_counts', pg_catalog.jsonb_build_object(
+      'categories', closure_input.category_count, 'items', closure_input.item_count, 'seo', closure_input.seo_count
+    ),
+    'expected_audits', pg_catalog.jsonb_build_object(
+      'categories', closure_input.category_count, 'items', closure_input.item_count, 'seo', closure_input.seo_count
+    )
+  );
+
+  -- The constant records the path actually validated in this transaction, not
+  -- an inference from later counts. The separate live fields fail closed after
+  -- drift. The official CLI registers this file only after it has completed;
+  -- migration_registered is therefore checked by consumers after CLI success.
+  rpc_body := pg_catalog.format($rpc$
+    select %L::pg_catalog.jsonb || pg_catalog.jsonb_build_object(
+      'migration_registered', (
+        select count(*) = 1 from supabase_migrations.schema_migrations m
+        where m.version = '20260804180000' and m.name = 'public_media_truth_closure'
+          and pg_catalog.cardinality(m.statements) > 0
+          and not exists (
+            select 1 from pg_catalog.unnest(m.statements) statement
+            where statement is null or pg_catalog.btrim(statement) = ''
+          )
+      ),
+      'structural_complete', (%s),
+      'audit_counts', pg_catalog.jsonb_build_object(
+        'categories', (select count(*) from public.admin_audit_logs
+          where action = 'public_media.legacy_category_migrated'
+            and metadata->>'migration' = '20260804180000_public_media_truth_closure'),
+        'items', (select count(*) from public.admin_audit_logs
+          where action = 'public_media.legacy_item_migrated'
+            and metadata->>'migration' = '20260804180000_public_media_truth_closure'),
+        'seo', (select count(*) from public.admin_audit_logs
+          where action = 'public_media.seo_title_normalized'
+            and metadata->>'migration' = '20260804180000_public_media_truth_closure'
+            and (metadata->>'normalized_length')::integer <= 60)
+      ),
+      'historical_audit_total', (select count(*) from public.admin_audit_logs
+        where metadata->>'migration' = '20260804180000_public_media_truth_closure')
+    )
+  $rpc$, frozen_path::text, structural_sql);
+
+  -- No REPLACE: a pre-existing definition is not trusted state. This projection
+  -- is owned by the migration role, not by the Product service-role writer.
+  execute pg_catalog.format(
+    'create function public.public_media_closure_provenance() returns jsonb language sql stable security definer set search_path = '''' as %L',
+    rpc_body
+  );
+end;
+$public_media_completed_path$;
+
+revoke all on function public.public_media_closure_provenance() from public;
+revoke all on function public.public_media_closure_provenance() from anon;
+revoke all on function public.public_media_closure_provenance() from authenticated;
+grant execute on function public.public_media_closure_provenance() to service_role;
+
+comment on function public.public_media_closure_provenance() is
+  'Migration 59 validated-path provenance with live invariants; no historical audit rows are synthesized.';
+
+do $public_media_provenance_acl$
+begin
+  if not exists (
+    select 1 from pg_catalog.pg_proc p
+    where p.oid = 'public.public_media_closure_provenance()'::regprocedure
+      and p.proowner = 'postgres'::regrole and p.prokind = 'f'
+      and p.pronargs = 0 and p.pronargdefaults = 0
+      and p.prorettype = 'jsonb'::regtype and not p.proretset
+      and p.prosecdef and p.provolatile = 's'
+      and p.proconfig = array['search_path=""']::text[]
+      and pg_catalog.has_function_privilege('service_role', p.oid, 'EXECUTE')
+      and not exists (
+        select 1 from pg_catalog.aclexplode(coalesce(p.proacl, pg_catalog.acldefault('f', p.proowner))) a
+        where a.grantee not in ('postgres'::regrole, 'service_role'::regrole)
+      )
+  ) then
+    raise exception 'Public Media Truth provenance owner/signature/ACL contract failed';
+  end if;
+end;
+$public_media_provenance_acl$;
+
+notify pgrst, 'reload schema';
 
 commit;

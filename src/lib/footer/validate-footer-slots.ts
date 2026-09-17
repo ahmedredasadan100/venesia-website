@@ -15,6 +15,60 @@ import { hasFooterContactItemContent } from "./parse-footer-settings";
 
 const UNSAFE_HREF_PATTERN = /^\s*javascript:/i;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === "object" && !Array.isArray(value);
+const optionalString = (value: unknown) => value === undefined || typeof value === "string";
+const optionalBoolean = (value: unknown) => value === undefined || typeof value === "boolean";
+const nullablePositiveInteger = (value: unknown) => value === null
+  || typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+const optionalLink = (value: unknown) => value == null || isRecord(value);
+const linkTarget = (value: unknown) => value === "_self" || value === "_blank";
+const menuLocation = (value: unknown) => typeof value === "string"
+  && ["footer", "main", "mobile", "custom"].includes(value);
+
+function contactItemShape(value: unknown) {
+  return isRecord(value) && optionalString(value.label) && optionalString(value.value)
+    && optionalString(value.icon) && optionalString(value.href) && optionalBoolean(value.visible);
+}
+
+function manualLinkShape(value: unknown) {
+  return isRecord(value) && typeof value.label === "string" && typeof value.href === "string"
+    && optionalLink(value.link) && (value.target === undefined || linkTarget(value.target))
+    && optionalBoolean(value.visible) && (value.sortOrder === undefined
+      || typeof value.sortOrder === "number" && Number.isFinite(value.sortOrder));
+}
+
+/** Validate stored shape even for disabled slots; disabling is not a schema bypass. */
+function slotShape(value: unknown) {
+  if (!isRecord(value) || typeof value.index !== "number" || typeof value.enabled !== "boolean"
+    || !(value.heading === null || typeof value.heading === "string") || !isRecord(value.config)) return false;
+  const config = value.config;
+  switch (value.type) {
+    case "text":
+      return typeof config.title === "string" && typeof config.body === "string"
+        && typeof config.showBrandIcon === "boolean" && isRecord(config.cta)
+        && typeof config.cta.enabled === "boolean" && typeof config.cta.label === "string"
+        && typeof config.cta.href === "string" && linkTarget(config.cta.target) && optionalLink(config.cta.link);
+    case "menu":
+      return (config.source === "location" || config.source === "menu_id")
+        && nullablePositiveInteger(config.menuId) && menuLocation(config.location)
+        && (config.fallbackLocation === null || menuLocation(config.fallbackLocation))
+        && nullablePositiveInteger(config.maxItems) && typeof config.showOnlyTopLevel === "boolean";
+    case "contact":
+      return (config.source === "global" || config.source === "custom")
+        && Array.isArray(config.items) && config.items.every(contactItemShape);
+    case "media":
+      return (config.source === "main_submenu" || config.source === "menu_id" || config.source === "manual")
+        && typeof config.parentHref === "string" && optionalLink(config.parentLink)
+        && nullablePositiveInteger(config.menuId) && nullablePositiveInteger(config.maxItems)
+        && Array.isArray(config.manualLinks) && config.manualLinks.every(manualLinkShape);
+    case "custom_links":
+      return Array.isArray(config.links) && config.links.every(manualLinkShape);
+    default:
+      return false;
+  }
+}
+
 export type FooterSlotsValidationResult =
   | { ok: true; value: FooterSlotsConfig }
   | { ok: false; errors: string[] };
@@ -131,8 +185,14 @@ function validateSlot(slot: FooterSlot, errors: string[]) {
   }
 }
 
-export function validateFooterSlots(config: FooterSlotsConfig): FooterSlotsValidationResult {
+export function validateFooterSlots(input: unknown): FooterSlotsValidationResult {
   const errors: string[] = [];
+
+  if (!isRecord(input) || !Array.isArray(input.slots) || !input.slots.every(slotShape)) {
+    return { ok: false, errors: ["بنية إعدادات أعمدة الفوتر غير صالحة."] };
+  }
+  // Every required runtime field is validated above; semantic validation stays below.
+  const config = input as FooterSlotsConfig;
 
   if (config.version !== FOOTER_SLOTS_CONFIG_VERSION) {
     errors.push(`إصدار footer.slots غير مدعوم: ${String(config.version)}`);

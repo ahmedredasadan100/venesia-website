@@ -1,0 +1,3385 @@
+-- Venesia public-table security contract.
+-- Authored with Project Owner authorization on 2026-09-16.
+-- The filename is a deliberate dependency-order version: after the historical
+-- Tracking pagination migration and before the historical RLS ACL hardening.
+-- It is NOT a claim that this migration existed or ran on 2026-08-19.
+-- Creation receipt: .tmp-qa/rls-security-contract/migration-creation.json.
+-- Existing-database / Production application requires separate authorization;
+-- no earlier migration receipt is replayed, renamed, or rewritten by this file.
+--
+-- The executable JSON literal below is the single migration-owned declaration.
+-- The existing reconciliation verifier consumes this same literal. No persisted
+-- metadata table, security function, optional event trigger, or second owner is
+-- introduced. Publication predicates remain the existing three SQL policies.
+--
+-- Catalog expectations are from the canonical isolated checkpoint at migration
+-- 85, captured on 2026-09-16; no Production catalog or user data was read.
+-- The 24 service-role reductions retain source-proven direct CRUD and invoker
+-- RPC requirements. Postgres ownership and the other 32 service ACLs are kept.
+-- Global defaults and official platform creator/schema defaults are untouched.
+
+begin;
+
+do $venisia_security_adoption$
+declare
+  v_contract constant jsonb :=
+  $venisia_security_contract$
+{
+  "formatVersion": 1,
+  "contractId": "venisia-public-table-security",
+  "revision": 1,
+  "supersedes": null,
+  "schema": "public",
+  "clientRoles": [
+    "anon",
+    "authenticated"
+  ],
+  "ddlRoles": [
+    "postgres"
+  ],
+  "tables": [
+    {
+      "name": "admin_audit_logs",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "INSERT",
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "admin_user_preferences",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "admin_users",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "analytics_provider_read_models",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "breadcrumb_block_templates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "cards_block_templates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "content_block_templates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "cta_block_templates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "feed_module_templates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "hero_assignments",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "hero_templates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "integration_app_configuration_entries",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "integration_app_configuration_groups",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "integration_app_configuration_validations",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "integration_authorization_attempts",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "integration_connection_assets",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "integration_connections",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "integration_credentials",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "integration_sync_runs",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "media_assets",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "media_delete_reservations",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "media_folders",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "media_hub_module_templates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "media_reference_provider_revisions",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "media_reference_write_leases",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "media_references",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "media_sidebar_module_templates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "menu_items",
+      "classification": "A",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [
+          "SELECT"
+        ],
+        "authenticated": [
+          "SELECT"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [
+        {
+          "name": "Public can read visible menu items",
+          "command": "SELECT",
+          "roles": [
+            "PUBLIC"
+          ],
+          "permissive": true,
+          "using": "((is_visible = true) AND (EXISTS ( SELECT 1\n   FROM menus\n  WHERE ((menus.id = menu_items.menu_id) AND (menus.is_active = true)))))",
+          "withCheck": null
+        }
+      ],
+      "exception": null
+    },
+    {
+      "name": "menus",
+      "classification": "A",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [
+          "SELECT"
+        ],
+        "authenticated": [
+          "SELECT"
+        ],
+        "service_role": [
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [
+        {
+          "name": "Public can read active menus",
+          "command": "SELECT",
+          "roles": [
+            "PUBLIC"
+          ],
+          "permissive": true,
+          "using": "(is_active = true)",
+          "withCheck": null
+        }
+      ],
+      "exception": null
+    },
+    {
+      "name": "page_breadcrumb_block_assignments",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "page_cards_block_assignments",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "page_content_block_assignments",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "page_cta_block_assignments",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "page_feed_module_assignments",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "page_media_hub_module_assignments",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "page_media_sidebar_module_assignments",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "pages",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_delivery_items",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_features",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_floor_plan_details",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_floor_plans",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_location_points",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_locations",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_media",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_tracking_items",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_tracking_profiles",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_tracking_stages",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_tracking_update_media",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_tracking_updates",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "project_videos",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "projects",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "SELECT"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "site_settings",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "topic_categories",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "topic_series",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "SELECT",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    },
+    {
+      "name": "topics",
+      "classification": "A",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [
+          "SELECT"
+        ],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [
+        {
+          "name": "topics_anon_published_read",
+          "command": "SELECT",
+          "roles": [
+            "anon"
+          ],
+          "permissive": true,
+          "using": "((status = 'published'::text) AND (deleted_at IS NULL))",
+          "withCheck": null
+        }
+      ],
+      "exception": null
+    },
+    {
+      "name": "url_redirects",
+      "classification": "B",
+      "owner": "postgres",
+      "forceRls": false,
+      "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      },
+      "policies": [],
+      "exception": null
+    }
+  ],
+  "roles": [
+    {
+      "name": "anon",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "authenticated",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "authenticator",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": false,
+      "canLogin": true,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "dashboard_user",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": true,
+      "createDb": true,
+      "replication": true
+    },
+    {
+      "name": "pg_checkpoint",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_create_subscription",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_database_owner",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_execute_server_program",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_maintain",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_monitor",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_read_all_data",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_read_all_settings",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_read_all_stats",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_read_server_files",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_signal_backend",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_stat_scan_tables",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_use_reserved_connections",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_write_all_data",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pg_write_server_files",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "pgbouncer",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": true,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "postgres",
+      "superuser": false,
+      "bypassRls": true,
+      "inherit": true,
+      "canLogin": true,
+      "createRole": true,
+      "createDb": true,
+      "replication": true
+    },
+    {
+      "name": "service_role",
+      "superuser": false,
+      "bypassRls": true,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "supabase_admin",
+      "superuser": true,
+      "bypassRls": true,
+      "inherit": true,
+      "canLogin": true,
+      "createRole": true,
+      "createDb": true,
+      "replication": true
+    },
+    {
+      "name": "supabase_auth_admin",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": false,
+      "canLogin": true,
+      "createRole": true,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "supabase_etl_admin",
+      "superuser": false,
+      "bypassRls": true,
+      "inherit": true,
+      "canLogin": true,
+      "createRole": false,
+      "createDb": false,
+      "replication": true
+    },
+    {
+      "name": "supabase_functions_admin",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": false,
+      "canLogin": true,
+      "createRole": true,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "supabase_privileged_role",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": false,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "supabase_read_only_user",
+      "superuser": false,
+      "bypassRls": true,
+      "inherit": true,
+      "canLogin": true,
+      "createRole": false,
+      "createDb": false,
+      "replication": false
+    },
+    {
+      "name": "supabase_replication_admin",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": true,
+      "canLogin": true,
+      "createRole": false,
+      "createDb": false,
+      "replication": true
+    },
+    {
+      "name": "supabase_storage_admin",
+      "superuser": false,
+      "bypassRls": false,
+      "inherit": false,
+      "canLogin": true,
+      "createRole": true,
+      "createDb": false,
+      "replication": false
+    }
+  ],
+  "memberships": [
+    {
+      "role": "anon",
+      "member": "authenticator",
+      "inheritOption": false,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "anon",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": true
+    },
+    {
+      "role": "authenticated",
+      "member": "authenticator",
+      "inheritOption": false,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "authenticated",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": true
+    },
+    {
+      "role": "authenticator",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": true
+    },
+    {
+      "role": "authenticator",
+      "member": "supabase_storage_admin",
+      "inheritOption": false,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "pg_create_subscription",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": true
+    },
+    {
+      "role": "pg_monitor",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": true
+    },
+    {
+      "role": "pg_monitor",
+      "member": "supabase_etl_admin",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "pg_monitor",
+      "member": "supabase_read_only_user",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "pg_read_all_data",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": true
+    },
+    {
+      "role": "pg_read_all_data",
+      "member": "supabase_etl_admin",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "pg_read_all_data",
+      "member": "supabase_read_only_user",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "pg_read_all_settings",
+      "member": "pg_monitor",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "pg_read_all_stats",
+      "member": "pg_monitor",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "pg_signal_backend",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": true
+    },
+    {
+      "role": "pg_stat_scan_tables",
+      "member": "pg_monitor",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "service_role",
+      "member": "authenticator",
+      "inheritOption": false,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "service_role",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": true
+    },
+    {
+      "role": "supabase_functions_admin",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "supabase_privileged_role",
+      "member": "postgres",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    },
+    {
+      "role": "supabase_privileged_role",
+      "member": "supabase_etl_admin",
+      "inheritOption": true,
+      "setOption": true,
+      "adminOption": false
+    }
+  ],
+  "schemaPrivileges": [
+    {
+      "role": "PUBLIC",
+      "privileges": [
+        "USAGE"
+      ]
+    },
+    {
+      "role": "anon",
+      "privileges": [
+        "USAGE"
+      ]
+    },
+    {
+      "role": "authenticated",
+      "privileges": [
+        "USAGE"
+      ]
+    },
+    {
+      "role": "postgres",
+      "privileges": [
+        "CREATE",
+        "USAGE"
+      ]
+    },
+    {
+      "role": "service_role",
+      "privileges": [
+        "USAGE"
+      ]
+    }
+  ],
+  "defaultPrivileges": [
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "S",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "owner": "postgres",
+      "schema": "public",
+      "objectType": "r",
+      "grants": {
+        "postgres": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ],
+        "service_role": [
+          "DELETE",
+          "INSERT",
+          "MAINTAIN",
+          "REFERENCES",
+          "SELECT",
+          "TRIGGER",
+          "TRUNCATE",
+          "UPDATE"
+        ]
+      }
+    }
+  ],
+  "columnPrivileges": [],
+  "sequencePrivileges": [
+    {
+      "name": "admin_audit_logs_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "admin_users_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "breadcrumb_block_templates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "cards_block_templates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "content_block_templates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "cta_block_templates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "feed_module_templates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "hero_assignments_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "hero_templates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "media_hub_module_templates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "media_sidebar_module_templates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "menu_items_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "menus_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "page_breadcrumb_block_assignments_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "page_cards_block_assignments_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "page_content_block_assignments_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "page_cta_block_assignments_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "page_feed_module_assignments_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "page_media_hub_module_assignments_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "page_media_sidebar_module_assignments_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "pages_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_delivery_items_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_features_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_floor_plan_details_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_floor_plans_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_location_points_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_locations_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_media_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_tracking_items_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_tracking_stages_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_tracking_update_media_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_tracking_updates_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "project_videos_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "projects_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "topic_categories_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "topic_series_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "topics_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    },
+    {
+      "name": "url_redirects_id_seq",
+      "owner": "postgres",
+      "grants": {
+        "postgres": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ],
+        "service_role": [
+          "SELECT",
+          "UPDATE",
+          "USAGE"
+        ]
+      }
+    }
+  ]
+}
+  $venisia_security_contract$::jsonb;
+  v_table jsonb;
+  v_role text;
+  v_privilege text;
+  v_relation oid;
+  v_actual_policies jsonb;
+  v_expected_policies jsonb;
+  v_actual_grants jsonb;
+  v_expected_grants jsonb;
+  v_expected_names text[];
+  v_actual_names text[];
+  v_invariants_before jsonb;
+  v_invariants_after jsonb;
+  v_actual_list jsonb;
+  v_expected_list jsonb;
+  v_entry jsonb;
+  v_sequence jsonb;
+  v_default jsonb;
+  v_immutable_before jsonb;
+  v_immutable_after jsonb;
+  v_immutable_catalog_sql constant text := $preserved_security_catalog$
+    select jsonb_build_object(
+      'roles', (select jsonb_agg(jsonb_build_object(
+        'oid',oid,'name',rolname,'superuser',rolsuper,'inherit',rolinherit,
+        'createRole',rolcreaterole,'createDb',rolcreatedb,'canLogin',rolcanlogin,
+        'replication',rolreplication,'bypassRls',rolbypassrls
+      ) order by rolname) from pg_catalog.pg_roles),
+      'memberships', (select jsonb_agg(to_jsonb(m) order by roleid,member,grantor)
+                      from pg_catalog.pg_auth_members as m),
+      'schemas', (select jsonb_agg(jsonb_build_object('oid',oid,'name',nspname,'owner',nspowner,'acl',nspacl)
+                                 order by nspname) from pg_catalog.pg_namespace),
+      'otherDefaults', (select jsonb_agg(to_jsonb(d) order by defaclrole,defaclnamespace,defaclobjtype)
+                       from pg_catalog.pg_default_acl as d
+                       where not (defaclrole='postgres'::regrole::oid
+                         and defaclnamespace='public'::regnamespace::oid and defaclobjtype in ('r','S'))),
+      'functions', (select jsonb_agg(jsonb_build_object(
+        'oid',p.oid,'owner',p.proowner,'acl',p.proacl,'securityDefiner',p.prosecdef,
+        'config',p.proconfig,'sourceHash',md5(pg_catalog.pg_get_functiondef(p.oid))) order by p.oid)
+        from pg_catalog.pg_proc as p
+        where p.pronamespace='public'::regnamespace::oid and p.prokind in ('f','p')),
+      'events', (select jsonb_agg(to_jsonb(e) order by evtname) from pg_catalog.pg_event_trigger as e),
+      'sequenceProtectedAcl', (select jsonb_agg(jsonb_build_object(
+        'oid',s.oid,'name',s.relname,'owner',s.relowner,
+        'acl',(select coalesce(jsonb_agg(to_jsonb(a) order by a.grantor,a.grantee,a.privilege_type),'[]'::jsonb)
+               from pg_catalog.aclexplode(coalesce(s.relacl,pg_catalog.acldefault('s',s.relowner))) as a
+               where a.grantee<>0 and a.grantee not in ('anon'::regrole::oid,'authenticated'::regrole::oid))
+      ) order by s.relname) from pg_catalog.pg_class as s
+        where s.relnamespace='public'::regnamespace::oid and s.relkind='S')
+    )
+  $preserved_security_catalog$;
+begin
+  if v_contract->>'contractId' is distinct from 'venisia-public-table-security'
+     or v_contract->>'formatVersion' is distinct from '1'
+     or v_contract->>'revision' is distinct from '1'
+     or v_contract->>'schema' is distinct from 'public'
+     or v_contract->'supersedes' is distinct from 'null'::jsonb
+     or v_contract->'clientRoles' is distinct from '["anon","authenticated"]'::jsonb
+     or v_contract->'ddlRoles' is distinct from '["postgres"]'::jsonb
+     or jsonb_typeof(v_contract->'tables') is distinct from 'array'
+     or jsonb_typeof(v_contract->'roles') is distinct from 'array'
+     or jsonb_typeof(v_contract->'memberships') is distinct from 'array'
+     or jsonb_typeof(v_contract->'schemaPrivileges') is distinct from 'array'
+     or jsonb_typeof(v_contract->'defaultPrivileges') is distinct from 'array'
+     or jsonb_typeof(v_contract->'columnPrivileges') is distinct from 'array'
+     or jsonb_typeof(v_contract->'sequencePrivileges') is distinct from 'array'
+     or jsonb_array_length(v_contract->'roles') = 0
+     or jsonb_array_length(v_contract->'schemaPrivileges') = 0
+     or jsonb_array_length(v_contract->'sequencePrivileges') = 0 then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_metadata_is_incomplete';
+  end if;
+
+  if current_user <> 'postgres' then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_requires_declared_migration_role';
+  end if;
+
+  select jsonb_agg(jsonb_build_object(
+    'name',rolname,'superuser',rolsuper,'bypassRls',rolbypassrls,
+    'inherit',rolinherit,'canLogin',rolcanlogin,'createRole',rolcreaterole,
+    'createDb',rolcreatedb,'replication',rolreplication
+  ) order by rolname) into v_actual_list from pg_catalog.pg_roles;
+  select jsonb_agg(item order by item->>'name') into v_expected_list
+  from jsonb_array_elements(v_contract->'roles') as rows(item);
+  if v_actual_list is distinct from v_expected_list then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_role_attributes_mismatch';
+  end if;
+
+  select jsonb_agg(jsonb_build_object(
+    'role',pg_catalog.pg_get_userbyid(roleid),
+    'member',pg_catalog.pg_get_userbyid(member),
+    'inheritOption',inherit_option,'setOption',set_option,'adminOption',admin_option
+  ) order by pg_catalog.pg_get_userbyid(roleid),pg_catalog.pg_get_userbyid(member))
+    into v_actual_list from pg_catalog.pg_auth_members;
+  select jsonb_agg(item order by item->>'role',item->>'member') into v_expected_list
+  from jsonb_array_elements(v_contract->'memberships') as rows(item);
+  if v_actual_list is distinct from v_expected_list then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_role_membership_mismatch';
+  end if;
+
+  foreach v_role in array array['anon','authenticated']
+  loop
+    if not exists (select 1 from pg_catalog.pg_roles
+                   where rolname=v_role and not rolsuper and not rolbypassrls)
+       or pg_catalog.has_schema_privilege(v_role,'public','CREATE') then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_client_has_privileged_boundary';
+    end if;
+  end loop;
+
+  for v_entry in select value from jsonb_array_elements(v_contract->'schemaPrivileges')
+  loop
+    if v_entry->>'role' = 'PUBLIC' then
+      select coalesce(jsonb_agg(a.privilege_type order by a.privilege_type),'[]'::jsonb)
+        into v_actual_list
+      from pg_catalog.pg_namespace as n
+      cross join lateral pg_catalog.aclexplode(coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))) as a
+      where n.nspname='public' and a.grantee=0;
+    else
+      select coalesce(jsonb_agg(privilege order by privilege),'[]'::jsonb)
+        into v_actual_list from (values ('CREATE'),('USAGE')) as privileges(privilege)
+      where pg_catalog.has_schema_privilege(v_entry->>'role','public',privilege);
+    end if;
+    select coalesce(jsonb_agg(value order by value),'[]'::jsonb) into v_expected_list
+    from jsonb_array_elements(v_entry->'privileges');
+    if v_actual_list is distinct from v_expected_list then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_schema_privileges_mismatch';
+    end if;
+  end loop;
+
+  if v_contract->'columnPrivileges' is distinct from '[]'::jsonb
+     or exists (
+       select 1 from pg_catalog.pg_attribute as a
+       join pg_catalog.pg_class as c on c.oid=a.attrelid
+       cross join lateral pg_catalog.aclexplode(a.attacl) as acl
+       where c.relnamespace='public'::regnamespace::oid
+         and a.attnum>0 and not a.attisdropped
+     ) then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_unreviewed_column_privileges';
+  end if;
+
+  -- A schema-specific REVOKE cannot subtract a global default grant. This
+  -- checkpoint has no postgres global TABLE/SEQUENCE defaults; do not broaden
+  -- the transition to Storage or other schemas if that prerequisite changes.
+  if exists (select 1 from pg_catalog.pg_default_acl
+             where defaclrole='postgres'::regrole::oid
+               and defaclnamespace=0 and defaclobjtype in ('r','S'))
+     or exists (select 1 from jsonb_array_elements(v_contract->'defaultPrivileges') as rows(item)
+                where item->>'owner' is distinct from 'postgres'
+                  or item->>'schema' is distinct from 'public'
+                  or item->>'objectType' not in ('r','S')) then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_unreviewed_global_defaults';
+  end if;
+
+  execute v_immutable_catalog_sql into v_immutable_before;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'owner',pg_catalog.pg_get_userbyid(d.defaclrole),
+    'schema',n.nspname,'objectType',d.defaclobjtype,
+    'grants',(select coalesce(jsonb_object_agg(grantee_name,privileges),'{}'::jsonb)
+              from (
+                select pg_catalog.pg_get_userbyid(a.grantee) as grantee_name,
+                       jsonb_agg(a.privilege_type order by a.privilege_type) as privileges
+                from pg_catalog.aclexplode(d.defaclacl) as a
+                where a.grantee<>0
+                  and a.grantee not in ('anon'::regrole::oid,'authenticated'::regrole::oid)
+                group by a.grantee
+              ) as retained)
+  ) order by d.defaclobjtype::text collate "C"),'[]'::jsonb) into v_actual_list
+  from pg_catalog.pg_default_acl as d
+  join pg_catalog.pg_namespace as n on n.oid=d.defaclnamespace
+  where d.defaclrole='postgres'::regrole::oid and n.nspname='public'
+    and d.defaclobjtype in ('r','S');
+  select coalesce(jsonb_agg(item order by (item->>'objectType') collate "C"),'[]'::jsonb)
+    into v_expected_list
+  from jsonb_array_elements(v_contract->'defaultPrivileges') as rows(item);
+  if v_actual_list is distinct from v_expected_list
+     or exists (
+       select 1 from pg_catalog.pg_default_acl as d
+       cross join lateral pg_catalog.aclexplode(d.defaclacl) as a
+       where d.defaclrole='postgres'::regrole::oid
+         and d.defaclnamespace='public'::regnamespace::oid
+         and d.defaclobjtype in ('r','S') and a.is_grantable
+     ) then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_default_acl_precondition_failed';
+  end if;
+
+  select array_agg(c.relname::text order by c.relname::text)
+    into v_actual_names from pg_catalog.pg_class as c
+  where c.relnamespace='public'::regnamespace::oid and c.relkind='S';
+  select array_agg(item->>'name' order by item->>'name') into v_expected_names
+  from jsonb_array_elements(v_contract->'sequencePrivileges') as rows(item);
+  if v_actual_names is distinct from v_expected_names
+     or cardinality(v_expected_names) <> (
+       select count(distinct item->>'name')
+       from jsonb_array_elements(v_contract->'sequencePrivileges') as rows(item)
+     ) then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_sequence_inventory_mismatch';
+  end if;
+
+  select array_agg(item->>'name' order by item->>'name')
+    into v_expected_names
+  from jsonb_array_elements(v_contract->'tables') as entry(item);
+
+  if v_expected_names is null
+     or cardinality(v_expected_names) <> (
+       select count(distinct item->>'name')
+       from jsonb_array_elements(v_contract->'tables') as entry(item)
+     )
+     or exists (
+       select 1
+       from jsonb_array_elements(v_contract->'tables') as entry(item)
+       where item->>'classification' not in ('A','B')
+          or item->>'owner' is distinct from 'postgres'
+          or item->'forceRls' is distinct from 'false'::jsonb
+          or item->'exception' is distinct from 'null'::jsonb
+          or jsonb_typeof(item->'policies') is distinct from 'array'
+          or jsonb_typeof(item->'grants') is distinct from 'object'
+          or item->'grants'->'PUBLIC' is distinct from '[]'::jsonb
+          or (item->>'classification' = 'B' and (
+            item->'policies' is distinct from '[]'::jsonb
+            or item->'grants'->'anon' is distinct from '[]'::jsonb
+            or item->'grants'->'authenticated' is distinct from '[]'::jsonb
+          ))
+     ) then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_table_classification_is_invalid';
+  end if;
+
+  -- This first adoption is deliberately bounded to its dependency checkpoint.
+  -- Later table declarations extend the contract at their own migration owner;
+  -- they are not silently ignored or guessed from grants by the verifier.
+  select array_agg(relation.relname::text order by relation.relname::text)
+    into v_actual_names
+  from pg_catalog.pg_class as relation
+  join pg_catalog.pg_namespace as namespace on namespace.oid = relation.relnamespace
+  where namespace.nspname = 'public' and relation.relkind in ('r','p');
+
+  if v_actual_names is distinct from v_expected_names then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_public_table_inventory_mismatch';
+  end if;
+
+  for v_table in
+    select item from jsonb_array_elements(v_contract->'tables') as entry(item)
+    order by item->>'name'
+  loop
+    execute format('lock table only public.%I in access exclusive mode', v_table->>'name');
+    v_relation := pg_catalog.to_regclass(format('public.%I', v_table->>'name'));
+    if not exists (
+      select 1 from pg_catalog.pg_class as relation
+      where relation.oid = v_relation
+        and relation.relkind = 'r'
+        and not relation.relispartition
+        and pg_catalog.pg_get_userbyid(relation.relowner) = v_table->>'owner'
+        and relation.relforcerowsecurity = (v_table->>'forceRls')::boolean
+    ) or exists (
+      select 1 from pg_catalog.pg_inherits
+      where inhrelid = v_relation or inhparent = v_relation
+    ) then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_relation_identity_mismatch';
+    end if;
+  end loop;
+
+  -- Preserve policies, ownership, FORCE, column ACLs, triggers and every ACL
+  -- entry except the explicitly declared client/service-role transition.
+  select jsonb_agg(jsonb_build_object(
+    'table', relation.relname,
+    'owner', relation.relowner,
+    'force', relation.relforcerowsecurity,
+    'policies', (select coalesce(jsonb_agg(to_jsonb(policy) order by policy.oid),'[]'::jsonb)
+                 from pg_catalog.pg_policy as policy where policy.polrelid = relation.oid),
+    'protectedAcl', (select coalesce(jsonb_agg(to_jsonb(acl) order by acl.grantor,acl.grantee,acl.privilege_type),'[]'::jsonb)
+                     from pg_catalog.aclexplode(coalesce(relation.relacl,pg_catalog.acldefault('r',relation.relowner))) as acl
+                     where acl.grantee <> 0
+                       and acl.grantee not in ('anon'::regrole::oid,'authenticated'::regrole::oid,'service_role'::regrole::oid)),
+    'columns', (select coalesce(jsonb_agg(jsonb_build_object('number',column_row.attnum,'acl',column_row.attacl) order by column_row.attnum),'[]'::jsonb)
+                 from pg_catalog.pg_attribute as column_row
+                 where column_row.attrelid = relation.oid and column_row.attnum > 0 and not column_row.attisdropped),
+    'triggers', (select coalesce(jsonb_agg(to_jsonb(trigger_row) order by trigger_row.oid),'[]'::jsonb)
+                 from pg_catalog.pg_trigger as trigger_row where trigger_row.tgrelid = relation.oid)
+  ) order by relation.relname) into v_invariants_before
+  from pg_catalog.pg_class as relation
+  where relation.oid in (
+    select pg_catalog.to_regclass(format('public.%I', item->>'name'))
+    from jsonb_array_elements(v_contract->'tables') as entry(item)
+  );
+
+  for v_table in
+    select item from jsonb_array_elements(v_contract->'tables') as entry(item)
+    order by item->>'name'
+  loop
+    v_relation := pg_catalog.to_regclass(format('public.%I', v_table->>'name'));
+
+    select coalesce(jsonb_agg(jsonb_build_object(
+      'name', policy.polname,
+      'command', case policy.polcmd when 'r' then 'SELECT' when 'a' then 'INSERT'
+                    when 'w' then 'UPDATE' when 'd' then 'DELETE' else 'ALL' end,
+      'roles', (select jsonb_agg(case when role_oid = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(role_oid) end
+                               order by case when role_oid = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(role_oid) end)
+                from unnest(policy.polroles) as roles(role_oid)),
+      'permissive', policy.polpermissive,
+      'using', pg_catalog.pg_get_expr(policy.polqual,policy.polrelid),
+      'withCheck', pg_catalog.pg_get_expr(policy.polwithcheck,policy.polrelid)
+    ) order by policy.polname),'[]'::jsonb)
+      into v_actual_policies
+    from pg_catalog.pg_policy as policy where policy.polrelid = v_relation;
+
+    select coalesce(jsonb_agg(policy order by policy->>'name'),'[]'::jsonb)
+      into v_expected_policies
+    from jsonb_array_elements(v_table->'policies') as policies(policy);
+    if v_actual_policies is distinct from v_expected_policies then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_existing_policy_mismatch';
+    end if;
+
+    if exists (
+      select 1 from pg_catalog.pg_attribute as column_row
+      cross join lateral pg_catalog.aclexplode(column_row.attacl) as acl
+      where column_row.attrelid = v_relation
+        and column_row.attnum > 0 and not column_row.attisdropped
+        and (acl.grantee = 0 or acl.grantee in ('anon'::regrole::oid,'authenticated'::regrole::oid))
+    ) then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_unreviewed_client_column_acl';
+    end if;
+
+    if exists (
+      select 1 from pg_catalog.pg_class as relation
+      cross join lateral pg_catalog.aclexplode(coalesce(relation.relacl,pg_catalog.acldefault('r',relation.relowner))) as acl
+      where relation.oid=v_relation and acl.is_grantable
+        and (acl.grantee=0 or acl.grantee in (
+          'anon'::regrole::oid,'authenticated'::regrole::oid,'service_role'::regrole::oid
+        ))
+    ) then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_unreviewed_grant_options';
+    end if;
+
+    if not (select relrowsecurity from pg_catalog.pg_class where oid = v_relation) then
+      execute format('alter table public.%I enable row level security', v_table->>'name');
+    end if;
+    execute format('revoke all privileges on table public.%I from public, anon, authenticated restrict', v_table->>'name');
+
+    foreach v_role in array array['anon','authenticated']
+    loop
+      for v_privilege in select jsonb_array_elements_text(v_table->'grants'->v_role)
+      loop
+        if v_privilege <> 'SELECT' or v_table->>'classification' <> 'A' then
+          raise exception using errcode = 'P0001',
+            message = 'venisia_security_contract_client_grant_is_not_approved';
+        end if;
+        execute format('grant select on table public.%I to %I',v_table->>'name',v_role);
+      end loop;
+    end loop;
+
+    -- Narrow service-role grants only where its reviewed target differs. Never
+    -- promote an absent privilege or alter owner grants as a side effect.
+    select coalesce(jsonb_agg(acl.privilege_type order by acl.privilege_type),'[]'::jsonb)
+      into v_actual_list
+    from pg_catalog.pg_class as relation
+    cross join lateral pg_catalog.aclexplode(coalesce(relation.relacl,pg_catalog.acldefault('r',relation.relowner))) as acl
+    where relation.oid=v_relation and acl.grantee='service_role'::regrole::oid;
+    select coalesce(jsonb_agg(value order by value),'[]'::jsonb) into v_expected_list
+    from jsonb_array_elements(v_table->'grants'->'service_role');
+    if not (v_actual_list @> v_expected_list) then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_service_privilege_expansion_not_approved';
+    end if;
+    if v_actual_list is distinct from v_expected_list then
+      execute format('revoke all privileges on table public.%I from service_role restrict',v_table->>'name');
+      for v_privilege in select jsonb_array_elements_text(v_expected_list)
+      loop
+        if v_privilege not in ('SELECT','INSERT','UPDATE','DELETE') then
+          raise exception using errcode = 'P0001',
+            message = 'venisia_security_contract_service_reduction_not_reviewed';
+        end if;
+        execute format('grant %s on table public.%I to service_role',v_privilege,v_table->>'name');
+      end loop;
+    end if;
+
+    select coalesce(jsonb_object_agg(grantee_name,privileges),'{}'::jsonb)
+      into v_actual_grants
+    from (
+      select case when acl.grantee = 0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(acl.grantee) end as grantee_name,
+             jsonb_agg(acl.privilege_type order by acl.privilege_type) as privileges
+      from pg_catalog.pg_class as relation
+      cross join lateral pg_catalog.aclexplode(coalesce(relation.relacl,pg_catalog.acldefault('r',relation.relowner))) as acl
+      where relation.oid = v_relation
+      group by acl.grantee
+    ) as actual;
+    select coalesce(jsonb_object_agg(key,value),'{}'::jsonb)
+      into v_expected_grants from jsonb_each(v_table->'grants')
+    where value <> '[]'::jsonb;
+    if v_actual_grants is distinct from v_expected_grants
+       or exists (
+         select 1 from pg_catalog.pg_class
+         where oid = v_relation and (not relrowsecurity or relforcerowsecurity)
+       ) then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_table_postcondition_failed';
+    end if;
+
+    foreach v_role in array array['anon','authenticated','service_role']
+    loop
+      foreach v_privilege in array array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','MAINTAIN']
+      loop
+        if pg_catalog.has_table_privilege(v_role,v_relation,v_privilege)
+           is distinct from ((v_table->'grants'->v_role) ? v_privilege) then
+          raise exception using errcode = 'P0001',
+            message = 'venisia_security_contract_inherited_declared_privilege';
+        end if;
+      end loop;
+      foreach v_privilege in array array['SELECT','INSERT','UPDATE','REFERENCES']
+      loop
+        if pg_catalog.has_any_column_privilege(v_role,v_relation,v_privilege)
+           is distinct from ((v_table->'grants'->v_role) ? v_privilege) then
+          raise exception using errcode = 'P0001',
+            message = 'venisia_security_contract_inherited_declared_column_privilege';
+        end if;
+      end loop;
+    end loop;
+  end loop;
+
+  -- Sequences do not have RLS. Remove only client access; keep the reviewed
+  -- privileged ACL, owner and sequence identity without reading sequence values.
+  for v_sequence in
+    select item from jsonb_array_elements(v_contract->'sequencePrivileges') as rows(item)
+    order by item->>'name'
+  loop
+    v_relation := pg_catalog.to_regclass(format('public.%I',v_sequence->>'name'));
+    if not exists (
+      select 1 from pg_catalog.pg_class as c
+      where c.oid=v_relation and c.relkind='S'
+        and pg_catalog.pg_get_userbyid(c.relowner)=v_sequence->>'owner'
+    ) or exists (
+      select 1 from pg_catalog.pg_class as c
+      cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault('s',c.relowner))) as a
+      where c.oid=v_relation and a.is_grantable
+    ) then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_sequence_identity_mismatch';
+    end if;
+
+    select coalesce(jsonb_object_agg(grantee_name,privileges),'{}'::jsonb)
+      into v_actual_grants from (
+        select pg_catalog.pg_get_userbyid(a.grantee) as grantee_name,
+               jsonb_agg(a.privilege_type order by a.privilege_type) as privileges
+        from pg_catalog.pg_class as c
+        cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault('s',c.relowner))) as a
+        where c.oid=v_relation and a.grantee<>0
+          and a.grantee not in ('anon'::regrole::oid,'authenticated'::regrole::oid)
+        group by a.grantee
+      ) as retained;
+    if v_actual_grants is distinct from v_sequence->'grants' then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_sequence_privileged_acl_mismatch';
+    end if;
+
+    execute format('revoke all privileges on sequence public.%I from public, anon, authenticated restrict',v_sequence->>'name');
+    select coalesce(jsonb_object_agg(grantee_name,privileges),'{}'::jsonb)
+      into v_actual_grants from (
+        select case when a.grantee=0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end as grantee_name,
+               jsonb_agg(a.privilege_type order by a.privilege_type) as privileges
+        from pg_catalog.pg_class as c
+        cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault('s',c.relowner))) as a
+        where c.oid=v_relation group by a.grantee
+      ) as actual;
+    if v_actual_grants is distinct from v_sequence->'grants' then
+      raise exception using errcode = 'P0001',
+        message = 'venisia_security_contract_sequence_postcondition_failed';
+    end if;
+    foreach v_role in array array['anon','authenticated']
+    loop
+      foreach v_privilege in array array['SELECT','UPDATE','USAGE']
+      loop
+        if pg_catalog.has_sequence_privilege(v_role,v_relation,v_privilege) then
+          raise exception using errcode = 'P0001',
+            message = 'venisia_security_contract_inherited_sequence_privilege';
+        end if;
+      end loop;
+    end loop;
+  end loop;
+
+  -- The current creator has no global TABLE/SEQUENCE defaults. These scoped
+  -- revokes therefore close future client exposure without touching official
+  -- platform creators, other schemas, or function EXECUTE defaults.
+  alter default privileges for role postgres in schema public
+    revoke all privileges on tables from public, anon, authenticated;
+  alter default privileges for role postgres in schema public
+    revoke all privileges on sequences from public, anon, authenticated;
+
+  select coalesce(jsonb_agg(jsonb_build_object(
+    'owner',pg_catalog.pg_get_userbyid(d.defaclrole),
+    'schema',n.nspname,'objectType',d.defaclobjtype,
+    'grants',(select coalesce(jsonb_object_agg(grantee_name,privileges),'{}'::jsonb)
+              from (
+                select case when a.grantee=0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end as grantee_name,
+                       jsonb_agg(a.privilege_type order by a.privilege_type) as privileges
+                from pg_catalog.aclexplode(d.defaclacl) as a group by a.grantee
+              ) as actual)
+  ) order by d.defaclobjtype::text collate "C"),'[]'::jsonb) into v_actual_list
+  from pg_catalog.pg_default_acl as d
+  join pg_catalog.pg_namespace as n on n.oid=d.defaclnamespace
+  where d.defaclrole='postgres'::regrole::oid and n.nspname='public'
+    and d.defaclobjtype in ('r','S');
+  select coalesce(jsonb_agg(item order by (item->>'objectType') collate "C"),'[]'::jsonb)
+    into v_expected_list
+  from jsonb_array_elements(v_contract->'defaultPrivileges') as rows(item);
+  if v_actual_list is distinct from v_expected_list then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_default_acl_postcondition_failed';
+  end if;
+
+  select jsonb_agg(jsonb_build_object(
+    'table', relation.relname,
+    'owner', relation.relowner,
+    'force', relation.relforcerowsecurity,
+    'policies', (select coalesce(jsonb_agg(to_jsonb(policy) order by policy.oid),'[]'::jsonb)
+                 from pg_catalog.pg_policy as policy where policy.polrelid = relation.oid),
+    'protectedAcl', (select coalesce(jsonb_agg(to_jsonb(acl) order by acl.grantor,acl.grantee,acl.privilege_type),'[]'::jsonb)
+                     from pg_catalog.aclexplode(coalesce(relation.relacl,pg_catalog.acldefault('r',relation.relowner))) as acl
+                     where acl.grantee <> 0
+                       and acl.grantee not in ('anon'::regrole::oid,'authenticated'::regrole::oid,'service_role'::regrole::oid)),
+    'columns', (select coalesce(jsonb_agg(jsonb_build_object('number',column_row.attnum,'acl',column_row.attacl) order by column_row.attnum),'[]'::jsonb)
+                 from pg_catalog.pg_attribute as column_row
+                 where column_row.attrelid = relation.oid and column_row.attnum > 0 and not column_row.attisdropped),
+    'triggers', (select coalesce(jsonb_agg(to_jsonb(trigger_row) order by trigger_row.oid),'[]'::jsonb)
+                 from pg_catalog.pg_trigger as trigger_row where trigger_row.tgrelid = relation.oid)
+  ) order by relation.relname) into v_invariants_after
+  from pg_catalog.pg_class as relation
+  where relation.oid in (
+    select pg_catalog.to_regclass(format('public.%I', item->>'name'))
+    from jsonb_array_elements(v_contract->'tables') as entry(item)
+  );
+  if v_invariants_after is distinct from v_invariants_before then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_preserved_catalog_changed';
+  end if;
+  execute v_immutable_catalog_sql into v_immutable_after;
+  if v_immutable_after is distinct from v_immutable_before then
+    raise exception using errcode = 'P0001',
+      message = 'venisia_security_contract_protected_platform_catalog_changed';
+  end if;
+end;
+$venisia_security_adoption$;
+
+commit;

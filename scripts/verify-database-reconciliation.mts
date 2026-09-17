@@ -3,19 +3,24 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { assertMigrationCorpusProvenance, assertMigrationSourceProvenance, assertWholeFileMigrationProvenance } from "./lib/migration-provenance.mjs";
 
 // @ts-expect-error The pg runtime package has no declarations in this workspace.
 import pg from "pg";
 import ts from "typescript";
 
 import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
+import { assertDatabaseSecurityCatalog, captureDatabaseSecurityCatalog, loadDatabaseSecurityContract } from "./lib/database-rls-security-contract.mts";
+import { assertRlsMigration86SourceContract, verifyRlsMigration86Compatibility } from "./lib/rls-migration86-verification.mts";
 
 const { Client } = pg;
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const MIGRATIONS_DIR = join(ROOT, "sql", "migrations");
 const CURRENT_PROJECT_STATE_PATH = join(ROOT, "docs", "CURRENT_PROJECT_STATE.md");
 const MIGRATION_FILE = /^(\d{14})_([a-z0-9_]+)\.sql$/u;
-const PLATFORM_OWNED_FUNCTIONS = new Set(["rls_auto_enable"]);
+// Migration86 hardens this historical optional helper. This exclusion does not
+// attribute its installation or application-table coverage to the platform.
+const HISTORICAL_RLS_HELPER_FUNCTIONS = new Set(["rls_auto_enable"]);
 const FRAMEWORK_ENTRYPOINTS = new Set(["instrumentation.ts"]);
 const REGISTERED_TOOL_SOURCE = /scripts\/[a-z0-9_./-]+\.[cm]?[jt]s/giu;
 const RETIRED_LEGACY_PATHS = [
@@ -80,13 +85,15 @@ function loadMigrations(): Migration[] {
       const match = MIGRATION_FILE.exec(file);
       assert.ok(match, `Migration filename is not canonical: ${file}`);
       const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8").replace(/\r\n?/gu, "\n");
-      return {
+      const migration = {
         file,
         version: match[1],
         name: match[2],
         sql,
         sha256: sha256(sql),
       };
+      assertMigrationSourceProvenance(migration);
+      return migration;
     });
 }
 
@@ -280,20 +287,16 @@ function verifyRuntimeReachability() {
 function verifyStructuralContract(migrations: Migration[]) {
   const runtimeReachability = verifyRuntimeReachability();
   assert.ok(migrations.length > 0, "The canonical migration corpus is empty.");
-  // The official state file is a dated Production readback, not a requirement
-  // to apply every new branch migration to Production before local validation.
-  // Validate its complete recorded prefix; live reconciliation below still
-  // requires every repository migration and exact SQL provenance.
+  const security = loadDatabaseSecurityContract(migrations);
+  // The dated readback identifies an immutable Git tree, not a prefix of today's
+  // execution order. Live registry evidence remains a separate read-only gate.
   const documentedSql = readFileSync(CURRENT_PROJECT_STATE_PATH, "utf8");
-  const documentedVersions = [...documentedSql.matchAll(/\b(\d{14})_[a-z0-9_]+\.sql\b/gu)]
-    .map((match) => match[1]).sort();
-  const documentedHead = documentedVersions.at(-1);
-  assert.ok(documentedHead, "The official migration snapshot has no recorded migration head.");
-  assert.equal(
-    loadDocumentedStateMetric("Repository migration files"),
-    migrations.filter((migration) => migration.version <= documentedHead).length,
-    "CURRENT_PROJECT_STATE migration prefix drifted from the canonical migration corpus.",
-  );
+  const snapshotRows = [...documentedSql.matchAll(/^\|\s*Verified cutover baseline\s*\|\s*`([a-f0-9]{40})`\s*\|\s*$/gmu)];
+  assert.equal(snapshotRows.length, 1, "The official historical snapshot must identify exactly one immutable cutover commit.");
+  const migrationProvenance = assertMigrationCorpusProvenance({
+    migrations, snapshotCommit: snapshotRows[0][1],
+    historicalCount: loadDocumentedStateMetric("Repository migration files"),
+  });
   assert.equal(
     new Set(migrations.map((migration) => migration.version)).size,
     migrations.length,
@@ -326,13 +329,17 @@ function verifyStructuralContract(migrations: Migration[]) {
 
   return {
     migrationCount: migrations.length,
+    migrationProvenance,
     corpusSha256: sha256(migrations.map(({ version, sha256: hash }) => `${version}:${hash}`).join("\n")),
     retiredLegacyPaths: RETIRED_LEGACY_PATHS.length,
+    securityContract: { revision: security.contract.revision, migrationVersion: security.migrationVersion,
+      migrationSourceSha256: security.migrationSourceSha256, classifiedTables: security.contract.tables.length },
     runtimeReachability,
   };
 }
 
 async function verifyLiveContract(migrations: Migration[]) {
+  const security = loadDatabaseSecurityContract(migrations);
   const connectionString = process.env.SUPABASE_DB_URL;
   assert.ok(connectionString, "SUPABASE_DB_URL is required for --live verification.");
 
@@ -357,11 +364,11 @@ async function verifyLiveContract(migrations: Migration[]) {
       "Production migration registry versions drift from the repository corpus.",
     );
 
+    const registeredRevisions = [];
     for (const [index, migration] of migrations.entries()) {
       const row = registry.rows[index];
-      assert.equal(row.name, migration.name, `Migration name drift: ${migration.version}`);
-      assert.equal(row.statements?.length, 1, `Migration statement provenance is not canonical: ${migration.version}`);
-      assert.equal(sha256(row.statements?.[0] ?? ""), migration.sha256, `Migration SQL drift: ${migration.version}`);
+      const provenance = assertWholeFileMigrationProvenance(row, migration);
+      if (provenance.revision !== "canonical-current") registeredRevisions.push({ version: row.version, ...provenance });
     }
 
     const corpus = migrations.map((migration) => migration.sql.toLowerCase()).join("\n");
@@ -437,9 +444,9 @@ async function verifyLiveContract(migrations: Migration[]) {
           where n.nspname = 'public'
             and has_function_privilege('anon', p.oid, 'EXECUTE')
             and p.prorettype not in ('pg_catalog.trigger'::regtype, 'pg_catalog.event_trigger'::regtype)) as anon_callable_data_functions,
-        to_regprocedure('public.rls_auto_enable()') is not null as platform_function_present,
+        to_regprocedure('public.rls_auto_enable()') is not null as historical_rls_helper_present,
         (select count(*)::int from public.admin_audit_logs where action = 'database.migration_registry_reconciled') as reconciliation_audit_count
-    `, [[...PLATFORM_OWNED_FUNCTIONS]])) as { rows: {
+    `, [[...HISTORICAL_RLS_HELPER_FUNCTIONS]])) as { rows: {
       public_tables: number;
       rls_enabled_tables: number;
       invalid_indexes: number;
@@ -447,7 +454,7 @@ async function verifyLiveContract(migrations: Migration[]) {
       overloaded_function_names: number;
       public_policy_count: number;
       anon_callable_data_functions: number;
-      platform_function_present: boolean;
+      historical_rls_helper_present: boolean;
       reconciliation_audit_count: number;
     }[] };
     const state = integrity.rows[0];
@@ -471,13 +478,18 @@ async function verifyLiveContract(migrations: Migration[]) {
       state.rls_enabled_tables,
       "CURRENT_PROJECT_STATE RLS-table count drifted from the live catalog.",
     );
-    assert.equal(state.rls_enabled_tables, state.public_tables, "One or more public tables do not have RLS enabled.");
+    const securityCatalog = await captureDatabaseSecurityCatalog(client, security);
+    const securityProof = assertDatabaseSecurityCatalog(security, securityCatalog);
+    assert.equal(state.rls_enabled_tables, securityProof.classifications.A + securityProof.classifications.B, "RLS coverage differs from the explicit migration-owned classifications.");
     assert.equal(state.invalid_indexes, 0, "Invalid, unready, or non-live public indexes remain.");
     assert.equal(state.unvalidated_constraints, 0, "Unvalidated public constraints remain.");
     assert.equal(state.overloaded_function_names, 0, "Parallel public function overload owners remain.");
-    assert.equal(state.public_policy_count, 3, "Public RLS policy inventory drifted from the three repository-owned read policies.");
+    assert.equal(state.public_policy_count, securityProof.policies, "Public RLS policy inventory differs from the migration-owned security contract.");
     assert.equal(state.anon_callable_data_functions, 0, "Anonymous role can execute an application data function.");
-    assert.equal(state.platform_function_present, true, "Supabase platform RLS event-trigger owner is missing.");
+    const migration86Proof = await verifyRlsMigration86Compatibility(client, {
+      migrations, registry: registry.rows, security, catalog: securityCatalog,
+    });
+    assert.equal(state.historical_rls_helper_present, migration86Proof.branch === "historical-hardened");
     assert.ok(state.reconciliation_audit_count >= 1, "Migration registry reconciliation audit proof is missing.");
 
     for (const view of catalog.rows.filter((entry) => entry.object_type === "relation" && [
@@ -492,6 +504,7 @@ async function verifyLiveContract(migrations: Migration[]) {
 
     return {
       registryVersions: registry.rows.length,
+      registeredRevisions,
       catalogObjectsWithRepositoryProvenance: catalog.rows.length,
       publicTables: state.public_tables,
       rlsEnabledTables: state.rls_enabled_tables,
@@ -501,6 +514,8 @@ async function verifyLiveContract(migrations: Migration[]) {
       publicPolicyCount: state.public_policy_count,
       anonymousCallableDataFunctions: state.anon_callable_data_functions,
       reconciliationAuditCount: state.reconciliation_audit_count,
+      securityContract: securityProof,
+      migration86: migration86Proof,
     };
   } finally {
     await client.query("rollback").catch(() => undefined);
@@ -509,6 +524,7 @@ async function verifyLiveContract(migrations: Migration[]) {
 }
 
 const migrations = loadMigrations();
+await assertRlsMigration86SourceContract(migrations);
 const structural = verifyStructuralContract(migrations);
 const live = process.argv.includes("--live") ? await verifyLiveContract(migrations) : null;
 console.log(JSON.stringify({ status: "ready", structural, live }, null, 2));

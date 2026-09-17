@@ -292,6 +292,7 @@ export default function UsersManagementClient({
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    adjacentPrefetch: true,
   });
   const instant = useAdminEntityInstantMutation<AdminUserEntityListRow>(
     "admin_users",
@@ -544,6 +545,7 @@ export default function UsersManagementClient({
               pageSizeOptions={PAGE_SIZE_OPTIONS}
               emptySummaryText="لا يوجد مستخدمون مطابقون"
               onPageChange={controller.setPage}
+              onPageIntent={controller.prefetchPage}
               onPageSizeChange={controller.setPageSize}
             />
           </AdminEntityListTableRegion>

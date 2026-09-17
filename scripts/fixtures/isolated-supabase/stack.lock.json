@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "release": {
+    "repository": "https://github.com/supabase/supabase",
+    "tag": "self-hosted/v0.8.1",
+    "commit": "8c7a4d9dbbaf8b552893822e89d7bf06f33f9220",
+    "sourceBaseUrl": "https://raw.githubusercontent.com/supabase/supabase/8c7a4d9dbbaf8b552893822e89d7bf06f33f9220/"
+  },
+  "images": {
+    "db": {
+      "version": "17.6.1.136",
+      "reference": "supabase/postgres@sha256:5a4314708484bec672de2c09653a5c01fb1c84a998564ac231b0325e2238ed5b",
+      "indexDigest": "sha256:f371b5f3f2ac0a05703f33d6e6134515fb2498cab708fb948a0aeb7481467c00",
+      "manifestDigest": "sha256:5a4314708484bec672de2c09653a5c01fb1c84a998564ac231b0325e2238ed5b",
+      "configDigest": "sha256:f519727303f0af6862882be2a30f420e28710d4209226e681aaddb2c01d12d9b",
+      "platform": "linux/amd64"
+    },
+    "storage": {
+      "version": "v1.74.0",
+      "reference": "supabase/storage-api@sha256:63da55733ce9d7592d860739acb94f0b6189d880b7565d247ee5b195be854db1",
+      "indexDigest": "sha256:f1546fac6d1c7e345428ac904bfaa7be7cecd50a1f549fe1cf38c628a7b15c85",
+      "manifestDigest": "sha256:63da55733ce9d7592d860739acb94f0b6189d880b7565d247ee5b195be854db1",
+      "configDigest": "sha256:cbd50858d9a1d085d301f10a5f4ab5c3214e44674cfa111f2a1226cc391c1ad9",
+      "platform": "linux/amd64"
+    },
+    "rest": {
+      "version": "v14.17",
+      "reference": "postgrest/postgrest@sha256:aa7e96af2d01219a09bc00c75de28171b1f9fda17ea455a931e4fb6d317089e0",
+      "indexDigest": "sha256:c9dc201e555f5d8e37e7f39cdd4df0229774996e213bfd7de8d10ac609030f2c",
+      "manifestDigest": "sha256:aa7e96af2d01219a09bc00c75de28171b1f9fda17ea455a931e4fb6d317089e0",
+      "configDigest": "sha256:fc3d286fec899d5a5bebbb98eac771ced1ccaa44deac8ce2fc23fe5d262eb3d9",
+      "platform": "linux/amd64"
+    },
+    "api-gw": {
+      "version": "v1.39.1",
+      "reference": "envoyproxy/envoy@sha256:be87c8b52663c1164a5bdf3c5419017a269cb3d8c74be1ec93638a71f1ffbd4b",
+      "indexDigest": "sha256:57e14a549d7bd43c8d3f6d03e8cfa653e037d4b38e133acd9b54f38c524401b4",
+      "manifestDigest": "sha256:be87c8b52663c1164a5bdf3c5419017a269cb3d8c74be1ec93638a71f1ffbd4b",
+      "configDigest": "sha256:ef41fe510c94b2a96c03e5f19a0bdce3ec92819c430401229e94faf768af792f",
+      "platform": "linux/amd64"
+    },
+    "imgproxy": {
+      "version": "v3.31.4",
+      "reference": "darthsim/imgproxy@sha256:80200afeaa85c4abb58bbcb84deadab6d6cf5c79ac7af0694ff22e2b5de1477b",
+      "indexDigest": "sha256:73c5dda13199745b0d2d00e4149d4a589c5b2e205dbf335ca05eca8276b54712",
+      "manifestDigest": "sha256:80200afeaa85c4abb58bbcb84deadab6d6cf5c79ac7af0694ff22e2b5de1477b",
+      "configDigest": "sha256:2d800dee5db7ad184e3c146756aff521a6ae3461796eefc1ad7e98827e7b9a75",
+      "platform": "linux/amd64"
+    }
+  },
+  "applicationMigrationTool": {
+    "name": "Supabase CLI",
+    "version": "2.116.0",
+    "role": "Official application migration handoff; not a Supabase platform service",
+    "repositoryVersionSource": ".github/workflows/quality-gate.yml",
+    "platform": "win32-x64",
+    "package": "@supabase/cli-windows-x64",
+    "metadataUrl": "https://registry.npmjs.org/@supabase%2fcli-windows-x64/2.116.0",
+    "packageIntegrity": "sha512-pz4zNDs3KCEx0l9JS9Xaiuzd5WXrISajVlBSxC5/2Jyo2+g+N/ftQJDYTHQ6Jir5fNelIqSHIXZelmGds14upw==",
+    "executablePathInPackage": "package/bin/supabase.exe",
+    "executableSha256": "5ccda93866ff48a3ec4a580679d71a44b9ee41150fb6143bdd4a6a57d3ecef1a",
+    "sourceTag": "https://github.com/supabase/cli/tree/v2.116.0"
+  },
+  "files": [
+    {
+      "path": "docker/docker-compose.yml",
+      "sha256": "f6724c97f1ca555b700f5ecf630e8a2e5114682b64ca94158061326187139183"
+    },
+    {
+      "path": "docker/volumes/db/realtime.sql",
+      "sha256": "7e9e442e7fc4dae05544c07b67bede37a00d84644304dfce4d937134cb4c8f88"
+    },
+    {
+      "path": "docker/volumes/db/webhooks.sql",
+      "sha256": "b584aaaa0c393f27218f81e01e76e1d07d42f947083249adcd6097ad471cde62"
+    },
+    {
+      "path": "docker/volumes/db/roles.sql",
+      "sha256": "3ad717b225daa38aa982da26750f35641eb404e1eb5e69a763c22236ab96c1b2"
+    },
+    {
+      "path": "docker/volumes/db/jwt.sql",
+      "sha256": "1cc94a4f16f6e2932b383cd68e211a96bcae298437ca4120d8a5106396c58465"
+    },
+    {
+      "path": "docker/volumes/db/_supabase.sql",
+      "sha256": "9dce462adc04137d6afabcf28efa60a6c355270a4b32d7af58891ac4eb964c5f"
+    },
+    {
+      "path": "docker/volumes/db/logs.sql",
+      "sha256": "f0463ce5030907acef49326d2bffd36002df0718035071be7c99bd7fc897c63d"
+    },
+    {
+      "path": "docker/volumes/db/pooler.sql",
+      "sha256": "df97ebe148d94cfb92a5e37ebf972dfd496be195f0915ecf14396b2cf50efecb"
+    },
+    {
+      "path": "docker/volumes/api/envoy/envoy.yaml",
+      "sha256": "3697f23b0be9ec5b829f937c600eb9b878f1f778ab510b42ad5e4f14742447e9"
+    },
+    {
+      "path": "docker/volumes/api/envoy/cds.yaml",
+      "sha256": "1d7514b891370ed27c25911df008887402e16ab09273e6e433225bb7f09f7905"
+    },
+    {
+      "path": "docker/volumes/api/envoy/lds.template.yaml",
+      "sha256": "9d9a6d6ea0a372be99e165d995f012d383d5cc8473b92a06b7aa0bbd73566c3d"
+    },
+    {
+      "path": "docker/volumes/api/envoy/docker-entrypoint.sh",
+      "sha256": "8a0c9503764de32ba39e0d81e73629457b13ec42ef19897e30e4918c996d0508"
+    }
+  ],
+  "compose": {
+    "path": "scripts/fixtures/isolated-supabase/compose.test.yml",
+    "sha256": "62515c4b101191ccd768dafa952047ea8ca589e267ee09ae0f089f5a691e94b4"
+  },
+  "storageMigrationAuthority": "Bundled official Storage image runner and migration files; no copied platform SQL",
+  "overrides": [
+    "owned names/labels and restart=no",
+    "all containers on one internal network; zero Docker published ports",
+    "Windows loopback-only ingress through fixed-target local Docker exec transport",
+    "qa-transport reuses the pinned Storage Node image without starting Storage platform code",
+    "unmodified official Envoy gateway configuration; Docker logging disabled",
+    "new Docker volumes for database/config/storage",
+    "generated local credentials",
+    "DB_INSTALL_ROLES=false",
+    "DB_ALLOW_MIGRATION_REFRESH=false"
+  ],
+  "transport": {
+    "path": "scripts/lib/isolated-supabase-transport.mjs",
+    "sha256": "b7d7657d0242db1f08d8af480667759eb23cbac51f4ab2908ddca489d8c71df5",
+    "role": "QA lifecycle fixed-target Docker exec transport; not a platform service"
+  }
+}

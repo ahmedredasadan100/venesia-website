@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
+import { getMigrationHistoryCompatibilityVersions, loadMigrationHistoryCompatibility } from "./lib/migration-provenance.mjs";
 import type { SelectedCliRegistryOptions, SelectedCliRegistryReceipt, SelectedCliRegistryReport } from "./reconcile-migration-registry.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -70,6 +71,19 @@ export async function verifySelectedMigrationRegistry() {
         state.registryReads++;
         return { rows: state.rows.map((row) => ({ version: row.version, name: row.name, statements: structuredClone(row.statements), full_row: structuredClone(row) })) };
       }
+      if (sql === "select version, name, statements from supabase_migrations.schema_migrations order by version") {
+        state.registryReads++;
+        return { rows: state.rows.map(({ version, name, statements }) => ({ version, name, statements: structuredClone(statements) })) };
+      }
+      if (sql.startsWith("insert into supabase_migrations.schema_migrations(version, statements, name, created_by)")) {
+        assert.ok(state.snapshot, "Legacy writes require an open transaction.");
+        const row = state.rows.find((item) => item.version === params[0]);
+        assert.ok(row, "This regression fixture does not authorize registry inserts.");
+        row.statements = structuredClone(params[1] as string[]);
+        row.name = params[2] as string;
+        state.updates++;
+        return { rows: [], rowCount: 1 };
+      }
       if (sql.startsWith("update supabase_migrations.schema_migrations set statements")) {
         assert.ok(state.snapshot, "Writes require an open transaction.");
         assert.ok(state.queries.some((query) => query.sql.includes("in exclusive mode")));
@@ -93,8 +107,16 @@ export async function verifySelectedMigrationRegistry() {
   const source = readFileSync(file, "utf8").split("\nif (process.argv[1]")[0].replaceAll("import.meta.url", JSON.stringify(pathToFileURL(file).href));
   const output = ts.transpileModule(source, { fileName: file.replace(/\.mts$/u, ".ts"), compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   const loaded = { exports: {} };
-  new Function("require", "module", "exports", output)((specifier: string) => specifier === "pg" ? { Client: FakePgClient } : nodeRequire(specifier), loaded, loaded.exports);
-  const tool = loaded.exports as { reconcileSelectedMigrationRegistry(options: SelectedCliRegistryOptions): Promise<SelectedCliRegistryReport> };
+  const ownerProcess = { argv: [process.execPath, file, "--apply"], env: { SUPABASE_DB_URL: "postgresql://fixture@127.0.0.1:55445/registry_fixture" }, exitCode: 0 };
+  new Function("require", "module", "exports", "process", "console", `${output}\nexports.verifyLegacyOwner = runLegacyRegistryReconciliation;`)(
+    (specifier: string) => specifier === "pg" ? { Client: FakePgClient } : nodeRequire(specifier),
+    loaded, loaded.exports, ownerProcess, { log: () => undefined },
+  );
+  const tool = loaded.exports as {
+    reconcileSelectedMigrationRegistry(options: SelectedCliRegistryOptions): Promise<SelectedCliRegistryReport>;
+    verifyLegacyOwner(): Promise<void>;
+    selectedRegistryBaseline(rows: Row[]): { count: number; sha256: string };
+  };
   const isolated: SelectedCliRegistryOptions = {
     confirmation: "selected-cli-migration-registry", connectionString: "postgresql://fixture@127.0.0.1:55445/registry_fixture",
     expectedDatabase: "registry_fixture", versions: phase.slice(0, 2).map((migration) => migration.version), receipt, cliBinary: binary, apply: true,
@@ -194,6 +216,60 @@ export async function verifySelectedMigrationRegistry() {
     check(state.options?.connectionTimeoutMillis === 15_000 && state.options?.statement_timeout === 30_000, "Connection and statement waits are bounded.");
     reset(); await tool.reconcileSelectedMigrationRegistry({ ...remote, production: { ...remote.production!, sslCaFile: caFile } });
     assert.deepEqual(state.options?.ssl, { rejectUnauthorized: true, ca: "fixture verified CA" }); checks++;
+
+    const compatibilities = getMigrationHistoryCompatibilityVersions().map(version => loadMigrationHistoryCompatibility(version));
+    for (const compatibility of compatibilities) {
+    const original: Row = {
+      version: compatibility.version, name: compatibility.name, statements: [compatibility.historicalSql],
+      created_by: "actual historical executor", inserted_at: "historical timestamp", custom: "must remain untouched",
+    };
+    reset(); state.rows.splice(1, 0, structuredClone(original));
+    const receiptWithHistory = { ...receipt, baseline: tool.selectedRegistryBaseline(state.rows.filter((row) => !receipt.migrations.some((entry) => entry.version === row.version))) };
+    const historyResult = await tool.reconcileSelectedMigrationRegistry({ ...isolated, receipt: receiptWithHistory });
+    check(historyResult.updated === 2 && historyResult.preservedRevisions[0]?.revision === "historical-applied", "Unrelated selected changes retain and identify the actual original revision.");
+    assert.deepEqual(state.rows.find((row) => row.version === compatibility.version), original); checks++;
+    check(!state.queries.some((query) => query.sql.startsWith("update supabase_migrations.schema_migrations") && query.params[1] === compatibility.version), "Selected reconciliation never writes approved historical revisions.");
+
+    for (const [sql, label] of [[compatibility.historicalSql, "historical-applied"], [compatibility.correctedSql, "fresh-bootstrap-corrected"]]) {
+      reset(); state.rows = [{ ...structuredClone(original), statements: [sql] }];
+      const selectedRevision = {
+        ...isolated, versions: [compatibility.version], receipt: {
+          ...receipt, baseline: tool.selectedRegistryBaseline([]), migrations: [{
+            version: compatibility.version, name: compatibility.name, sourceSha256: compatibility.correctedSourceSha256,
+            statements: ["a receipt cannot replace a known revision"],
+          }],
+        },
+      };
+      const preserved = structuredClone(state.rows);
+      const result = await tool.reconcileSelectedMigrationRegistry(selectedRevision);
+      check(result.updated === 0 && result.alreadyCanonical === 1 && result.preservedRevisions[0]?.revision === label, "Explicitly selecting a recognized revision cannot authorize a rewrite.");
+      assert.deepEqual(state.rows, preserved); checks++;
+      check(state.updates === 0 && state.audits === 0, "Recognized selected revisions emit no writes or audit.");
+      state.rows[0].statements = ["third, unapproved revision"];
+      await blocked({ ...selectedRevision, receipt: { ...selectedRevision.receipt, migrations: [{ ...selectedRevision.receipt.migrations[0], statements: ["third, unapproved revision"] }] } });
+    }
+    }
+
+    const corpus = readdirSync(resolve(ROOT, "sql/migrations")).filter((name) => name.endsWith(".sql")).sort().map(loadMigration);
+    const legacyRows = () => corpus.map((migration) => ({
+      ...structuredClone(historicalRow), version: migration.version, name: migration.name,
+      statements: [compatibilities.find(contract => contract.version === migration.version)?.historicalSql ?? migration.sql],
+    }));
+    reset(); state.rows = legacyRows();
+    state.rows[0].statements = ["unrelated historical registry format"];
+    const retained = structuredClone(state.rows.filter((row) => compatibilities.some(contract => contract.version === row.version)));
+    await tool.verifyLegacyOwner();
+    assert.deepEqual(state.rows.filter((row) => compatibilities.some(contract => contract.version === row.version)), retained); checks++;
+    check(!state.queries.some((query) => query.sql.startsWith("insert into supabase_migrations.schema_migrations") && compatibilities.some(contract => contract.version === query.params[0])), "Broad reconciliation skips every recognized revision even when unrelated registry work is required.");
+    check(state.updates === corpus.length - compatibilities.length && state.audits === 1, "Only preserved compatibility revisions are excluded from legacy behavior.");
+    for (const compatibility of compatibilities) {
+    reset(); state.rows = legacyRows();
+    state.rows.find((row) => row.version === compatibility.version)!.statements[0] += "\n";
+    const invalidHistory = structuredClone(state.rows);
+    await assert.rejects(() => tool.verifyLegacyOwner()); checks++;
+    assert.deepEqual(state.rows, invalidHistory); checks++;
+    check(state.updates === 0 && state.audits === 0, "An unknown reviewed-version revision blocks legacy repair before any write.");
+    }
 
     for (const args of [["--selected-cl", "--apply"], ["--versions", phase[0].version, "--apply"], ["--selected-cli", "--unknown"], ["--selected-cli", "--apply", "--apply"]]) {
       const result = spawnSync(process.execPath, ["--experimental-strip-types", file, ...args], { cwd: ROOT, encoding: "utf8", env: { ...process.env, SUPABASE_DB_URL: "postgresql://PRIVATE_SECRET@127.0.0.1:1/do_not_connect" } });

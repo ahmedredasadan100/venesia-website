@@ -241,6 +241,7 @@ export default function RedirectsClient({
     initialQuery,
     initialResult,
     staleTimeMs: 30_000,
+    adjacentPrefetch: true,
   });
   const instant = useAdminEntityInstantMutation<RedirectEntityListRow>(
     "redirects",
@@ -474,6 +475,7 @@ export default function RedirectsClient({
               totalPages={controller.result.pagination.totalPages}
               emptySummaryText="لا توجد تحويلات"
               onPageChange={controller.setPage}
+              onPageIntent={controller.prefetchPage}
               onPageSizeChange={controller.setPageSize}
             />
           </AdminEntityListTableRegion>

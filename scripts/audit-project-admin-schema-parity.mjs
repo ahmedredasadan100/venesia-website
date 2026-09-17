@@ -1,6 +1,11 @@
 import pg from "pg";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import {
+  assertMigrationSourceProvenance,
+  classifyWholeFileMigrationProvenance,
+  loadMigrationHistoryCompatibility,
+} from "./lib/migration-provenance.mjs";
 
 const { Client } = pg;
 
@@ -168,11 +173,15 @@ const manuallyAppliedMigrationVersions = [
   "20260729090000",
   "20260729150000",
 ];
-const reconciledMigrationSourceHashes = new Map([
-  ["20260728090000", sha256(finalRebuildMigration)],
-  ["20260729090000", sha256(aclCorrectionMigration)],
-  ["20260729150000", sha256(schemaParityForwardMigration)],
+const reconciledMigrationSources = new Map([
+  ["20260728090000", { version: "20260728090000", name: "rebuild_project_admin_data_entry", sql: finalRebuildMigration }],
+  ["20260729090000", { version: "20260729090000", name: "project_admin_entry_acl_correction", sql: aclCorrectionMigration }],
+  ["20260729150000", { version: "20260729150000", name: "project_admin_schema_parity_forward_fix", sql: schemaParityForwardMigration }],
 ]);
+for (const migration of reconciledMigrationSources.values()) {
+  assertMigrationSourceProvenance(migration);
+}
+const migrationHistoryCompatibility = loadMigrationHistoryCompatibility();
 const runtimeRoles = ["anon", "authenticated", "service_role"];
 const tablePrivileges = [
   "SELECT",
@@ -775,6 +784,135 @@ const expectedConstraintByKey = new Map(
     constraint,
   ]),
 );
+
+// Migration 52 owns the bounded identity exception. Consume its three repeated
+// phase manifests instead of inventing a second list of historical names.
+function extractHistoricalCheckIdentities() {
+  const blocks = [...schemaParityForwardMigration.matchAll(
+    /left\s+join\s*\(\s*values([\s\S]*?)\)\s+(?:as\s+)?historical\s*\(\s*table_name\s*,\s*constraint_name\s*,\s*historical_constraint_name\s*\)/giu,
+  )].map((block) => [...block[1].matchAll(
+    /\('([a-z_]+)'\s*,\s*'([a-z_]+)'\s*,\s*'([a-z_0-9]+)'\)/gu,
+  )].map((match) => ({
+    table_name: match[1],
+    constraint_name: match[2],
+    historical_constraint_name: match[3],
+  })));
+  if (blocks.length !== 3 || blocks.some((block) => block.length !== 3)
+    || blocks.some((block) => JSON.stringify(block) !== JSON.stringify(blocks[0]))) {
+    throw new Error("Migration 52 historical CHECK identity manifests disagree.");
+  }
+  const identities = blocks[0];
+  for (const property of ["constraint_name", "historical_constraint_name"]) {
+    if (new Set(identities.map((entry) => `${entry.table_name}.${entry[property]}`)).size !== 3) {
+      throw new Error("Migration 52 historical CHECK identities are ambiguous.");
+    }
+  }
+  for (const identity of identities) {
+    const expected = expectedConstraintByKey.get(`${identity.table_name}.${identity.constraint_name}`);
+    if (expected?.constraint_type !== "c"
+      || !parseHistoricalImageAltCheck(expected.expected_definition)
+      || expectedConstraintByKey.has(`${identity.table_name}.${identity.historical_constraint_name}`)) {
+      throw new Error("Migration 52 historical CHECK identity is outside the rebuild contract.");
+    }
+  }
+  return identities;
+}
+
+// The three authorized expressions have this exact grammar. Preserve casts,
+// operators and boolean structure; accept only PostgreSQL's empty-text cast and
+// redundant grouping, rather than stripping arbitrary casts or parentheses.
+function parseHistoricalImageAltCheck(definition) {
+  if (typeof definition !== "string") return null;
+  const source = definition.toLowerCase().replace(/\bpg_catalog\./gu, "").trim();
+  const tokens = [];
+  const tokenPattern = /\s*(<>|::|[a-z_][a-z0-9_]*|''|[()])/gy;
+  let position = 0;
+  while (position < source.length) {
+    tokenPattern.lastIndex = position;
+    const token = tokenPattern.exec(source);
+    if (!token) return null;
+    tokens.push(token[1]);
+    position = tokenPattern.lastIndex;
+  }
+  let cursor = 0;
+  const expect = (token) => {
+    if (tokens[cursor++] !== token) throw new Error("Unexpected bounded CHECK token.");
+  };
+  const identifier = () => {
+    const token = tokens[cursor++];
+    if (!/^[a-z_][a-z0-9_]*$/u.test(token ?? "")) throw new Error("Invalid CHECK column.");
+    return token;
+  };
+  const expression = () => {
+    let result = atom();
+    while (tokens[cursor] === "or") {
+      cursor += 1;
+      result = ["or", result, atom()];
+    }
+    return result;
+  };
+  const atom = () => {
+    if (tokens[cursor] === "(") {
+      cursor += 1;
+      const result = expression();
+      expect(")");
+      return result;
+    }
+    if (tokens[cursor] === "btrim") {
+      cursor += 1;
+      expect("(");
+      const column = identifier();
+      expect(")");
+      expect("<>");
+      expect("''");
+      if (tokens[cursor] === "::") {
+        cursor += 1;
+        expect("text");
+      }
+      return ["nonempty-trim", column];
+    }
+    const column = identifier();
+    expect("is");
+    expect("null");
+    return ["is-null", column];
+  };
+  try {
+    expect("check");
+    expect("(");
+    const tree = expression();
+    expect(")");
+    if (cursor !== tokens.length || tree[0] !== "or"
+      || tree[1]?.[0] !== "is-null" || tree[2]?.[0] !== "nonempty-trim") return null;
+    return { canonical: JSON.stringify(tree), columns: [tree[1][1], tree[2][1]] };
+  } catch {
+    return null;
+  }
+}
+
+const historicalCheckIdentities = extractHistoricalCheckIdentities();
+const historicalCheckIdentityByKey = new Map(historicalCheckIdentities.map((entry) => [
+  `${entry.table_name}.${entry.constraint_name}`, entry,
+]));
+
+function resolveConstraintIdentity(expected, constraints) {
+  const identity = historicalCheckIdentityByKey.get(`${expected.table_name}.${expected.constraint_name}`);
+  if (!identity) return {
+    actual: constraints.find((entry) => entry.table_name === expected.table_name
+      && entry.constraint_name === expected.constraint_name) ?? null,
+    identity_error: null,
+  };
+  const expectedExpression = parseHistoricalImageAltCheck(expected.expected_definition);
+  const names = [identity.constraint_name, identity.historical_constraint_name];
+  const candidates = constraints.filter((entry) => entry.table_name === expected.table_name
+    && (names.includes(entry.constraint_name)
+      || parseHistoricalImageAltCheck(entry.definition)?.canonical === expectedExpression.canonical));
+  if (candidates.length > 1) return { actual: null, identity_error: "multiple CHECK identity candidates" };
+  const actual = candidates[0] ?? null;
+  if (actual && !names.includes(actual.constraint_name)) {
+    return { actual: null, identity_error: "equivalent CHECK has an unapproved historical identity" };
+  }
+  return { actual, identity_error: null };
+}
 const expectedTriggerManifest = extractExpectedTriggerManifest();
 const missingCheckConstraintKeys = new Set(
   finalRequiredCheckConstraints.map(
@@ -803,9 +941,11 @@ if (expectedExistingConstraintManifest.length !== 75) {
 assertConstraintDefinitionSemanticNormalizer();
 assertTriggerDefinitionSemanticNormalizer();
 if (process.argv.includes("--self-test")) {
+  const historicalIdentityTests = assertHistoricalCheckIdentitySelfTest();
   console.log(
     `OK: schema definition semantic self-test passed ${constraintDefinitionSemanticCases.length} constraint equivalents, ${constraintDefinitionNegativeCases.length} constraint negative controls, ${triggerDefinitionSemanticCases.length} trigger equivalent, and ${triggerDefinitionNegativeCases.length} trigger negative control.`,
   );
+  console.log(`OK: historical CHECK identity self-test passed ${historicalIdentityTests.positive} positive and ${historicalIdentityTests.negative} negative controls across the 3 migration-owned identities.`);
   process.exit(0);
 }
 
@@ -831,6 +971,13 @@ const report = {
     expected_rpcs: aggregateRpcSignatures,
     forbidden_legacy_functions: forbiddenLegacyFunctionSignatures,
     manually_applied_migration_versions: manuallyAppliedMigrationVersions,
+    migration_history_compatibility: {
+      version: migrationHistoryCompatibility.version,
+      historical_source_sha256: migrationHistoryCompatibility.historicalSourceSha256,
+      corrected_source_sha256: migrationHistoryCompatibility.correctedSourceSha256,
+      existing_database_policy: migrationHistoryCompatibility.existingDatabasePolicy,
+      fresh_database_policy: migrationHistoryCompatibility.freshDatabasePolicy,
+    },
     runtime_roles: runtimeRoles,
     expected_reference_locations: expectedReferenceLocations,
     fixture_client_keys: fixtureClientKeys,
@@ -1217,12 +1364,6 @@ function buildColumnPropertyDiagnostics(fullReport) {
 }
 
 function buildConstraintDiagnostics(fullReport) {
-  const actualByKey = new Map(
-    fullReport.constraints.map((constraint) => [
-      `${constraint.table_name}.${constraint.constraint_name}`,
-      constraint,
-    ]),
-  );
   const propertyNames = [
     "validated",
     "deferrable",
@@ -1234,7 +1375,8 @@ function buildConstraintDiagnostics(fullReport) {
   ];
   const compareConstraint = (expected) => {
     const key = `${expected.table_name}.${expected.constraint_name}`;
-    const actual = actualByKey.get(key) ?? null;
+    const historicalIdentity = historicalCheckIdentityByKey.get(key);
+    const { actual, identity_error: identityError } = resolveConstraintIdentity(expected, fullReport.constraints);
     const metadataDifferences = actual
       ? [
           ...(actual.constraint_type === expected.constraint_type
@@ -1269,11 +1411,40 @@ function buildConstraintDiagnostics(fullReport) {
           semantic_match: false,
           classification: "B. Real Schema Drift",
         }];
-    const expectedDefinitionCanonical = normalizeConstraintDefinition(
-      expected.expected_definition,
-    );
+    if (identityError) metadataDifferences.push({
+      property: "historical_identity",
+      expected: "one unambiguous canonical or approved historical CHECK",
+      actual: identityError,
+      semantic_match: false,
+      classification: "B. Real Schema Drift",
+    });
+    const historicalExpression = historicalIdentity
+      ? parseHistoricalImageAltCheck(expected.expected_definition) : null;
+    if (actual && historicalIdentity) {
+      const strictProperties = {
+        constraint_column_names: historicalExpression.columns,
+        constraint_type_oid: "0",
+        referenced_relation_oid: "0",
+        backing_index_oid: "0",
+        referenced_column_names: [],
+        referenced_keys_is_null: true,
+        referenced_table: null,
+        backing_index: null,
+      };
+      for (const [property, expectedValue] of Object.entries(strictProperties)) {
+        const actualValue = property.endsWith("_oid") ? String(actual[property]) : actual[property];
+        if (JSON.stringify(actualValue) !== JSON.stringify(expectedValue)) metadataDifferences.push({
+          property, expected: expectedValue, actual: actualValue,
+          semantic_match: false, classification: "B. Real Schema Drift",
+        });
+      }
+    }
+    const expectedDefinitionCanonical = historicalExpression?.canonical
+      ?? normalizeConstraintDefinition(expected.expected_definition);
     const actualDefinitionCanonical = actual
-      ? normalizeConstraintDefinition(actual.definition)
+      ? historicalIdentity
+        ? parseHistoricalImageAltCheck(actual.definition)?.canonical ?? null
+        : normalizeConstraintDefinition(actual.definition)
       : null;
     const definitionMatches =
       actualDefinitionCanonical === expectedDefinitionCanonical;
@@ -1281,6 +1452,8 @@ function buildConstraintDiagnostics(fullReport) {
     return {
       table_name: expected.table_name,
       constraint_name: expected.constraint_name,
+      actual_constraint_name: actual?.constraint_name ?? null,
+      historical_identity: historicalIdentity ?? null,
       constraint_type: expected.constraint_type,
       actual_constraint_type: actual?.constraint_type ?? null,
       expected_metadata: expected.expected_metadata,
@@ -1314,9 +1487,15 @@ function buildConstraintDiagnostics(fullReport) {
       `${constraint.table_name}.${constraint.constraint_name}`,
     ));
   const expectedKeys = new Set(expectedConstraintByKey.keys());
+  const matchedHistoricalKeys = new Set(all.filter((constraint) =>
+    constraint.historical_identity && constraint.actual_present
+    && constraint.metadata_differences.length === 0
+    && constraint.definition_comparison.semantic_match,
+  ).map((constraint) => `${constraint.table_name}.${constraint.actual_constraint_name}`));
   const unexpectedActual = fullReport.constraints.filter(
     (constraint) =>
       !expectedKeys.has(`${constraint.table_name}.${constraint.constraint_name}`)
+      && !matchedHistoricalKeys.has(`${constraint.table_name}.${constraint.constraint_name}`)
       && !knownAdditiveConstraintKeys.has(`${constraint.table_name}.${constraint.constraint_name}`),
   );
   const legacyPredicateFailures = shared
@@ -1358,6 +1537,66 @@ function buildConstraintDiagnostics(fullReport) {
     unexpectedActual,
     legacyPredicateFailures,
   };
+}
+
+function assertHistoricalCheckIdentitySelfTest() {
+  const counts = { positive: 0, negative: 0 };
+  for (const identity of historicalCheckIdentities) {
+    const expected = expectedConstraintByKey.get(`${identity.table_name}.${identity.constraint_name}`);
+    const parsed = parseHistoricalImageAltCheck(expected.expected_definition);
+    const actual = {
+      table_name: identity.table_name,
+      constraint_name: identity.historical_constraint_name,
+      constraint_type: "c",
+      definition: `CHECK (((${parsed.columns[0]} IS NULL) OR (btrim(${parsed.columns[1]}) <> ''::text)))`,
+      ...expected.expected_metadata,
+      constraint_column_names: parsed.columns,
+      constraint_type_oid: "0",
+      referenced_relation_oid: "0",
+      backing_index_oid: "0",
+      referenced_column_names: [],
+      referenced_keys_is_null: true,
+      referenced_table: null,
+      backing_index: null,
+    };
+    const passes = (constraints) => {
+      const diagnostics = buildConstraintDiagnostics({ constraints });
+      const row = diagnostics.all.find((entry) => entry.table_name === identity.table_name
+        && entry.constraint_name === identity.constraint_name);
+      return row.actual_present && row.metadata_differences.length === 0
+        && row.definition_comparison.semantic_match && diagnostics.unexpectedActual.length === 0;
+    };
+    for (const candidate of [actual, { ...actual, constraint_name: identity.constraint_name }]) {
+      if (!passes([candidate])) throw new Error(`Historical CHECK positive control failed: ${identity.constraint_name}`);
+      counts.positive += 1;
+    }
+    const negativeCases = [
+      [],
+      [{ ...actual, table_name: "wrong_table" }],
+      [{ ...actual, constraint_name: "unapproved_check" }],
+      [{ ...actual, definition: actual.definition.replace("<>", "=") }],
+      [{ ...actual, definition: actual.definition.replace("::text", "::integer") }],
+      [{ ...actual, constraint_name: identity.constraint_name, definition: "CHECK (false)" }],
+      [actual, { ...actual, constraint_name: identity.constraint_name }],
+      [actual, { ...actual, constraint_name: "unknown_equivalent_check" }],
+      [actual, { ...actual, constraint_name: identity.constraint_name, definition: "CHECK (false)" }],
+      ...[
+        ["constraint_type", "f"], ["validated", false], ["deferrable", true],
+        ["initially_deferred", true], ["is_local", false], ["no_inherit", true],
+        ["inheritance_count", 1], ["parent_constraint_oid", "1"],
+        ["constraint_column_names", [...parsed.columns].reverse()],
+        ["constraint_type_oid", "1"], ["referenced_relation_oid", "1"],
+        ["backing_index_oid", "1"], ["referenced_column_names", ["id"]],
+        ["referenced_keys_is_null", false], ["referenced_table", "projects"],
+        ["backing_index", "unexpected_index"],
+      ].map(([property, value]) => [{ ...actual, [property]: value }]),
+    ];
+    for (const candidates of negativeCases) {
+      if (passes(candidates)) throw new Error(`Historical CHECK negative control passed unexpectedly: ${identity.constraint_name}`);
+      counts.negative += 1;
+    }
+  }
+  return counts;
 }
 
 function buildTriggerDiagnostics(fullReport) {
@@ -1504,11 +1743,6 @@ function buildParitySummary(fullReport) {
       column,
     ]),
   );
-  const actualConstraintKeys = new Set(
-    fullReport.constraints.map(
-      (constraint) => `${constraint.table_name}.${constraint.constraint_name}`,
-    ),
-  );
   const functionBodyDrift = fullReport.functions
     .filter((functionRecord) => !functionRecord.source_matches_final_rebuild)
     .map((functionRecord) => ({
@@ -1601,8 +1835,11 @@ function buildParitySummary(fullReport) {
   ];
   const missingCheckConstraints = finalRequiredCheckConstraints
     .filter(
-      ([tableName, constraintName]) =>
-        !actualConstraintKeys.has(`${tableName}.${constraintName}`),
+      ([tableName, constraintName]) => !constraintDiagnostics.all.some((constraint) =>
+        constraint.table_name === tableName && constraint.constraint_name === constraintName
+        && constraint.actual_present && constraint.metadata_differences.length === 0
+        && constraint.definition_comparison.semantic_match,
+      ),
     )
     .map(([tableName, constraintName]) => ({
       table_name: tableName,
@@ -2102,14 +2339,21 @@ function buildSchemaDriftRemaining(summary) {
   ];
 }
 
+function buildMigrationRegistryProvenance(entries) {
+  return entries.map((entry) => {
+    const source = reconciledMigrationSources.get(entry.version);
+    const provenance = source ? classifyWholeFileMigrationProvenance(entry, source) : null;
+    return { version: entry.version, ...(provenance ?? { revision: "unrecognized", sourceSha256: null }) };
+  });
+}
+
 function buildFinalParityGate(summary) {
+  const registryProvenance = buildMigrationRegistryProvenance(summary.migration_registry);
+  summary.migration_registry_provenance = registryProvenance;
   const reconciledMigrationRegistryMatches =
     summary.migration_registry.length === manuallyAppliedMigrationVersions.length &&
-    summary.migration_registry.every(
-      (entry) =>
-        entry.statements?.length === 1 &&
-        sha256(entry.statements[0]) === reconciledMigrationSourceHashes.get(entry.version),
-    );
+    new Set(summary.migration_registry.map((entry) => entry.version)).size === manuallyAppliedMigrationVersions.length &&
+    registryProvenance.every((entry) => entry.revision !== "unrecognized");
   const checks = {
     read_only_transaction: summary.session[0]?.transaction_read_only === "on",
     exact_catalog_counts:
@@ -2288,6 +2532,20 @@ try {
              constraint_record.coninhcount as inheritance_count,
              constraint_record.connoinherit as no_inherit,
              constraint_record.conparentid as parent_constraint_oid,
+             constraint_record.contypid as constraint_type_oid,
+             constraint_record.confrelid as referenced_relation_oid,
+             constraint_record.conindid as backing_index_oid,
+             constraint_record.confkey is null as referenced_keys_is_null,
+             array(select attribute.attname::text
+                     from unnest(constraint_record.conkey) with ordinality as key(attnum, position)
+                     join pg_attribute attribute on attribute.attrelid = constraint_record.conrelid
+                                                and attribute.attnum = key.attnum
+                    order by key.position) as constraint_column_names,
+             array(select attribute.attname::text
+                     from unnest(constraint_record.confkey) with ordinality as key(attnum, position)
+                     join pg_attribute attribute on attribute.attrelid = constraint_record.confrelid
+                                                and attribute.attnum = key.attnum
+                    order by key.position) as referenced_column_names,
              case when constraint_record.confrelid = 0 then null
                   else constraint_record.confrelid::regclass::text end as referenced_table,
              case when constraint_record.conindid = 0 then null
@@ -2942,6 +3200,7 @@ try {
     `,
     [manuallyAppliedMigrationVersions],
   );
+  report.migration_registry_provenance = buildMigrationRegistryProvenance(report.migration_registry);
 
   const actualReferenceLocations = new Map(
     report.reference_locations.map((location) => [location.client_key, location]),
@@ -3061,6 +3320,7 @@ if (auditError) {
         acl_checks: paritySummary.acl_checks,
         data_integrity_pass: paritySummary.data_integrity_pass,
         data_integrity_checks: paritySummary.data_integrity_checks,
+        migration_registry_provenance: paritySummary.migration_registry_provenance,
         all_non_drift_invariants_match:
           paritySummary.all_non_drift_invariants_match,
         final_parity_gate: paritySummary.final_parity_gate,

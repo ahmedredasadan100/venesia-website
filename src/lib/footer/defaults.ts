@@ -1,5 +1,6 @@
 import type {
   FooterSettings,
+  FooterSettingsContent,
   FooterSocialPlatform,
 } from "./types";
 import { FOOTER_SLOTS_CONFIG_VERSION, type FooterSlotsConfig } from "./footer-slot-types";
@@ -14,27 +15,29 @@ const SOCIAL_PLATFORMS: FooterSocialPlatform[] = [
   "location",
 ];
 
-/** Admin-only reset template. It is never used by the public read path. */
-export const DEFAULT_FOOTER_SLOTS: FooterSlotsConfig = {
+/** One structural preset owner. Business copy is applied only for an explicit Admin reset. */
+export function createFooterSlotsPreset(purpose: "fresh" | "reset"): FooterSlotsConfig {
+  const reset = purpose === "reset";
+  return {
   version: FOOTER_SLOTS_CONFIG_VERSION,
   slots: [
     {
       index: 1,
-      enabled: true,
+      enabled: reset,
       type: "text",
-      heading: "Venesia Developments",
+      heading: reset ? "Venesia Developments" : null,
       config: {
         title: "",
-        body: "Building trust before concrete.",
-        showBrandIcon: true,
+        body: reset ? "Building trust before concrete." : "",
+        showBrandIcon: reset,
         cta: { enabled: false, label: "", href: "", target: "_self" },
       },
     },
     {
       index: 2,
-      enabled: true,
+      enabled: reset,
       type: "menu",
-      heading: "القائمة الرئيسية",
+      heading: reset ? "القائمة الرئيسية" : null,
       config: {
         source: "location",
         menuId: null,
@@ -46,9 +49,9 @@ export const DEFAULT_FOOTER_SLOTS: FooterSlotsConfig = {
     },
     {
       index: 3,
-      enabled: true,
+      enabled: reset,
       type: "media",
-      heading: "المركز الإعلامي",
+      heading: reset ? "المركز الإعلامي" : null,
       config: {
         source: "main_submenu",
         parentHref: getPublicPageRoute("media-center").href,
@@ -60,13 +63,27 @@ export const DEFAULT_FOOTER_SLOTS: FooterSlotsConfig = {
     },
     {
       index: 4,
-      enabled: true,
+      enabled: reset,
       type: "contact",
-      heading: "تواصل معنا",
+      heading: reset ? "تواصل معنا" : null,
       config: { source: "global", items: [] },
     },
   ],
-};
+  };
+}
+
+/** Admin-only reset template. It is never used by the public read path. */
+export const DEFAULT_FOOTER_SLOTS = createFooterSlotsPreset("reset");
+
+/** Explicit fresh-install structure, without business content or publication intent. */
+export function createFreshFooterSettings(): FooterSettingsContent {
+  return {
+    slots: createFooterSlotsPreset("fresh"),
+    contactItems: [],
+    socialLinks: [],
+    legal: { copyright: "", tagline: "" },
+  };
+}
 
 /** Fail-safe outage state: deliberately carries no public composition content. */
 export const EMPTY_FOOTER_SETTINGS: FooterSettings = {
@@ -76,6 +93,7 @@ export const EMPTY_FOOTER_SETTINGS: FooterSettings = {
   slots: { version: FOOTER_SLOTS_CONFIG_VERSION, slots: [] },
   sourceStatus: "error",
   sourceIssues: ["Footer settings are unavailable."],
+  readiness: { systemValid: false, publicationReady: false, issues: ["Footer settings are unavailable."] },
 };
 
 export function isSocialPlatform(value: string): value is FooterSocialPlatform {

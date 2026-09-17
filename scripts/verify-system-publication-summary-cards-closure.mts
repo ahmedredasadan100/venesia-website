@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
+import { assertPublication69Source } from "./lib/publication-migration69-verification.mts";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) =>
@@ -189,17 +190,132 @@ check(
     ),
 );
 
+const publicationTables = [...statusTables.filter(table => table !== "featured_module_templates"), "projects"];
+const publicationProof = assertPublication69Source(migration, publicationTables);
 check(
-  "migration maps every status table and installs binary constraints",
-  statusTables.every((table) =>
-    migration.includes(`alter table public.${table} add constraint ${table}_status_check check (status in ('published', 'unpublished'))`) ||
-      (table === "featured_module_templates" &&
-        featuredMigration.includes("constraint featured_module_templates_status_check") &&
-        featuredMigration.includes("check (status in ('published', 'unpublished'))")),
-  ) &&
-    migration.includes("set publication_status = 'unpublished'") &&
-    migration.includes("projects_publication_status_check check (publication_status in ('published', 'unpublished'))"),
+  "Migration69 installs the thirteen executable binary publication contracts with safe Page transition ordering",
+  publicationProof.entries.length === publicationTables.length && publicationTables.length === 13 &&
+    publicationProof.pages.constraint < publicationProof.pages.mapping &&
+    publicationProof.pages.mapping < publicationProof.pages.validation,
 );
+check(
+  "Featured retains its separate later migration binary status contract",
+  featuredMigration.includes("constraint featured_module_templates_status_check") &&
+    featuredMigration.includes("check (status in ('published', 'unpublished'))"),
+);
+
+// Mutations are derived from the immutable source read above, never written or
+// executed. The existing migration verification owner alone evaluates SQL.
+function sourceVariant(source: string, original: string, replacement: string) {
+  assert.equal(source.split(original).length, 2, "Source fixture must replace exactly one known statement.");
+  return source.replace(original, replacement);
+}
+function sourceRejects(label: string, source: string) {
+  assert.notEqual(source, migration, "A negative source fixture must change the input.");
+  assert.throws(() => assertPublication69Source(source, publicationTables), label);
+  check(label, true);
+}
+function sourceAccepts(label: string, source: string) {
+  assert.notEqual(source, migration, "A formatting source fixture must change the input.");
+  const proof = assertPublication69Source(source, publicationTables);
+  check(label, proof.entries.length === publicationTables.length &&
+    proof.pages.constraint < proof.pages.mapping && proof.pages.mapping < proof.pages.validation);
+}
+const requiredStatement = (pattern: RegExp) => {
+  const matches = [...migration.matchAll(pattern)];
+  assert.equal(matches.length, 1, "Source fixture needs one unambiguous canonical statement.");
+  return matches[0][0];
+};
+const pageTransition = requiredStatement(/alter table public\.pages\s+drop constraint pages_status_check,\s+add constraint pages_status_check check \(status in \('published', 'unpublished'\)\) not valid;/gu);
+const pageMapping = requiredStatement(/update public\.pages\s+set status = 'unpublished'\s+where status is distinct from 'published';/gu);
+const pageLock = requiredStatement(/lock table public\.pages in access exclusive mode;/gu);
+const pageValidation = requiredStatement(/alter table public\.pages validate constraint pages_status_check;/gu);
+const topicCheck = requiredStatement(/alter table public\.topics add constraint topics_status_check check \(status in \('published', 'unpublished'\)\);/gu);
+const pageDefault = requiredStatement(/alter table public\.pages alter column status set default 'unpublished';/gu);
+const pageNotNull = requiredStatement(/alter table public\.pages alter column status set not null;/gu);
+
+sourceAccepts("publication source accepts multiline SQL keyword/token formatting",
+  migration.replaceAll("alter table public.", "ALTER\nTABLE\tpublic.").replaceAll("set default", "SET\nDEFAULT"));
+sourceAccepts("publication source accepts inter-token comments without treating them as DDL",
+  migration.replaceAll("alter table public.", "alter /* formatting /* nested trivia */ only */ table public.")
+    .replaceAll("set not null", "set -- formatting only\n not null"));
+sourceAccepts("publication source accepts SQL keyword case while preserving status literal case",
+  migration.replace(/\b(?:alter|table|add|drop|constraint|check|in|not|valid|validate|set|default|null|update|where|is|distinct|from|lock|access|exclusive|mode|case|when|then|else|end|or)\b/gu,
+    word => word.toUpperCase()));
+sourceAccepts("publication source accepts CRLF without changing statement identity", migration.replaceAll("\n", "\r\n"));
+sourceAccepts("publication source accepts the same binary CHECK members in reversed order",
+  sourceVariant(migration, topicCheck, topicCheck.replace("'published', 'unpublished'", "'unpublished', 'published'")));
+for (const control of ["END", "ABORT"]) {
+  sourceRejects(`publication source rejects outer ${control} that ends the lock transaction`,
+    sourceVariant(migration, "\nbegin;", `\nbegin;\n${control};`));
+}
+
+for (const table of publicationTables) {
+  const column = table === "projects" ? "publication_status" : "status";
+  const statement = table === "pages" ? pageTransition : requiredStatement(new RegExp(
+    `alter table public\\.${table} add constraint ${table}_${column}_check check \\(${column} in \\('published', 'unpublished'\\)\\);`, "gu"));
+  sourceRejects(`publication source rejects the missing ${table} executable CHECK`, sourceVariant(migration, statement, ""));
+}
+for (const [label, original, replacement] of [
+  ["wrong CHECK name", topicCheck, topicCheck.replace("topics_status_check", "topics_other_check")],
+  ["wrong CHECK table", topicCheck, topicCheck.replace("public.topics", "public.topic_categories")],
+  ["wrong CHECK column", topicCheck, topicCheck.replace("check (status", "check (publication_status")],
+  ["wrong binary CHECK member", topicCheck, topicCheck.replace("'unpublished'", "'draft'")],
+  ["case-changed status literal", topicCheck, topicCheck.replace("'published'", "'Published'")],
+  ["extra incompatible status member", topicCheck, topicCheck.replace("'unpublished'", "'unpublished', 'archived'")],
+  ["missing Page default", pageDefault, ""],
+  ["wrong Page default", pageDefault, pageDefault.replace("'unpublished'", "'published'")],
+  ["wrong default column", pageDefault, pageDefault.replace("column status", "column publication_status")],
+  ["missing Page NOT NULL", pageNotNull, ""],
+  ["wrong NOT NULL column", pageNotNull, pageNotNull.replace("column status", "column publication_status")],
+  ["missing Page lock", pageLock, ""],
+  ["weaker Page lock", pageLock, pageLock.replace("access exclusive", "share")],
+  ["wrong Page CHECK name", pageTransition, pageTransition.replace("add constraint pages_status_check", "add constraint pages_other_check")],
+  ["wrong Page CHECK column", pageTransition, pageTransition.replace("check (status", "check (publication_status")],
+  ["wrong Page CHECK member", pageTransition, pageTransition.replace("'unpublished'", "'draft'")],
+  ["missing Page NOT VALID transition", pageTransition, pageTransition.replace(" not valid", "")],
+  ["non-atomic Page constraint replacement", pageTransition, pageTransition.replace(",\n  add", ";\nalter table public.pages add")],
+  ["missing Page validation", pageValidation, ""],
+  ["wrong validation constraint", pageValidation, pageValidation.replace("pages_status_check", "pages_other_check")],
+  ["wrong validation table", pageValidation, pageValidation.replace("public.pages", "public.topics")],
+  ["wrong Page normalization mapping", pageMapping, pageMapping.replace("set status = 'unpublished'", "set status = 'published'")],
+  ["wrong Page normalization predicate", pageMapping, pageMapping.replace("is distinct from", "=")],
+  ["additional Page UPDATE", pageMapping, `${pageMapping}\n${pageMapping}`],
+  ["additional incompatible Page constraint", pageTransition, `${pageTransition}\nalter table public.pages add constraint pages_extra_check check (status = 'published');`],
+] as const) sourceRejects(`publication source rejects ${label}`, sourceVariant(migration, original, replacement));
+
+const lateConstraint = sourceVariant(sourceVariant(migration, pageTransition, ""), pageMapping, `${pageMapping}\n${pageTransition}`);
+sourceRejects("publication source rejects Page mapping before the final constraint", lateConstraint);
+const prematureValidation = sourceVariant(sourceVariant(migration, pageValidation, ""), pageMapping, `${pageValidation}\n${pageMapping}`);
+sourceRejects("publication source rejects Page validation before normalization", prematureValidation);
+const lateLock = sourceVariant(sourceVariant(migration, pageLock, ""), pageTransition, `${pageTransition}\n${pageLock}`);
+sourceRejects("publication source rejects Page locking after constraint replacement", lateLock);
+
+const categoryMapping = requiredStatement(/update public\.topic_categories\s+set status = case when status = 'published' then 'published' else 'unpublished' end,\s+is_active = \(status = 'published'\);/gu);
+sourceRejects("publication source preserves Category is_active derivation", sourceVariant(migration, categoryMapping,
+  categoryMapping.replace("is_active = (status = 'published')", "is_active = true")));
+const heroMapping = requiredStatement(/update public\.hero_templates\s+set status = case when is_visible then 'published' else 'unpublished' end\s+where status is null or status not in \('published', 'unpublished'\);/gu);
+sourceRejects("publication source preserves Hero visibility-to-status mapping", sourceVariant(migration, heroMapping,
+  heroMapping.replace("when is_visible", "when not is_visible")));
+
+const missingRealCheck = sourceVariant(migration, topicCheck, "");
+const quotedCheck = topicCheck.replaceAll("'", "''");
+for (const [label, decoy] of [
+  ["line comment", `-- ${topicCheck}\n`],
+  ["block comment", `/* ${topicCheck} */`],
+  ["SELECT string", `select '${quotedCheck}';`],
+  ["SELECT dollar string", `select $ddl_decoy$${topicCheck}$ddl_decoy$;`],
+  ["DO dollar body", `do $ddl_decoy$ begin ${topicCheck} end; $ddl_decoy$;`],
+  ["function dollar body", `create function public.publication_source_decoy() returns void language plpgsql as $ddl_decoy$ begin ${topicCheck} end; $ddl_decoy$;`],
+  ["DO quoted body", `do 'begin execute ''${quotedCheck.replaceAll("'", "''")}''; end;';`],
+] as const) {
+  sourceAccepts(`publication source keeps ${label} opaque when executable DDL is present`,
+    sourceVariant(migration, "\ncommit;", `\n${decoy}\ncommit;`));
+  sourceRejects(`publication source cannot substitute ${label} for executable DDL`,
+    sourceVariant(missingRealCheck, "\ncommit;", `\n${decoy}\ncommit;`));
+}
+sourceRejects("publication source cannot substitute quoted validation for Page VALIDATE", sourceVariant(migration,
+  pageValidation, `select '${pageValidation}';`));
 check(
   "migration is guarded, transactional, and retains shared database owners",
   migration.trimStart().startsWith("-- System Publication") &&
