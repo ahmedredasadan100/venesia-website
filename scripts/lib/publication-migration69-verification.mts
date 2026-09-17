@@ -10,11 +10,156 @@ type Row = Record<string, unknown>;
 type StatusRow = { id: string; status: string | null; unrelatedHash: string; compatibilityHash: string;
   compatibilityValue: boolean | null };
 
+/** Bounded source evidence for this migration, not a SQL execution/parser owner.
+ * Only complete top-level statements can prove its DDL/DML contract. Comments
+ * are trivia; quoted values/identifiers remain case-sensitive; dollar bodies
+ * are opaque so PL/pgSQL strings cannot masquerade as executable outer DDL.
+ * Catalog/row semantics remain owned by verifyPublication69Transition below. */
+function publicationStatements(sql: string): string[] {
+  const statements: string[] = [];
+  let tokens: string[] = [];
+  let offset = 0;
+  while (offset < sql.length) {
+    const rest = sql.slice(offset);
+    const trivia = /^(?:\s+|--[^\r\n]*)/u.exec(rest);
+    if (trivia) { offset += trivia[0].length; continue; }
+    if (rest.startsWith("/*")) {
+      offset += 2;
+      let depth = 1;
+      while (depth && offset < sql.length) {
+        if (sql.startsWith("/*", offset)) { depth++; offset += 2; }
+        else if (sql.startsWith("*/", offset)) { depth--; offset += 2; }
+        else offset++;
+      }
+      assert.equal(depth, 0, "Unterminated publication SQL comment.");
+      continue;
+    }
+    const delimiter = /^(?:\$[A-Za-z_][A-Za-z_0-9]*\$|\$\$)/u.exec(rest)?.[0];
+    if (delimiter) {
+      const end = sql.indexOf(delimiter, offset + delimiter.length);
+      assert.ok(end >= 0, "Unterminated publication SQL body.");
+      tokens.push("<quoted-body>");
+      offset = end + delimiter.length;
+      continue;
+    }
+    const quote = sql[offset];
+    if (quote === "'" || quote === '"') {
+      const start = offset++;
+      const escaped = quote === "'" && /(?:^|[^A-Za-z_0-9])e$/iu.test(sql.slice(0, start));
+      let closed = false;
+      while (offset < sql.length) {
+        if (escaped && sql[offset] === "\\") { offset += 2; continue; }
+        if (sql[offset++] !== quote) continue;
+        if (sql[offset] === quote) { offset++; continue; }
+        closed = true;
+        break;
+      }
+      assert.ok(closed, "Unterminated publication SQL literal/identifier.");
+      tokens.push(sql.slice(start, offset));
+      continue;
+    }
+    if (quote === ";") {
+      if (tokens.length) statements.push(tokens.join(" "));
+      tokens = [];
+      offset++;
+      continue;
+    }
+    const word = /^[A-Za-z_][A-Za-z_0-9$]*/u.exec(rest)?.[0];
+    tokens.push(word ? word.toLowerCase() : quote);
+    offset += word?.length ?? 1;
+  }
+  assert.equal(tokens.length, 0, "Publication SQL must terminate every outer statement.");
+  return statements;
+}
+
+function publicationEntries(statements: string[]) {
+  return statements.flatMap(statement => {
+    const match = /^alter table public \. ([a-z_]+) alter column ([a-z_]+) set default 'unpublished'$/u.exec(statement);
+    return match ? [{ table: match[1], column: match[2] }] : [];
+  });
+}
+
+/** Source-only companion to the existing catalog transition proof. Accept
+ * formatting/trivia changes, but fail closed on unreviewed DDL/DML shapes. */
+export function assertPublication69Source(sql: string, expectedTables: readonly string[]) {
+  const statements = publicationStatements(sql);
+  assert.equal(statements[0], "begin", "Publication transition must be transactional.");
+  assert.equal(statements.at(-1), "commit", "Publication transition must commit after validation.");
+  assert.equal(statements.filter(statement => /^(?:begin|commit|rollback)\b/u.test(statement)).length, 2);
+  const entries = publicationEntries(statements);
+  assert.equal(expectedTables.length, 13);
+  assert.equal(new Set(expectedTables).size, 13);
+  assert.deepEqual(entries.map(entry => entry.table).sort(), [...expectedTables].sort(), "Publication table inventory drifted.");
+  const exactlyOnce = (statement: string) => {
+    const indices = statements.flatMap((value, index) => value === statement ? [index] : []);
+    assert.equal(indices.length, 1, `Expected one executable statement: ${statement}`);
+    return indices[0];
+  };
+  const pages = { constraint: -1, mapping: -1, validation: -1 };
+  for (const { table, column } of entries) {
+    assert.equal(column, table === "projects" ? "publication_status" : "status");
+    const relation = `public . ${table}`;
+    const constraint = `${table}_${column}_check`;
+    const prefix = `alter table ${relation} `;
+    const alters = statements.filter(statement => statement.startsWith(prefix));
+    const defaultIndex = exactlyOnce(`${prefix}alter column ${column} set default 'unpublished'`);
+    const notNullIndex = exactlyOnce(`${prefix}alter column ${column} set not null`);
+    const additions = alters.filter(statement => statement.includes(" add constraint "));
+    assert.equal(additions.length, 1, `${table}: missing/ambiguous final CHECK.`);
+    const add = additions[0].slice(prefix.length);
+    const checkSource = table === "pages"
+      ? add.replace(/^drop constraint pages_status_check , /u, "") : add;
+    if (table === "pages") assert.notEqual(checkSource, add, "Pages must replace the legacy CHECK atomically.");
+    const check = /^add constraint ([a-z_]+) check \( ([a-z_]+) in \( ('[^']*') , ('[^']*') \) \)( not valid)?$/u.exec(checkSource);
+    assert.ok(check, `${table}: unrecognized final CHECK contract.`);
+    assert.equal(check[1], constraint, `${table}: CHECK name differs.`);
+    assert.equal(check[2], column, `${table}: CHECK column differs.`);
+    assert.deepEqual([check[3], check[4]].sort(), ["'published'", "'unpublished'"], `${table}: allowed statuses differ.`);
+    assert.equal(Boolean(check[5]), table === "pages", `${table}: CHECK validation mode differs.`);
+    const addIndex = exactlyOnce(additions[0]);
+    const mapping = table === "topic_categories"
+      ? `update ${relation} set status = case when status = 'published' then 'published' else 'unpublished' end , is_active = ( status = 'published' )`
+      : table === "hero_templates"
+        ? `update ${relation} set status = case when is_visible then 'published' else 'unpublished' end where status is null or status not in ( 'published' , 'unpublished' )`
+        : `update ${relation} set ${column} = 'unpublished' where ${column} is distinct from 'published'`;
+    const mappingIndex = exactlyOnce(mapping);
+    assert.equal(statements.filter(statement => statement.startsWith(`update ${relation} `)).length, 1,
+      `${table}: unexpected additional normalization/write.`);
+    assert.ok(mappingIndex < defaultIndex && mappingIndex < notNullIndex, `${table}: mapping must precede column finalization.`);
+    if (table === "pages") {
+      const lockIndex = exactlyOnce(`lock table ${relation} in access exclusive mode`);
+      const validationIndex = exactlyOnce(`${prefix}validate constraint ${constraint}`);
+      assert.ok(lockIndex < addIndex && addIndex < mappingIndex && mappingIndex < validationIndex,
+        "Pages require lock -> compatible CHECK -> mapping -> VALIDATE.");
+      assert.equal(alters.length, 4, "Unexpected Pages DDL can invalidate the proved contract.");
+      Object.assign(pages, { constraint: addIndex, mapping: mappingIndex, validation: validationIndex });
+    } else {
+      const dropIndex = exactlyOnce(`${prefix}drop constraint if exists ${constraint}`);
+      assert.ok(mappingIndex < dropIndex && dropIndex < addIndex, `${table}: CHECK replacement ordering differs.`);
+      if (table === "hero_templates") {
+        assert.ok(exactlyOnce(`${prefix}add column if not exists status text`) < mappingIndex);
+      }
+      assert.equal(alters.length, table === "hero_templates" ? 5 : 4, `${table}: unexpected publication DDL.`);
+    }
+  }
+  // Extra writes, CTE-wrapped writes or table DDL cannot borrow proof from the
+  // reviewed statements. Function/DO bodies are covered by existing runtime and
+  // provenance proofs; their quoted contents are never positive source evidence.
+  for (const statement of statements) {
+    if (/^(?:update|alter table)\b/u.test(statement)) {
+      assert.ok(entries.some(({ table }) => statement.startsWith(`update public . ${table} `)
+        || statement.startsWith(`alter table public . ${table} `)), "Unreviewed publication relation.");
+    }
+    assert.ok(!/^(?:with|insert|delete|merge|truncate|drop table|create table|set|reset|savepoint|release|end|abort|start|prepare|execute|call)\b/u.test(statement),
+      "Unreviewed outer write/DDL/session control in publication migration.");
+  }
+  return { entries, pages };
+}
+
 /** Derive the affected inventory from this migration's actual default contract. */
 export function readPublication69Contract() {
   const sql = readFileSync(sourceUrl, "utf8").replace(/\r\n?/gu, "\n");
-  const entries = [...sql.matchAll(/alter table public\.([a-z_]+) alter column ([a-z_]+) set default 'unpublished';/gu)]
-    .map((match) => ({ table: match[1], column: match[2] }));
+  const entries = publicationEntries(publicationStatements(sql));
   assert.equal(entries.length, 13, "Migration69's reviewed entity inventory changed.");
   assert.equal(new Set(entries.map(entry => entry.table)).size, entries.length);
   assert.ok(entries.every(entry => entry.column === (entry.table === "projects" ? "publication_status" : "status")));
