@@ -252,7 +252,10 @@ export async function saveProjectEntry(
 
     if (mode === "edit") {
       try {
-        reconciledBundle = await loadProjectEntry(saved.id);
+        reconciledBundle = await loadProjectEntry(
+          saved.id,
+          coordinated.reconciliationMediaSeed,
+        );
       } catch (reconciliationError) {
         console.error("Project entry post-save reconciliation read failed", {
           projectId: saved.id,

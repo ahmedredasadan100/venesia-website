@@ -156,8 +156,41 @@ export async function loadEmptyProjectEntry(
   return { ...entry, ...locationState };
 }
 
+export type ProjectEntryMediaReadSeed = {
+  floorPlans: Array<{
+    id: number;
+    client_key: string;
+    name: string | null;
+    area_text: string | null;
+    featured: boolean | null;
+    architectural_image: string | null;
+    architectural_image_alt: string | null;
+    furnishing_image: string | null;
+    furnishing_image_alt: string | null;
+    sort_order: number;
+  }>;
+  media: Array<{
+    id: number;
+    client_key: string;
+    section: string;
+    image: string | null;
+    alt_text: string | null;
+    sort_order: number;
+  }>;
+  videos: Array<{
+    id: number;
+    client_key: string;
+    section: string;
+    video_url: string | null;
+    poster_image: string | null;
+    poster_alt: string | null;
+    sort_order: number;
+  }>;
+};
+
 export async function loadProjectEntry(
   id: number,
+  mediaReadSeed?: ProjectEntryMediaReadSeed | null,
 ): Promise<ProjectEntryBundle | null> {
   const supabase = getSupabaseAdmin();
   const rootResult = await supabase
@@ -204,11 +237,13 @@ export async function loadProjectEntry(
       .eq("project_id", id)
       .order("sort_order"),
     (async () => {
-      const plansResult = await supabase
-        .from("project_floor_plans")
-        .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
-        .eq("project_id", id)
-        .order("sort_order");
+      const plansResult = mediaReadSeed
+        ? { data: mediaReadSeed.floorPlans, error: null }
+        : await supabase
+            .from("project_floor_plans")
+            .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
+            .eq("project_id", id)
+            .order("sort_order");
       const planIds = (plansResult.data ?? []).map((row) => Number(row.id)).filter(Number.isFinite);
       // Details depend on plan IDs, not on the unrelated media/reference reads.
       const detailsResult = !plansResult.error && planIds.length
@@ -226,18 +261,22 @@ export async function loadProjectEntry(
       .select("id,client_key,body,sort_order")
       .eq("project_id", id)
       .order("sort_order"),
-    supabase
-      .from("project_media")
-      .select("id,client_key,section,image,alt_text,sort_order")
-      .eq("project_id", id)
-      .order("section")
-      .order("sort_order"),
-    supabase
-      .from("project_videos")
-      .select("id,client_key,section,video_url,poster_image,poster_alt,sort_order")
-      .eq("project_id", id)
-      .order("section")
-      .order("sort_order"),
+    mediaReadSeed
+      ? Promise.resolve({ data: mediaReadSeed.media, error: null })
+      : supabase
+          .from("project_media")
+          .select("id,client_key,section,image,alt_text,sort_order")
+          .eq("project_id", id)
+          .order("section")
+          .order("sort_order"),
+    mediaReadSeed
+      ? Promise.resolve({ data: mediaReadSeed.videos, error: null })
+      : supabase
+          .from("project_videos")
+          .select("id,client_key,section,video_url,poster_image,poster_alt,sort_order")
+          .eq("project_id", id)
+          .order("section")
+          .order("sort_order"),
   ]);
 
   const { plansResult, detailsResult } = planState;

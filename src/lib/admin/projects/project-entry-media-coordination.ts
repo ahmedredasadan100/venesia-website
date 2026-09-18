@@ -8,6 +8,7 @@ import { buildMediaReferenceWriteScope } from "../media-catalog/reference-provid
 import { synchronizeMediaReferenceWriteScopesAfterDomainMutation } from "../media-catalog/synchronization";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import type { ProjectEntryPayload } from "./project-entry-contract";
+import type { ProjectEntryMediaReadSeed } from "./project-entry-data";
 
 type SavedProjectIdentity = {
   id: number;
@@ -102,15 +103,64 @@ function buildIntendedChildren(
 }
 
 async function loadPersistedMediaChildren(projectId: number) {
-  return loadExistingMediaChildren(projectId);
+  const supabase = getSupabaseAdmin();
+  const [plans, media, videos] = await Promise.all([
+    supabase
+      .from("project_floor_plans")
+      .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
+      .eq("project_id", projectId)
+      .order("sort_order"),
+    supabase
+      .from("project_media")
+      .select("id,client_key,section,image,alt_text,sort_order")
+      .eq("project_id", projectId)
+      .order("section")
+      .order("sort_order"),
+    supabase
+      .from("project_videos")
+      .select("id,client_key,section,video_url,poster_image,poster_alt,sort_order")
+      .eq("project_id", projectId)
+      .order("section")
+      .order("sort_order"),
+  ]);
+  const error = plans.error ?? media.error ?? videos.error;
+  if (error) throw new Error(`project_media_post_save_read_failed:${error.message}`);
+
+  const reconciliationMediaSeed: ProjectEntryMediaReadSeed = {
+    floorPlans: plans.data ?? [],
+    media: media.data ?? [],
+    videos: videos.data ?? [],
+  };
+  const identities: ExistingMediaChild[] = [
+    ...reconciliationMediaSeed.floorPlans.map((row) => ({
+      domainKey: "project_floor_plans" as const,
+      id: Number(row.id),
+      clientKey: String(row.client_key ?? ""),
+    })),
+    ...reconciliationMediaSeed.media.map((row) => ({
+      domainKey: "project_media" as const,
+      id: Number(row.id),
+      clientKey: String(row.client_key ?? ""),
+    })),
+    ...reconciliationMediaSeed.videos.map((row) => ({
+      domainKey: "project_videos" as const,
+      id: Number(row.id),
+      clientKey: String(row.client_key ?? ""),
+    })),
+  ];
+  return { identities, reconciliationMediaSeed };
 }
+
+export type ProjectEntrySaveCoordinationResult = CoordinatedMediaDomainMutationResult<SavedProjectIdentity> & {
+  reconciliationMediaSeed: ProjectEntryMediaReadSeed | null;
+};
 
 export async function coordinateProjectEntrySave(input: {
   actorId: number;
   projectId: number | null;
   payload: ProjectEntryPayload;
   mutate: () => Promise<SavedProjectIdentity>;
-}): Promise<CoordinatedMediaDomainMutationResult<SavedProjectIdentity>> {
+}): Promise<ProjectEntrySaveCoordinationResult> {
   const operationIdentity = crypto.randomUUID();
   const rootLeaseIdentity = input.projectId
     ? String(input.projectId)
@@ -141,16 +191,18 @@ export async function coordinateProjectEntrySave(input: {
     ),
   ];
 
-  return coordinateMediaReferenceDomainMutation({
+  let reconciliationMediaSeed: ProjectEntryMediaReadSeed | null = null;
+  const coordinated = await coordinateMediaReferenceDomainMutation({
     scopes,
     actorId: input.actorId,
     requestIdentity: `project-entry:${operationIdentity}`,
     mutate: input.mutate,
     resolveEntityIdentity: (saved) => String(saved.id),
     synchronize: async ({ value, leaseToken }) => {
-      const persistedChildren = await loadPersistedMediaChildren(value.id);
+      const persisted = await loadPersistedMediaChildren(value.id);
+      reconciliationMediaSeed = persisted.reconciliationMediaSeed;
       const persistedByKey = new Map(
-        persistedChildren.map((child) => [
+        persisted.identities.map((child) => [
           `${child.domainKey}:${child.clientKey}`,
           child,
         ]),
@@ -198,4 +250,5 @@ export async function coordinateProjectEntrySave(input: {
       );
     },
   });
+  return { ...coordinated, reconciliationMediaSeed };
 }
