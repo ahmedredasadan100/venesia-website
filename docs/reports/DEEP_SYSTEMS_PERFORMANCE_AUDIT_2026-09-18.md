@@ -13,6 +13,41 @@ The accepted product correction is real and bounded: successful Project Save no 
 
 The broader eight-axis audit does not support a universal performance closure. The remaining multi-second variance is concentrated at the remote data-fetch boundary. Current evidence can separate that boundary from browser work, local SQL execution on the fixture, and most local server residual work, but cannot causally split the remote tail among Production database execution, connection/queueing, PostgREST/Supabase service time, Docker/OS scheduling, and transport. No speculative optimization follows from that uncertainty.
 
+## Focused Closure Pass — Remote Data-Fetch Variance Attribution
+
+This pass reused the immutable full-mode server traces and their existing browser/server correlation. It did not rerun a journey, add instrumentation, or alter Product behavior.
+
+| Boundary | Before Heavy diagnostic | After Heavy diagnostic | Attribution finding |
+|---|---:|---:|---|
+| Browser action → correct usable editor | 1,738.6 ms | 3,702.5 ms | End-to-end reference only; not assigned wholesale to any subsystem. |
+| Correlated Next Server Action span | 1,541 ms | 3,379 ms | The variable interval is already present inside the server request. |
+| Union of Supabase/PostgREST fetch start → response headers | 1,503 ms | 3,334 ms | `97.5%` and `98.7%` of the respective server spans. This is the bounded location of the material tail. |
+| Upper-bound server time outside the headers union | 38 ms | 45 ms | Includes local gaps, Next work, and serialization; it is not an exact CPU measure, but cannot explain the seconds-scale variance. |
+| Sum of response-header → observed body completion across all fetches | 36.9 ms | 72.5 ms | Not a critical-path sum because calls overlap. It proves body receipt/clone work is small relative to the header wait. |
+| Largest response body: media catalog, 234,757 B | 13.4 ms body phase | 43.0 ms body phase | Large response transfer/clone is not the dominant tail. |
+| Atomic save RPC | about 52 ms | about 47 ms | Mutation execution through the boundary remains small in the observed trace. |
+| Local indexed read plans | 0.029–0.113 ms | same targeted receipt | Local fixture SQL execution cannot explain the remote header delay; Production execution/waits remain unobserved. |
+
+The slow calls are heterogeneous and mostly tiny responses. Before, one `project_media` GET waited `1,180.2 ms` for headers and several one-byte reference RPC responses waited up to `1,261.6 ms`; their body phases were about `0.3–0.5 ms`. After, auth reads waited `455.1/477.6 ms`, media/video reads `483.8/500.9 ms`, another media read `1,526.6 ms`, and one-byte reference RPC responses up to `1,590.7 ms`; almost every body phase remained below `1 ms`.
+
+The existing media synchronization owner launches a real burst of 16 `replace_media_references_for_entity` RPCs. In the After trace, the burst began within roughly `6 ms`: three calls returned headers around `156–159 ms`, while the remaining group returned around `1.42–1.59 s`. That shape is consistent with queueing, connection/pool saturation, service scheduling, transport/bridge scheduling, or a shared PostgreSQL wait. The available client-side fetch timestamps cannot distinguish those causes. The burst is therefore a proven workload topology, not a proven owner-local defect; changing concurrency or batching without server-side evidence would be speculative and could worsen latency or synchronization semantics.
+
+### Classification
+
+- **Next/server boundary:** not the material bottleneck established by this trace. At most `38/45 ms` lies outside the remote response-header interval, as an upper bound rather than exact CPU attribution.
+- **Response/serialization:** not material in the observed path. Response bodies complete in tens of milliseconds in aggregate, and Heavy RSC size remains stable.
+- **PostgreSQL execution:** local indexed fixture execution is not material; Production statement execution, locks, and wait events are not observed.
+- **Supabase/PostgREST/service/pooling:** a plausible location inside the measured pre-header interval, but not independently isolated.
+- **Transport/network:** also inside the same pre-header interval; DNS/connect/TLS are not exposed for the server-side Supabase fetches in the retained trace.
+- **Environment/scheduling:** Docker/OS/VM or service scheduling remains possible and cannot be separated by current evidence.
+- **Product-side:** no additional material Product-side bottleneck is known inside the audited owner after the accepted duplicate-read correction. The 16-RPC burst is visible, but causality and a safe corrective shape are not proven.
+
+### Stop condition and evidence needed
+
+Further isolation requires new Production/service-side correlation that records, for the same request/RPC, PostgREST receipt/dispatch time, pool checkout/queue time, PostgreSQL statement execution plus lock/wait events, and response-write completion. Comparing those timestamps with the existing Next fetch start/header timestamps would separate service/pool, database, and network/host contributions. Enabling that evidence requires Production instrumentation or Supabase/Infrastructure configuration and possibly privileged operational access, all explicit stop conditions for this phase. No such change was executed.
+
+Any work to harden trace correlation, propagate request IDs, or redesign the measurement harness is recorded for the independent **Test & Verification Infrastructure Hardening** phase only. It is not a Product Performance Improvement.
+
 ## Eight-Axis Findings Matrix
 
 | Axis | Evidence used / measurement added | Finding | Material bottleneck | Owner / source of truth | Delta | Status / remaining limit |
@@ -100,13 +135,14 @@ Added in this continuation only:
 
 - Targeted Heavy Project read-plan measurement for the eight affected read shapes: pass.
 - Isolated lifecycle cleanup: complete; original resources unchanged.
+- Focused offline attribution of the existing immutable Heavy diagnostic traces: pass; the remote pre-header interval accounts for `97.5–98.7%` of the correlated Server Action span.
 - Report consistency/diff validation only; no code dependency changed, so `127/127`, `20/20`, Public E2E, and unrelated CI suites were intentionally not rerun.
 
 ## Blocking gaps and owners
 
 | Blocking gap | Owner boundary | What is not proven |
 |---|---|---|
-| Remote read/RPC latency and variance | Supabase/PostgREST connection and transport boundary consumed by Project save/read owners | The split among Production PostgreSQL execution/waits, pooling/queue, service processing, network/bridge, and host scheduling. |
+| Bounded external/environment attribution gap before response headers | Supabase/PostgREST service/pool, Production PostgreSQL operational evidence, transport, and host scheduling boundaries consumed by Project save/read owners | Existing traces locate `97.5–98.7%` of the server span inside fetch-start → response-headers, but cannot split Production PostgreSQL execution/waits from pool/service queueing, transport/bridge, or host scheduling. New Production/service-side correlated instrumentation or Infrastructure access is required. |
 | Stable Heavy/Normal Save latency closure | Project Save journey, dependent on the remote boundary above | A repeatable end-user latency improvement or bounded variance; the structural `-3` request delta is proven, but quiet medians remain variable. |
 | Production plan equivalence | Production PostgreSQL operational evidence owner | Whether Production cardinality, cache state, contention, and wait events match the sub-millisecond local indexed plans. No Production mutation or invasive profiling was authorized. |
 
@@ -114,4 +150,4 @@ React, RSC/Flight, browser main thread, JavaScript delivery, and local PostgreSQ
 
 ## Exact closure claim
 
-**Admin Performance Global Closure — NOT PROVEN.** The duplicate post-save reconciliation reads are corrected and regression-guarded, and all eight axes now have evidence-backed findings. The remaining material gap is high-variance remote data-fetch latency whose DB/service/transport/environment contributions cannot be isolated with the current evidence; therefore neither a stable Heavy Editor Save latency closure nor a Production-wide Admin performance closure is claimed. PR #168 must remain Draft, and this phase stops before Ready.
+**Admin Performance Global Closure — NOT PROVEN.** The duplicate post-save reconciliation reads are corrected and regression-guarded, all eight axes have evidence-backed findings, and the focused pass locates the remaining material time before Supabase/PostgREST response headers. No additional material Product-side bottleneck is known inside the audited owner. The blocker is now specifically a bounded external/environment attribution gap: current evidence cannot split Production DB execution/waits from service/pool queueing, transport/bridge, or host scheduling without new Production/service instrumentation or Infrastructure access. Therefore neither stable Heavy Editor Save latency closure nor Production-wide Admin performance closure is claimed. PR #168 must remain Draft, and this phase stops before Ready.
