@@ -168,7 +168,7 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
       "../../supabase-admin": { getSupabaseAdmin: () => ({ from(table: Domain) {
         assert.ok(domains.includes(table), `Unexpected preflight table ${table}`);
         return { select(columns: string) {
-          assert.equal(columns, "id,client_key");
+          assert.ok(columns.startsWith("id,client_key"));
           return { eq(key: string, value: number) {
             assert.equal(key, "project_id");
             const stage = state.mutations ? "after" : "before";
@@ -178,7 +178,12 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
             const data = stage === "before"
               ? [{ id: 60, client_key: `removed:${table}` }, { id: 61, client_key: `retained:${table}` }]
               : options.missingIdentity === table || options.emptyChildren ? [] : savedRows[table];
-            return Promise.resolve({ data, error });
+            const result = Promise.resolve({ data, error });
+            const query = {
+              order() { return query; },
+              then: result.then.bind(result),
+            };
+            return query;
           } };
         } };
       } }) },
@@ -213,7 +218,7 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
     }
     const coordinate = load("src/lib/admin/projects/project-entry-media-coordination.ts").coordinateProjectEntrySave as (input: {
       actorId: number; projectId: number | null; payload: typeof payload; mutate: () => Promise<Saved>;
-    }) => Promise<{ value: Saved; mediaSynchronization: MediaReferenceSynchronizationResult; lease: Lease | null }>;
+    }) => Promise<{ value: Saved; mediaSynchronization: MediaReferenceSynchronizationResult; lease: Lease | null; reconciliationMediaSeed: unknown }>;
     const run = () => coordinate({ actorId: 7, projectId, payload, mutate: async () => {
       state.events.push("mutate"); state.mutations++;
       if (options.mutationError) throw options.mutationError;
@@ -234,6 +239,7 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
     assert.deepEqual(h.state.sync[0].targets.map(row => row.leaseEntityIdentity), h.state.acquired[0].scopes.map(row => row.entityIdentity));
     assert.equal(h.state.sync[0].leaseToken, h.lease.token); assert.deepEqual(h.state.sync[0].cleanup, []);
     assert.strictEqual(result.value, h.saved); assert.strictEqual(result.mediaSynchronization, h.syncResult); assert.strictEqual(result.lease, h.lease);
+    assert.ok(result.reconciliationMediaSeed, "successful post-save identity reads expose the same request-scoped rows for reconciliation reuse");
     assert.deepEqual(h.state.failed, []); assert.deepEqual(h.state.uncertain, []);
   }
   ok("Project Save without media-child tombstones skips only three preflight reads and preserves actor, lease, mutation, persisted IDs and return values");
@@ -267,7 +273,8 @@ export async function verifyProjectEntryMediaPreflight(root: string) {
   for (const table of domains) {
     const h = fixture({ errorStage: "after", errorTables: [table] }); const result = await h.run();
     assert.equal(h.state.mutations, 1); assert.equal(h.state.reads.length, 3); assert.equal(h.state.sync.length, 0);
-    assert.equal(result.mediaSynchronization.failureReason, `project_media_preflight_failed:after:${table}`);
+    assert.equal(result.mediaSynchronization.failureReason, `project_media_post_save_read_failed:after:${table}`);
+    assert.equal(result.reconciliationMediaSeed, null);
     assert.equal(result.mediaSynchronization.status, "saved_with_media_sync_warning"); assert.strictEqual(result.value, h.saved);
     assert.equal(h.state.failed[0].domainWriteCommitted, true); assert.equal(h.state.completed.length, 0);
   }

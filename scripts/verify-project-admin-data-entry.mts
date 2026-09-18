@@ -1084,8 +1084,9 @@ check(
     editPage.includes("<ProjectEditForm key={bundle.project.id"),
 );
 check(
-  "successful Project edits re-read the aggregate and remount child state with hydrated IDs and cleared tombstones",
-  action.includes("reconciledBundle = await loadProjectEntry(saved.id)") &&
+  "successful Project edits reconcile the aggregate with the post-save media read seed and remount child state with hydrated IDs and cleared tombstones",
+  action.includes("coordinated.reconciliationMediaSeed") &&
+    action.includes("reconciledBundle = await loadProjectEntry(") &&
     action.includes("reconciledBundle,") &&
     form.includes("setFormSnapshot") &&
     form.includes("generation: current.generation + 1") &&
