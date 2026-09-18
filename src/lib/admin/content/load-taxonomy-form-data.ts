@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Database } from "../../database.types";
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { isContentType, resolveContentEditor } from "./content-types";
 import {
   buildAdminCategoryTree,
   flattenAdminCategoryTree,
@@ -155,6 +156,16 @@ export async function loadCategoryParentFormOptions(
   } = {},
 ): Promise<TaxonomyFormDependencyResult<TaxonomyFormOption[]>> {
   const result = await loadCategoryRows("category_options");
+  return resolveCategoryParentFormOptions(result, { excludeCategoryId, persistedParentId });
+}
+
+function resolveCategoryParentFormOptions(
+  result: TaxonomyFormDependencyResult<AdminContentCategory[]>,
+  { excludeCategoryId, persistedParentId }: {
+    excludeCategoryId?: number;
+    persistedParentId?: number | null;
+  },
+): TaxonomyFormDependencyResult<TaxonomyFormOption[]> {
   if (result.status === "error") return result;
 
   const blockedIds = excludeCategoryId
@@ -176,6 +187,13 @@ export async function loadSeriesCategoryFormOptions(
   currentCategoryId?: number | null,
 ): Promise<TaxonomyFormDependencyResult<TaxonomyFormOption[]>> {
   const result = await loadCategoryRows("series_options");
+  return resolveSeriesCategoryFormOptions(result, currentCategoryId);
+}
+
+function resolveSeriesCategoryFormOptions(
+  result: TaxonomyFormDependencyResult<AdminContentCategory[]>,
+  currentCategoryId?: number | null,
+): TaxonomyFormDependencyResult<TaxonomyFormOption[]> {
   if (result.status === "error") return result;
 
   const selectableRows = result.data.filter(
@@ -264,13 +282,7 @@ export function invalidTopicFormRecord(
   return errorResult("topic_record_contract", cause);
 }
 
-export async function loadTopicTaxonomyFormDependencies({
-  currentCategoryId,
-  currentSeriesId,
-}: {
-  currentCategoryId?: number | null;
-  currentSeriesId?: number | null;
-} = {}): Promise<TaxonomyFormDependencyResult<TopicTaxonomyFormDependencies>> {
+async function loadTopicTaxonomyRows(): Promise<TaxonomyFormDependencyResult<TopicTaxonomyFormDependencies>> {
   try {
     const supabase = getSupabaseAdmin();
     const [categoriesResult, seriesResult] = await Promise.all([
@@ -298,14 +310,30 @@ export async function loadTopicTaxonomyFormDependencies({
       return errorResult("topic_taxonomy_dependencies");
     }
 
+    return dataResult({ categories: categoriesResult.data, series: seriesResult.data });
+  } catch (cause) {
+    return errorResult("topic_taxonomy_dependencies", cause);
+  }
+}
+
+function resolveTopicTaxonomyFormDependencies(
+  result: TaxonomyFormDependencyResult<TopicTaxonomyFormDependencies>,
+  { currentCategoryId, currentSeriesId }: {
+    currentCategoryId?: number | null;
+    currentSeriesId?: number | null;
+  },
+): TaxonomyFormDependencyResult<TopicTaxonomyFormDependencies> {
+  if (result.status === "error") return result;
+  try {
+
     const persistedCategory = currentCategoryId == null
       ? null
-      : categoriesResult.data.find(
+      : result.data.categories.find(
           (category) => category.id === currentCategoryId,
         ) ?? null;
     const persistedSeries = currentSeriesId == null
       ? null
-      : seriesResult.data.find((item) => item.id === currentSeriesId) ?? null;
+      : result.data.series.find((item) => item.id === currentSeriesId) ?? null;
     const persistedRelationshipInvalid =
       currentSeriesId != null &&
       (currentCategoryId == null ||
@@ -319,12 +347,12 @@ export async function loadTopicTaxonomyFormDependencies({
       return errorResult("topic_taxonomy_contract");
     }
 
-    const categories = categoriesResult.data.filter(
+    const categories = result.data.categories.filter(
       (category) =>
         category.id === currentCategoryId ||
         (category.status === "published" && category.is_active === true),
     );
-    const series = seriesResult.data.filter(
+    const series = result.data.series.filter(
       (item) => item.status === "published" || item.id === currentSeriesId,
     );
 
@@ -336,4 +364,59 @@ export async function loadTopicTaxonomyFormDependencies({
   } catch (cause) {
     return errorResult("topic_taxonomy_dependencies", cause);
   }
+}
+
+export async function loadTopicTaxonomyFormDependencies(
+  selection: { currentCategoryId?: number | null; currentSeriesId?: number | null } = {},
+): Promise<TaxonomyFormDependencyResult<TopicTaxonomyFormDependencies>> {
+  return resolveTopicTaxonomyFormDependencies(await loadTopicTaxonomyRows(), selection);
+}
+
+/** References are independent reads; only their eligibility projection needs the record. */
+export async function loadCategoryEditorFormData(id: number): Promise<
+  TaxonomyFormRecordResult<{ category: CategoryFormRecord; parentOptions: TaxonomyFormOption[] }>
+> {
+  const [record, rows] = await Promise.all([
+    loadCategoryFormRecord(id),
+    loadCategoryRows("category_options"),
+  ]);
+  if (record.status !== "data") return record;
+  const options = resolveCategoryParentFormOptions(rows, {
+    excludeCategoryId: id,
+    persistedParentId: record.data.parent_id,
+  });
+  if (options.status === "error") return options;
+  return dataResult({ category: record.data, parentOptions: options.data });
+}
+
+export async function loadSeriesEditorFormData(id: number): Promise<
+  TaxonomyFormRecordResult<{ series: SeriesFormRecord; categoryOptions: TaxonomyFormOption[] }>
+> {
+  const [record, rows] = await Promise.all([
+    loadSeriesFormRecord(id),
+    loadCategoryRows("series_options"),
+  ]);
+  if (record.status !== "data") return record;
+  const options = resolveSeriesCategoryFormOptions(rows, record.data.category_id);
+  if (options.status === "error") return options;
+  return dataResult({ series: record.data, categoryOptions: options.data });
+}
+
+export async function loadTopicEditorFormData(id: number): Promise<
+  TaxonomyFormRecordResult<{ topic: TopicFormRecord } & TopicTaxonomyFormDependencies>
+> {
+  const [record, rows] = await Promise.all([
+    loadTopicFormRecord(id),
+    loadTopicTaxonomyRows(),
+  ]);
+  if (record.status !== "data") return record;
+  if (!isContentType(record.data.content_type) || !resolveContentEditor(record.data.content_type)) {
+    return invalidTopicFormRecord();
+  }
+  const dependencies = resolveTopicTaxonomyFormDependencies(rows, {
+    currentCategoryId: record.data.category_id,
+    currentSeriesId: record.data.series_id,
+  });
+  if (dependencies.status === "error") return dependencies;
+  return dataResult({ topic: record.data, ...dependencies.data });
 }

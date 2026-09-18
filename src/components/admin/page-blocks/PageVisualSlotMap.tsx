@@ -10,6 +10,7 @@ import { comparePageAssignmentOrder } from "../../../lib/page-composition/page-a
 import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type PageVisualSlotMapProps = {
+  returnTo?: string;
   assignments: PageBlockAssignmentRow[];
 };
 
@@ -62,7 +63,7 @@ function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
   return groups;
 }
 
-export default function PageVisualSlotMap({ assignments }: PageVisualSlotMapProps) {
+export default function PageVisualSlotMap({ assignments, returnTo }: PageVisualSlotMapProps) {
   const grouped = groupAssignmentsBySlot(assignments);
 
   return (
@@ -120,7 +121,7 @@ export default function PageVisualSlotMap({ assignments }: PageVisualSlotMapProp
                         </div>
                         <div className="mt-2 flex flex-wrap gap-2">
                           <Link
-                            href={moduleEditHref(row.module_kind, row.template_id)}
+                            href={moduleEditHref(row.module_kind, row.template_id, { returnPageId: row.page_id, returnTo })}
                             className="rounded-full border border-white/10 px-2.5 py-1 text-[10px] text-white/55 hover:border-[#D8B87A]/30 hover:text-[#D8B87A]"
                           >
                             تحرير

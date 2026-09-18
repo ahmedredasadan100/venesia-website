@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { resolveAdminFormReturnPath } from "../../../../../../lib/admin/form-runtime";
 
 import { PlusIcon } from "../../../../../../components/admin/AdminRowActions";
 import {
@@ -14,6 +15,7 @@ type PageBlocksHeaderPage = {
 };
 
 type PageBlocksHeaderProps = {
+  returnTo?: string;
   page: PageBlocksHeaderPage;
   previewHref: string | null;
   onOpenAssignModal: () => void;
@@ -50,6 +52,7 @@ export function PageModuleKindsSummary({ usedModuleKinds }: PageModuleKindsSumma
 }
 
 export default function PageBlocksHeader({
+  returnTo,
   page,
   previewHref,
   onOpenAssignModal,
@@ -61,7 +64,7 @@ export default function PageBlocksHeader({
       description="تحكّم في إعدادات الصفحة، هيكلها، والموديولات المعروضة داخلها."
       actions={(
         <>
-          <AdminActionButton href="/admin/pages-blocks/pages" variant="dark">
+          <AdminActionButton href={resolveAdminFormReturnPath(returnTo, "/admin/pages-blocks/pages")} variant="dark">
             إدارة الصفحات
           </AdminActionButton>
           <AdminActionButton href="/admin/pages-blocks/blocks" variant="dark">

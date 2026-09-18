@@ -9,6 +9,7 @@ import AdminEntitySeoPanel, {
 } from "../../../../../components/admin/seo/AdminEntitySeoPanel";
 import { ENTITY_SEO_FIELD_NAMES } from "../../../../../lib/seo/entity-seo-types";
 import { savePageSeoAction } from "../page-seo-actions";
+import { adminFormEditHref } from "../../../../../lib/admin/form-runtime";
 
 const PAGE_SEO_FIELD_IDS = {
   seoTitle: "page-seo-title",
@@ -24,6 +25,7 @@ const PAGE_SEO_FIELD_IDS = {
 } satisfies AdminEntitySeoFieldIds;
 
 type PageSeoPanelProps = {
+  returnTo?: string;
   pageId: number;
   pageTitle: string;
   path: string;
@@ -87,7 +89,7 @@ export default function PageSeoPanel(props: PageSeoPanelProps) {
       >
         <AdminFormPendingFields className="space-y-5">
           <input type="hidden" name="page_id" value={props.pageId} />
-          <input type="hidden" name="redirect_to" value={`/admin/pages-blocks/pages/${props.pageId}?tab=seo`} />
+          <input type="hidden" name="redirect_to" value={adminFormEditHref(`/admin/pages-blocks/pages/${props.pageId}?tab=seo`, props.returnTo, "/admin/pages-blocks/pages")} />
           <input type="hidden" name="page_title" value={props.pageTitle} />
           <input type="hidden" name="page_description" value="" />
           <input type="hidden" name="page_content" value={props.content} />

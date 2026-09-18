@@ -42,7 +42,16 @@ export type PrivatePublicVerificationContext = {
 export type PublicGateRequest = {
   additionalSourceFiles: readonly string[];
   /** Fixed affected-build subset; omission retains the complete Public gate contract. */
-  selection?: "build-contracts";
+  selection?: "build-contracts" | "admin-interactions";
+  /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
+  adminMeasurement?: {
+    phase: "before" | "after";
+    frozenSourceManifest: string;
+    controlDirectory: string;
+    resumeAfterFromRuntime09?: true;
+    resumeFinalAfterFromRuntime11?: true;
+    resumeCorrectionAfterFromRuntime12?: true;
+  };
 };
 export type PublicFixtureReadiness = {
   status: "ready"; latestVersion: string; registeredMigrations: number;
@@ -54,6 +63,76 @@ export type PublicFixtureReadiness = {
 };
 const prepared = new WeakMap<PrivatePublicVerificationContext, PublicFixtureReadiness>();
 const completed = new WeakSet<PrivatePublicVerificationContext>();
+const adminPhases = new WeakMap<PrivatePublicVerificationContext, Set<string>>();
+const adminCredentials = new WeakMap<PrivatePublicVerificationContext, { username: string; password: string; secret: string }>();
+
+export const validateAcceptedAdminBefore09 = () => {
+  const base=resolve(ROOT,".tmp-qa/admin-near-instant-continuation-2026-09-17"),control=join(base,"control");
+  const lifecyclePath=join(control,"before-lifecycle.json"),lifecycle=JSON.parse(readFileSync(lifecyclePath,"utf8"));
+  assert.equal(lifecycle.status,"pass");assert.equal(lifecycle.phase,"before");assert.equal(lifecycle.selection,"admin-interactions");
+  assert.equal(lifecycle.sourceSha256,"bf1367d8554f1e547a18742da3381a1446d9662831547994c8ba1193189aac94");
+  assert.equal(lifecycle.buildIdSha256,"b2a0619c2ce3a6906ca55d084386e33209c55b6c56811b18ff2cc7cd950f7950");
+  assert.deepEqual(lifecycle.gates.map((gate:{name:string;code:number})=>[gate.name,gate.code]),[["normal-build",0],["admin-interactions",0]]);
+  const beforeRoot=resolve(base,"production-runtime-09/admin-before"),jobs=readdirSync(control).filter(file=>/^before-job-[a-z0-9-]+\.json$/u.test(file));assert.equal(jobs.length,31);
+  const receipts=jobs.map(file=>{
+    const job=JSON.parse(readFileSync(join(control,file),"utf8"));const pointer=JSON.parse(readFileSync(join(control,`before-result-${job.id}.json`),"utf8"));
+    const path=resolve(pointer.path);assert.ok(path.startsWith(beforeRoot+sep),"Retained Before receipt must belong to runtime09");
+    const raw=readFileSync(path),receipt=JSON.parse(raw.toString());assert.equal(receipt.id,job.id);assert.equal(receipt.phase,"before");assert.equal(receipt.status,pointer.status);assert.ok(["pass","fail"].includes(receipt.status));
+    assert.ok(Array.isArray(receipt.measurements)&&Number.isFinite(receipt.finishedAt));
+    return {id:job.id,status:receipt.status,path,sha256:createHash("sha256").update(raw).digest("hex")};
+  });
+  const cleanup=JSON.parse(readFileSync(join(base,"production-runtime-09/cleanup.json"),"utf8"));assert.equal(cleanup.status,"complete");assert.equal(cleanup.remainingOwnedResources,0);assert.equal(cleanup.originalResourcesUnchanged,true);
+  return {lifecycle,receipts,beforeDatabase:"cleaned after fixture reset failure",afterDatabase:"fresh canonical owned DB; identical returned fixture model required",repeatedBeforeBuild:false,repeatedBeforeJobs:false};
+};
+
+export const validateAcceptedAdminAfter11 = () => {
+  const base=resolve(ROOT,".tmp-qa/admin-near-instant-continuation-2026-09-17"),control=join(base,"control");
+  const lifecyclePath=join(control,"after-lifecycle.json"),lifecycle=JSON.parse(readFileSync(lifecyclePath,"utf8"));
+  assert.equal(lifecycle.status,"pass");assert.equal(lifecycle.phase,"after");assert.equal(lifecycle.selection,"admin-interactions");
+  assert.equal(lifecycle.sourceSha256,"91aa9401a07482bddb53a71a80ace45acea36a4adb182d8b6afa36b054dd0aa2");
+  assert.equal(lifecycle.buildIdSha256,"457638f37754fa57e57581a189d4eac4d97de867098f927d312f4baaffdb8f9f");
+  assert.deepEqual(lifecycle.gates.map((gate:{name:string;code:number})=>[gate.name,gate.code]),[["normal-build",0],["admin-interactions",0]]);
+  const afterRoot=resolve(base,"production-runtime-11/admin-after"),summaryPath=join(afterRoot,"browser-summary.json"),summaryRaw=readFileSync(summaryPath),summary=JSON.parse(summaryRaw.toString());
+  assert.equal(summary.phase,"after");assert.ok(Array.isArray(summary.jobs)&&summary.jobs.length>0);assert.equal(new Set(summary.jobs).size,summary.jobs.length);
+  const receipts=summary.jobs.map((file:string)=>{
+    assert.match(file,/^after-job-[a-z0-9-]+\.json$/u);
+    const job=JSON.parse(readFileSync(join(control,file),"utf8")),pointer=JSON.parse(readFileSync(join(control,`after-result-${job.id}.json`),"utf8"));
+    const path=resolve(pointer.path);assert.ok(path.startsWith(afterRoot+sep),"Retained After receipt must belong to runtime11");
+    const raw=readFileSync(path),receipt=JSON.parse(raw.toString());assert.equal(receipt.id,job.id);assert.equal(receipt.phase,"after");assert.equal(receipt.status,pointer.status);assert.ok(["pass","fail"].includes(receipt.status));
+    assert.ok(Array.isArray(receipt.measurements)&&Number.isFinite(receipt.finishedAt));
+    return {id:job.id,status:receipt.status,path,sha256:digest(raw)};
+  });
+  const cleanup=JSON.parse(readFileSync(join(base,"production-runtime-11/cleanup.json"),"utf8"));assert.equal(cleanup.status,"complete");assert.equal(cleanup.remainingOwnedResources,0);assert.equal(cleanup.originalResourcesUnchanged,true);
+  return {lifecycle,receipts,browserSummarySha256:digest(summaryRaw),priorDatabase:"cleaned normally after preserved browser summary",nextDatabase:"fresh canonical owned DB; fixture model equality required",repeatedPriorBuild:false,repeatedPriorJobs:false,retainedFailuresAreNotPasses:true};
+};
+
+export const validateAcceptedAdminAfter12 = () => {
+  const base=resolve(ROOT,".tmp-qa/admin-near-instant-continuation-2026-09-17"),control=join(base,"control-final-delta");
+  const lifecycle=JSON.parse(readFileSync(join(control,"after-lifecycle.json"),"utf8"));
+  assert.equal(lifecycle.status,"pass");assert.equal(lifecycle.phase,"after");assert.equal(lifecycle.selection,"admin-interactions");
+  assert.equal(lifecycle.sourceSha256,"ddc0d27237b435a2e766ae3adbef85a2853e32ab4c6ce4fd550871dfeb741a3d");
+  assert.equal(lifecycle.buildIdSha256,"149049e42b900bd5021e71caa53ce13b938d692b5b88078d3fddba949a82a897");
+  assert.deepEqual(lifecycle.gates.map((gate:{name:string;code:number})=>[gate.name,gate.code]),[["normal-build",0],["admin-interactions",0]]);
+  const afterRoot=resolve(base,"production-runtime-12/admin-after"),jobs=readdirSync(control).filter(file=>/^after-job-[a-z0-9-]+\.json$/u.test(file));assert.equal(jobs.length,26);
+  const receipts=jobs.map(file=>{
+    const jobRaw=readFileSync(join(control,file)),job=JSON.parse(jobRaw.toString()),pointer=JSON.parse(readFileSync(join(control,`after-result-${job.id}.json`),"utf8"));
+    const path=resolve(pointer.path);assert.ok(path.startsWith(afterRoot+sep),"Retained After receipt must belong to runtime12");
+    const raw=readFileSync(path),retained=JSON.parse(raw.toString());assert.equal(retained.id,job.id);assert.equal(retained.phase,"after");assert.equal(retained.status,pointer.status);assert.ok(["pass","fail"].includes(retained.status));
+    assert.equal(retained.scenarioSha256,digest(jobRaw));assert.ok(Array.isArray(retained.measurements)&&Number.isFinite(retained.finishedAt));
+    return {file,id:job.id,status:retained.status,path,sha256:digest(raw)};
+  });
+  assert.equal(new Set(receipts.map(row=>row.id)).size,receipts.length);
+  const summaryPath=join(afterRoot,"browser-driver-2/browser-summary.json"),summaryRaw=readFileSync(summaryPath),summary=JSON.parse(summaryRaw.toString());
+  assert.equal(summary.phase,"after");assert.ok(Array.isArray(summary.jobs)&&summary.jobs.length>0);assert.equal(new Set(summary.jobs).size,summary.jobs.length);
+  for(const file of summary.jobs){assert.match(file,/^after-job-[a-z0-9-]+\.json$/u);assert.ok(jobs.includes(file));}
+  const cleanup=JSON.parse(readFileSync(join(base,"production-runtime-12/cleanup.json"),"utf8"));assert.equal(cleanup.status,"complete");assert.equal(cleanup.remainingOwnedResources,0);assert.equal(cleanup.originalResourcesUnchanged,true);assert.equal(cleanup.privateEnvRemoved,true);
+  return {lifecycle,receipts,browserSummarySha256:digest(summaryRaw),terminalDriverJobs:summary.jobs.length,allCompletedJobs:receipts.length,summaryIsTerminalDriverSubset:true,priorDatabase:"cleaned normally after both driver attempts",nextDatabase:"fresh canonical owned DB; fixture model equality required",repeatedPriorBuild:false,repeatedPriorJobs:false,retainedFailuresAreNotPasses:true};
+};
+
+export function registerOwnedAdminMeasurement(context: PrivatePublicVerificationContext, credentials: { username: string; password: string; secret: string }) {
+  assert.equal(adminCredentials.has(context), false);
+  adminCredentials.set(context, Object.freeze({ ...credentials }));
+}
 
 function ownedPath(context: PrivatePublicVerificationContext, name: string) {
   assert.ok(!isAbsolute(name) && !name.split(/[\\/]/u).includes(".."));
@@ -240,31 +319,83 @@ async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
 export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal) {
   await context.assertOwned();
   const readiness = prepared.get(context); assert.ok(readiness, "Public fixture readiness must precede gates.");
-  assert.ok(request.selection === undefined || request.selection === "build-contracts", "Unknown fixed Public gate selection.");
-  const gates = request.selection === "build-contracts"
+  assert.ok(request.selection === undefined || request.selection === "build-contracts" || request.selection === "admin-interactions", "Unknown fixed Public gate selection.");
+  const measurement = request.selection === "admin-interactions" ? request.adminMeasurement : undefined;
+  assert.equal(Boolean(request.adminMeasurement), Boolean(measurement));
+  const credentials = measurement ? adminCredentials.get(context) : undefined;
+  const originalContext = context;
+  let frozenDirectory: string | undefined;
+  let frozenManifest: Array<{ file: string; sha256: string }> | undefined;
+  if (measurement) {
+    assert.ok(credentials, "The canonical owned local Admin fixture must be prepared first.");
+    assert.ok(measurement.phase === "before" || measurement.phase === "after");
+    const phases = adminPhases.get(context) ?? new Set<string>();
+    assert.equal(phases.has(measurement.phase), false, "A successful measurement phase is one-shot.");
+    if(measurement.resumeAfterFromRuntime09)assert.equal(measurement.phase,"after");
+    if(measurement.resumeCorrectionAfterFromRuntime12){
+      assert.equal(measurement.phase,"after");assert.equal(measurement.resumeAfterFromRuntime09,true);assert.equal(measurement.resumeFinalAfterFromRuntime11,true);
+      assert.equal(resolve(measurement.frozenSourceManifest),resolve(ROOT,".tmp-qa/admin-near-instant-continuation-2026-09-17/after-source-manifest-v5.json"));
+      assert.equal(resolve(measurement.controlDirectory),resolve(ROOT,".tmp-qa/admin-near-instant-continuation-2026-09-17/control-final-correction"));
+      receipt(context,"admin-retained-after-runtime12.json",validateAcceptedAdminAfter12());
+    }
+    if(measurement.resumeFinalAfterFromRuntime11){
+      assert.equal(measurement.phase,"after");assert.equal(measurement.resumeAfterFromRuntime09,true);
+      assert.equal(resolve(measurement.frozenSourceManifest),resolve(ROOT,`.tmp-qa/admin-near-instant-continuation-2026-09-17/after-source-manifest-${measurement.resumeCorrectionAfterFromRuntime12?"v5":"v4"}.json`));
+      assert.equal(resolve(measurement.controlDirectory),resolve(ROOT,`.tmp-qa/admin-near-instant-continuation-2026-09-17/${measurement.resumeCorrectionAfterFromRuntime12?"control-final-correction":"control-final-delta"}`));
+      receipt(context,"admin-retained-after-runtime11.json",validateAcceptedAdminAfter11());
+    }
+    if(measurement.phase==="after"&&!phases.has("before")){
+      assert.equal(measurement.resumeAfterFromRuntime09,true,"After requires a completed or explicitly retained Before cohort");
+      const retained=validateAcceptedAdminBefore09();
+      assert.equal(resolve(measurement.controlDirectory),resolve(ROOT,`.tmp-qa/admin-near-instant-continuation-2026-09-17/${measurement.resumeCorrectionAfterFromRuntime12?"control-final-correction":measurement.resumeFinalAfterFromRuntime11?"control-final-delta":"control"}`));
+      receipt(context,"admin-retained-before-runtime09.json",retained);
+    }
+    adminPhases.set(context, phases);
+    const boundary = resolve(ROOT, ".tmp-qa/admin-near-instant-continuation-2026-09-17") + sep;
+    const manifestPath = resolve(measurement.frozenSourceManifest);
+    assert.ok(manifestPath.startsWith(boundary) && realpathSync(manifestPath) === manifestPath && lstatSync(manifestPath).isFile());
+    const frozen = JSON.parse(readFileSync(manifestPath, "utf8"));
+    frozenDirectory = resolve(frozen.sourceDirectory);
+    assert.ok(frozenDirectory.startsWith(boundary) && realpathSync(frozenDirectory) === frozenDirectory);
+    frozenManifest = frozen.manifest.map((row: { file: string; sha256: string }) => ({ file: row.file, sha256: row.sha256 }));
+    assert.ok(frozenManifest!.length > 100 && new Set(frozenManifest!.map(row => row.file)).size === frozenManifest!.length);
+    for (const row of frozenManifest!) { safeSourcePath(row.file); assert.match(row.sha256, /^[a-f0-9]{64}$/u); }
+    const control = resolve(measurement.controlDirectory);
+    assert.ok(control.startsWith(boundary) && realpathSync(control) === control && lstatSync(control).isDirectory());
+    const phaseDirectory = ownedPath(context, `admin-${measurement.phase}`);
+    mkdirSync(phaseDirectory);
+    const baseSanitize = context.sanitize;
+    context = { ...context, runDirectory: phaseDirectory,
+      sanitize: value => [credentials.username, credentials.password, credentials.secret].reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_ADMIN]"), baseSanitize(value)) };
+  }
+  const gates = measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: 7_200_000 }] : request.selection === "build-contracts"
     ? GATES.filter(gate => gate.name !== "public-e2e") : GATES;
-  assert.equal(gates.length, request.selection === "build-contracts" ? 3 : 4);
-  assert.equal(completed.has(context), false, "Successful selected gates cannot be rerun in this fixture.");
+  assert.equal(gates.length, measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
+  assert.equal(completed.has(originalContext), false, "Successful selected gates cannot be rerun in this fixture.");
   const sourceDirectory = ownedPath(context, "public-build-source");
   assert.equal(existsSync(sourceDirectory), false, "Preserve any prior build workspace.");
-  const files = await gitSourceInventory(context, request);
+  const files = frozenManifest?.map(row => row.file) ?? await gitSourceInventory(context, request);
+  const sourcePath = (file: string) => frozenDirectory ? join(frozenDirectory, file) : safeSourcePath(file);
   const manifest = files.map(file => {
-    const original = safeSourcePath(file);
+    const original = sourcePath(file);
     assert.ok(lstatSync(original).isFile());
     assert.equal(realpathSync(original), original, "Public source must not traverse a symlink or junction.");
-    return { file, sha256: digest(readFileSync(original)) };
+    const sha256 = digest(readFileSync(original));
+    if (frozenManifest) assert.equal(sha256, frozenManifest.find(row => row.file === file)!.sha256);
+    return { file, sha256 };
   });
   mkdirSync(sourceDirectory);
   const childEnvironment: NodeJS.ProcessEnv = { ...context.cleanEnvironment(), CI: "1", NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1",
     NEXT_PUBLIC_SUPABASE_URL: `http://127.0.0.1:${context.apiPort}`, NEXT_PUBLIC_SUPABASE_ANON_KEY: context.anonKey,
-    SUPABASE_SERVICE_ROLE_KEY: context.serviceKey };
+    SUPABASE_SERVICE_ROLE_KEY: context.serviceKey,
+    ...(credentials ? { ADMIN_SESSION_SECRET: credentials.secret, ADMIN_SESSION_COOKIE_SECURE: "false" } : {}) };
   const children = new Set<ChildProcess>();
   let appPort: number | null = null;
   let appFailed = false;
   const reports: Array<{ name: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   let buildIdSha256: string | null = null;
   const verifySource = () => {
-    for (const row of manifest) { assert.equal(digest(readFileSync(safeSourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
+    for (const row of manifest) { assert.equal(digest(readFileSync(sourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
     for (const name of readdirSync(sourceDirectory)) assert.equal(/^\.env(?:\.|$)/iu.test(name), false);
   };
   const runChild = (args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number) => new Promise<{ code: number; stdout: string; stderr: string }>((done, reject) => {
@@ -291,7 +422,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     });
   });
   try {
-    for (const row of manifest) { const target = join(sourceDirectory, row.file); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, readFileSync(safeSourcePath(row.file)), { flag: "wx" }); }
+    for (const row of manifest) { const target = join(sourceDirectory, row.file); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, readFileSync(sourcePath(row.file)), { flag: "wx" }); }
     symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
     receipt(context, "public-source-manifest.json", { manifest, sourceSha256: digest(JSON.stringify(manifest)), environmentFilesCopied: false, generatedLocalCredentialsOnly: true });
     for (const gate of gates) {
@@ -299,11 +430,15 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       let env: NodeJS.ProcessEnv = context.cleanEnvironment();
       if (gate.name === "normal-build") env = childEnvironment;
       if (gate.name !== "normal-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
-      if (gate.name === "public-e2e") {
+      if (gate.name === "public-e2e" || gate.name === "admin-interactions") {
+        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
+          .map(file=>({file,sha256:digest(readFileSync(safeSourcePath(file)))})) : null;
+        if(measurementHarness) receipt(context,"admin-measurement-harness.json",{manifest:measurementHarness,diagnosticInstrumentation:true,productSourceUnchanged:true});
         appPort = await new Promise<number>((done, reject) => { const reservation = net.createServer(); reservation.once("error", reject);
           reservation.listen(0, "127.0.0.1", () => { const port = (reservation.address() as net.AddressInfo).port; reservation.close(error => error ? reject(error) : done(port)); }); });
-        const app = spawn(process.execPath, [join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
-          { cwd: sourceDirectory, env: childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+        const app = spawn(process.execPath, [...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
+          { cwd: sourceDirectory, env: measurement ? {...childEnvironment,
+            QA_ADMIN_SERVER_TRACE_PATH:ownedPath(context,"admin-server-trace.jsonl")} : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
         children.add(app); let appOutput = "";
         const captureAppOutput = (value: Buffer) => {
           if (appFailed) return;
@@ -323,11 +458,30 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         }
         assert.ok(ready, "Owned application readiness failed.");
         env = { ...context.cleanEnvironment(), E2E_BASE_URL: origin, E2E_ADMIN_STORAGE_STATE: "", E2E_TOPICS_CMS_STATE: readiness.topicsCmsState };
+        if (measurement && credentials) env = { ...env, QA_ADMIN_USERNAME: credentials.username, QA_ADMIN_PASSWORD: credentials.password,
+          QA_ADMIN_PHASE: measurement.phase, QA_ADMIN_CONTROL: resolve(measurement.controlDirectory), QA_ADMIN_OUTPUT: context.runDirectory,
+          QA_ADMIN_STORAGE_PUBLIC_PREFIXES: JSON.stringify(["cms-images","cms-documents"].map(bucket=>`http://127.0.0.1:${context.apiPort}/storage/v1/object/public/${bucket}/`)),
+          QA_ADMIN_SOURCE_SHA256: digest(JSON.stringify(manifest)) };
       }
       context.record("public-gate-start", { gate: gate.name });
-      const args = "script" in gate ? ["--experimental-strip-types", join(sourceDirectory, gate.script), ...gate.args]
+      const args = "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
         : [join(sourceDirectory, "node_modules", gate.module), ...gate.args];
-      const result = await runChild(args, env, gate.name, gate.limitMs);
+      let result = await runChild(args, env, gate.name, gate.limitMs);
+      if(measurement && gate.name==="admin-interactions") {
+        // A QA-driver failure cannot discard an already successful build or
+        // bootstrap a replacement database. Only the fixed driver may retry.
+        for(let attempt=1;result.code!==0 && attempt<=4;attempt++) {
+          receipt(context,`admin-driver-failure-${attempt}.json`,{status:"paused-on-driver-error",code:result.code,buildIdSha256,sourceSha256:digest(JSON.stringify(manifest)),qualityPassClaimed:false});
+          const commandPath=join(resolve(measurement.controlDirectory),`${measurement.phase}-driver-repair-${attempt}.json`),deadline=Date.now()+1_800_000;
+          while(!existsSync(commandPath)&&Date.now()<deadline) {await context.assertOwned();signal.throwIfAborted();await new Promise(done=>setTimeout(done,1_000));}
+          assert.ok(existsSync(commandPath),"Fixed Admin driver repair lease expired");
+          assert.deepEqual(JSON.parse(readFileSync(commandPath,"utf8")),{operation:"retry-fixed-driver"});
+          verifySource();assert.equal(digest(readFileSync(join(sourceDirectory,".next/BUILD_ID"))),buildIdSha256);
+          const driverOutput=ownedPath(context,`browser-driver-${attempt+1}`);mkdirSync(driverOutput);
+          receipt(context,`admin-driver-retry-${attempt+1}.json`,{driverSha256:digest(readFileSync(safeSourcePath("scripts/qa-admin-production-interactions.mjs"))),sourceSha256:digest(JSON.stringify(manifest)),buildIdSha256,output:driverOutput,originalReceiptsPreserved:true});
+          result=await runChild(args,{...env,QA_ADMIN_OUTPUT:driverOutput,QA_ADMIN_DRIVER_ATTEMPT:String(attempt+1)},`${gate.name}-attempt-${attempt+1}`,gate.limitMs);
+        }
+      }
       assert.equal(appFailed, false, "Owned application process failed during Public verification.");
       const report = { name: gate.name, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
       reports.push(report); receipt(context, `public-${gate.name}.json`, report);
@@ -336,7 +490,9 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       if (gate.name === "normal-build") buildIdSha256 = digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID")));
       context.record("public-gate-pass", { gate: gate.name });
     }
-    verifySource(); completed.add(context);
+    verifySource();
+    if (measurement) adminPhases.get(originalContext)!.add(measurement.phase);
+    else completed.add(originalContext);
   } finally {
     const childCleanup = await Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment())));
     assert.ok(childCleanup.every(result => result.status === "fulfilled"), "An owned Public process could not be stopped.");
@@ -351,6 +507,8 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     receipt(context, "public-process-cleanup.json", { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: !existsSync(sourceDirectory), otherResourcesTouched: false });
   }
   const result = { status: "pass", gates: reports, buildIdSha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
+  if (measurement) { const value = { ...result, selection: "admin-interactions", phase: measurement.phase, priorQualityGatesRerun: false };
+    receipt(context, "admin-measurement-lifecycle.json", value); return value; }
   if (request.selection === "build-contracts") {
     const buildResult = { ...result, selection: "build-contracts", publicE2EReexecuted: false };
     receipt(context, "public-build-contract-gates.json", buildResult); return buildResult;

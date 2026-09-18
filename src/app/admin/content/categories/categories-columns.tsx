@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { adminFormEditHref } from "../../../../lib/admin/form-runtime";
 
 import AdminCategoryBadge from "../../../../components/admin/content/AdminCategoryBadge";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
@@ -107,6 +108,7 @@ export type CategoryColumnLayoutOptions = {
 
 export function createCategoryColumns(
   tree: {
+    currentListPath?: string;
     view: "active" | "trash";
     isExpanded: (categoryId: number) => boolean;
     onToggle: (categoryId: number) => void;
@@ -189,7 +191,7 @@ export function createCategoryColumns(
               </span>
             ) : (
               <Link
-                href={`/admin/content/categories/${row.id}`}
+                href={adminFormEditHref(`/admin/content/categories/${row.id}`, tree.currentListPath, "/admin/content/categories")}
                 data-category-edit-link=""
                 className="min-w-0 flex-1 cursor-pointer rounded-[8px] px-1.5 py-1 text-right transition hover:bg-white/[0.04] hover:text-[#F4D99A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
                 style={{ maxWidth: ADMIN_DATA_GRID_HIERARCHY_LABEL_MAX_WIDTH }}
@@ -218,6 +220,7 @@ export function createCategoryColumns(
       renderCell: ({ row, onMutationResult }) => (
         <CategoryRowActions
           category={row}
+          currentListPath={tree.currentListPath}
           view={tree.view}
           onMutationResult={onMutationResult}
           interaction={tree.rowInteraction(row.id)}
@@ -343,6 +346,7 @@ export function createCategoryColumns(
       renderCell: ({ row, onMutationResult }) => (
         <CategoryRowActions
           category={row}
+          currentListPath={tree.currentListPath}
           view={tree.view}
           onMutationResult={onMutationResult}
           interaction={tree.rowInteraction(row.id)}

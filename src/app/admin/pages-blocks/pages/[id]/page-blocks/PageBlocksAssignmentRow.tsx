@@ -28,6 +28,7 @@ import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/t
 import type { AdminInstantMutationRowInteraction } from "../../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 
 type PageBlocksAssignmentRowProps = {
+  returnTo?: string;
   row: PageBlockAssignmentRow;
   rowId: string;
   previewHref: string | null;
@@ -56,6 +57,7 @@ type PageBlocksAssignmentRowProps = {
 };
 
 export default function PageBlocksAssignmentRow({
+  returnTo,
   row,
   rowId,
   previewHref,
@@ -108,6 +110,7 @@ export default function PageBlocksAssignmentRow({
         access: "allowed",
         href: moduleEditHref(row.module_kind, row.template_id, {
           returnPageId: row.page_id,
+          returnTo,
         }),
       },
       preview: previewHref
@@ -220,6 +223,7 @@ export default function PageBlocksAssignmentRow({
         <Link
           href={moduleEditHref(row.module_kind, row.template_id, {
             returnPageId: row.page_id,
+            returnTo,
           })}
           className="min-w-0 truncate text-sm font-semibold text-white hover:text-[#D8B87A]"
           title={technicalIdentityIsInternal ? undefined : row.template_slug}

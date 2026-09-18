@@ -32,7 +32,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -151,7 +151,7 @@ async function buildTopicsListingConfig(
     collection = { type: "all" };
   } else if (collectionValue.startsWith("category:")) {
     const categorySlug = collectionValue.slice("category:".length).trim();
-    const filterOptions = await loadTopicFilterOptionsForAdmin();
+    const filterOptions = await loadTopicFilterOptionsForAdmin({ includeSeries: false });
     if (
       !categorySlug ||
       !filterOptions.categories.some(
@@ -1256,8 +1256,7 @@ export async function updateContentBlock(formData: FormData) {
     },
   });
   const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
-    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
-    await revalidateBlockModulePaths("content");
+    await revalidateBlockModulePaths("content", coordinated.value.affectedPageIds);
   });
   if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);
   redirect(

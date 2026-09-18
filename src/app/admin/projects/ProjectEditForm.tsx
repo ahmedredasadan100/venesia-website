@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, useState, type ReactNode } from "react";
 import type { AdminFormRuntimeHandle } from "../../../components/admin/ui/AdminFormRuntime";
 
 import AdminRichTextEditor from "../../../components/admin/AdminRichTextEditor";
@@ -522,22 +522,25 @@ function DeliveryTab({ bundle }: { bundle: ProjectEntryBundle }) {
 
 export default function ProjectEditForm({
   bundle: initialBundle,
+  closeHref: requestedCloseHref,
 }: {
   bundle: ProjectEntryBundle;
+  closeHref?: string;
 }) {
   const [{ bundle, generation }, setFormSnapshot] = useState(() => ({
     bundle: initialBundle,
     generation: 0,
   }));
+  const [activeTabId, setActiveTabId] = useState<string>(PROJECT_ENTRY_TAB_IDS.basic);
   const invalidateProjectsList = useAdminEntityListInvalidation("projects");
   const runtimeRef = useRef<AdminFormRuntimeHandle>(null);
   const mode = bundle.project.id === null ? "create" : "edit";
   const formId =
     mode === "create" ? "project-create-form" : "project-edit-form";
-  const closeHref =
+  const closeHref = requestedCloseHref ?? (
     bundle.project.type === "commercial"
       ? "/admin/projects/commercial"
-      : "/admin/projects/residential";
+      : "/admin/projects/residential");
   const handleSaveSuccess = useCallback(
     (state: AdminFormActionState<ProjectEntrySaveResult>) => {
       void invalidateProjectsList();
@@ -562,7 +565,7 @@ export default function ProjectEditForm({
     [invalidateProjectsList],
   );
 
-  const tabs = [
+  const tabs = useMemo(() => [
     {
       id: PROJECT_ENTRY_TAB_IDS.basic,
       navigationLabel: "البيانات",
@@ -737,7 +740,7 @@ export default function ProjectEditForm({
         <ProjectPublishChecklistPanel formId={formId} initial={bundle} />
       ),
     },
-  ];
+  ], [bundle, formId, mode]);
 
   return (
     <AdminFormRuntime
@@ -758,6 +761,8 @@ export default function ProjectEditForm({
       <div className="min-w-0 w-full">
         <AdminModuleTabs
           tabs={tabs}
+          activeTabId={activeTabId}
+          onActiveTabChange={setActiveTabId}
           variant="editor"
           navigationEventName={PROJECT_ENTRY_NAVIGATION_EVENT}
           ariaLabel="أقسام بيانات المشروع"

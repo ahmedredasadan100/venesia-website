@@ -21,7 +21,7 @@ import {
   parsePageBlockBulkIds,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   buildMediaSidebarModuleConfig,
   parseMediaSidebarWidgetKey,
@@ -71,8 +71,7 @@ export async function updateMediaSidebarModule(formData: FormData) {
     metadata: { blockType: "media-sidebar", widgetKey },
   }, actor);
   const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
-    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
-    await revalidateBlockModulePaths("media-sidebar");
+    await revalidateBlockModulePaths("media-sidebar", coordinated.value.affectedPageIds);
     revalidatePath(`/admin/pages-blocks/blocks/media-sidebar/${id}`, "page");
   });
   if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);

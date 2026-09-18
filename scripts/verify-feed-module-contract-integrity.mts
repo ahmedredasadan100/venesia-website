@@ -70,10 +70,14 @@ const pageBlockConfigs = await jiti.import<Record<string, unknown>>(
 const categoryHierarchy = await jiti.import<Record<string, unknown>>(
   "../src/lib/admin/content/category-hierarchy.ts",
 );
+const adminFormRuntime = await jiti.import<Record<string, unknown>>(
+  "../src/lib/admin/form-runtime.ts",
+);
 const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "../admin/content/content-status-metadata": {
     getContentStatusMetadata: () => ({}),
   },
+  "../admin/form-runtime": adminFormRuntime,
   "./module-edit-registry": moduleEditRegistry,
 });
 const feedTypes = loadTranspiledModule("src/lib/feed-modules/types.ts");

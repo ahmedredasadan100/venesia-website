@@ -24,8 +24,9 @@ function descendantSlugs(
 }
 
 export async function loadFeaturedEditorOptions(): Promise<FeaturedEditorOptions> {
-  const filterOptions = await loadTopicFilterOptionsForAdmin();
-  const itemGroups = await Promise.all(CONTENT_TYPES.map(async (contentType) => {
+  const [filterOptions, itemGroups] = await Promise.all([
+    loadTopicFilterOptionsForAdmin({ includeSeries: false }),
+    Promise.all(CONTENT_TYPES.map(async (contentType) => {
     const first = await loadPublicContentCollection({
       contentTypes: [contentType],
       page: 1,
@@ -43,7 +44,8 @@ export async function loadFeaturedEditorOptions(): Promise<FeaturedEditorOptions
       ),
     );
     return [first, ...remaining].flatMap((page) => page.items);
-  }));
+    })),
+  ]);
 
   return {
     categories: filterOptions.categories.map((category) => ({

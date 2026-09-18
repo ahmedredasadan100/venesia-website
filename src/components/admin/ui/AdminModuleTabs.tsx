@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { ModuleEditorIconToken } from "../../../lib/page-composition/slot-module-registry";
 
 export type AdminModuleTabIconName = ModuleEditorIconToken;
@@ -36,6 +36,9 @@ export type AdminModuleTabsProps = {
   activePanelContext?: ReactNode;
   /** Optional initial tab id; falls back to the first tab. */
   initialTabId?: string;
+  /** Let an editor preserve its selected panel when accepted form data remounts. */
+  activeTabId?: string;
+  onActiveTabChange?: (tabId: string) => void;
   /**
    * Keep tabs on one horizontal row (scroll instead of wrap).
    * Safe default remains wrap for existing editors.
@@ -164,13 +167,20 @@ function focusNavigationTarget(targetId: string) {
   });
 }
 
-export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId, nowrap = false, variant = "editor", navigationEventName, ariaLabel = "أقسام المحرر" }: AdminModuleTabsProps) {
+export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId, activeTabId, onActiveTabChange, nowrap = false, variant = "editor", navigationEventName, ariaLabel = "أقسام المحرر" }: AdminModuleTabsProps) {
   const instanceId = useId();
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const fallbackId = tabs[0]?.id ?? "";
   const resolvedInitial =
     initialTabId && tabs.some((tab) => tab.id === initialTabId) ? initialTabId : fallbackId;
-  const [activeId, setActiveId] = useState(resolvedInitial);
+  const [uncontrolledActiveId, setUncontrolledActiveId] = useState(resolvedInitial);
+  const activeId = activeTabId === undefined
+    ? uncontrolledActiveId
+    : tabs.some((tab) => tab.id === activeTabId) ? activeTabId : fallbackId;
+  const setActiveId = useCallback((tabId: string) => {
+    if (activeTabId === undefined) setUncontrolledActiveId(tabId);
+    onActiveTabChange?.(tabId);
+  }, [activeTabId, onActiveTabChange]);
 
   useEffect(() => {
     if (!navigationEventName) return;
@@ -185,7 +195,7 @@ export default function AdminModuleTabs({ tabs, activePanelContext, initialTabId
     };
     window.addEventListener(navigationEventName, navigate);
     return () => window.removeEventListener(navigationEventName, navigate);
-  }, [navigationEventName, tabs]);
+  }, [navigationEventName, setActiveId, tabs]);
 
   if (!tabs.length) return null;
 

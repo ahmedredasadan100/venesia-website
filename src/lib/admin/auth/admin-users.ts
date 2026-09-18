@@ -129,13 +129,17 @@ export async function authenticateAdminUser(identifier: string, password: string
   return user;
 }
 
-export async function validateAdminSessionPayload(payload: AdminSessionPayload | null) {
-  if (!payload) return false;
+async function resolveAdminSessionUser(payload: AdminSessionPayload | null) {
+  if (!payload) return null;
 
   const user = await getAdminUserForSession(payload.id);
-  if (!user || !user.is_active) return false;
+  if (!user || !user.is_active || user.session_version !== payload.sv) return null;
 
-  return user.session_version === payload.sv;
+  return user;
+}
+
+export async function validateAdminSessionPayload(payload: AdminSessionPayload | null) {
+  return (await resolveAdminSessionUser(payload)) !== null;
 }
 
 export async function getCurrentAdminUserFromCookies() {
@@ -147,10 +151,9 @@ export async function getCurrentAdminUserFromCookies() {
   const payload = verifyAdminSessionToken(token, config.secret);
   if (!payload) return null;
 
-  const valid = await validateAdminSessionPayload(payload);
-  if (!valid) return null;
-
-  return getAdminUserForSession(payload.id);
+  // Return the same credential-free row whose active status and session version
+  // were checked. Each invocation still performs a fresh authorization read.
+  return resolveAdminSessionUser(payload);
 }
 
 export async function verifyAdminUserPassword(userId: number, password: string) {

@@ -165,28 +165,25 @@ export default function ContentModuleEditClient({
   const usesAboutPrinciplesConfig = editorKey === "about-principles" || editorKey === "home-trust";
   const usesAboutCtaConfig = editorKey === "about-cta" || editorKey === "home-contact";
   const presentationSlug = editorKey === "generic" ? block.slug : editorKey;
+  const projectsHubPage = assignmentContext.pages.find(
+    (page) => page.slug === "projects" && page.path === "/projects",
+  );
+  const usesProjectsHubPageNavigation =
+    editorKey === "projects-hub-hero" ||
+    editorKey === "projects-hub-featured" ||
+    editorKey === "projects-hub-map";
   const projectsHubNavigation =
-    editorKey === "projects-hub-hero"
+    usesProjectsHubPageNavigation && projectsHubPage
       ? {
-          backHref: "/admin/pages-blocks/pages/36",
+          backHref: `/admin/pages-blocks/pages/${projectsHubPage.id}`,
           backLabel: "الرجوع لصفحة المشروعات",
         }
-      : editorKey === "projects-hub-featured"
+      : usesProjectsHubPageNavigation || editorKey === "projects-hub-listing"
         ? {
-            backHref: "/admin/pages-blocks/pages/36",
-            backLabel: "الرجوع لصفحة المشروعات",
+            backHref: "/admin/pages-blocks/blocks/content",
+            backLabel: "الرجوع لبلوكات المحتوى",
           }
-        : editorKey === "projects-hub-listing"
-          ? {
-              backHref: "/admin/pages-blocks/blocks/content",
-              backLabel: "الرجوع لبلوكات المحتوى",
-            }
-          : editorKey === "projects-hub-map"
-            ? {
-                backHref: "/admin/pages-blocks/pages/36",
-                backLabel: "الرجوع لصفحة المشروعات",
-              }
-            : null;
+        : null;
 
   const isHomeStory = editorKey === "home-story";
   const isProjectsHubHero = editorKey === "projects-hub-hero";

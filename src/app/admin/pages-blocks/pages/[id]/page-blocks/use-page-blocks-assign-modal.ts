@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 
 import { PAGE_BLOCK_ACTION_INITIAL } from "../../../../../../lib/page-blocks/action-result";
 import type {
@@ -38,7 +38,6 @@ type UsePageBlocksAssignModalOptions = {
   assignments: PageBlockAssignmentRow[];
   templates: PageBlocksAssignTemplates;
   setActionMessage: (message: string | null) => void;
-  router: { refresh: () => void };
 };
 
 export function usePageBlocksAssignModal({
@@ -46,7 +45,6 @@ export function usePageBlocksAssignModal({
   assignments,
   templates,
   setActionMessage,
-  router,
 }: UsePageBlocksAssignModalOptions) {
   void pageId;
   const [showAssignModal, setShowAssignModal] = useState(false);
@@ -77,7 +75,6 @@ export function usePageBlocksAssignModal({
   const [assignDismissSession, setAssignDismissSession] = useState<number | null>(null);
   const [assignSubmitSession, setAssignSubmitSession] = useState<number | null>(null);
   const [prevAssignPending, setPrevAssignPending] = useState(assignPending);
-  const [assignRefreshNonce, setAssignRefreshNonce] = useState(0);
   const assignModalOpen = showAssignModal && assignDismissSession !== assignModalSession;
 
   if (assignPending !== prevAssignPending) {
@@ -90,17 +87,11 @@ export function usePageBlocksAssignModal({
         setAssignDismissSession(assignModalSession);
         setAssignVisible(true);
         setActionMessage(null);
-        setAssignRefreshNonce((value) => value + 1);
       } else if (assignSubmitSession === assignModalSession) {
         setActionMessage(activeAssignState.message);
       }
     }
   }
-
-  useEffect(() => {
-    if (assignRefreshNonce === 0) return;
-    router.refresh();
-  }, [assignRefreshNonce, router]);
 
   const templateOptions = useMemo(
     () =>

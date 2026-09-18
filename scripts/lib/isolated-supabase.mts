@@ -3,7 +3,7 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 // @ts-expect-error The repository uses pg without separate declarations.
 import pg from "pg";
 import { assertApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicationMigrations, runOwnedEntitySeoBackfill,
@@ -11,8 +11,9 @@ import { assertApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicati
   type ApplicationMigrationStage, type ApplicationMigrationTool, type EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 export type { ApplicationMigrationCliResult, ApplicationMigrationStage, EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 import { proveHostBoundary, startHostAccessBridge } from "./isolated-supabase-transport.mjs";
-import { prepareOwnedPublicVerification, runOwnedPublicVerification,
+import { prepareOwnedPublicVerification, registerOwnedAdminMeasurement, runOwnedPublicVerification,
   type PrivatePublicVerificationContext, type PublicFixtureReadiness, type PublicGateRequest } from "./isolated-public-verification.mts";
+import { prepareOwnedAdminMeasurementAccount } from "../fixtures/admin-interaction-fixtures.mts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const OWNER = "isolated-supabase";
@@ -56,7 +57,7 @@ export function observeApplicationClient(client: Pick<PgConnection, "on">, recor
   let rejectFailure: (error: IsolatedSupabaseError) => void = () => undefined;
   const failed = new Promise<never>((_resolve, reject) => { rejectFailure = reject; });
   void failed.catch(() => undefined);
-  client.on("error", () => {
+  const watch = (watched: Pick<PgConnection,"on">) => watched.on("error", () => {
     if (failure) return;
     failure = new IsolatedSupabaseError("APPLICATION_CLIENT_DISCONNECTED", "application-handoff");
     // A failed receipt write must also remain inside the awaited failure path.
@@ -65,11 +66,52 @@ export function observeApplicationClient(client: Pick<PgConnection, "on">, recor
     }
     rejectFailure(failure);
   });
+  watch(client);
   return {
+    watch,
     assertHealthy() { if (failure) throw failure; },
     async run<T>(handoff: () => Promise<T>): Promise<T> {
       if (failure) throw failure;
       return Promise.race([failed, handoff()]);
+    },
+  };
+}
+
+/** Planned renewal of the Admin measurement control socket only. The pinned
+ * transport's ten-minute hard lifetime and error handling remain unchanged. */
+export function createAdminMeasurementControlLease(initial: PgConnection, options: {
+  connect(): Promise<PgConnection>;
+  assertHealthy(): void;
+  assertOwned(): Promise<void>;
+  watch(client: PgConnection): unknown;
+  replaced(client: PgConnection): void;
+  record(values: Record<string,string|number|boolean|null>): void;
+  now?: () => number;
+}) {
+  const now=options.now??Date.now;
+  let current=initial,bornAt=now(),renewing:Promise<void>|undefined;
+  return {
+    get client(){return current;},
+    async renewIfDue(adminJobActive:boolean) {
+      options.assertHealthy();
+      if(!adminJobActive || now()-bornAt<240_000) return;
+      if(renewing) return renewing;
+      requireThat(now()-bornAt<480_000,"ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE","admin-measurement");
+      renewing=(async()=>{
+        await options.assertOwned();options.assertHealthy();
+        const next=await options.connect();let published=false;
+        try {
+          options.watch(next);
+          const row=(await next.query("select current_database() as database,current_user as role,pg_backend_pid() as backend_pid")).rows[0];
+          options.assertHealthy();await options.assertOwned();
+          requireThat(row?.database==="postgres"&&row.role==="postgres"&&Number.isInteger(Number(row.backend_pid))&&Number(row.backend_pid)>0,"ADMIN_CONTROL_IDENTITY_MISMATCH","admin-measurement");
+          const previous=current,previousAgeMs=now()-bornAt;
+          current=next;bornAt=now();options.replaced(next);published=true;
+          await previous.end();options.assertHealthy();
+          options.record({backendPid:Number(row.backend_pid),previousAgeMs,proactive:true,transportLifetimeUnchanged:true,previousSocketClosed:true});
+        } catch(error) {if(!published)await next.end().catch(()=>undefined);throw error;}
+      })();
+      try{await renewing;}finally{renewing=undefined;}
     },
   };
 }
@@ -140,6 +182,7 @@ export type OwnedLocalHandle = {
   pushApplicationMigrations(request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }): Promise<ApplicationMigrationCliResult>;
   runEntitySeoBackfill(request: { mode: "dry-run" | "apply" | "verify" }): Promise<EntitySeoBackfillReport>;
   preparePublicVerification(): Promise<PublicFixtureReadiness>;
+  prepareAdminInteractions(): Promise<Record<string, unknown>>;
   runPublicVerification(request: PublicGateRequest): ReturnType<typeof runOwnedPublicVerification>;
   record(stage: string, metadata: Record<string, SafeValue>): void;
 };
@@ -977,6 +1020,11 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         if (handle) activeHandles.delete(handle);
         safeRecord("application-client-disconnected", { code: "APPLICATION_CLIENT_DISCONNECTED", errorDetailsRetained: false });
       });
+      const applicationLease=createAdminMeasurementControlLease(boundConnection,{
+        connect:()=>connect("postgres"),assertHealthy:()=>applicationClient.assertHealthy(),watch:client=>applicationClient.watch(client),
+        assertOwned:async()=>{assertOwnedLocalHandle(handle);requireThat(!interrupted&&!cleaning,"INACTIVE_ADMIN_CONTROL_LEASE","admin-measurement");await inspectCaptured(serviceResource("db"));},
+        replaced:client=>{appConnection=client;},record:values=>safeRecord("admin-control-connection-renewed",values),
+      });
       requireThat(options.cliBinary, "CLI_BINARY_REQUIRED_FOR_HANDOFF", currentStage);
       // One private context per handoff preserves the helper's verified binary
       // and dry-run/apply sequencing. Neither it nor its credential is exposed.
@@ -1000,13 +1048,14 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         sanitize: (value: string) => privateValues.reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_CREDENTIAL]"), value),
         record: safeRecord,
       });
+      let acceptedAdminFixtureHash: string | undefined;
       handle = Object.freeze({ identity: Object.freeze({ runId, projectName: run.projectName, database: "postgres" as const, host: "127.0.0.1" as const, port: run.pgPort, databaseContainerId: serviceResource("db").identity.id }),
         query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
           assertOwnedLocalHandle(handle);
           applicationClient.assertHealthy();
           await inspectCaptured(serviceResource("db"));
           try {
-            const result = await boundConnection.query(sql, params);
+            const result = await applicationLease.client.query(sql, params);
             return Array.isArray(result) ? result[result.length - 1] as QueryResult : result;
           } catch (error) { throw asSafeError(error, "application-query"); }
         },
@@ -1022,6 +1071,27 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           assertOwnedLocalHandle(handle);
           return prepareOwnedPublicVerification(publicContext, handle);
         },
+        prepareAdminInteractions: async () => {
+          assertOwnedLocalHandle(handle);
+          requireThat(!publicJob, "ADMIN_FIXTURE_DURING_JOB", "admin-measurement");
+          const credentials=await prepareOwnedAdminMeasurementAccount(handle);
+          if (!privateValues.includes(credentials.secret)) {
+            privateValues.push(credentials.secret, credentials.password);
+            registerOwnedAdminMeasurement(publicContext, credentials);
+          }
+          // The repair seam loads only these reviewed local fixture modules.
+          // It never accepts executable paths, SQL, callbacks or credentials.
+          const fixturePaths=[resolve(ROOT,"scripts/fixtures/admin-interaction-fixtures.mts"),resolve(ROOT,"scripts/fixtures/admin-page-interaction-fixtures.mts")];
+          for(const fixturePath of fixturePaths) requireThat(realpathSync(fixturePath)===fixturePath && lstatSync(fixturePath).isFile(),"ADMIN_FIXTURE_SOURCE_INVALID","admin-measurement");
+          const fixtureHash=sha256(fixturePaths.map(file=>sha256(readFileSync(file))).join(":"));
+          requireThat(!acceptedAdminFixtureHash || acceptedAdminFixtureHash===fixtureHash,"ADMIN_ACCEPTED_FIXTURE_MODEL_CHANGED","admin-measurement");
+          safeRecord("admin-fixture-attempt",{fixtureHash,acceptedBefore:Boolean(acceptedAdminFixtureHash)});
+          const fixtureOwner=await import(`${pathToFileURL(fixturePaths[0]).href}?fixture=${fixtureHash}`);
+          const result=await fixtureOwner.seedOwnedAdminInteractionFixtures(handle,credentials);
+          acceptedAdminFixtureHash=fixtureHash;
+          safeRecord("admin-fixture-ready",{fixtureHash});
+          return result.fixtures;
+        },
         runPublicVerification: async (request: PublicGateRequest) => {
           assertOwnedLocalHandle(handle);
           requireThat(!publicJob, "PUBLIC_JOB_ALREADY_STARTED", "public-verification");
@@ -1030,12 +1100,16 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           let pulse = Promise.resolve();
           let heartbeatFailure: IsolatedSupabaseError | undefined;
           // Only a bounded active gate job retains this existing control lease.
-          // A failed pulse aborts owned children; no reconnect, retry or timeout change.
+          // A failed pulse aborts owned children. Admin measurement alone renews
+          // its healthy control socket proactively; errors never reconnect.
           const timer = setInterval(() => {
-            if (!heartbeatActive || heartbeatBusy) return;
+            if (!heartbeatActive || heartbeatBusy || heartbeatFailure) return;
             heartbeatBusy = true;
             pulse = (async () => {
               try {
+                // This timer has no application transaction or concurrent SQL
+                // operation: only this serialized ownership/heartbeat pulse.
+                await applicationLease.renewIfDue(request.selection==="admin-interactions");
                 await publicContext.assertOwned();
                 await handle!.query("select 1 as owned_public_job_heartbeat");
                 safeRecord("public-job-heartbeat", { active: true });
@@ -1047,7 +1121,9 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           }, 20_000);
           publicJob = runOwnedPublicVerification(publicContext, request, publicJobAbort.signal);
           try { const result = await publicJob; if (heartbeatFailure) throw heartbeatFailure; return result; }
-          finally { heartbeatActive = false; clearInterval(timer); await pulse; }
+          catch(error) {throw heartbeatFailure ?? error;}
+          finally { heartbeatActive = false; clearInterval(timer); await pulse;
+            if (request.selection === "admin-interactions") publicJob = undefined; }
         }, record: safeRecord });
       activeHandles.add(handle);
       const boundHandle = handle;

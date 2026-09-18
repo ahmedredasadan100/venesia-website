@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJiti } from "jiti";
+import ts from "typescript";
 import { getModuleEditorSectionMetadata } from "../src/lib/page-composition/module-registry-metadata.ts";
 import { collectExecutableSourceGraph } from "./lib/typescript-executable-graph.mts";
 
@@ -14,6 +15,7 @@ const {
   HERO_BULK_ACTIONS,
   MODULE_EDITOR_RETURN_PAGE_FORM_FIELD,
   MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM,
+  MODULE_EDITOR_TAB_FORM_FIELD,
   PAGE_BLOCK_BULK_ACTIONS,
   PAGE_BLOCK_PUBLICATION_BULK_ACTIONS,
   isPageModulePubliclyVisible,
@@ -21,8 +23,12 @@ const {
   moduleKindLabel,
   parsePageBlockBulkAction,
   parsePageBlockBulkIds,
+  parseModuleEditorTabId,
   resolveModuleEditorReturnNavigation,
+  resolveModuleEditorTabId,
   resolvePageModuleVisibilityFields,
+  withModuleEditorReturnContextFromForm,
+  withModuleEditorReturnPageId,
 } = await jiti.import<typeof import("../src/lib/page-blocks/admin-utils.ts")>(
   "../src/lib/page-blocks/admin-utils.ts",
 );
@@ -226,6 +232,26 @@ const contentEditRoute = read(
 const contentEditClient = read(
   "src/components/admin/page-blocks/ContentModuleEditClient.tsx",
 );
+const contentClientAst = ts.createSourceFile("ContentModuleEditClient.tsx", contentEditClient, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const contentClientFunction = contentClientAst.statements.find((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "ContentModuleEditClient");
+assert.ok(contentClientFunction?.body);
+const hubNavigationDeclarations = contentClientFunction.body.statements.filter((node) =>
+  ts.isVariableStatement(node) && node.declarationList.declarations.some((declaration) =>
+    ts.isIdentifier(declaration.name) && ["projectsHubPage", "usesProjectsHubPageNavigation", "projectsHubNavigation"].includes(declaration.name.text),
+  ),
+);
+assert.equal(hubNavigationDeclarations.length, 3);
+const resolveActualHubNavigation = new Function("assignmentContext", "editorKey", ts.transpileModule(
+  `${hubNavigationDeclarations.map((node) => node.getText(contentClientAst)).join("\n")}\nreturn projectsHubNavigation;`,
+  { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } },
+).outputText) as (context: { pages: { id: number; slug: string; path: string }[] }, key: string) => { backHref: string; backLabel: string } | null;
+const hubEditorKeys = ["projects-hub-hero", "projects-hub-featured", "projects-hub-map"];
+check("Hub editors resolve arbitrary canonical Page identity from existing assignment context and safely fall back when absent", hubEditorKeys.every((key) =>
+  resolveActualHubNavigation({ pages: [{ id: 36, slug: "other", path: "/other" }, { id: 813, slug: "projects", path: "/projects" }] }, key)?.backHref === "/admin/pages-blocks/pages/813" &&
+  resolveActualHubNavigation({ pages: [] }, key)?.backHref === "/admin/pages-blocks/blocks/content" &&
+  resolveActualHubNavigation({ pages: [{ id: 36, slug: "projects", path: "/other" }] }, key)?.backHref === "/admin/pages-blocks/blocks/content",
+) && resolveActualHubNavigation({ pages: [{ id: 813, slug: "projects", path: "/projects" }] }, "projects-hub-listing")?.backHref === "/admin/pages-blocks/blocks/content");
+check("Explicit Page return retains priority over the Hub default", resolveModuleEditorReturnNavigation("812", "/admin/pages-blocks/pages?q=QA")?.backHref === "/admin/pages-blocks/pages/812?tab=modules&return_to=%2Fadmin%2Fpages-blocks%2Fpages%3Fq%3DQA" && presentation.indexOf("if (returnNavigation)") < presentation.indexOf('return "backHref" in props'));
 const genericContentEditor = read(
   "src/components/admin/page-blocks/editors/GenericContentModuleEditor.tsx",
 );
@@ -1211,6 +1237,87 @@ check(
     ).includes("withModuleEditorReturnPageId"),
 );
 
+const pagesReturnPath = "/admin/pages-blocks/pages?q=QA+Page&page=2&page_size=20&sort=title&direction=desc";
+for (const kind of PAGE_MODULE_KINDS) {
+  const edit = new URL(moduleEditHref(kind, 15, { returnPageId: 17, returnTo: pagesReturnPath }), "http://internal.invalid");
+  assert.equal(edit.pathname, `/admin/pages-blocks/blocks/${kind}/15`);
+  assert.equal(edit.searchParams.get("returnPageId"), "17");
+  assert.equal(edit.searchParams.get("return_to"), pagesReturnPath);
+  const submitted = new FormData();
+  submitted.set(MODULE_EDITOR_RETURN_PAGE_FORM_FIELD, "17");
+  submitted.set("return_to", edit.searchParams.get("return_to")!);
+  const saved = new URL(withModuleEditorReturnContextFromForm(`${edit.pathname}?saved=1&tab=buttons`, submitted), edit.origin);
+  assert.equal(saved.searchParams.get("saved"), "1");
+  assert.equal(saved.searchParams.get("tab"), "buttons");
+  assert.equal(saved.searchParams.get("returnPageId"), "17");
+  assert.equal(saved.searchParams.get("return_to"), pagesReturnPath);
+  const back = new URL(resolveModuleEditorReturnNavigation(saved.searchParams.get("returnPageId"), saved.searchParams.get("return_to"))!.backHref, edit.origin);
+  assert.equal(back.pathname, "/admin/pages-blocks/pages/17");
+  assert.equal(back.searchParams.get("tab"), "modules");
+  assert.equal(back.searchParams.get("return_to"), pagesReturnPath);
+  const selectedTab = kind === "hero" ? "display" : "pages";
+  submitted.set(MODULE_EDITOR_TAB_FORM_FIELD, selectedTab);
+  const savedPanel = new URL(withModuleEditorReturnContextFromForm(`${edit.pathname}?saved=1&notice=saved_with_media_sync_warning#saved-panel`, submitted), edit.origin);
+  assert.equal(savedPanel.searchParams.get("tab"), selectedTab);
+  assert.equal(savedPanel.searchParams.get("saved"), "1");
+  assert.equal(savedPanel.searchParams.get("notice"), "saved_with_media_sync_warning");
+  assert.equal(savedPanel.searchParams.get("returnPageId"), "17");
+  assert.equal(savedPanel.searchParams.get("return_to"), pagesReturnPath);
+  assert.equal(savedPanel.hash, "#saved-panel");
+  assert.equal(resolveModuleEditorTabId(savedPanel.searchParams.get("tab"), ["content", selectedTab]), selectedTab);
+}
+for (const rejectedTab of ["", "../content", "Content", "pages&saved=0", "pages#content", "display\n", "a".repeat(49), ["pages"], null]) {
+  assert.equal(parseModuleEditorTabId(rejectedTab), null);
+  assert.equal(resolveModuleEditorTabId(rejectedTab, ["content", "pages"]), "content");
+  const submitted = new FormData();
+  if (typeof rejectedTab === "string") submitted.set(MODULE_EDITOR_TAB_FORM_FIELD, rejectedTab);
+  assert.equal(withModuleEditorReturnContextFromForm("/admin/pages-blocks/blocks/content/15?saved=1&notice=kept", submitted), "/admin/pages-blocks/blocks/content/15?saved=1&notice=kept");
+}
+assert.equal(resolveModuleEditorTabId("retired-panel", ["content", "pages"]), "content");
+assert.equal(resolveModuleEditorTabId("retired-panel", ["content", "buttons"], "buttons"), "buttons");
+assert.equal(resolveModuleEditorTabId("pages", []), "");
+assert.equal(resolveModuleEditorTabId("pages", ["content", "pages"], "content"), "pages");
+const noPageContext = new FormData();
+noPageContext.set(MODULE_EDITOR_TAB_FORM_FIELD, "display");
+assert.equal(withModuleEditorReturnContextFromForm("/admin/pages-blocks/blocks/hero/15?saved=1&tab=content", noPageContext), "/admin/pages-blocks/blocks/hero/15?saved=1&tab=display");
+assert.equal(withModuleEditorReturnContextFromForm("/admin/pages-blocks/blocks/hero/15?saved=1&notice=kept&tab=content#saved-panel", noPageContext), "/admin/pages-blocks/blocks/hero/15?saved=1&notice=kept&tab=display#saved-panel");
+check(
+  "Module editor save preserves only an actual selected panel through the existing tabs and redirect owners",
+  presentation.includes('resolveModuleEditorTabId(searchParams.get("tab"), tabIds, initialTabId)') &&
+    presentation.includes("controlledActiveTabId === undefined ? selectedTabId : controlledActiveTabId") &&
+    presentation.includes("if (controlledActiveTabId === undefined) setSelectedTabId(tabId)") &&
+    presentation.includes("onActiveTabChange?.(tabId)") &&
+    presentation.includes("name={MODULE_EDITOR_TAB_FORM_FIELD} value={activeTabId}") &&
+    presentation.includes("onActiveTabChange={handleActiveTabChange}"),
+);
+for (const rejectedTarget of [
+  "https://example.test/admin/pages-blocks/pages?q=QA", "//example.test/admin/pages-blocks/pages",
+  "/\\example.test/admin/pages-blocks/pages", "/admin/content/topics?q=QA", "/admin/pages-blocks/pages/18?q=QA",
+  "/admin/pages-blocks/pages-extra?q=QA", "/admin/pages-blocks/pages\n?q=QA",
+]) {
+  assert.equal(resolveModuleEditorReturnNavigation("17", rejectedTarget)?.backHref, "/admin/pages-blocks/pages/17?tab=modules");
+  const submitted = new FormData();
+  submitted.set(MODULE_EDITOR_RETURN_PAGE_FORM_FIELD, "17");
+  submitted.set("return_to", rejectedTarget);
+  assert.equal(withModuleEditorReturnContextFromForm("/admin/pages-blocks/blocks/content/15?saved=1", submitted), "/admin/pages-blocks/blocks/content/15?saved=1&returnPageId=17");
+}
+assert.equal(withModuleEditorReturnPageId("/admin/pages-blocks/blocks/hero/15?tab=buttons", "17", pagesReturnPath), `/admin/pages-blocks/blocks/hero/15?tab=buttons&returnPageId=17&return_to=${encodeURIComponent(pagesReturnPath)}`);
+assert.equal(withModuleEditorReturnPageId("/admin/pages-blocks/blocks/hero/15", "../17", pagesReturnPath), "/admin/pages-blocks/blocks/hero/15");
+check(
+  "Pages list query survives title/action open, SEO save, assignment/map edit, module save and contextual return through shared owners",
+  pagesListClient.includes("writeAdminEntityListQuery(pagesQueryContract, controller.query)") &&
+    (pagesListClient.match(/adminFormEditHref\(`/gu)?.length ?? 0) === 2 &&
+    pagesListClient.includes("[currentListPath, instant.getRowInteraction, supportedSortFields]") &&
+    read("src/app/admin/pages-blocks/pages/[id]/page.tsx").includes("resolveAdminFormReturnPath(resolvedSearchParams?.return_to") &&
+    read("src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksHeader.tsx").includes("resolveAdminFormReturnPath(returnTo") &&
+    read("src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx").includes("adminFormEditHref(`/admin/pages-blocks/pages/${props.pageId}?tab=seo`, props.returnTo") &&
+    pagesClient.includes("adminFormEditHref(redirectTo, returnTo") &&
+    assignmentGrid.includes("returnTo={returnTo}") && assignmentRow.includes("returnTo,") &&
+    slotMap.includes("returnPageId: row.page_id, returnTo") &&
+    presentation.includes('name="return_to"') &&
+    presentation.includes('resolveAdminFormReturnPath(searchParams.get("return_to")'),
+);
+
 check(
   "Page Module mutations invalidate literal public and Admin paths with the Next 16 contract",
   adminRevalidationOwner.includes("revalidatePath(normalizedPath);") &&
@@ -1293,6 +1400,20 @@ check(
       "setActionMessage(activeAssignState.message)",
     ) &&
     !assignmentModalOwner.includes("assignState.ok || assignHeroState.ok"),
+);
+
+const assignmentCreateActions = read("src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts");
+check(
+  "Page assignment creation consumes the canonical revalidated Action render without an extra refresh roundtrip",
+  !assignmentModalOwner.includes("router.refresh") &&
+    !assignmentModalOwner.includes("assignRefreshNonce") &&
+    assignmentModalOwner.includes("setAssignDismissSession(assignModalSession)") &&
+    assignmentModalOwner.includes("templateOptions.filter((template) => !assignedTemplateIds.has(template.id))") &&
+    assignmentCreateActions.includes("await revalidatePageBlocksPath(options.pageId);") &&
+    assignmentCreateActions.includes("await revalidatePageBlocksPath(pageId);") &&
+    ["assignPageBlock", "assignHeroModule", "assignMediaSidebarModule", "assignMediaHubModule"].every(
+      (action) => assignmentModalOwner.replace(/\s+/gu, "").includes(`useActionState(${action},`) && assignmentCreateActions.includes(`export async function ${action}(`),
+    ),
 );
 
 const retiredHint = resolve(

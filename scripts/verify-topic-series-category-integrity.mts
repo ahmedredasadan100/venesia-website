@@ -77,9 +77,9 @@ const [
 
 check(
   "create and edit routes load the canonical series category relation",
-  [newPage, editPage].every((source) =>
-    source.includes("loadTopicTaxonomyFormDependencies"),
-  ) &&
+  newPage.includes("loadTopicTaxonomyFormDependencies") &&
+    editPage.includes("loadTopicEditorFormData") &&
+    taxonomyLoader.includes("resolveTopicTaxonomyFormDependencies(rows,") &&
     taxonomyLoader.includes(
       'select("id,name,slug,status,deleted_at,category_id")',
     ),
@@ -90,7 +90,8 @@ check(
     "persistedSeries.category_id !== currentCategoryId",
   ) &&
     taxonomyLoader.includes('errorResult("topic_taxonomy_contract")') &&
-    editPage.indexOf("if (taxonomyResult.status === \"error\")") <
+    editPage.indexOf("if (topicResult.status === \"error\")") >= 0 &&
+    editPage.indexOf("if (topicResult.status === \"error\")") <
       editPage.indexOf('if (editorKind === "article")'),
 );
 check(

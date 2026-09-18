@@ -48,7 +48,7 @@ const { adminContentTopicPreviewPath } = await jiti.import<
 const { resolvePublicContentPath } = await jiti.import<
   typeof import("../src/lib/content/public-content-path.ts")
 >("../src/lib/content/public-content-path.ts");
-const { resolveAdminFormNavigationDecision } = await jiti.import<
+const { resolveAdminFormNavigationDecision, resolveAdminFormReturnPath, adminFormEditHref } = await jiti.import<
   typeof import("../src/lib/admin/form-runtime.ts")
 >("../src/lib/admin/form-runtime.ts");
 const {
@@ -1588,6 +1588,42 @@ check(
     !createPageModal.includes("adminFormLabelClassName"),
 );
 
+const createPageSyntax = ts.createSourceFile(
+  "CreatePageModal.tsx",
+  createPageModal,
+  ts.ScriptTarget.Latest,
+  true,
+  ts.ScriptKind.TSX,
+);
+const createPageRuntimeNodes: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
+const visitCreatePageRuntime = (node: ts.Node) => {
+  if (
+    (ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) &&
+    node.tagName.getText(createPageSyntax) === "AdminFormRuntime"
+  ) {
+    createPageRuntimeNodes.push(node);
+  }
+  ts.forEachChild(node, visitCreatePageRuntime);
+};
+visitCreatePageRuntime(createPageSyntax);
+check(
+  "Page quick-create invalidates only the Pages entity cache at its canonical Form Runtime before create-to-edit navigation",
+  createPageRuntimeNodes.length === 1 &&
+    createPageRuntimeNodes.every((node) => {
+      const invalidation = node.attributes.properties.find(
+        (property) => ts.isJsxAttribute(property) && property.name.getText(createPageSyntax) === "invalidateEntities",
+      );
+      if (!invalidation || !ts.isJsxAttribute(invalidation)) return false;
+      const initializer = invalidation.initializer;
+      if (!initializer || !ts.isJsxExpression(initializer) || !initializer.expression) return false;
+      const expression = initializer.expression;
+      return ts.isArrayLiteralExpression(expression) &&
+        expression.elements.length === 1 &&
+        ts.isStringLiteral(expression.elements[0]) &&
+        expression.elements[0].text === "pages";
+    }),
+);
+
 const runtime = read("src/components/admin/ui/AdminFormRuntime.tsx");
 check(
   "shared Admin form grids use the dense but comfortable 16px rhythm",
@@ -2119,5 +2155,27 @@ check(
       (sourceFile, index) => sourceFile === actualConfirmDebt[index],
     ),
 );
+
+for (const listPath of ["/admin/content/categories", "/admin/content/series", "/admin/projects/residential", "/admin/projects/commercial"]) {
+  const original = `${listPath}?page=3&limit=30&q=${encodeURIComponent("اختبار")}&sort=name_desc`;
+  const editPath = listPath.includes("/projects/") ? "/admin/projects/42" : `${listPath}/42`;
+  const editHref = adminFormEditHref(editPath, original, listPath);
+  const carried = new URL(editHref, "http://internal.invalid").searchParams.get("return_to");
+  check(`edit return preserves the complete query for ${listPath}`, carried === original && resolveAdminFormReturnPath(carried, listPath) === original);
+  check(`default list links retain their original destination for ${listPath}`, adminFormEditHref(editPath, listPath, listPath) === editPath);
+  for (const unsafe of ["https://example.com/", "//example.com/", "/\\example.com/", "/admin/users-roles?page=3", `${listPath}/42?page=3`, `${listPath}-other?page=3`, "/admin/projects/../users-roles", `${listPath}\n?x=1`]) {
+    check(`form return rejects a foreign or unsafe destination (${listPath}, ${JSON.stringify(unsafe)})`, resolveAdminFormReturnPath(unsafe, listPath) === listPath);
+  }
+  check(`form return rejects duplicate query values for ${listPath}`, resolveAdminFormReturnPath([original, original], listPath) === listPath);
+}
+check("form edit helper cannot create an external editor destination", adminFormEditHref("//example.com/editor", "/admin/content/categories?q=1", "/admin/content/categories") === "");
+for (const file of ["src/app/admin/content/categories/CategoriesListClient.tsx", "src/app/admin/content/series/SeriesTableClient.tsx", "src/app/admin/projects/ProjectsTableClient.tsx"]) {
+  const source = read(file);
+  check(`return query delegates to the canonical writer in ${file}`, source.includes("writeAdminEntityListQuery(") && source.includes("currentListPath"));
+}
+for (const file of ["src/app/admin/content/categories/[id]/page.tsx", "src/app/admin/content/series/[id]/page.tsx", "src/app/admin/projects/[id]/page.tsx"]) {
+  const source = read(file);
+  check(`edit route validates and passes the Form close destination in ${file}`, source.includes("resolveAdminFormReturnPath(") && source.includes("closeHref={closeHref}"));
+}
 
 console.log(`verify:admin-form-system passed (${passed} assertions)`);

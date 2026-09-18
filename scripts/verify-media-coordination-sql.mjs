@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyMediaSynchronizationReadReuse } from "./fixtures/media-synchronization-read-reuse.mjs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const read = (relativePath) =>
@@ -176,6 +177,11 @@ for (const proof of [
     integration.toLowerCase().includes(proof.toLowerCase()),
   );
 }
+
+await verifyMediaSynchronizationReadReuse({
+  sourceRoot: root,
+  onCheck: (description) => check(`synchronization runtime: ${description}`, true),
+});
 
 const failures = checks.filter((entry) => !entry.condition);
 for (const entry of checks) {

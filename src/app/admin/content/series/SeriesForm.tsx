@@ -26,6 +26,7 @@ import {
 import TaxonomyExpectedRevisionInput from "../TaxonomyExpectedRevisionInput";
 
 type SeriesFormProps = {
+  closeHref?: string;
   mode: "create" | "edit";
   series?: SeriesFormRecord | null;
   categoryOptions: TaxonomyFormOption[];
@@ -35,6 +36,7 @@ export default function SeriesForm({
   mode,
   series,
   categoryOptions,
+  closeHref = "/admin/content/series",
 }: SeriesFormProps) {
   const isEdit = mode === "edit";
   const action = isEdit ? updateSeriesForm : createSeriesForm;
@@ -45,7 +47,7 @@ export default function SeriesForm({
       mode={mode}
       entityKey="series"
       invalidateEntities={["series", "topics", "categories"]}
-      closeHref="/admin/content/series"
+      closeHref={closeHref}
       formId="series-taxonomy-form"
       className={ADMIN_FORM_STACK_CLASS_NAME}
     >

@@ -6,9 +6,9 @@ import {
   AdminPageExperience,
 } from "../../../../../components/admin/ui";
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { resolveAdminFormReturnPath } from "../../../../../lib/admin/form-runtime";
 import {
-  loadCategoryFormRecord,
-  loadCategoryParentFormOptions,
+  loadCategoryEditorFormData,
 } from "../../../../../lib/admin/content/load-taxonomy-form-data";
 import CategoryForm from "../CategoryForm";
 
@@ -23,28 +23,22 @@ function truncateWords(value: string, limit = 4) {
 
 export default async function EditTopicCategoryPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ return_to?: string | string[] }>;
 }) {
   await requireAdminSession();
   const { id: rawId } = await params;
   if (!/^\d+$/.test(rawId)) notFound();
   const id = Number(rawId);
 
-  const categoryResult = await loadCategoryFormRecord(id);
+  const categoryResult = await loadCategoryEditorFormData(id);
   if (categoryResult.status === "error") throw categoryResult.error;
   if (categoryResult.status === "not_found") notFound();
 
-  const parentOptionsResult = await loadCategoryParentFormOptions({
-    excludeCategoryId: id,
-    persistedParentId: categoryResult.data.parent_id,
-  });
-  if (parentOptionsResult.status === "error") {
-    throw parentOptionsResult.error;
-  }
-
-  const category = categoryResult.data;
-  const parentOptions = parentOptionsResult.data;
+  const { category, parentOptions } = categoryResult.data;
+  const closeHref = resolveAdminFormReturnPath((await searchParams)?.return_to, "/admin/content/categories");
 
   return (
     <AdminPageExperience>
@@ -54,7 +48,7 @@ export default async function EditTopicCategoryPage({
         description="تعديل تصنيف — حدّث بيانات التصنيف مع الحفاظ على Slug الثابت وروابط المحتوى الحالية."
         actions={
           <>
-            <AdminActionButton href="/admin/content/categories" variant="dark">
+            <AdminActionButton href={closeHref} variant="dark">
               عرض التصنيفات
             </AdminActionButton>
             <AdminActionButton href="/admin/content/topics" variant="dark">
@@ -72,6 +66,7 @@ export default async function EditTopicCategoryPage({
         mode="edit"
         category={category}
         parentOptions={parentOptions}
+        closeHref={closeHref}
       />
     </AdminPageExperience>
   );

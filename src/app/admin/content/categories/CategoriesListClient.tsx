@@ -30,9 +30,10 @@ import {
   ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS,
   type AdminEntityFilterDef,
 } from "../../../../lib/admin/entity-list";
-import type {
-  AdminEntityListQuery,
-  AdminEntityListResult,
+import {
+  writeAdminEntityListQuery,
+  type AdminEntityListQuery,
+  type AdminEntityListResult,
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
@@ -456,10 +457,15 @@ export default function CategoriesListClient({
     0,
   );
 
+  const currentListPath = useMemo(() => {
+    const params = writeAdminEntityListQuery(categoriesQueryContract, controller.query);
+    return params.size ? `${BASE_PATH}?${params.toString()}` : BASE_PATH;
+  }, [controller.query]);
   const columns = useMemo(
     () =>
       createCategoryColumns(
         {
+          currentListPath,
           view: controller.query.filters.view,
           isExpanded: (categoryId) => !collapsedCategoryIds.has(categoryId),
           onToggle: toggleCategory,
@@ -474,6 +480,7 @@ export default function CategoriesListClient({
       ),
     [
       collapsedCategoryIds,
+      currentListPath,
       duplicate,
       instant.getRowInteraction,
       controller.query.filters.view,

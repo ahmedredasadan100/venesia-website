@@ -1,6 +1,7 @@
 import type { PageBlockStatus, PageBlockType } from "./types";
 import { getContentStatusMetadata } from "../admin/content/content-status-metadata";
 import { resolveModuleProductKind } from "./module-edit-registry";
+import { adminFormEditHref } from "../admin/form-runtime";
 
 export const BLOCK_STATUSES: PageBlockStatus[] = ["published", "unpublished"];
 
@@ -10,6 +11,19 @@ export const HERO_BULK_ACTIONS = ["show", "hide", "delete"] as const;
 
 export const MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM = "returnPageId";
 export const MODULE_EDITOR_RETURN_PAGE_FORM_FIELD = "return_page_id";
+export const MODULE_EDITOR_TAB_FORM_FIELD = "module_editor_tab";
+
+export function parseModuleEditorTabId(value: unknown) {
+  return typeof value === "string" && /^[a-z][a-z0-9-]{0,47}$/u.test(value) ? value : null;
+}
+
+/** URL/form tokens never create a panel outside the current editor's actual tabs. */
+export function resolveModuleEditorTabId(value: unknown, tabIds: readonly string[], fallback?: unknown) {
+  const requested = parseModuleEditorTabId(value);
+  if (requested && tabIds.includes(requested)) return requested;
+  const defaultId = parseModuleEditorTabId(fallback);
+  return defaultId && tabIds.includes(defaultId) ? defaultId : tabIds[0] ?? "";
+}
 
 export function cleanText(value: FormDataEntryValue | null) {
   return String(value ?? "").trim();
@@ -202,34 +216,52 @@ export function parseModuleEditorReturnPageId(value: unknown) {
   return Number.isSafeInteger(pageId) && pageId > 0 ? pageId : null;
 }
 
-export function resolveModuleEditorReturnNavigation(value: unknown) {
+export function resolveModuleEditorReturnNavigation(value: unknown, returnTo?: string | null) {
   const pageId = parseModuleEditorReturnPageId(value);
   return pageId
     ? {
-        backHref: `/admin/pages-blocks/pages/${pageId}?tab=modules`,
+        backHref: adminFormEditHref(
+          `/admin/pages-blocks/pages/${pageId}?tab=modules`,
+          returnTo ?? undefined,
+          "/admin/pages-blocks/pages",
+        ),
         backLabel: "الرجوع إلى موديولات الصفحة",
       }
     : null;
 }
 
-export function withModuleEditorReturnPageId(href: string, value: unknown) {
+export function withModuleEditorReturnPageId(href: string, value: unknown, returnTo?: string | null) {
   const pageId = parseModuleEditorReturnPageId(value);
   if (!pageId) return href;
-  const separator = href.includes("?") ? "&" : "?";
-  return `${href}${separator}${MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM}=${pageId}`;
+  const hashIndex = href.indexOf("#");
+  const pathnameAndSearch = hashIndex < 0 ? href : href.slice(0, hashIndex);
+  const hash = hashIndex < 0 ? "" : href.slice(hashIndex);
+  const separator = pathnameAndSearch.includes("?") ? "&" : "?";
+  const contextualHref = adminFormEditHref(
+    `${pathnameAndSearch}${separator}${MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM}=${pageId}`,
+    returnTo ?? undefined,
+    "/admin/pages-blocks/pages",
+  );
+  return contextualHref ? `${contextualHref}${hash}` : contextualHref;
 }
 
 export function withModuleEditorReturnContextFromForm(href: string, formData: FormData) {
-  return withModuleEditorReturnPageId(
+  const contextualHref = withModuleEditorReturnPageId(
     href,
     formData.get(MODULE_EDITOR_RETURN_PAGE_FORM_FIELD),
+    typeof formData.get("return_to") === "string" ? String(formData.get("return_to")) : undefined,
   );
+  const tabId = parseModuleEditorTabId(formData.get(MODULE_EDITOR_TAB_FORM_FIELD));
+  if (!tabId) return contextualHref;
+  const destination = new URL(contextualHref, "http://internal.invalid");
+  destination.searchParams.set("tab", tabId);
+  return `${destination.pathname}${destination.search}${destination.hash}`;
 }
 
 export function moduleEditHref(
   kind: string,
   templateId: number,
-  options: { returnPageId?: unknown } = {},
+  options: { returnPageId?: unknown; returnTo?: string } = {},
 ) {
   const href = kind === "hero"
     ? heroModuleHref(templateId)
@@ -238,7 +270,7 @@ export function moduleEditHref(
       : kind === "media-hub"
         ? mediaHubModuleHref(templateId)
         : blockModuleHref(kind as PageBlockType, templateId);
-  return withModuleEditorReturnPageId(href, options.returnPageId);
+  return withModuleEditorReturnPageId(href, options.returnPageId, options.returnTo);
 }
 
 export function moduleListHref(kind: string) {

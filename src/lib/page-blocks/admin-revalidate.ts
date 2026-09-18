@@ -33,8 +33,10 @@ function addPagePaths(paths: Set<string>, page?: { path: string | null; slug: st
   if (registeredRoute) paths.add(registeredRoute.href);
 }
 
-async function collectAssignedPublicPaths() {
-  const pageIds = new Set<number>();
+async function collectAssignedPublicPaths(affectedPageIds: readonly number[] = []) {
+  // Keep detached pages in the same read as current assignments so their old
+  // public path is invalidated after a module save, too.
+  const pageIds = new Set(affectedPageIds);
 
   await Promise.all(
     ALL_ASSIGNMENT_TABLES.map(async (table) => {
@@ -46,9 +48,13 @@ async function collectAssignedPublicPaths() {
     }),
   );
 
+  return readPublicPathsForPageIds([...pageIds]);
+}
+
+async function readPublicPathsForPageIds(pageIds: readonly number[]) {
   const paths = new Set<string>(BASE_PUBLIC_PATHS);
 
-  if (pageIds.size) {
+  if (pageIds.length) {
     const { data: pages, error } = await getSupabaseAdmin()
       .from("pages")
       .select("path,slug")
@@ -64,19 +70,45 @@ async function collectAssignedPublicPaths() {
   return paths;
 }
 
-export async function revalidatePublicPagesWithBlockAssignments() {
+export async function revalidatePublicPagesWithBlockAssignments(affectedPageIds: readonly number[] = []) {
   revalidatePageCompositionCache();
-  const paths = await collectAssignedPublicPaths();
+  let paths: Set<string>;
+  try {
+    paths = await collectAssignedPublicPaths(affectedPageIds);
+  } catch (error) {
+    // An unrelated assignment read must not prevent invalidation of pages this
+    // mutation already changed. Keep the successful path as one batched read.
+    if (affectedPageIds.length) {
+      try {
+        const affectedPaths = await readPublicPathsForPageIds([...new Set(affectedPageIds)]);
+        for (const path of affectedPaths) revalidateStoredPublicPagePath(path);
+      } catch (fallbackError) {
+        throw new AggregateError(
+          [error, fallbackError],
+          error instanceof Error ? error.message : "Page revalidation failed.",
+          { cause: error },
+        );
+      }
+    }
+    // The original failure still reaches the bounded retry/warning owner.
+    throw error;
+  }
 
   for (const path of paths) {
     revalidateStoredPublicPagePath(path);
   }
 }
 
-export async function revalidateBlockModulePaths(modulePath: string) {
+export async function revalidateBlockModulePaths(
+  modulePath: string,
+  affectedPageIds: readonly number[] = [],
+) {
   revalidatePath("/admin/pages-blocks/pages", "layout");
+  for (const pageId of new Set(affectedPageIds)) {
+    revalidatePath(`/admin/pages-blocks/pages/${pageId}`);
+  }
   revalidateBlockModuleCache(modulePath);
-  await revalidatePublicPagesWithBlockAssignments();
+  await revalidatePublicPagesWithBlockAssignments(affectedPageIds);
 }
 
 export async function revalidatePageBlocksPath(pageId: number) {

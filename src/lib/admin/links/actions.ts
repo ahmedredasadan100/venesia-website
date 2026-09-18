@@ -4,7 +4,6 @@ import { getSupabaseAdmin } from "../../supabase-admin";
 import { requireAdminSession } from "../auth/require-admin-session";
 import {
   describeAdminLink,
-  resolveAdminLink,
   searchAdminLinks,
   type AdminLinkValue,
   type LinkedResourceType,
@@ -185,8 +184,9 @@ export async function browseTopicCategoriesPickerAjax(options?: { query?: string
 export async function resolveAdminLinkAjax(value: AdminLinkValue) {
   await requireAdminSession();
   try {
-    const [publicPath, display] = await Promise.all([resolveAdminLink(value), describeAdminLink(value)]);
-    return { ok: true as const, publicPath, display };
+    // The display owner already resolves the canonical public path.
+    const display = await describeAdminLink(value);
+    return { ok: true as const, publicPath: display.publicPath, display };
   } catch (error) {
     return {
       ok: false as const,

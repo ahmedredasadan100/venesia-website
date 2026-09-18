@@ -8,6 +8,7 @@ import {
   AdminPageExperience,
 } from "../../../../components/admin/ui";
 import { requireAdminSession } from "../../../../lib/admin/auth/require-admin-session";
+import { resolveAdminFormReturnPath } from "../../../../lib/admin/form-runtime";
 import {
   loadProjectEntry,
   ProjectEntrySchemaUnavailableError,
@@ -19,8 +20,10 @@ export const dynamic = "force-dynamic";
 
 export default async function ProjectEditPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ return_to?: string | string[] }>;
 }) {
   await requireAdminSession();
   const { id } = await params;
@@ -51,6 +54,7 @@ export default async function ProjectEditPage({
   if (!bundle) notFound();
   const project = bundle.project;
   const listPath = project.type === "commercial" ? "/admin/projects/commercial" : "/admin/projects/residential";
+  const closeHref = resolveAdminFormReturnPath((await searchParams)?.return_to, listPath);
 
   return (
     <AdminPageExperience dir="rtl">
@@ -60,7 +64,7 @@ export default async function ProjectEditPage({
         description={`المشاريع / تعديل المشروع — ${project.english_name || "اسم المشروع بالإنجليزية"} — ${project.slug}`}
         actions={
           <>
-            <AdminActionButton href={listPath} variant="dark">عرض المشروعات</AdminActionButton>
+            <AdminActionButton href={closeHref} variant="dark">عرض المشروعات</AdminActionButton>
             <AdminActionButton href={`/admin/projects/${project.id}/tracking`} variant="dark">متابعة التنفيذ</AdminActionButton>
             <AdminEntityPreviewActions
               capability={getProjectPreviewCapability({
@@ -72,7 +76,7 @@ export default async function ProjectEditPage({
           </>
         }
       />
-      <ProjectEditForm key={bundle.project.id ?? `project-${id}`} bundle={bundle} />
+      <ProjectEditForm key={bundle.project.id ?? `project-${id}`} bundle={bundle} closeHref={closeHref} />
     </AdminPageExperience>
   );
 }

@@ -36,7 +36,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -110,7 +110,7 @@ export async function createFeaturedModule(
   if (!slug) return createFailure(revision, "اكتب slug صالحًا للموديول.", "slug");
   if (!(await ensureUniqueSlug(slug))) return createFailure(revision, "الـ slug مستخدم بالفعل.", "slug");
 
-  const options = await loadTopicFilterOptionsForAdmin();
+  const options = await loadTopicFilterOptionsForAdmin({ includeSeries: false });
   const firstCategory = options.categories[0]?.slug;
   if (!firstCategory) {
     return createFailure(revision, "لا يوجد تصنيف منشور يمكن استخدامه كمصدر افتراضي.");
@@ -210,8 +210,7 @@ export async function updateFeaturedModule(formData: FormData) {
     metadata: { blockType: "featured", slug },
   }, actor);
   const cacheRevalidation = await runBoundedPublicCacheRevalidation(async () => {
-    await Promise.all(coordinated.value.affectedPageIds.map(revalidatePageBlocksPath));
-    await revalidateBlockModulePaths("featured");
+    await revalidateBlockModulePaths("featured", coordinated.value.affectedPageIds);
     revalidatePath(`/admin/pages-blocks/blocks/featured/${id}`, "page");
   });
   if (!cacheRevalidation.ok) console.error("Template save committed; cache revalidation failed", cacheRevalidation.error);

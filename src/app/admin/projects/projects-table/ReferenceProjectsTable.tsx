@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { adminFormEditHref } from "../../../../lib/admin/form-runtime";
 
 import {
   AdminDataGridRowActions,
@@ -30,6 +31,7 @@ export {
 } from "../../../../components/admin/ui/AdminDataGrid";
 
 export type ProjectRowActionHandlers = {
+  currentListPath?: string;
   rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onCopyPublicLink: (row: ProjectGridRow) => Promise<AdminActionResult>;
   onDelete: (row: ProjectGridRow) => Promise<AdminActionResult>;
@@ -107,7 +109,7 @@ function ProjectRowActions({
     actions: {
       edit: {
         access: "allowed",
-        href: `/admin/projects/${row.id}`,
+        href: adminFormEditHref(`/admin/projects/${row.id}`, handlers.currentListPath, `/admin/projects/${row.type}`),
       },
       preview: previewAction
         ? {
@@ -233,7 +235,7 @@ export function createProjectColumns(
       primaryPresentation: "standard-icon",
       renderCell: ({ row }) => (
         <Link
-          href={`/admin/projects/${row.id}`}
+          href={adminFormEditHref(`/admin/projects/${row.id}`, handlers.currentListPath, `/admin/projects/${row.type}`)}
           className="flex min-w-0 items-center gap-3 text-right transition hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
           title={`تعديل ${row.arabic_name}`}
         >

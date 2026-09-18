@@ -20,6 +20,7 @@ type HarnessOptions = {
   deferAction?: boolean;
   savedRevision?: string;
   title?: string;
+  closeHref?: string;
 };
 
 type ContentActionOutcome =
@@ -157,7 +158,7 @@ window.__ADMIN_FORM_GUARDED_NAV_QA__ = qa;
 function RuntimeProbe() {
   const runtime = useAdminFormRuntime();
   qa.runtime = runtime;
-  return React.createElement(
+  return React.createElement(React.Fragment, null, React.createElement(
     "output",
     {
       id: "qa-runtime-state",
@@ -167,10 +168,10 @@ function RuntimeProbe() {
       "data-revision": String(runtime.state.revision),
     },
     runtime.state.status,
-  );
+  ), React.createElement("button", { id: "qa-close", type: "button", onClick: runtime.requestClose }, "Close"));
 }
 
-function Harness({ mode, actionOutcome, deferAction = false, savedRevision, title = "Initial title" }) {
+function Harness({ mode, actionOutcome, deferAction = false, savedRevision, title = "Initial title", closeHref }) {
   const action = React.useCallback(
     async (previousState, formData) => {
       qa.actionCalls += 1;
@@ -226,6 +227,7 @@ function Harness({ mode, actionOutcome, deferAction = false, savedRevision, titl
         entityKey: "qa-topic",
         formId: "qa-admin-form",
         savedRevision,
+        closeHref,
       },
       React.createElement("input", {
         id: "qa-title",
@@ -1330,6 +1332,7 @@ async function runReportFreshnessCases(browser: Browser, harnessUrl: string, roo
 const rootDir = process.cwd();
 const saveCacheOnly = process.argv.includes("--save-cache-only");
 const reportFreshnessOnly = process.argv.includes("--report-freshness-only");
+const returnPathOnly = process.argv.includes("--return-path-only");
 const tempDir = await mkdtemp(path.join(tmpdir(), TEMP_PREFIX));
 let browser: Browser | null = null;
 let server: Server | null = null;
@@ -1345,9 +1348,34 @@ try {
   const browserIssues: BrowserIssue[] = [];
   browser = await chromium.launch({ headless: true });
   if (reportFreshnessOnly) await runReportFreshnessCases(browser, harnessUrl, rootDir, browserIssues);
+  if (!saveCacheOnly && !reportFreshnessOnly) {
+    for (const listPath of ["/admin/content/categories", "/admin/content/series", "/admin/projects/residential", "/admin/projects/commercial"]) {
+      const closeHref = `${listPath}?page=3&limit=30&q=${encodeURIComponent("اختبار")}&sort=name_desc`;
+      for (const dirty of [false, true]) {
+        const { page } = await openHarness(browser, harnessUrl, { mode: "edit", actionOutcome: "success", closeHref }, browserIssues);
+        if (dirty) {
+          await page.locator("#qa-title").fill("Unsaved return query test");
+          await waitForRuntime(page, { dirty: "true" });
+        }
+        await page.locator("#qa-close").click();
+        if (dirty) {
+          await page.locator("[data-admin-confirm-dialog]").waitFor({ state: "visible" });
+          check(`dirty Close preserves the target until confirmation: ${listPath}`, (await getRouterEvents(page)).length === 0);
+          await page.locator("[data-admin-confirm-cancel]").click();
+          check(`cancelled Close retains draft and query target: ${listPath}`, (await getRouterEvents(page)).length === 0 && (await page.locator("#qa-title").inputValue()) === "Unsaved return query test");
+          await page.locator("#qa-close").click();
+          await page.locator("[data-admin-confirm-submit]").click();
+        }
+        await page.waitForFunction(() => (window as unknown as HarnessWindow).__ADMIN_FORM_GUARDED_NAV_QA__.routerEvents.length === 1);
+        const events = await getRouterEvents(page);
+        check(`${dirty ? "guarded" : "clean"} Form Close restores the exact list query once: ${listPath}`, events.length === 1 && events[0]?.href === closeHref && events[0]?.kind === "push");
+        await closePage(page);
+      }
+    }
+  }
 
   const secondSaveFailures: string[] = [];
-  for (const scenario of reportFreshnessOnly ? [] : [
+  for (const scenario of reportFreshnessOnly || returnPathOnly ? [] : [
     { outcome: "success", expected: "success", returnToList: true },
     { outcome: "warning", expected: "warning", returnToList: true },
     { outcome: "success", expected: "warning", cacheFailure: true },
@@ -1478,10 +1506,10 @@ try {
     }
     await closePage(page);
   }
-  if (!reportFreshnessOnly) check(`all failed second saves preserve dirty state${secondSaveFailures.length ? `: ${secondSaveFailures.join("; ")}` : ""}`,
+  if (!reportFreshnessOnly && !returnPathOnly) check(`all failed second saves preserve dirty state${secondSaveFailures.length ? `: ${secondSaveFailures.join("; ")}` : ""}`,
     secondSaveFailures.length === 0);
 
-  if (!saveCacheOnly && !reportFreshnessOnly) {
+  if (!saveCacheOnly && !reportFreshnessOnly && !returnPathOnly) {
   {
     // Real mounted Admin presentation and installed Next boundary; only the
     // AppRouter refresh/data response is controlled. This is not a live RSC/DB proof.

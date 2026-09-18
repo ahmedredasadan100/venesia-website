@@ -29,7 +29,9 @@ export type TopicFilterOptions = {
   seriesByCategorySlug: Record<string, TopicSeriesFilterOption[]>;
 };
 
-export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptions> {
+export async function loadTopicFilterOptionsForAdmin(
+  { includeSeries = true }: { includeSeries?: boolean } = {},
+): Promise<TopicFilterOptions> {
   const supabase = getSupabaseAdmin();
 
   const [{ data: categories, error: categoriesError }, { data: seriesRows, error: seriesError }] =
@@ -41,14 +43,14 @@ export async function loadTopicFilterOptionsForAdmin(): Promise<TopicFilterOptio
         .is("deleted_at", null)
         .order("sort_order", { ascending: true })
         .order("name", { ascending: true }),
-      supabase
+      includeSeries ? supabase
         .from("topic_series")
         .select("id,name,slug,category_id")
         .eq("status", "published")
         .is("deleted_at", null)
         .not("category_id", "is", null)
         .order("sort_order", { ascending: true })
-        .order("name", { ascending: true }),
+        .order("name", { ascending: true }) : Promise.resolve({ data: [], error: null }),
     ]);
 
   if (categoriesError) logError("loadTopicFilterOptionsForAdmin: categories failed", categoriesError);

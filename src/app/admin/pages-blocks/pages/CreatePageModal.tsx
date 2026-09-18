@@ -46,6 +46,7 @@ export default function CreatePageModal() {
           action={createPage}
           mode="create"
           entityKey="page-quick-create"
+          invalidateEntities={["pages"]}
           onClose={() => setOpen(false)}
           onSuccess={() => setOpen(false)}
           runtimeRef={runtimeRef}

@@ -35,10 +35,12 @@ import { getContentStatusMetadata } from "../../../../lib/admin/content/content-
 import { formatAdminDateTime } from "../../../../lib/content-dates";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
 import { useAdminEntityListController } from "../../../../lib/admin/entity-list/data-engine/client-controller";
-import type {
-  AdminEntityListQuery,
-  AdminEntityListResult,
+import {
+  writeAdminEntityListQuery,
+  type AdminEntityListQuery,
+  type AdminEntityListResult,
 } from "../../../../lib/admin/entity-list/data-engine/contracts";
+import { adminFormEditHref } from "../../../../lib/admin/form-runtime";
 import { ADMIN_BULK_ACTION_LABELS } from "../../../../lib/admin/entity-list/bulk-action-labels";
 import { useAdminEntityInstantMutation } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
 import type { AdminInstantMutationRowInteraction } from "../../../../lib/admin/entity-list/data-engine/instant-mutation";
@@ -81,6 +83,7 @@ function statusMeta(status: string) {
 }
 
 type PageRowActionHandlers = {
+  currentListPath: string;
   rowInteraction: (id: number) => AdminInstantMutationRowInteraction;
   onCopyPublicLink: (row: AdminPageListRow) => Promise<AdminActionResult>;
   onDelete: (row: AdminPageListRow) => Promise<AdminActionResult>;
@@ -139,7 +142,7 @@ function PageRowActions({
     actions: {
       edit: {
         access: "allowed",
-        href: `/admin/pages-blocks/pages/${row.id}`,
+        href: adminFormEditHref(`/admin/pages-blocks/pages/${row.id}`, handlers.currentListPath, "/admin/pages-blocks/pages"),
       },
       preview: publicPath
         ? {
@@ -227,7 +230,7 @@ function createPageColumns(
       primaryPresentation: "text-only",
       renderCell: ({ row }) => (
         <Link
-          href={`/admin/pages-blocks/pages/${row.id}`}
+          href={adminFormEditHref(`/admin/pages-blocks/pages/${row.id}`, handlers.currentListPath, "/admin/pages-blocks/pages")}
           prefetch={false}
           className="block truncate text-right font-semibold text-white transition hover:text-[#D8B87A] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#D8B87A]/70"
         >
@@ -563,10 +566,15 @@ export default function PagesTableClient({
     }
   }
 
+  const currentListPath = useMemo(() => {
+    const params = writeAdminEntityListQuery(pagesQueryContract, controller.query);
+    return params.size ? `/admin/pages-blocks/pages?${params.toString()}` : "/admin/pages-blocks/pages";
+  }, [controller.query]);
   const columns = useMemo(
     () =>
       createPageColumns(
         {
+          currentListPath,
           rowInteraction: instant.getRowInteraction,
           onCopyPublicLink: copyPublicLink,
           onDelete: deletePage,
@@ -577,7 +585,7 @@ export default function PagesTableClient({
       ),
     // The handlers intentionally close over the current normalized-list mutation owner.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [instant.getRowInteraction, supportedSortFields],
+    [currentListPath, instant.getRowInteraction, supportedSortFields],
   );
   const initialFeedback = useMemo(
     () => {
