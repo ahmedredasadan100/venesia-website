@@ -89,12 +89,15 @@ class Query implements PromiseLike<Result> {
   then<T = Result, U = never>(fulfilled?: ((value: Result) => T | PromiseLike<T>) | null, rejected?: ((reason: unknown) => U | PromiseLike<U>) | null): PromiseLike<T | U> {
     return Promise.resolve().then((): Result => {
       if (this.payload) {
-        assert.deepEqual(this.filters, { id: state.page?.id }, "Writes must target exactly the persisted Home ID");
+        const expectedFilters = Object.hasOwn(this.payload, "status")
+          ? { id: state.page?.id, status: state.page?.status, updated_at: state.page?.updated_at }
+          : { id: state.page?.id };
+        assert.deepEqual(this.filters, expectedFilters, "Writes must use the persisted Home identity and required revision");
         state.writes.push({ table: this.table, filters: { ...this.filters }, payload: { ...this.payload } });
         if (state.failWrite) return { data: null, error: { message: "isolated_write_rejected" } };
         assert.ok(state.page);
         Object.assign(state.page, this.payload);
-        return { data: null, error: null };
+        return { data: structuredClone(this.singular ? state.page : null), error: null };
       }
       state.reads.push(this.table);
       if (this.table === state.failReadTable) return { data: null, error: { message: "isolated_read_rejected" } };
@@ -162,6 +165,7 @@ function reset() {
 }
 const detail = load<typeof import("../src/app/admin/pages-blocks/pages/[id]/page.tsx")>("src/app/admin/pages-blocks/pages/[id]/page.tsx");
 const assignment = load<typeof import("../src/lib/page-blocks/admin-queries.ts")>("src/lib/page-blocks/admin-queries.ts");
+const assignmentActions = load<typeof import("../src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts")>("src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts");
 const readModel = load<typeof import("../src/lib/admin/pages/entity-list-read-model-boundary.ts")>("src/lib/admin/pages/entity-list-read-model-boundary.ts");
 const rowContract = load<typeof import("../src/lib/admin/pages/entity-list-contract.ts")>("src/lib/admin/pages/entity-list-contract.ts");
 const seoOwner = load<typeof import("../src/lib/admin/seo-score.ts")>("src/lib/admin/seo-score.ts");
@@ -208,7 +212,10 @@ try {
     const result = await assignment.getPageModuleAssignmentsForAdmin(Number(initialHome.id));
     assert.deepEqual(result.assignments, []);
     assert.equal(result.seoContent, "");
-    assert.equal(result.templates.content[0]?.id, availableTemplate.id);
+    assert.ok(!Object.hasOwn(result, "templates"), "Page does not preload every picker catalog");
+    assert.ok(result.initialContentTemplates, "The default Content summary is available for first Assign");
+    assert.equal(result.initialContentTemplates[0]?.id, availableTemplate.id);
+    assert.equal((await assignment.getPageModuleTemplateOptionsForAdmin("content"))[0]?.id, availableTemplate.id);
     assert.equal(state.reads.filter((table) => assignmentTables.has(table)).length, assignmentTables.size);
     assertNoMutation();
   });
@@ -218,7 +225,9 @@ try {
     assert.equal(element.props.page.id, initialHome.id);
     assert.equal(element.props.page.status, "unpublished");
     assert.deepEqual(element.props.assignments, []);
-    assert.equal(element.props.templates.content[0]?.id, availableTemplate.id);
+    assert.ok(!Object.hasOwn(element.props, "templates"));
+    assert.equal(element.props.initialContentTemplates[0]?.id, availableTemplate.id);
+    assert.equal((await assignment.getPageModuleTemplateOptionsForAdmin("content"))[0]?.id, availableTemplate.id);
     assert.equal(element.props.seo.content, "");
     assert.equal((await publicRead.getPublishedPageStateBySlug("home")).sourceStatus, "missing");
     assert.equal(state.authCalls, 0, "No login/session is synthesized by reads");
@@ -237,6 +246,19 @@ try {
     assert.deepEqual(element.props.assignments, []);
     assert.ok(state.cache.some((entry) => entry.kind === "path" && entry.args[0] === "/"));
   });
+  await check("assignment picker validates session and kind before its one catalog read", async () => {
+    state.denyAuth = true;
+    await assert.rejects(() => assignmentActions.loadPageModuleTemplateOptions("content"), /isolated_auth_rejected/);
+    assert.deepEqual(state.reads, []);
+    state.denyAuth = false;
+    await assert.rejects(() => assignmentActions.loadPageModuleTemplateOptions("invalid"), error => error instanceof Error && error.message === "نوع الموديول غير صالح.");
+    assert.deepEqual(state.reads, []);
+    assert.equal((await assignmentActions.loadPageModuleTemplateOptions("content"))[0]?.id, availableTemplate.id);
+    assert.deepEqual(state.reads, ["content_block_templates"]);
+    state.failReadTable = "content_block_templates";
+    await assert.rejects(() => assignmentActions.loadPageModuleTemplateOptions("content"), /isolated_read_rejected/);
+    assertNoMutation();
+  });
   await check("invalid SEO input is rejected before persistence", async () => {
     await expectRedirect(() => edit.savePageSeoAction(seoForm("x".repeat(61))), "seo_error");
     assertNoMutation(); assert.deepEqual(state.page, initialHome);
@@ -249,34 +271,34 @@ try {
   });
   await check("publication occurs only through explicit current Page action", async () => {
     assertNoMutation();
-    const result = await status.togglePageStatus(Number(initialHome.id));
+    const result = await status.togglePageStatus(Number(initialHome.id), String(state.page?.status), String(state.page?.updated_at));
     assert.equal(result.ok, true); assert.equal(result.status, "published");
     assert.equal(state.writes.length, 1); assert.equal(state.audits.length, 1); assert.equal(state.authCalls, 1);
     assert.deepEqual(Object.keys(state.writes[0].payload).sort(), ["status", "updated_at"]);
     assert.equal(state.audits[0].entityId, initialHome.id);
     assert.equal((await publicRead.getPublishedPageStateBySlug("home")).page?.id, initialHome.id);
     assert.deepEqual((await assignment.getPageModuleAssignmentsForAdmin(Number(initialHome.id))).assignments, []);
-    const reverse = await status.togglePageStatus(Number(initialHome.id));
+    const reverse = await status.togglePageStatus(Number(initialHome.id), String(state.page?.status), String(state.page?.updated_at));
     assert.equal(reverse.status, "unpublished"); assert.equal(state.writes.length, 2);
     assert.equal((await publicRead.getPublishedPageStateBySlug("home")).page, null);
   });
   await check("publication write failure does not release false success", async () => {
     state.failWrite = true;
-    const result = await status.togglePageStatus(Number(initialHome.id));
+    const result = await status.togglePageStatus(Number(initialHome.id), String(state.page?.status), String(state.page?.updated_at));
     assert.equal(result.ok, false); assert.equal(result.code, "status_update_failed");
     assert.equal(state.writes.length, 1); assert.deepEqual(state.audits, []); assert.deepEqual(state.cache, []);
     assert.deepEqual(state.page, initialHome);
   });
   await check("session rejection prevents Page read/write attempts", async () => {
     state.denyAuth = true;
-    await assert.rejects(() => status.togglePageStatus(Number(initialHome.id)), /isolated_auth_rejected/);
+    await assert.rejects(() => status.togglePageStatus(Number(initialHome.id), String(state.page?.status), String(state.page?.updated_at)), /isolated_auth_rejected/);
     await assert.rejects(() => edit.savePageSeoAction(seoForm()), /isolated_auth_rejected/);
     assert.deepEqual(state.reads, []); assertNoMutation();
   });
   await check("missing Home stays missing without implicit creation", async () => {
     state.page = null;
     await assert.rejects(() => detail.default({ params: { id: String(initialHome.id) } }), NotFoundSignal);
-    const result = await status.togglePageStatus(Number(initialHome.id));
+    const result = await status.togglePageStatus(Number(initialHome.id), String(initialHome.status), String(initialHome.updated_at));
     assert.equal(result.ok, false); assert.equal(result.code, "page_not_found");
     assertNoMutation();
   });

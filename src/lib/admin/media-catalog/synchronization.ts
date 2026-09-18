@@ -18,6 +18,7 @@ import {
   scanAllMediaReferenceProviders,
   validateMediaReferenceProviderRegistry,
   type DiscoveredMediaReference,
+  type MediaReferenceProvider,
 } from "./reference-providers";
 import type { MediaCatalogAsset } from "./types";
 import {
@@ -139,11 +140,17 @@ type MediaReferenceSynchronizationOptions = {
   leaseEntityIdentity?: string | null;
 };
 
+type ReadMediaEntityReferences = (
+  provider: MediaReferenceProvider,
+  entityIdentity: string,
+) => Promise<DiscoveredMediaReference[]>;
+
 async function syncMediaReferencesWithAssetMap(
   domainKey: string,
   entityIdentity: string,
   options: MediaReferenceSynchronizationOptions,
   readAssetMap: typeof getAllCatalogAssetIdentityMap,
+  readReferences: ReadMediaEntityReferences = (provider, identity) => provider.scanEntity(identity),
 ) {
   const provider = getMediaReferenceProvider(domainKey);
   if (!provider) {
@@ -156,7 +163,7 @@ async function syncMediaReferencesWithAssetMap(
   let assetMap: Map<string, MediaCatalogAsset>;
   try {
     [references, assetMap] = await Promise.all([
-      provider.scanEntity(entityIdentity),
+      readReferences(provider, entityIdentity),
       readAssetMap(),
     ]);
   } catch (error) {
@@ -222,9 +229,10 @@ async function synchronizeMediaReferencesWithAssetMap(
   entityIdentity: string | number,
   options: MediaReferenceSynchronizationOptions,
   readAssetMap: typeof getAllCatalogAssetIdentityMap,
+  readReferences?: ReadMediaEntityReferences,
 ) {
   try {
-    const result = await syncMediaReferencesWithAssetMap(domainKey, String(entityIdentity), options, readAssetMap);
+    const result = await syncMediaReferencesWithAssetMap(domainKey, String(entityIdentity), options, readAssetMap, readReferences);
     return {
       status: "synced" as const,
       code: "media_reference_sync_succeeded" as const,
@@ -274,9 +282,35 @@ export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
   }[] = [],
 ) {
   // One post-mutation Catalog snapshot serves this batch only. Standalone calls
-  // and later batches still read fresh data; provider scans and lease RPCs remain per target.
+  // and later batches still read fresh data; every target retains its own lease RPC.
   let assetMapPromise: ReturnType<typeof getAllCatalogAssetIdentityMap> | undefined;
   const readAssetMap = () => assetMapPromise ??= getAllCatalogAssetIdentityMap();
+  const identitiesByProvider = new Map<string, Set<string>>();
+  for (const target of [...targets, ...cleanupTargets]) {
+    const identities = identitiesByProvider.get(target.domainKey) ?? new Set<string>();
+    identities.add(String(target.entityIdentity));
+    identitiesByProvider.set(target.domainKey, identities);
+  }
+  const providerScans = new Map<string, Promise<Map<string, DiscoveredMediaReference[]>>>();
+  const readReferences: ReadMediaEntityReferences = async (provider, entityIdentity) => {
+    if (!provider.scanEntities) return provider.scanEntity(entityIdentity);
+    let scan = providerScans.get(provider.domainKey);
+    if (!scan) {
+      scan = provider.scanEntities([...(identitiesByProvider.get(provider.domainKey) ?? [])]);
+      providerScans.set(provider.domainKey, scan);
+    }
+    let result: DiscoveredMediaReference[] | undefined;
+    try {
+      result = (await scan).get(entityIdentity);
+    } catch {
+      // Retain per-target failure isolation when a grouped read cannot be proved.
+      result = await provider.scanEntity(entityIdentity);
+    }
+    if (!result || result.some((reference) => reference.domainKey !== provider.domainKey || reference.entityIdentity !== entityIdentity)) {
+      throw new Error(`media_reference_provider:${provider.domainKey}:invalid_entity_scan_result`);
+    }
+    return result;
+  };
   const [writeResults, cleanupResults] = await Promise.all([
     Promise.all(
       targets.map((target) =>
@@ -288,6 +322,7 @@ export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
             leaseEntityIdentity: target.leaseEntityIdentity,
           },
           readAssetMap,
+          readReferences,
         ),
       ),
     ),
@@ -298,6 +333,7 @@ export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
           target.entityIdentity,
           {},
           readAssetMap,
+          readReferences,
         ),
       ),
     ),

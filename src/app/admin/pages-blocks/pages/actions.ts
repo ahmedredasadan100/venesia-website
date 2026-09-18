@@ -1,4 +1,5 @@
 export {
+  loadPageModuleTemplateOptions,
   assignHeroModule,
   assignMediaHubModule,
   assignMediaSidebarModule,

@@ -34,8 +34,15 @@ export async function prepareOwnedAdminMeasurementAccount(handle: OwnedLocalHand
   return credentials;
 }
 
-export async function seedOwnedAdminInteractionFixtures(handle: OwnedLocalHandle, credentials: { username: string; password: string; secret: string }) {
+export async function seedOwnedAdminInteractionFixtures(handle: OwnedLocalHandle, credentials: { username: string; password: string; secret: string }, study?: {
+  study: "heavy-editor-performance"; apiPort: number; serviceKey: string;
+}) {
   assertOwnedLocalHandle(handle);
+  if (study) {
+    assert.equal(study.study, "heavy-editor-performance");
+    assert.ok(Number.isSafeInteger(study.apiPort) && study.apiPort > 0 && study.apiPort < 65536);
+    assert.ok(study.serviceKey.length > 0);
+  }
   const categories = [];
   for (let i = 0; i < 3; i++) {
     const row = (await handle.query(`insert into public.topic_categories(name,slug,status,is_active,show_in_menu)
@@ -110,13 +117,75 @@ export async function seedOwnedAdminInteractionFixtures(handle: OwnedLocalHandle
   Object.assign(commercial.project,seo.deriveEntitySeoScore(seo.toProjectSeoScoreInput(commercial.project as ProjectSeoSource)));
   const commercialPrevious=(await handle.query("select id from public.projects where slug=$1",[commercial.project.slug])).rows[0];
   const commercialSaved=await saveFixture(commercialPrevious?.id,commercial);
+  // This study measures a separate persistent aggregate. The normal fixtures
+  // retain their legacy shape, and reset reuses every heavy child client key/ID.
+  let heavy: typeof payload | undefined;
+  let heavySaved: Awaited<ReturnType<typeof saveFixture>> | undefined;
+  if (study) {
+    heavy=JSON.parse(JSON.stringify(payload, (name,value)=>name === "client_key" ? key(`heavy-${value}`) : value)) as typeof payload;
+    Object.assign(heavy.project,{arabic_name:"QA مشروع ثقيل متكامل",english_name:"QA Complete Heavy Project",slug:"qa-admin-heavy-project",overview_title:"QA saved residential overview",publication_status:"unpublished"});
+    heavy.features.push({client_key:key("heavy-feature-4"),body:"QA saved residential generated feature"});
+    const planNames=["QA خطة 1",...Array.from({length:10},(_,index)=>`QA Heavy Clone ${10-index}`),"QA خطة 2"];
+    heavy.floor_plans=planNames.map((name,index)=>({
+      client_key:key(`heavy-plan-${index}`),name,area_text:"150",featured:index===0,
+      architectural_image:image,architectural_image_alt:"QA معماري",furnishing_image:image,furnishing_image_alt:"QA فرش",
+      details:["QA تفصيل 1","QA تفصيل 2","QA Heavy Detail 3","QA Heavy Detail 4"].map((label,detailIndex)=>({
+        client_key:key(`heavy-detail-${index}-${detailIndex}`),label,value:["100","100","300","400"][detailIndex],
+      })),
+    }));
+    Object.assign(heavy.project,seo.deriveEntitySeoScore(seo.toProjectSeoScoreInput(heavy.project as ProjectSeoSource)));
+    const heavyPrevious=(await handle.query("select id from public.projects where slug=$1",[heavy.project.slug])).rows[0];
+    heavySaved=await saveFixture(heavyPrevious?.id,heavy);
+    assert.ok(heavySaved?.project_id);
+    const publication=(await handle.query("select publication_status from public.projects where id=$1",[heavySaved.project_id])).rows[0];
+    assert.equal(publication?.publication_status,"unpublished","The heavy editor fixture starts unpublished in both phases.");
+  }
   const projectMetadata=(id:unknown,value:typeof project)=>({id:Number(id),slug:value.slug,title:value.arabic_name,arabicName:value.arabic_name,overviewTitle:value.overview_title,overviewBody:"QA محتوى محفوظ للنظرة العامة",deliveryTitle:value.delivery_title,deliveryBody:"QA مواصفات وتسليم محفوظة",
     subAreaId:locations[3],locationIds:locations,editorPath:`/admin/projects/${id}`,listPath:`/admin/projects/${value.type}`,listQuery:`?q=QA&type=${value.type}&page=1&limit=20`});
   const pageFixturePath=resolve(root,"scripts/fixtures/admin-page-interaction-fixtures.mts");
   const pageFixtureHash=createHash("sha256").update(readFileSync(pageFixturePath)).digest("hex");
   const {seedAdminPageInteractionFixtures}=await import(`${pathToFileURL(pageFixturePath).href}?fixture=${pageFixtureHash}`);
   const pages = await seedAdminPageInteractionFixtures(handle);
+  if (study) {
+    // Canonical scoped reference writes make the initial Catalog identity equal
+    // to the post-save/reset identity. No Catalog rows or reference counts are
+    // invented here; the existing providers and guarded RPC remain authoritative.
+    const projectIds=[saved.project_id,commercialSaved.project_id,heavySaved!.project_id];
+    const targets=[{domainKey:"topics",entityIdentity:topic.id},
+      ...categories.map(row=>({domainKey:"topic_categories",entityIdentity:row.id})),
+      ...projectIds.map(id=>({domainKey:"projects",entityIdentity:id}))];
+    for(const table of ["project_floor_plans","project_media","project_videos"] as const) {
+      const children=await handle.query(`select id from public.${table} where project_id=any($1::bigint[]) order by id`,[projectIds]);
+      targets.push(...children.rows.map(row=>({domainKey:table,entityIdentity:row.id})));
+    }
+    const templateDomains:Record<string,string>={content:"content_block_templates",cta:"cta_block_templates",cards:"cards_block_templates",breadcrumb:"breadcrumb_block_templates",feed:"feed_module_templates",featured:"featured_module_templates",hero:"hero_templates","media-sidebar":"media_sidebar_module_templates","media-hub":"media_hub_module_templates"};
+    for(const template of pages.templates as Array<{kind:string;id:number}>) {
+      assert.ok(templateDomains[template.kind]);
+      targets.push({domainKey:templateDomains[template.kind],entityIdentity:template.id});
+    }
+    const previousUrl=process.env.NEXT_PUBLIC_SUPABASE_URL,previousServiceKey=process.env.SUPABASE_SERVICE_ROLE_KEY;
+    try {
+      // Private, sequential provisioning only, supplied by the live owned
+      // lifecycle. These values never enter fixture metadata or disk receipts.
+      process.env.NEXT_PUBLIC_SUPABASE_URL=`http://127.0.0.1:${study.apiPort}`;
+      process.env.SUPABASE_SERVICE_ROLE_KEY=study.serviceKey;
+      const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false,alias:{"server-only":resolve(root,"node_modules/next/dist/compiled/server-only/empty.js")}});
+      const owner=await jiti.import<{
+        synchronizeMediaReferenceWriteScopesAfterDomainMutation(targets:Array<{domainKey:string;entityIdentity:string;leaseEntityIdentity:string}>,leaseToken:null):Promise<{status:string}>;
+      }>(resolve(root,"src/lib/admin/media-catalog/synchronization.ts"));
+      for(let offset=0;offset<targets.length;offset+=8) {
+        const result=await owner.synchronizeMediaReferenceWriteScopesAfterDomainMutation(targets.slice(offset,offset+8).map(target=>({
+          domainKey:target.domainKey,entityIdentity:String(target.entityIdentity),leaseEntityIdentity:String(target.entityIdentity),
+        })),null);
+        assert.equal(result.status,"synced","Owned fixture media references must synchronize before identity capture.");
+      }
+    } finally {
+      if(previousUrl===undefined)delete process.env.NEXT_PUBLIC_SUPABASE_URL;else process.env.NEXT_PUBLIC_SUPABASE_URL=previousUrl;
+      if(previousServiceKey===undefined)delete process.env.SUPABASE_SERVICE_ROLE_KEY;else process.env.SUPABASE_SERVICE_ROLE_KEY=previousServiceKey;
+    }
+  }
   return { credentials, fixtures: { category: categories[0], categories,series,topic,
     project:projectMetadata(saved.project_id,project),commercialProject:projectMetadata(commercialSaved.project_id,commercial.project),pages,
+    ...(heavy&&heavySaved?{heavyProject:projectMetadata(heavySaved.project_id,heavy.project),heavyShape:{plans:12,detailsPerPlan:4,features:4,delivery:2,gallery:3,locationDepth:4}}:{}),
     baselineShape: { plans:2,detailsPerPlan:2,features:3,delivery:2,gallery:3,locationDepth:4 } } };
 }

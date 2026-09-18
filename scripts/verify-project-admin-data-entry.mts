@@ -4,7 +4,10 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { verifyProjectEntryReadScheduling } from "./lib/verify-project-entry-read-scheduling.mts";
+import {
+  verifyProjectEntryMediaPreflight,
+  verifyProjectEntryReadScheduling,
+} from "./lib/verify-project-entry-read-scheduling.mts";
 import {
   assertMigrationSourceProvenance,
   classifyWholeFileMigrationProvenance,
@@ -1533,4 +1536,5 @@ check(
 );
 
 passed += await verifyProjectEntryReadScheduling(ROOT);
+passed += await verifyProjectEntryMediaPreflight(ROOT);
 console.log(`OK: Project Admin Data Entry verifier passed ${passed} checks.`);

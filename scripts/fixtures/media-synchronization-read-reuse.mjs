@@ -7,11 +7,25 @@ import ts from "typescript";
 // Execute the actual synchronization owner; isolate Catalog, provider and RPC ports.
 // No database, Storage or network writes occur in this fixture.
 function harness(sourceRoot, options = {}) {
-  const state = { catalogReads: 0, scans: [], rpcCalls: [], uncertainMarks: [], logs: [] };
+  const state = { catalogReads: 0, scans: [], batchScans: [], providerQueries: [], rpcCalls: [], uncertainMarks: [], logs: [] };
   const assetMap = revision => new Map([["fixture-identity", { id: `asset-${revision}` }]]);
   const context = { provider: "local", environment: "test", identity: "isolated" };
   const ports = {
-    "../../supabase-admin": { getSupabaseAdmin: () => ({ rpc: async (name, args) => {
+    "../../supabase-admin": { getSupabaseAdmin: () => ({
+      from: table => {
+        const query = { table };
+        return {
+          select(columns) { query.columns = columns; return this; },
+          in(field, identities) { query.field = field; query.identities = identities; return this; },
+          eq(field, identity) { query.field = field; query.identities = [identity]; return this; },
+          order(field, order) { query.order = { field, ...order }; return this; },
+          range(from, to) {
+            query.range = [from, to]; state.providerQueries.push(query);
+            return Promise.resolve({ data: options.providerRows?.(query) ?? [], error: options.providerError ?? null });
+          },
+        };
+      },
+      rpc: async (name, args) => {
       assert.equal(name, "replace_media_references_for_entity");
       state.rpcCalls.push(args);
       return { error: options.rpcFailure === args.p_entity_identity ? { code: "fixture_rpc_failed" } : null };
@@ -27,7 +41,12 @@ function harness(sourceRoot, options = {}) {
       getMediaCatalogRuntimeState: async () => ({ state: "synced", warnings: [] }),
       setMediaCatalogRuntimeState: async value => { state.uncertainMarks.push(value); },
     },
-    "./identity": { getCanonicalMediaIdentityKey: identity => identity.key },
+    "./identity": { getCanonicalMediaIdentityKey: identity => identity.key,
+      parseLegacyPublicMediaAsset: value => typeof value === "string" && value.startsWith("/images/") ? {key:"fixture-identity"} : null },
+    "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
+    "../content/content-types": { isContentType: () => true },
+    "../../content/public-content-path": { resolvePublicContentPath: () => "/fixture" },
+    "../seo/entity-seo-persistence": { TOPIC_SEO_SOURCE_COLUMNS: [], PERSISTED_ENTITY_SEO_FIELDS: [] },
     "./reference-providers": {
       MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "fixture",
       getMediaReferenceProvider: domainKey => domainKey === "missing-provider" ? null : ({
@@ -36,10 +55,20 @@ function harness(sourceRoot, options = {}) {
           state.scans.push({ domainKey, entityIdentity });
           if (options.scanFailure === entityIdentity) throw new Error("fixture_scan_failed");
           if (entityIdentity.startsWith("cleanup-empty")) return [];
-          return [{ identity: { key: "fixture-identity" }, domainKey, entityType: domainKey, entityIdentity,
+          return [{ identity: { key: "fixture-identity" }, domainKey, entityType: domainKey,
+            entityIdentity: options.fallbackForeignResult === entityIdentity ? "foreign" : entityIdentity,
             entityLabel: "Fixture", fieldKey: "image", editHref: "/admin/fixture", publicHref: null,
             referenceState: "active", restorable: false }];
         },
+        ...(options.batched ? { scanEntities: async identities => {
+          state.batchScans.push({domainKey, identities});
+          if (options.batchFailure) throw new Error("fixture_batch_failed");
+          if (options.batchRead) return options.batchRead(domainKey, identities);
+          return new Map(identities.filter(entityIdentity => entityIdentity !== options.missingResult).map(entityIdentity => [entityIdentity,
+            entityIdentity.startsWith("cleanup-empty") ? [] : [{ identity:{key:"fixture-identity"}, domainKey,
+              entityType:domainKey, entityIdentity:options.foreignResult === entityIdentity ? "foreign" : entityIdentity,
+              entityLabel:"Fixture", fieldKey:"image", editHref:"/admin/fixture", publicHref:null, referenceState:"active", restorable:false }]]));
+        } } : {}),
       }),
     },
     "./write-lease": {},
@@ -52,6 +81,7 @@ function harness(sourceRoot, options = {}) {
     const nativeRequire = createRequire(absolute);
     const require = name => {
       if (name === "server-only") return {};
+      if (name === "./reference-providers" && options.actualProviders) return load("src/lib/admin/media-catalog/reference-providers.ts");
       if (ports[name]) return ports[name];
       if (!name.startsWith(".")) return nativeRequire(name);
       return load(path.resolve(path.dirname(absolute), `${name}.ts`));
@@ -63,7 +93,8 @@ function harness(sourceRoot, options = {}) {
       { error: (...args) => state.logs.push(args) });
     return loadedModule.exports;
   }
-  return { owner: load("src/lib/admin/media-catalog/synchronization.ts"), state };
+  return { owner: load("src/lib/admin/media-catalog/synchronization.ts"),
+    providers: options.actualProviders ? load("src/lib/admin/media-catalog/reference-providers.ts") : null, state };
 }
 
 const target = (index, domainKey = "project_media") => ({ domainKey, entityIdentity: String(index), leaseEntityIdentity: `lease-${index}` });
@@ -132,6 +163,71 @@ export async function verifyMediaSynchronizationReadReuse({ sourceRoot = process
     await owner.syncMediaReferencesForEntity("projects", "1");
     await owner.synchronizeMediaReferencesAfterDomainMutation("projects", "1");
     check("standalone exported synchronization reads remain fresh", state.catalogReads, 2);
+  }
+  if (!baseline) {
+    {
+      const { owner, state } = harness(sourceRoot, {batched:true});
+      const entries=[target(1,"projects"),...targets(12).map(row=>({...row,domainKey:"project_floor_plans"})),...targets(3)];
+      const result=await owner.synchronizeMediaReferenceWriteScopesAfterDomainMutation(entries,"batch-lease",[cleanup("cleanup-empty-1")]);
+      check("heavy aggregate groups only its requested provider identities",state.batchScans.map(row=>[row.domainKey,row.identities.length]),[["projects",1],["project_floor_plans",12],["project_media",4]]);
+      check("grouped scans preserve every target RPC and lease identity",state.rpcCalls.slice(0,16).map(row=>[row.p_domain_key,row.p_entity_identity,row.p_lease_entity_identity,row.p_lease_token]),entries.map(row=>[row.domainKey,row.entityIdentity,row.leaseEntityIdentity,"batch-lease"]));
+      check("grouped cleanup remains explicit-empty and lease-free",state.rpcCalls.at(-1).p_references.length===0&&state.rpcCalls.at(-1).p_lease_token===null);
+      check("grouped aggregate retains all reference results",[result.status,result.referenceCount,state.catalogReads,state.scans.length],["synced",16,1,0]);
+    }
+    {
+      const {owner,state}=harness(sourceRoot,{batched:true,batchFailure:true,scanFailure:"2"});
+      const result=await owner.synchronizeMediaReferenceWriteScopesAfterDomainMutation(targets(3),"batch-failure");
+      check("failed group falls back to existing per-target failure isolation",[state.batchScans.length,state.scans.length,state.rpcCalls.map(row=>row.p_entity_identity),result.status,state.uncertainMarks.length],[1,3,["1","3"],"saved_with_media_sync_warning",1]);
+    }
+    for (const options of [{foreignResult:"2"}, {missingResult:"2"}, {batchFailure:true,fallbackForeignResult:"2"}]) {
+      const {owner,state}=harness(sourceRoot,{batched:true,...options});
+      const result=await owner.synchronizeMediaReferenceWriteScopesAfterDomainMutation(targets(3),"invalid-group");
+      check(`${Object.keys(options).at(-1)} cannot write unproved references into an entity`,[state.rpcCalls.map(row=>row.p_entity_identity),result.status,state.uncertainMarks.length],[["1","3"],"saved_with_media_sync_warning",1]);
+    }
+    {
+      const {owner,state}=harness(sourceRoot,{batched:true,rpcFailure:"2"});
+      const result=await owner.synchronizeMediaReferenceWriteScopesAfterDomainMutation([target(1),target(2),target(1)],"duplicate-targets",[cleanup("cleanup-nonempty")]);
+      check("duplicate targets reuse only their read and retain each synchronization RPC",[state.batchScans[0].identities,state.rpcCalls.map(row=>row.p_entity_identity)],[["1","2","cleanup-nonempty"],["1","2","1","cleanup-nonempty"]]);
+      check("grouped RPC failure and nonempty cleanup retain their warnings",[result.status,state.uncertainMarks.length,result.uncertainties.includes("media_reference_cleanup_not_explicit_empty:project_media:cleanup-nonempty")],["saved_with_media_sync_warning",2,true]);
+    }
+    {
+      const gates=[];
+      const {owner,state}=harness(sourceRoot,{batched:true,batchRead:(domainKey,identities)=>{
+        assert.equal(domainKey,"project_media");
+        return new Promise(resolve=>gates.push(()=>resolve(new Map(identities.map(id=>[id,[]])))));
+      }});
+      const first=owner.synchronizeMediaReferenceWriteScopesAfterDomainMutation(targets(2),"first");
+      const second=owner.synchronizeMediaReferenceWriteScopesAfterDomainMutation(targets(2),"second");
+      check("overlapping operations own separate provider scan promises",state.batchScans.length,2);
+      gates.forEach(resolve=>resolve());await Promise.all([first,second]);
+      const next=owner.synchronizeMediaReferenceWriteScopesAfterDomainMutation(targets(2),"next");gates.at(-1)();await next;
+      check("later operation reads provider data afresh",state.batchScans.length,3);
+      await owner.syncMediaReferencesForEntity("projects","1");
+      check("standalone synchronization retains its individual fresh scan",state.scans.length,1);
+    }
+    {
+      const {providers,state}=harness(sourceRoot,{actualProviders:true,providerRows:query=>query.identities.filter(id=>id!=="missing").map(id=>({id:Number(id),image:"/images/fixture.jpg"})).reverse()});
+      const provider=providers.getMediaReferenceProvider("projects");
+      const ids=Array.from({length:401},(_,index)=>String(index+1));
+      const result=await provider.scanEntities([...ids,"missing","1"]);
+      check("provider queries chunk unique requested identities at the existing 200-row bound",state.providerQueries.map(query=>[query.field,query.identities.length,query.range]),[["id",200,[0,199]],["id",200,[0,199]],["id",2,[0,199]]]);
+      check("reordered provider rows retain exact identities and missing rows are explicit empty",[result.get("1")[0].entityIdentity,result.get("401")[0].entityIdentity,result.get("missing"),result.size],["1","401",[],402]);
+      const before=state.providerQueries.length;await provider.scanEntities([]);
+      check("empty provider identity group performs no read",state.providerQueries.length,before);
+      await assert.rejects(provider.scanEntities([""]),/invalid_entity_identity/);
+      check("invalid requested identity is rejected before querying",state.providerQueries.length,before);
+    }
+    for(const row of [{id:999,image:"/images/fixture.jpg"}, {id:1,image:"/images/fixture.jpg"}]) {
+      const {providers}=harness(sourceRoot,{actualProviders:true,providerRows:()=>row.id===1?[row,row]:[row]});
+      await assert.rejects(providers.getMediaReferenceProvider("projects").scanEntities(["1"]),/unexpected_entity_identity/);
+      check(row.id===1?"duplicate primary-key rows fail closed":"unrequested returned entity fails closed",true);
+    }
+    {
+      const keys=["seo.global","footer.\"literal,key\"", "absent"];
+      const {providers,state}=harness(sourceRoot,{actualProviders:true,providerRows:query=>query.identities.filter(key=>key!=="absent").map(key=>({key,value:{}}))});
+      const result=await providers.getMediaReferenceProvider("site_settings").scanEntities(keys);
+      check("text primary keys pass unchanged through the typed in filter",[state.providerQueries[0].field,state.providerQueries[0].identities,[...result.keys()]],["key",keys,keys]);
+    }
   }
   return { sourceRoot, baseline, checks, observations, scope: "Actual synchronization owner with isolated Catalog/provider/RPC ports; no live timing or database claim" };
 }

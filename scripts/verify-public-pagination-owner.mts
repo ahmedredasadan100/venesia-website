@@ -305,7 +305,7 @@ check(
   "Search Platform adopts once as a URL-driven results consumer",
   searchPlatform.includes("loadPublicContentCollection") &&
     (searchPlatform.match(/<PublicPagination/gu)?.length ?? 0) === 1 &&
-    searchPlatform.includes('basePath="/search"'),
+    searchPlatform.includes("basePath={SEARCH_PLATFORM_PUBLIC_ROUTE.href}"),
 );
 check(
   "Project Tracking adopts five times as a true non-Listing consumer",

@@ -6,6 +6,19 @@ import {
 import type { PageBlockTextAlignment } from "./configs";
 
 export const SEARCH_PLATFORM_TEMPLATE_SLUG = "search-platform";
+/** Canonical destination identity owned by the Search Platform contract. */
+export const SEARCH_PLATFORM_PUBLIC_ROUTE = {
+  cmsPageSlug: "search",
+  href: "/search",
+} as const;
+
+export function isSearchPlatformLauncherTemplate(
+  slug: string | null | undefined,
+  variant?: string | null,
+) {
+  return variant === SEARCH_PLATFORM_TEMPLATE_SLUG &&
+    slug !== SEARCH_PLATFORM_TEMPLATE_SLUG;
+}
 
 export const SEARCH_PLATFORM_SCOPES = ["all", "selected"] as const;
 export type SearchPlatformScope = (typeof SEARCH_PLATFORM_SCOPES)[number];

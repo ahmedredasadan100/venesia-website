@@ -69,7 +69,7 @@ import {
   isManageableAssignment,
   orderPageCompositionRowsForDisplay,
 } from "./page-blocks/page-blocks-utils";
-import { usePageBlocksAssignModal } from "./page-blocks/use-page-blocks-assign-modal";
+import { usePageBlocksAssignModal, type InitialContentTemplateOptions } from "./page-blocks/use-page-blocks-assign-modal";
 
 type PageRow = {
   id: number;
@@ -80,23 +80,11 @@ type PageRow = {
   status: string;
 };
 
-type TemplateOption = { id: number; name: string; slug: string; status: string };
-
 type PageBlocksClientProps = {
   returnTo?: string;
   page: PageRow;
   assignments: PageBlockAssignmentRow[];
-  templates: {
-    content: TemplateOption[];
-    cta: TemplateOption[];
-    cards: TemplateOption[];
-    breadcrumb: TemplateOption[];
-    feed: TemplateOption[];
-    featured: TemplateOption[];
-    hero: TemplateOption[];
-    mediaSidebar: TemplateOption[];
-    mediaHub: TemplateOption[];
-  };
+  initialContentTemplates: InitialContentTemplateOptions | null;
   seo: {
     content: string;
     titleSuffix: string;
@@ -129,7 +117,7 @@ export default function PageBlocksClient({
   returnTo,
   page,
   assignments,
-  templates,
+  initialContentTemplates,
   seo,
   initialTabId,
   initialVisibleColumns = null,
@@ -173,6 +161,9 @@ export default function PageBlocksClient({
     setAssignVisible,
     assignPending,
     templateOptions,
+    templatesLoading,
+    templatesError,
+    retryTemplates,
     assignableTemplates,
     heroAssignmentExists,
     slotOptions,
@@ -185,9 +176,8 @@ export default function PageBlocksClient({
     assignMediaSidebarAction,
     assignMediaHubAction,
   } = usePageBlocksAssignModal({
-    pageId: page.id,
     assignments: instant.rows,
-    templates,
+    initialContentTemplates,
     setActionMessage,
   });
 
@@ -968,6 +958,9 @@ export default function PageBlocksClient({
           onAssignVisibleChange={setAssignVisible}
           assignPending={assignPending}
           templateOptions={templateOptions}
+          templatesLoading={templatesLoading}
+          templatesError={templatesError}
+          onRetryTemplates={retryTemplates}
           assignableTemplates={assignableTemplates}
           heroAssignmentExists={heroAssignmentExists}
           slotOptions={slotOptions}

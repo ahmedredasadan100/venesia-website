@@ -99,7 +99,24 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
       requireThat(now()-bornAt<480_000,"ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE","admin-measurement");
       renewing=(async()=>{
         await options.assertOwned();options.assertHealthy();
-        const next=await options.connect();let published=false;
+        let next: PgConnection;
+        try { next=await options.connect(); }
+        catch(error) {
+          // A fresh socket can be rejected while the pinned host bridge is at
+          // capacity (for example, parallel Next build workers). Defer only
+          // this connection reset; never reconnect a failed current session or
+          // replay a query/write. The next normal heartbeat may renew again.
+          if (!(error instanceof IsolatedSupabaseError && error.stage==="database-connect" && error.code==="ECONNRESET")) throw error;
+          options.assertHealthy();await options.assertOwned();
+          requireThat(now()-bornAt<480_000,"ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE","admin-measurement");
+          const row=(await current.query("select current_database() as database,current_user as role,pg_backend_pid() as backend_pid")).rows[0];
+          options.assertHealthy();await options.assertOwned();
+          requireThat(row?.database==="postgres"&&row.role==="postgres"&&Number.isInteger(Number(row.backend_pid))&&Number(row.backend_pid)>0,"ADMIN_CONTROL_IDENTITY_MISMATCH","admin-measurement");
+          requireThat(now()-bornAt<480_000,"ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE","admin-measurement");
+          options.record({deferred:true,freshSocketCode:"ECONNRESET",backendPid:Number(row.backend_pid),previousAgeMs:now()-bornAt,currentSocketRetained:true,transportLifetimeUnchanged:true});
+          return;
+        }
+        let published=false;
         try {
           options.watch(next);
           const row=(await next.query("select current_database() as database,current_user as role,pg_backend_pid() as backend_pid")).rows[0];
@@ -182,7 +199,7 @@ export type OwnedLocalHandle = {
   pushApplicationMigrations(request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }): Promise<ApplicationMigrationCliResult>;
   runEntitySeoBackfill(request: { mode: "dry-run" | "apply" | "verify" }): Promise<EntitySeoBackfillReport>;
   preparePublicVerification(): Promise<PublicFixtureReadiness>;
-  prepareAdminInteractions(): Promise<Record<string, unknown>>;
+  prepareAdminInteractions(request?: { study: "heavy-editor-performance" }): Promise<Record<string, unknown>>;
   runPublicVerification(request: PublicGateRequest): ReturnType<typeof runOwnedPublicVerification>;
   record(stage: string, metadata: Record<string, SafeValue>): void;
 };
@@ -1023,7 +1040,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       const applicationLease=createAdminMeasurementControlLease(boundConnection,{
         connect:()=>connect("postgres"),assertHealthy:()=>applicationClient.assertHealthy(),watch:client=>applicationClient.watch(client),
         assertOwned:async()=>{assertOwnedLocalHandle(handle);requireThat(!interrupted&&!cleaning,"INACTIVE_ADMIN_CONTROL_LEASE","admin-measurement");await inspectCaptured(serviceResource("db"));},
-        replaced:client=>{appConnection=client;},record:values=>safeRecord("admin-control-connection-renewed",values),
+        replaced:client=>{appConnection=client;},record:values=>safeRecord(values.deferred===true?"admin-control-connection-deferred":"admin-control-connection-renewed",values),
       });
       requireThat(options.cliBinary, "CLI_BINARY_REQUIRED_FOR_HANDOFF", currentStage);
       // One private context per handoff preserves the helper's verified binary
@@ -1071,8 +1088,9 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           assertOwnedLocalHandle(handle);
           return prepareOwnedPublicVerification(publicContext, handle);
         },
-        prepareAdminInteractions: async () => {
+        prepareAdminInteractions: async (request?: { study: "heavy-editor-performance" }) => {
           assertOwnedLocalHandle(handle);
+          requireThat(!request || request.study === "heavy-editor-performance", "ADMIN_FIXTURE_STUDY_INVALID", "admin-measurement");
           requireThat(!publicJob, "ADMIN_FIXTURE_DURING_JOB", "admin-measurement");
           const credentials=await prepareOwnedAdminMeasurementAccount(handle);
           if (!privateValues.includes(credentials.secret)) {
@@ -1087,7 +1105,9 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           requireThat(!acceptedAdminFixtureHash || acceptedAdminFixtureHash===fixtureHash,"ADMIN_ACCEPTED_FIXTURE_MODEL_CHANGED","admin-measurement");
           safeRecord("admin-fixture-attempt",{fixtureHash,acceptedBefore:Boolean(acceptedAdminFixtureHash)});
           const fixtureOwner=await import(`${pathToFileURL(fixturePaths[0]).href}?fixture=${fixtureHash}`);
-          const result=await fixtureOwner.seedOwnedAdminInteractionFixtures(handle,credentials);
+          const result=await fixtureOwner.seedOwnedAdminInteractionFixtures(handle,credentials,request ? {
+            study: request.study, apiPort: publicContext.apiPort, serviceKey: publicContext.serviceKey,
+          } : undefined);
           acceptedAdminFixtureHash=fixtureHash;
           safeRecord("admin-fixture-ready",{fixtureHash});
           return result.fixtures;

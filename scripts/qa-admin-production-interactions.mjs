@@ -3,6 +3,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
 import { chromium } from "playwright";
+import { browserAtomicReadiness } from "./fixtures/admin-atomic-readiness.mjs";
 
 const origin = process.env.E2E_BASE_URL;
 assert.match(origin ?? "", /^http:\/\/127\.0\.0\.1:\d+$/u);
@@ -40,8 +41,17 @@ const completeResponseTelemetry = async (row,response,request) => {
     Promise.resolve().then(()=>request.sizes()).then(sizes=>finish(()=>{Object.assign(row,sizes);row.sizesStatus="complete";}),error=>finish(()=>{row.sizesStatus="error";row.sizeError=String(error.message??error);}));
   });
 };
+const sessionPath = join(control, "local-browser-session.private.json");
+const reuseLocalSession = process.env.QA_ADMIN_STUDY === "heavy-editor-performance" && phase === "after";
+const preservedCookies = reuseLocalSession ? JSON.parse(readFileSync(sessionPath, "utf8")) : null;
+if (preservedCookies) assert.ok(preservedCookies.length > 0 && preservedCookies.every(cookie => cookie.domain === "127.0.0.1"));
+const credentialArtifacts = process.env.QA_ADMIN_STUDY === "heavy-editor-performance" ? "owned-private-local-session-cookie" : false;
 const browser = await chromium.launch({ headless: true, args: ["--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding"] });
 const context = await browser.newContext({ viewport: { width: 1365, height: 900 }, deviceScaleFactor: 1, locale: "ar-EG", timezoneId: "Africa/Cairo", reducedMotion: "reduce", serviceWorkers: "block" });
+if (preservedCookies) {
+  try { await context.addCookies(preservedCookies); }
+  catch (error) { await context.close(); await browser.close(); throw error; }
+}
 const blocked = [];
 await context.route("**/*", route => {
   const url = new URL(route.request().url());
@@ -49,6 +59,8 @@ await context.route("**/*", route => {
   blocked.push({ origin: url.origin, pathname: url.pathname }); return route.abort("blockedbyclient");
 });
 const page = await context.newPage();
+const cdp = await context.newCDPSession(page);
+await cdp.send("Network.enable");
 page.setDefaultTimeout(30_000);
 const trustedEvents = [];
 await page.exposeBinding("qaTrustedAction", (_source, value) => { trustedEvents.push(value); });
@@ -63,6 +75,13 @@ await page.addInitScript(() => {
 const substitute = value => typeof value === "string" ? value.replace(/\{\{([a-zA-Z0-9_.]+)\}\}/gu, (_, path) => {
   const result = path.split(".").reduce((item, key) => item?.[key], fixtures); assert.notEqual(result, undefined, `Unknown fixture ${path}`); return String(result);
 }) : value;
+const nativeCriteria = criteria => criteria.map(item => ({ ...item,
+  target: item.target ? { ...item.target, css: substitute(item.target.css) } : undefined,
+  urlContains: substitute(item.urlContains), value: substitute(item.value), textContains: substitute(item.textContains),
+  attribute: item.attribute ? { ...item.attribute, value: substitute(item.attribute.value) } : undefined,
+}));
+const canBatchCriteria = criteria => criteria.every(item => !item.target ||
+  (item.target.css && !/:(?:has-text|text(?:-is|-matches)?|visible)\(/u.test(item.target.css) && !item.target.css.includes(":visible")));
 const locator = (target, surface = page) => {
   assert.ok(target && typeof target === "object");
   let value = target.css ? surface.locator(substitute(target.css)) : target.role ? surface.getByRole(target.role, { name: substitute(target.name), exact: target.exact ?? true })
@@ -74,6 +93,10 @@ const locator = (target, surface = page) => {
 };
 const atomicReadiness = async (criteria, surface = page) => {
   const entries=[],probeStarted=performance.now();let lookupMs=0;
+  if (canBatchCriteria(criteria)) {
+    const observation = await surface.evaluate(browserAtomicReadiness, { operation: "snapshot", criteria: nativeCriteria(criteria) });
+    return { ...observation, lookupMs: 0, probeMs: performance.now() - probeStarted, collector: "single-renderer-task" };
+  }
   try {
     for(const item of criteria) entries.push({item:{...item,urlContains:substitute(item.urlContains),value:substitute(item.value),textContains:substitute(item.textContains),attribute:item.attribute?{...item.attribute,value:substitute(item.attribute.value)}:undefined},elements:item.target?await locator(item.target,surface).elementHandles():[]});
     lookupMs=performance.now()-probeStarted;
@@ -129,8 +152,15 @@ const ready = async (criteria, surface = page, metrics) => {
   throw error;
 };
 const act = async action => {
-  assert.ok(["goto", "click", "fill", "press", "select", "check", "back", "reload", "assert", "settle-network", "local-password", "local-login", "upload"].includes(action.op), "Unknown fixed QA action");
+  assert.ok(["goto", "click", "fill", "press", "select", "check", "back", "reload", "reset-client", "assert", "settle-network", "local-password", "local-login", "upload"].includes(action.op), "Unknown fixed QA action");
   if (action.op === "goto") { const path = substitute(action.path); assert.ok(path.startsWith("/admin") && !path.startsWith("//")); await page.goto(origin + path, { waitUntil: "domcontentloaded" }); }
+  else if (action.op === "reset-client") {
+    assert.equal(process.env.QA_ADMIN_STUDY, "heavy-editor-performance");
+    const path = substitute(action.path); assert.ok(path.startsWith("/admin") && !path.startsWith("//"));
+    await page.goto("about:blank"); await cdp.send("Network.clearBrowserCache");
+    await page.goto(origin + path, { waitUntil: "domcontentloaded" });
+    checkpoint({type:"client-reset",job:activeJob,cookiesPreserved:true,documentAndRouterReset:true,httpCacheCleared:true,serverCacheReset:false});
+  }
   else if (action.op === "back") await page.goBack({waitUntil:"domcontentloaded"});
   else if (action.op === "reload") await page.reload({waitUntil:"domcontentloaded"});
   else if (action.op === "settle-network") {
@@ -242,6 +272,11 @@ const measurePreview = async step => {
   activeMeasurement=null;return result;
 };
 try {
+  if (reuseLocalSession) {
+    await page.goto(`${origin}/admin`, {waitUntil:"domcontentloaded"});
+    assert.equal(new URL(page.url()).pathname, "/admin", "The original owned local session must remain valid");
+    save("login-dashboard.json",{phase,status:"reused-local-session",localAuth:true,newLogin:false,credentialArtifacts});
+  } else {
   await page.goto(`${origin}/admin/login`, { waitUntil: "domcontentloaded" });
   await page.locator('input[name="username"]').fill(process.env.QA_ADMIN_USERNAME);
   await page.locator('input[name="password"]').fill(process.env.QA_ADMIN_PASSWORD);
@@ -254,16 +289,22 @@ try {
   const loginAction=trustedEvents.slice(loginEventsStart).find(event=>event.type==="click");
   save("login-dashboard.json",{phase,status:loginReadinessFailure?"partial-or-unready":"pass",trustedAction:loginAction??null,
     trustedActionToUsableMs:loginAction&&!loginReadinessFailure?loginFinished-loginAction.at:null,automationMs:performance.now()-loginAutomationStart,
-    dashboardHeadings:await page.locator("main h1").allTextContents(),failure:loginReadinessFailure,localAuth:true,credentialArtifacts:false});
+    dashboardHeadings:await page.locator("main h1").allTextContents(),failure:loginReadinessFailure,localAuth:true,credentialArtifacts});
+  if (process.env.QA_ADMIN_STUDY === "heavy-editor-performance") {
+    const cookies = await context.cookies();
+    assert.ok(cookies.length > 0 && cookies.every(cookie => cookie.domain === "127.0.0.1"));
+    writeFileSync(sessionPath, JSON.stringify(cookies), {mode:0o600,flag:"wx"});
+  }
+  }
   delete process.env.QA_ADMIN_USERNAME; delete process.env.QA_ADMIN_PASSWORD;
   observeNetwork(page);
   page.on("console", message => { if(message.type() === "error") consoleErrors.push({job:activeJob,text:message.text()}); });
   page.on("pageerror", error => pageErrors.push({job:activeJob,message:error.message}));
-  save("ready.json", {origin,phase,fixturePath:join(control,"fixtures.json"),sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,mode:"production",headless:true,viewport:{width:1365,height:900},localLogin:true,credentialArtifacts:false});
+  save("ready.json", {origin,phase,fixturePath:join(control,"fixtures.json"),sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,mode:"production",headless:true,viewport:{width:1365,height:900},localLogin:!reuseLocalSession,credentialArtifacts});
   const driverAttempt=process.env.QA_ADMIN_DRIVER_ATTEMPT;
   writeFileSync(join(control, `${phase}-ready${driverAttempt?`-${driverAttempt}`:""}.json`), `${JSON.stringify({origin,output,phase},null,2)}\n`, {flag:"wx"});
   const completed = new Set();
-  const deadline = Date.now() + 6_900_000;
+  const deadline = Date.now() + (process.env.QA_ADMIN_STUDY === "heavy-editor-performance" ? 21_300_000 : 6_900_000);
   while(Date.now() < deadline) {
     const jobs = readdirSync(control).filter(name => new RegExp(`^${phase}-job-[a-z0-9-]+\\.json$`, "u").test(name) && !completed.has(name))
       .filter(name=>{const job=JSON.parse(readFileSync(join(control,name),"utf8"));return !existsSync(join(control,`${phase}-result-${job.id}.json`));}).sort();
@@ -271,6 +312,26 @@ try {
     for(const file of jobs) {
       const raw = readFileSync(join(control,file),"utf8"); const job = JSON.parse(raw); assert.match(job.id,/^[a-z0-9-]+$/u); assert.ok(Array.isArray(job.steps) && job.steps.length <= 150);
       activeJob=job.id; const start=Date.now();const measurements=[]; const snapshots=[]; const networkStart=network.length;let failure=null;
+      if (process.env.QA_ADMIN_STUDY === "heavy-editor-performance") {
+        assert.ok(["off", "headers", "full"].includes(job.serverTrace ?? "off"));
+        const mode = job.serverTrace ?? "off", token = `${job.id}:${Date.now()}`;
+        writeFileSync(join(control, "server-trace-mode.json"), JSON.stringify({mode,token}));
+        const acknowledgement = join(control, "server-trace-mode-ack.json"), deadline = Date.now() + 10_000;
+        let acknowledged = false;
+        while (!acknowledged && Date.now() < deadline) {
+          try { const ack = JSON.parse(readFileSync(acknowledgement,"utf8")); acknowledged = ack.token === token && ack.mode === mode; } catch { /* The fixed tiny file may be in flight. */ }
+          if (!acknowledged) await new Promise(done => setTimeout(done, 50));
+        }
+        assert.ok(acknowledged, "The owned server did not acknowledge its instrumentation mode");
+      }
+      let traceEvents = null;
+      const onTrace = event => traceEvents.push(...event.value);
+      if (job.profile === true) {
+        assert.equal(process.env.QA_ADMIN_STUDY, "heavy-editor-performance");
+        traceEvents = []; cdp.on("Tracing.dataCollected", onTrace);
+        await cdp.send("Profiler.enable"); await cdp.send("Profiler.start");
+        await cdp.send("Tracing.start", {categories:"devtools.timeline,blink.user_timing,v8,disabled-by-default-devtools.timeline",options:"record-as-much-as-possible"});
+      }
       checkpoint({type:"job-start",job:job.id,file,scenarioSha256:createHash("sha256").update(raw).digest("hex")});
       writeFileSync(join(control,`${phase}-current-job.json`),JSON.stringify({id:job.id,file,output,startedAt:start}));
       const frameCalibration=await page.evaluate(()=>new Promise(done=>{const frames=[];let last=performance.now();const tick=now=>{frames.push(now-last);last=now;if(frames.length===20)done({visibility:document.visibilityState,hasFocus:document.hasFocus(),frames});else requestAnimationFrame(tick);};requestAnimationFrame(tick);}));
@@ -286,6 +347,12 @@ try {
           assert.match(step.id,/^[a-z0-9-]+$/u); assert.ok(Array.isArray(step.ready) && step.ready.length > 0);
           if(step.action.target) {await locator(step.action.target).waitFor({state:"visible"});assert.ok(await locator(step.action.target).isEnabled());}
           activeMeasurement=step.id; const eventStart=trustedEvents.length,nodeStarted=performance.now(), browserStarted=await page.evaluate(()=>performance.timeOrigin+performance.now());
+          const expectedEvent=step.action.op === "fill" ? "input" : step.action.op === "press" ? "keydown" : step.action.op === "select" ? "change" : "click";
+          const watcherId = `${job.id}:${step.id}`;
+          const armed = canBatchCriteria(step.ready) && ["click", "fill", "press"].includes(step.action.op);
+          if (step.requireFormSaved) assert.ok(armed, "Committed-form readiness requires the native prearmed observer");
+          if (armed) await page.evaluate(browserAtomicReadiness, { operation: "arm", id: watcherId, criteria: nativeCriteria(step.ready), eventType: expectedEvent,
+            requireFormSaved: step.requireFormSaved ? { entityId: substitute(step.requireFormSaved.entityId) } : undefined });
           let measurementFailure=null,browserFinished=null;const pipeline={actionInvokedAt:Date.now(),readiness:{}};
           try {
             const networkIndex=network.length;
@@ -304,23 +371,48 @@ try {
               while(!network.slice(networkIndex).some(matches)&&Date.now()<deadline) await new Promise(done=>setTimeout(done,20));
               assert.ok(network.slice(networkIndex).some(matches),"The measured action did not complete its required owned Recovery API response");
             }
-            pipeline.readinessStartedAt=Date.now();browserFinished=await ready(step.ready,page,pipeline.readiness);
+            pipeline.readinessStartedAt=Date.now();
+            const observation = armed ? await page.evaluate(browserAtomicReadiness, { operation: "result", id: watcherId }) : null;
+            if (observation) {
+              Object.assign(pipeline.readiness, observation, { collector: "prearmed-native-css", timestamp: "first-of-three-consecutive-ready-frames" });
+              assert.equal(observation.failures.length, 0, JSON.stringify(observation));
+              assert.ok(Number.isFinite(observation.actionAt) && Number.isFinite(observation.firstReadyAt) && Number.isFinite(observation.confirmedAt)
+                && observation.actionAt <= observation.firstReadyAt && observation.firstReadyAt <= observation.confirmedAt, "Invalid readiness chronology");
+              browserFinished = observation.firstReadyAt;
+            } else {
+              assert.ok(!step.requireFormSaved, "The document changed before the required committed-form event could be verified");
+              browserFinished=await ready(step.ready,page,pipeline.readiness);
+            }
           } catch(error) {measurementFailure={name:error.name,message:error.message};}
           if(browserFinished===null)browserFinished=await page.evaluate(()=>performance.timeOrigin+performance.now());
           const events=trustedEvents.slice(eventStart).filter(event=>event.at>=browserStarted);
-          const expectedEvent=step.action.op === "fill" ? "input" : step.action.op === "press" ? "keydown" : "click";
           const trusted=events.find(event=>event.type===expectedEvent);
           pipeline.longTasks=await page.evaluate(since=>(window.__qaAdminLongTasks??[]).filter(task=>task.startedAt+task.durationMs>=since),browserStarted);
           measurements.push({id:step.id,status:measurementFailure?"fail":"pass",automationMs:performance.now()-nodeStarted,navigationCommandMs:trusted?null:browserFinished-browserStarted,
             pipeline,
             trustedActionToUsableMs:trusted&&!measurementFailure?browserFinished-trusted.at:null,trustedAction:trusted??null,observedEvents:events,
-            finishedAt:Date.now(),url:page.url(),criteria:step.ready,failure:measurementFailure,endpoint:"Two complete atomic connected-element snapshots separated by double rAF; timestamp sampled inside final successful snapshot; includes observation latency"});activeMeasurement=null;
+            finishedAt:Date.now(),url:page.url(),criteria:step.ready,failure:measurementFailure,endpoint:pipeline.readiness.collector === "prearmed-native-css" ? "Trusted action to first correct atomic native-CSS snapshot, confirmed on two subsequent animation frames; observer CPU reported separately" : "Two complete atomic connected-element snapshots separated by double rAF; timestamp sampled inside final successful snapshot; includes observation latency"});activeMeasurement=null;
           checkpoint({type:"measurement",job:job.id,measurement:measurements.at(-1)});
           if(measurementFailure)stepStatus="fail";
           if(measurementFailure && step.continueOnFailure !== true) throw new Error(`Measurement ${step.id}: ${measurementFailure.message}`);
         } else if(step.op === "snapshot") {
           const fields=await page.locator("input,textarea,select,[contenteditable=true],[data-admin-tab-id]").evaluateAll(elements=>elements.map(element=>({tag:element.tagName,name:element.getAttribute("name"),id:element.id,type:element.getAttribute("type"),value:element.type === "password" ? "[REDACTED]" : element.value ?? null,text:element.isContentEditable ? element.textContent : null,disabled:Boolean(element.disabled),tab:element.getAttribute("data-admin-tab-id"),selected:element.getAttribute("aria-selected")})));
-          snapshots.push({id:step.id,url:page.url(),fields,bodyText:await page.locator("body").innerText()});
+          let formData;
+          if (step.formData === true) {
+            assert.equal(typeof step.formSelector, "string");
+            formData = await page.locator(step.formSelector).evaluate(form => {
+              if (!(form instanceof HTMLFormElement)) throw new Error("Expected owned editor form");
+              return [...new FormData(form).entries()].map(([name, value]) => [name, typeof value === "string" ? value : { name: value.name, size: value.size, type: value.type }]);
+            });
+            for (const [name, count] of Object.entries(step.formAssertions?.names ?? {})) assert.equal(formData.filter(entry => entry[0] === name).length, count, `Successful FormData count: ${name}`);
+            for (const [name, values] of Object.entries(step.formAssertions?.values ?? {})) assert.deepEqual(formData.filter(entry => entry[0] === name).map(entry => entry[1]), values.map(substitute), `Successful FormData values: ${name}`);
+            if (step.compareFormTo) {
+              const previous = snapshots.find(snapshot => snapshot.id === step.compareFormTo);
+              assert.ok(previous?.formData, "Missing earlier successful FormData snapshot");
+              assert.deepEqual(formData, previous.formData, "Tab navigation changed successful FormData");
+            }
+          }
+          snapshots.push({id:step.id,url:page.url(),fields,...(formData ? {formData} : {}),bodyText:await page.locator("body").innerText()});
           checkpoint({type:"snapshot",job:job.id,snapshot:snapshots.at(-1)});
         } else await act(step);
         } catch(error) {
@@ -339,7 +431,13 @@ try {
         save(`job-${job.id}-failure-dom.json`,{url:page.url(),bodyText,html,artifactFailures});
       }
       await Promise.race([Promise.allSettled([...pendingNetwork]),new Promise(done=>setTimeout(done,2_000))]);
-      const result={id:job.id,phase,status:failure||measurements.some(row=>row.status==="fail")?"fail":"pass",startedAt:start,finishedAt:Date.now(),frameCalibration,scenarioSha256:createHash("sha256").update(raw).digest("hex"),measurements,snapshots,network:network.slice(networkStart),pendingTelemetryAtReceipt:pendingNetwork.size,failure};
+      if (traceEvents) {
+        const profile = await cdp.send("Profiler.stop"); await cdp.send("Profiler.disable");
+        const tracingComplete = new Promise(done => cdp.once("Tracing.tracingComplete", done));
+        await cdp.send("Tracing.end"); await tracingComplete; cdp.off("Tracing.dataCollected", onTrace);
+        save(`job-${job.id}-cpu-profile.json`,profile); save(`job-${job.id}-browser-trace.json`,{traceEvents});
+      }
+      const result={id:job.id,phase,status:failure||measurements.some(row=>row.status==="fail")?"fail":"pass",startedAt:start,finishedAt:Date.now(),instrumentation:{serverTrace:job.serverTrace ?? (process.env.QA_ADMIN_STUDY ? "off" : "legacy-full"),browserProfile:job.profile === true},frameCalibration,scenarioSha256:createHash("sha256").update(raw).digest("hex"),measurements,snapshots,network:network.slice(networkStart),pendingTelemetryAtReceipt:pendingNetwork.size,failure};
       save(`job-${job.id}.json`,result); completed.add(file); activeJob=null;activeMeasurement=null;
       writeFileSync(join(control,`${phase}-result-${job.id}.json`),`${JSON.stringify({status:result.status,path:join(output,`job-${job.id}.json`)},null,2)}\n`,{flag:"wx"});
     }

@@ -387,7 +387,7 @@ assert.match(
   sharedEntitySeoMigration,
   /alter table public\.pages[\s\S]*alter column seo_title set not null[\s\S]*alter column seo_description set not null[\s\S]*alter column focus_keyword set not null[\s\S]*alter column seo_keywords set not null[\s\S]*alter column og_image_alt set not null/iu,
 );
-assert.match(pageStatusAction, /update\(\{ status: nextStatus, updated_at: new Date\(\)\.toISOString\(\) \}\)/u);
+assert.match(pageStatusAction, /const updatedAt = new Date\(\)\.toISOString\(\);[\s\S]*update\(\{ status: nextStatus, updated_at: updatedAt \}\)[\s\S]*\.eq\("status", page\.status\)[\s\S]*\.eq\("updated_at", page\.updated_at\)/u);
 assert.match(pageSeoAction, /toEntitySeoPersistence\(seo\)[\s\S]*updated_at:\s*new Date\(\)\.toISOString\(\)/u);
 assert.match(adminDateOwner, /ADMIN_TIME_ZONE\s*=\s*"Africa\/Cairo"/u);
 assert.match(adminDateOwner, /export function formatAdminDateTime/u);

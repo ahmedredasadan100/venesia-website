@@ -1557,11 +1557,15 @@ check(
 );
 
 check(
-  "Page Blocks read owners avoid duplicate template and page payloads while keeping parallel reads",
-  adminQueries.includes("const contentTemplateById = new Map") &&
-    adminQueries.includes("const heroTemplateById = new Map") &&
-    !adminQueries.includes("content_block_templates(name") &&
-    !adminQueries.includes("hero_templates(id") &&
+  "Page Blocks read owners join assigned metadata, preload only default Content summaries and keep other picker catalogs on demand",
+  adminQueries.includes("content_block_templates(id,name,slug,status,variant,config)") &&
+    adminQueries.includes("hero_templates(id,name,slug,status,variant,config)") &&
+    adminQueries.includes("const template = row.content_block_templates;") &&
+    adminQueries.includes("const template = row.hero_templates;") &&
+    adminQueries.includes("getPageModuleTemplateOptionsForAdmin(kind: PageModuleKind)") &&
+    adminQueries.includes('getPageModuleTemplateOptionsForAdmin("content").catch(() => null)') &&
+    pageCompositionRoute.includes("initialContentTemplates={assignmentsData.initialContentTemplates}") &&
+    !pageCompositionRoute.includes("templates={assignmentsData.templates}") &&
     assignmentContextQuery.includes("const pageById = new Map") &&
     !assignmentContextQuery.includes("pages(title,slug,path)") &&
     heroDetailRoute.includes("getHeroModuleAssignmentContext(heroId)") &&

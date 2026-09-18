@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { verifyPageBlockReadAndRevalidationContract } from "./fixtures/page-block-performance-harness.mjs";
+import { verifyPageBlockReadAndRevalidationContract, verifyPageAssignmentQueryRuntime } from "./fixtures/page-block-performance-harness.mjs";
 
 import {
   PAGE_COMPOSITION_POSITIONS,
@@ -348,6 +348,8 @@ assert.ok(!assignmentContract.includes("components/"));
 assert.ok(!positionInventory.includes("components/"));
 
 await verifyPageBlockReadAndRevalidationContract(root);
+const assignmentQuery = await verifyPageAssignmentQueryRuntime(root, resolve(root, ".tmp-qa/page-composition-assignment-query"));
+console.log(`PASS Page Assignment mounted Query Runtime: ${assignmentQuery.assertions.length} invariants.`);
 console.log("PASS Page Block read/revalidation contract: summary-only picker payload, preserved SEO content, batched detached/assigned page invalidation, failure propagation, and every module save adopter.");
 
 console.log(

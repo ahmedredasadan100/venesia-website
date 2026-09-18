@@ -10,6 +10,7 @@ export {
   savePagesTablePreferences,
 } from "./column-preferences";
 export {
+  loadPageModuleTemplateOptions,
   assignHeroModule,
   assignMediaHubModule,
   assignMediaSidebarModule,
