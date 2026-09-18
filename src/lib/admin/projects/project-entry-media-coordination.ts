@@ -115,7 +115,14 @@ export async function coordinateProjectEntrySave(input: {
   const rootLeaseIdentity = input.projectId
     ? String(input.projectId)
     : `project-create:${operationIdentity}`;
-  const existingChildren = await loadExistingMediaChildren(input.projectId);
+  const hasMediaDeletions = input.payload.deleted.floor_plan_ids.length > 0
+    || input.payload.deleted.media_ids.length > 0
+    || input.payload.deleted.video_ids.length > 0;
+  // Previous identities serve only explicit deletion cleanup. Persisted identities
+  // are still read after every successful mutation before reference synchronization.
+  const existingChildren = hasMediaDeletions
+    ? await loadExistingMediaChildren(input.projectId)
+    : [];
   const intendedChildren = buildIntendedChildren(input.payload, operationIdentity);
   const scopes = [
     buildMediaReferenceWriteScope("projects", rootLeaseIdentity, {

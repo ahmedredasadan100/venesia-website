@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -350,6 +351,139 @@ async function networkBoundaryOnly() {
     dockerExecuted: false, networkRequests: 0, databaseCalls: 0, retainedNavigationGatesReexecuted: false, integrationReadinessClaimed: false }, null, 2));
 }
 
+async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/isolated-supabase.mts")) {
+  // Exercise the real private receipt validator as well as the exported lease.
+  // No socket, database, clock wait, environment loader or lifecycle is started.
+  const source = readSource("scripts/lib/isolated-supabase.mts");
+  const declaration = source.slice(source.indexOf("  const safeRecord ="), source.indexOf("  const events:"));
+  assert.ok(declaration.includes("UNSAFE_RECEIPT_KEY"));
+  const receipt = new Function("requireThat", "privateValues", "events", "recordFile", "process",
+    ts.transpileModule(declaration, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText + ";return safeRecord;")(
+    (value: unknown, code: string) => assert.ok(value, code), [], [], () => {}, { stdout: { write() {} } });
+  function setup() {
+    let time = 0, connections = 0, owned = 0, queryFailure = false, ownershipFailure = false, expireOnQuery = false;
+    let connectFailure: Error | undefined = new owner.IsolatedSupabaseError("ECONNRESET", "database-connect");
+    let identity = { database: "postgres", role: "postgres", backend_pid: 11 };
+    const make = (pid: number) => Object.assign(new EventEmitter(), {
+      closed: false, queries: 0, async connect() {},
+      async query() {
+        this.queries++;
+        if (queryFailure) throw new Error("old-query-failed");
+        if (expireOnQuery) time = 480_000;
+        return { rows: [pid === 11 ? identity : { database: "postgres", role: "postgres", backend_pid: pid }], rowCount: 1 };
+      },
+      async end() { this.closed = true; },
+    });
+    const first = make(11), second = make(12), records: Array<Record<string, unknown>> = [];
+    const observer = owner.observeApplicationClient(first, () => {});
+    const lease = owner.createAdminMeasurementControlLease(first, {
+      now: () => time,
+      connect: async () => { connections++; if (connectFailure) throw connectFailure; return second; },
+      assertHealthy: () => observer.assertHealthy(),
+      assertOwned: async () => { owned++; if (ownershipFailure) throw new Error("ownership-lost"); },
+      watch: client => observer.watch(client), replaced: () => {},
+      record: row => {
+        receipt(row.deferred === true ? "admin-control-connection-deferred" : "admin-control-connection-renewed", row);
+        records.push(row);
+      },
+    });
+    time = 240_000;
+    return {
+      lease, first, second, records, connections: () => connections, owned: () => owned,
+      setTime: (value: number) => { time = value; }, setError: (error?: Error) => { connectFailure = error; },
+      loseOwnership: () => { ownershipFailure = true; }, failQuery: () => { queryFailure = true; },
+      expireOnQuery: () => { expireOnQuery = true; }, wrongIdentity: () => { identity = { ...identity, role: "other" }; },
+    };
+  }
+  {
+    const t = setup();
+    await Promise.all([t.lease.renewIfDue(true), t.lease.renewIfDue(true)]);
+    assert.equal(t.connections(), 1); assert.equal(t.first.queries, 1); assert.equal(t.owned(), 3);
+    assert.equal(t.first.closed, false); assert.equal(t.lease.client, t.first);
+    assert.equal(t.records[0].deferred, true); assert.equal(t.records[0].previousAgeMs, 240_000);
+    t.setError(); t.setTime(260_000); await t.lease.renewIfDue(true);
+    assert.equal(t.connections(), 2); assert.equal(t.first.closed, true); assert.equal(t.lease.client, t.second);
+    assert.equal(t.records[1].previousAgeMs, 260_000); assert.equal(t.records[1].previousSocketClosed, true);
+    cases.push("control lease defers a fresh reset only on verified current identity, serializes callers, retains original deadline, then validates and swaps on next heartbeat; actual receipts pass");
+  }
+  {
+    const t = setup(); t.first.emit("error", new Error("idle-error"));
+    await assert.rejects(t.lease.renewIfDue(true), /APPLICATION_CLIENT_DISCONNECTED/); assert.equal(t.connections(), 0);
+    cases.push("control lease never reconnects a failed current session");
+  }
+  {
+    const t = setup(); t.loseOwnership();
+    await assert.rejects(t.lease.renewIfDue(true), /ownership-lost/); assert.equal(t.connections(), 0);
+    cases.push("control lease rejects lost ownership before connecting");
+  }
+  {
+    const t = setup(); t.failQuery();
+    await assert.rejects(t.lease.renewIfDue(true), /old-query-failed/); assert.equal(t.records.length, 0); assert.equal(t.first.queries, 1);
+    assert.equal(t.lease.client, t.first);
+    cases.push("control lease never replays a failed current read or reports it as deferred");
+  }
+  {
+    const t = setup(); t.wrongIdentity();
+    await assert.rejects(t.lease.renewIfDue(true), /ADMIN_CONTROL_IDENTITY_MISMATCH/); assert.equal(t.records.length, 0);
+    cases.push("control lease requires the current role identity for deferral");
+  }
+  for (const duringQuery of [false, true]) {
+    const t = setup(); if (duringQuery) t.expireOnQuery(); else t.setTime(480_000);
+    await assert.rejects(t.lease.renewIfDue(true), /ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE/);
+    assert.equal(t.records.length, 0); assert.equal(t.connections(), duringQuery ? 1 : 0);
+  }
+  cases.push("control lease enforces eight minutes before attempt and after validation without resetting birth time");
+  for (const error of [new owner.IsolatedSupabaseError("ECONNREFUSED", "database-connect"), new owner.IsolatedSupabaseError("ECONNRESET", "ownership"), new Error("ECONNRESET")]) {
+    const t = setup(); t.setError(error);
+    await assert.rejects(t.lease.renewIfDue(true), value => value === error); assert.equal(t.first.queries, 0); assert.equal(t.records.length, 0);
+  }
+  cases.push("control lease permits only sanitized database-connect ECONNRESET; other codes, stages and raw errors fail closed");
+  {
+    const t = setup(); await t.lease.renewIfDue(false); assert.equal(t.connections(), 0);
+    t.setTime(239_999); await t.lease.renewIfDue(true); assert.equal(t.connections(), 0);
+    cases.push("control lease does no connection or probe outside active Admin jobs or before renewal is due");
+  }
+}
+
+async function adminControlLeaseOnly() {
+  const sources = ["scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-public-verification.mts", "scripts/verify-isolated-supabase.mts"];
+  const sourceHashes = Object.fromEntries(sources.map(file => [file, sha256(readSource(file))]));
+  await verifyAdminMeasurementControlLease(await import("./lib/isolated-supabase.mts"));
+  verifyAdminMeasurementDriverRepairPolicy();
+  for (const file of sources) assert.equal(sha256(readSource(file)), sourceHashes[file]);
+  console.log(JSON.stringify({ status: "PASS", scope: "admin-control-lease-only", checks: cases.length, cases, sourceHashes,
+    dockerExecuted: false, networkRequests: 0, databaseCalls: 0, actualRenewalClaimed: false }, null, 2));
+}
+
+function verifyAdminMeasurementDriverRepairPolicy() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  let policy: ts.IfStatement | undefined;
+  const visit = (node: ts.Node) => {
+    if (ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
+      && node.thenStatement.statements.some(statement => ts.isExpressionStatement(statement)
+        && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(file) === "receipt"
+        && statement.expression.arguments[1]?.getText(file) === '"admin-before-driver-repair-rejected.json"')) policy = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(file); assert.ok(policy, "The fixed study must guard Before repair at the canonical owner.");
+  const repairChild = source.indexOf("result=await runChild(args,{...env,QA_ADMIN_OUTPUT:driverOutput");
+  assert.ok(repairChild > policy.end, "The policy must run before any repair child.");
+  const events: unknown[] = [];
+  const evaluate = new Function("measurement", "result", "receipt", "context", "assert",
+    ts.transpileModule(policy.getText(file), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
+  const record = (_context: unknown, name: string, metadata: unknown) => events.push({ name, metadata });
+  assert.throws(() => evaluate({ study: "heavy-editor-performance", phase: "before" }, { code: 1 }, record, {}, assert), /same-session contract/);
+  assert.equal(events.length, 1);
+  for (const [measurement, code] of [
+    [{ study: "heavy-editor-performance", phase: "before" }, 0],
+    [{ study: "heavy-editor-performance", phase: "after" }, 1],
+    [{ phase: "before" }, 1], [{ phase: "after" }, 1],
+  ] as const) evaluate(measurement, { code }, record, {}, assert);
+  assert.equal(events.length, 1, "After and legacy repairs must retain their existing path.");
+  cases.push("fixed-study Before failure rejects repair before child launch; successful Before, After and legacy repair paths remain allowed");
+}
+
 async function main() {
   verifyScanner();
   const provenance = verifyReleaseLock();
@@ -364,6 +498,8 @@ async function main() {
   // Importing the lifecycle owner must be passive. Only pure exported guards are
   // invoked below; run/start/cleanup, Docker, SQL and environment loaders are not.
   const owner = await import("./lib/isolated-supabase.mts");
+  await verifyAdminMeasurementControlLease(owner);
+  verifyAdminMeasurementDriverRepairPolicy();
   verifyImageIdentity(owner, provenance.lock.images.db);
   const password = "offline-unit-secret-not-a-credential";
   const target = { port: 55965, database: "postgres" as const, username: "postgres" as const };
@@ -518,5 +654,5 @@ async function cliDiagnosticsOnly() {
     cliExecuted: false, databaseCalls: 0, networkRequests: 0, retainedNavigationGatesReexecuted: false }, null, 2));
 }
 
-const verification = process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+const verification = process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });

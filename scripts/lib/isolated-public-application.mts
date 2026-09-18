@@ -51,6 +51,8 @@ export type ApplicationHandoffReport = {
   officialCliExecutionProvenanceVerified: boolean;
   migrationIdempotencyVerified: boolean;
   failedMigrationState: "not_started" | "unconfirmed";
+  provisioningOnly?: true;
+  priorVerificationSuitesRerun?: false;
 };
 
 export class ApplicationHandoffBlocked extends Error {
@@ -209,8 +211,12 @@ export async function applyCanonicalApplicationVerificationPrefix(
 export async function runApplicationHandoff(
   handle: OwnedLocalHandle,
   checkpoints: readonly ApplicationMigrationCheckpoint[] = [],
+  options: { mode?: "measurement-provision" } = {},
 ): Promise<ApplicationHandoffReport> {
   assertOwnedLocalHandle(handle);
+  assert.ok(options.mode === undefined || options.mode === "measurement-provision");
+  const provisioningOnly = options.mode === "measurement-provision";
+  if (provisioningOnly) assert.equal(checkpoints.length, 0, "Measurement provisioning does not replay verification checkpoints.");
   const report: ApplicationHandoffReport = {
     status: "blocked", stage: "identity", migration: null, sqlState: null, reason: null,
     planned: 0, baselinePlanned: 0, registered: 0, corpusSha256: null,
@@ -218,6 +224,7 @@ export async function runApplicationHandoff(
     seoExpandVerified: false, seoBackfillVerified: false, seoIdempotencyVerified: false, seoEnforceVerified: false,
     canonicalWholeFileRegistryVerified: false, officialCliExecutionProvenanceVerified: false,
     migrationIdempotencyVerified: false, failedMigrationState: "not_started",
+    ...(provisioningOnly ? { provisioningOnly: true as const, priorVerificationSuitesRerun: false as const } : {}),
   };
 
   try {
@@ -358,30 +365,34 @@ export async function runApplicationHandoff(
       return result;
     };
 
-    await backfill("dry-run", "seo_dry_run");
+    if (!provisioningOnly) await backfill("dry-run", "seo_dry_run");
     await backfill("apply", "seo_apply");
     await backfill("verify", "seo_verify");
     report.seoBackfillVerified = true;
-    const idempotent = await backfill("apply", "seo_idempotency");
-    report.reason = "seo_backfill_failed";
-    assert.equal(idempotent.counts.written, 0, "Idempotency rerun must not write any row.");
-    report.reason = null;
-    report.seoIdempotencyVerified = true;
-    await backfill("verify", "seo_verify");
+    if (!provisioningOnly) {
+      const idempotent = await backfill("apply", "seo_idempotency");
+      report.reason = "seo_backfill_failed";
+      assert.equal(idempotent.counts.written, 0, "Idempotency rerun must not write any row.");
+      report.reason = null;
+      report.seoIdempotencyVerified = true;
+      await backfill("verify", "seo_verify");
+    }
     // The canonical ENFORCE file also locks and rechecks all tuples atomically.
     await applyPhase(migrations.slice(0, seoBoundary + 3));
     report.seoEnforceVerified = true;
     await applyPhase(migrations);
     // The official CLI owns statement splitting. Preserve its rows and prove
     // source-bound execution; never relabel them as whole-file registry SQL.
-    const idempotentPlan = await handle.pushApplicationMigrations({ mode: "dry-run", stage: cliStage(migrations) });
-    recordCli(handle, idempotentPlan, migrations, "dry-run");
-    assert.equal(idempotentPlan.exitCode, 0);
-    assert.deepEqual(idempotentPlan.pendingFiles, []);
-    assert.deepEqual(await readRegistry(handle), before, "Final CLI verification changed history.");
-    assert.deepEqual(readCanonicalCorpus(), migrations, "Source changed during final CLI verification.");
+    if (!provisioningOnly) {
+      const idempotentPlan = await handle.pushApplicationMigrations({ mode: "dry-run", stage: cliStage(migrations) });
+      recordCli(handle, idempotentPlan, migrations, "dry-run");
+      assert.equal(idempotentPlan.exitCode, 0);
+      assert.deepEqual(idempotentPlan.pendingFiles, []);
+      assert.deepEqual(await readRegistry(handle), before, "Final CLI verification changed history.");
+      assert.deepEqual(readCanonicalCorpus(), migrations, "Source changed during final CLI verification.");
+      report.migrationIdempotencyVerified = true;
+    }
     report.officialCliExecutionProvenanceVerified = true;
-    report.migrationIdempotencyVerified = true;
     report.status = "complete";
     report.stage = "complete";
     report.migration = null;

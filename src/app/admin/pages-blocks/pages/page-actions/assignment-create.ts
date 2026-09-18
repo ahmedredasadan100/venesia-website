@@ -1,6 +1,8 @@
 "use server";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
+import { getPageModuleTemplateOptionsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
+import { PAGE_MODULE_KINDS, type PageModuleKind } from "../../../../../lib/page-blocks/types";
 import { BLOCK_MODULE_REGISTRY } from "../../../../../lib/page-blocks/block-module-registry";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
 import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
@@ -17,6 +19,14 @@ import {
   positionPolicyFailure,
   success,
 } from "./helpers";
+
+export async function loadPageModuleTemplateOptions(kind: string) {
+  await requireAdminSession();
+  if (!PAGE_MODULE_KINDS.includes(kind as PageModuleKind)) {
+    throw new Error("نوع الموديول غير صالح.");
+  }
+  return getPageModuleTemplateOptionsForAdmin(kind as PageModuleKind);
+}
 
 async function resolveRequestedSortOrder(
   formData: FormData,

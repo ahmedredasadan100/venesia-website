@@ -1077,7 +1077,8 @@ assert.equal(
 const blockLoader = read("src/lib/page-blocks/load-page-blocks.ts");
 const adminQueries = read("src/lib/page-blocks/admin-queries.ts");
 assert.ok(blockLoader.includes("isRetiredContentBlockTemplateSlug"));
-assert.ok(adminQueries.includes("activeContentTemplates"));
+assert.ok(adminQueries.includes("if (!template || isRetiredContentBlockTemplateSlug(template.slug)) continue;"));
+assert.ok(adminQueries.includes('kind !== "content" || !isRetiredContentBlockTemplateSlug(template.slug)'));
 
 const listingRoutes = [
   "news",

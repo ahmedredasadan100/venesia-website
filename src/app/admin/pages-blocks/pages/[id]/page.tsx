@@ -116,7 +116,7 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       returnTo={resolveAdminFormReturnPath(resolvedSearchParams?.return_to, "/admin/pages-blocks/pages")}
       page={page}
       assignments={assignmentsData.assignments}
-      templates={assignmentsData.templates}
+      initialContentTemplates={assignmentsData.initialContentTemplates}
       seo={{
         content: assignmentsData.seoContent,
         titleSuffix: getSeoTitleSuffix(globalSeo),

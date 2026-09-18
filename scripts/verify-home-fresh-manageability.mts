@@ -162,6 +162,7 @@ function reset() {
 }
 const detail = load<typeof import("../src/app/admin/pages-blocks/pages/[id]/page.tsx")>("src/app/admin/pages-blocks/pages/[id]/page.tsx");
 const assignment = load<typeof import("../src/lib/page-blocks/admin-queries.ts")>("src/lib/page-blocks/admin-queries.ts");
+const assignmentActions = load<typeof import("../src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts")>("src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts");
 const readModel = load<typeof import("../src/lib/admin/pages/entity-list-read-model-boundary.ts")>("src/lib/admin/pages/entity-list-read-model-boundary.ts");
 const rowContract = load<typeof import("../src/lib/admin/pages/entity-list-contract.ts")>("src/lib/admin/pages/entity-list-contract.ts");
 const seoOwner = load<typeof import("../src/lib/admin/seo-score.ts")>("src/lib/admin/seo-score.ts");
@@ -208,7 +209,10 @@ try {
     const result = await assignment.getPageModuleAssignmentsForAdmin(Number(initialHome.id));
     assert.deepEqual(result.assignments, []);
     assert.equal(result.seoContent, "");
-    assert.equal(result.templates.content[0]?.id, availableTemplate.id);
+    assert.ok(!Object.hasOwn(result, "templates"), "Page does not preload every picker catalog");
+    assert.ok(result.initialContentTemplates, "The default Content summary is available for first Assign");
+    assert.equal(result.initialContentTemplates[0]?.id, availableTemplate.id);
+    assert.equal((await assignment.getPageModuleTemplateOptionsForAdmin("content"))[0]?.id, availableTemplate.id);
     assert.equal(state.reads.filter((table) => assignmentTables.has(table)).length, assignmentTables.size);
     assertNoMutation();
   });
@@ -218,7 +222,9 @@ try {
     assert.equal(element.props.page.id, initialHome.id);
     assert.equal(element.props.page.status, "unpublished");
     assert.deepEqual(element.props.assignments, []);
-    assert.equal(element.props.templates.content[0]?.id, availableTemplate.id);
+    assert.ok(!Object.hasOwn(element.props, "templates"));
+    assert.equal(element.props.initialContentTemplates[0]?.id, availableTemplate.id);
+    assert.equal((await assignment.getPageModuleTemplateOptionsForAdmin("content"))[0]?.id, availableTemplate.id);
     assert.equal(element.props.seo.content, "");
     assert.equal((await publicRead.getPublishedPageStateBySlug("home")).sourceStatus, "missing");
     assert.equal(state.authCalls, 0, "No login/session is synthesized by reads");
@@ -236,6 +242,19 @@ try {
     assert.equal(element.props.seo.seoTitle, "Explicit Home SEO edit");
     assert.deepEqual(element.props.assignments, []);
     assert.ok(state.cache.some((entry) => entry.kind === "path" && entry.args[0] === "/"));
+  });
+  await check("assignment picker validates session and kind before its one catalog read", async () => {
+    state.denyAuth = true;
+    await assert.rejects(() => assignmentActions.loadPageModuleTemplateOptions("content"), /isolated_auth_rejected/);
+    assert.deepEqual(state.reads, []);
+    state.denyAuth = false;
+    await assert.rejects(() => assignmentActions.loadPageModuleTemplateOptions("invalid"), error => error instanceof Error && error.message === "نوع الموديول غير صالح.");
+    assert.deepEqual(state.reads, []);
+    assert.equal((await assignmentActions.loadPageModuleTemplateOptions("content"))[0]?.id, availableTemplate.id);
+    assert.deepEqual(state.reads, ["content_block_templates"]);
+    state.failReadTable = "content_block_templates";
+    await assert.rejects(() => assignmentActions.loadPageModuleTemplateOptions("content"), /isolated_read_rejected/);
+    assertNoMutation();
   });
   await check("invalid SEO input is rejected before persistence", async () => {
     await expectRedirect(() => edit.savePageSeoAction(seoForm("x".repeat(61))), "seo_error");

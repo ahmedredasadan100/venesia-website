@@ -4,6 +4,261 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import ts from "typescript";
 
+/** Actual hook and shared QueryProvider; only authenticated action transport is deferred. */
+export async function verifyPageAssignmentQueryRuntime(root, out) {
+  const { mkdir, writeFile, readFile } = await import("node:fs/promises");
+  const { createServer } = await import("node:http");
+  const { chromium } = await import("playwright");
+  const { createHash } = await import("node:crypto");
+  const require = createRequire(import.meta.url);
+  await mkdir(out, { recursive: true });
+  await writeFile(path.join(out, "entry.tsx"), `
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {useQueryClient} from '@tanstack/react-query';
+import Provider from '@src/components/admin/entity-list/AdminEntityListQueryProvider';
+import {usePageBlocksAssignModal} from '@src/app/admin/pages-blocks/pages/[id]/page-blocks/use-page-blocks-assign-modal';
+window.calls=[];
+window.catalogMode='deferred';
+function Fixture({initialContentTemplates}){
+ window.queryClient=useQueryClient();
+ const hook=usePageBlocksAssignModal({assignments:[{module_kind:'content',block_type:'content',template_id:501},{module_kind:'hero',block_type:null,template_id:501}],initialContentTemplates,setActionMessage:()=>{}});
+ window.fixture=hook;
+ return <output>{JSON.stringify({open:hook.assignModalOpen,kind:hook.assignModuleKind,loading:hook.templatesLoading,error:hook.templatesError,options:hook.templateOptions,assignable:hook.assignableTemplates,hero:hook.heroAssignmentExists})}</output>;
+}
+function App(){
+ const [scenario,setScenario]=React.useState({key:0,seed:null});
+ window.remountWithSnapshot=seed=>setScenario(previous=>({key:previous.key+1,seed}));
+ window.updateSnapshot=seed=>setScenario(previous=>({...previous,seed}));
+ return <Fixture key={scenario.key} initialContentTemplates={scenario.seed}/>;
+}
+createRoot(document.getElementById('root')).render(<Provider><App/></Provider>);
+`);
+  await writeFile(path.join(out, "actions.ts"), `
+export function loadPageModuleTemplateOptions(kind){return new Promise((resolve,reject)=>{
+ const call={kind,settled:false,resolve:()=>{call.settled=true;resolve([501,502].map(id=>({id,name:kind+' '+id,slug:kind+'-'+id,status:'published'})))},reject:()=>{call.settled=true;reject(Object.assign(new Error('isolated catalog failure'),{status:400}))}};
+ window.calls.push(call);
+ if(window.catalogMode==='immediate-error') call.reject();
+})}
+export const assignPageBlock=async()=>({ok:true});
+export const assignHeroModule=assignPageBlock;
+export const assignMediaSidebarModule=assignPageBlock;
+export const assignMediaHubModule=assignPageBlock;
+`);
+  await require("next/dist/build/swc").loadBindings();
+  const webpack = require("next/dist/compiled/webpack/webpack").webpack;
+  const compiler = webpack({
+    mode: "development", target: "web", context: root,
+    entry: path.join(out, "entry.tsx"), output: { path: out, filename: "fixture.js" }, devtool: false,
+    plugins: [new webpack.DefinePlugin({ "process.env.NODE_ENV": JSON.stringify("development") })],
+    resolve: { extensions: [".tsx", ".ts", ".js"], alias: { "@src": path.join(root, "src"), "../../actions$": path.join(out, "actions.ts") } },
+    module: { rules: [{ test: /\.[jt]sx?$/, exclude: /node_modules/, use: [{
+      loader: require.resolve("next/dist/build/webpack/loaders/next-swc-loader"), options: {
+        rootDir: root, isServer: false, compilerType: "client", hasReactRefresh: false, nextConfig: {}, jsConfig: {},
+        swcCacheDir: path.join(out, "swc-cache"), serverComponents: false, serverReferenceHashSalt: "isolated-assignment-query", esm: false, transpilePackages: [],
+      },
+    }] }] },
+  });
+  await new Promise((resolve, reject) => compiler.run((error, stats) => compiler.close(closeError => {
+    if (error || closeError || stats?.hasErrors()) reject(error ?? closeError ?? new Error(JSON.stringify(stats.toJson({ all: false, errors: true }).errors)));
+    else resolve();
+  })));
+  const bundle = await readFile(path.join(out, "fixture.js"));
+  const server = createServer((request, response) => {
+    response.setHeader("content-type", request.url === "/fixture.js" ? "application/javascript" : "text/html; charset=utf-8");
+    response.end(request.url === "/fixture.js" ? bundle : '<!doctype html><div id="root"></div><script src="/fixture.js"></script>');
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  let browser;
+  const assertions = [];
+  try {
+    browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage();
+    const errors = [];
+    page.on("pageerror", error => errors.push(error.message));
+    await page.route("**/*", route => new URL(route.request().url()).origin === origin ? route.continue() : route.abort());
+    await page.goto(origin);
+    await page.waitForFunction(() => Boolean(window.fixture));
+    assert.equal(await page.evaluate(() => window.calls.length), 0);
+    assertions.push("closed picker performs zero catalog reads");
+    const openDispatchCount = await page.evaluate(() => {
+      window.fixture.openAssignModal();
+      return window.calls.length;
+    });
+    assert.equal(openDispatchCount, 1, "The existing query begins in the open handler before the modal render");
+    await page.waitForFunction(() => window.calls.length === 1);
+    assert.equal(await page.evaluate(() => window.fixture.templatesLoading), true);
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    const kindDispatchCount = await page.evaluate(() => {
+      window.fixture.setAssignModuleKind("cta");
+      return window.calls.length;
+    });
+    assert.equal(kindDispatchCount, 2, "The new kind's existing query begins before its state change renders");
+    await page.waitForFunction(() => window.calls.length === 2);
+    await page.evaluate(() => window.calls[1].resolve());
+    await page.waitForFunction(() => window.fixture.templateOptions[0]?.name === "cta 501");
+    await page.evaluate(() => window.calls[0].resolve());
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(() => window.fixture.templateOptions[0].name), "cta 501");
+    assert.equal(await page.evaluate(() => window.calls.length), 2);
+    assertions.push("one request per open/type change; late prior-kind response cannot replace current choices");
+    await page.evaluate(() => window.fixture.closeAssignModal());
+    await page.waitForFunction(() => !window.fixture.assignModalOpen);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(() => window.calls.length === 3);
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(() => window.calls[2].reject());
+    await page.waitForFunction(() => Boolean(window.fixture.templatesError));
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(() => window.fixture.retryTemplates());
+    await page.waitForFunction(() => window.calls.length === 4);
+    await page.evaluate(() => window.calls[3].resolve());
+    await page.waitForFunction(() => !window.fixture.templatesLoading && !window.fixture.templatesError);
+    assertions.push("reopen refreshes cached choices once; failure hides stale choices; explicit retry recovers");
+    const kinds = ["content", "cards", "breadcrumb", "feed", "featured", "hero", "media-sidebar", "media-hub"];
+    for (const kind of kinds) {
+      const count = await page.evaluate(() => window.calls.length);
+      await page.evaluate(value => window.fixture.setAssignModuleKind(value), kind);
+      await page.waitForFunction(n => window.calls.length === n + 1, count);
+      assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+      await page.evaluate(() => window.calls.at(-1).resolve());
+      await page.waitForFunction(() => !window.fixture.templatesLoading);
+      assert.equal(await page.evaluate(() => window.fixture.templateOptions[0]?.name), `${kind} 501`);
+      const expected = kind === "hero" ? [] : kind === "content" ? [502] : [501, 502];
+      assert.deepEqual(await page.evaluate(() => window.fixture.assignableTemplates.map(row => row.id)), expected);
+      await page.evaluate(value => window.fixture.setAssignModuleKind(value), kind);
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+      assert.equal(await page.evaluate(() => window.calls.length), count + 1);
+    }
+    assertions.push("all nine kinds preserve correct summaries, Content exclusion, existing-Hero rule and same-kind no-op");
+    for (const kind of ["media-sidebar", "media-hub"]) {
+      await page.evaluate(value => window.fixture.setAssignModuleKind(value), kind);
+      await page.waitForFunction(() => window.fixture.templatesLoading);
+      await page.evaluate(() => window.calls.at(-1).resolve());
+      await page.waitForFunction(() => !window.fixture.templatesLoading);
+      const count = await page.evaluate(() => window.calls.length);
+      await page.evaluate(value => { void window.queryClient.invalidateQueries({ queryKey: ['admin-entity-list', value + '-block-templates'] }); }, kind);
+      await page.waitForFunction(n => window.calls.length === n + 1, count);
+      assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+      await page.evaluate(() => window.calls.at(-1).resolve());
+      await page.waitForFunction(() => !window.fixture.templatesLoading);
+    }
+    assertions.push("both Media catalogs share their existing manager entity invalidation namespace");
+    await page.evaluate(() => window.fixture.closeAssignModal());
+    await page.waitForFunction(() => !window.fixture.assignModalOpen);
+    const pendingStart = await page.evaluate(() => window.calls.length);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(n => window.calls.length === n + 1, pendingStart);
+    await page.evaluate(() => window.fixture.closeAssignModal());
+    await page.waitForFunction(() => !window.fixture.assignModalOpen);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(n => window.calls.length === n + 2, pendingStart);
+    await page.evaluate(n => window.calls[n].resolve(), pendingStart);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(() => window.fixture.templatesLoading), true);
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(() => window.calls.at(-1).resolve());
+    await page.waitForFunction(() => !window.fixture.templatesLoading);
+    assertions.push("closing and reopening an in-flight request starts a fresh activation and ignores its old late response");
+    await page.evaluate(() => window.fixture.closeAssignModal());
+    await page.waitForFunction(() => !window.fixture.assignModalOpen);
+    const beforeFastFailure = await page.evaluate(() => window.calls.length);
+    await page.evaluate(() => {
+      window.catalogMode = "immediate-error";
+      window.fixture.openAssignModal();
+    });
+    await page.waitForFunction(() => Boolean(window.fixture.templatesError));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(() => window.calls.length), beforeFastFailure + 1, "An immediate terminal error is not duplicated when the observer enables");
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    const beforeFailedKind = await page.evaluate(() => window.calls.length);
+    await page.evaluate(() => window.fixture.setAssignModuleKind("breadcrumb"));
+    await page.waitForFunction(() => window.fixture.assignModuleKind === "breadcrumb" && Boolean(window.fixture.templatesError));
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(() => window.calls.length), beforeFailedKind + 1, "An immediate error on a type switch does not start an implicit second request");
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(() => { window.catalogMode = "deferred"; window.fixture.retryTemplates(); });
+    await page.waitForFunction(n => window.calls.length === n + 2, beforeFailedKind);
+    await page.evaluate(() => window.calls.at(-1).resolve());
+    await page.waitForFunction(() => !window.fixture.templatesLoading && !window.fixture.templatesError);
+    assertions.push("open/type dispatch precedes rendering; observer reuse and immediate failure preserve one request per activation");
+    const contentKey = ["admin-entity-list", "content-block-templates", "assignment-options", "content"];
+    const seed = [501, 502].map(id => ({ id, name: `content ${id}`, slug: `content-${id}`, status: "published" }));
+    await page.evaluate(key => window.queryClient.removeQueries({ queryKey:key, exact:true }), contentKey);
+    await page.evaluate(value => window.remountWithSnapshot(value), seed);
+    await page.waitForFunction(() => !window.fixture.assignModalOpen && window.fixture.assignModuleKind === "content" && window.fixture.templateOptions.length === 2);
+    const seededCount = await page.evaluate(() => window.calls.length);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(() => window.fixture.assignModalOpen && !window.fixture.templatesLoading);
+    assert.equal(await page.evaluate(() => window.calls.length), seededCount, "Fresh Page default summaries require no additional action");
+    assert.deepEqual(await page.evaluate(() => window.fixture.assignableTemplates.map(row => row.id)), [502]);
+    await page.evaluate(() => window.fixture.closeAssignModal());
+    await page.waitForFunction(() => !window.fixture.assignModalOpen);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(n => window.calls.length === n+1, seededCount);
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(() => window.calls.at(-1).resolve());
+    await page.waitForFunction(() => !window.fixture.templatesLoading);
+    assertions.push("Page default summary serves only first Content activation; reopen refreshes and hides stale data");
+    const beforeRevisitUpdatedAt = await page.evaluate(key => window.queryClient.getQueryState(key).dataUpdatedAt, contentKey);
+    await page.evaluate(value => window.remountWithSnapshot(value), seed);
+    await page.waitForFunction(() => !window.fixture.assignModalOpen && window.fixture.templateOptions.length === 2);
+    assert.equal(await page.evaluate(key => window.queryClient.getQueryState(key).dataUpdatedAt, contentKey), beforeRevisitUpdatedAt, "Equal Page props do not reset canonical query freshness");
+    const matchingCount = await page.evaluate(() => window.calls.length);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(() => window.fixture.assignModalOpen && !window.fixture.templatesLoading);
+    assert.equal(await page.evaluate(() => window.calls.length), matchingCount, "Identical settled cache is reused on Page revisit without resetting its freshness");
+    await page.evaluate(value => window.remountWithSnapshot(value), seed);
+    await page.waitForFunction(() => !window.fixture.assignModalOpen && window.fixture.templateOptions.length === 2);
+    await page.evaluate(() => { void window.queryClient.invalidateQueries({queryKey:['admin-entity-list','content-block-templates']}); });
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(n => window.calls.length === n+1, matchingCount);
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(() => window.calls.at(-1).resolve());
+    await page.waitForFunction(() => !window.fixture.templatesLoading);
+    assertions.push("Canonical prefix invalidation between mount and first open rejects the Page seed");
+    const conflictingSeed = [{ id:601, name:"Older RSC", slug:"older-rsc", status:"unpublished" }];
+    await page.evaluate(value => window.remountWithSnapshot(value), conflictingSeed);
+    await page.waitForFunction(() => !window.fixture.assignModalOpen);
+    assert.deepEqual(await page.evaluate(key => window.queryClient.getQueryData(key).map(row=>row.id), contentKey), [501,502], "A different Page snapshot never overwrites canonical cache data");
+    const conflictingCount = await page.evaluate(() => window.calls.length);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(n => window.calls.length === n+1, conflictingCount);
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(value => window.remountWithSnapshot(value), seed);
+    await page.waitForFunction(() => !window.fixture.assignModalOpen);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(n => window.calls.length === n+2, conflictingCount);
+    await page.evaluate(n => window.calls[n].resolve(), conflictingCount);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(await page.evaluate(() => window.fixture.templatesLoading), true);
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(() => window.calls.at(-1).resolve());
+    await page.waitForFunction(() => !window.fixture.templatesLoading);
+    assertions.push("Conflicting or pending cache is never overwritten by new Page props; remount cancels the old activation before fresh read");
+    await page.evaluate(({key,seed}) => window.queryClient.setQueryData(key,seed,{updatedAt:1}), {key:contentKey,seed});
+    await page.evaluate(value => window.remountWithSnapshot(value), seed);
+    await page.waitForFunction(() => !window.fixture.assignModalOpen);
+    const staleCount = await page.evaluate(() => window.calls.length);
+    await page.evaluate(() => window.fixture.openAssignModal());
+    await page.waitForFunction(n => window.calls.length === n+1, staleCount);
+    assert.deepEqual(await page.evaluate(() => window.fixture.templateOptions), []);
+    await page.evaluate(() => window.calls.at(-1).resolve());
+    await page.waitForFunction(() => !window.fixture.templatesLoading);
+    assertions.push("Matching expired cache still obeys the existing QueryClient freshness policy; no TTL reset or stale-ready result");
+    assert.deepEqual(errors, []);
+    const files = ["src/app/admin/pages-blocks/pages/[id]/page-blocks/use-page-blocks-assign-modal.ts", "src/components/admin/entity-list/AdminEntityListQueryProvider.tsx", "src/lib/admin/entity-list/data-engine/query-keys.ts"];
+    const hashes = Object.fromEntries(await Promise.all(files.map(async file => [file, createHash("sha256").update(await readFile(path.join(root, file))).digest("hex")])));
+    const result = { status: "pass", assertions, sourceHashes: hashes, scope: "Actual mounted hook/shared QueryProvider; deferred action transport only. No DB or authenticated production proof." };
+    await writeFile(path.join(out, "result.json"), JSON.stringify(result, null, 2));
+    return result;
+  } finally {
+    await browser?.close();
+    await new Promise(resolve => server.close(resolve));
+  }
+}
+
 /** Current read/revalidation owners; isolated transport and cache only. No DB/Auth/UI proof. */
 export function createPageBlockPerformanceHarness(root, { delayMs = 0, fixtureRows = {} } = {}) {
   const nativeRequire = createRequire(import.meta.url);
@@ -178,11 +433,17 @@ export async function verifyPageBlockReadAndRevalidationContract(root) {
   const composition = await h.assignment.getPageModuleAssignmentsForAdmin(1);
   assert.equal(composition.assignments.length, 1);
   assert.ok(composition.seoContent.includes("Authored copy"), "Saved visible SEO text still comes from full server config");
-  for (const templates of Object.values(composition.templates)) {
+  for (const kind of ["content", "cta", "cards", "breadcrumb", "feed", "featured", "hero", "media-sidebar", "media-hub"]) {
+    h.reset();
+    const templates = await h.assignment.getPageModuleTemplateOptionsForAdmin(kind);
+    assert.equal(h.state.reads.length, 1, "Only the requested catalog is read");
+    assert.equal(h.state.reads[0].fields, "id,name,slug,status");
     assert.ok(templates.length > 0, "Fixture covers every template kind");
     for (const template of templates) assert.deepEqual(Object.keys(template).sort(), ["id", "name", "slug", "status"], "Picker payload must only carry declared summary fields");
+    h.state.failTable = h.state.reads[0].table;
+    await assert.rejects(() => h.assignment.getPageModuleTemplateOptionsForAdmin(kind), error => error.message === "Page Composition template read failed: isolated_read_failure");
   }
-  h.reset(); h.state.failTable = "breadcrumb_block_templates";
+  h.reset(); h.state.failTable = "page_breadcrumb_block_assignments";
   await assert.rejects(() => h.assignment.getPageModuleAssignmentsForAdmin(1), /isolated_read_failure/);
   const projectionRows = createPageCompositionProjectionFixture();
   const projection = createPageBlockPerformanceHarness(root, { fixtureRows: projectionRows });
@@ -194,10 +455,19 @@ export async function verifyPageBlockReadAndRevalidationContract(root) {
     assert.ok(page.seoContent.includes(`Assigned ${kind} copy`), "Assigned authored config feeds SEO");
   }
   assert.ok(!page.seoContent.includes("Unused authored"));
-  assert.equal(projectionReads.length, 18, "Keep independent parallel reads without adding a second config round trip");
-  assert.equal(projectionReads.filter(read => read.fields.includes("(config)")).length, 6);
-  for (const read of projectionReads.filter(read => read.table.endsWith("_templates"))) {
-    assert.ok(!read.fields.split(",").includes("config"), "Catalog config must not scale the editor payload");
+  assert.equal(projectionReads.length, 10, "Nine assigned metadata reads plus only the default Content summary run in the initial owner");
+  assert.equal(projectionReads.filter(read => read.fields.includes(",config)")).length, 6);
+  assert.equal(projectionReads.filter(read => read.table.endsWith("_assignments")).length, 9);
+  assert.deepEqual(projectionReads.filter(read => !read.table.endsWith("_assignments")).map(read => ({table:read.table,fields:read.fields})), [{table:"content_block_templates",fields:"id,name,slug,status"}], "Other eight catalogs remain on demand; default options contain no configs");
+  assert.equal(page.initialContentTemplates.length, 9);
+  for (const row of page.initialContentTemplates) assert.deepEqual(Object.keys(row).sort(), ["id", "name", "slug", "status"]);
+  for (const assignment of page.assignments) {
+    const kind = assignment.module_kind.replaceAll("-", "_");
+    assert.equal(assignment.template_name, `${kind} 0`);
+    assert.equal(assignment.template_slug, `qa-${kind}-0`);
+    assert.equal(assignment.template_status, "published");
+    assert.equal(assignment.template_id, 501);
+    assert.equal(assignment.is_publicly_visible, true);
   }
   const payloadBytes = projectionReads.reduce((sum, read) => sum + read.responseBytes, 0);
   for (const [table, rows] of Object.entries(projectionRows)) {
@@ -206,7 +476,12 @@ export async function verifyPageBlockReadAndRevalidationContract(root) {
   projection.reset();
   assert.deepEqual(await projection.assignment.getPageModuleAssignmentsForAdmin(1), page, "Unassigned config changes cannot affect current page output");
   assert.equal(projection.state.reads.reduce((sum, read) => sum + read.responseBytes, 0), payloadBytes, "Unassigned config growth must not increase transport bytes");
-  for (const { table } of projectionReads) {
+  projection.reset(); projection.state.failTable = "content_block_templates";
+  const optionalFailure = await projection.assignment.getPageModuleAssignmentsForAdmin(1);
+  assert.equal(optionalFailure.initialContentTemplates, null, "Failed optional default options do not block the Page");
+  assert.deepEqual(optionalFailure.assignments, page.assignments);
+  assert.equal(optionalFailure.seoContent, page.seoContent);
+  for (const { table } of projectionReads.filter(read => read.table.endsWith("_assignments"))) {
     projection.reset(); projection.state.failTable = table; projection.state.errorMessages[table] = `failed:${table}`;
     await assert.rejects(() => projection.assignment.getPageModuleAssignmentsForAdmin(1), error => error.message === `Page Composition assignment read failed: failed:${table}`);
   }
@@ -215,10 +490,25 @@ export async function verifyPageBlockReadAndRevalidationContract(root) {
   await assert.rejects(() => projection.assignment.getPageModuleAssignmentsForAdmin(1), error => error.message === `Page Composition assignment read failed: failed:${projectionReads[0].table}`);
   const retiredRows = createPageCompositionProjectionFixture();
   retiredRows.content_block_templates[0].slug = "project-details-presentation";
-  const retired = await createPageBlockPerformanceHarness(root, { fixtureRows: retiredRows }).assignment.getPageModuleAssignmentsForAdmin(1);
+  const retiredOwner = createPageBlockPerformanceHarness(root, { fixtureRows: retiredRows }).assignment;
+  const retired = await retiredOwner.getPageModuleAssignmentsForAdmin(1);
   assert.equal(retired.assignments.length, 8);
   assert.ok(!retired.seoContent.includes("Assigned content copy"));
-  assert.equal(retired.templates.content.length, 8, "Retired content stays absent from the picker");
+  assert.equal((await retiredOwner.getPageModuleTemplateOptionsForAdmin("content")).length, 8, "Retired content stays absent from the picker");
+  const missingRows = createPageCompositionProjectionFixture();
+  for (const table of Object.keys(missingRows).filter(table => table.endsWith("_templates"))) missingRows[table] = [];
+  const missingOwner = createPageBlockPerformanceHarness(root, { fixtureRows: missingRows }).assignment;
+  const missing = await missingOwner.getPageModuleAssignmentsForAdmin(1);
+  assert.equal(missing.assignments.length, 7, "Missing Hero/Content templates stay omitted; other kinds retain assignment fallback");
+  assert.equal(missing.seoContent, "");
+  assert.ok(missing.assignments.every(row => row.template_name === "—" && row.template_status === "unpublished" && !row.is_publicly_visible));
+  assert.deepEqual(await missingOwner.getPageModuleTemplateOptionsForAdmin("content"), [], "A successful empty catalog remains distinguishable from failure");
+  const hiddenRows = createPageCompositionProjectionFixture();
+  hiddenRows.content_block_templates[0].status = "unpublished";
+  hiddenRows.hero_assignments[0].is_active = false;
+  const hidden = await createPageBlockPerformanceHarness(root, { fixtureRows: hiddenRows }).assignment.getPageModuleAssignmentsForAdmin(1);
+  assert.equal(hidden.assignments.length, 9);
+  assert.ok(!hidden.seoContent.includes("Assigned content copy") && !hidden.seoContent.includes("Assigned hero copy"), "Joined metadata retains publication and assignment visibility truth");
   return { moduleKinds: moduleKinds.length, sourceFiles: [...h.files] };
 }
 

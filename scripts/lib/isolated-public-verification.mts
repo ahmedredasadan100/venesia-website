@@ -45,6 +45,8 @@ export type PublicGateRequest = {
   selection?: "build-contracts" | "admin-interactions";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
+    study?: "heavy-editor-performance";
+    round?: "closure";
     phase: "before" | "after";
     frozenSourceManifest: string;
     controlDirectory: string;
@@ -64,6 +66,8 @@ export type PublicFixtureReadiness = {
 const prepared = new WeakMap<PrivatePublicVerificationContext, PublicFixtureReadiness>();
 const completed = new WeakSet<PrivatePublicVerificationContext>();
 const adminPhases = new WeakMap<PrivatePublicVerificationContext, Set<string>>();
+const adminStudies = new WeakMap<PrivatePublicVerificationContext, "legacy" | "heavy-editor-performance" | "heavy-editor-closure">();
+const adminStudyHarnesses = new WeakMap<PrivatePublicVerificationContext, Array<{ file: string; sha256: string }>>();
 const adminCredentials = new WeakMap<PrivatePublicVerificationContext, { username: string; password: string; secret: string }>();
 
 export const validateAcceptedAdminBefore09 = () => {
@@ -328,9 +332,25 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   let frozenManifest: Array<{ file: string; sha256: string }> | undefined;
   if (measurement) {
     assert.ok(credentials, "The canonical owned local Admin fixture must be prepared first.");
+    assert.ok(measurement.study === undefined || measurement.study === "heavy-editor-performance", "Unknown fixed Admin study.");
+    assert.ok(measurement.round === undefined || (measurement.round === "closure" && measurement.study === "heavy-editor-performance"), "Unknown fixed Admin study round.");
+    const study = measurement.study ?? "legacy";
+    const studyIdentity = measurement.round === "closure" ? "heavy-editor-closure" : study;
+    const priorStudy = adminStudies.get(context);
+    assert.ok(priorStudy === undefined || priorStudy === studyIdentity, "An owned Admin fixture cannot change studies or rounds between phases.");
+    adminStudies.set(context, studyIdentity);
     assert.ok(measurement.phase === "before" || measurement.phase === "after");
     const phases = adminPhases.get(context) ?? new Set<string>();
     assert.equal(phases.has(measurement.phase), false, "A successful measurement phase is one-shot.");
+    if (study === "heavy-editor-performance") {
+      assert.equal(measurement.resumeAfterFromRuntime09, undefined, "The new study cannot reuse a legacy Before phase.");
+      assert.equal(measurement.resumeFinalAfterFromRuntime11, undefined);
+      assert.equal(measurement.resumeCorrectionAfterFromRuntime12, undefined);
+      const studyBase = resolve(ROOT, measurement.round === "closure" ? ".tmp-qa/heavy-editor-closure-2026-09-18" : ".tmp-qa/heavy-editor-performance-excellence-2026-09-18");
+      assert.equal(resolve(measurement.frozenSourceManifest), join(studyBase, measurement.phase === "before" ? "baseline-source-manifest.json" : "after-source-manifest.json"));
+      assert.equal(resolve(measurement.controlDirectory), join(studyBase, "control"));
+      if (measurement.phase === "after") assert.ok(phases.has("before"), "The new study requires its own completed Before phase on the same fixture.");
+    }
     if(measurement.resumeAfterFromRuntime09)assert.equal(measurement.phase,"after");
     if(measurement.resumeCorrectionAfterFromRuntime12){
       assert.equal(measurement.phase,"after");assert.equal(measurement.resumeAfterFromRuntime09,true);assert.equal(measurement.resumeFinalAfterFromRuntime11,true);
@@ -351,7 +371,9 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       receipt(context,"admin-retained-before-runtime09.json",retained);
     }
     adminPhases.set(context, phases);
-    const boundary = resolve(ROOT, ".tmp-qa/admin-near-instant-continuation-2026-09-17") + sep;
+    const boundary = resolve(ROOT, study === "heavy-editor-performance"
+      ? measurement.round === "closure" ? ".tmp-qa/heavy-editor-closure-2026-09-18" : ".tmp-qa/heavy-editor-performance-excellence-2026-09-18"
+      : ".tmp-qa/admin-near-instant-continuation-2026-09-17") + sep;
     const manifestPath = resolve(measurement.frozenSourceManifest);
     assert.ok(manifestPath.startsWith(boundary) && realpathSync(manifestPath) === manifestPath && lstatSync(manifestPath).isFile());
     const frozen = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -368,7 +390,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     context = { ...context, runDirectory: phaseDirectory,
       sanitize: value => [credentials.username, credentials.password, credentials.secret].reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_ADMIN]"), baseSanitize(value)) };
   }
-  const gates = measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: 7_200_000 }] : request.selection === "build-contracts"
+  const gates = measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
     ? GATES.filter(gate => gate.name !== "public-e2e") : GATES;
   assert.equal(gates.length, measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
   assert.equal(completed.has(originalContext), false, "Successful selected gates cannot be rerun in this fixture.");
@@ -431,14 +453,21 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       if (gate.name === "normal-build") env = childEnvironment;
       if (gate.name !== "normal-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
       if (gate.name === "public-e2e" || gate.name === "admin-interactions") {
-        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
+        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
           .map(file=>({file,sha256:digest(readFileSync(safeSourcePath(file)))})) : null;
+        if (measurement?.study === "heavy-editor-performance") {
+          const priorHarness = adminStudyHarnesses.get(originalContext);
+          if (priorHarness) assert.deepEqual(measurementHarness, priorHarness, "Both study phases require the same collector and trace source.");
+          else adminStudyHarnesses.set(originalContext, measurementHarness!);
+          for (const row of measurementHarness!) assert.equal(row.sha256, manifest.find(source => source.file === row.file)?.sha256, "The study harness must match its frozen source.");
+        }
         if(measurementHarness) receipt(context,"admin-measurement-harness.json",{manifest:measurementHarness,diagnosticInstrumentation:true,productSourceUnchanged:true});
         appPort = await new Promise<number>((done, reject) => { const reservation = net.createServer(); reservation.once("error", reject);
           reservation.listen(0, "127.0.0.1", () => { const port = (reservation.address() as net.AddressInfo).port; reservation.close(error => error ? reject(error) : done(port)); }); });
         const app = spawn(process.execPath, [...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
           { cwd: sourceDirectory, env: measurement ? {...childEnvironment,
-            QA_ADMIN_SERVER_TRACE_PATH:ownedPath(context,"admin-server-trace.jsonl")} : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+            QA_ADMIN_SERVER_TRACE_PATH:ownedPath(context,"admin-server-trace.jsonl"),
+            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
         children.add(app); let appOutput = "";
         const captureAppOutput = (value: Buffer) => {
           if (appFailed) return;
@@ -460,6 +489,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         env = { ...context.cleanEnvironment(), E2E_BASE_URL: origin, E2E_ADMIN_STORAGE_STATE: "", E2E_TOPICS_CMS_STATE: readiness.topicsCmsState };
         if (measurement && credentials) env = { ...env, QA_ADMIN_USERNAME: credentials.username, QA_ADMIN_PASSWORD: credentials.password,
           QA_ADMIN_PHASE: measurement.phase, QA_ADMIN_CONTROL: resolve(measurement.controlDirectory), QA_ADMIN_OUTPUT: context.runDirectory,
+          ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_STUDY: measurement.study } : {}),
           QA_ADMIN_STORAGE_PUBLIC_PREFIXES: JSON.stringify(["cms-images","cms-documents"].map(bucket=>`http://127.0.0.1:${context.apiPort}/storage/v1/object/public/${bucket}/`)),
           QA_ADMIN_SOURCE_SHA256: digest(JSON.stringify(manifest)) };
       }
@@ -468,8 +498,14 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         : [join(sourceDirectory, "node_modules", gate.module), ...gate.args];
       let result = await runChild(args, env, gate.name, gate.limitMs);
       if(measurement && gate.name==="admin-interactions") {
-        // A QA-driver failure cannot discard an already successful build or
-        // bootstrap a replacement database. Only the fixed driver may retry.
+        if (measurement.study === "heavy-editor-performance" && measurement.phase === "before" && result.code !== 0) {
+          receipt(context,"admin-before-driver-repair-rejected.json",{
+            status:"rejected",driverCode:result.code,sameSessionRequired:true,cleanLifecycleRestartRequired:true,
+          });
+          assert.fail("Heavy Editor Before driver repair cannot preserve the same-session contract; complete owned cleanup and start a fresh lifecycle. No repair child was launched.");
+        }
+        // Eligible After/legacy repairs retain the successful build and owned
+        // database. Only the fixed driver may retry.
         for(let attempt=1;result.code!==0 && attempt<=4;attempt++) {
           receipt(context,`admin-driver-failure-${attempt}.json`,{status:"paused-on-driver-error",code:result.code,buildIdSha256,sourceSha256:digest(JSON.stringify(manifest)),qualityPassClaimed:false});
           const commandPath=join(resolve(measurement.controlDirectory),`${measurement.phase}-driver-repair-${attempt}.json`),deadline=Date.now()+1_800_000;
@@ -477,6 +513,9 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
           assert.ok(existsSync(commandPath),"Fixed Admin driver repair lease expired");
           assert.deepEqual(JSON.parse(readFileSync(commandPath,"utf8")),{operation:"retry-fixed-driver"});
           verifySource();assert.equal(digest(readFileSync(join(sourceDirectory,".next/BUILD_ID"))),buildIdSha256);
+          if (measurement.study === "heavy-editor-performance") {
+            for (const row of adminStudyHarnesses.get(originalContext)!) assert.equal(digest(readFileSync(safeSourcePath(row.file))), row.sha256, "The study collector cannot change during a cohort.");
+          }
           const driverOutput=ownedPath(context,`browser-driver-${attempt+1}`);mkdirSync(driverOutput);
           receipt(context,`admin-driver-retry-${attempt+1}.json`,{driverSha256:digest(readFileSync(safeSourcePath("scripts/qa-admin-production-interactions.mjs"))),sourceSha256:digest(JSON.stringify(manifest)),buildIdSha256,output:driverOutput,originalReceiptsPreserved:true});
           result=await runChild(args,{...env,QA_ADMIN_OUTPUT:driverOutput,QA_ADMIN_DRIVER_ATTEMPT:String(attempt+1)},`${gate.name}-attempt-${attempt+1}`,gate.limitMs);
@@ -507,7 +546,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     receipt(context, "public-process-cleanup.json", { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: !existsSync(sourceDirectory), otherResourcesTouched: false });
   }
   const result = { status: "pass", gates: reports, buildIdSha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
-  if (measurement) { const value = { ...result, selection: "admin-interactions", phase: measurement.phase, priorQualityGatesRerun: false };
+  if (measurement) { const value = { ...result, selection: "admin-interactions", phase: measurement.phase, ...(measurement.study ? { study: measurement.study } : {}), priorQualityGatesRerun: false };
     receipt(context, "admin-measurement-lifecycle.json", value); return value; }
   if (request.selection === "build-contracts") {
     const buildResult = { ...result, selection: "build-contracts", publicE2EReexecuted: false };

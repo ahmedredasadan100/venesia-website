@@ -56,6 +56,7 @@ export type MediaReferenceProvider = {
   readonly supportsRebind: boolean;
   scanAll(): Promise<DiscoveredMediaReference[]>;
   scanEntity(entityIdentity: string): Promise<DiscoveredMediaReference[]>;
+  scanEntities?(entityIdentities: readonly string[]): Promise<Map<string, DiscoveredMediaReference[]>>;
   scanUsageByPublicValue(publicValue: string): Promise<DiscoveredMediaUsage[]>;
   rebind(reference: DiscoveredMediaReference, nextPublicValue: string): Promise<void>;
 };
@@ -313,6 +314,35 @@ function createProvider(config: ProviderConfig): MediaReferenceProvider {
     async scanEntity(entityIdentity) {
       const rows = await fetchRows(entityIdentity);
       return rows.flatMap((row) => discoverRowReferences(config, row));
+    },
+    async scanEntities(entityIdentities) {
+      if (entityIdentities.some((identity) => typeof identity !== "string" || !identity.trim() || identity !== identity.trim())) {
+        throw new Error(`media_reference_provider:${config.domainKey}:invalid_entity_identity`);
+      }
+      const identities = [...new Set(entityIdentities)];
+      const references = new Map<string, DiscoveredMediaReference[]>(identities.map((identity) => [identity, []]));
+      for (let offset = 0; offset < identities.length; offset += PROVIDER_PAGE_SIZE) {
+        const chunk = identities.slice(offset, offset + PROVIDER_PAGE_SIZE);
+        const { data, error } = await getSupabaseAdmin()
+          .from(config.table)
+          .select(providerColumns(config))
+          .in(idField, chunk)
+          .order(idField, { ascending: true })
+          .range(0, PROVIDER_PAGE_SIZE - 1);
+        if (error) throw new Error(`media_reference_provider:${config.domainKey}:${error.code ?? "query_failed"}`);
+        const requested = new Set(chunk);
+        const observed = new Set<string>();
+        for (const value of data ?? []) {
+          const row = providerRow(value);
+          const identity = valueText(row[idField]);
+          if (!requested.has(identity) || observed.has(identity)) {
+            throw new Error(`media_reference_provider:${config.domainKey}:unexpected_entity_identity`);
+          }
+          observed.add(identity);
+          references.set(identity, discoverRowReferences(config, row));
+        }
+      }
+      return references;
     },
     async scanUsageByPublicValue(publicValue) {
       const rows = await fetchRows();

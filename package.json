@@ -161,7 +161,7 @@
     "verify:integrations-server-configuration-postgres": "node --experimental-strip-types scripts/verify-integrations-server-configuration-postgres.mts",
     "verify:integrations-database-live": "node --env-file=.env.local --experimental-strip-types scripts/verify-external-integrations-database-live.mts",
     "verify:platform-health-owner-contracts": "node --experimental-strip-types scripts/verify-platform-health-owner-contracts.mts",
-    "verify:platform-performance": "node --experimental-strip-types scripts/verify-platform-performance-contracts.mts && node scripts/qa-admin-link-picker.mjs && node scripts/qa-admin-link-picker.mjs --phase=journey-contract",
+    "verify:platform-performance": "node --experimental-strip-types scripts/verify-platform-performance-contracts.mts && node scripts/qa-admin-link-picker.mjs && node scripts/qa-admin-link-picker.mjs --phase=journey-contract && node scripts/verify-admin-atomic-readiness.mjs && npm run verify:isolated-supabase -- --admin-control-lease-only",
     "verify:admin-users-invariant-postgres": "node --experimental-strip-types scripts/verify-admin-users-invariant-postgres.mts",
     "verify:medium-hardening": "node --experimental-strip-types scripts/verify-medium-hardening.mts",
     "verify:platform": "node --experimental-strip-types scripts/verify-platform.mts",

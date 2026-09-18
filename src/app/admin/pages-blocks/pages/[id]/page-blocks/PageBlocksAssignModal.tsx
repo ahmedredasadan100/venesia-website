@@ -48,6 +48,9 @@ type PageBlocksAssignModalProps = {
   onAssignVisibleChange: (visible: boolean) => void;
   assignPending: boolean;
   templateOptions: TemplateOption[];
+  templatesLoading: boolean;
+  templatesError: string | null;
+  onRetryTemplates: () => void;
   assignableTemplates: TemplateOption[];
   heroAssignmentExists: boolean;
   slotOptions: PageLayoutSlot[];
@@ -72,6 +75,9 @@ export default function PageBlocksAssignModal({
   onAssignVisibleChange,
   assignPending,
   templateOptions,
+  templatesLoading,
+  templatesError,
+  onRetryTemplates,
   assignableTemplates,
   heroAssignmentExists,
   slotOptions,
@@ -99,7 +105,7 @@ export default function PageBlocksAssignModal({
           <AdminModalPrimaryButton
             type="submit"
             form="assign-page-block-form"
-            disabled={!assignableTemplates.length || !slotOptions.length || assignPending}
+            disabled={templatesLoading || Boolean(templatesError) || !assignableTemplates.length || !slotOptions.length || assignPending}
           >
             ربط الموديول
           </AdminModalPrimaryButton>
@@ -152,6 +158,9 @@ export default function PageBlocksAssignModal({
             name="template_id"
             label="القالب"
             required
+            disabled={templatesLoading || Boolean(templatesError) || assignPending}
+            loading={templatesLoading}
+            error={templatesError}
             value={assignTemplateId ? String(assignTemplateId) : ""}
             onChange={(next) => {
               const value = Number(next);
@@ -165,6 +174,11 @@ export default function PageBlocksAssignModal({
               label: `${template.name} (${getContentStatusMetadata(template.status).label})`,
             }))}
           />
+          {templatesError ? (
+            <AdminModalCancelButton onClick={onRetryTemplates}>
+              إعادة المحاولة
+            </AdminModalCancelButton>
+          ) : null}
           <AssignTemplateUsageWarning
             moduleKind={assignModuleKind}
             templateId={assignTemplateId}
@@ -174,7 +188,7 @@ export default function PageBlocksAssignModal({
             القوالب المرتبطة بهذه الصفحة لا تظهر في القائمة. لإعادة استخدام
             قالب، احذف الربط الحالي أو عدّله.
           </p>
-          {!assignableTemplates.length ? (
+          {!templatesLoading && !templatesError && !assignableTemplates.length ? (
             <p className="text-xs text-amber-200/70">
               {assignModuleKind === "hero" && heroAssignmentExists ? (
                 "هذه الصفحة مرتبطة بهيرو واحد بالفعل. عدّل الربط الحالي أو أزله أولًا."

@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "../lib/isolated-supabase.mts";
 
 /** Data only, scoped to a live owned disposable database and this QA namespace. */
@@ -19,16 +20,12 @@ export async function seedAdminPageInteractionFixtures(handle: OwnedLocalHandle)
       [pageId, operation, JSON.stringify(payload), `system:${namespace}`],
     );
   };
-  // Reset only this fixture page through the same atomic owner used by Admin.
+  // Reset through the same atomic owner while preserving the measured identities.
   const existingAssignments = await handle.query(
-    "select kind,id from public.page_composition_assignments where page_id=$1 order by kind,id",
+    "select kind,id,template_id from public.page_composition_assignments where page_id=$1 order by kind,id",
     [pageId],
   );
-  if (existingAssignments.rows.length > 0) {
-    await mutateComposition("bulk", {
-      changes: existingAssignments.rows.map((row) => ({ kind: row.kind, id: Number(row.id), action: "delete" })),
-    });
-  }
+  const retainedAssignments = new Set<string>();
   const kinds = [
     { kind: "content", template: "content_block_templates", assignment: "page_content_block_assignments" },
     { kind: "cta", template: "cta_block_templates", assignment: "page_cta_block_assignments" },
@@ -63,18 +60,40 @@ export async function seedAdminPageInteractionFixtures(handle: OwnedLocalHandle)
       const templateId = Number(result.rows[0].id);
       templates.push({ kind: entry.kind, id: templateId, name, slug, assigned });
       if (!assigned) continue;
+      const databaseKind = entry.kind.replaceAll("-", "_");
+      const matching = existingAssignments.rows.filter(row => row.kind === databaseKind && Number(row.template_id) === templateId);
+      assert.ok(matching.length <= 1, "A fixture assignment identity is ambiguous; do not replace measured rows.");
+      const assignmentId = matching.length === 1 ? Number(matching[0].id) : undefined;
+      const identity = assignmentId === undefined ? {} : { assignment_id: assignmentId };
       if (entry.kind === "hero") {
-        await mutateComposition("save_hero_assignment", { hero_id: templateId, sort_order: 0, is_visible: true });
+        await mutateComposition("save_hero_assignment", { ...identity, hero_id: templateId, sort_order: 0, is_visible: true });
       } else {
         await mutateComposition("save_assignment", {
-          kind: entry.kind.replaceAll("-", "_"),
+          ...identity,
+          kind: databaseKind,
           template_id: templateId,
           slot: entry.kind === "media-sidebar" ? "sidebar" : "main",
           sort_order: (kinds.indexOf(entry) + 1) * 10,
           is_visible: true,
         });
       }
+      const current = (await handle.query(
+        "select id from public.page_composition_assignments where page_id=$1 and kind=$2 and template_id=$3 order by id",
+        [pageId, databaseKind, templateId],
+      )).rows;
+      assert.equal(current.length, 1, "The canonical assignment save must resolve one fixture row.");
+      if (assignmentId !== undefined) assert.equal(Number(current[0].id), assignmentId, "Reset replaced a measured assignment identity.");
+      retainedAssignments.add(`${databaseKind}:${current[0].id}`);
     }
+  }
+  const extraAssignments = existingAssignments.rows.filter(row => !retainedAssignments.has(`${row.kind}:${row.id}`));
+  if (extraAssignments.length > 0) {
+    for (const row of extraAssignments) assert.ok(templates.some(template =>
+      template.kind.replaceAll("-", "_") === row.kind && template.id === Number(row.template_id)),
+    "Only assignments to this QA namespace may be removed during fixture reset.");
+    await mutateComposition("bulk", {
+      changes: extraAssignments.map(row => ({ kind: row.kind, id: Number(row.id), action: "delete" })),
+    });
   }
   return { pageId, title, slug: namespace, editorPath: `/admin/pages-blocks/pages/${pageId}`, seoTitle: "QA Page SEO Title", templates, unusedPerKind: 8, assignedKinds: 9 };
 }
