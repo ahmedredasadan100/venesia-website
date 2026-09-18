@@ -89,12 +89,15 @@ class Query implements PromiseLike<Result> {
   then<T = Result, U = never>(fulfilled?: ((value: Result) => T | PromiseLike<T>) | null, rejected?: ((reason: unknown) => U | PromiseLike<U>) | null): PromiseLike<T | U> {
     return Promise.resolve().then((): Result => {
       if (this.payload) {
-        assert.deepEqual(this.filters, { id: state.page?.id }, "Writes must target exactly the persisted Home ID");
+        const expectedFilters = Object.hasOwn(this.payload, "status")
+          ? { id: state.page?.id, status: state.page?.status, updated_at: state.page?.updated_at }
+          : { id: state.page?.id };
+        assert.deepEqual(this.filters, expectedFilters, "Writes must use the persisted Home identity and required revision");
         state.writes.push({ table: this.table, filters: { ...this.filters }, payload: { ...this.payload } });
         if (state.failWrite) return { data: null, error: { message: "isolated_write_rejected" } };
         assert.ok(state.page);
         Object.assign(state.page, this.payload);
-        return { data: null, error: null };
+        return { data: structuredClone(this.singular ? state.page : null), error: null };
       }
       state.reads.push(this.table);
       if (this.table === state.failReadTable) return { data: null, error: { message: "isolated_read_rejected" } };
@@ -268,34 +271,34 @@ try {
   });
   await check("publication occurs only through explicit current Page action", async () => {
     assertNoMutation();
-    const result = await status.togglePageStatus(Number(initialHome.id));
+    const result = await status.togglePageStatus(Number(initialHome.id), String(state.page?.status), String(state.page?.updated_at));
     assert.equal(result.ok, true); assert.equal(result.status, "published");
     assert.equal(state.writes.length, 1); assert.equal(state.audits.length, 1); assert.equal(state.authCalls, 1);
     assert.deepEqual(Object.keys(state.writes[0].payload).sort(), ["status", "updated_at"]);
     assert.equal(state.audits[0].entityId, initialHome.id);
     assert.equal((await publicRead.getPublishedPageStateBySlug("home")).page?.id, initialHome.id);
     assert.deepEqual((await assignment.getPageModuleAssignmentsForAdmin(Number(initialHome.id))).assignments, []);
-    const reverse = await status.togglePageStatus(Number(initialHome.id));
+    const reverse = await status.togglePageStatus(Number(initialHome.id), String(state.page?.status), String(state.page?.updated_at));
     assert.equal(reverse.status, "unpublished"); assert.equal(state.writes.length, 2);
     assert.equal((await publicRead.getPublishedPageStateBySlug("home")).page, null);
   });
   await check("publication write failure does not release false success", async () => {
     state.failWrite = true;
-    const result = await status.togglePageStatus(Number(initialHome.id));
+    const result = await status.togglePageStatus(Number(initialHome.id), String(state.page?.status), String(state.page?.updated_at));
     assert.equal(result.ok, false); assert.equal(result.code, "status_update_failed");
     assert.equal(state.writes.length, 1); assert.deepEqual(state.audits, []); assert.deepEqual(state.cache, []);
     assert.deepEqual(state.page, initialHome);
   });
   await check("session rejection prevents Page read/write attempts", async () => {
     state.denyAuth = true;
-    await assert.rejects(() => status.togglePageStatus(Number(initialHome.id)), /isolated_auth_rejected/);
+    await assert.rejects(() => status.togglePageStatus(Number(initialHome.id), String(state.page?.status), String(state.page?.updated_at)), /isolated_auth_rejected/);
     await assert.rejects(() => edit.savePageSeoAction(seoForm()), /isolated_auth_rejected/);
     assert.deepEqual(state.reads, []); assertNoMutation();
   });
   await check("missing Home stays missing without implicit creation", async () => {
     state.page = null;
     await assert.rejects(() => detail.default({ params: { id: String(initialHome.id) } }), NotFoundSignal);
-    const result = await status.togglePageStatus(Number(initialHome.id));
+    const result = await status.togglePageStatus(Number(initialHome.id), String(initialHome.status), String(initialHome.updated_at));
     assert.equal(result.ok, false); assert.equal(result.code, "page_not_found");
     assertNoMutation();
   });

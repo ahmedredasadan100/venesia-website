@@ -451,7 +451,7 @@ export default function PagesTableClient({
           cache.patchRows((row) =>
             row.id === page.id ? { ...row, status: nextStatus } : row,
           ),
-        execute: () => togglePageStatus(page.id),
+        execute: () => togglePageStatus(page.id, page.status, page.updatedAt),
       });
       return {
         ok: true,

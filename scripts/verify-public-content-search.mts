@@ -352,14 +352,14 @@ assert.ok(moduleRegistry.includes('"search-platform"'));
 assert.ok(slotRenderer.includes("<SearchPlatformModule"));
 assert.ok(dynamicPage.includes("publicPath={page.path}") && dynamicPage.includes("searchParams={resolvedSearchParams}"));
 assert.ok(searchModule.includes("basePath={publicPath}"));
-assert.ok(searchModule.includes('submitPath="/search"'));
+assert.ok(searchModule.includes("submitPath={SEARCH_PLATFORM_PUBLIC_ROUTE.href}"));
 assert.ok(
-  searchModule.includes('if (publicPath !== "/search")') &&
-    !searchModule.includes('publicPath !== "/search" || config.presentation === "compact"'),
+  searchModule.includes("if (publicPath !== SEARCH_PLATFORM_PUBLIC_ROUTE.href)") &&
+    !searchModule.includes("publicPath !== SEARCH_PLATFORM_PUBLIC_ROUTE.href || config.presentation === \"compact\""),
   "/search identity must always select the full-results runtime even when presentation is compact",
 );
 const launcherRuntimeStart = searchModule.indexOf(
-  'if (publicPath !== "/search")',
+  "if (publicPath !== SEARCH_PLATFORM_PUBLIC_ROUTE.href)",
 );
 const launcherRuntimeEnd = searchModule.indexOf(
   "const scope = resolveScopedContentTypes",
@@ -430,7 +430,7 @@ assert.ok(searchModule.includes("suggestions={suggestions}"));
 assert.ok(searchModule.includes("loadPublicContentCollection"));
 assert.ok(searchModule.includes("loadPublicContentFilterOptions"));
 assert.ok(searchModule.includes("<PublicPagination"));
-assert.ok(searchModule.includes('action="/search"'));
+assert.ok(searchModule.includes("action={SEARCH_PLATFORM_PUBLIC_ROUTE.href}"));
 assert.ok(
   searchModule.includes('<input type="hidden" name="q" defaultValue={query} />'),
   "Search filters must submit the active URL-owned query",

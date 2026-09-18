@@ -20,6 +20,7 @@ import {
 } from "../../lib/content/public-content-read/owner";
 import {
   asSearchPlatformConfig,
+  SEARCH_PLATFORM_PUBLIC_ROUTE,
   type SearchPlatformConfig,
 } from "../../lib/page-blocks/search-platform-config";
 import {
@@ -213,7 +214,7 @@ function SearchLauncher({
       <div className="mt-5">
         <PublicContentSearchInput
           basePath={publicPath}
-          submitPath="/search"
+          submitPath={SEARCH_PLATFORM_PUBLIC_ROUTE.href}
           submitPersistentParams={submitPersistentParams}
           query={query}
           suggestions={suggestions}
@@ -274,7 +275,7 @@ function SearchFilters({
     "h-11 w-full rounded-xl border border-white/10 bg-[#070A0F] px-3 text-sm text-white outline-none transition focus:border-[#D8B87A]/45 focus:ring-2 focus:ring-[#D8B87A]/10";
 
   return (
-    <form action="/search" method="get" className="grid gap-4 rounded-[1.5rem] border border-white/10 bg-white/[0.025] p-5 md:grid-cols-2 xl:grid-cols-4">
+    <form action={SEARCH_PLATFORM_PUBLIC_ROUTE.href} method="get" className="grid gap-4 rounded-[1.5rem] border border-white/10 bg-white/[0.025] p-5 md:grid-cols-2 xl:grid-cols-4">
       <input type="hidden" name="q" defaultValue={query} />
       {scopeParam ? <input type="hidden" name="types" value={scopeParam} /> : null}
 
@@ -329,7 +330,7 @@ function SearchFilters({
           تطبيق الفلاتر
         </button>
         <Link
-          href={`/search?${new URLSearchParams({ q: query, ...(scopeParam ? { types: scopeParam } : {}) }).toString()}`}
+          href={`${SEARCH_PLATFORM_PUBLIC_ROUTE.href}?${new URLSearchParams({ q: query, ...(scopeParam ? { types: scopeParam } : {}) }).toString()}`}
           scroll={false}
           className="rounded-xl border border-white/10 px-5 py-2.5 text-sm text-white/55 transition hover:border-[#D8B87A]/35 hover:text-[#D8B87A]"
         >
@@ -386,7 +387,7 @@ export default async function SearchPlatformModule({
     sort: selectedSort,
   } satisfies Readonly<Record<string, string | undefined>>;
 
-  if (publicPath !== "/search") {
+  if (publicPath !== SEARCH_PLATFORM_PUBLIC_ROUTE.href) {
     let listing = EMPTY_RESULT;
     let hasReadError = false;
     if (query) {
@@ -417,7 +418,7 @@ export default async function SearchPlatformModule({
     return (
       <SearchLauncher
         config={config}
-        publicPath={publicPath || "/search"}
+        publicPath={publicPath || SEARCH_PLATFORM_PUBLIC_ROUTE.href}
         scopeParam={scopeParam}
         query={query}
         suggestions={suggestions}
@@ -510,7 +511,7 @@ export default async function SearchPlatformModule({
         ) : null}
         <div className="mt-6 max-w-3xl">
           <PublicContentSearchInput
-            basePath="/search"
+            basePath={SEARCH_PLATFORM_PUBLIC_ROUTE.href}
             persistentParams={canonicalSearchParams}
             query={query}
             suggestions={suggestions}
@@ -588,7 +589,7 @@ export default async function SearchPlatformModule({
         <PublicPagination
           currentPage={listing.page}
           totalPages={listing.totalPages}
-          basePath="/search"
+          basePath={SEARCH_PLATFORM_PUBLIC_ROUTE.href}
           query={paginationQuery}
           requestedQuery={searchParams}
           ariaLabel="صفحات نتائج البحث"
