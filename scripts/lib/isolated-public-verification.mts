@@ -463,7 +463,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       if (gate.name === "normal-build") env = childEnvironment;
       if (gate.name !== "normal-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
       if (gate.name === "public-e2e" || gate.name === "admin-interactions") {
-        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
+        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-measurement-restore-transition.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
           .map(file=>({file,sha256:digest(readFileSync(safeSourcePath(file)))})) : null;
         if (measurement?.study === "heavy-editor-performance") {
           const priorHarness = adminStudyHarnesses.get(originalContext);
@@ -506,30 +506,13 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       context.record("public-gate-start", { gate: gate.name });
       const args = "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
         : [join(sourceDirectory, "node_modules", gate.module), ...gate.args];
-      let result = await runChild(args, env, gate.name, gate.limitMs);
-      if(measurement && gate.name==="admin-interactions") {
-        if (measurement.study === "heavy-editor-performance" && measurement.phase === "before" && result.code !== 0) {
-          receipt(context,"admin-before-driver-repair-rejected.json",{
-            status:"rejected",driverCode:result.code,sameSessionRequired:true,cleanLifecycleRestartRequired:true,
-          });
-          assert.fail("Heavy Editor Before driver repair cannot preserve the same-session contract; complete owned cleanup and start a fresh lifecycle. No repair child was launched.");
-        }
-        // Eligible After/legacy repairs retain the successful build and owned
-        // database. Only the fixed driver may retry.
-        for(let attempt=1;result.code!==0 && attempt<=4;attempt++) {
-          receipt(context,`admin-driver-failure-${attempt}.json`,{status:"paused-on-driver-error",code:result.code,buildIdSha256,sourceSha256:digest(JSON.stringify(manifest)),qualityPassClaimed:false});
-          const commandPath=join(resolve(measurement.controlDirectory),`${measurement.phase}-driver-repair-${attempt}.json`),deadline=Date.now()+1_800_000;
-          while(!existsSync(commandPath)&&Date.now()<deadline) {await context.assertOwned();signal.throwIfAborted();await new Promise(done=>setTimeout(done,1_000));}
-          assert.ok(existsSync(commandPath),"Fixed Admin driver repair lease expired");
-          assert.deepEqual(JSON.parse(readFileSync(commandPath,"utf8")),{operation:"retry-fixed-driver"});
-          verifySource();assert.equal(digest(readFileSync(join(sourceDirectory,".next/BUILD_ID"))),buildIdSha256);
-          if (measurement.study === "heavy-editor-performance") {
-            for (const row of adminStudyHarnesses.get(originalContext)!) assert.equal(digest(readFileSync(safeSourcePath(row.file))), row.sha256, "The study collector cannot change during a cohort.");
-          }
-          const driverOutput=ownedPath(context,`browser-driver-${attempt+1}`);mkdirSync(driverOutput);
-          receipt(context,`admin-driver-retry-${attempt+1}.json`,{driverSha256:digest(readFileSync(safeSourcePath("scripts/qa-admin-production-interactions.mjs"))),sourceSha256:digest(JSON.stringify(manifest)),buildIdSha256,output:driverOutput,originalReceiptsPreserved:true});
-          result=await runChild(args,{...env,QA_ADMIN_OUTPUT:driverOutput,QA_ADMIN_DRIVER_ATTEMPT:String(attempt+1)},`${gate.name}-attempt-${attempt+1}`,gate.limitMs);
-        }
+      const result = await runChild(args, env, gate.name, gate.limitMs);
+      if (measurement && gate.name === "admin-interactions" && result.code !== 0) {
+        receipt(context, "admin-driver-restart-rejected.json", {
+          status: "rejected", driverCode: result.code, cleanLifecycleRestartRequired: true,
+          sourceSha256: digest(JSON.stringify(manifest)), qualityPassClaimed: false,
+        });
+        assert.fail("Admin measurement driver failed; the owned fixture must be recreated before any further job. No repair child was launched.");
       }
       assert.equal(appFailed, false, "Owned application process failed during Public verification.");
       const report = { name: gate.name, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };

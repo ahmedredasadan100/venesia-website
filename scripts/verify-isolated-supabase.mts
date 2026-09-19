@@ -465,39 +465,39 @@ async function adminControlLeaseOnly() {
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-public-verification.mts", "scripts/verify-isolated-supabase.mts"];
   const sourceHashes = Object.fromEntries(sources.map(file => [file, sha256(readSource(file))]));
   await verifyAdminMeasurementControlLease(await import("./lib/isolated-supabase.mts"));
-  verifyAdminMeasurementDriverRepairPolicy();
+  verifyAdminMeasurementRestartPolicy();
   for (const file of sources) assert.equal(sha256(readSource(file)), sourceHashes[file]);
   console.log(JSON.stringify({ status: "PASS", scope: "admin-control-lease-only", checks: cases.length, cases, sourceHashes,
     dockerExecuted: false, networkRequests: 0, databaseCalls: 0, actualRenewalClaimed: false }, null, 2));
 }
 
-function verifyAdminMeasurementDriverRepairPolicy() {
+function verifyAdminMeasurementRestartPolicy() {
   const source = readSource("scripts/lib/isolated-public-verification.mts");
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   let policy: ts.IfStatement | undefined;
+  let driverLaunches = 0;
   const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(file) === "runChild") driverLaunches++;
     if (ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
       && node.thenStatement.statements.some(statement => ts.isExpressionStatement(statement)
         && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(file) === "receipt"
-        && statement.expression.arguments[1]?.getText(file) === '"admin-before-driver-repair-rejected.json"')) policy = node;
+        && statement.expression.arguments[1]?.getText(file) === '"admin-driver-restart-rejected.json"')) policy = node;
     ts.forEachChild(node, visit);
   };
-  visit(file); assert.ok(policy, "The fixed study must guard Before repair at the canonical owner.");
-  const repairChild = source.indexOf("result=await runChild(args,{...env,QA_ADMIN_OUTPUT:driverOutput");
-  assert.ok(repairChild > policy.end, "The policy must run before any repair child.");
+  visit(file); assert.ok(policy, "Admin measurement failure must reject reuse at the canonical owner.");
+  assert.equal(driverLaunches, 1, "A failed measurement driver cannot launch a repair child against the same fixture.");
   const events: unknown[] = [];
-  const evaluate = new Function("measurement", "result", "receipt", "context", "assert",
+  const evaluate = new Function("measurement", "gate", "result", "receipt", "context", "assert", "manifest", "digest",
     ts.transpileModule(policy.getText(file), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
   const record = (_context: unknown, name: string, metadata: unknown) => events.push({ name, metadata });
-  assert.throws(() => evaluate({ study: "heavy-editor-performance", phase: "before" }, { code: 1 }, record, {}, assert), /same-session contract/);
-  assert.equal(events.length, 1);
-  for (const [measurement, code] of [
-    [{ study: "heavy-editor-performance", phase: "before" }, 0],
-    [{ study: "heavy-editor-performance", phase: "after" }, 1],
-    [{ phase: "before" }, 1], [{ phase: "after" }, 1],
-  ] as const) evaluate(measurement, { code }, record, {}, assert);
-  assert.equal(events.length, 1, "After and legacy repairs must retain their existing path.");
-  cases.push("fixed-study Before failure rejects repair before child launch; successful Before, After and legacy repair paths remain allowed");
+  for (const phase of ["before", "after"] as const) {
+    assert.throws(() => evaluate({ phase }, { name: "admin-interactions" }, { code: 1 }, record, {}, assert, [], () => "source"), /owned fixture must be recreated/);
+    assert.throws(() => evaluate({ phase, study: "heavy-editor-performance" }, { name: "admin-interactions" }, { code: 1 }, record, {}, assert, [], () => "source"), /owned fixture must be recreated/);
+  }
+  assert.equal(events.length, 4);
+  evaluate({ phase: "before" }, { name: "admin-interactions" }, { code: 0 }, record, {}, assert, [], () => "source");
+  assert.equal(events.length, 4, "Successful driver needs no repair policy.");
+  cases.push("all failed Admin measurement drivers reject same-fixture restart; a successful driver continues");
 }
 
 async function main() {
@@ -515,7 +515,7 @@ async function main() {
   // invoked below; run/start/cleanup, Docker, SQL and environment loaders are not.
   const owner = await import("./lib/isolated-supabase.mts");
   await verifyAdminMeasurementControlLease(owner);
-  verifyAdminMeasurementDriverRepairPolicy();
+  verifyAdminMeasurementRestartPolicy();
   verifyImageIdentity(owner, provenance.lock.images.db);
   const password = "offline-unit-secret-not-a-credential";
   const target = { port: 55965, database: "postgres" as const, username: "postgres" as const };

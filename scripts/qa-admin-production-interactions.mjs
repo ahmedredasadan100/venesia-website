@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
 import { chromium } from "playwright";
 import { browserAtomicReadiness } from "./fixtures/admin-atomic-readiness.mjs";
+import { assertFreshMeasurementControl, createAdminMeasurementRestoreTransition, readCompletedRestoreReceipt } from "./fixtures/admin-measurement-restore-transition.mjs";
 
 const origin = process.env.E2E_BASE_URL;
 assert.match(origin ?? "", /^http:\/\/127\.0\.0\.1:\d+$/u);
@@ -13,6 +14,24 @@ const control = resolve(process.env.QA_ADMIN_CONTROL ?? "");
 const output = resolve(process.env.QA_ADMIN_OUTPUT ?? "");
 assert.ok(control.includes(`${sep}.tmp-qa${sep}`) && output.includes(`${sep}.tmp-qa${sep}`));
 const fixtures = JSON.parse(readFileSync(join(control, "fixtures.json"), "utf8"));
+assertFreshMeasurementControl(readdirSync(control), phase);
+const hash = value => createHash("sha256").update(value).digest("hex");
+const sourceSha256 = process.env.QA_ADMIN_SOURCE_SHA256;
+assert.match(sourceSha256 ?? "", /^[a-f0-9]{64}$/u);
+const fixtureSha256 = hash(readFileSync(join(control, "fixtures.json")));
+const study = process.env.QA_ADMIN_STUDY === "heavy-editor-performance";
+const dataIdentity = study ? JSON.parse(readFileSync(join(control, `${phase}-fixture-data-identity.json`), "utf8")) : null;
+if (dataIdentity) {
+  assert.equal(dataIdentity.sourceSha256, sourceSha256);
+  assert.match(dataIdentity.logicalSha256, /^[a-f0-9]{64}$/u);
+}
+const restoreIdentity = { runId: randomUUID(), phase, sourceSha256, fixtureSha256,
+  baselineSha256: hash(JSON.stringify({ phase, sourceSha256, fixtureSha256, fixtureDataLogicalSha256: dataIdentity?.logicalSha256 ?? null })) };
+const restoreTransition = createAdminMeasurementRestoreTransition(restoreIdentity);
+const successfulRestoreReceipt = () => {
+  const id = restoreTransition.restoreReceiptJobId;
+  return id ? readCompletedRestoreReceipt(control, output, phase, id) : undefined;
+};
 const localAuth={username:process.env.QA_ADMIN_USERNAME,password:process.env.QA_ADMIN_PASSWORD,next:randomBytes(32).toString("base64url")};
 const privateValues=[localAuth.password,localAuth.next].filter(Boolean);
 const storagePublicPrefixes = JSON.parse(process.env.QA_ADMIN_STORAGE_PUBLIC_PREFIXES ?? "[]");
@@ -25,6 +44,7 @@ const allowsOwnedStorageRead = request => {
 };
 const sanitize=value=>privateValues.reduce((text,secret)=>text.replaceAll(secret,"[REDACTED_LOCAL_PASSWORD]"),value);
 const save = (file, value) => writeFileSync(join(output, file), `${sanitize(JSON.stringify(value, null, 2))}\n`, { flag: "wx" });
+save("measurement-run-identity.json", restoreIdentity);
 const checkpoint=value=>appendFileSync(join(output,"browser-checkpoints.jsonl"),`${sanitize(JSON.stringify({at:Date.now(),...value}))}\n`);
 const completeResponseTelemetry = async (row,response,request) => {
   row.responseCompletion="pending";
@@ -301,16 +321,17 @@ try {
   page.on("console", message => { if(message.type() === "error") consoleErrors.push({job:activeJob,text:message.text()}); });
   page.on("pageerror", error => pageErrors.push({job:activeJob,message:error.message}));
   save("ready.json", {origin,phase,fixturePath:join(control,"fixtures.json"),sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,mode:"production",headless:true,viewport:{width:1365,height:900},localLogin:!reuseLocalSession,credentialArtifacts});
-  const driverAttempt=process.env.QA_ADMIN_DRIVER_ATTEMPT;
-  writeFileSync(join(control, `${phase}-ready${driverAttempt?`-${driverAttempt}`:""}.json`), `${JSON.stringify({origin,output,phase},null,2)}\n`, {flag:"wx"});
+  writeFileSync(join(control, `${phase}-ready.json`), `${JSON.stringify({origin,output,phase},null,2)}\n`, {flag:"wx"});
   const completed = new Set();
   const deadline = Date.now() + (process.env.QA_ADMIN_STUDY === "heavy-editor-performance" ? 21_300_000 : 6_900_000);
   while(Date.now() < deadline) {
     const jobs = readdirSync(control).filter(name => new RegExp(`^${phase}-job-[a-z0-9-]+\\.json$`, "u").test(name) && !completed.has(name))
-      .filter(name=>{const job=JSON.parse(readFileSync(join(control,name),"utf8"));return !existsSync(join(control,`${phase}-result-${job.id}.json`));}).sort();
-    if(!jobs.length) { if(existsSync(join(control,`${phase}-finish.json`))) break; await new Promise(done => setTimeout(done,500)); continue; }
+      .filter(name=>{const job=JSON.parse(readFileSync(join(control,name),"utf8"));assert.equal(name,`${phase}-job-${job.id}.json`);
+        assert.equal(existsSync(join(control,`${phase}-result-${job.id}.json`)),false,"A result from another measurement run cannot skip a queued job.");return true;}).sort();
+    if(!jobs.length) { if(existsSync(join(control,`${phase}-finish.json`))) { restoreTransition.finish(successfulRestoreReceipt()); break; } await new Promise(done => setTimeout(done,500)); continue; }
     for(const file of jobs) {
       const raw = readFileSync(join(control,file),"utf8"); const job = JSON.parse(raw); assert.match(job.id,/^[a-z0-9-]+$/u); assert.ok(Array.isArray(job.steps) && job.steps.length <= 150);
+      restoreTransition.authorize(job, successfulRestoreReceipt());
       activeJob=job.id; const start=Date.now();const measurements=[]; const snapshots=[]; const networkStart=network.length;let failure=null;
       if (process.env.QA_ADMIN_STUDY === "heavy-editor-performance") {
         assert.ok(["off", "headers", "full"].includes(job.serverTrace ?? "off"));
@@ -437,11 +458,18 @@ try {
         await cdp.send("Tracing.end"); await tracingComplete; cdp.off("Tracing.dataCollected", onTrace);
         save(`job-${job.id}-cpu-profile.json`,profile); save(`job-${job.id}-browser-trace.json`,{traceEvents});
       }
-      const result={id:job.id,phase,status:failure||measurements.some(row=>row.status==="fail")?"fail":"pass",startedAt:start,finishedAt:Date.now(),instrumentation:{serverTrace:job.serverTrace ?? (process.env.QA_ADMIN_STUDY ? "off" : "legacy-full"),browserProfile:job.profile === true},frameCalibration,scenarioSha256:createHash("sha256").update(raw).digest("hex"),measurements,snapshots,network:network.slice(networkStart),pendingTelemetryAtReceipt:pendingNetwork.size,failure};
-      save(`job-${job.id}.json`,result); completed.add(file); activeJob=null;activeMeasurement=null;
-      writeFileSync(join(control,`${phase}-result-${job.id}.json`),`${JSON.stringify({status:result.status,path:join(output,`job-${job.id}.json`)},null,2)}\n`,{flag:"wx"});
+       const result={id:job.id,phase,stateEffect:job.stateEffect,status:failure||measurements.some(row=>row.status==="fail")?"fail":"pass",startedAt:start,finishedAt:Date.now(),instrumentation:{serverTrace:job.serverTrace ?? (process.env.QA_ADMIN_STUDY ? "off" : "legacy-full"),browserProfile:job.profile === true},frameCalibration,scenarioSha256:createHash("sha256").update(raw).digest("hex"),measurements,snapshots,network:network.slice(networkStart),pendingTelemetryAtReceipt:pendingNetwork.size,failure};
+       save(`job-${job.id}.json`,result); completed.add(file); activeJob=null;activeMeasurement=null;
+       writeFileSync(join(control,`${phase}-result-${job.id}.json`),`${JSON.stringify({status:result.status,path:join(output,`job-${job.id}.json`)},null,2)}\n`,{flag:"wx"});
+       const restoreReceipt = restoreTransition.complete(job, result, result.scenarioSha256,
+         hash(readFileSync(join(output, `job-${job.id}.json`))));
+       if (restoreReceipt) {
+         writeFileSync(join(control,`${phase}-restore-receipt-${job.id}.json`),`${JSON.stringify(restoreReceipt,null,2)}\n`,{flag:"wx",mode:0o600});
+         checkpoint({type:"restore-succeeded",job:job.id,runId:restoreIdentity.runId,baselineSha256:restoreIdentity.baselineSha256});
+       } else if (restoreTransition.state === "RESTORE_REQUIRED") checkpoint({type:"restore-required",job:job.id,runId:restoreIdentity.runId});
     }
   }
   assert.ok(existsSync(join(control,`${phase}-finish.json`)),"Admin measurement control lease expired");
+  restoreTransition.finish(successfulRestoreReceipt());
   save("browser-summary.json",{phase,jobs:[...completed],network,consoleErrors,pageErrors,blockedExternal:blocked,allOutliersRetained:true,measurementScope:"Explicit scenario full readiness criteria; no global UI timing claim"});
 } finally { await context.close(); await browser.close(); }

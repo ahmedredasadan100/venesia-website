@@ -82,7 +82,7 @@ try {
   for(const item of criteria) handles.push(...await page.locator(item.target.css).elementHandles());
   const legacyLookupMs=performance.now()-lookupStart;
   await Promise.all(handles.map(handle=>handle.dispose()));
-  const sourceHashes=Object.fromEntries(["scripts/fixtures/admin-atomic-readiness.mjs","scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"].map(file=>[file,createHash("sha256").update(readFileSync(file)).digest("hex")]));
+  const sourceHashes=Object.fromEntries(["scripts/fixtures/admin-atomic-readiness.mjs","scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-measurement-restore-transition.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"].map(file=>[file,createHash("sha256").update(readFileSync(file)).digest("hex")]));
   const result={status:"pass",semanticAssertions:14,fixtureControls:465,saved,expired,overhead,legacyLookupMs,sourceHashes,latencyThreshold:false,productionAccess:false};
   if(output)writeFileSync(output,JSON.stringify(result,null,2)+"\n",{flag:"wx"});
   console.log(JSON.stringify(result));
