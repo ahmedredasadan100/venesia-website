@@ -5,6 +5,7 @@ import { startSupabaseRpcCorrelationPhase } from "../../supabase-fetch";
 import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import {
   getAllCatalogAssetIdentityMap,
+  getCatalogAssetIdentityMapForSynchronization,
   getMediaCatalogRuntimeState,
   listCatalogReferences,
   setMediaCatalogRuntimeState,
@@ -150,7 +151,7 @@ async function syncMediaReferencesWithAssetMap(
   domainKey: string,
   entityIdentity: string,
   options: MediaReferenceSynchronizationOptions,
-  readAssetMap: typeof getAllCatalogAssetIdentityMap,
+  readAssetMap: typeof getCatalogAssetIdentityMapForSynchronization,
   readReferences: ReadMediaEntityReferences = (provider, identity) => provider.scanEntity(identity),
   onPrepared?: () => void,
 ) {
@@ -162,7 +163,7 @@ async function syncMediaReferencesWithAssetMap(
   }
 
   let references: DiscoveredMediaReference[];
-  let assetMap: Map<string, MediaCatalogAsset>;
+  let assetMap: Awaited<ReturnType<typeof getCatalogAssetIdentityMapForSynchronization>>;
   try {
     [references, assetMap] = await Promise.all([
       readReferences(provider, entityIdentity),
@@ -224,14 +225,14 @@ export async function syncMediaReferencesForEntity(
   entityIdentity: string,
   options: MediaReferenceSynchronizationOptions = {},
 ) {
-  return syncMediaReferencesWithAssetMap(domainKey, entityIdentity, options, getAllCatalogAssetIdentityMap);
+  return syncMediaReferencesWithAssetMap(domainKey, entityIdentity, options, getCatalogAssetIdentityMapForSynchronization);
 }
 
 async function synchronizeMediaReferencesWithAssetMap(
   domainKey: string,
   entityIdentity: string | number,
   options: MediaReferenceSynchronizationOptions,
-  readAssetMap: typeof getAllCatalogAssetIdentityMap,
+  readAssetMap: typeof getCatalogAssetIdentityMapForSynchronization,
   readReferences?: ReadMediaEntityReferences,
   onPreparationSettled?: (error: unknown | null) => void,
 ) {
@@ -284,7 +285,7 @@ export async function synchronizeMediaReferencesAfterDomainMutation(
   entityIdentity: string | number,
   options: MediaReferenceSynchronizationOptions = {},
 ) {
-  return synchronizeMediaReferencesWithAssetMap(domainKey, entityIdentity, options, getAllCatalogAssetIdentityMap);
+  return synchronizeMediaReferencesWithAssetMap(domainKey, entityIdentity, options, getCatalogAssetIdentityMapForSynchronization);
 }
 
 export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
@@ -318,8 +319,8 @@ export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
 
   // One post-mutation Catalog snapshot serves this batch only. Standalone calls
   // and later batches still read fresh data; every target retains its own lease RPC.
-  let assetMapPromise: ReturnType<typeof getAllCatalogAssetIdentityMap> | undefined;
-  const readAssetMap = () => assetMapPromise ??= getAllCatalogAssetIdentityMap();
+  let assetMapPromise: ReturnType<typeof getCatalogAssetIdentityMapForSynchronization> | undefined;
+  const readAssetMap = () => assetMapPromise ??= getCatalogAssetIdentityMapForSynchronization();
   const identitiesByProvider = new Map<string, Set<string>>();
   for (const target of [...targets, ...cleanupTargets]) {
     const identities = identitiesByProvider.get(target.domainKey) ?? new Set<string>();

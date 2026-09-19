@@ -940,6 +940,40 @@ export async function getAllCatalogAssetIdentityMap() {
   return result;
 }
 
+type MediaCatalogAssetIdentity = Pick<MediaCatalogAsset, "id" | "provider" | "bucket" | "objectKey">;
+
+export async function getCatalogAssetIdentityMapForSynchronization() {
+  const result = new Map<string, MediaCatalogAssetIdentity>();
+  const supabase = getSupabaseAdmin();
+  const pageSize = 500;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("admin_media_assets_catalog")
+      .select("id, provider, bucket, object_key")
+      .neq("status", "deleted")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (isMediaCatalogMissingError(error)) throw new MediaCatalogUnavailableError();
+    if (error) throw new Error(error.message);
+    const rows = (data ?? []).map((row): MediaCatalogAssetIdentity => ({
+      id: text(row.id),
+      provider: row.provider === "filesystem" ? "filesystem" : "supabase",
+      bucket: text(row.bucket),
+      objectKey: text(row.object_key),
+    }));
+    for (const asset of rows) {
+      result.set(getCanonicalMediaIdentityKey(asset), asset);
+    }
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return result;
+}
+
 export async function getMediaCatalogRuntimeState(): Promise<MediaCatalogRuntimeState> {
   const { data, error } = await getSupabaseAdmin()
     .from("site_settings")
