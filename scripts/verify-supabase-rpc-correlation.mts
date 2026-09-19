@@ -4,6 +4,11 @@ import { readFile } from "node:fs/promises";
 import {
   createSupabaseFetch,
   runWithSupabaseRpcCorrelation,
+  runWithSupabaseRpcCorrelationPhase,
+  runWithSupabaseRpcCorrelationSyncPhase,
+  startSupabaseRpcCorrelationPhase,
+  SUPABASE_RPC_CORRELATION_PHASE_NAMES,
+  type SupabaseRpcCorrelationPhaseName,
 } from "../src/lib/supabase-fetch.ts";
 
 const SUPABASE_ORIGIN = "https://trace-test.supabase.co";
@@ -15,7 +20,7 @@ const ZERO_SPAN_ID = "0".repeat(16);
 const REQUEST_SECRET = "REQUEST_SECRET_MUST_NOT_APPEAR";
 const RESPONSE_SECRET = "RESPONSE_SECRET_MUST_NOT_APPEAR";
 const ERROR_SECRET = "ERROR_SECRET_MUST_NOT_APPEAR";
-const ALLOWED_FIELDS = new Set([
+const RPC_ALLOWED_FIELDS = new Set([
   "trace_id",
   "span_id",
   "parent_span_id",
@@ -28,6 +33,15 @@ const ALLOWED_FIELDS = new Set([
   "http_status",
   "sanitized_error_class",
 ]);
+const PHASE_ALLOWED_FIELDS = new Set([
+  "phase_name",
+  "trace_id",
+  "start",
+  "end",
+  "duration_ms",
+  "status",
+  "sanitized_error_class",
+]);
 
 type CapturedRequest = {
   url: string;
@@ -36,7 +50,7 @@ type CapturedRequest = {
 };
 
 type ParsedLog = {
-  event: "root_start" | "root_end" | "rpc_start" | "rpc_end";
+  event: "root_start" | "root_end" | "rpc_start" | "rpc_end" | "phase";
   fields: Record<string, unknown>;
 };
 
@@ -60,7 +74,7 @@ let fetchImplementation: typeof fetch = async (input, init) => {
 function parseLogs(): ParsedLog[] {
   return logLines.map((line) => {
     const match = line.match(
-      /^\[venesia:supabase-rpc-correlation:(root_start|root_end|rpc_start|rpc_end)\] (\{.*\})$/,
+      /^\[venesia:supabase-rpc-correlation:(root_start|root_end|rpc_start|rpc_end|phase)\] (\{.*\})$/,
     );
     assert.ok(match, `unexpected correlation log format: ${line}`);
     return {
@@ -239,7 +253,7 @@ async function main() {
 
   for (const entry of successLogs) {
     assert.ok(
-      Object.keys(entry.fields).every((field) => ALLOWED_FIELDS.has(field)),
+      Object.keys(entry.fields).every((field) => RPC_ALLOWED_FIELDS.has(field)),
       `unexpected logged field: ${Object.keys(entry.fields).join(",")}`,
     );
   }
@@ -247,6 +261,173 @@ async function main() {
   assert.doesNotMatch(successText, new RegExp(REQUEST_SECRET));
   assert.doesNotMatch(successText, new RegExp(RESPONSE_SECRET));
   assert.doesNotMatch(successText, /authorization|apikey|cookie|body|email|user_id|project_id|entity_id|https?:\/\//i);
+
+  // Phase timing stays inside the same Heavy Save trace and logs only the fixed allowlist.
+  clearCaptured();
+  fetchImplementation = async (input, init) => {
+    const response = new Response("{}", { status: 200 });
+    requests.push({
+      url: String(input),
+      headers: new Headers(init?.headers),
+      response,
+    });
+    return response;
+  };
+  const phaseResult = { secret: REQUEST_SECRET };
+  const observedSyncOrder: string[] = [];
+  const returnedPhaseResult = await runWithSupabaseRpcCorrelation(async () => {
+    await runWithSupabaseRpcCorrelationPhase(
+      "pre_lease_project_read_and_prepare",
+      async () => phaseResult,
+    );
+    await runWithSupabaseRpcCorrelationPhase(
+      "post_atomic_persisted_child_reads",
+      async () => phaseResult,
+    );
+    const endMediaPreparation = startSupabaseRpcCorrelationPhase(
+      "media_reference_preparation",
+    );
+    endMediaPreparation("success");
+    endMediaPreparation("error", new Error(ERROR_SECRET));
+    await runWithSupabaseRpcCorrelationPhase(
+      "post_save_project_root_read",
+      async () => phaseResult,
+    );
+    await runWithSupabaseRpcCorrelationPhase(
+      "post_save_child_reconciliation_reads",
+      async () => phaseResult,
+    );
+    const mapped = runWithSupabaseRpcCorrelationSyncPhase(
+      "reconciliation_mapping",
+      () => {
+        observedSyncOrder.push("mapping");
+        return phaseResult;
+      },
+    );
+    observedSyncOrder.push("after_mapping");
+    assert.equal(mapped, phaseResult);
+    await runWithSupabaseRpcCorrelationPhase(
+      "cache_revalidation",
+      async () => phaseResult,
+    );
+    await runWithSupabaseRpcCorrelationPhase(
+      "audit_write",
+      async () => phaseResult,
+    );
+    const finalResult = runWithSupabaseRpcCorrelationSyncPhase(
+      "final_result_feedback_preparation",
+      () => {
+        observedSyncOrder.push("feedback");
+        return phaseResult;
+      },
+    );
+    observedSyncOrder.push("after_feedback");
+    await transport(`${SUPABASE_ORIGIN}/rest/v1/rpc/phase_anchor`);
+    return finalResult;
+  });
+  assert.equal(returnedPhaseResult, phaseResult, "phase wrappers must preserve return identity");
+  assert.deepEqual(observedSyncOrder, [
+    "mapping",
+    "after_mapping",
+    "feedback",
+    "after_feedback",
+  ]);
+
+  const phaseLogs = parseLogs();
+  const phaseEntries = phaseLogs.filter((entry) => entry.event === "phase");
+  assert.equal(phaseEntries.length, SUPABASE_RPC_CORRELATION_PHASE_NAMES.length);
+  assert.deepEqual(
+    phaseEntries.map((entry) => entry.fields.phase_name).sort(),
+    [...SUPABASE_RPC_CORRELATION_PHASE_NAMES].sort(),
+  );
+  const phaseRoot = phaseLogs.find((entry) => entry.event === "root_start")!;
+  assert.equal(phaseLogs[0]?.event, "root_start", "root must activate before the first phase event");
+  assert.equal(phaseLogs.filter((entry) => entry.event === "root_start").length, 1);
+  assert.equal(phaseLogs.filter((entry) => entry.event === "root_end").length, 1);
+  assert.equal(phaseLogs.filter((entry) => entry.event === "rpc_start").length, 1);
+  assert.equal(phaseLogs.filter((entry) => entry.event === "rpc_end").length, 1);
+  for (const entry of phaseEntries) {
+    assert.deepEqual(
+      Object.keys(entry.fields).sort(),
+      [...PHASE_ALLOWED_FIELDS].sort(),
+    );
+    assert.equal(entry.fields.trace_id, phaseRoot.fields.trace_id);
+    assert.ok(SUPABASE_RPC_CORRELATION_PHASE_NAMES.includes(
+      entry.fields.phase_name as SupabaseRpcCorrelationPhaseName,
+    ));
+    assert.ok(Number.isFinite(Date.parse(String(entry.fields.start))));
+    assert.ok(Number.isFinite(Date.parse(String(entry.fields.end))));
+    assert.equal(entry.fields.status, "success");
+    assert.equal(entry.fields.sanitized_error_class, null);
+    assert.equal(typeof entry.fields.duration_ms, "number");
+    assert.ok(Number(entry.fields.duration_ms) >= 0);
+  }
+  assert.ok(
+    phaseEntries.every(
+      (entry) =>
+        entry.fields.phase_name !== "lease_acquire" &&
+        entry.fields.phase_name !== "atomic_save" &&
+        entry.fields.phase_name !== "replacement_barrier" &&
+        entry.fields.phase_name !== "lease_completion",
+    ),
+    "RPC-derived phases must not be duplicated",
+  );
+  const phaseText = phaseEntries.map((entry) => JSON.stringify(entry.fields)).join("\n");
+  assert.doesNotMatch(phaseText, new RegExp(REQUEST_SECRET));
+  assert.doesNotMatch(phaseText, new RegExp(ERROR_SECRET));
+  assert.doesNotMatch(
+    phaseText,
+    /authorization|apikey|cookie|body|payload|query|response|email|user_id|project_id|entity_id|https?:\/\//i,
+  );
+
+  // Phase helpers are silent outside the Heavy Save scope and reject no values.
+  clearCaptured();
+  assert.equal(
+    await runWithSupabaseRpcCorrelationPhase(
+      "cache_revalidation",
+      async () => phaseResult,
+    ),
+    phaseResult,
+  );
+  assert.equal(
+    runWithSupabaseRpcCorrelationSyncPhase(
+      "reconciliation_mapping",
+      () => phaseResult,
+    ),
+    phaseResult,
+  );
+  assert.equal(logLines.length, 0);
+
+  // Runtime allowlisting suppresses invalid names even if a caller bypasses TypeScript.
+  clearCaptured();
+  const invalidPhaseResult = await runWithSupabaseRpcCorrelation(() =>
+    runWithSupabaseRpcCorrelationPhase(
+      "not_allowlisted" as SupabaseRpcCorrelationPhaseName,
+      async () => phaseResult,
+    ),
+  );
+  assert.equal(invalidPhaseResult, phaseResult);
+  assert.equal(logLines.length, 0);
+
+  // Errors retain identity while logs expose only a sanitized class.
+  clearCaptured();
+  const phaseError = new TypeError(ERROR_SECRET);
+  await expectReject(
+    () =>
+      runWithSupabaseRpcCorrelation(() =>
+        runWithSupabaseRpcCorrelationPhase(
+          "cache_revalidation",
+          async () => {
+            throw phaseError;
+          },
+        ),
+      ),
+    (error) => assert.equal(error, phaseError),
+  );
+  const failedPhase = parseLogs().find((entry) => entry.event === "phase")!;
+  assert.equal(failedPhase.fields.status, "error");
+  assert.equal(failedPhase.fields.sanitized_error_class, "TypeError");
+  assert.doesNotMatch(logLines.join("\n"), new RegExp(ERROR_SECRET));
 
   clearCaptured();
   const requestInput = new Request(
@@ -336,22 +517,70 @@ async function main() {
   assert.equal(abortEnd.fields.sanitized_error_class, "AbortError");
   assert.equal(abortEnd.fields.http_status, null);
 
-  const saveSource = await readFile(
-    new URL("../src/app/admin/projects/project-actions/save-entry.ts", import.meta.url),
-    "utf8",
-  );
+  const [
+    saveSource,
+    projectMediaCoordinationSource,
+    synchronizationSource,
+    projectEntryDataSource,
+    auditSource,
+  ] = await Promise.all([
+    readFile(
+      new URL("../src/app/admin/projects/project-actions/save-entry.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../src/lib/admin/projects/project-entry-media-coordination.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../src/lib/admin/media-catalog/synchronization.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../src/lib/admin/projects/project-entry-data.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../src/lib/admin/audit/record-admin-audit-event.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
   assert.match(
     saveSource,
     /return runWithSupabaseRpcCorrelation\(async \(\) => \{\s+try \{/,
     "Heavy Project Save must own the explicit request-local trace scope",
   );
   assert.equal(
-    (saveSource.match(/runWithSupabaseRpcCorrelation/g) ?? []).length,
+    (saveSource.match(/\brunWithSupabaseRpcCorrelation\b/g) ?? []).length,
     2,
     "correlation helper should appear only in the import and save boundary",
   );
+  assert.match(saveSource, /"pre_lease_project_read_and_prepare"/);
+  assert.match(saveSource, /"cache_revalidation"/);
+  assert.match(saveSource, /"final_result_feedback_preparation"/);
+  assert.match(projectMediaCoordinationSource, /"post_atomic_persisted_child_reads"/);
+  assert.match(synchronizationSource, /"media_reference_preparation"/);
+  assert.match(
+    synchronizationSource,
+    /onPrepared\?\.\(\);\s+const \{ error \} = await getSupabaseAdmin\(\)\.rpc\("replace_media_references_for_entity"/,
+    "preparation tracking must settle immediately before each existing replacement RPC",
+  );
+  assert.match(
+    synchronizationSource,
+    /const \[writeResults, cleanupResults\] = await Promise\.all\(\[/,
+    "the existing replacement Promise.all boundary must remain intact",
+  );
+  assert.match(projectEntryDataSource, /"post_save_project_root_read"/);
+  assert.match(projectEntryDataSource, /"post_save_child_reconciliation_reads"/);
+  assert.match(projectEntryDataSource, /"reconciliation_mapping"/);
+  assert.match(
+    projectEntryDataSource,
+    /"post_save_child_reconciliation_reads",\s+\(\) =>\s+Promise\.all\(\[/,
+    "post-save child reconciliation reads must remain parallel",
+  );
+  assert.match(auditSource, /"audit_write"/);
 
-  originalConsoleInfo("Supabase RPC correlation verification passed (16 RPCs, W3C, isolation, headers, errors, and sensitive-data contract).");
+  originalConsoleInfo("Supabase RPC correlation verification passed (16 RPCs, phase timings, W3C, isolation, headers, errors, and sensitive-data contract).");
 }
 
 try {

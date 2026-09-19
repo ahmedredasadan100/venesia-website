@@ -188,16 +188,54 @@ export type ProjectEntryMediaReadSeed = {
   }>;
 };
 
+type ProjectEntryReadTimingPort = {
+  runAsync<TResult>(
+    phaseName:
+      | "post_save_project_root_read"
+      | "post_save_child_reconciliation_reads",
+    operation: () => PromiseLike<TResult>,
+  ): Promise<TResult>;
+  runSync<TResult>(
+    phaseName: "reconciliation_mapping",
+    operation: () => TResult,
+  ): TResult;
+};
+
+async function runProjectEntryReadPhase<TResult>(
+  timing: ProjectEntryReadTimingPort | undefined,
+  phaseName:
+    | "post_save_project_root_read"
+    | "post_save_child_reconciliation_reads",
+  operation: () => PromiseLike<TResult>,
+) {
+  return timing ? timing.runAsync(phaseName, operation) : await operation();
+}
+
+function runProjectEntryMappingPhase<TResult>(
+  timing: ProjectEntryReadTimingPort | undefined,
+  operation: () => TResult,
+) {
+  return timing
+    ? timing.runSync("reconciliation_mapping", operation)
+    : operation();
+}
+
 export async function loadProjectEntry(
   id: number,
   mediaReadSeed?: ProjectEntryMediaReadSeed | null,
+  timing?: ProjectEntryReadTimingPort,
 ): Promise<ProjectEntryBundle | null> {
   const supabase = getSupabaseAdmin();
-  const rootResult = await supabase
-    .from("projects")
-    .select(PROJECT_ROOT_SELECT)
-    .eq("id", id)
-    .maybeSingle();
+  const rootResult = await runProjectEntryReadPhase(
+    timing,
+    "post_save_project_root_read",
+    () =>
+      supabase
+        .from("projects")
+        .select(PROJECT_ROOT_SELECT)
+        .eq("id", id)
+        .maybeSingle(),
+  );
 
   if (rootResult.error) {
     throw new ProjectEntrySchemaUnavailableError(
@@ -223,61 +261,66 @@ export async function loadProjectEntry(
     deliveryResult,
     mediaResult,
     videosResult,
-  ] = await Promise.all([
-    loadProjectLocationOptions(retainedLocationIds),
-    supabase
-      .from("project_location_points")
-      .select("id,client_key,kind,label,distance_text,sort_order")
-      .eq("project_id", id)
-      .order("kind")
-      .order("sort_order"),
-    supabase
-      .from("project_features")
-      .select("id,client_key,body,sort_order")
-      .eq("project_id", id)
-      .order("sort_order"),
-    (async () => {
-      const plansResult = mediaReadSeed
-        ? { data: mediaReadSeed.floorPlans, error: null }
-        : await supabase
-            .from("project_floor_plans")
-            .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
-            .eq("project_id", id)
-            .order("sort_order");
-      const planIds = (plansResult.data ?? []).map((row) => Number(row.id)).filter(Number.isFinite);
-      // Details depend on plan IDs, not on the unrelated media/reference reads.
-      const detailsResult = !plansResult.error && planIds.length
-        ? await supabase
-            .from("project_floor_plan_details")
-            .select("id,client_key,floor_plan_id,label,value,sort_order")
-            .in("floor_plan_id", planIds)
-            .order("floor_plan_id")
-            .order("sort_order")
-        : { data: [], error: null };
-      return { plansResult, detailsResult };
-    })(),
-    supabase
-      .from("project_delivery_items")
-      .select("id,client_key,body,sort_order")
-      .eq("project_id", id)
-      .order("sort_order"),
-    mediaReadSeed
-      ? Promise.resolve({ data: mediaReadSeed.media, error: null })
-      : supabase
-          .from("project_media")
-          .select("id,client_key,section,image,alt_text,sort_order")
+  ] = await runProjectEntryReadPhase(
+    timing,
+    "post_save_child_reconciliation_reads",
+    () =>
+      Promise.all([
+        loadProjectLocationOptions(retainedLocationIds),
+        supabase
+          .from("project_location_points")
+          .select("id,client_key,kind,label,distance_text,sort_order")
           .eq("project_id", id)
-          .order("section")
+          .order("kind")
           .order("sort_order"),
-    mediaReadSeed
-      ? Promise.resolve({ data: mediaReadSeed.videos, error: null })
-      : supabase
-          .from("project_videos")
-          .select("id,client_key,section,video_url,poster_image,poster_alt,sort_order")
+        supabase
+          .from("project_features")
+          .select("id,client_key,body,sort_order")
           .eq("project_id", id)
-          .order("section")
           .order("sort_order"),
-  ]);
+        (async () => {
+          const plansResult = mediaReadSeed
+            ? { data: mediaReadSeed.floorPlans, error: null }
+            : await supabase
+                .from("project_floor_plans")
+                .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
+                .eq("project_id", id)
+                .order("sort_order");
+          const planIds = (plansResult.data ?? []).map((row) => Number(row.id)).filter(Number.isFinite);
+          // Details depend on plan IDs, not on the unrelated media/reference reads.
+          const detailsResult = !plansResult.error && planIds.length
+            ? await supabase
+                .from("project_floor_plan_details")
+                .select("id,client_key,floor_plan_id,label,value,sort_order")
+                .in("floor_plan_id", planIds)
+                .order("floor_plan_id")
+                .order("sort_order")
+            : { data: [], error: null };
+          return { plansResult, detailsResult };
+        })(),
+        supabase
+          .from("project_delivery_items")
+          .select("id,client_key,body,sort_order")
+          .eq("project_id", id)
+          .order("sort_order"),
+        mediaReadSeed
+          ? Promise.resolve({ data: mediaReadSeed.media, error: null })
+          : supabase
+              .from("project_media")
+              .select("id,client_key,section,image,alt_text,sort_order")
+              .eq("project_id", id)
+              .order("section")
+              .order("sort_order"),
+        mediaReadSeed
+          ? Promise.resolve({ data: mediaReadSeed.videos, error: null })
+          : supabase
+              .from("project_videos")
+              .select("id,client_key,section,video_url,poster_image,poster_alt,sort_order")
+              .eq("project_id", id)
+              .order("section")
+              .order("sort_order"),
+      ]),
+  );
 
   const { plansResult, detailsResult } = planState;
 
@@ -305,7 +348,7 @@ export async function loadProjectEntry(
   const projectType = requireProjectType(root.type);
   const entry = createEmptyProjectEntry(projectType);
 
-  return {
+  const mapEntry = () => ({
     ...entry,
     ...locationState,
     location_section_presentation: {
@@ -432,5 +475,6 @@ export async function loadProjectEntry(
         poster_alt: stringValue(row.poster_alt),
       }),
     ),
-  };
+  });
+  return runProjectEntryMappingPhase(timing, mapEntry);
 }

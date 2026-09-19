@@ -11,6 +11,25 @@ type SupabaseRpcCorrelationState = {
   activated: boolean;
 };
 
+export const SUPABASE_RPC_CORRELATION_PHASE_NAMES = [
+  "pre_lease_project_read_and_prepare",
+  "post_atomic_persisted_child_reads",
+  "media_reference_preparation",
+  "post_save_project_root_read",
+  "post_save_child_reconciliation_reads",
+  "reconciliation_mapping",
+  "cache_revalidation",
+  "audit_write",
+  "final_result_feedback_preparation",
+] as const;
+
+export type SupabaseRpcCorrelationPhaseName =
+  (typeof SUPABASE_RPC_CORRELATION_PHASE_NAMES)[number];
+
+const SUPABASE_RPC_CORRELATION_PHASE_NAME_SET = new Set<string>(
+  SUPABASE_RPC_CORRELATION_PHASE_NAMES,
+);
+
 type SupabaseRpcCorrelationSpan = {
   state: SupabaseRpcCorrelationState;
   rpcName: string;
@@ -33,6 +52,16 @@ type SupabaseRpcLogFields = {
   duration_ms?: number;
   http_status?: number | null;
   sanitized_error_class?: string | null;
+};
+
+type SupabaseRpcPhaseLogFields = {
+  phase_name: SupabaseRpcCorrelationPhaseName;
+  trace_id: string;
+  start: string;
+  end: string;
+  duration_ms: number;
+  status: "success" | "error";
+  sanitized_error_class: string | null;
 };
 
 const supabaseRpcCorrelation = new AsyncLocalStorage<SupabaseRpcCorrelationState>();
@@ -65,6 +94,12 @@ function emitSupabaseRpcCorrelation(
   );
 }
 
+function emitSupabaseRpcCorrelationPhase(fields: SupabaseRpcPhaseLogFields) {
+  console.info(
+    `[venesia:supabase-rpc-correlation:phase] ${JSON.stringify(fields)}`,
+  );
+}
+
 function sanitizedErrorClass(error: unknown) {
   if (
     typeof DOMException !== "undefined" &&
@@ -89,6 +124,71 @@ function activateCorrelation(state: SupabaseRpcCorrelationState) {
     parent_span_id: null,
     request_start: state.requestStart,
   });
+}
+
+/** Starts one allow-listed phase inside the active Heavy Project Save trace. */
+export function startSupabaseRpcCorrelationPhase(
+  phaseName: SupabaseRpcCorrelationPhaseName,
+) {
+  const state = supabaseRpcCorrelation.getStore();
+  if (!state || !SUPABASE_RPC_CORRELATION_PHASE_NAME_SET.has(phaseName)) {
+    return (status: "success" | "error", error?: unknown) => {
+      void status;
+      void error;
+    };
+  }
+
+  activateCorrelation(state);
+  const start = new Date().toISOString();
+  const startedAt = performance.now();
+  let ended = false;
+
+  return (status: "success" | "error", error?: unknown) => {
+    if (ended) return;
+    ended = true;
+    emitSupabaseRpcCorrelationPhase({
+      phase_name: phaseName,
+      trace_id: state.traceId,
+      start,
+      end: new Date().toISOString(),
+      duration_ms: elapsedMs(startedAt),
+      status,
+      sanitized_error_class:
+        status === "error" ? sanitizedErrorClass(error) : null,
+    });
+  };
+}
+
+/** Times an existing async boundary without changing its return or error contract. */
+export async function runWithSupabaseRpcCorrelationPhase<TResult>(
+  phaseName: SupabaseRpcCorrelationPhaseName,
+  operation: () => PromiseLike<TResult>,
+): Promise<TResult> {
+  const endPhase = startSupabaseRpcCorrelationPhase(phaseName);
+  try {
+    const result = await operation();
+    endPhase("success");
+    return result;
+  } catch (error) {
+    endPhase("error", error);
+    throw error;
+  }
+}
+
+/** Times synchronous preparation without adding an async or microtask boundary. */
+export function runWithSupabaseRpcCorrelationSyncPhase<TResult>(
+  phaseName: SupabaseRpcCorrelationPhaseName,
+  operation: () => TResult,
+): TResult {
+  const endPhase = startSupabaseRpcCorrelationPhase(phaseName);
+  try {
+    const result = operation();
+    endPhase("success");
+    return result;
+  } catch (error) {
+    endPhase("error", error);
+    throw error;
+  }
 }
 
 function rpcRequest(input: RequestInfo | URL) {
