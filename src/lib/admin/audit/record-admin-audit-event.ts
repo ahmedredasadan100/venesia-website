@@ -3,6 +3,7 @@ import "server-only";
 import type { Json } from "../../database.types";
 import { logError } from "../../logging";
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { runWithSupabaseRpcCorrelationPhase } from "../../supabase-fetch";
 import type { AuditEventInput } from "./audit-types";
 import { sanitizeAuditMetadata } from "./sanitize-audit-metadata";
 
@@ -29,23 +30,29 @@ function auditMetadata(input: Record<string, unknown> | undefined): Json {
 
 export async function recordAdminAuditEvent(input: AuditEventInput): Promise<void> {
   try {
-    const { data, error } = await getSupabaseAdmin()
-      .from("admin_audit_logs")
-      .insert({
-        actor_admin_user_id: input.actorAdminUserId ?? null,
-        actor_username: input.actorUsername,
-        action: input.action,
-        entity_type: input.entityType ?? null,
-        entity_id: input.entityId ?? null,
-        entity_label: input.entityLabel ?? null,
-        metadata: auditMetadata(input.metadata),
-        ip_address: input.ipAddress ?? null,
-        user_agent: input.userAgent ?? null,
-      })
-      .select("id")
-      .single();
+    const data = await runWithSupabaseRpcCorrelationPhase(
+      "audit_write",
+      async () => {
+        const { data, error } = await getSupabaseAdmin()
+          .from("admin_audit_logs")
+          .insert({
+            actor_admin_user_id: input.actorAdminUserId ?? null,
+            actor_username: input.actorUsername,
+            action: input.action,
+            entity_type: input.entityType ?? null,
+            entity_id: input.entityId ?? null,
+            entity_label: input.entityLabel ?? null,
+            metadata: auditMetadata(input.metadata),
+            ip_address: input.ipAddress ?? null,
+            user_agent: input.userAgent ?? null,
+          })
+          .select("id")
+          .single();
 
-    if (error) throw error;
+        if (error) throw error;
+        return data;
+      },
+    );
     void data;
   } catch (error) {
     logError("audit log write failed", error, { action: input.action });

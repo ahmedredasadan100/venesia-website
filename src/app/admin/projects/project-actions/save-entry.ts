@@ -27,7 +27,11 @@ import {
   type ProjectPublicationStatus,
 } from "../../../../lib/admin/projects/project-publishing-capability";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
-import { runWithSupabaseRpcCorrelation } from "../../../../lib/supabase-fetch";
+import {
+  runWithSupabaseRpcCorrelation,
+  runWithSupabaseRpcCorrelationPhase,
+  runWithSupabaseRpcCorrelationSyncPhase,
+} from "../../../../lib/supabase-fetch";
 import { revalidateProjectPaths } from "./revalidate";
 import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { MediaDomainMutationError } from "../../../../lib/admin/media-catalog/domain-write-coordination";
@@ -184,44 +188,70 @@ export async function saveProjectEntry(
 
   return runWithSupabaseRpcCorrelation(async () => {
     try {
-    let previousPublicationStatus: ProjectPublicationStatus | null = null;
-    let previousPublishedAt: string | null = null;
-    let previousSlug: string | null = null;
-    let previousSeoScore: PersistedEntitySeoScoreSource | null = null;
-    if (mode === "edit" && projectId) {
-      const { data: current, error: currentError } = await getSupabaseAdmin()
-        .from("projects")
-        .select("publication_status,published_at,slug,seo_score,seo_score_version,seo_score_input_hash")
-        .eq("id", projectId)
-        .maybeSingle();
-      if (
-        currentError ||
-        !current ||
-        !isProjectPublicationStatus(current.publication_status)
-      ) {
-        return databaseFailure(mode, revision, currentError);
-      }
-      previousPublicationStatus = current.publication_status;
-      previousPublishedAt = current.published_at;
-      previousSlug = current.slug;
-      previousSeoScore = current;
-    }
+    const preparation = await runWithSupabaseRpcCorrelationPhase(
+      "pre_lease_project_read_and_prepare",
+      async () => {
+        let previousPublicationStatus: ProjectPublicationStatus | null = null;
+        let previousPublishedAt: string | null = null;
+        let previousSlug: string | null = null;
+        let previousSeoScore: PersistedEntitySeoScoreSource | null = null;
+        if (mode === "edit" && projectId) {
+          const { data: current, error: currentError } = await getSupabaseAdmin()
+            .from("projects")
+            .select("publication_status,published_at,slug,seo_score,seo_score_version,seo_score_input_hash")
+            .eq("id", projectId)
+            .maybeSingle();
+          if (
+            currentError ||
+            !current ||
+            !isProjectPublicationStatus(current.publication_status)
+          ) {
+            return {
+              ok: false as const,
+              failure: databaseFailure(mode, revision, currentError),
+            };
+          }
+          previousPublicationStatus = current.publication_status;
+          previousPublishedAt = current.published_at;
+          previousSlug = current.slug;
+          previousSeoScore = current;
+        }
 
-    const requestedPublicationStatus = payload.project.publication_status;
-    const trustedPayload = {
-      ...payload,
-      project: {
-        ...payload.project,
-        ...deriveEntitySeoScore(toProjectSeoScoreInput(payload.project), previousSeoScore),
-        publication_status: requestedPublicationStatus,
+        const requestedPublicationStatus = payload.project.publication_status;
+        const trustedPayload = {
+          ...payload,
+          project: {
+            ...payload.project,
+            ...deriveEntitySeoScore(
+              toProjectSeoScoreInput(payload.project),
+              previousSeoScore,
+            ),
+            publication_status: requestedPublicationStatus,
+          },
+          publication_actor_id: actor.id,
+          publication_previous_status: previousPublicationStatus,
+        };
+        return {
+          ok: true as const,
+          previousPublicationStatus,
+          previousPublishedAt,
+          previousSlug,
+          trustedPayload,
+        };
       },
-      publication_actor_id: actor.id,
-      publication_previous_status: previousPublicationStatus,
-    };
+    );
+    if (!preparation.ok) return preparation.failure;
+    const {
+      previousPublicationStatus,
+      previousPublishedAt,
+      previousSlug,
+      trustedPayload,
+    } = preparation;
     const coordinated = await coordinateProjectEntrySave({
       actorId: actor.id,
       projectId,
       payload: trustedPayload,
+      runPhase: runWithSupabaseRpcCorrelationPhase,
       mutate: async () => {
         const { data, error } = await getSupabaseAdmin().rpc(
           "save_project_admin_entry",
@@ -257,6 +287,10 @@ export async function saveProjectEntry(
         reconciledBundle = await loadProjectEntry(
           saved.id,
           coordinated.reconciliationMediaSeed,
+          {
+            runAsync: runWithSupabaseRpcCorrelationPhase,
+            runSync: runWithSupabaseRpcCorrelationSyncPhase,
+          },
         );
       } catch (reconciliationError) {
         console.error("Project entry post-save reconciliation read failed", {
@@ -279,12 +313,18 @@ export async function saveProjectEntry(
       previousPublishedAt ??
       (nextPublicationStatus === "published" ? saved.updatedAt : null);
 
-    const cache = await runBoundedPublicCacheRevalidation(() => revalidateProjectPaths(
-      payload.project.type,
-      saved.id,
-      saved.slug,
-      previousSlug,
-    ));
+    const cache = await runWithSupabaseRpcCorrelationPhase(
+      "cache_revalidation",
+      () =>
+        runBoundedPublicCacheRevalidation(() =>
+          revalidateProjectPaths(
+            payload.project.type,
+            saved.id,
+            saved.slug,
+            previousSlug,
+          ),
+        ),
+    );
     const savedWithWarning = mediaWarning || reconciliationWarning || !cache.ok;
 
     await recordCmsAdminAudit(
@@ -308,46 +348,49 @@ export async function saveProjectEntry(
       actor,
     );
 
-    return {
-      status: savedWithWarning ? "warning" : "success",
-      mode,
-      revision,
-      title: reconciliationWarning
-        ? "تم حفظ المشروع — يلزم تحديث المحرر"
-        : mediaWarning
-          ? "تم حفظ المشروع مع تنبيه للميديا"
-          : nextPublicationStatus === "published"
-            ? "تم حفظ المشروع ونشره"
-            : nextPublicationStatus === "unpublished"
-              ? "تم حفظ المشروع وإخفاؤه"
-              : mode === "create"
-                ? "تم إنشاء المشروع كغير منشور"
-                : "تم حفظ المشروع",
-      message: reconciliationWarning
-        ? "حُفظ المشروع وكل عناصره، لكن تعذرت إعادة قراءة عقد التعديل بأمان. سيُعاد تحميل المحرر قبل السماح بحفظ آخر."
-        : mediaWarning
-          ? "حُفظ Project Aggregate ذريًا، لكن تعذر إثبات اكتمال مزامنة مراجع الميديا. يظل الحذف الآمن متوقفًا حتى reconciliation."
-          : !cache.ok
-            ? "تم حفظ المشروع وكل عناصره، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد الإنشاء أو الحفظ."
-          : nextPublicationStatus === "published"
-            ? "حُفظ Project Aggregate وأصبح المشروع ظاهرًا للعامة."
-            : nextPublicationStatus === "unpublished"
-              ? "حُفظ المشروع وأُخفي عن العرض العام مع الاحتفاظ بتاريخ أول نشر."
-              : "حُفظ أصل المشروع وكل العناصر التابعة كغير منشورة ضمن عملية ذرية واحدة.",
-      code: reconciliationWarning
-        ? "saved_requires_reconciliation_reload"
-        : mediaWarning
-          ? "saved_with_media_sync_warning"
-          : !cache.ok ? "committed_cache_revalidation_pending" : "saved",
-      entityId: saved.id,
-      ...(mode === "create" ? { editHref: `/admin/projects/${saved.id}` } : {}),
-      savedRevision: `${saved.id}:${saved.updatedAt}`,
-      result: {
-        mediaSynchronizationStatus: mediaWarning ? "warning" : "synced",
-        reconciledBundle,
-        publicationStatus: nextPublicationStatus,
-      },
-    };
+    return runWithSupabaseRpcCorrelationSyncPhase(
+      "final_result_feedback_preparation",
+      () => ({
+        status: savedWithWarning ? "warning" : "success",
+        mode,
+        revision,
+        title: reconciliationWarning
+          ? "تم حفظ المشروع — يلزم تحديث المحرر"
+          : mediaWarning
+            ? "تم حفظ المشروع مع تنبيه للميديا"
+            : nextPublicationStatus === "published"
+              ? "تم حفظ المشروع ونشره"
+              : nextPublicationStatus === "unpublished"
+                ? "تم حفظ المشروع وإخفاؤه"
+                : mode === "create"
+                  ? "تم إنشاء المشروع كغير منشور"
+                  : "تم حفظ المشروع",
+        message: reconciliationWarning
+          ? "حُفظ المشروع وكل عناصره، لكن تعذرت إعادة قراءة عقد التعديل بأمان. سيُعاد تحميل المحرر قبل السماح بحفظ آخر."
+          : mediaWarning
+            ? "حُفظ Project Aggregate ذريًا، لكن تعذر إثبات اكتمال مزامنة مراجع الميديا. يظل الحذف الآمن متوقفًا حتى reconciliation."
+            : !cache.ok
+              ? "تم حفظ المشروع وكل عناصره، لكن تعذر تحديث العرض فورًا. حدّث الصفحة لعرض أحدث البيانات. لا تعِد الإنشاء أو الحفظ."
+              : nextPublicationStatus === "published"
+                ? "حُفظ Project Aggregate وأصبح المشروع ظاهرًا للعامة."
+                : nextPublicationStatus === "unpublished"
+                  ? "حُفظ المشروع وأُخفي عن العرض العام مع الاحتفاظ بتاريخ أول نشر."
+                  : "حُفظ أصل المشروع وكل العناصر التابعة كغير منشورة ضمن عملية ذرية واحدة.",
+        code: reconciliationWarning
+          ? "saved_requires_reconciliation_reload"
+          : mediaWarning
+            ? "saved_with_media_sync_warning"
+            : !cache.ok ? "committed_cache_revalidation_pending" : "saved",
+        entityId: saved.id,
+        ...(mode === "create" ? { editHref: `/admin/projects/${saved.id}` } : {}),
+        savedRevision: `${saved.id}:${saved.updatedAt}`,
+        result: {
+          mediaSynchronizationStatus: mediaWarning ? "warning" : "synced",
+          reconciledBundle,
+          publicationStatus: nextPublicationStatus,
+        },
+      }),
+    );
     } catch (error) {
       if (error instanceof MediaDomainMutationError && error.domainWriteCommitted) {
         await runBoundedPublicCacheRevalidation(() => revalidateProjectPaths(payload.project.type, projectId ?? undefined));

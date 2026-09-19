@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "../../supabase-admin";
+import { startSupabaseRpcCorrelationPhase } from "../../supabase-fetch";
 import { resolveMediaStorageRuntimeContext } from "../media-storage-adapter";
 import {
   getAllCatalogAssetIdentityMap,
@@ -151,6 +152,7 @@ async function syncMediaReferencesWithAssetMap(
   options: MediaReferenceSynchronizationOptions,
   readAssetMap: typeof getAllCatalogAssetIdentityMap,
   readReferences: ReadMediaEntityReferences = (provider, identity) => provider.scanEntity(identity),
+  onPrepared?: () => void,
 ) {
   const provider = getMediaReferenceProvider(domainKey);
   if (!provider) {
@@ -191,6 +193,7 @@ async function syncMediaReferencesWithAssetMap(
   const payload = references.map((reference) =>
     serializedReference(reference, assetMap.get(getCanonicalMediaIdentityKey(reference.identity))!.id),
   );
+  onPrepared?.();
   const { error } = await getSupabaseAdmin().rpc("replace_media_references_for_entity", {
     p_domain_key: provider.domainKey,
     p_entity_type: provider.entityType,
@@ -230,9 +233,23 @@ async function synchronizeMediaReferencesWithAssetMap(
   options: MediaReferenceSynchronizationOptions,
   readAssetMap: typeof getAllCatalogAssetIdentityMap,
   readReferences?: ReadMediaEntityReferences,
+  onPreparationSettled?: (error: unknown | null) => void,
 ) {
+  let preparationSettled = false;
+  const settlePreparation = (error: unknown | null) => {
+    if (preparationSettled) return;
+    preparationSettled = true;
+    onPreparationSettled?.(error);
+  };
   try {
-    const result = await syncMediaReferencesWithAssetMap(domainKey, String(entityIdentity), options, readAssetMap, readReferences);
+    const result = await syncMediaReferencesWithAssetMap(
+      domainKey,
+      String(entityIdentity),
+      options,
+      readAssetMap,
+      readReferences,
+      () => settlePreparation(null),
+    );
     return {
       status: "synced" as const,
       code: "media_reference_sync_succeeded" as const,
@@ -246,6 +263,7 @@ async function synchronizeMediaReferencesWithAssetMap(
       uncertainties: [],
     } satisfies MediaReferenceSynchronizationResult;
   } catch (error) {
+    settlePreparation(error);
     const warning = synchronizationWarning({
       domainKey,
       entityIdentity: String(entityIdentity),
@@ -281,6 +299,23 @@ export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
     entityIdentity: string | number;
   }[] = [],
 ) {
+  const endPreparationPhase = startSupabaseRpcCorrelationPhase(
+    "media_reference_preparation",
+  );
+  const preparationTargetCount = targets.length + cleanupTargets.length;
+  let preparationSettledCount = 0;
+  let preparationError: unknown;
+  const onPreparationSettled = (error: unknown | null) => {
+    preparationSettledCount += 1;
+    if (error != null && preparationError == null) preparationError = error;
+    if (preparationSettledCount !== preparationTargetCount) return;
+    endPreparationPhase(
+      preparationError == null ? "success" : "error",
+      preparationError,
+    );
+  };
+  if (preparationTargetCount === 0) endPreparationPhase("success");
+
   // One post-mutation Catalog snapshot serves this batch only. Standalone calls
   // and later batches still read fresh data; every target retains its own lease RPC.
   let assetMapPromise: ReturnType<typeof getAllCatalogAssetIdentityMap> | undefined;
@@ -323,6 +358,7 @@ export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
           },
           readAssetMap,
           readReferences,
+          onPreparationSettled,
         ),
       ),
     ),
@@ -334,6 +370,7 @@ export async function synchronizeMediaReferenceWriteScopesAfterDomainMutation(
           {},
           readAssetMap,
           readReferences,
+          onPreparationSettled,
         ),
       ),
     ),

@@ -34,6 +34,11 @@ type IntendedMediaChild = {
   row: Record<string, unknown>;
 };
 
+type ProjectEntrySavePhaseRunner = <TResult>(
+  phaseName: "post_atomic_persisted_child_reads",
+  operation: () => PromiseLike<TResult>,
+) => Promise<TResult>;
+
 async function loadExistingMediaChildren(projectId: number | null) {
   if (!projectId) return [] satisfies ExistingMediaChild[];
   const supabase = getSupabaseAdmin();
@@ -102,53 +107,62 @@ function buildIntendedChildren(
   ];
 }
 
-async function loadPersistedMediaChildren(projectId: number) {
-  const supabase = getSupabaseAdmin();
-  const [plans, media, videos] = await Promise.all([
-    supabase
-      .from("project_floor_plans")
-      .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
-      .eq("project_id", projectId)
-      .order("sort_order"),
-    supabase
-      .from("project_media")
-      .select("id,client_key,section,image,alt_text,sort_order")
-      .eq("project_id", projectId)
-      .order("section")
-      .order("sort_order"),
-    supabase
-      .from("project_videos")
-      .select("id,client_key,section,video_url,poster_image,poster_alt,sort_order")
-      .eq("project_id", projectId)
-      .order("section")
-      .order("sort_order"),
-  ]);
-  const error = plans.error ?? media.error ?? videos.error;
-  if (error) throw new Error(`project_media_post_save_read_failed:${error.message}`);
+async function loadPersistedMediaChildren(
+  projectId: number,
+  runPhase?: ProjectEntrySavePhaseRunner,
+) {
+  const operation = async () => {
+    const supabase = getSupabaseAdmin();
+    const [plans, media, videos] = await Promise.all([
+      supabase
+        .from("project_floor_plans")
+        .select("id,client_key,name,area_text,featured,architectural_image,architectural_image_alt,furnishing_image,furnishing_image_alt,sort_order")
+        .eq("project_id", projectId)
+        .order("sort_order"),
+      supabase
+        .from("project_media")
+        .select("id,client_key,section,image,alt_text,sort_order")
+        .eq("project_id", projectId)
+        .order("section")
+        .order("sort_order"),
+      supabase
+        .from("project_videos")
+        .select("id,client_key,section,video_url,poster_image,poster_alt,sort_order")
+        .eq("project_id", projectId)
+        .order("section")
+        .order("sort_order"),
+    ]);
+    const error = plans.error ?? media.error ?? videos.error;
+    if (error) throw new Error(`project_media_post_save_read_failed:${error.message}`);
 
-  const reconciliationMediaSeed: ProjectEntryMediaReadSeed = {
-    floorPlans: plans.data ?? [],
-    media: media.data ?? [],
-    videos: videos.data ?? [],
+    const reconciliationMediaSeed: ProjectEntryMediaReadSeed = {
+      floorPlans: plans.data ?? [],
+      media: media.data ?? [],
+      videos: videos.data ?? [],
+    };
+    const identities: ExistingMediaChild[] = [
+      ...reconciliationMediaSeed.floorPlans.map((row) => ({
+        domainKey: "project_floor_plans" as const,
+        id: Number(row.id),
+        clientKey: String(row.client_key ?? ""),
+      })),
+      ...reconciliationMediaSeed.media.map((row) => ({
+        domainKey: "project_media" as const,
+        id: Number(row.id),
+        clientKey: String(row.client_key ?? ""),
+      })),
+      ...reconciliationMediaSeed.videos.map((row) => ({
+        domainKey: "project_videos" as const,
+        id: Number(row.id),
+        clientKey: String(row.client_key ?? ""),
+      })),
+    ];
+    return { identities, reconciliationMediaSeed };
   };
-  const identities: ExistingMediaChild[] = [
-    ...reconciliationMediaSeed.floorPlans.map((row) => ({
-      domainKey: "project_floor_plans" as const,
-      id: Number(row.id),
-      clientKey: String(row.client_key ?? ""),
-    })),
-    ...reconciliationMediaSeed.media.map((row) => ({
-      domainKey: "project_media" as const,
-      id: Number(row.id),
-      clientKey: String(row.client_key ?? ""),
-    })),
-    ...reconciliationMediaSeed.videos.map((row) => ({
-      domainKey: "project_videos" as const,
-      id: Number(row.id),
-      clientKey: String(row.client_key ?? ""),
-    })),
-  ];
-  return { identities, reconciliationMediaSeed };
+
+  return runPhase
+    ? runPhase("post_atomic_persisted_child_reads", operation)
+    : await operation();
 }
 
 export type ProjectEntrySaveCoordinationResult = CoordinatedMediaDomainMutationResult<SavedProjectIdentity> & {
@@ -160,6 +174,7 @@ export async function coordinateProjectEntrySave(input: {
   projectId: number | null;
   payload: ProjectEntryPayload;
   mutate: () => Promise<SavedProjectIdentity>;
+  runPhase?: ProjectEntrySavePhaseRunner;
 }): Promise<ProjectEntrySaveCoordinationResult> {
   const operationIdentity = crypto.randomUUID();
   const rootLeaseIdentity = input.projectId
@@ -199,7 +214,10 @@ export async function coordinateProjectEntrySave(input: {
     mutate: input.mutate,
     resolveEntityIdentity: (saved) => String(saved.id),
     synchronize: async ({ value, leaseToken }) => {
-      const persisted = await loadPersistedMediaChildren(value.id);
+      const persisted = await loadPersistedMediaChildren(
+        value.id,
+        input.runPhase,
+      );
       reconciliationMediaSeed = persisted.reconciliationMediaSeed;
       const persistedByKey = new Map(
         persisted.identities.map((child) => [
