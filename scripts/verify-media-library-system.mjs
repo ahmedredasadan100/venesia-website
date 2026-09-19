@@ -1119,6 +1119,120 @@ check("shared picker adopts the viewport modal owner, locks the root scroller, a
 check("duplicate media-browse route is closed", !existsSync(resolve(ROOT, "src/app/api/admin/media-browse/route.ts")));
 check("topics-without-image report exists with server pagination", existsSync(resolve(ROOT, "src/app/admin/reports/topics-without-image/page.tsx")) && source("src/lib/admin/media-catalog/reports.ts").includes("range(from, from + pageSize - 1)"));
 
+const identityProjectionRows = Array.from({ length: 501 }, (_, index) => catalogRow(catalogAsset, {
+  id: `identity-${String(index).padStart(3, "0")}`,
+  object_key: `images/catalog/identity-${String(index).padStart(3, "0")}.png`,
+  created_at: "2026-07-25T01:00:00.000Z",
+  status: index === 500 ? "missing" : "active",
+}));
+identityProjectionRows.push(catalogRow(catalogAsset, {
+  id: "identity-deleted",
+  object_key: "images/catalog/deleted.png",
+  status: "deleted",
+}));
+const identityProjectionCalls = [];
+let identityProjectionError = null;
+let identityProjectionErrorOffset = 0;
+const identityProjectionSupabase = {
+  from(table) {
+    assert.equal(table, "admin_media_assets_catalog");
+    const call = { table, select: null, filter: null, order: [], range: null };
+    identityProjectionCalls.push(call);
+    return {
+      select(columns) { call.select = columns; return this; },
+      neq(column, value) { call.filter = [column, value]; return this; },
+      order(column, options) { call.order.push([column, options]); return this; },
+      async range(from, to) {
+        call.range = [from, to];
+        if (identityProjectionError && from === identityProjectionErrorOffset) {
+          return { data: null, error: identityProjectionError };
+        }
+        const rows = identityProjectionRows
+          .filter((row) => row.status !== call.filter?.[1])
+          .sort((left, right) => left.created_at.localeCompare(right.created_at) || left.id.localeCompare(right.id))
+          .slice(from, to + 1);
+        const columns = call.select === "*" ? null : call.select.split(", ");
+        return {
+          data: columns ? rows.map((row) => Object.fromEntries(columns.map((column) => [column, row[column]]))) : rows,
+          error: null,
+        };
+      },
+    };
+  },
+};
+const identityProjectionCatalog = loadTypeScriptModule("src/lib/admin/media-catalog/catalog.ts", {
+  "server-only": {},
+  path: { default: nodePath },
+  "../media-storage-adapter": { resolveMediaStorageRuntimeContext: () => runtimeContext },
+  "../media-library": { listManagedMediaInventory: async () => managedInventory },
+  "../entity-list/search-normalization": searchNormalizationModule,
+  "../../storage/upload-cms-asset": { parseManagedStorageAsset: () => null },
+  "../../supabase-admin": { getSupabaseAdmin: () => identityProjectionSupabase },
+  "./identity": identityModule,
+  "./binary-metadata": { readUploadBinaryMetadata: async () => ({}) },
+  "./reference-providers": { MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION: "test-registry" },
+  "./readiness": readinessModule,
+});
+const fullIdentityMap = await identityProjectionCatalog.getAllCatalogAssetIdentityMap();
+const narrowIdentityMap = await identityProjectionCatalog.getCatalogAssetIdentityMapForSynchronization();
+assert.equal(fullIdentityMap.size, 501);
+assert.equal(narrowIdentityMap.size, fullIdentityMap.size);
+for (const [identity, asset] of fullIdentityMap) {
+  assert.deepEqual(narrowIdentityMap.get(identity), {
+    id: asset.id,
+    provider: asset.provider,
+    bucket: asset.bucket,
+    objectKey: asset.objectKey,
+  });
+}
+check("identity-only Catalog read preserves the full identity map across the 500-row boundary", true);
+assert.equal(narrowIdentityMap.has("supabase:cms-images:images/catalog/deleted.png"), false);
+assert.equal(narrowIdentityMap.get("supabase:cms-images:images/catalog/identity-500.png")?.id, "identity-500");
+assert.equal(narrowIdentityMap.has("supabase:cms-images:images/catalog/absent.png"), false);
+check("identity-only read preserves deleted, missing-status and absent-asset semantics", true);
+const fullIdentityCalls = identityProjectionCalls.filter((call) => call.select === "*");
+const narrowIdentityCalls = identityProjectionCalls.filter((call) => call.select !== "*");
+assert.deepEqual(fullIdentityCalls.map((call) => call.range), [[0, 499], [500, 999]]);
+assert.deepEqual(narrowIdentityCalls.map((call) => call.range), [[0, 499], [500, 999]]);
+for (const call of narrowIdentityCalls) {
+  assert.equal(call.select, "id, provider, bucket, object_key");
+  assert.deepEqual(call.filter, ["status", "deleted"]);
+  assert.deepEqual(call.order, [["created_at", { ascending: true }], ["id", { ascending: true }]]);
+}
+check("identity-only projection keeps the exact filter, order and pagination contract", true);
+assert.ok(Object.keys(fullIdentityMap.values().next().value).length > 4);
+assert.deepEqual(Object.keys(narrowIdentityMap.values().next().value), ["id", "provider", "bucket", "objectKey"]);
+check("full Catalog consumers retain the complete asset contract", true);
+identityProjectionError = { code: "42P01", message: "catalog view unavailable" };
+identityProjectionErrorOffset = 0;
+await assert.rejects(
+  () => identityProjectionCatalog.getCatalogAssetIdentityMapForSynchronization(),
+  (error) => error?.code === "media_catalog_unavailable",
+);
+identityProjectionError = { code: "XX000", message: "catalog read failed" };
+identityProjectionErrorOffset = 500;
+await assert.rejects(
+  () => identityProjectionCatalog.getCatalogAssetIdentityMapForSynchronization(),
+  (error) => error?.message === "catalog read failed",
+);
+identityProjectionError = null;
+check("identity-only read retains missing-Catalog and later-page failure semantics", true);
+const synchronizationReadPath = synchronization.slice(0, synchronization.indexOf("export async function reconcileAllMediaReferences"));
+check(
+  "standalone, post-mutation and batch synchronization adopt the Catalog-owned narrow read",
+  !synchronizationReadPath.includes("getAllCatalogAssetIdentityMap(") &&
+    synchronizationReadPath.includes("return syncMediaReferencesWithAssetMap(domainKey, entityIdentity, options, getCatalogAssetIdentityMapForSynchronization)") &&
+    synchronizationReadPath.includes("return synchronizeMediaReferencesWithAssetMap(domainKey, entityIdentity, options, getCatalogAssetIdentityMapForSynchronization)") &&
+    synchronizationReadPath.includes("assetMapPromise ??= getCatalogAssetIdentityMapForSynchronization()") &&
+    synchronizationReadPath.includes("[references, assetMap] = await Promise.all([") &&
+    synchronizationReadPath.includes("const [writeResults, cleanupResults] = await Promise.all(["),
+);
+check(
+  "reconciliation remains a full-Catalog consumer under the existing safety contract",
+  synchronization.includes("options.assetMap ?? await getAllCatalogAssetIdentityMap()") &&
+    source("src/lib/admin/media-catalog/reconciliation.ts").includes("await getAllCatalogAssetIdentityMap()"),
+);
+
 const passed = checks.filter((item) => item.ok).length;
 console.log(`\nMedia Library system: ${passed}/${checks.length} checks passed.`);
 if (passed !== checks.length) process.exitCode = 1;
