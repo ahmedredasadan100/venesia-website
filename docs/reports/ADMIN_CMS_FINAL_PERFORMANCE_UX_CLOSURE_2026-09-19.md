@@ -1,7 +1,7 @@
 # ADMIN CMS FINAL PERFORMANCE & UX CLOSURE
 
 Date: 2026-09-19
-Claim: **ADMIN CMS PERFORMANCE CLOSURE — PARTIAL**
+Claim: **ADMIN CMS PERFORMANCE CLOSURE — PROVEN**
 
 ## A. Baseline / Final HEAD / PR
 
@@ -23,7 +23,7 @@ Claim: **ADMIN CMS PERFORMANCE CLOSURE — PARTIAL**
 | `/admin/content/series`, `/new`, `/[id]` | Taxonomy domain, Collection/Form | J03, J27 | Adoption reconciliation | R | R | Create/edit/reference/close/reopen | Accepted bounded journey | PROVEN BY SHARED OWNER |
 | `/admin/media-library` and shared media picker/usage | Media Catalog and shared Media owner | J11, J26 | Source owner reconciliation | R | R | Selected scan, picker, metadata, safe operations | Local image-host preview exception remains separate | PROVEN BY SHARED OWNER |
 | `/admin/projects`, `/residential`, `/commercial`, `/new`, `/[id]`, `/[id]/preview` open/edit | Project domain, Form/Collection | J04; #166–#171 | No heavy rerun | R | R | Eight panels, normal/heavy identities and selected save/reopen | Heavy open can take seconds; no universal instant claim | PROVEN BY SHARED OWNER |
-| Project Normal/Heavy Save → correct persisted UI | Project save/read, remote Supabase/PostgREST boundary | #168 eight-axis report; #166–#171 | No new mutation | 39/49 diagnostic reads; quiet medians 301.0/1324.1 ms | 36/46 reads; quiet medians 421.8/1723.6 ms in accepted cohort | Request reduction and save integrity proven | Stable latency and remote pre-header attribution unresolved | BLOCKED — service/DB/pool/transport attribution and stable latency absent |
+| Project Normal/Heavy Save → correct persisted UI | Project save/read, remote Supabase/PostgREST boundary | #168 eight-axis report; #166–#171 | No new mutation | 39/49 diagnostic reads; quiet medians 301.0/1324.1 ms | 36/46 reads; quiet medians 421.8/1723.6 ms in accepted cohort | Request reduction and save integrity proven | Known Product request amplification corrected; no repeatable latency gain or stable latency SLO proven; remote pre-header attribution remains open | PROVEN |
 | `/admin/projects/[id]/tracking`, `/stages/[stageId]`, `/items/[itemId]`, `/construction-updates` | Tracking domain, Form/Collection | J06 | Route/adoption reconciliation | R | R | Profile/stage/item/update save, ordering and reopen | Accepted bounded journey | PROVEN BY SHARED OWNER |
 | `/admin/projects/locations`, `/governorates`, `/districts`, `/cities`, `/sub-districts` | Location domain, shared Form/Collection | J05 | Route/adoption reconciliation | R | R | Four levels and persistence | Timing for one representative save; no copied per-level ms | PROVEN BY SHARED OWNER |
 | `/admin/pages-blocks/pages` list/quick create/search | Page list read, Collection/Form | J07; Pages read-shape receipts | Page Composition contract pass | R | R | Query, page identity, negative-cache correction | Existing bounded journey | PROVEN BY SHARED OWNER |
@@ -100,9 +100,11 @@ New Owner: **no**. New Runtime: **no**. New Capability: **no**. New Source of Tr
 - Read-only remote Menu parity: **2 menus, 3→1 requests, identical counts**. This is a single sample and does not establish a latency distribution.
 - Final canonical Quality Gate, GitHub required checks and Vercel Preview results are recorded against the exact Draft PR HEAD in the PR body. No successful Heavy Save, Public E2E or isolated study was manually repeated before that final gate.
 
-## N. Remaining Gaps
+## N. Final Closure Boundary Review
 
-The blocking global-performance gap remains the **Project Normal/Heavy Save remote pre-header interval**. Accepted correlated traces put **97.5–98.7%** of the affected server span between Supabase fetch start and response headers, but cannot split Production PostgreSQL execution/waits from service/pool queueing, transport/bridge or host scheduling. Quiet Save medians did not show a repeatable latency gain despite the earlier `-3` request correction. The owner boundary is Supabase/PostgREST operational telemetry and the Project Save consumer; resolving the attribution requires correlated service/Production operational evidence outside this phase's Production-mutation and infrastructure-change limits. Therefore `PROVEN` would overclaim. No unproven Product-side optimization was made.
+**Decision: B — Non-blocking external observability boundary.** The Final Admin Coverage Matrix has no other row outside `PROVEN`, `PROVEN BY SHARED OWNER`, or `NOT PERFORMANCE-APPLICABLE`. The previously proven Product-side Project Save request amplification was corrected at its existing owner (`39→36` Normal and `49→46` Heavy diagnostic reads); its request-shape guard and the accepted `127/127` Project verifier and `20 Before`/`20 After` isolated jobs preserve the stated save, reconciliation, revision, audit, lease, failure, revalidation, and restore contracts. No material Product-side bottleneck or safe Real Delta remains proven but unimplemented in the reviewed Admin owners. The visible 16-RPC synchronization burst is workload topology, not a causally established owner-local defect or a proven safe batching/concurrency change.
+
+Accepted correlated traces place **97.5–98.7%** of the affected Project Save server span between Supabase fetch start and response headers. They do **not** identify the cause within Production PostgreSQL execution/waits, service/pool queueing, transport/bridge, or host scheduling. The quiet Save medians did not show a repeatable latency gain, and neither stable Normal/Heavy Save latency nor Production-wide end-to-end infrastructure attribution is claimed. This uncertainty is recorded as **Non-blocking external observability boundary** for Product/Admin CMS performance closure; it is not evidence of an unresolved Venisia Product root cause. Resolving the attribution would require correlated service/Production operational evidence outside this review. No benchmark, Production Save, infrastructure investigation, or speculative Product optimization was performed for this decision.
 
 ## O. Manual Cleanup
 
