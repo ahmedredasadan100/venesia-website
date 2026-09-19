@@ -1,4 +1,3 @@
-import { countMenuItemsByMenuIds } from "../../../../lib/admin/menus/count-menu-items";
 import { readAdminColumnPreferences } from "../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../lib/page-blocks/admin-collection-columns";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
@@ -17,7 +16,7 @@ export default async function MenusPage({
   const [menusResult, preference] = await Promise.all([
     getSupabaseAdmin()
       .from("menus")
-      .select("id, name, slug, location, is_active")
+      .select("id, name, slug, location, is_active, menu_items(count)")
       .order("id", { ascending: true }),
     readAdminColumnPreferences(
       getPageCompositionColumnPreferenceConfig("menus").viewKey,
@@ -26,17 +25,13 @@ export default async function MenusPage({
   const { data: menus, error } = menusResult;
 
   const menuRows = menus ?? [];
-  const counts = error
-    ? new Map<number, number>()
-    : await countMenuItemsByMenuIds(menuRows.map((menu) => menu.id));
-
   const rows: MenuListRow[] = menuRows.map((menu) => ({
     id: menu.id,
     name: menu.name,
     slug: menu.slug,
     location: menu.location,
     is_active: Boolean(menu.is_active),
-    item_count: counts.get(menu.id) ?? 0,
+    item_count: menu.menu_items?.[0]?.count ?? 0,
   }));
 
   return (
