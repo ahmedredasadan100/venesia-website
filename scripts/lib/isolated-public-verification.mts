@@ -7,6 +7,7 @@ import net from "node:net";
 import { dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEntitySeoPersistenceOwner } from "../backfill-entity-seo-scores.mts";
+import { selectSourceInventory, sourceIncluded } from "./verification-source-inventory.mts";
 import type { TopicSeoSource } from "../../src/lib/admin/seo/entity-seo-persistence.ts";
 import type { OwnedLocalHandle } from "./isolated-supabase.mts";
 
@@ -15,12 +16,6 @@ const digest = (value: string | Buffer) => createHash("sha256").update(value).di
 const FIXTURE_SLUG = "isolated-public-property-ownership";
 const FIXTURE_CATEGORY = "isolated-public-articles";
 const FIXTURE_DATE = "2026-01-01T00:00:00.000Z";
-const SOURCE_ROOTS = new Set(["src", "scripts", "sql", "tests", "docs", "public", ".github"]);
-const SOURCE_ROOT_FILES = new Set([
-  "AGENTS.md", "AI_ARCHITECTURE_PRINCIPLES.md", "CLAUDE.md", "README.md", ".gitignore",
-  "eslint.config.mjs", "next.config.ts", "package-lock.json", "package.json", "playwright.config.ts",
-  "postcss.config.mjs", "tsconfig.json", "vercel.json",
-]);
 const GATES = [
   { name: "normal-build", module: "next/dist/bin/next", args: ["build"], limitMs: 900_000 },
   { name: "product-surface-build", script: "scripts/verify-product-surface-identity.mts", args: ["--build"], limitMs: 180_000 },
@@ -267,13 +262,6 @@ function safeSourcePath(file: string) {
   assert.ok(file && !isAbsolute(file) && !file.includes("\\") && sourceIncluded(file));
   return resolve(ROOT, file);
 }
-function sourceIncluded(file: string) {
-  const parts = file.split("/");
-  return (parts.length === 1 ? SOURCE_ROOT_FILES.has(file) : SOURCE_ROOTS.has(parts[0]))
-    && !parts.some(part => !part || part === ".." || /^\.env/iu.test(part)
-      || /^(?:\.git|\.tmp-qa|\.next|node_modules|\.codex|\.agents|\.vercel|\.supabase|debug\.log|protected|private)$/iu.test(part)
-      || /(?:\.private\.|\.(?:pem|key)$)/iu.test(part));
-}
 async function gitSourceInventory(context: PrivatePublicVerificationContext, request: PublicGateRequest) {
   assert.ok(Array.isArray(request.additionalSourceFiles));
   const inventory = (options: string[]) => new Promise<string[]>((done, reject) => {
@@ -297,7 +285,17 @@ async function gitSourceInventory(context: PrivatePublicVerificationContext, req
     safeSourcePath(file); assert.match(file, /^(?:src|scripts|sql|tests|docs)\//u);
     assert.ok(eligibleAdditional.has(file), "Additional Public source must be a reviewed, nonignored new source file.");
   }
-  return [...new Set([...tracked, ...additional])].filter(sourceIncluded).sort();
+  return selectSourceInventory(tracked, additional);
+}
+
+async function gitHead(context: PrivatePublicVerificationContext) {
+  return new Promise<string>((done, reject) => {
+    const child = spawn("git", ["rev-parse", "HEAD"], { cwd: ROOT, env: context.cleanEnvironment(), windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+    let output = "";
+    child.stdout.on("data", value => { output += String(value); });
+    child.once("error", reject);
+    child.once("close", code => code === 0 && /^[a-f0-9]{40}\s*$/u.test(output) ? done(output.trim()) : reject(new Error("Snapshot HEAD binding failed.")));
+  });
 }
 
 async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
@@ -330,6 +328,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const originalContext = context;
   let frozenDirectory: string | undefined;
   let frozenManifest: Array<{ file: string; sha256: string }> | undefined;
+  let frozenProvenance: { acceptedBaselineHeadSha: string; measurementCorrection: string | null } | undefined;
   if (measurement) {
     assert.ok(credentials, "The canonical owned local Admin fixture must be prepared first.");
     assert.ok(measurement.study === undefined || measurement.study === "heavy-editor-performance", "Unknown fixed Admin study.");
@@ -382,6 +381,10 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     frozenManifest = frozen.manifest.map((row: { file: string; sha256: string }) => ({ file: row.file, sha256: row.sha256 }));
     assert.ok(frozenManifest!.length > 100 && new Set(frozenManifest!.map(row => row.file)).size === frozenManifest!.length);
     for (const row of frozenManifest!) { safeSourcePath(row.file); assert.match(row.sha256, /^[a-f0-9]{64}$/u); }
+    assert.match(frozen.acceptedHead, /^[a-f0-9]{40}$/u, "Frozen measurement lacks an immutable accepted baseline HEAD.");
+    assert.equal(frozen.sourceSha256, digest(JSON.stringify(frozenManifest)), "Frozen measurement manifest checksum differs from its file inventory.");
+    frozenProvenance = { acceptedBaselineHeadSha: frozen.acceptedHead,
+      measurementCorrection: typeof frozen.measurementCorrection === "string" ? frozen.measurementCorrection : null };
     const control = resolve(measurement.controlDirectory);
     assert.ok(control.startsWith(boundary) && realpathSync(control) === control && lstatSync(control).isDirectory());
     const phaseDirectory = ownedPath(context, `admin-${measurement.phase}`);
@@ -446,14 +449,21 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   try {
     for (const row of manifest) { const target = join(sourceDirectory, row.file); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, readFileSync(sourcePath(row.file)), { flag: "wx" }); }
     symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
-    receipt(context, "public-source-manifest.json", { manifest, sourceSha256: digest(JSON.stringify(manifest)), environmentFilesCopied: false, generatedLocalCredentialsOnly: true });
+    const headSha = await gitHead(context);
+    const collectorSha256 = manifest.find(row => row.file === "scripts/lib/isolated-public-verification.mts")?.sha256;
+    assert.match(collectorSha256 ?? "", /^[a-f0-9]{64}$/u, "Snapshot omits its own verification collector.");
+    receipt(context, "public-source-manifest.json", { invocationHeadSha: headSha, frozenProvenance: frozenProvenance ?? null,
+      inventoryBasis: frozenManifest ? "reviewed-frozen-manifest" : "git-index-plus-reviewed-additions",
+      byteSource: frozenManifest ? "reviewed-frozen-directory" : "working-tree", additionalSourceFiles: request.additionalSourceFiles,
+      fixtureContentSha256: readiness.fixtureContentSha256, collectorSha256,
+      manifest, sourceSha256: digest(JSON.stringify(manifest)), environmentFilesCopied: false, generatedLocalCredentialsOnly: true });
     for (const gate of gates) {
       verifySource(); await context.assertOwned(); signal.throwIfAborted();
       let env: NodeJS.ProcessEnv = context.cleanEnvironment();
       if (gate.name === "normal-build") env = childEnvironment;
       if (gate.name !== "normal-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
       if (gate.name === "public-e2e" || gate.name === "admin-interactions") {
-        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
+        const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-measurement-restore-transition.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
           .map(file=>({file,sha256:digest(readFileSync(safeSourcePath(file)))})) : null;
         if (measurement?.study === "heavy-editor-performance") {
           const priorHarness = adminStudyHarnesses.get(originalContext);
@@ -496,30 +506,13 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       context.record("public-gate-start", { gate: gate.name });
       const args = "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
         : [join(sourceDirectory, "node_modules", gate.module), ...gate.args];
-      let result = await runChild(args, env, gate.name, gate.limitMs);
-      if(measurement && gate.name==="admin-interactions") {
-        if (measurement.study === "heavy-editor-performance" && measurement.phase === "before" && result.code !== 0) {
-          receipt(context,"admin-before-driver-repair-rejected.json",{
-            status:"rejected",driverCode:result.code,sameSessionRequired:true,cleanLifecycleRestartRequired:true,
-          });
-          assert.fail("Heavy Editor Before driver repair cannot preserve the same-session contract; complete owned cleanup and start a fresh lifecycle. No repair child was launched.");
-        }
-        // Eligible After/legacy repairs retain the successful build and owned
-        // database. Only the fixed driver may retry.
-        for(let attempt=1;result.code!==0 && attempt<=4;attempt++) {
-          receipt(context,`admin-driver-failure-${attempt}.json`,{status:"paused-on-driver-error",code:result.code,buildIdSha256,sourceSha256:digest(JSON.stringify(manifest)),qualityPassClaimed:false});
-          const commandPath=join(resolve(measurement.controlDirectory),`${measurement.phase}-driver-repair-${attempt}.json`),deadline=Date.now()+1_800_000;
-          while(!existsSync(commandPath)&&Date.now()<deadline) {await context.assertOwned();signal.throwIfAborted();await new Promise(done=>setTimeout(done,1_000));}
-          assert.ok(existsSync(commandPath),"Fixed Admin driver repair lease expired");
-          assert.deepEqual(JSON.parse(readFileSync(commandPath,"utf8")),{operation:"retry-fixed-driver"});
-          verifySource();assert.equal(digest(readFileSync(join(sourceDirectory,".next/BUILD_ID"))),buildIdSha256);
-          if (measurement.study === "heavy-editor-performance") {
-            for (const row of adminStudyHarnesses.get(originalContext)!) assert.equal(digest(readFileSync(safeSourcePath(row.file))), row.sha256, "The study collector cannot change during a cohort.");
-          }
-          const driverOutput=ownedPath(context,`browser-driver-${attempt+1}`);mkdirSync(driverOutput);
-          receipt(context,`admin-driver-retry-${attempt+1}.json`,{driverSha256:digest(readFileSync(safeSourcePath("scripts/qa-admin-production-interactions.mjs"))),sourceSha256:digest(JSON.stringify(manifest)),buildIdSha256,output:driverOutput,originalReceiptsPreserved:true});
-          result=await runChild(args,{...env,QA_ADMIN_OUTPUT:driverOutput,QA_ADMIN_DRIVER_ATTEMPT:String(attempt+1)},`${gate.name}-attempt-${attempt+1}`,gate.limitMs);
-        }
+      const result = await runChild(args, env, gate.name, gate.limitMs);
+      if (measurement && gate.name === "admin-interactions" && result.code !== 0) {
+        receipt(context, "admin-driver-restart-rejected.json", {
+          status: "rejected", driverCode: result.code, cleanLifecycleRestartRequired: true,
+          sourceSha256: digest(JSON.stringify(manifest)), qualityPassClaimed: false,
+        });
+        assert.fail("Admin measurement driver failed; the owned fixture must be recreated before any further job. No repair child was launched.");
       }
       assert.equal(appFailed, false, "Owned application process failed during Public verification.");
       const report = { name: gate.name, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
@@ -530,6 +523,8 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       context.record("public-gate-pass", { gate: gate.name });
     }
     verifySource();
+    assert.equal(await gitHead(context), headSha, "Repository HEAD changed during the source snapshot gates.");
+    if (!frozenManifest) assert.deepEqual(await gitSourceInventory(context, request), files, "Git source membership changed during the source snapshot gates.");
     if (measurement) adminPhases.get(originalContext)!.add(measurement.phase);
     else completed.add(originalContext);
   } finally {

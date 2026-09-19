@@ -28,6 +28,19 @@ function sourceFailures(source: string, filename: string): string[] {
   const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const failures = new Set<string>();
   function moduleReference(node: ts.Node | undefined) {
+    // The fixed local fixture module uses a SHA256 query solely to refresh Node's
+    // module cache between owned attempts. The path itself cannot be supplied by a caller.
+    if (node && ts.isPropertyAccessExpression(node) && node.name.text === "href"
+      && ts.isNewExpression(node.expression) && ts.isIdentifier(node.expression.expression)
+      && node.expression.expression.text === "URL" && node.expression.arguments?.length === 2) {
+      const [path, base] = node.expression.arguments;
+      if (ts.isTemplateExpression(path) && path.head.text === "../fixtures/admin-interaction-fixtures.mts?fixture="
+        && path.templateSpans.length === 1 && ts.isIdentifier(path.templateSpans[0].expression)
+        && path.templateSpans[0].expression.text === "fixtureHash" && path.templateSpans[0].literal.text === ""
+        && ts.isPropertyAccessExpression(base) && base.name.text === "url"
+        && ts.isMetaProperty(base.expression) && base.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+        && base.expression.name.text === "meta") return;
+    }
     if (!node || !ts.isStringLiteralLike(node)) {
       failures.add("dynamic-module-reference");
       return;
@@ -70,6 +83,8 @@ function verifyScanner() {
     ["historical dynamic import", 'await import("../../.tmp-qa/old/bootstrap.cjs");', "historical-executable-import"],
     ["historical re-export", 'export { value } from "../../.tmp-qa/old/bootstrap.cjs";', "historical-executable-import"],
     ["nonliteral executable import", "await import(untrustedPath);", "dynamic-module-reference"],
+    ["variable fixture path", 'await import(new URL(`../fixtures/${name}.mts?fixture=${fixtureHash}`, import.meta.url).href);', "dynamic-module-reference"],
+    ["variable fixture identity", 'await import(new URL(`../fixtures/admin-interaction-fixtures.mts?fixture=${token}`, import.meta.url).href);', "dynamic-module-reference"],
     ["legacy bucket DDL", 'db.query("CREATE TABLE storage.buckets (id text)");', "local-storage-ddl"],
     ["legacy object DDL", 'db.query("ALTER TABLE storage.objects ADD COLUMN owner text");', "local-storage-ddl"],
     ["permission grant repair", 'db.query("GRANT CREATE ON DATABASE postgres TO postgres");', "local-permission-repair"],
@@ -79,6 +94,7 @@ function verifyScanner() {
   for (const [name, source, expected] of negative) check(`source guard rejects ${name}`, () => assert.ok(sourceFailures(source, "negative.mts").includes(expected)));
   check("source guard allows canonical imports and read-only catalog queries", () => {
     assert.deepEqual(sourceFailures('import { value } from "./isolated-supabase.mts"; const sql = "select has_database_privilege(current_user, current_database(), \'CREATE\')";', "valid.mts"), []);
+    assert.deepEqual(sourceFailures('await import(new URL(`../fixtures/admin-interaction-fixtures.mts?fixture=${fixtureHash}`, import.meta.url).href);', "valid.mts"), []);
   });
   check("source guard does not execute or classify historical comments as imports", () => {
     assert.deepEqual(sourceFailures('// Historical evidence: .tmp-qa/old/bootstrap.cjs; GRANT CREATE ON DATABASE postgres TO postgres\nconst ownedEvidenceDirectory = ".tmp-qa/current-owned";', "valid.mts"), []);
@@ -449,39 +465,39 @@ async function adminControlLeaseOnly() {
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-public-verification.mts", "scripts/verify-isolated-supabase.mts"];
   const sourceHashes = Object.fromEntries(sources.map(file => [file, sha256(readSource(file))]));
   await verifyAdminMeasurementControlLease(await import("./lib/isolated-supabase.mts"));
-  verifyAdminMeasurementDriverRepairPolicy();
+  verifyAdminMeasurementRestartPolicy();
   for (const file of sources) assert.equal(sha256(readSource(file)), sourceHashes[file]);
   console.log(JSON.stringify({ status: "PASS", scope: "admin-control-lease-only", checks: cases.length, cases, sourceHashes,
     dockerExecuted: false, networkRequests: 0, databaseCalls: 0, actualRenewalClaimed: false }, null, 2));
 }
 
-function verifyAdminMeasurementDriverRepairPolicy() {
+function verifyAdminMeasurementRestartPolicy() {
   const source = readSource("scripts/lib/isolated-public-verification.mts");
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   let policy: ts.IfStatement | undefined;
+  let driverLaunches = 0;
   const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(file) === "runChild") driverLaunches++;
     if (ts.isIfStatement(node) && ts.isBlock(node.thenStatement)
       && node.thenStatement.statements.some(statement => ts.isExpressionStatement(statement)
         && ts.isCallExpression(statement.expression) && statement.expression.expression.getText(file) === "receipt"
-        && statement.expression.arguments[1]?.getText(file) === '"admin-before-driver-repair-rejected.json"')) policy = node;
+        && statement.expression.arguments[1]?.getText(file) === '"admin-driver-restart-rejected.json"')) policy = node;
     ts.forEachChild(node, visit);
   };
-  visit(file); assert.ok(policy, "The fixed study must guard Before repair at the canonical owner.");
-  const repairChild = source.indexOf("result=await runChild(args,{...env,QA_ADMIN_OUTPUT:driverOutput");
-  assert.ok(repairChild > policy.end, "The policy must run before any repair child.");
+  visit(file); assert.ok(policy, "Admin measurement failure must reject reuse at the canonical owner.");
+  assert.equal(driverLaunches, 1, "A failed measurement driver cannot launch a repair child against the same fixture.");
   const events: unknown[] = [];
-  const evaluate = new Function("measurement", "result", "receipt", "context", "assert",
+  const evaluate = new Function("measurement", "gate", "result", "receipt", "context", "assert", "manifest", "digest",
     ts.transpileModule(policy.getText(file), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
   const record = (_context: unknown, name: string, metadata: unknown) => events.push({ name, metadata });
-  assert.throws(() => evaluate({ study: "heavy-editor-performance", phase: "before" }, { code: 1 }, record, {}, assert), /same-session contract/);
-  assert.equal(events.length, 1);
-  for (const [measurement, code] of [
-    [{ study: "heavy-editor-performance", phase: "before" }, 0],
-    [{ study: "heavy-editor-performance", phase: "after" }, 1],
-    [{ phase: "before" }, 1], [{ phase: "after" }, 1],
-  ] as const) evaluate(measurement, { code }, record, {}, assert);
-  assert.equal(events.length, 1, "After and legacy repairs must retain their existing path.");
-  cases.push("fixed-study Before failure rejects repair before child launch; successful Before, After and legacy repair paths remain allowed");
+  for (const phase of ["before", "after"] as const) {
+    assert.throws(() => evaluate({ phase }, { name: "admin-interactions" }, { code: 1 }, record, {}, assert, [], () => "source"), /owned fixture must be recreated/);
+    assert.throws(() => evaluate({ phase, study: "heavy-editor-performance" }, { name: "admin-interactions" }, { code: 1 }, record, {}, assert, [], () => "source"), /owned fixture must be recreated/);
+  }
+  assert.equal(events.length, 4);
+  evaluate({ phase: "before" }, { name: "admin-interactions" }, { code: 0 }, record, {}, assert, [], () => "source");
+  assert.equal(events.length, 4, "Successful driver needs no repair policy.");
+  cases.push("all failed Admin measurement drivers reject same-fixture restart; a successful driver continues");
 }
 
 async function main() {
@@ -499,7 +515,7 @@ async function main() {
   // invoked below; run/start/cleanup, Docker, SQL and environment loaders are not.
   const owner = await import("./lib/isolated-supabase.mts");
   await verifyAdminMeasurementControlLease(owner);
-  verifyAdminMeasurementDriverRepairPolicy();
+  verifyAdminMeasurementRestartPolicy();
   verifyImageIdentity(owner, provenance.lock.images.db);
   const password = "offline-unit-secret-not-a-credential";
   const target = { port: 55965, database: "postgres" as const, username: "postgres" as const };

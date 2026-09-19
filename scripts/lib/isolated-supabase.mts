@@ -3,7 +3,7 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 // @ts-expect-error The repository uses pg without separate declarations.
 import pg from "pg";
 import { assertApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicationMigrations, runOwnedEntitySeoBackfill,
@@ -1104,7 +1104,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           const fixtureHash=sha256(fixturePaths.map(file=>sha256(readFileSync(file))).join(":"));
           requireThat(!acceptedAdminFixtureHash || acceptedAdminFixtureHash===fixtureHash,"ADMIN_ACCEPTED_FIXTURE_MODEL_CHANGED","admin-measurement");
           safeRecord("admin-fixture-attempt",{fixtureHash,acceptedBefore:Boolean(acceptedAdminFixtureHash)});
-          const fixtureOwner=await import(`${pathToFileURL(fixturePaths[0]).href}?fixture=${fixtureHash}`);
+          const fixtureOwner=await import(new URL(`../fixtures/admin-interaction-fixtures.mts?fixture=${fixtureHash}`, import.meta.url).href);
           const result=await fixtureOwner.seedOwnedAdminInteractionFixtures(handle,credentials,request ? {
             study: request.study, apiPort: publicContext.apiPort, serviceKey: publicContext.serviceKey,
           } : undefined);
