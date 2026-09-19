@@ -9,6 +9,12 @@ import ts from "typescript";
 function harness(sourceRoot, options = {}) {
   const state = { catalogReads: 0, scans: [], batchScans: [], providerQueries: [], rpcCalls: [], uncertainMarks: [], logs: [] };
   const assetMap = revision => new Map([["fixture-identity", { id: `asset-${revision}` }]]);
+  const readCatalog = async () => {
+    const revision = ++state.catalogReads;
+    if (options.catalogRead) return options.catalogRead(revision, assetMap);
+    if (options.catalogFailure) throw new Error("fixture_catalog_failed");
+    return options.missingAsset ? new Map() : assetMap(revision);
+  };
   const context = { provider: "local", environment: "test", identity: "isolated" };
   const ports = {
     "../../supabase-admin": { getSupabaseAdmin: () => ({
@@ -32,12 +38,8 @@ function harness(sourceRoot, options = {}) {
     } }) },
     "../media-storage-adapter": { resolveMediaStorageRuntimeContext: () => context },
     "./catalog": {
-      getAllCatalogAssetIdentityMap: async () => {
-        const revision = ++state.catalogReads;
-        if (options.catalogRead) return options.catalogRead(revision, assetMap);
-        if (options.catalogFailure) throw new Error("fixture_catalog_failed");
-        return options.missingAsset ? new Map() : assetMap(revision);
-      },
+      getAllCatalogAssetIdentityMap: readCatalog,
+      getCatalogAssetIdentityMapForSynchronization: readCatalog,
       getMediaCatalogRuntimeState: async () => ({ state: "synced", warnings: [] }),
       setMediaCatalogRuntimeState: async value => { state.uncertainMarks.push(value); },
     },
