@@ -39,11 +39,13 @@ function load<T>(file: string): T {
 const state = {
   reads: 0, writes: 0, audits: 0, cacheCalls: [] as string[], cacheFailures: 0,
   writeFailure: false, missingMenu: false, maintenance: false,
+  menuListRead: false, menuListFailure: false, menuListColumns: "", menuItemReads: 0,
   settings: new Map<string, unknown>(),
 };
 function reset() {
   Object.assign(state, { reads: 0, writes: 0, audits: 0, cacheFailures: 0,
-    writeFailure: false, missingMenu: false, maintenance: false });
+    writeFailure: false, missingMenu: false, maintenance: false,
+    menuListRead: false, menuListFailure: false, menuListColumns: "", menuItemReads: 0 });
   state.cacheCalls.length = 0; state.settings.clear();
 }
 type Result = { data: unknown; error: { message: string; code?: string } | null };
@@ -51,7 +53,8 @@ class Query {
   table: string; operation = "read"; payload: Record<string, unknown> = {};
   filters: Record<string, unknown> = {}; selected = false;
   constructor(table: string) { this.table = table; }
-  select() { this.selected = true; return this; }
+  select(columns = "") { this.selected = true; if (state.menuListRead && this.table === "menus") state.menuListColumns = columns; return this; }
+  order() { return this; }
   eq(key: string, value: unknown) { this.filters[key] = value; return this; }
   neq() { return this; } maybeSingle() { return this; } single() { return this; }
   update(payload: Record<string, unknown>) { this.operation = "update"; this.payload = payload; return this; }
@@ -60,6 +63,14 @@ class Query {
     return Promise.resolve().then(() => {
       if (this.operation === "read") {
         state.reads++;
+        if (state.menuListRead) {
+          if (this.table === "menu_items") state.menuItemReads++;
+          if (this.table === "menus" && state.menuListFailure) return { data: null, error: { message: "isolated list read failure" } };
+          if (this.table === "menus") return { data: [
+            { id: 11, name: "Main", slug: "main", location: "main", is_active: true, menu_items: [{ count: 3 }] },
+            { id: 12, name: "Footer", slug: "footer", location: "footer", is_active: false, menu_items: [{ count: 0 }] },
+          ], error: null };
+        }
         return { data: this.table === "site_settings" ? { value: { enabled: state.maintenance } } : null, error: null };
       }
       if (state.writeFailure) return { data: null, error: { message: "isolated write rejection" } };
@@ -84,6 +95,9 @@ stub("src/lib/supabase-admin.ts", { getSupabaseAdmin: () => ({
   },
 }) });
 stub("src/lib/admin/auth/require-admin-session.ts", { requireAdminSession: async () => ({ id: 17, username: "isolated-proof" }) });
+stub("src/lib/admin/preferences/admin-column-preferences.ts", { readAdminColumnPreferences: async () => ({ visibleColumns: null, error: null }) });
+stub("src/lib/page-blocks/admin-collection-columns.ts", { getPageCompositionColumnPreferenceConfig: () => ({ viewKey: "menus" }) });
+stub("src/app/admin/pages-blocks/menus/MenusTableClient.tsx", { default: () => null });
 stub("src/lib/admin/audit-log.ts", { recordCmsAdminAudit: async () => { state.audits++; } });
 stub("src/lib/logging.ts", { logError() {}, logWarn() {} });
 stub("src/lib/maintenance/read-maintenance-mode.ts", { clearMaintenanceModeCache() {} });
@@ -116,6 +130,7 @@ const footerRestore = load<typeof import("../src/app/admin/pages-blocks/footer/f
 const general = load<typeof import("../src/app/admin/settings/general/actions.ts")>("src/app/admin/settings/general/actions.ts");
 const media = load<typeof import("../src/app/admin/settings/media/actions.ts")>("src/app/admin/settings/media/actions.ts");
 const menus = load<typeof import("../src/app/admin/pages-blocks/menus/menu-actions/save.ts")>("src/app/admin/pages-blocks/menus/menu-actions/save.ts");
+const menusPage = load<typeof import("../src/app/admin/pages-blocks/menus/page.tsx")>("src/app/admin/pages-blocks/menus/page.tsx");
 const { DEFAULT_FOOTER_SLOTS } = load<typeof import("../src/lib/footer/defaults.ts")>("src/lib/footer/defaults.ts");
 const footerInput = { slots: structuredClone(DEFAULT_FOOTER_SLOTS), contactItems: [{ label: "Call", value: "123" }],
   socialLinks: [{ platform: "facebook" as const, label: "Facebook", href: "https://example.com" }], legal: { copyright: "Proof", tagline: "Proof" } };
@@ -223,6 +238,24 @@ await check("menu update: duplicate identity cannot silently choose one target",
   const data = menuInput("31"); data.append("id", "32");
   await redirectOf(() => menus.updateMenu(data));
   assert.equal(state.reads, 0); assert.equal(state.writes, 0);
+});
+await check("menu list: embedded counts preserve rows with one bounded menu read", async () => {
+  state.menuListRead = true;
+  const result = await menusPage.default({ searchParams: Promise.resolve({}) });
+  const rows = result.props.menus as Array<{ id: number; item_count: number }>;
+  assert.deepEqual(rows.map(({ id, item_count }) => [id, item_count]), [[11, 3], [12, 0]]);
+  assert.equal(state.menuListColumns.includes("menu_items(count)"), true);
+  assert.equal(state.reads, 1);
+  assert.equal(state.menuItemReads, 0);
+});
+await check("menu list: failed aggregate read reports failure without false counts", async () => {
+  state.menuListRead = true;
+  state.menuListFailure = true;
+  const result = await menusPage.default({ searchParams: Promise.resolve({}) });
+  assert.deepEqual(result.props.menus, []);
+  assert.match(result.props.loadError, /isolated list read failure/);
+  assert.equal(state.reads, 1);
+  assert.equal(state.menuItemReads, 0);
 });
 if (failures.length) throw new Error(`${failures.length} remaining settings/menu proof failures: ${failures.join(", ")}`);
 console.log("Remaining settings/menu proof: actual action input, persistence, output and bounded-cache failure boundaries passed; no live mutations.");
