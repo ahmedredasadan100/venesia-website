@@ -27,6 +27,7 @@ import {
   type ProjectPublicationStatus,
 } from "../../../../lib/admin/projects/project-publishing-capability";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { runWithSupabaseRpcCorrelation } from "../../../../lib/supabase-fetch";
 import { revalidateProjectPaths } from "./revalidate";
 import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 import { MediaDomainMutationError } from "../../../../lib/admin/media-catalog/domain-write-coordination";
@@ -181,7 +182,8 @@ export async function saveProjectEntry(
     );
   }
 
-  try {
+  return runWithSupabaseRpcCorrelation(async () => {
+    try {
     let previousPublicationStatus: ProjectPublicationStatus | null = null;
     let previousPublishedAt: string | null = null;
     let previousSlug: string | null = null;
@@ -346,28 +348,29 @@ export async function saveProjectEntry(
         publicationStatus: nextPublicationStatus,
       },
     };
-  } catch (error) {
-    if (error instanceof MediaDomainMutationError && error.domainWriteCommitted) {
-      await runBoundedPublicCacheRevalidation(() => revalidateProjectPaths(payload.project.type, projectId ?? undefined));
-      return { status: "warning", mode, revision, title: "تم الحفظ — يلزم التحقق من النتيجة", message: "استُقبل تأكيد الحفظ، لكن تعذر التحقق من البيانات المعادة. حدّث القائمة للتحقق ولا تعِد إنشاء المشروع.", code: "saved_requires_reconciliation_reload" };
+    } catch (error) {
+      if (error instanceof MediaDomainMutationError && error.domainWriteCommitted) {
+        await runBoundedPublicCacheRevalidation(() => revalidateProjectPaths(payload.project.type, projectId ?? undefined));
+        return { status: "warning", mode, revision, title: "تم الحفظ — يلزم التحقق من النتيجة", message: "استُقبل تأكيد الحفظ، لكن تعذر التحقق من البيانات المعادة. حدّث القائمة للتحقق ولا تعِد إنشاء المشروع.", code: "saved_requires_reconciliation_reload" };
+      }
+      if (error instanceof MediaReferenceWriteLeaseError) {
+        const message = getMediaReferenceWriteLeaseUserMessage(error.code);
+        return failure(
+          mode,
+          revision,
+          message,
+          { image: [message] },
+          error.code,
+        );
+      }
+      const normalized = error instanceof Error
+        ? {
+            message: error.message,
+            code: "code" in error ? String(error.code ?? "") : undefined,
+            details: "details" in error ? String(error.details ?? "") : undefined,
+          }
+        : null;
+      return databaseFailure(mode, revision, normalized);
     }
-    if (error instanceof MediaReferenceWriteLeaseError) {
-      const message = getMediaReferenceWriteLeaseUserMessage(error.code);
-      return failure(
-        mode,
-        revision,
-        message,
-        { image: [message] },
-        error.code,
-      );
-    }
-    const normalized = error instanceof Error
-      ? {
-          message: error.message,
-          code: "code" in error ? String(error.code ?? "") : undefined,
-          details: "details" in error ? String(error.details ?? "") : undefined,
-        }
-      : null;
-    return databaseFailure(mode, revision, normalized);
-  }
+  });
 }

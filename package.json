@@ -5,6 +5,7 @@
   "scripts": {
     "qa:isolated-supabase": "node --experimental-strip-types scripts/qa-isolated-supabase.mts",
     "verify:isolated-supabase": "node --experimental-strip-types scripts/verify-isolated-supabase.mts",
+    "verify:supabase-rpc-correlation": "node --experimental-strip-types scripts/verify-supabase-rpc-correlation.mts",
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
