@@ -28,6 +28,19 @@ function sourceFailures(source: string, filename: string): string[] {
   const file = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const failures = new Set<string>();
   function moduleReference(node: ts.Node | undefined) {
+    // The fixed local fixture module uses a SHA256 query solely to refresh Node's
+    // module cache between owned attempts. The path itself cannot be supplied by a caller.
+    if (node && ts.isPropertyAccessExpression(node) && node.name.text === "href"
+      && ts.isNewExpression(node.expression) && ts.isIdentifier(node.expression.expression)
+      && node.expression.expression.text === "URL" && node.expression.arguments?.length === 2) {
+      const [path, base] = node.expression.arguments;
+      if (ts.isTemplateExpression(path) && path.head.text === "../fixtures/admin-interaction-fixtures.mts?fixture="
+        && path.templateSpans.length === 1 && ts.isIdentifier(path.templateSpans[0].expression)
+        && path.templateSpans[0].expression.text === "fixtureHash" && path.templateSpans[0].literal.text === ""
+        && ts.isPropertyAccessExpression(base) && base.name.text === "url"
+        && ts.isMetaProperty(base.expression) && base.expression.keywordToken === ts.SyntaxKind.ImportKeyword
+        && base.expression.name.text === "meta") return;
+    }
     if (!node || !ts.isStringLiteralLike(node)) {
       failures.add("dynamic-module-reference");
       return;
@@ -70,6 +83,8 @@ function verifyScanner() {
     ["historical dynamic import", 'await import("../../.tmp-qa/old/bootstrap.cjs");', "historical-executable-import"],
     ["historical re-export", 'export { value } from "../../.tmp-qa/old/bootstrap.cjs";', "historical-executable-import"],
     ["nonliteral executable import", "await import(untrustedPath);", "dynamic-module-reference"],
+    ["variable fixture path", 'await import(new URL(`../fixtures/${name}.mts?fixture=${fixtureHash}`, import.meta.url).href);', "dynamic-module-reference"],
+    ["variable fixture identity", 'await import(new URL(`../fixtures/admin-interaction-fixtures.mts?fixture=${token}`, import.meta.url).href);', "dynamic-module-reference"],
     ["legacy bucket DDL", 'db.query("CREATE TABLE storage.buckets (id text)");', "local-storage-ddl"],
     ["legacy object DDL", 'db.query("ALTER TABLE storage.objects ADD COLUMN owner text");', "local-storage-ddl"],
     ["permission grant repair", 'db.query("GRANT CREATE ON DATABASE postgres TO postgres");', "local-permission-repair"],
@@ -79,6 +94,7 @@ function verifyScanner() {
   for (const [name, source, expected] of negative) check(`source guard rejects ${name}`, () => assert.ok(sourceFailures(source, "negative.mts").includes(expected)));
   check("source guard allows canonical imports and read-only catalog queries", () => {
     assert.deepEqual(sourceFailures('import { value } from "./isolated-supabase.mts"; const sql = "select has_database_privilege(current_user, current_database(), \'CREATE\')";', "valid.mts"), []);
+    assert.deepEqual(sourceFailures('await import(new URL(`../fixtures/admin-interaction-fixtures.mts?fixture=${fixtureHash}`, import.meta.url).href);', "valid.mts"), []);
   });
   check("source guard does not execute or classify historical comments as imports", () => {
     assert.deepEqual(sourceFailures('// Historical evidence: .tmp-qa/old/bootstrap.cjs; GRANT CREATE ON DATABASE postgres TO postgres\nconst ownedEvidenceDirectory = ".tmp-qa/current-owned";', "valid.mts"), []);

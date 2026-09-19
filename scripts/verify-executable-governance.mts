@@ -16,6 +16,7 @@ import { CONTENT_EDITOR_ADOPTION_MANIFEST } from "../src/lib/admin/content/conte
 import { GLOBAL_SEO_PUBLIC_CONSUMERS } from "../src/lib/admin/seo/global-seo-adoption-manifest.ts";
 import { PAGE_COMPOSITION_COLUMN_PREFERENCES } from "../src/lib/page-blocks/admin-collection-columns.ts";
 import { parseTypeScriptSource } from "./lib/typescript-executable-graph.mts";
+import { currentArchitectureBoundaryFiles, evaluateArchitectureBoundaries } from "./lib/architecture-boundary-guard.mts";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const CAPABILITY_GUARD = "scripts/verify-admin-row-actions-capability.mts";
@@ -303,4 +304,7 @@ console.log(
 );
 console.log("String/token/regex source proof .. ABSENT");
 console.log("Hidden capability defaults ....... ABSENT");
+const boundaryFailures = evaluateArchitectureBoundaries(ROOT, currentArchitectureBoundaryFiles(ROOT));
+assert.deepEqual(boundaryFailures, [], `Architecture owner boundary failed: ${JSON.stringify(boundaryFailures)}`);
+console.log("Architecture owner boundaries ... PASS");
 console.log("Executable governance PASS");
