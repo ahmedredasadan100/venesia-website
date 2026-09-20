@@ -16,7 +16,7 @@
 | Gate | PR #173 was merged into that SHA on 2026-09-19; GitHub reported zero open PRs at phase entry. |
 | Working tree | Tracked/index clean at entry. `debug.log` was untracked and protected. |
 | Phase branch | `codex/public-composition-performance-closure`. |
-| Final HEAD and Draft PR | Fill from the exact pushed commit and PR result. No Ready, Merge, Deploy, Migration, or Production mutation is authorized. |
+| Final HEAD and Draft PR | [Draft PR #174](https://github.com/ahmedredasadan100/venesia-website/pull/174); its head ref supplies the exact final SHA without a self-referential commit hash in this file. No Ready, Merge, Deploy, Migration, or Production mutation is authorized. |
 
 The previous Admin CMS Performance, verification infrastructure, and shared capability closures are baselines. Their scoped results are not remeasured or broadened here.
 
@@ -172,7 +172,7 @@ New Owner: **No**. New Runtime/System: **No**. New Capability: **No**. New Provi
 - `verify:verification-infrastructure` passed with positive and negative public boundary fixtures.
 - `verify:public-content-delivery` passed (183 assertions); `verify:feed-module-contract-integrity`, `verify:position-driven-composition`, and `verify:page-composition-platform-contract` passed. Typecheck, scoped ESLint, and `git diff --check` passed.
 - Local Playwright read-only smoke passed for Home, Topics, Media Center, Projects, and Search at 390px; Topics and Media Center also at 1365px. The settled image check found zero broken images and no horizontal overflow.
-- Build, final canonical Quality Gate, GitHub required checks, and Vercel Preview are pending at this report revision. A failed or skipped gate must not be reported as passed.
+- At this report revision, build, final canonical Quality Gate, GitHub required checks, and Vercel Preview are pending. Their exact-head outcome is reported in the final handoff and PR check metadata. A failed or skipped gate must not be reported as passed.
 
 ## AD. Remaining Gaps
 
