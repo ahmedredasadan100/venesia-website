@@ -223,9 +223,9 @@ assert.throws(
 assert.ok(loader.includes("isAssignmentPositionAllowed"), "loader must reject Positions outside the platform/Product contract");
 assert.ok(!loader.includes("layoutMode") && !loader.includes("getPageLayoutModeForRoute"), "CMS loader must not derive Theme layout from a Slug");
 assert.ok(
-  loader.includes('isAssignmentPositionAllowed("media-sidebar", widget.slot)') &&
+  loader.includes('isAssignmentPositionAllowed("media-sidebar", widget.slot, regionKeys)') &&
     loader.includes("slots[widget.slot].push") &&
-    loader.includes('isAssignmentPositionAllowed("media-hub", hubModule.slot)') &&
+    loader.includes('isAssignmentPositionAllowed("media-hub", hubModule.slot, regionKeys)') &&
     loader.includes("slots[hubModule.slot].push") &&
     !loader.includes("if (!isMediaCenterPage)"),
   "Media assignments must carry their persisted Position into the canonical slot plan",
@@ -467,4 +467,4 @@ for (const path of portableResponsiveSources) {
   assert.doesNotMatch(source, viewportResponsiveLayout, `${path} still responds to viewport instead of its assigned slot container`);
 }
 
-console.log("PASS Page Composition Position: Theme/Template/Slug-agnostic platform Regions, Assignment-owned Position, flexible-module inheritance, explicit Product-fixed exceptions, module-derived Presentation, Theme adoption, and fail-closed validation.");
+console.log("PASS Page Composition Position: Layout-owned Region identity, Assignment-owned placement, flexible-module inheritance, explicit Product-fixed exceptions, Theme adoption, and fail-closed validation.");

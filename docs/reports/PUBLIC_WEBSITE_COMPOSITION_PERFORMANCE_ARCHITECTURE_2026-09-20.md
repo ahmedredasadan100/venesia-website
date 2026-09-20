@@ -264,3 +264,53 @@ Only two implementation blockers remain: the tailored grouped Feed database read
 **PUBLIC WEBSITE PERFORMANCE CLOSURE — PARTIAL:** the Category/Series cold read fan-out remains until Gap A's database contract is authorized, implemented, adopted and verified. **FUTURE TEMPLATE PERFORMANCE ADOPTION — PARTIAL:** current Placement works among defined Positions, but novel Template-defined Regions cannot pass official persistence, validation and render paths until Gap B's Migration and adoption. Do not call either PROVEN from this design or from a green CI run alone.
 
 **Delivery stop:** Draft PR after checks and Preview; stop before Ready. No Merge, auto-merge, manual Deploy, Production mutation, Migration, or Auth/Cron/Permissions change.
+
+## MIGRATION IMPLEMENTATION / ISOLATED READINESS — Draft PR #174
+
+This section supersedes the design-only implementation status in **AD–AF** and **FINAL TWO-GAP CLOSURE A–N**. The design decision is unchanged. Migration files and related source are implemented locally; no Production Migration has been applied. The PR remains Draft. Production cutover is a separate decision.
+
+### 1. Migration files and exact Feed database contract
+
+- `20260920010000_public_feed_aggregated_reads.sql` adds two read-only, `SECURITY INVOKER` functions callable by `service_role` only. `public_feed_category_counts(p_categories jsonb, p_series_slugs text[])` returns `(category_id bigint, article_count bigint)` for each requested Category ID. Each input row supplies the owner-computed descendant **slugs**. A left join yields zero when no public Article matches. The predicate preserves `content_type='article'`, `status='published'`, `deleted_at IS NULL`, `slug NOT LIKE 'e2e-test%'`, and optional Series slug filtering. The input is bounded to 60 selected Categories. The function does not choose Category order or pagination.
+- `public_feed_series_representatives(p_series_slugs text[])` returns `(series_slug text, representative jsonb)` for Series that have a public Article. It ranks by `published_at DESC, id DESC` per Series **slug**, applying the same public Article predicate. Its JSON projection matches `PUBLIC_CONTENT_COLLECTION_SELECT` for the selected Article. An absent Series Article returns no row; the current Public Content Read owner maps that absence to `representative: null`. Its input is bounded to 60 Series. It does not select, sort, or paginate the Series taxonomy.
+- Both functions reject malformed input. No new Feed index was added without a demonstrated plan need; existing slug/status/publication indexes remain the starting point. RPC errors and malformed output stay failures in Public Content Read; no per-item fallback is retained. Existing owner cache keys, `public-content` tag, Category/Series selection, ordering, limits, links, and empty state remain in source.
+
+### 2. Feed request topology and adoption
+
+| Cold read | Before | After |
+| --- | --- | --- |
+| Category Feed | Published Category read + optional Series scope read + **N exact Article count requests** | Same selection reads + **1 grouped count RPC** for N selected Categories |
+| Series Feed | Published Category read + Series selection read + **N newest Article requests** | Same selection reads + **1 grouped representative RPC** for N selected Series |
+
+Only `src/lib/content/public-content-read/owner.ts` invokes the new RPCs. The existing Feed resolver and Category/Series consumers use that owner. The old `countPublicArticlesForCategory` and per-Series `pageSize: 1` fan-out path have been removed. `verify:public-content-delivery` exercises grouped request plans, failure recovery, and null representative behavior; `verify:feed-module-contract-integrity` guards against reintroducing the per-item path.
+
+### 3. Layout-owned Region contract and compatibility bridge
+
+`20260920011000_page_composition_layout_regions.sql` adds `page_composition_layouts(id, key, admin_label)` and `page_composition_regions(layout_id, key, admin_label, sort_order)`. `(layout_id,key)` is the Region identity, with unique `(layout_id,sort_order)`, nonempty label, and bounded key syntax. `pages.layout_id` is non-null, references its Layout, and defaults to the seeded `venisia-legacy` Layout. Existing Assignment `slot` remains the Region key. Write triggers require the key to belong to the assigned Page's Layout, reject an incompatible Page Layout change, and protect an in-use Region from deletion and all Region identity updates. Hero retains its explicit Product-fixed `hero` Region. The existing atomic Composition function accepts syntactically valid novel keys; the same Assignment trigger validates membership. There is no new global left/right/center enum, Template Builder, query, cache, data/media lifecycle, or Region-specific performance branch.
+
+Migration replay follows the official CLI registry: an already registered file is a no-op on the next dry run. The guarded schema creation, seeded keys, legacy normalization, function replacement, and trigger replacement are deterministic and non-destructive. The one-way compatibility mapping matches the previous `normalizeLayoutSlot` behavior:
+
+| Stored Position before Migration | Canonical Region |
+| --- | --- |
+| `top` | `hero` |
+| `before-content` | `main` |
+| `after-content`, `before-footer` | `bottom` |
+| `main`, `sidebar`, `bottom`, `footer`, `hero` | unchanged |
+
+The isolated historical corpus contained one `before-footer` Assignment, which the existing renderer interpreted as `bottom`. The Migration normalizes all four known aliases in Assignment storage before activating validation; unknown historical values fail the migration preflight without being rewritten. The compatibility bridge owner is Page Composition: source is pre-Migration text `slot` plus current `layout-slots.ts` alias mapping; target is the canonical legacy Layout Region key. Adoption is the one-way data normalization plus Layout-driven Admin/public reads and writes. Remove the static Position fallback and alias map only after Production backfill verification finds no aliases and the remaining module-editor bulk sync supplies Layout-owned Region selection; until then they serve legacy-only calls, not a second runtime Region source.
+
+### 4. Isolated rehearsal and future Region proof
+
+The existing #172 lifecycle applied **all 110 migrations (108 prior + 2 new) from zero** using the pinned official Supabase CLI. The official CLI's final dry run found no pending files. The focused handoff in `scripts/verify-public-composition-isolated.mts` then checked the schema, all existing Pages on `venisia-legacy`, all current Page Assignments valid against their Layout, and the exact five current Region keys/order. A fixture Layout added `north-gallery` without changing any Module or Performance source, and an existing Content Module template was assigned there. A cross-Layout change to `main` failed with SQLSTATE `23514`; renaming the Region identity also failed with `23514`.
+
+The same isolated run inserted published, unpublished, and `e2e-test%` Article fixtures under parent/child Category slugs and a Series slug. The grouped Category counts were **root 3, child 2**, equal to the previous exact slug-filtered queries. The grouped Series representative was the Article with the latest `(published_at,id)` (ID 54 in the final isolated run), equal to the old ordered single-Series query. The empty Series returned no representative row. Category/Series order and pagination remain selected by Public Content Read before the grouped RPCs. No Production data was copied.
+
+The final lifecycle receipt for `.tmp-qa/public-composition-isolated-browser-2` reports `status=complete`, `ownedResourcesRemoved=10`, `remainingOwnedResources=0`, original resources unchanged, and all four owned ports released. The artifact is local and ignored by Git; the focused handoff reproduces its checks. Its normal production build, product-surface build, platform contracts and public Browser gate passed; all 11 public Browser journeys passed. The Topics route in this isolated corpus has no persisted Page, so the legacy static shell uses its original five Positions; persisted Pages still resolve Regions from their Layout. This fallback repair was verified in the second clean isolated run. The existing actual-route composition fixture also rendered a novel `north-gallery` Region with the unchanged Content Module; it performed no network read and needed no Module/Performance source change.
+
+### 5. Verification, GitHub/Vercel, and closure boundary
+
+Local targeted results: `verify:migrations` (110 files), `verify:feed-module-contract-integrity`, `verify:public-content-delivery` (195 assertions), `verify:page-composition-position-adoption`, `verify:position-driven-composition`, `verify:route-slot-policy`, `verify:page-composition-platform-contract`, `verify:page-composition-position-postgres`, `verify:page-block-editor-presentation` (66 checks), `verify:consumer-capability-adoption` source proof for `page-block-assignments`, platform performance contracts, typecheck and scoped lint passed. The final isolated run also passed build and 11/11 Browser journeys. Final committed-HEAD Quality Gate, GitHub checks and Vercel Preview are still pending at this report edit and must be recorded after completion. A blocked or skipped check is not counted as passed. No existing Auth/Permissions/Cron owner, Admin Performance, Heavy Save, Test Infrastructure rebuild, Production Migration, Ready, Merge, or manual Deploy is authorized in this pass. Only the new database objects receive restricted `service_role` access.
+
+**PUBLIC WEBSITE PERFORMANCE CLOSURE — PARTIAL** until the separate Production cutover and post-cutover public behavior are proven. The grouped read and fan-out closure are locally/isolated proven.
+
+**FUTURE TEMPLATE PERFORMANCE ADOPTION — PARTIAL** until the separate Production cutover and post-cutover public behavior are proven. The Layout-owned Region foundation and arbitrary Region fixture are locally/isolated proven.

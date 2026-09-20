@@ -6,6 +6,7 @@ import {
   getUnsupportedAssignmentPositionMessage,
   isAssignmentPositionAllowed,
 } from "../../../../../lib/page-composition/page-assignment-contract";
+import { loadPageRegionsForPage } from "../../../../../lib/page-composition/load-page-regions";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type { ParsedAssignmentKey } from "./types";
 
@@ -48,12 +49,15 @@ export async function pageExists(pageId: number): Promise<boolean> {
 }
 
 /** Returns Arabic failure when Position violates the platform or Product contract. */
-export function positionPolicyFailure(
+export async function positionPolicyFailure(
+  pageId: number,
   moduleKind: string,
   slot: string,
-): PageBlockActionResult | null {
-  if (isAssignmentPositionAllowed(moduleKind, slot)) return null;
-  return failure(getUnsupportedAssignmentPositionMessage(moduleKind, slot));
+): Promise<PageBlockActionResult | null> {
+  const layout = await loadPageRegionsForPage(pageId);
+  const regionKeys = layout.regions.map((region) => region.key);
+  if (isAssignmentPositionAllowed(moduleKind, slot, regionKeys)) return null;
+  return failure(getUnsupportedAssignmentPositionMessage(moduleKind, slot, regionKeys));
 }
 
 export function assignmentTable(blockType: PageBlockType) {

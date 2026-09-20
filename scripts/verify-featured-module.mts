@@ -237,7 +237,7 @@ check(
   "Page Composition loads Featured for every page without route/domain gates",
   composition.includes("loadFeaturedModuleStateForPageSlug(pageSlug)") &&
     composition.includes(
-      'isAssignmentPositionAllowed("featured", featured.slot)',
+      'isAssignmentPositionAllowed("featured", featured.slot, regionKeys)',
     ),
 );
 check(

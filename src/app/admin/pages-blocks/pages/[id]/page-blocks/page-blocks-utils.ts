@@ -41,6 +41,6 @@ export function orderPageCompositionRowsForDisplay<
  * Valid semantic Regions for a module kind.
  * Delegates to the shared Page Composition contract (single source of truth).
  */
-export function getSlotOptions(kind: string): PageLayoutSlot[] {
-  return getAssignablePositions(kind);
+export function getSlotOptions(kind: string, regionKeys?: readonly string[]): PageLayoutSlot[] {
+  return getAssignablePositions(kind, regionKeys);
 }

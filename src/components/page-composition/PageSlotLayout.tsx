@@ -427,7 +427,10 @@ export default function PageSlotLayout({
   // Venesia Theme decision only. Page Composition exposes a semantic sidebar
   // Region and remains unaware whether a Theme renders it as a column, drawer,
   // stack, or any other visual treatment.
-  const isMainSidebar = hasSidebarContent;
+  const isMainSidebar = composition.layoutKey === "venisia-legacy" && hasSidebarContent;
+  const regionRenderOrder = composition.layoutKey === "venisia-legacy"
+    ? VENISIA_THEME_REGION_RENDER_ORDER
+    : composition.regions.map((region) => region.key);
 
   const renderSlotStack = (slot: PageLayoutSlot) => {
     if (skip.has(slot)) return null;
@@ -554,7 +557,7 @@ export default function PageSlotLayout({
       className="page-layout page-layout--stack"
       data-page-layout-contract="theme-owned"
     >
-      {VENISIA_THEME_REGION_RENDER_ORDER.map(renderSlotStack)}
+      {regionRenderOrder.map(renderSlotStack)}
     </div>
   );
 }

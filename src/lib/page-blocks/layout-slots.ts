@@ -10,9 +10,9 @@ export { PAGE_COMPOSITION_POSITIONS, type PageCompositionPosition };
 export const PAGE_LAYOUT_SLOTS = PAGE_COMPOSITION_POSITIONS;
 
 /** @deprecated Compatibility alias for persisted `slot` fields. */
-export type PageLayoutSlot = PageCompositionPosition;
+export type PageLayoutSlot = string;
 
-const LEGACY_SLOT_MAP: Record<string, PageLayoutSlot> = {
+const LEGACY_SLOT_MAP: Record<string, PageCompositionPosition> = {
   top: "hero",
   "before-content": "main",
   main: "main",
@@ -36,10 +36,12 @@ export function isRecognizedLayoutSlot(
 
 export function normalizeLayoutSlot(slot: string | null | undefined): PageLayoutSlot {
   const value = (slot ?? "main").trim().toLowerCase();
-  return LEGACY_SLOT_MAP[value] ?? (isPageCompositionPosition(value) ? value : "main");
+  // Preserve novel Region keys for validation against the owning Layout.
+  // Unknown persisted keys must never be silently rendered as Main.
+  return LEGACY_SLOT_MAP[value] ?? value;
 }
 
-export const LAYOUT_SLOT_LABELS: Record<PageLayoutSlot, string> = {
+export const LAYOUT_SLOT_LABELS: Record<string, string> = {
   hero: "Hero",
   main: "Main",
   sidebar: "Sidebar",
@@ -47,7 +49,7 @@ export const LAYOUT_SLOT_LABELS: Record<PageLayoutSlot, string> = {
   footer: "Footer",
 };
 
-export const LAYOUT_SLOT_LABELS_AR: Record<PageLayoutSlot, string> = {
+export const LAYOUT_SLOT_LABELS_AR: Record<string, string> = {
   hero: "الهيرو",
   main: "المحتوى الرئيسي",
   sidebar: "الشريط الجانبي",

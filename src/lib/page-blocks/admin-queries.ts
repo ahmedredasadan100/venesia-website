@@ -331,7 +331,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   assignments.sort((a, b) => {
     const positionOrder = (slot: string) =>
-      PAGE_COMPOSITION_POSITIONS.indexOf(normalizeLayoutSlot(slot));
+      (PAGE_COMPOSITION_POSITIONS as readonly string[]).indexOf(normalizeLayoutSlot(slot));
     return positionOrder(a.slot) - positionOrder(b.slot)
       || comparePageAssignmentOrder(
         {

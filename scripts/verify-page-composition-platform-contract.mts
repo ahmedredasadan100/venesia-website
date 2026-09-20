@@ -353,5 +353,5 @@ console.log(`PASS Page Assignment mounted Query Runtime: ${assignmentQuery.asser
 console.log("PASS Page Block read/revalidation contract: summary-only picker payload, preserved SEO content, batched detached/assigned page invalidation, failure propagation, and every module save adopter.");
 
 console.log(
-  "PASS Page Composition Platform Contract: semantic Region identifiers/order and Assignment Position/visibility/order are CMS-owned; Theme names, Templates, CSS, Grid/Columns, direction, breakpoints, geometry, and visual Region rendering are downstream-only. A Theme replacement consumes the same Regions and Assignments without changing the contract or rebuilding data.",
+  "PASS Page Composition Platform Contract: Layout-owned Region identifiers/order and Assignment placement/visibility/order remain in Page Composition; Theme geometry and visual rendering consume those contracts without changing module data.",
 );

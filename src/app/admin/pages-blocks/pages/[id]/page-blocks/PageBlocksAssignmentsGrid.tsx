@@ -25,6 +25,7 @@ type SortKey = "module_kind" | "template_name" | "slot" | "visibility";
 
 // 150px = secondary module-type column (no dedicated preset).
 type PageBlocksAssignmentsGridProps = {
+  regionLabels: Readonly<Record<string, string>>;
   returnTo?: string;
   rows: PageBlockAssignmentRow[];
   previewHref: string | null;
@@ -48,6 +49,7 @@ type PageBlocksAssignmentsGridProps = {
 };
 
 export default function PageBlocksAssignmentsGrid({
+  regionLabels,
   returnTo,
   rows,
   previewHref,
@@ -129,6 +131,7 @@ export default function PageBlocksAssignmentsGrid({
         const reorder = getReorderPosition(row);
         return (
           <PageBlocksAssignmentRow
+            regionLabels={regionLabels}
             returnTo={returnTo}
             key={rowId}
             row={row}

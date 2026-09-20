@@ -47,9 +47,9 @@ for (const consumer of [mediaHubConsumer, mediaListingConsumer, mediaDetailConsu
   assert.ok(!consumer.includes("loadMediaCenterSidebarProps") && !consumer.includes("loadMediaSidebarModules"), "Parallel Media Sidebar public loader is forbidden");
 }
 assert.ok(
-  compositionLoader.includes('isAssignmentPositionAllowed("media-sidebar", widget.slot)') &&
+  compositionLoader.includes('isAssignmentPositionAllowed("media-sidebar", widget.slot, regionKeys)') &&
     compositionLoader.includes("slots[widget.slot].push") &&
-    compositionLoader.includes('isAssignmentPositionAllowed("media-hub", hubModule.slot)') &&
+    compositionLoader.includes('isAssignmentPositionAllowed("media-hub", hubModule.slot, regionKeys)') &&
     compositionLoader.includes("slots[hubModule.slot].push") &&
     !compositionLoader.includes("if (!isMediaCenterPage)"),
   "Specialized Media truth must enter the canonical persisted Position path",

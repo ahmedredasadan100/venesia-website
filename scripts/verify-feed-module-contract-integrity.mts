@@ -1193,18 +1193,19 @@ assert.ok(
 assert.ok(
   publicContentReadOwner.includes("loadPublicContentFeedCategories") &&
     publicContentReadOwner.includes("getCategoryAndDescendantIds") &&
-    /\.select\("id",\s*\{\s*count:\s*"exact",\s*head:\s*true\s*\}\)/u.test(
-      publicContentReadOwner,
-    ) &&
-    publicContentReadOwner.includes("count: await countPublicArticlesForCategory("),
-  "Category Feed counts the exact public Article total across descendants",
+    publicContentReadOwner.includes('.rpc("public_feed_category_counts"') &&
+    publicContentReadOwner.includes("p_categories: requested") &&
+    publicContentReadOwner.includes("p_series_slugs: input.seriesSlugs") &&
+    !publicContentReadOwner.includes("countPublicArticlesForCategory"),
+  "Category Feed uses one grouped owner read for exact descendant counts",
 );
 assert.ok(
   publicContentReadOwner.includes("loadPublicContentFeedSeries") &&
-    publicContentReadOwner.includes("seriesSlug: row.slug") &&
-    publicContentReadOwner.includes("pageSize: 1") &&
+    publicContentReadOwner.includes('.rpc("public_feed_series_representatives"') &&
+    publicContentReadOwner.includes("p_series_slugs: data.map((row) => row.slug)") &&
+    !publicContentReadOwner.includes("pageSize: 1") &&
     !publicContentReadOwner.includes("loadTopicImagesBySeriesSlug"),
-  "each Series resolves one representative independently of a global content cap",
+  "Series Feed uses one grouped owner read for latest representatives",
 );
 for (const field of ["id: number", "imageAlt: string", "category: string", "series: string", "viewsCount: number"]) {
   assert.ok(

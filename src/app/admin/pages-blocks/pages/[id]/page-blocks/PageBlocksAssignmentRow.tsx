@@ -19,15 +19,12 @@ import {
   moduleKindLabel,
   normalizeBoolean,
 } from "../../../../../../lib/page-blocks/admin-utils";
-import {
-  LAYOUT_SLOT_LABELS_AR,
-  normalizeLayoutSlot,
-  type PageLayoutSlot,
-} from "../../../../../../lib/page-blocks/layout-slots";
+import { normalizeLayoutSlot, type PageLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import type { PageBlockAssignmentRow } from "../../../../../../lib/page-blocks/types";
 import type { AdminInstantMutationRowInteraction } from "../../../../../../lib/admin/entity-list/data-engine/instant-mutation";
 
 type PageBlocksAssignmentRowProps = {
+  regionLabels: Readonly<Record<string, string>>;
   returnTo?: string;
   row: PageBlockAssignmentRow;
   rowId: string;
@@ -57,6 +54,7 @@ type PageBlocksAssignmentRowProps = {
 };
 
 export default function PageBlocksAssignmentRow({
+  regionLabels,
   returnTo,
   row,
   rowId,
@@ -132,7 +130,7 @@ export default function PageBlocksAssignmentRow({
           ...(technicalIdentityIsInternal
             ? []
             : [{ label: "المعرّف", value: row.template_slug }]),
-          { label: "موضع العرض", value: LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)] },
+          { label: "موضع العرض", value: regionLabels[normalizeLayoutSlot(row.slot)] ?? row.slot },
           { label: "حالة النشر", value: templatePublished ? "منشور" : "غير منشور" },
           { label: "الربط بالصفحة", value: assignmentVisible ? "ظاهر" : "مخفي" },
           { label: "الظهور العام", value: isVisible ? "ظاهر للعامة" : "غير ظاهر للعامة" },
@@ -243,7 +241,7 @@ export default function PageBlocksAssignmentRow({
           value={normalizeLayoutSlot(row.slot)}
           options={displayPositionOptions.map((slot) => ({
             value: slot,
-            label: LAYOUT_SLOT_LABELS_AR[slot],
+            label: regionLabels[slot] ?? slot,
           }))}
           onChange={(value) => onDisplayPositionChange(value as PageLayoutSlot)}
           disabled={

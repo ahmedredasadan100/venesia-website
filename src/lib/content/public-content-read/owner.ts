@@ -493,48 +493,6 @@ function normalizeFeedTaxonomyInput(input: PublicContentFeedTaxonomyInput) {
   };
 }
 
-async function countPublicArticlesForCategory(
-  categories: readonly AdminContentCategory[],
-  categoryId: number,
-  seriesSlugs: readonly string[],
-) {
-  const descendantIds = new Set(
-    getCategoryAndDescendantIds([...categories], categoryId),
-  );
-  const categorySlugs = categories
-    .filter((category) => descendantIds.has(category.id))
-    .map((category) => category.slug);
-
-  let query = getSupabaseAdmin()
-    .from("topics")
-    .select("id", { count: "exact", head: true })
-    .eq("content_type", "article")
-    .eq("status", "published")
-    .is("deleted_at", null)
-    .not("slug", "like", "e2e-test%")
-    .in("category_slug", categorySlugs);
-
-  if (seriesSlugs.length) query = query.in("series_slug", seriesSlugs);
-
-  const { count, error } = await query;
-  if (error) {
-    failPublicContentRead("query_failed", {
-      context: "Public Content Feed category count query failed",
-      error,
-      details: { categoryId, categorySlugs, seriesSlugs },
-    });
-  }
-  if (!Number.isInteger(count) || Number(count) < 0) {
-    failPublicContentRead("contract_failed", {
-      context: "Public Content Feed category count is invalid",
-      error: new Error("Public Content Feed category count does not satisfy the read contract."),
-      details: { categoryId, count },
-    });
-  }
-
-  return Number(count);
-}
-
 async function queryPublicContentFeedCategories(
   input: ReturnType<typeof normalizeFeedTaxonomyInput>,
 ): Promise<PublicContentFeedCategory[]> {
@@ -576,17 +534,55 @@ async function queryPublicContentFeedCategories(
     const descendantIds = getCategoryAndDescendantIds(categories, category.id);
     return descendantIds.some((id) => selectedSeriesCategoryIds.has(id));
   }).slice(0, input.limit);
+  if (!selected.length) return [];
 
-  return Promise.all(selected.map(async (category) => ({
+  const requested = selected.map((category) => {
+    const descendantIds = new Set(
+      getCategoryAndDescendantIds(categories, category.id),
+    );
+    return {
+      id: category.id,
+      slugs: categories
+        .filter((candidate) => descendantIds.has(candidate.id))
+        .map((candidate) => candidate.slug),
+    };
+  });
+  const { data, error } = await getSupabaseAdmin().rpc("public_feed_category_counts", {
+    p_categories: requested,
+    p_series_slugs: input.seriesSlugs,
+  });
+  if (error) {
+    failPublicContentRead("query_failed", {
+      context: "Public Content Feed grouped category count query failed",
+      error,
+      details: { categoryIds: selected.map((category) => category.id) },
+    });
+  }
+  if (!Array.isArray(data) || data.length !== selected.length) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content Feed grouped category count shape is invalid",
+      error: new Error("Public Content Feed category counts do not satisfy the read contract."),
+    });
+  }
+  const counts = new Map<number, number>();
+  const selectedIds = new Set(selected.map((category) => category.id));
+  for (const row of data) {
+    if (!row || !selectedIds.has(row.category_id) || counts.has(row.category_id)
+      || !Number.isSafeInteger(row.article_count) || row.article_count < 0) {
+      failPublicContentRead("contract_failed", {
+        context: "Public Content Feed grouped category count row is invalid",
+        error: new Error("Public Content Feed category count does not satisfy the read contract."),
+        details: { categoryId: row.category_id },
+      });
+    }
+    counts.set(row.category_id, row.article_count);
+  }
+  return selected.map((category) => ({
     id: category.id,
     name: category.name,
     slug: category.slug,
-    count: await countPublicArticlesForCategory(
-      categories,
-      category.id,
-      input.seriesSlugs,
-    ),
-  })));
+    count: counts.get(category.id)!,
+  }));
 }
 
 export async function loadPublicContentFeedCategories(
@@ -646,23 +642,51 @@ async function queryPublicContentFeedSeries(
     });
   }
 
-  return Promise.all(data.map(async (row) => {
-    const representative = await loadPublicContentCollection({
-      contentTypes: ["article"],
-      seriesSlug: row.slug,
-      page: 1,
-      pageSize: 1,
-      sort: "newest",
+  if (!data.length) return [];
+  const { data: representatives, error: representativeError } = await getSupabaseAdmin()
+    .rpc("public_feed_series_representatives", {
+      p_series_slugs: data.map((row) => row.slug),
     });
-
-    return {
+  if (representativeError) {
+    failPublicContentRead("query_failed", {
+      context: "Public Content Feed grouped Series representative query failed",
+      error: representativeError,
+      details: { seriesSlugs: data.map((row) => row.slug) },
+    });
+  }
+  if (!Array.isArray(representatives)) {
+    failPublicContentRead("contract_failed", {
+      context: "Public Content Feed grouped Series representatives returned null data",
+      error: new Error("Public Content Feed Series representatives do not satisfy the read contract."),
+    });
+  }
+  const selectedSlugs = new Set(data.map((row) => row.slug));
+  const bySlug = new Map<string, PublicContentSummary>();
+  for (const row of representatives) {
+    if (!row || !selectedSlugs.has(row.series_slug) || bySlug.has(row.series_slug)
+      || row.representative === null || typeof row.representative !== "object"
+      || Array.isArray(row.representative)
+      || row.representative.series_slug !== row.series_slug
+      || !Number.isSafeInteger(Number(row.representative.id))
+      || Number(row.representative.id) <= 0
+      || typeof row.representative.slug !== "string"
+      || !row.representative.slug
+      || row.representative.content_type !== "article") {
+      failPublicContentRead("contract_failed", {
+        context: "Public Content Feed grouped Series representative row is invalid",
+        error: new Error("Public Content Feed Series representative does not satisfy the read contract."),
+        details: { seriesSlug: row?.series_slug },
+      });
+    }
+    bySlug.set(row.series_slug, mapCollectionRow(row.representative as PublicContentRow));
+  }
+  return data.map((row) => ({
       id: row.id,
       name: row.name,
       slug: row.slug,
       description: row.description ?? "",
       categoryId: row.category_id,
-      representative: representative.items[0] ?? null,
-    };
+      representative: bySlug.get(row.slug) ?? null,
   }));
 }
 

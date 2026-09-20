@@ -18,10 +18,7 @@ import {
   blockModuleListHref,
   moduleKindLabel,
 } from "../../../../../../lib/page-blocks/admin-utils";
-import {
-  LAYOUT_SLOT_LABELS_AR,
-  type PageLayoutSlot,
-} from "../../../../../../lib/page-blocks/layout-slots";
+import { type PageLayoutSlot } from "../../../../../../lib/page-blocks/layout-slots";
 import {
   REGISTERED_SLOT_MODULE_KINDS,
 } from "../../../../../../lib/page-composition/slot-module-registry";
@@ -35,9 +32,8 @@ type TemplateOption = {
   status: string;
 };
 
-const slotLabels = LAYOUT_SLOT_LABELS_AR;
-
 type PageBlocksAssignModalProps = {
+  regionLabels: Readonly<Record<string, string>>;
   pageId: number;
   onClose: () => void;
   assignModuleKind: AssignableModuleKind;
@@ -65,6 +61,7 @@ type PageBlocksAssignModalProps = {
 };
 
 export default function PageBlocksAssignModal({
+  regionLabels,
   pageId,
   onClose,
   assignModuleKind,
@@ -220,7 +217,7 @@ export default function PageBlocksAssignModal({
           disabled={slotOptions.length <= 1}
           options={slotOptions.map((slot) => ({
             value: slot,
-            label: slotLabels[slot] ?? slot,
+            label: regionLabels[slot] ?? slot,
           }))}
         />
         {!slotOptions.length ? (

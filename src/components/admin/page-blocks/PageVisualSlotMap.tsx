@@ -2,16 +2,17 @@
 
 import Link from "next/link";
 
-import { LAYOUT_SLOT_LABELS_AR, normalizeLayoutSlot, type PageLayoutSlot } from "../../../lib/page-blocks/layout-slots";
+import { normalizeLayoutSlot, type PageLayoutSlot } from "../../../lib/page-blocks/layout-slots";
 import { moduleEditHref, moduleKindLabel, normalizeBoolean } from "../../../lib/page-blocks/admin-utils";
 import type { PageBlockAssignmentRow } from "../../../lib/page-blocks/types";
-import { PAGE_COMPOSITION_POSITIONS } from "../../../lib/page-blocks/layout-slots";
+import type { PageRegionDefinition } from "../../../lib/page-composition/load-page-regions";
 import { comparePageAssignmentOrder } from "../../../lib/page-composition/page-assignment-contract";
 import { getSlotCompatibilityLabel } from "../../../lib/page-composition/slot-module-registry";
 
 type PageVisualSlotMapProps = {
   returnTo?: string;
   assignments: PageBlockAssignmentRow[];
+  regions: readonly PageRegionDefinition[];
 };
 
 function compareRowsInSlot(
@@ -39,11 +40,11 @@ function compareRowsInSlot(
   );
 }
 
-function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
+function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[], regions: readonly PageRegionDefinition[]) {
   const groups = new Map<PageLayoutSlot, PageBlockAssignmentRow[]>();
 
-  for (const slot of PAGE_COMPOSITION_POSITIONS) {
-    groups.set(slot, []);
+  for (const region of regions) {
+    groups.set(region.key, []);
   }
 
   for (const row of assignments) {
@@ -63,13 +64,13 @@ function groupAssignmentsBySlot(assignments: PageBlockAssignmentRow[]) {
   return groups;
 }
 
-export default function PageVisualSlotMap({ assignments, returnTo }: PageVisualSlotMapProps) {
-  const grouped = groupAssignmentsBySlot(assignments);
+export default function PageVisualSlotMap({ assignments, regions, returnTo }: PageVisualSlotMapProps) {
+  const grouped = groupAssignmentsBySlot(assignments, regions);
 
   return (
     <div>
       <div className="grid gap-4 xl:grid-cols-5">
-        {PAGE_COMPOSITION_POSITIONS.map((slot) => {
+        {regions.map(({ key: slot, adminLabel }) => {
           const rows = grouped.get(slot) ?? [];
           const isEmpty = rows.length === 0;
 
@@ -83,7 +84,7 @@ export default function PageVisualSlotMap({ assignments, returnTo }: PageVisualS
             >
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-white">{LAYOUT_SLOT_LABELS_AR[slot]}</p>
+                  <p className="text-sm font-semibold text-white">{adminLabel}</p>
                   <p className="font-en text-[10px] tracking-[0.2em] text-white/30">{slot}</p>
                 </div>
                 <span
