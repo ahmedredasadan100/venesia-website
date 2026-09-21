@@ -18,7 +18,7 @@ const GENERATED_MIGRATIONS = join(ROOT, "supabase", "migrations");
 const LOCAL_STATE_DIRECTORY = join(ROOT, ".supabase-local");
 const STATE_FILE = join(LOCAL_STATE_DIRECTORY, "migration-state.json");
 const ENV_FILE = join(ROOT, ".env.local");
-const CLI_BINARY = join(ROOT, "node_modules", "@supabase", "cli-windows-x64", "bin", "supabase.exe");
+const CLI_ENTRYPOINT = join(ROOT, "node_modules", "supabase", "dist", "supabase.js");
 const PROJECT_ID = "venisia-local-development";
 const API_URL = "http://127.0.0.1:54321";
 const DATABASE_URL = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
@@ -70,7 +70,6 @@ export function assertLocalDevelopmentConfiguration(config = readFileSync(CONFIG
   check(/\[api\][\s\S]*?port\s*=\s*54321/u.test(config), "LOCAL_API_PORT_MISMATCH");
   check(/\[db\][\s\S]*?port\s*=\s*54322/u.test(config), "LOCAL_DATABASE_PORT_MISMATCH");
   check(!existsSync(join(ROOT, "supabase", ".temp", "project-ref")), "REMOTE_PROJECT_LINK_PRESENT");
-  check(existsSync(CLI_BINARY) && lstatSync(CLI_BINARY).isFile(), "LOCAL_SUPABASE_CLI_MISSING");
 }
 
 export function assertMigrationHistoryPrefix(history: LocalHistory[], corpus: LocalMigration[], state: LocalState | null): void {
@@ -105,7 +104,8 @@ function cliEnvironment(): NodeJS.ProcessEnv {
 
 function runCli(args: string[], capture = false): string {
   assertLocalDevelopmentConfiguration();
-  const result = spawnSync(CLI_BINARY, [...args, "--workdir", ROOT], {
+  check(existsSync(CLI_ENTRYPOINT) && lstatSync(CLI_ENTRYPOINT).isFile(), "LOCAL_SUPABASE_CLI_MISSING");
+  const result = spawnSync(process.execPath, [CLI_ENTRYPOINT, ...args, "--workdir", ROOT], {
     cwd: ROOT,
     env: cliEnvironment(),
     windowsHide: true,

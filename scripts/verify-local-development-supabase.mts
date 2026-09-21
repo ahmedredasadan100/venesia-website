@@ -41,10 +41,16 @@ assert.match(owner, /127\.0\.0\.1:54322/u);
 assert.match(owner, /LOCAL_HISTORY_DIVERGED/u);
 assert.match(owner, /LOCAL_APPLIED_SOURCE_DRIFT/u);
 assert.match(owner, /runEntitySeoBackfill/u);
+assert.match(owner, /node_modules", "supabase", "dist", "supabase\.js/u);
+assert.match(owner, /spawnSync\(process\.execPath/u);
 assert.match(owner, /stop", "--no-backup/u);
 assert.doesNotMatch(owner, /SUPABASE_DB_URL|DATABASE_URL\s*=\s*process\.env/u);
 
-const packageJson = JSON.parse(read("package.json")) as { scripts: Record<string, string> };
+const packageJson = JSON.parse(read("package.json")) as {
+  scripts: Record<string, string>;
+  devDependencies: Record<string, string>;
+};
+assert.equal(packageJson.devDependencies.supabase, "2.116.0");
 assert.match(packageJson.scripts.dev, /^npm run dev:db:preflight && next dev/u);
 for (const command of ["start", "stop", "reset", "preflight"]) {
   assert.equal(packageJson.scripts[`dev:db:${command}`],
