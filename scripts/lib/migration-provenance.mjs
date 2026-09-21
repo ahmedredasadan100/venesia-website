@@ -15,8 +15,8 @@ const source = (path) => readFileSync(path, "utf8").replace(/\r\n?/gu, "\n");
 
 /** @typedef {{version:string,name:string,sql:string,sha256?:string}} MigrationSource */
 /** @typedef {{version:string,name:string|null,statements:string[]|null}} MigrationRegistryRow */
-/** @typedef {{revision:'canonical-current'|'historical-applied'|'fresh-bootstrap-corrected',sourceSha256:string}} Provenance */
-/** @typedef {{version:string,name:string,historicalSourceSha256:string,correctedSourceSha256:string,reason:string,existingDatabasePolicy:string,freshDatabasePolicy:string}} MigrationCompatibilityRecord */
+/** @typedef {{revision:'canonical-current'|'historical-applied'|'fresh-bootstrap-superseded'|'fresh-bootstrap-corrected',sourceSha256:string}} Provenance */
+/** @typedef {{version:string,name:string,historicalSourceSha256:string,supersededFreshSourceSha256?:string,correctedSourceSha256:string,reason:string,existingDatabasePolicy:string,freshDatabasePolicy:string}} MigrationCompatibilityRecord */
 
 /** @returns {MigrationCompatibilityRecord[]} */
 function readRecords() {
@@ -54,8 +54,10 @@ export function loadMigrationHistoryCompatibility(version = "20260729150000") {
   const record = readRecords().find(entry => entry.version === version);
   assert.ok(record, "Migration version has no reviewed history compatibility contract.");
   const historicalSql = source(join(ROOT, "sql/migration-history", record.version, "historical-applied.sql"));
+  const supersededFreshSql = record.supersededFreshSourceSha256 === undefined ? undefined
+    : source(join(ROOT, "sql/migration-history", record.version, "fresh-bootstrap-superseded.sql"));
   const correctedSql = source(join(ROOT, "sql/migrations", `${record.version}_${record.name}.sql`));
-  return verifyMigrationHistoryCompatibilitySources(record, historicalSql, correctedSql);
+  return verifyMigrationHistoryCompatibilitySources(record, historicalSql, correctedSql, supersededFreshSql);
 }
 
 /**
@@ -63,14 +65,22 @@ export function loadMigrationHistoryCompatibility(version = "20260729150000") {
  * @param {MigrationCompatibilityRecord} record
  * @param {string} historicalSql
  * @param {string} correctedSql
+ * @param {string|undefined} supersededFreshSql
  */
-export function verifyMigrationHistoryCompatibilitySources(record, historicalSql, correctedSql) {
+export function verifyMigrationHistoryCompatibilitySources(record, historicalSql, correctedSql, supersededFreshSql = undefined) {
   assert.match(record.historicalSourceSha256, SHA256, "Historical revision hash is not frozen.");
   assert.match(record.correctedSourceSha256, SHA256, "Corrected revision hash is not frozen.");
   assert.notEqual(record.historicalSourceSha256, record.correctedSourceSha256);
   assert.equal(digest(historicalSql), record.historicalSourceSha256, "Historical migration archive drift.");
+  if (record.supersededFreshSourceSha256 !== undefined) {
+    assert.match(record.supersededFreshSourceSha256, SHA256, "Superseded fresh revision hash is not frozen.");
+    assert.notEqual(record.supersededFreshSourceSha256, record.historicalSourceSha256);
+    assert.notEqual(record.supersededFreshSourceSha256, record.correctedSourceSha256);
+    assert.equal(typeof supersededFreshSql, "string", "Superseded fresh revision archive is missing.");
+    assert.equal(digest(supersededFreshSql), record.supersededFreshSourceSha256, "Superseded fresh migration archive drift.");
+  } else assert.equal(supersededFreshSql, undefined, "Unexpected superseded fresh revision archive.");
   assert.equal(digest(correctedSql), record.correctedSourceSha256, "Corrected migration source drift.");
-  return Object.freeze({ ...record, historicalSql, correctedSql });
+  return Object.freeze({ ...record, historicalSql, supersededFreshSql, correctedSql });
 }
 
 /** @param {MigrationSource} migration */
@@ -103,6 +113,9 @@ export function classifyWholeFileMigrationProvenance(row, migration) {
   const contract = loadMigrationHistoryCompatibility(migration.version);
   if (recordedSql === contract.historicalSql) {
     return { revision: "historical-applied", sourceSha256: contract.historicalSourceSha256 };
+  }
+  if (contract.supersededFreshSql !== undefined && recordedSql === contract.supersededFreshSql) {
+    return { revision: "fresh-bootstrap-superseded", sourceSha256: contract.supersededFreshSourceSha256 };
   }
   if (recordedSql === contract.correctedSql) {
     return { revision: "fresh-bootstrap-corrected", sourceSha256: contract.correctedSourceSha256 };
@@ -207,7 +220,7 @@ export function verifyMigrationCorpusProvenance({ historical, committed, current
     const original = old.get(record.version);
     assert.ok(original, "Compatibility revision has no historical snapshot member.");
     assert.equal(record.name, original.name, "Historical compatibility identity mismatch.");
-    assert.ok([record.historicalSourceSha256, record.correctedSourceSha256].includes(original.sha256),
+    assert.ok([record.historicalSourceSha256, record.supersededFreshSourceSha256, record.correctedSourceSha256].filter(Boolean).includes(original.sha256),
       "Compatibility revision does not recognize the immutable Git snapshot checksum.");
     revisions.set(record.version, record);
   }

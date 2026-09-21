@@ -317,6 +317,8 @@ function verifyStructuralContract(migrations: Migration[]) {
     .map((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8"))
     .join("\n");
   assert.doesNotMatch(sourceCorpus, /\bsync_project_children\b/u, "Removed Project child-write owner is referenced by active source.");
+  assert.doesNotMatch(sourceCorpus, /\bcli_login_postgres\b/u,
+    "Application source must not use the conditional Supabase CLI tooling role or its credential.");
 
   const projectAudit = readFileSync(join(ROOT, "scripts", "audit-project-admin-schema-parity.mjs"), "utf8");
   assert.match(projectAudit, /indexes:\s*53/u, "Project parity guard must include Dashboard and Reports indexes after removing Project Code uniqueness.");
