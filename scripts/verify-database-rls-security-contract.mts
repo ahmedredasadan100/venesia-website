@@ -44,7 +44,8 @@ function catalog(loaded: LoadedDatabaseSecurityContract): DatabaseSecurityCatalo
   const roles = contract.roles.filter(role => role.presence === "required").map(role => ({ name: role.name,
     ...Object.fromEntries(Object.entries(role.attributeRules).map(([field, rule]) => [field, rule === "require"])) })) as DatabaseSecurityCatalog["roles"];
   return { schema: contract.schema, roles, memberships: contract.memberships.filter(row => row.presence === "required")
-      .map(({ presence: _presence, classification: _classification, ...row }) => row),
+      .map(row => ({ role: row.role, member: row.member, inheritOption: row.inheritOption,
+        setOption: row.setOption, adminOption: row.adminOption })),
     schemaPrivileges: contract.schemaPrivileges, defaultPrivileges: contract.defaultPrivileges, columnPrivileges: contract.columnPrivileges,
     tables: contract.tables.map(table => ({ name: table.name, owner: table.owner, rlsEnabled: table.classification !== "C", forceRls: table.forceRls,
       grants: table.grants, policies: table.policies, grantOptions: {},
