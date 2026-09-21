@@ -357,7 +357,13 @@ Search, Projects, one Project detail and the arbitrary-Region page. Search for
 synthetic published item; Projects showed the fixture published through the
 canonical Project publication owner. Header, menu and footer remained visible.
 There were no runtime overlays, `PGRST200` or `PGRST202` errors. Only existing
-LCP image warnings were observed.
+LCP image warnings were observed. The final persistent-stack reset also created
+the synthetic Topics Page before adopting its existing `topics-search` template
+through `mutate_page_composition`; the complete public Browser suite then passed
+11/11 on the warm local development runtime. The first parallel run's two
+timeouts were cold-compile contention (the `/search` response completed in
+23.1 seconds against a 20-second assertion), not contract or runtime failures.
+The serial warm rerun passed without changing Product code or test thresholds.
 
 Production and Vercel environments remain untouched. The exact future cutover
 chain is read only preflight at Production head 106, official application of

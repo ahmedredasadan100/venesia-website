@@ -35,14 +35,14 @@ begin
      category_id, series, series_slug, series_id, date_label, published_at,
      content_type, status, seo_title, seo_description, focus_keyword)
   values
-    ('development-series-first', 'Development Series First', 'Synthetic published article.',
-     '<p>Synthetic local development content.</p>', '/images/placeholder.jpg', 'Synthetic image',
+    ('development-series-first', 'Development Series First', 'Synthetic published article about Venesia فينيسيا and ملكية.',
+     '<h2>Development Heading</h2><p>Synthetic local development content about فينيسيا and ملكية.</p>', '/images/placeholder.jpg', 'Synthetic image',
      'Development Articles', 'development-articles', v_category_id,
      'Development Series', 'development-series', v_series_id, 'Development',
      '2026-01-01T09:00:00Z', 'article', 'published', 'Development Series First',
      'Synthetic published article for local development.', 'development'),
-    ('development-series-latest', 'Development Series Latest', 'Synthetic latest published article.',
-     '<p>Synthetic local development content.</p>', '/images/placeholder.jpg', 'Synthetic image',
+    ('development-series-latest', 'Development Series Latest', 'Synthetic latest published article about Venesia فينيسيا and ملكية.',
+     '<h2>Latest Development Heading</h2><p>Synthetic local development content about فينيسيا and ملكية.</p>', '/images/placeholder.jpg', 'Synthetic image',
      'Development Articles', 'development-articles', v_category_id,
      'Development Series', 'development-series', v_series_id, 'Development',
      '2026-02-01T09:00:00Z', 'article', 'published', 'Development Series Latest',

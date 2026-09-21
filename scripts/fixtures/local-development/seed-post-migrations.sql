@@ -116,7 +116,8 @@ $development_navigation$;
 insert into public.pages(title, slug, path, page_type, status, sort_order)
 values
   ('من نحن — Development', 'about', '/about', 'static', 'published', 20),
-  ('تواصل معنا — Development', 'contact', '/contact', 'contact', 'published', 30)
+  ('تواصل معنا — Development', 'contact', '/contact', 'contact', 'published', 30),
+  ('الموضوعات — Development', 'topics', '/topics', 'static', 'published', 40)
 on conflict (slug) do update set
   title = excluded.title,
   path = excluded.path,
@@ -124,6 +125,36 @@ on conflict (slug) do update set
   status = excluded.status;
 
 update public.pages set status = 'published' where slug = 'home';
+update public.pages set status = 'published' where slug = 'topics';
+
+do $development_topics_search$
+declare
+  v_page_id bigint;
+  v_template_id bigint;
+begin
+  select id into strict v_page_id from public.pages where slug = 'topics';
+  select id into strict v_template_id from public.content_block_templates where slug = 'topics-search';
+
+  if not exists (
+    select 1 from public.page_content_block_assignments
+    where page_id = v_page_id and template_id = v_template_id
+  ) then
+    perform public.mutate_page_composition(
+      v_page_id,
+      'save_assignment',
+      jsonb_build_object(
+        'kind', 'content',
+        'template_id', v_template_id,
+        'slot', 'sidebar',
+        'sort_order', 10,
+        'is_visible', true
+      ),
+      null,
+      'system:local-development-seed'
+    );
+  end if;
+end;
+$development_topics_search$;
 
 -- Exercise the canonical Project publication owner instead of bypassing the
 -- readiness and first-publish contract with a direct fixture update.
