@@ -36,15 +36,17 @@
       "version": "20260819041808",
       "name": "harden_rls_auto_enable_execute_acl",
       "historicalSourceSha256": "b89ae35c983e17900c9ecc4412f28b4c3c0e5725d70a65f945ac57f3586c188e",
-      "correctedSourceSha256": "b1f30542995efb59492cfc408d4c9ca4f70aa67c90dc469c68719a286ee356e1",
-      "reason": "Preserve historical EXECUTE hardening; accept complete historical-pair absence only with exact fresh lineage, registered security revision, and matching classified RLS/grants catalog. Reject partial or ambiguous state without creating compatibility objects."
+      "supersededFreshSourceSha256": "b1f30542995efb59492cfc408d4c9ca4f70aa67c90dc469c68719a286ee356e1",
+      "correctedSourceSha256": "e9e876a3a32ca849aa4fd8668cc4ea8bdf47089d85d47d958756648955fd25b6",
+      "reason": "Preserve historical EXECUTE hardening and the first fresh-bootstrap verifier; the current fresh path verifies the platform-aware application security contract without replaying or rewriting either prior receipt."
     },
     {
       "version": "20260830232134",
       "name": "search_platform_module",
       "historicalSourceSha256": "040f32e6169b5ccccb226ec908d05931bd74b5712489614fafca9da42ca383e2",
-      "correctedSourceSha256": "55149926caec2f664a20379c995aad170f7a6f6aefe88f98caf5f70e9cc99745",
-      "reason": "Preserve existing Topics and all Search/Media adoption; omit only the Topics assignment on source-proven canonical fresh absence without manufacturing a Page, publication or adoption event."
+      "supersededFreshSourceSha256": "55149926caec2f664a20379c995aad170f7a6f6aefe88f98caf5f70e9cc99745",
+      "correctedSourceSha256": "903e28ae541718f2e0537ce22d8e4e3a87fae5a52b96d8b157353c72bab4c292",
+      "reason": "Preserve existing Topics and all Search/Media adoption plus the first fresh bootstrap; the current fresh path uses exact registry identity and immutable upstream attestations without binding to one official CLI statement parser."
     }
   ]
 }

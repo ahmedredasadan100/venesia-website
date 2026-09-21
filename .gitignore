@@ -57,6 +57,9 @@ lint-report.txt
 dead-code-scan*.json
 # canonical documentation policy
 /.tmp-qa/
+/.supabase-local/
+/supabase/.temp/
+/supabase/migrations/
 /docs/qa/
 /docs/archive/
 /docs/*.docx
