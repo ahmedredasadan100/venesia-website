@@ -314,3 +314,55 @@ Local targeted results: `verify:migrations` (110 files), `verify:feed-module-con
 **PUBLIC WEBSITE PERFORMANCE CLOSURE — PARTIAL** until the separate Production cutover and post-cutover public behavior are proven. The grouped read and fan-out closure are locally/isolated proven.
 
 **FUTURE TEMPLATE PERFORMANCE ADOPTION — PARTIAL** until the separate Production cutover and post-cutover public behavior are proven. The Layout-owned Region foundation and arbitrary Region fixture are locally/isolated proven.
+
+## CURRENT SECURITY CONTRACT / PERSISTENT LOCAL DEVELOPMENT — 2026-09-22
+
+PR #175 is the prerequisite security reconciliation for this Draft. It keeps
+107 and 108 as honest, unapplied Production migrations with their historical
+source revisions archived; no receipt or migration history was fabricated.
+Revision 1 in 107 separates application invariants from reviewed platform role
+compatibility, revision 2 in 108 covers the later schema, and revision 3 in 110
+adds the Layout/Region objects and their validation functions to the same
+contract. The parser and negative controls passed 72 checks. A safe classified
+platform role may exist without failing on inventory presence alone; an unknown
+role, unknown membership, or effective public/application escalation path still
+fails closed. `cli_login_postgres` remains optional and conditional: when it is
+present its exact attributes, `SET ROLE postgres` membership, credential state,
+session state, object ownership, ACL reachability and inbound membership paths
+must all match the reviewed tooling contract. The modern local stack did not
+contain that optional role.
+
+The persistent development owner uses Supabase CLI 2.116.0 and the current
+Postgres 17.6.1.165 image on loopback. A clean reset applied all 110 repository
+migrations in order, including the Entity SEO EXPAND/backfill/ENFORCE boundary,
+then installed synthetic fixtures without reading Production. The resulting
+registry contains 110 versions with head `20260920011000`; `.env.local` points
+only to `127.0.0.1`, and the stack remains running after verification. Daily
+startup fails before Next.js when the local target, migration count, migration
+head or applied source hashes do not match Git.
+
+Live catalog proof on the final local schema reported security revision 3,
+63 classified tables, 31 roles, 25 exact memberships, three policies, verified
+function EXECUTE and effective client privileges, zero invalid Region
+assignments, and rejection of both an unclassified role and an unauthorized
+membership escalation inside rolled-back negative controls. Anonymous reads saw
+the two published Series articles and not the unpublished fixture; anonymous
+writes were denied. Feed Category counts and latest-Series selection matched the
+expected fixture. The arbitrary `north-gallery` Region rendered with the
+unchanged Content Module and a cross-Layout assignment failed.
+
+Local Browser verification rendered Home, About, Topics, Media Center, News,
+Search, Projects, one Project detail and the arbitrary-Region page. Search for
+`Development` returned the published Article and News fixtures; News showed the
+synthetic published item; Projects showed the fixture published through the
+canonical Project publication owner. Header, menu and footer remained visible.
+There were no runtime overlays, `PGRST200` or `PGRST202` errors. Only existing
+LCP image warnings were observed.
+
+Production and Vercel environments remain untouched. The exact future cutover
+chain is read only preflight at Production head 106, official application of
+107, read only revision-1 verification, official application of 108, read only
+revision-2 verification, official application of 109 and 110, then read only
+revision-3, Feed, Region, compatibility and public route verification. Any
+catalog, role, session, source, registry or dependency drift stops before the
+first write. This report does not authorize that chain.

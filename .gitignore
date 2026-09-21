@@ -59,6 +59,8 @@ dead-code-scan*.json
 /.tmp-qa/
 /.supabase-local/
 /supabase/.temp/
+/supabase/.branches/
+/supabase/snippets/
 /supabase/migrations/
 /docs/qa/
 /docs/archive/

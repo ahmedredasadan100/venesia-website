@@ -16,6 +16,10 @@ project id `venisia-local-development`. It then creates a fresh official
 Supabase CLI stack on loopback, applies the current repository migrations in
 order, runs the existing Entity SEO backfill between EXPAND and ENFORCE, and
 installs synthetic development fixtures. It does not read or copy Production.
+The daily website stack keeps Database, API gateway, PostgREST, Auth, Storage,
+Realtime, Mailpit, metadata and Studio. Edge Functions, Analytics/Logflare,
+Vector and the disabled pooler are excluded because this application does not
+use them in its localhost public or Admin paths.
 
 ## Daily workflow
 
