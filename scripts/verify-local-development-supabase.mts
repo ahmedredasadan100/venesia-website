@@ -43,7 +43,6 @@ assert.match(owner, /LOCAL_APPLIED_SOURCE_DRIFT/u);
 assert.match(owner, /runEntitySeoBackfill/u);
 assert.match(owner, /node_modules", "supabase", "dist", "supabase\.js/u);
 assert.match(owner, /spawnSync\(process\.execPath/u);
-assert.match(owner, /edge-runtime,logflare,vector,supavisor/u);
 assert.match(owner, /stop", "--no-backup/u);
 assert.doesNotMatch(owner, /SUPABASE_DB_URL|DATABASE_URL\s*=\s*process\.env/u);
 

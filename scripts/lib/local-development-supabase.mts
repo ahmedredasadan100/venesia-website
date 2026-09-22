@@ -27,7 +27,6 @@ const HASH = /^[a-f0-9]{64}$/u;
 const FIRST_SEO_EXPAND = "20260914004050";
 const SECOND_SEO_EXPAND = "20260914004118";
 const SEO_ENFORCE = "20260914151556";
-const DEVELOPMENT_EXCLUDED_SERVICES = "edge-runtime,logflare,vector,supavisor";
 const sha256 = (value: string) => createHash("sha256").update(value, "utf8").digest("hex");
 
 export type LocalMigration = { file: string; version: string; name: string; sql: string; sha256: string };
@@ -267,7 +266,7 @@ export async function startLocalDevelopmentSupabase(): Promise<Record<string, un
   assertLocalDevelopmentConfiguration();
   const corpus = readLocalDevelopmentMigrationCorpus();
   materialize([]);
-  runCli(["start", "--exclude", DEVELOPMENT_EXCLUDED_SERVICES]);
+  runCli(["start"]);
   const client = await connect();
   try {
     const before = await readHistory(client);
