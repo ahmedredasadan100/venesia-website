@@ -6,6 +6,10 @@
 -- Creation receipt: .tmp-qa/rls-security-contract/migration-creation.json.
 -- Existing-database / Production application requires separate authorization;
 -- no earlier migration receipt is replayed, renamed, or rewritten by this file.
+-- Revision 1 retains the historical 56-table/38-sequence snapshot. Its bounded
+-- Existing-106 adoption branch accepts only the reviewed 61/40 evolution when
+-- the exact registry, creator receipts and structural signatures match; it then
+-- applies the same material security effect to the complete approved inventory.
 --
 -- The executable JSON literal below is the single migration-owned declaration.
 -- The existing reconciliation verifier consumes this same literal. No persisted
@@ -3047,9 +3051,245 @@ declare
     "forbidClientSecurityDefinerExecute": true,
     "forbidClientGrantOptions": true,
     "defaultClientExecute": false
+  },
+  "existingDatabaseAdoption": {
+    "mode": "approved-existing-database",
+    "registry": {
+      "count": 106,
+      "head": "20260914151556",
+      "identitySha256": "f410be65dbb575eb433fbdeec4e96e71feae155826213a678260dbbd2a6d99ef",
+      "requiredReceipts": [
+        {
+          "version": "20260828233733",
+          "name": "featured_page_composition_module",
+          "sourceSha256": "0d38383d42e4f48bff01a9cd7c1a4dacf27d76c3202ae1273927c7ff6966373a",
+          "productionWholeFileReceipt": {
+            "statementCount": 1,
+            "statementsSha256": "90dabbcba5bd2a797dfd17ef42dfeb42d5efa60d40177ca94577ebf2583114b6"
+          },
+          "supabaseCliV2116Receipt": {
+            "statementCount": 32,
+            "statementsSha256": "cd7142f45244cf23470d3a11f401cd20dcb73bea438509268694147a1729278f"
+          }
+        },
+        {
+          "version": "20260911194004",
+          "name": "topic_view_integrity",
+          "sourceSha256": "eb9157b854f70098e4e5137f90cf6174ea6981cee1b250b7d31c15a4817fcc58",
+          "productionWholeFileReceipt": {
+            "statementCount": 1,
+            "statementsSha256": "a145bb8c4ce22bab969ed81b806d2af81cbc5b89cf9651f05ce720181a79ca85"
+          },
+          "supabaseCliV2116Receipt": {
+            "statementCount": 26,
+            "statementsSha256": "b317fdd7c09163649561d8ee7a5ac29b50f1499d11cd2b5d003c77033eecd5f2"
+          }
+        }
+      ]
+    },
+    "tableStructureSha256": "caa51ae621cc5b1616a36a55ddc72dd13928b3c3ea46eed4b6a2951ff3d94f13",
+    "sequenceStructureSha256": "6470bc044437ec26eaec110d423b848dce0dcd910fe95020623acd406eacd4ce",
+    "extensionTables": [
+      {
+        "name": "featured_module_templates",
+        "classification": "B",
+        "owner": "postgres",
+        "forceRls": false,
+        "grants": {
+          "PUBLIC": [],
+          "anon": [],
+          "authenticated": [],
+          "postgres": [
+            "DELETE",
+            "INSERT",
+            "MAINTAIN",
+            "REFERENCES",
+            "SELECT",
+            "TRIGGER",
+            "TRUNCATE",
+            "UPDATE"
+          ],
+          "service_role": [
+            "DELETE",
+            "INSERT",
+            "MAINTAIN",
+            "REFERENCES",
+            "SELECT",
+            "TRIGGER",
+            "TRUNCATE",
+            "UPDATE"
+          ]
+        },
+        "policies": [],
+        "exception": null
+      },
+      {
+        "name": "page_featured_module_assignments",
+        "classification": "B",
+        "owner": "postgres",
+        "forceRls": false,
+        "grants": {
+          "PUBLIC": [],
+          "anon": [],
+          "authenticated": [],
+          "postgres": [
+            "DELETE",
+            "INSERT",
+            "MAINTAIN",
+            "REFERENCES",
+            "SELECT",
+            "TRIGGER",
+            "TRUNCATE",
+            "UPDATE"
+          ],
+          "service_role": [
+            "DELETE",
+            "INSERT",
+            "MAINTAIN",
+            "REFERENCES",
+            "SELECT",
+            "TRIGGER",
+            "TRUNCATE",
+            "UPDATE"
+          ]
+        },
+        "policies": [],
+        "exception": null
+      },
+      {
+        "name": "topic_view_deduplication",
+        "classification": "B",
+        "owner": "postgres",
+        "forceRls": false,
+        "grants": {
+          "PUBLIC": [],
+          "anon": [],
+          "authenticated": [],
+          "postgres": [
+            "DELETE",
+            "INSERT",
+            "MAINTAIN",
+            "REFERENCES",
+            "SELECT",
+            "TRIGGER",
+            "TRUNCATE",
+            "UPDATE"
+          ],
+          "service_role": [
+            "DELETE",
+            "INSERT",
+            "SELECT",
+            "UPDATE"
+          ]
+        },
+        "policies": [],
+        "exception": null
+      },
+      {
+        "name": "topic_view_policy",
+        "classification": "B",
+        "owner": "postgres",
+        "forceRls": false,
+        "grants": {
+          "PUBLIC": [],
+          "anon": [],
+          "authenticated": [],
+          "postgres": [
+            "DELETE",
+            "INSERT",
+            "MAINTAIN",
+            "REFERENCES",
+            "SELECT",
+            "TRIGGER",
+            "TRUNCATE",
+            "UPDATE"
+          ],
+          "service_role": [
+            "SELECT"
+          ]
+        },
+        "policies": [],
+        "exception": null
+      },
+      {
+        "name": "topic_view_request_limits",
+        "classification": "B",
+        "owner": "postgres",
+        "forceRls": false,
+        "grants": {
+          "PUBLIC": [],
+          "anon": [],
+          "authenticated": [],
+          "postgres": [
+            "DELETE",
+            "INSERT",
+            "MAINTAIN",
+            "REFERENCES",
+            "SELECT",
+            "TRIGGER",
+            "TRUNCATE",
+            "UPDATE"
+          ],
+          "service_role": [
+            "DELETE",
+            "INSERT",
+            "SELECT",
+            "UPDATE"
+          ]
+        },
+        "policies": [],
+        "exception": null
+      }
+    ],
+    "extensionSequencePrivileges": [
+      {
+        "name": "featured_module_templates_id_seq",
+        "owner": "postgres",
+        "grants": {
+          "postgres": [
+            "SELECT",
+            "UPDATE",
+            "USAGE"
+          ],
+          "service_role": [
+            "SELECT",
+            "UPDATE",
+            "USAGE"
+          ]
+        }
+      },
+      {
+        "name": "page_featured_module_assignments_id_seq",
+        "owner": "postgres",
+        "grants": {
+          "postgres": [
+            "SELECT",
+            "UPDATE",
+            "USAGE"
+          ],
+          "service_role": [
+            "SELECT",
+            "UPDATE",
+            "USAGE"
+          ]
+        }
+      }
+    ]
   }
 }
   $venisia_security_contract$::jsonb;
+  v_effective_contract jsonb;
+  v_existing_adoption jsonb;
+  v_adoption_mode text;
+  v_registry_count integer;
+  v_registry_head text;
+  v_registry_identity_sha256 text;
+  v_receipt record;
+  v_required_receipt jsonb;
+  v_extension_table_names text[];
+  v_extension_sequence_names text[];
+  v_structure_before jsonb;
+  v_structure_after jsonb;
   v_table jsonb;
   v_role text;
   v_privilege text;
@@ -3106,6 +3346,7 @@ begin
      or v_contract->>'revision' is distinct from '1'
      or v_contract->>'schema' is distinct from 'public'
      or v_contract->'supersedes' is distinct from 'null'::jsonb
+     or jsonb_typeof(v_contract->'existingDatabaseAdoption') is distinct from 'object'
      or v_contract->'clientRoles' is distinct from '["anon","authenticated"]'::jsonb
      or v_contract->'ddlRoles' is distinct from '["postgres"]'::jsonb
      or jsonb_typeof(v_contract->'tables') is distinct from 'array'
@@ -3256,6 +3497,153 @@ begin
      or v_contract->'functionSecurity'->>'defaultClientExecute' is distinct from 'false' then
     raise exception using errcode='P0001', message='venisia_security_contract_function_boundary_invalid';
   end if;
+
+  -- Revision 1 retains its exact historical 56-table/38-sequence declaration.
+  -- A database that legitimately reached the reviewed 106 head before adopting
+  -- this migration may use only the bounded evolution declared in the same
+  -- executable contract. No inventory entry is inferred from the live catalog.
+  v_existing_adoption := v_contract->'existingDatabaseAdoption';
+  if v_existing_adoption->>'mode' is distinct from 'approved-existing-database'
+     or jsonb_typeof(v_existing_adoption->'extensionTables') is distinct from 'array'
+     or jsonb_typeof(v_existing_adoption->'extensionSequencePrivileges') is distinct from 'array'
+     or jsonb_array_length(v_existing_adoption->'extensionTables') <> 5
+     or jsonb_array_length(v_existing_adoption->'extensionSequencePrivileges') <> 2 then
+    raise exception using errcode='P0001', message='venisia_security_contract_existing_adoption_metadata_invalid';
+  end if;
+  select array_agg(value->>'name' order by value->>'name' collate "C") into v_expected_names
+  from jsonb_array_elements(v_contract->'tables');
+  select array_agg(value->>'name' order by value->>'name' collate "C") into v_actual_names
+  from jsonb_array_elements(v_existing_adoption->'extensionTables');
+  if v_actual_names && v_expected_names then
+    raise exception using errcode='P0001', message='venisia_security_contract_existing_adoption_duplicate_table';
+  end if;
+  v_extension_table_names := v_actual_names;
+  select array_agg(value->>'name' order by value->>'name' collate "C") into v_extension_sequence_names
+  from jsonb_array_elements(v_existing_adoption->'extensionSequencePrivileges');
+
+  select array_agg(c.relname::text order by c.relname::text collate "C") into v_actual_names
+  from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='public' and c.relkind in ('r','p');
+  select array_agg(value->>'name' order by value->>'name' collate "C") into v_expected_names
+  from jsonb_array_elements(v_contract->'tables');
+  if v_actual_names = v_expected_names then
+    v_adoption_mode := 'fresh-historical-checkpoint';
+    v_effective_contract := v_contract;
+  elsif v_actual_names = (
+    select array_agg(name order by name collate "C") from (
+      select value->>'name' name from jsonb_array_elements(v_contract->'tables')
+      union all
+      select value->>'name' from jsonb_array_elements(v_existing_adoption->'extensionTables')
+    ) approved
+  ) then
+    v_adoption_mode := 'existing-approved-evolution';
+    v_effective_contract := jsonb_set(v_contract,'{tables}',
+      (v_contract->'tables') || (v_existing_adoption->'extensionTables'));
+  else
+    raise exception using errcode='P0001', message='venisia_security_contract_public_table_inventory_mismatch';
+  end if;
+
+  select array_agg(c.relname::text order by c.relname::text collate "C") into v_actual_names
+  from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+  where n.nspname='public' and c.relkind='S';
+  select array_agg(value->>'name' order by value->>'name' collate "C") into v_expected_names
+  from jsonb_array_elements(v_contract->'sequencePrivileges');
+  if v_adoption_mode='fresh-historical-checkpoint' and v_actual_names is distinct from v_expected_names then
+    raise exception using errcode='P0001', message='venisia_security_contract_sequence_inventory_mismatch';
+  elsif v_adoption_mode='existing-approved-evolution' then
+    if v_actual_names is distinct from (
+      select array_agg(name order by name collate "C") from (
+        select value->>'name' name from jsonb_array_elements(v_contract->'sequencePrivileges')
+        union all
+        select value->>'name' from jsonb_array_elements(v_existing_adoption->'extensionSequencePrivileges')
+      ) approved
+    ) then
+      raise exception using errcode='P0001', message='venisia_security_contract_sequence_inventory_mismatch';
+    end if;
+    v_effective_contract := jsonb_set(v_effective_contract,'{sequencePrivileges}',
+      (v_contract->'sequencePrivileges') || (v_existing_adoption->'extensionSequencePrivileges'));
+  end if;
+
+  if v_adoption_mode='existing-approved-evolution' then
+    select count(*)::integer,max(version),
+      encode(sha256(convert_to(jsonb_agg(jsonb_build_object('version',version,'name',name)
+        order by version collate "C")::text,'UTF8')),'hex')
+      into v_registry_count,v_registry_head,v_registry_identity_sha256
+    from supabase_migrations.schema_migrations;
+    if v_registry_count is distinct from (v_existing_adoption->'registry'->>'count')::integer
+       or v_registry_head is distinct from v_existing_adoption->'registry'->>'head'
+       or v_registry_identity_sha256 is distinct from v_existing_adoption->'registry'->>'identitySha256'
+       or exists (select 1 from supabase_migrations.schema_migrations
+         where statements is null or cardinality(statements)=0) then
+      raise exception using errcode='P0001', message='venisia_security_contract_existing_adoption_registry_mismatch';
+    end if;
+    for v_required_receipt in select value
+      from jsonb_array_elements(v_existing_adoption->'registry'->'requiredReceipts')
+    loop
+      select * into v_receipt from supabase_migrations.schema_migrations
+      where version=v_required_receipt->>'version' and name=v_required_receipt->>'name';
+      if not found or not exists (
+        select 1 from (values
+          (v_required_receipt->'productionWholeFileReceipt'),
+          (v_required_receipt->'supabaseCliV2116Receipt')
+        ) accepted(receipt)
+        where cardinality(v_receipt.statements)=(accepted.receipt->>'statementCount')::integer
+          and encode(sha256(convert_to(to_json(v_receipt.statements)::text,'UTF8')),'hex')
+            =accepted.receipt->>'statementsSha256'
+      ) then
+        raise exception using errcode='P0001', message='venisia_security_contract_existing_adoption_receipt_mismatch';
+      end if;
+    end loop;
+
+    with target_tables as (
+      select c.oid,c.relname,pg_catalog.pg_get_userbyid(c.relowner) owner,c.relpersistence
+      from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='public' and c.relkind in ('r','p') and c.relname=any(v_extension_table_names)
+    ), table_docs as (
+      select t.relname,jsonb_build_object('name',t.relname,'owner',t.owner,'persistence',t.relpersistence,
+        'columns',(select coalesce(jsonb_agg(jsonb_build_object('name',a.attname,
+          'type',pg_catalog.format_type(a.atttypid,a.atttypmod),'notNull',a.attnotnull,
+          'default',pg_catalog.pg_get_expr(d.adbin,d.adrelid,false),'identity',a.attidentity::text,
+          'generated',a.attgenerated::text,'collation',case when a.attcollation=0 then null else a.attcollation::regcollation::text end)
+          order by a.attnum),'[]'::jsonb) from pg_catalog.pg_attribute a
+          left join pg_catalog.pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum
+          where a.attrelid=t.oid and a.attnum>0 and not a.attisdropped),
+        'constraints',(select coalesce(jsonb_agg(jsonb_build_object('name',con.conname,'type',con.contype::text,
+          'definition',pg_catalog.pg_get_constraintdef(con.oid,true),'validated',con.convalidated,
+          'deferrable',con.condeferrable,'deferred',con.condeferred) order by con.conname),'[]'::jsonb)
+          from pg_catalog.pg_constraint con where con.conrelid=t.oid),
+        'indexes',(select coalesce(jsonb_agg(jsonb_build_object('name',i.indexrelid::regclass::text,
+          'definition',pg_catalog.pg_get_indexdef(i.indexrelid)) order by i.indexrelid::regclass::text),'[]'::jsonb)
+          from pg_catalog.pg_index i where i.indrelid=t.oid),
+        'triggers',(select coalesce(jsonb_agg(jsonb_build_object('name',tr.tgname,
+          'definition',pg_catalog.pg_get_triggerdef(tr.oid,true)) order by tr.tgname),'[]'::jsonb)
+          from pg_catalog.pg_trigger tr where tr.tgrelid=t.oid and not tr.tgisinternal)) doc
+      from target_tables t
+    ), target_sequences as (
+      select c.oid,c.relname,pg_catalog.pg_get_userbyid(c.relowner) owner
+      from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='public' and c.relkind='S' and c.relname=any(v_extension_sequence_names)
+    ), sequence_docs as (
+      select s.relname,jsonb_build_object('name',s.relname,'owner',s.owner,
+        'parameters',(select jsonb_build_object('type',pg_catalog.format_type(q.seqtypid,null),'start',q.seqstart,
+          'increment',q.seqincrement,'max',q.seqmax,'min',q.seqmin,'cache',q.seqcache,'cycle',q.seqcycle)
+          from pg_catalog.pg_sequence q where q.seqrelid=s.oid),
+        'ownedBy',(select coalesce(jsonb_agg(jsonb_build_object('table',d.refobjid::regclass::text,
+          'column',a.attname,'dependency',d.deptype::text) order by d.refobjid::regclass::text,a.attname),'[]'::jsonb)
+          from pg_catalog.pg_depend d join pg_catalog.pg_attribute a on a.attrelid=d.refobjid and a.attnum=d.refobjsubid
+          where d.objid=s.oid and d.classid='pg_class'::regclass and d.refclassid='pg_class'::regclass
+            and d.deptype in ('a','i'))) doc from target_sequences s
+    ) select jsonb_build_object(
+      'tables',(select jsonb_agg(doc order by relname) from table_docs),
+      'sequences',(select jsonb_agg(doc order by relname) from sequence_docs)) into v_structure_before;
+    if encode(sha256(convert_to((v_structure_before->'tables')::text,'UTF8')),'hex')
+         is distinct from v_existing_adoption->>'tableStructureSha256'
+       or encode(sha256(convert_to((v_structure_before->'sequences')::text,'UTF8')),'hex')
+         is distinct from v_existing_adoption->>'sequenceStructureSha256' then
+      raise exception using errcode='P0001', message='venisia_security_contract_existing_adoption_structure_mismatch';
+    end if;
+  end if;
+
   for v_entry in select jsonb_build_object('identity',format('%I.%I(%s)',n.nspname,p.proname,
       pg_catalog.pg_get_function_identity_arguments(p.oid)))
     from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
@@ -3320,11 +3708,11 @@ begin
     into v_actual_names from pg_catalog.pg_class as c
   where c.relnamespace='public'::regnamespace::oid and c.relkind='S';
   select array_agg(item->>'name' order by item->>'name') into v_expected_names
-  from jsonb_array_elements(v_contract->'sequencePrivileges') as rows(item);
+  from jsonb_array_elements(v_effective_contract->'sequencePrivileges') as rows(item);
   if v_actual_names is distinct from v_expected_names
      or cardinality(v_expected_names) <> (
        select count(distinct item->>'name')
-       from jsonb_array_elements(v_contract->'sequencePrivileges') as rows(item)
+       from jsonb_array_elements(v_effective_contract->'sequencePrivileges') as rows(item)
      ) then
     raise exception using errcode = 'P0001',
       message = 'venisia_security_contract_sequence_inventory_mismatch';
@@ -3332,16 +3720,16 @@ begin
 
   select array_agg(item->>'name' order by item->>'name')
     into v_expected_names
-  from jsonb_array_elements(v_contract->'tables') as entry(item);
+  from jsonb_array_elements(v_effective_contract->'tables') as entry(item);
 
   if v_expected_names is null
      or cardinality(v_expected_names) <> (
        select count(distinct item->>'name')
-       from jsonb_array_elements(v_contract->'tables') as entry(item)
+       from jsonb_array_elements(v_effective_contract->'tables') as entry(item)
      )
      or exists (
        select 1
-       from jsonb_array_elements(v_contract->'tables') as entry(item)
+       from jsonb_array_elements(v_effective_contract->'tables') as entry(item)
        where item->>'classification' not in ('A','B')
           or item->>'owner' is distinct from 'postgres'
           or item->'forceRls' is distinct from 'false'::jsonb
@@ -3359,9 +3747,9 @@ begin
       message = 'venisia_security_contract_table_classification_is_invalid';
   end if;
 
-  -- This first adoption is deliberately bounded to its dependency checkpoint.
-  -- Later table declarations extend the contract at their own migration owner;
-  -- they are not silently ignored or guessed from grants by the verifier.
+  -- The effective inventory is either the historical checkpoint or the exact
+  -- source-declared Existing-106 extension proven above. No live object is
+  -- silently ignored or inferred from its current grants.
   select array_agg(relation.relname::text order by relation.relname::text)
     into v_actual_names
   from pg_catalog.pg_class as relation
@@ -3374,7 +3762,7 @@ begin
   end if;
 
   for v_table in
-    select item from jsonb_array_elements(v_contract->'tables') as entry(item)
+    select item from jsonb_array_elements(v_effective_contract->'tables') as entry(item)
     order by item->>'name'
   loop
     execute format('lock table only public.%I in access exclusive mode', v_table->>'name');
@@ -3416,11 +3804,11 @@ begin
   from pg_catalog.pg_class as relation
   where relation.oid in (
     select pg_catalog.to_regclass(format('public.%I', item->>'name'))
-    from jsonb_array_elements(v_contract->'tables') as entry(item)
+    from jsonb_array_elements(v_effective_contract->'tables') as entry(item)
   );
 
   for v_table in
-    select item from jsonb_array_elements(v_contract->'tables') as entry(item)
+    select item from jsonb_array_elements(v_effective_contract->'tables') as entry(item)
     order by item->>'name'
   loop
     v_relation := pg_catalog.to_regclass(format('public.%I', v_table->>'name'));
@@ -3558,7 +3946,7 @@ begin
   -- Sequences do not have RLS. Remove only client access; keep the reviewed
   -- privileged ACL, owner and sequence identity without reading sequence values.
   for v_sequence in
-    select item from jsonb_array_elements(v_contract->'sequencePrivileges') as rows(item)
+    select item from jsonb_array_elements(v_effective_contract->'sequencePrivileges') as rows(item)
     order by item->>'name'
   loop
     v_relation := pg_catalog.to_regclass(format('public.%I',v_sequence->>'name'));
@@ -3585,7 +3973,10 @@ begin
           and a.grantee not in ('anon'::regrole::oid,'authenticated'::regrole::oid)
         group by a.grantee
       ) as retained;
-    if v_actual_grants is distinct from v_sequence->'grants' then
+    select coalesce(jsonb_object_agg(key,value),'{}'::jsonb)
+      into v_expected_grants from jsonb_each(v_sequence->'grants')
+      where value <> '[]'::jsonb;
+    if v_actual_grants is distinct from v_expected_grants then
       raise exception using errcode = 'P0001',
         message = 'venisia_security_contract_sequence_privileged_acl_mismatch';
     end if;
@@ -3599,7 +3990,7 @@ begin
         cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault('s',c.relowner))) as a
         where c.oid=v_relation group by a.grantee
       ) as actual;
-    if v_actual_grants is distinct from v_sequence->'grants' then
+    if v_actual_grants is distinct from v_expected_grants then
       raise exception using errcode = 'P0001',
         message = 'venisia_security_contract_sequence_postcondition_failed';
     end if;
@@ -3664,7 +4055,7 @@ begin
   from pg_catalog.pg_class as relation
   where relation.oid in (
     select pg_catalog.to_regclass(format('public.%I', item->>'name'))
-    from jsonb_array_elements(v_contract->'tables') as entry(item)
+    from jsonb_array_elements(v_effective_contract->'tables') as entry(item)
   );
   if v_invariants_after is distinct from v_invariants_before then
     raise exception using errcode = 'P0001',

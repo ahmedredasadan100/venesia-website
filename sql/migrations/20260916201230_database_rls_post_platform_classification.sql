@@ -4,6 +4,9 @@
 -- Captured isolated catalog: 61 tables / A3 + B58 and 40 sequences.
 -- Preserve revision 1's 56 table entries, policies and protected metadata exactly.
 -- Add only the five existing server-only tables and two Featured sequences.
+-- Revision 1's receipt also declares their exact bounded Existing-106 adoption
+-- provenance. This revision verifies that declaration before promoting those
+-- entries into the current 61-table/40-sequence classification.
 --
 -- This is declaration and read-only verification only. It does not grant or
 -- revoke privileges, alter RLS/policies, rewrite prior receipts, or create a
@@ -25,7 +28,7 @@ declare
   "supersedes": {
     "revision": 1,
     "migrationVersion": "20260819040000",
-    "migrationSourceSha256": "a904a37e1c52ea13fe891b3698d606e7536b1f7cffe0346ef7c62cc8e24f8ce2"
+    "migrationSourceSha256": "409b501179fc89d8442b09554c2f85f595e99ed3e678d81124c88cf596e31637"
   },
   "schema": "public",
   "clientRoles": [
@@ -275,6 +278,9 @@ declare
       "owner": "postgres",
       "forceRls": false,
       "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
         "postgres": [
           "DELETE",
           "INSERT",
@@ -1081,6 +1087,9 @@ declare
       "owner": "postgres",
       "forceRls": false,
       "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
         "postgres": [
           "DELETE",
           "INSERT",
@@ -1707,6 +1716,9 @@ declare
       "owner": "postgres",
       "forceRls": false,
       "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
         "postgres": [
           "DELETE",
           "INSERT",
@@ -1733,6 +1745,9 @@ declare
       "owner": "postgres",
       "forceRls": false,
       "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
         "postgres": [
           "DELETE",
           "INSERT",
@@ -1756,6 +1771,9 @@ declare
       "owner": "postgres",
       "forceRls": false,
       "grants": {
+        "PUBLIC": [],
+        "anon": [],
+        "authenticated": [],
         "postgres": [
           "DELETE",
           "INSERT",
@@ -3207,7 +3225,8 @@ declare
     "forbidClientSecurityDefinerExecute": true,
     "forbidClientGrantOptions": true,
     "defaultClientExecute": false
-  }
+  },
+  "existingDatabaseAdoption": null
 }
   $venisia_security_contract$::jsonb;
   v_prior_record record;
@@ -3312,9 +3331,10 @@ begin
     or v_contract->>'contractId' is distinct from 'venisia-public-table-security'
     or v_contract->>'revision' is distinct from '2'
     or v_contract->>'schema' is distinct from 'public'
+    or v_contract->'existingDatabaseAdoption' is distinct from 'null'::jsonb
     or v_contract->'supersedes' is distinct from jsonb_build_object(
       'revision',1,'migrationVersion','20260819040000',
-      'migrationSourceSha256','a904a37e1c52ea13fe891b3698d606e7536b1f7cffe0346ef7c62cc8e24f8ce2') then
+      'migrationSourceSha256','409b501179fc89d8442b09554c2f85f595e99ed3e678d81124c88cf596e31637') then
     raise exception using errcode='P0001', message='database_security_revision2_identity_mismatch';
   end if;
   -- Require the actual reviewed predecessor, never a metadata-only claim that
@@ -3335,8 +3355,11 @@ begin
   v_prior := v_parts[2]::jsonb;
   if v_prior->>'revision' is distinct from '1'
     or v_prior->'supersedes' is distinct from 'null'::jsonb
-    or (v_contract - array['revision','supersedes','tables','sequencePrivileges']) is distinct from
-      (v_prior - array['revision','supersedes','tables','sequencePrivileges']) then
+    or v_prior->'existingDatabaseAdoption'->>'mode' is distinct from 'approved-existing-database'
+    or jsonb_array_length(v_prior->'existingDatabaseAdoption'->'extensionTables') <> 5
+    or jsonb_array_length(v_prior->'existingDatabaseAdoption'->'extensionSequencePrivileges') <> 2
+    or (v_contract - array['revision','supersedes','existingDatabaseAdoption','tables','sequencePrivileges']) is distinct from
+      (v_prior - array['revision','supersedes','existingDatabaseAdoption','tables','sequencePrivileges']) then
     raise exception using errcode='P0001', message='database_security_revision2_prior_metadata_changed';
   end if;
 
@@ -3366,6 +3389,24 @@ begin
           or exists (select 1 from jsonb_each(next_entry->'grants')
             where key in ('PUBLIC','anon','authenticated') and value<>'[]'::jsonb))) then
     raise exception using errcode='P0001', message='database_security_revision2_unreviewed_extension';
+  end if;
+  select coalesce(jsonb_agg(item order by (item->>'name') collate "C"),'[]'::jsonb)
+    into v_actual from jsonb_array_elements(v_contract->'tables') as entries(item)
+    where not exists (select 1 from jsonb_array_elements(v_prior->'tables') as prior_entries(prior)
+      where prior->>'name'=item->>'name');
+  select coalesce(jsonb_agg(item order by (item->>'name') collate "C"),'[]'::jsonb)
+    into v_expected from jsonb_array_elements(v_prior->'existingDatabaseAdoption'->'extensionTables') as entries(item);
+  if v_actual is distinct from v_expected then
+    raise exception using errcode='P0001', message='database_security_revision2_adoption_table_evolution_mismatch';
+  end if;
+  select coalesce(jsonb_agg(item order by (item->>'name') collate "C"),'[]'::jsonb)
+    into v_actual from jsonb_array_elements(v_contract->'sequencePrivileges') as entries(item)
+    where not exists (select 1 from jsonb_array_elements(v_prior->'sequencePrivileges') as prior_entries(prior)
+      where prior->>'name'=item->>'name');
+  select coalesce(jsonb_agg(item order by (item->>'name') collate "C"),'[]'::jsonb)
+    into v_expected from jsonb_array_elements(v_prior->'existingDatabaseAdoption'->'extensionSequencePrivileges') as entries(item);
+  if v_actual is distinct from v_expected then
+    raise exception using errcode='P0001', message='database_security_revision2_adoption_sequence_evolution_mismatch';
   end if;
 
   select array_agg(value order by value collate "C") into v_client_roles

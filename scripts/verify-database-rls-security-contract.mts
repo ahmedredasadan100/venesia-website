@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -19,6 +20,7 @@ function fixture(): DatabaseSecurityContract {
       presence: "required", attributeRules: Object.fromEntries(Object.entries(values).map(([field, value]) => [field, exact(value)])) as DatabaseSecurityContract["roles"][number]["attributeRules"] };
   });
   return { formatVersion: 2, contractId: "venisia-public-table-security", revision: 1, supersedes: null,
+    existingDatabaseAdoption: null,
     schema: "public", clientRoles: ["anon", "authenticated"], ddlRoles: ["postgres"],
     tables: [
       { name: "public_records", classification: "A", owner: "postgres", forceRls: false,
@@ -97,6 +99,45 @@ export async function verifyDatabaseRlsSecurityContract() {
   badContract(value => { value.defaultPrivileges[0].grants.PUBLIC = ["SELECT"]; });
   badContract(value => { value.sequencePrivileges[0].grants.authenticated = ["USAGE"]; });
   badContract(value => { value.columnPrivileges.push({ table: "private_records", column: "secret", role: "anon", privileges: ["SELECT"], grantable: [] }); });
+
+  const creator = { version: "19981201000000", name: "approved_schema_evolution",
+    file: "19981201000000_approved_schema_evolution.sql", sql: "begin;\ncreate table public.approved_extension(id bigint);\ncommit;\n" };
+  const adopted = fixture();
+  adopted.existingDatabaseAdoption = {
+    mode: "approved-existing-database",
+    registry: {
+      count: 2,
+      head: "19990101000000",
+      identitySha256: "1".repeat(64),
+      requiredReceipts: [{
+        version: creator.version,
+        name: creator.name,
+        sourceSha256: createHash("sha256").update(creator.sql, "utf8").digest("hex"),
+        productionWholeFileReceipt: {
+          statementCount: 1,
+          statementsSha256: createHash("sha256").update(JSON.stringify([creator.sql]), "utf8").digest("hex"),
+        },
+        supabaseCliV2116Receipt: { statementCount: 3, statementsSha256: "2".repeat(64) },
+      }],
+    },
+    tableStructureSha256: "3".repeat(64),
+    sequenceStructureSha256: "4".repeat(64),
+    extensionTables: [{ name: "approved_extension", classification: "B", owner: "postgres", forceRls: false,
+      grants: { postgres: tablePrivileges, service_role: ["SELECT"], anon: [], authenticated: [], PUBLIC: [] }, policies: [], exception: null }],
+    extensionSequencePrivileges: [{ name: "approved_extension_id_seq", owner: "postgres",
+      grants: { postgres: ["SELECT", "UPDATE", "USAGE"], service_role: ["SELECT", "UPDATE", "USAGE"] } }],
+  };
+  const adoptedSource = source(adopted);
+  check(() => assert.equal(loadDatabaseSecurityContract([creator, adoptedSource]).contract.existingDatabaseAdoption?.extensionTables.length, 1));
+  rejects(() => loadDatabaseSecurityContract([{ ...creator, sql: `${creator.sql}-- drift\n` }, adoptedSource]));
+  const badAdoption = (mutate: (contract: DatabaseSecurityContract) => void) => rejects(() => {
+    const value = clone(adopted); mutate(value); validateDatabaseSecurityContract(value);
+  });
+  badAdoption(value => { value.existingDatabaseAdoption!.extensionTables[0].classification = "A"; });
+  badAdoption(value => { value.existingDatabaseAdoption!.extensionTables[0].grants.anon = ["SELECT"]; });
+  badAdoption(value => { value.existingDatabaseAdoption!.extensionTables[0].name = "private_records"; });
+  badAdoption(value => { value.existingDatabaseAdoption!.extensionSequencePrivileges[0].grants.authenticated = ["USAGE"]; });
+  badAdoption(value => { (value.existingDatabaseAdoption!.registry.requiredReceipts[0].productionWholeFileReceipt as { statementCount: number }).statementCount = 2; });
 
   const badCatalog = (mutate: (snapshot: DatabaseSecurityCatalog) => void) => rejects(() => { const value = catalog(loaded); mutate(value); assertDatabaseSecurityCatalog(loaded, value); });
   badCatalog(value => { value.tables.push({ ...clone(value.tables[1]), name: "future_unclassified" }); });

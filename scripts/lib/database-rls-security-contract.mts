@@ -31,9 +31,22 @@ export type SecurityColumnPrivileges = { table: string; column: string; role: st
 export type SecuritySequence = { name: string; owner: string; grants: SecurityGrantMap };
 export type SecurityFunctionContract = { clientRoles: string[]; allowClientExecute: string[];
   forbidClientSecurityDefinerExecute: boolean; forbidClientGrantOptions: boolean; defaultClientExecute: boolean };
+export type SecurityExistingDatabaseAdoption = {
+  mode: "approved-existing-database";
+  registry: { count: number; head: string; identitySha256: string; requiredReceipts: Array<{
+    version: string; name: string; sourceSha256: string;
+    productionWholeFileReceipt: { statementCount: 1; statementsSha256: string };
+    supabaseCliV2116Receipt: { statementCount: number; statementsSha256: string };
+  }> };
+  tableStructureSha256: string;
+  sequenceStructureSha256: string;
+  extensionTables: SecurityTable[];
+  extensionSequencePrivileges: SecuritySequence[];
+};
 export type DatabaseSecurityContract = {
   formatVersion: 2; contractId: "venisia-public-table-security"; revision: number;
   supersedes: { revision: number; migrationVersion: string; migrationSourceSha256: string } | null;
+  existingDatabaseAdoption: SecurityExistingDatabaseAdoption | null;
   schema: "public"; clientRoles: string[]; ddlRoles: string[]; tables: SecurityTable[];
   roles: SecurityRole[]; memberships: SecurityMembership[];
   schemaPrivileges: Array<{ role: string; privileges: string[] }>;
@@ -47,7 +60,7 @@ export type SecurityCatalogTable = Omit<SecurityTable, "classification" | "excep
   effectivePrivileges: SecurityGrantMap; effectiveColumnPrivileges: SecurityGrantMap;
 };
 export type DatabaseSecurityCatalog = Omit<DatabaseSecurityContract,
-  "formatVersion" | "contractId" | "revision" | "supersedes" | "clientRoles" | "ddlRoles" | "tables" | "roles" | "memberships" | "sequencePrivileges" | "functionSecurity"> & {
+  "formatVersion" | "contractId" | "revision" | "supersedes" | "existingDatabaseAdoption" | "clientRoles" | "ddlRoles" | "tables" | "roles" | "memberships" | "sequencePrivileges" | "functionSecurity"> & {
   tables: SecurityCatalogTable[];
   roles: ObservedSecurityRole[]; memberships: ObservedSecurityMembership[];
   sequencePrivileges: Array<SecuritySequence & { effectivePrivileges: SecurityGrantMap }>;
@@ -196,7 +209,7 @@ function strictJson(source: string): unknown {
 
 export function validateDatabaseSecurityContract(value: unknown): DatabaseSecurityContract {
   const root = object(value, "Database security contract");
-  keys(root, ["formatVersion", "contractId", "revision", "supersedes", "schema", "clientRoles", "ddlRoles", "tables", "roles", "memberships", "schemaPrivileges", "defaultPrivileges", "columnPrivileges", "sequencePrivileges", "functionSecurity"], "Database security contract");
+  keys(root, ["formatVersion", "contractId", "revision", "supersedes", "existingDatabaseAdoption", "schema", "clientRoles", "ddlRoles", "tables", "roles", "memberships", "schemaPrivileges", "defaultPrivileges", "columnPrivileges", "sequencePrivileges", "functionSecurity"], "Database security contract");
   assert.equal(root.formatVersion, 2);
   assert.equal(root.contractId, "venisia-public-table-security");
   assert.equal(root.schema, "public");
@@ -241,6 +254,61 @@ export function validateDatabaseSecurityContract(value: unknown): DatabaseSecuri
     }
   }
   unique(tableRows.map(value => (value as SecurityTable).name), "Table classification");
+  if (root.existingDatabaseAdoption !== null) {
+    assert.equal(root.revision, 1, "Existing-database adoption belongs only to the initial security revision.");
+    const adoption = object(root.existingDatabaseAdoption, "Existing-database adoption");
+    keys(adoption, ["mode", "registry", "tableStructureSha256", "sequenceStructureSha256", "extensionTables", "extensionSequencePrivileges"], "Existing-database adoption");
+    assert.equal(adoption.mode, "approved-existing-database");
+    assert.match(adoption.tableStructureSha256 as string, HASH);
+    assert.match(adoption.sequenceStructureSha256 as string, HASH);
+    const registry = object(adoption.registry, "Existing-database registry");
+    keys(registry, ["count", "head", "identitySha256", "requiredReceipts"], "Existing-database registry");
+    assert.ok(Number.isSafeInteger(registry.count) && (registry.count as number) > 0);
+    assert.match(registry.head as string, VERSION);
+    assert.match(registry.identitySha256 as string, HASH);
+    const receiptRows = array(registry.requiredReceipts, "Existing-database required receipts");
+    assert.ok(receiptRows.length > 0, "Existing-database provenance receipts are required.");
+    for (const value of receiptRows) {
+      const receipt = object(value, "Existing-database receipt");
+      keys(receipt, ["version", "name", "sourceSha256", "productionWholeFileReceipt", "supabaseCliV2116Receipt"], "Existing-database receipt");
+      assert.match(receipt.version as string, VERSION); identifier(receipt.name, "Existing-database receipt name");
+      assert.match(receipt.sourceSha256 as string, HASH);
+      const wholeFile = object(receipt.productionWholeFileReceipt, "Production whole-file receipt");
+      const modernCli = object(receipt.supabaseCliV2116Receipt, "Supabase CLI v2.116 receipt");
+      for (const [label, representation] of [["Production whole-file receipt", wholeFile], ["Supabase CLI v2.116 receipt", modernCli]] as const) {
+        keys(representation, ["statementCount", "statementsSha256"], label);
+        assert.ok(Number.isSafeInteger(representation.statementCount) && (representation.statementCount as number) > 0);
+        assert.match(representation.statementsSha256 as string, HASH);
+      }
+      assert.equal(wholeFile.statementCount, 1, "Production whole-file receipt must remain a single exact source statement.");
+    }
+    unique(receiptRows.map(value => (value as { version: string }).version), "Existing-database receipt versions");
+    const extensionTables = array(adoption.extensionTables, "Existing-database extension tables");
+    assert.ok(extensionTables.length > 0, "Existing-database table evolution is empty.");
+    for (const value of extensionTables) {
+      const table = object(value, "Existing-database extension table");
+      keys(table, ["name", "classification", "owner", "forceRls", "grants", "policies", "exception"], "Existing-database extension table");
+      identifier(table.name, "Existing-database extension table"); identifier(table.owner, "Existing-database extension owner");
+      assert.equal(table.classification, "B", "Existing-database extensions must remain server-only.");
+      assert.equal(table.forceRls, false); assert.equal(table.exception, null);
+      assert.deepEqual(array(table.policies, "Existing-database extension policies"), []);
+      const acl = grants(table.grants, TABLE_PRIVILEGES, `Existing-database extension ${table.name}`);
+      for (const role of ["PUBLIC", ...clients]) assert.deepEqual(acl[role] ?? [], [], "Existing-database extension grants client access.");
+    }
+    unique(extensionTables.map(value => (value as SecurityTable).name), "Existing-database extension tables");
+    assert.ok(extensionTables.every(value => !tableRows.some(base => (base as SecurityTable).name === (value as SecurityTable).name)),
+      "Existing-database extension duplicates the historical table inventory.");
+    const extensionSequences = array(adoption.extensionSequencePrivileges, "Existing-database extension sequences");
+    assert.ok(extensionSequences.length > 0, "Existing-database sequence evolution is empty.");
+    for (const value of extensionSequences) {
+      const sequence = object(value, "Existing-database extension sequence");
+      keys(sequence, ["name", "owner", "grants"], "Existing-database extension sequence");
+      identifier(sequence.name, "Existing-database extension sequence"); identifier(sequence.owner, "Existing-database extension sequence owner");
+      const acl = grants(sequence.grants, SEQUENCE_PRIVILEGES, "Existing-database extension sequence grants");
+      for (const role of ["PUBLIC", ...clients]) assert.deepEqual(acl[role] ?? [], [], "Existing-database extension grants client sequence access.");
+    }
+    unique(extensionSequences.map(value => (value as SecuritySequence).name), "Existing-database extension sequences");
+  }
   const roles = array(root.roles, "Roles");
   for (const value of roles) {
     const role = object(value, "Role");
@@ -362,8 +430,9 @@ export function validateDatabaseSecurityContract(value: unknown): DatabaseSecuri
 /** Full source-owned revisions only. No implicit merge or latest-block-wins. */
 export function loadDatabaseSecurityContract(migrations: SecurityMigrationSource[], options: { throughVersion?: string } = {}): LoadedDatabaseSecurityContract {
   if (options.throughVersion) assert.match(options.throughVersion, VERSION);
-  const ordered = migrations.filter(migration => !options.throughVersion || migration.version <= options.throughVersion).sort((a, b) => a.version.localeCompare(b.version));
-  unique(ordered.map(migration => migration.version), "Migration versions");
+  const corpus = [...migrations].sort((a, b) => a.version.localeCompare(b.version));
+  unique(corpus.map(migration => migration.version), "Migration versions");
+  const ordered = corpus.filter(migration => !options.throughVersion || migration.version <= options.throughVersion);
   let loaded: LoadedDatabaseSecurityContract | null = null;
   for (const migration of ordered) {
     if (!migration.sql.includes(TAG)) continue;
@@ -383,6 +452,17 @@ export function loadDatabaseSecurityContract(migrations: SecurityMigrationSource
     assert.match(pieces[2], /^\s*::\s*jsonb\s*;/iu, "Security contract initializer has unsupported SQL syntax.");
     const contract = validateDatabaseSecurityContract(strictJson(pieces[1]));
     const migrationSourceSha256 = createHash("sha256").update(migration.sql, "utf8").digest("hex");
+    for (const receipt of contract.existingDatabaseAdoption?.registry.requiredReceipts ?? []) {
+      const creator = corpus.find(candidate => candidate.version === receipt.version);
+      assert.ok(creator, `Existing-database creator migration is missing: ${receipt.version}.`);
+      assert.equal(creator.name ?? creator.file?.replace(/^\d{14}_|\.sql$/gu, ""), receipt.name,
+        "Existing-database creator migration name drift.");
+      assert.equal(createHash("sha256").update(creator.sql, "utf8").digest("hex"), receipt.sourceSha256,
+        "Existing-database creator migration source drift.");
+      assert.equal(createHash("sha256").update(JSON.stringify([creator.sql]), "utf8").digest("hex"),
+        receipt.productionWholeFileReceipt.statementsSha256,
+        "Production whole-file receipt no longer represents the exact creator source.");
+    }
     if (loaded === null) {
       assert.equal(contract.revision, 1, "The initial security revision must be 1.");
       assert.equal(contract.supersedes, null, "The initial security revision cannot supersede an absent source.");
