@@ -60,7 +60,7 @@ export type SecurityCatalogTable = Omit<SecurityTable, "classification" | "excep
   effectivePrivileges: SecurityGrantMap; effectiveColumnPrivileges: SecurityGrantMap;
 };
 export type DatabaseSecurityCatalog = Omit<DatabaseSecurityContract,
-  "formatVersion" | "contractId" | "revision" | "supersedes" | "clientRoles" | "ddlRoles" | "tables" | "roles" | "memberships" | "sequencePrivileges" | "functionSecurity"> & {
+  "formatVersion" | "contractId" | "revision" | "supersedes" | "existingDatabaseAdoption" | "clientRoles" | "ddlRoles" | "tables" | "roles" | "memberships" | "sequencePrivileges" | "functionSecurity"> & {
   tables: SecurityCatalogTable[];
   roles: ObservedSecurityRole[]; memberships: ObservedSecurityMembership[];
   sequencePrivileges: Array<SecuritySequence & { effectivePrivileges: SecurityGrantMap }>;
