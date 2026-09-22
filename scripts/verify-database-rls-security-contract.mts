@@ -137,7 +137,7 @@ export async function verifyDatabaseRlsSecurityContract() {
   badAdoption(value => { value.existingDatabaseAdoption!.extensionTables[0].grants.anon = ["SELECT"]; });
   badAdoption(value => { value.existingDatabaseAdoption!.extensionTables[0].name = "private_records"; });
   badAdoption(value => { value.existingDatabaseAdoption!.extensionSequencePrivileges[0].grants.authenticated = ["USAGE"]; });
-  badAdoption(value => { value.existingDatabaseAdoption!.registry.requiredReceipts[0].productionWholeFileReceipt.statementCount = 2; });
+  badAdoption(value => { (value.existingDatabaseAdoption!.registry.requiredReceipts[0].productionWholeFileReceipt as { statementCount: number }).statementCount = 2; });
 
   const badCatalog = (mutate: (snapshot: DatabaseSecurityCatalog) => void) => rejects(() => { const value = catalog(loaded); mutate(value); assertDatabaseSecurityCatalog(loaded, value); });
   badCatalog(value => { value.tables.push({ ...clone(value.tables[1]), name: "future_unclassified" }); });
