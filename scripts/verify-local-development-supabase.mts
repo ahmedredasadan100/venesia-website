@@ -72,7 +72,11 @@ for (const path of ["scripts/fixtures/local-development/seed-pre-enforce.sql", "
 
 const isolatedSources = ["scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-public-application.mts", "scripts/qa-isolated-supabase.mts"];
 for (const path of isolatedSources) assert.doesNotMatch(read(path), /local-development-supabase/u);
-assert.deepEqual(readdirSync(resolve(root, "supabase")).filter(name => name !== "migrations").sort(), ["config.toml"]);
+const localRuntimeDirectories = new Set([".branches", "migrations", "snippets"]);
+assert.deepEqual(
+  readdirSync(resolve(root, "supabase")).filter(name => !localRuntimeDirectories.has(name)).sort(),
+  ["config.toml"],
+);
 
 console.log(JSON.stringify({
   checks: "PASS",
