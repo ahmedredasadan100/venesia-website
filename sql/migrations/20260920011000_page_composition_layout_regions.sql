@@ -266,8 +266,9 @@ declare
   "supersedes": {
     "revision": 2,
     "migrationVersion": "20260916201230",
-    "migrationSourceSha256": "935426a76430a467e0145e05d8f35d88440b07a396baa7680e83523a4300b2d9"
+    "migrationSourceSha256": "19f6d457df2106777a91a6434ad80cfb74470bb4c16e7490b79dc00b0350f82b"
   },
+  "existingDatabaseAdoption": null,
   "schema": "public",
   "clientRoles": [
     "anon",
@@ -3545,7 +3546,7 @@ begin
      or v_contract->>'revision' is distinct from '3'
      or v_contract->'supersedes' is distinct from jsonb_build_object(
        'revision',2,'migrationVersion','20260916201230',
-       'migrationSourceSha256','935426a76430a467e0145e05d8f35d88440b07a396baa7680e83523a4300b2d9') then
+       'migrationSourceSha256','19f6d457df2106777a91a6434ad80cfb74470bb4c16e7490b79dc00b0350f82b') then
     raise exception using errcode='P0001', message='database_security_revision3_provenance_drift';
   end if;
 
