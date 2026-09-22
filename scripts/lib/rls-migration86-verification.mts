@@ -257,8 +257,10 @@ export async function assertFreshRlsMigration86Transition(before: RlsMigration86
   assert.equal(appended.name, approved.source.name);
   assert.ok(Number.isSafeInteger(appended.statementCount) && appended.statementCount > 0);
   assert.match(appended.statementsSha256, /^[a-f0-9]{64}$/u);
-  const oldPrefix = before.registry.filter(row => row.version !== approved.security.migrationVersion)
-    .map(row => ({ version: row.version, name: row.name, statement_count: row.statementCount, statements_sha256: row.statementsSha256 }));
+  const receiptPrefix = before.registry.filter(row => row.version !== approved.security.migrationVersion);
+  assert.ok(receiptPrefix.every(row => Number.isSafeInteger(row.statementCount) && row.statementCount > 0
+    && /^[a-f0-9]{64}$/u.test(row.statementsSha256)), "Fresh lineage contains an incomplete official CLI receipt.");
+  const oldPrefix = receiptPrefix.map(row => ({ version: row.version, name: row.name }));
   assert.deepEqual(oldPrefix, approved.reviewedPrefix, "Fresh lineage differs from the migration-owned reviewed CLI prefix.");
   assert.equal(execution.throughVersion, RLS_MIGRATION86_VERSION);
   assert.deepEqual(execution.applied, [`${RLS_MIGRATION86_VERSION}_${approved.source.name}.sql`]);

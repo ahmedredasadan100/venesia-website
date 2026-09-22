@@ -14,22 +14,31 @@ const ALL_PRIVILEGES = [...new Set([...TABLE_PRIVILEGES, "USAGE", "CREATE", "EXE
 type JsonObject = Record<string, unknown>;
 export type SecurityGrantMap = Record<string, string[]>;
 export type SecurityPolicy = { name: string; command: string; roles: string[]; permissive: boolean; using: string | null; withCheck: string | null };
-export type SecurityRole = { name: string; superuser: boolean; bypassRls: boolean; inherit: boolean; canLogin: boolean;
+export type SecurityRoleAttributeRule = "deny" | "require" | "allow";
+export type SecurityRole = { name: string;
+  classification: "application-public" | "application-server" | "platform-administration" | "platform-managed" | "postgres-built-in" | "conditional-platform-tooling";
+  presence: "required" | "optional"; managedBy?: "supabase-cli-login-role";
+  attributeRules: Record<"superuser" | "bypassRls" | "inherit" | "canLogin" | "createRole" | "createDb" | "replication", SecurityRoleAttributeRule> };
+export type ObservedSecurityRole = { name: string; superuser: boolean; bypassRls: boolean; inherit: boolean; canLogin: boolean;
   createRole: boolean; createDb: boolean; replication: boolean };
-export type SecurityMembership = { role: string; member: string; inheritOption: boolean; setOption: boolean; adminOption: boolean };
+export type SecurityMembership = { role: string; member: string; inheritOption: boolean; setOption: boolean; adminOption: boolean;
+  presence: "required" | "optional"; classification?: "platform-managed" | "conditional-platform-tooling" };
+export type ObservedSecurityMembership = Omit<SecurityMembership, "presence" | "classification">;
 export type SecurityTable = { name: string; classification: "A" | "B" | "C"; owner: string; forceRls: boolean;
   grants: SecurityGrantMap; policies: SecurityPolicy[]; exception: { reason: string; approval: string } | null };
 export type SecurityDefaultPrivileges = { owner: string; schema: string | null; objectType: string; grants: SecurityGrantMap };
 export type SecurityColumnPrivileges = { table: string; column: string; role: string; privileges: string[]; grantable: string[] };
 export type SecuritySequence = { name: string; owner: string; grants: SecurityGrantMap };
+export type SecurityFunctionContract = { clientRoles: string[]; allowClientExecute: string[];
+  forbidClientSecurityDefinerExecute: boolean; forbidClientGrantOptions: boolean; defaultClientExecute: boolean };
 export type DatabaseSecurityContract = {
-  formatVersion: 1; contractId: "venisia-public-table-security"; revision: number;
+  formatVersion: 2; contractId: "venisia-public-table-security"; revision: number;
   supersedes: { revision: number; migrationVersion: string; migrationSourceSha256: string } | null;
   schema: "public"; clientRoles: string[]; ddlRoles: string[]; tables: SecurityTable[];
   roles: SecurityRole[]; memberships: SecurityMembership[];
   schemaPrivileges: Array<{ role: string; privileges: string[] }>;
   defaultPrivileges: SecurityDefaultPrivileges[];
-  columnPrivileges: SecurityColumnPrivileges[]; sequencePrivileges: SecuritySequence[];
+  columnPrivileges: SecurityColumnPrivileges[]; sequencePrivileges: SecuritySequence[]; functionSecurity: SecurityFunctionContract;
 };
 export type SecurityMigrationSource = { version: string; name?: string; file?: string; sql: string; sha256?: string };
 export type LoadedDatabaseSecurityContract = { contract: DatabaseSecurityContract; contractSha256: string; migrationVersion: string; migrationSourceSha256: string };
@@ -38,9 +47,13 @@ export type SecurityCatalogTable = Omit<SecurityTable, "classification" | "excep
   effectivePrivileges: SecurityGrantMap; effectiveColumnPrivileges: SecurityGrantMap;
 };
 export type DatabaseSecurityCatalog = Omit<DatabaseSecurityContract,
-  "formatVersion" | "contractId" | "revision" | "supersedes" | "clientRoles" | "ddlRoles" | "tables" | "sequencePrivileges"> & {
+  "formatVersion" | "contractId" | "revision" | "supersedes" | "clientRoles" | "ddlRoles" | "tables" | "roles" | "memberships" | "sequencePrivileges" | "functionSecurity"> & {
   tables: SecurityCatalogTable[];
+  roles: ObservedSecurityRole[]; memberships: ObservedSecurityMembership[];
   sequencePrivileges: Array<SecuritySequence & { effectivePrivileges: SecurityGrantMap }>;
+  functionSecurity: { clientExecutable: string[]; securityDefinerClientExecutable: string[]; clientGrantOptions: string[]; defaultClientExecute: string[] };
+  toolingRoles: Array<{ name: string; passwordConfigured: boolean; validUntil: string | null; activeSessions: number;
+    ownsApplicationObjects: number; directApplicationAclEntries: number }>;
 };
 export type SecurityReadClient = { query(sql: string, parameters?: unknown[]): Promise<{ rows: unknown[] }> };
 
@@ -102,6 +115,58 @@ function canonical(value: unknown): unknown {
 }
 function equal(actual: unknown, expected: unknown, label: string) { assert.deepEqual(canonical(actual), canonical(expected), label); }
 function nonemptyGrants(value: SecurityGrantMap) { return Object.fromEntries(Object.entries(value).filter(([, entries]) => entries.length > 0)); }
+const ROLE_ATTRIBUTES = ["superuser", "bypassRls", "inherit", "canLogin", "createRole", "createDb", "replication"] as const;
+function assertRoleSecurity(contract: DatabaseSecurityContract, snapshot: DatabaseSecurityCatalog) {
+  const declared = new Map(contract.roles.map(role => [role.name, role]));
+  const observed = new Map(snapshot.roles.map(role => [role.name, role]));
+  for (const role of snapshot.roles) assert.ok(declared.has(role.name), `Unclassified database role: ${role.name}`);
+  for (const role of contract.roles) {
+    const actual = observed.get(role.name);
+    if (role.presence === "required") assert.ok(actual, `Required database role is missing: ${role.name}`);
+    if (!actual) continue;
+    for (const attribute of ROLE_ATTRIBUTES) {
+      const rule = role.attributeRules[attribute];
+      if (rule === "deny") assert.equal(actual[attribute], false, `Denied role attribute: ${role.name}/${attribute}`);
+      if (rule === "require") assert.equal(actual[attribute], true, `Required role attribute: ${role.name}/${attribute}`);
+    }
+  }
+  const rules = new Map(contract.memberships.map(row => [`${row.role}/${row.member}`, row]));
+  const actualMemberships = new Map(snapshot.memberships.map(row => [`${row.role}/${row.member}`, row]));
+  for (const membership of snapshot.memberships) {
+    const rule = rules.get(`${membership.role}/${membership.member}`);
+    assert.ok(rule, `Unclassified role membership: ${membership.role}/${membership.member}`);
+    assert.deepEqual(membership, { role: rule.role, member: rule.member, inheritOption: rule.inheritOption,
+      setOption: rule.setOption, adminOption: rule.adminOption }, `Role membership options changed: ${membership.role}/${membership.member}`);
+  }
+  for (const membership of contract.memberships.filter(row => row.presence === "required"))
+    assert.ok(actualMemberships.has(`${membership.role}/${membership.member}`), `Required role membership is missing: ${membership.role}/${membership.member}`);
+  const privileged = new Set(snapshot.roles.filter(role => role.superuser || role.bypassRls || role.createRole || role.createDb || role.replication)
+    .map(role => role.name));
+  privileged.add("service_role");
+  for (const client of contract.clientRoles) {
+    const reachable = new Set([client]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const membership of snapshot.memberships) if (reachable.has(membership.member)
+        && (membership.inheritOption || membership.setOption || membership.adminOption) && !reachable.has(membership.role)) {
+        reachable.add(membership.role); changed = true;
+      }
+    }
+    assert.ok([...reachable].every(role => role === client || !privileged.has(role)), `Application role can reach privileged role: ${client}`);
+  }
+  const toolingNames = contract.roles.filter(role => role.classification === "conditional-platform-tooling").map(role => role.name);
+  assert.deepEqual(snapshot.toolingRoles.map(row => row.name).sort(), toolingNames.filter(name => observed.has(name)).sort(), "Conditional tooling evidence is incomplete.");
+  for (const tooling of snapshot.toolingRoles) {
+    assert.equal(tooling.passwordConfigured, true, `Conditional tooling credential state is unavailable: ${tooling.name}`);
+    assert.ok(tooling.validUntil !== null && Number.isFinite(Date.parse(tooling.validUntil)), `Conditional tooling expiry is unavailable: ${tooling.name}`);
+    assert.equal(Number(tooling.activeSessions), 0, `Conditional tooling role has an active session: ${tooling.name}`);
+    assert.equal(Number(tooling.ownsApplicationObjects), 0, `Conditional tooling role owns application objects: ${tooling.name}`);
+    assert.equal(Number(tooling.directApplicationAclEntries), 0, `Conditional tooling role has direct application ACLs: ${tooling.name}`);
+  }
+  return { classifiedRoles: snapshot.roles.length, optionalRolesAbsent: contract.roles.filter(role => role.presence === "optional" && !observed.has(role.name)).map(role => role.name),
+    memberships: snapshot.memberships.length, conditionalToolingRoles: snapshot.toolingRoles.map(role => role.name) };
+}
 const contractDigest = (contract: DatabaseSecurityContract) => createHash("sha256").update(JSON.stringify(contract), "utf8").digest("hex");
 function freeze<T>(value: T): T {
   if (value !== null && typeof value === "object") {
@@ -131,8 +196,8 @@ function strictJson(source: string): unknown {
 
 export function validateDatabaseSecurityContract(value: unknown): DatabaseSecurityContract {
   const root = object(value, "Database security contract");
-  keys(root, ["formatVersion", "contractId", "revision", "supersedes", "schema", "clientRoles", "ddlRoles", "tables", "roles", "memberships", "schemaPrivileges", "defaultPrivileges", "columnPrivileges", "sequencePrivileges"], "Database security contract");
-  assert.equal(root.formatVersion, 1);
+  keys(root, ["formatVersion", "contractId", "revision", "supersedes", "schema", "clientRoles", "ddlRoles", "tables", "roles", "memberships", "schemaPrivileges", "defaultPrivileges", "columnPrivileges", "sequencePrivileges", "functionSecurity"], "Database security contract");
+  assert.equal(root.formatVersion, 2);
   assert.equal(root.contractId, "venisia-public-table-security");
   assert.equal(root.schema, "public");
   assert.ok(Number.isSafeInteger(root.revision) && (root.revision as number) > 0, "Invalid security revision.");
@@ -178,22 +243,53 @@ export function validateDatabaseSecurityContract(value: unknown): DatabaseSecuri
   unique(tableRows.map(value => (value as SecurityTable).name), "Table classification");
   const roles = array(root.roles, "Roles");
   for (const value of roles) {
-    const role = object(value, "Role"); keys(role, ["name", "superuser", "bypassRls", "inherit", "canLogin", "createRole", "createDb", "replication"], "Role");
+    const role = object(value, "Role");
+    const conditional = role.classification === "conditional-platform-tooling";
+    keys(role, conditional ? ["name", "classification", "presence", "managedBy", "attributeRules"]
+      : ["name", "classification", "presence", "attributeRules"], "Role");
     identifier(role.name, "Role name");
-    for (const field of ["superuser", "bypassRls", "inherit", "canLogin", "createRole", "createDb", "replication"]) bool(role[field], `Role ${field}`);
+    assert.ok(["application-public", "application-server", "platform-administration", "platform-managed", "postgres-built-in", "conditional-platform-tooling"].includes(role.classification as string), "Unknown role classification.");
+    assert.ok(["required", "optional"].includes(role.presence as string), "Unknown role presence rule.");
+    if (conditional) assert.equal(role.managedBy, "supabase-cli-login-role", "Conditional tooling provenance changed.");
+    const attributeRules = object(role.attributeRules, "Role attribute rules");
+    keys(attributeRules, ["superuser", "bypassRls", "inherit", "canLogin", "createRole", "createDb", "replication"], "Role attribute rules");
+    for (const [field, rule] of Object.entries(attributeRules)) assert.ok(["deny", "require", "allow"].includes(rule as string), `Unsupported ${field} role rule.`);
   }
   unique(roles.map(value => (value as SecurityRole).name), "Role inventory");
   const knownRoles = new Set(roles.map(value => (value as SecurityRole).name));
   for (const client of clients) {
     const role = roles.find(value => (value as SecurityRole).name === client) as SecurityRole | undefined;
-    assert.ok(role && !role.superuser && !role.bypassRls && !role.createRole && !role.createDb && !role.replication, "Client role has privileged database attributes.");
+    assert.ok(role && role.classification === "application-public" && role.presence === "required", "Client role classification changed.");
+    for (const field of ["superuser", "bypassRls", "createRole", "createDb", "replication"] as const)
+      assert.equal(role.attributeRules[field], "deny", "Client role permits a privileged database attribute.");
   }
   for (const role of root.ddlRoles as string[]) assert.ok(knownRoles.has(role), "Unknown migration creator role.");
   for (const value of array(root.memberships, "Memberships")) {
     const membership = object(value, "Membership");
-    keys(membership, ["role", "member", "inheritOption", "setOption", "adminOption"], "Membership");
+    const conditional = membership.classification === "conditional-platform-tooling";
+    const classified = membership.classification !== undefined;
+    keys(membership, classified ? ["role", "member", "inheritOption", "setOption", "adminOption", "presence", "classification"]
+      : ["role", "member", "inheritOption", "setOption", "adminOption", "presence"], "Membership");
     for (const field of ["role", "member"]) assert.ok(knownRoles.has(membership[field] as string), "Membership references an unknown role.");
     for (const field of ["inheritOption", "setOption", "adminOption"]) bool(membership[field], `Membership ${field}`);
+    assert.ok(["required", "optional"].includes(membership.presence as string), "Unknown membership presence rule.");
+    if (classified) assert.ok(["platform-managed", "conditional-platform-tooling"].includes(membership.classification as string),
+      "Unknown membership classification.");
+    if (conditional) assert.deepEqual({ role: membership.role, member: membership.member, inheritOption: membership.inheritOption,
+      setOption: membership.setOption, adminOption: membership.adminOption },
+    { role: "postgres", member: "cli_login_postgres", inheritOption: false, setOption: true, adminOption: false },
+    "Conditional CLI membership changed.");
+    if (membership.classification === "platform-managed") {
+      const member = roles.find(value => (value as SecurityRole).name === membership.member) as SecurityRole;
+      const granted = roles.find(value => (value as SecurityRole).name === membership.role) as SecurityRole;
+      assert.equal(membership.presence, "optional", "Platform-managed membership cannot become an application requirement.");
+      assert.equal(member.classification, "platform-managed", "Platform-managed membership has an unclassified member.");
+      assert.ok(["application-public", "application-server"].includes(granted.classification),
+        "Platform-managed membership grants an unreviewed role class.");
+      assert.equal(membership.inheritOption, false, "Platform-managed application membership cannot be inherited.");
+      assert.equal(membership.setOption, true, "Platform-managed application membership must retain explicit SET ROLE semantics.");
+      assert.equal(membership.adminOption, false, "Platform-managed application membership cannot administer its target role.");
+    }
   }
   const memberships = root.memberships as SecurityMembership[];
   unique(memberships.map(row => `${row.role}/${row.member}`), "Membership identities");
@@ -209,7 +305,8 @@ export function validateDatabaseSecurityContract(value: unknown): DatabaseSecuri
       }
     }
     const privileged = new Set([...(root.ddlRoles as string[]), ...tableRows.map(value => (value as SecurityTable).owner), "service_role",
-      ...roles.filter(value => (value as SecurityRole).superuser || (value as SecurityRole).bypassRls).map(value => (value as SecurityRole).name)]);
+      ...roles.filter(value => ["require", "allow"].includes((value as SecurityRole).attributeRules.superuser)
+        || ["require", "allow"].includes((value as SecurityRole).attributeRules.bypassRls)).map(value => (value as SecurityRole).name)]);
     assert.ok([...reachable].every(role => !privileged.has(role)), "Client role can inherit or SET ROLE into a privileged owner.");
   }
   for (const value of tableRows) {
@@ -252,6 +349,13 @@ export function validateDatabaseSecurityContract(value: unknown): DatabaseSecuri
     const acl = grants(row.grants, SEQUENCE_PRIVILEGES, "Sequence grants");
     for (const client of ["PUBLIC", ...clients]) assert.equal((acl[client] ?? []).length, 0, "Read-only clients must not acquire sequence privileges.");
   }
+  const functionSecurity = object(root.functionSecurity, "Function security");
+  keys(functionSecurity, ["clientRoles", "allowClientExecute", "forbidClientSecurityDefinerExecute", "forbidClientGrantOptions", "defaultClientExecute"], "Function security");
+  equal(names(functionSecurity.clientRoles, "Function client roles"), clients, "Function client-role boundary changed.");
+  assert.deepEqual(array(functionSecurity.allowClientExecute, "Allowed client functions"), [], "Client function execution needs an explicit reviewed contract revision.");
+  assert.equal(functionSecurity.forbidClientSecurityDefinerExecute, true);
+  assert.equal(functionSecurity.forbidClientGrantOptions, true);
+  assert.equal(functionSecurity.defaultClientExecute, false);
   return root as DatabaseSecurityContract;
 }
 
@@ -323,6 +427,16 @@ export async function captureDatabaseSecurityCatalog(client: SecurityReadClient,
       where pg_catalog.pg_get_userbyid(d.defaclrole)=any($2::text[]) and d.defaclobjtype in ('r','S') and (d.defaclnamespace=0 or n.nspname=$1)),
     default_group as (select oid,owner,schema,object_type,role,jsonb_agg(privilege_type order by privilege_type) as privileges from default_acl group by oid,owner,schema,object_type,role),
     default_maps as (select oid,owner,schema,object_type,jsonb_object_agg(role,privileges) as grants from default_group group by oid,owner,schema,object_type),
+    function_rows as (select p.oid,p.proowner,p.prosecdef,p.proacl,p.oid::regprocedure::text as identity
+      from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname=$1 and p.prokind in ('f','p')),
+    function_acl as (select f.oid,f.identity,f.prosecdef,case when a.grantee=0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end as role,
+      a.privilege_type,a.is_grantable from function_rows f cross join lateral
+      pg_catalog.aclexplode(coalesce(f.proacl,pg_catalog.acldefault('f',f.proowner))) a),
+    default_function_acl as (select pg_catalog.pg_get_userbyid(d.defaclrole) owner,coalesce(n.nspname,'') schema,
+      case when a.grantee=0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end role,a.privilege_type
+      from pg_catalog.pg_default_acl d left join pg_catalog.pg_namespace n on n.oid=d.defaclnamespace
+      cross join lateral pg_catalog.aclexplode(d.defaclacl) a where d.defaclobjtype='f'
+      and pg_catalog.pg_get_userbyid(d.defaclrole)=any($2::text[]) and (d.defaclnamespace=0 or n.nspname=$1)),
     schema_acl as (select n.oid,case when a.grantee=0 then 'PUBLIC' else pg_catalog.pg_get_userbyid(a.grantee) end as role,a.privilege_type
       from pg_catalog.pg_namespace n cross join lateral pg_catalog.aclexplode(coalesce(n.nspacl,pg_catalog.acldefault('n',n.nspowner))) a where n.nspname=$1)
     select jsonb_build_object('schema',$1::text,
@@ -342,8 +456,26 @@ export async function captureDatabaseSecurityCatalog(client: SecurityReadClient,
       'columnPrivileges',(select coalesce(jsonb_agg(jsonb_build_object('table',relname,'column',attname,'role',role,'privileges',privileges,'grantable',grantable) order by relname,attname,role),'[]'::jsonb) from column_group),
       'sequencePrivileges',(select coalesce(jsonb_agg(jsonb_build_object('name',c.relname,'owner',pg_catalog.pg_get_userbyid(c.relowner),'grants',coalesce(a.grants,'{}'::jsonb),
         'effectivePrivileges',(select jsonb_object_agg(r.rolname,(select coalesce(jsonb_agg(privilege order by privilege),'[]'::jsonb) from unnest(array['SELECT','UPDATE','USAGE']) privilege where pg_catalog.has_sequence_privilege(r.oid,c.oid,privilege))) from roles r where r.rolname=any($6::text[]))) order by c.relname),'[]'::jsonb) from relations c left join acl_maps a on a.oid=c.oid where c.relkind='S')
+      ,'functionSecurity',jsonb_build_object(
+        'clientExecutable',(select coalesce(jsonb_agg(identity order by identity),'[]'::jsonb) from function_rows f
+          where exists(select 1 from roles r where r.rolname=any($6::text[]) and pg_catalog.has_function_privilege(r.oid,f.oid,'EXECUTE'))),
+        'securityDefinerClientExecutable',(select coalesce(jsonb_agg(identity order by identity),'[]'::jsonb) from function_rows f where f.prosecdef
+          and exists(select 1 from roles r where r.rolname=any($6::text[]) and pg_catalog.has_function_privilege(r.oid,f.oid,'EXECUTE'))),
+        'clientGrantOptions',(select coalesce(jsonb_agg(distinct identity order by identity),'[]'::jsonb) from function_acl
+          where (role='PUBLIC' or role=any($6::text[])) and is_grantable),
+        'defaultClientExecute',(select coalesce(jsonb_agg(distinct owner||'/'||schema||'/'||role order by owner||'/'||schema||'/'||role),'[]'::jsonb)
+          from default_function_acl where privilege_type='EXECUTE' and (role='PUBLIC' or role=any($6::text[])))
+      ),
+      'toolingRoles',(select coalesce(jsonb_agg(jsonb_build_object('name',a.rolname,'passwordConfigured',a.rolpassword is not null,
+        'validUntil',a.rolvaliduntil::text,'activeSessions',(select count(*) from pg_catalog.pg_stat_activity s where s.usename=a.rolname),
+        'ownsApplicationObjects',(select count(*) from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname=$1 and c.relowner=a.oid)
+          +(select count(*) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname=$1 and p.proowner=a.oid),
+        'directApplicationAclEntries',(select count(*) from relations c cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault(case when c.relkind='S' then 's'::"char" else 'r'::"char" end,c.relowner))) x where x.grantee=a.oid)
+          +(select count(*) from function_rows f cross join lateral pg_catalog.aclexplode(coalesce(f.proacl,pg_catalog.acldefault('f',f.proowner))) x where x.grantee=a.oid)
+      ) order by a.rolname),'[]'::jsonb) from pg_catalog.pg_authid a where a.rolname=any($7::text[]))
     ) as document
-  `, [contract.schema, contract.ddlRoles, TABLE_PRIVILEGES, COLUMN_PRIVILEGES, [...new Set([...contract.clientRoles, ...contract.ddlRoles, ...contract.tables.flatMap(table => Object.keys(table.grants).filter(role => role !== "PUBLIC"))])], contract.clientRoles]);
+  `, [contract.schema, contract.ddlRoles, TABLE_PRIVILEGES, COLUMN_PRIVILEGES, [...new Set([...contract.clientRoles, ...contract.ddlRoles, ...contract.tables.flatMap(table => Object.keys(table.grants).filter(role => role !== "PUBLIC"))])], contract.clientRoles,
+    contract.roles.filter(role => role.classification === "conditional-platform-tooling").map(role => role.name)]);
   assert.equal(result.rows.length, 1, "Security catalog snapshot is unavailable.");
   return object(object(result.rows[0], "Security catalog row").document, "Security catalog") as DatabaseSecurityCatalog;
 }
@@ -352,7 +484,7 @@ export async function captureDatabaseSecurityCatalog(client: SecurityReadClient,
 export function assertDatabaseSecurityCatalog(loaded: LoadedDatabaseSecurityContract, snapshot: DatabaseSecurityCatalog) {
   const contract = validateDatabaseSecurityContract(loaded.contract);
   assert.equal(contractDigest(contract), loaded.contractSha256, "Loaded security declaration was modified after source validation.");
-  keys(object(snapshot, "Security catalog"), ["schema", "tables", "roles", "memberships", "schemaPrivileges", "defaultPrivileges", "columnPrivileges", "sequencePrivileges"], "Security catalog");
+  keys(object(snapshot, "Security catalog"), ["schema", "tables", "roles", "memberships", "schemaPrivileges", "defaultPrivileges", "columnPrivileges", "sequencePrivileges", "functionSecurity", "toolingRoles"], "Security catalog");
   assert.equal(snapshot.schema, contract.schema);
   unique(snapshot.tables.map(table => table.name), "Catalog table identities");
   equal(snapshot.tables.map(table => table.name), contract.tables.map(table => table.name), "Unclassified, missing or unexpected public application table.");
@@ -370,13 +502,19 @@ export function assertDatabaseSecurityCatalog(loaded: LoadedDatabaseSecurityCont
       equal(actual.effectiveColumnPrivileges[role], allowed.filter(privilege => COLUMN_PRIVILEGES.includes(privilege)), `Effective client column access drift: ${expected.name}/${role}`);
     }
   }
-  for (const field of ["roles", "memberships", "schemaPrivileges", "defaultPrivileges", "columnPrivileges"] as const) equal(snapshot[field], contract[field], `${field} differs from the reviewed migration security contract.`);
+  const roleProof = assertRoleSecurity(contract, snapshot);
+  for (const field of ["schemaPrivileges", "defaultPrivileges", "columnPrivileges"] as const) equal(snapshot[field], contract[field], `${field} differs from the reviewed migration security contract.`);
+  equal(snapshot.functionSecurity.clientExecutable, contract.functionSecurity.allowClientExecute, "Client function EXECUTE differs from the reviewed security contract.");
+  if (contract.functionSecurity.forbidClientSecurityDefinerExecute) equal(snapshot.functionSecurity.securityDefinerClientExecutable, [], "Client role can execute a SECURITY DEFINER function.");
+  if (contract.functionSecurity.forbidClientGrantOptions) equal(snapshot.functionSecurity.clientGrantOptions, [], "Client role has a function EXECUTE grant option.");
+  if (!contract.functionSecurity.defaultClientExecute) equal(snapshot.functionSecurity.defaultClientExecute, [], "Default privileges expose future functions to client roles.");
   equal(snapshot.sequencePrivileges.map(sequence => ({ name: sequence.name, owner: sequence.owner, grants: sequence.grants })), contract.sequencePrivileges, "Sequence privileges differ from the reviewed migration security contract.");
   for (const sequence of snapshot.sequencePrivileges) for (const role of contract.clientRoles) equal(sequence.effectivePrivileges[role], [], `Effective client sequence grants remain: ${sequence.name}/${role}`);
   return { revision: contract.revision, migrationVersion: loaded.migrationVersion, migrationSourceSha256: loaded.migrationSourceSha256,
     tables: snapshot.tables.length, classifications: { A: contract.tables.filter(table => table.classification === "A").length,
       B: contract.tables.filter(table => table.classification === "B").length, C: contract.tables.filter(table => table.classification === "C").length },
     policies: snapshot.tables.reduce((count, table) => count + table.policies.length, 0),
-    actualRoles: snapshot.roles.length, actualMemberships: snapshot.memberships.length,
+    actualRoles: snapshot.roles.length, actualMemberships: snapshot.memberships.length, roleProof,
+    functionExecuteVerified: true,
     clientEffectivePrivilegesVerified: true, catalogVerificationReadOnly: true };
 }

@@ -1,4 +1,4 @@
--- Venesia public-table security contract.
+-- Venesia public-table security contract, platform-aware revision.
 -- Authored with Project Owner authorization on 2026-09-16.
 -- The filename is a deliberate dependency-order version: after the historical
 -- Tracking pagination migration and before the historical RLS ACL hardening.
@@ -12,11 +12,16 @@
 -- metadata table, security function, optional event trigger, or second owner is
 -- introduced. Publication predicates remain the existing three SQL policies.
 --
--- Catalog expectations are from the canonical isolated checkpoint at migration
--- 85, captured on 2026-09-16; no Production catalog or user data was read.
+-- Application access remains exact and fail-closed. Supabase/Postgres roles are
+-- explicitly classified with bounded attributes and memberships instead of a
+-- literal whole-platform snapshot. Unclassified roles still fail closed.
+-- cli_login_postgres is conditional platform tooling: its exact attributes,
+-- membership, credential state, active sessions, ownership and direct ACLs are
+-- checked without changing or deleting the role.
 -- The 24 service-role reductions retain source-proven direct CRUD and invoker
 -- RPC requirements. Postgres ownership and the other 32 service ACLs are kept.
--- Global defaults and official platform creator/schema defaults are untouched.
+-- Client function EXECUTE and postgres/public function defaults are closed;
+-- official platform creator defaults outside the public application schema are untouched.
 
 begin;
 
@@ -25,7 +30,7 @@ declare
   v_contract constant jsonb :=
   $venisia_security_contract$
 {
-  "formatVersion": 1,
+  "formatVersion": 2,
   "contractId": "venisia-public-table-security",
   "revision": 1,
   "supersedes": null,
@@ -1726,303 +1731,452 @@ declare
   "roles": [
     {
       "name": "anon",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "application-public",
+      "presence": "required",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "require",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "authenticated",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "application-public",
+      "presence": "required",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "require",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "authenticator",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": false,
-      "canLogin": true,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "platform-managed",
+      "presence": "required",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "deny",
+        "canLogin": "allow",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
+    },
+    {
+      "name": "cli_login_postgres",
+      "classification": "conditional-platform-tooling",
+      "presence": "optional",
+      "managedBy": "supabase-cli-login-role",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "deny",
+        "canLogin": "require",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "dashboard_user",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": true,
-      "createDb": true,
-      "replication": true
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "allow",
+        "createDb": "allow",
+        "replication": "allow"
+      }
     },
     {
       "name": "pg_checkpoint",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_create_subscription",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_database_owner",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_execute_server_program",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_maintain",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_monitor",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_read_all_data",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_read_all_settings",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_read_all_stats",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_read_server_files",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_signal_backend",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_stat_scan_tables",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_use_reserved_connections",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_write_all_data",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pg_write_server_files",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "postgres-built-in",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "pgbouncer",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": true,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "allow",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "postgres",
-      "superuser": false,
-      "bypassRls": true,
-      "inherit": true,
-      "canLogin": true,
-      "createRole": true,
-      "createDb": true,
-      "replication": true
+      "classification": "platform-administration",
+      "presence": "required",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "require",
+        "inherit": "require",
+        "canLogin": "require",
+        "createRole": "require",
+        "createDb": "require",
+        "replication": "require"
+      }
     },
     {
       "name": "service_role",
-      "superuser": false,
-      "bypassRls": true,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "application-server",
+      "presence": "required",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "require",
+        "inherit": "require",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "supabase_admin",
-      "superuser": true,
-      "bypassRls": true,
-      "inherit": true,
-      "canLogin": true,
-      "createRole": true,
-      "createDb": true,
-      "replication": true
+      "classification": "platform-administration",
+      "presence": "required",
+      "attributeRules": {
+        "superuser": "require",
+        "bypassRls": "require",
+        "inherit": "require",
+        "canLogin": "require",
+        "createRole": "require",
+        "createDb": "require",
+        "replication": "require"
+      }
     },
     {
       "name": "supabase_auth_admin",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": false,
-      "canLogin": true,
-      "createRole": true,
-      "createDb": false,
-      "replication": false
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "deny",
+        "canLogin": "allow",
+        "createRole": "allow",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "supabase_etl_admin",
-      "superuser": false,
-      "bypassRls": true,
-      "inherit": true,
-      "canLogin": true,
-      "createRole": false,
-      "createDb": false,
-      "replication": true
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "allow",
+        "inherit": "allow",
+        "canLogin": "allow",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "allow"
+      }
     },
     {
       "name": "supabase_functions_admin",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": false,
-      "canLogin": true,
-      "createRole": true,
-      "createDb": false,
-      "replication": false
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "deny",
+        "canLogin": "allow",
+        "createRole": "allow",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "supabase_privileged_role",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": false,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "supabase_read_only_user",
-      "superuser": false,
-      "bypassRls": true,
-      "inherit": true,
-      "canLogin": true,
-      "createRole": false,
-      "createDb": false,
-      "replication": false
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "allow",
+        "inherit": "allow",
+        "canLogin": "allow",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
+    },
+    {
+      "name": "supabase_realtime_admin",
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "deny",
+        "canLogin": "deny",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     },
     {
       "name": "supabase_replication_admin",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": true,
-      "canLogin": true,
-      "createRole": false,
-      "createDb": false,
-      "replication": true
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "allow",
+        "canLogin": "allow",
+        "createRole": "deny",
+        "createDb": "deny",
+        "replication": "allow"
+      }
     },
     {
       "name": "supabase_storage_admin",
-      "superuser": false,
-      "bypassRls": false,
-      "inherit": false,
-      "canLogin": true,
-      "createRole": true,
-      "createDb": false,
-      "replication": false
+      "classification": "platform-managed",
+      "presence": "optional",
+      "attributeRules": {
+        "superuser": "deny",
+        "bypassRls": "deny",
+        "inherit": "deny",
+        "canLogin": "allow",
+        "createRole": "allow",
+        "createDb": "deny",
+        "replication": "deny"
+      }
     }
   ],
   "memberships": [
@@ -2031,154 +2185,212 @@ declare
       "member": "authenticator",
       "inheritOption": false,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "required"
     },
     {
       "role": "anon",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": true
+      "adminOption": true,
+      "presence": "optional"
+    },
+    {
+      "role": "anon",
+      "member": "supabase_realtime_admin",
+      "inheritOption": false,
+      "setOption": true,
+      "adminOption": false,
+      "presence": "optional",
+      "classification": "platform-managed"
     },
     {
       "role": "authenticated",
       "member": "authenticator",
       "inheritOption": false,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "required"
     },
     {
       "role": "authenticated",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": true
+      "adminOption": true,
+      "presence": "optional"
+    },
+    {
+      "role": "authenticated",
+      "member": "supabase_realtime_admin",
+      "inheritOption": false,
+      "setOption": true,
+      "adminOption": false,
+      "presence": "optional",
+      "classification": "platform-managed"
     },
     {
       "role": "authenticator",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": true
+      "adminOption": true,
+      "presence": "optional"
     },
     {
       "role": "authenticator",
       "member": "supabase_storage_admin",
       "inheritOption": false,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "pg_create_subscription",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": true
+      "adminOption": true,
+      "presence": "optional"
     },
     {
       "role": "pg_monitor",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": true
+      "adminOption": true,
+      "presence": "optional"
     },
     {
       "role": "pg_monitor",
       "member": "supabase_etl_admin",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "pg_monitor",
       "member": "supabase_read_only_user",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "pg_read_all_data",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": true
+      "adminOption": true,
+      "presence": "optional"
     },
     {
       "role": "pg_read_all_data",
       "member": "supabase_etl_admin",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "pg_read_all_data",
       "member": "supabase_read_only_user",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "pg_read_all_settings",
       "member": "pg_monitor",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "pg_read_all_stats",
       "member": "pg_monitor",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "pg_signal_backend",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": true
+      "adminOption": true,
+      "presence": "optional"
     },
     {
       "role": "pg_stat_scan_tables",
       "member": "pg_monitor",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
+    },
+    {
+      "role": "postgres",
+      "member": "cli_login_postgres",
+      "inheritOption": false,
+      "setOption": true,
+      "adminOption": false,
+      "presence": "optional",
+      "classification": "conditional-platform-tooling"
     },
     {
       "role": "service_role",
       "member": "authenticator",
       "inheritOption": false,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "required"
     },
     {
       "role": "service_role",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": true
+      "adminOption": true,
+      "presence": "optional"
+    },
+    {
+      "role": "service_role",
+      "member": "supabase_realtime_admin",
+      "inheritOption": false,
+      "setOption": true,
+      "adminOption": false,
+      "presence": "optional",
+      "classification": "platform-managed"
     },
     {
       "role": "supabase_functions_admin",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "supabase_privileged_role",
       "member": "postgres",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     },
     {
       "role": "supabase_privileged_role",
       "member": "supabase_etl_admin",
       "inheritOption": true,
       "setOption": true,
-      "adminOption": false
+      "adminOption": false,
+      "presence": "optional"
     }
   ],
   "schemaPrivileges": [
@@ -2825,13 +3037,24 @@ declare
         ]
       }
     }
-  ]
+  ],
+  "functionSecurity": {
+    "clientRoles": [
+      "anon",
+      "authenticated"
+    ],
+    "allowClientExecute": [],
+    "forbidClientSecurityDefinerExecute": true,
+    "forbidClientGrantOptions": true,
+    "defaultClientExecute": false
+  }
 }
   $venisia_security_contract$::jsonb;
   v_table jsonb;
   v_role text;
   v_privilege text;
   v_relation oid;
+  v_tooling_role oid;
   v_actual_policies jsonb;
   v_expected_policies jsonb;
   v_actual_grants jsonb;
@@ -2879,7 +3102,7 @@ declare
   $preserved_security_catalog$;
 begin
   if v_contract->>'contractId' is distinct from 'venisia-public-table-security'
-     or v_contract->>'formatVersion' is distinct from '1'
+     or v_contract->>'formatVersion' is distinct from '2'
      or v_contract->>'revision' is distinct from '1'
      or v_contract->>'schema' is distinct from 'public'
      or v_contract->'supersedes' is distinct from 'null'::jsonb
@@ -2892,6 +3115,7 @@ begin
      or jsonb_typeof(v_contract->'defaultPrivileges') is distinct from 'array'
      or jsonb_typeof(v_contract->'columnPrivileges') is distinct from 'array'
      or jsonb_typeof(v_contract->'sequencePrivileges') is distinct from 'array'
+     or jsonb_typeof(v_contract->'functionSecurity') is distinct from 'object'
      or jsonb_array_length(v_contract->'roles') = 0
      or jsonb_array_length(v_contract->'schemaPrivileges') = 0
      or jsonb_array_length(v_contract->'sequencePrivileges') = 0 then
@@ -2904,29 +3128,68 @@ begin
       message = 'venisia_security_contract_requires_declared_migration_role';
   end if;
 
-  select jsonb_agg(jsonb_build_object(
-    'name',rolname,'superuser',rolsuper,'bypassRls',rolbypassrls,
-    'inherit',rolinherit,'canLogin',rolcanlogin,'createRole',rolcreaterole,
-    'createDb',rolcreatedb,'replication',rolreplication
-  ) order by rolname) into v_actual_list from pg_catalog.pg_roles;
-  select jsonb_agg(item order by item->>'name') into v_expected_list
-  from jsonb_array_elements(v_contract->'roles') as rows(item);
-  if v_actual_list is distinct from v_expected_list then
-    raise exception using errcode = 'P0001',
-      message = 'venisia_security_contract_role_attributes_mismatch';
+  if exists (select 1 from pg_catalog.pg_roles r where not exists (
+       select 1 from jsonb_array_elements(v_contract->'roles') declared where declared->>'name'=r.rolname
+     )) or exists (select 1 from jsonb_array_elements(v_contract->'roles') declared
+       where declared->>'presence'='required' and not exists (
+         select 1 from pg_catalog.pg_roles r where r.rolname=declared->>'name'
+       )) then
+    raise exception using errcode='P0001', message='venisia_security_contract_role_classification_mismatch';
   end if;
-
-  select jsonb_agg(jsonb_build_object(
-    'role',pg_catalog.pg_get_userbyid(roleid),
-    'member',pg_catalog.pg_get_userbyid(member),
-    'inheritOption',inherit_option,'setOption',set_option,'adminOption',admin_option
-  ) order by pg_catalog.pg_get_userbyid(roleid),pg_catalog.pg_get_userbyid(member))
-    into v_actual_list from pg_catalog.pg_auth_members;
-  select jsonb_agg(item order by item->>'role',item->>'member') into v_expected_list
-  from jsonb_array_elements(v_contract->'memberships') as rows(item);
-  if v_actual_list is distinct from v_expected_list then
-    raise exception using errcode = 'P0001',
-      message = 'venisia_security_contract_role_membership_mismatch';
+  for v_entry in select value from jsonb_array_elements(v_contract->'roles')
+  loop
+    select jsonb_build_object('superuser',rolsuper,'bypassRls',rolbypassrls,'inherit',rolinherit,
+      'canLogin',rolcanlogin,'createRole',rolcreaterole,'createDb',rolcreatedb,'replication',rolreplication)
+      into v_actual_list from pg_catalog.pg_roles where rolname=v_entry->>'name';
+    if v_actual_list is null then continue; end if;
+    if exists (select 1 from jsonb_each_text(v_entry->'attributeRules') rule
+      where (rule.value='deny' and (v_actual_list->>rule.key)::boolean)
+         or (rule.value='require' and not (v_actual_list->>rule.key)::boolean)
+         or rule.value not in ('deny','require','allow')) then
+      raise exception using errcode='P0001', message='venisia_security_contract_role_attribute_boundary';
+    end if;
+  end loop;
+  if exists (select 1 from pg_catalog.pg_auth_members m where not exists (
+      select 1 from jsonb_array_elements(v_contract->'memberships') rule
+      where rule->>'role'=pg_catalog.pg_get_userbyid(m.roleid)
+        and rule->>'member'=pg_catalog.pg_get_userbyid(m.member)
+        and (rule->>'inheritOption')::boolean=m.inherit_option
+        and (rule->>'setOption')::boolean=m.set_option
+        and (rule->>'adminOption')::boolean=m.admin_option
+    )) or exists (select 1 from jsonb_array_elements(v_contract->'memberships') rule
+      where rule->>'presence'='required' and not exists (
+        select 1 from pg_catalog.pg_auth_members m
+        where pg_catalog.pg_get_userbyid(m.roleid)=rule->>'role'
+          and pg_catalog.pg_get_userbyid(m.member)=rule->>'member'
+          and m.inherit_option=(rule->>'inheritOption')::boolean
+          and m.set_option=(rule->>'setOption')::boolean
+          and m.admin_option=(rule->>'adminOption')::boolean
+    )) then
+    raise exception using errcode='P0001', message='venisia_security_contract_role_membership_boundary';
+  end if;
+  if exists (with recursive reachable(client,reached_role) as (
+      select value collate "C",value collate "C" from jsonb_array_elements_text(v_contract->'clientRoles')
+      union
+      select reachable.client collate "C",pg_catalog.pg_get_userbyid(m.roleid)::text collate "C"
+      from reachable join pg_catalog.pg_auth_members m on pg_catalog.pg_get_userbyid(m.member)=reachable.reached_role
+      where m.inherit_option or m.set_option or m.admin_option
+    ) select 1 from reachable join pg_catalog.pg_roles r on r.rolname=reachable.reached_role
+      where reachable.reached_role<>reachable.client
+        and (r.rolsuper or r.rolbypassrls or r.rolcreaterole or r.rolcreatedb or r.rolreplication or r.rolname='service_role')) then
+    raise exception using errcode='P0001', message='venisia_security_contract_application_role_escalation_path';
+  end if;
+  select oid into v_tooling_role from pg_catalog.pg_roles where rolname='cli_login_postgres';
+  if v_tooling_role is not null and (
+      not exists(select 1 from pg_catalog.pg_authid where rolname='cli_login_postgres' and rolpassword is not null and rolvaliduntil is not null)
+      or exists(select 1 from pg_catalog.pg_stat_activity where usename='cli_login_postgres')
+      or exists(select 1 from pg_catalog.pg_class c join pg_catalog.pg_namespace n on n.oid=c.relnamespace where n.nspname='public' and c.relowner=v_tooling_role)
+      or exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proowner=v_tooling_role)
+      or exists(select 1 from pg_catalog.pg_class c cross join lateral pg_catalog.aclexplode(coalesce(c.relacl,pg_catalog.acldefault(case when c.relkind='S' then 's'::"char" else 'r'::"char" end,c.relowner))) a
+        where c.relnamespace='public'::regnamespace and c.relkind in ('r','p','S') and a.grantee=v_tooling_role)
+      or exists(select 1 from pg_catalog.pg_proc p cross join lateral pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+        where p.pronamespace='public'::regnamespace and a.grantee=v_tooling_role)
+    ) then
+    raise exception using errcode='P0001', message='venisia_security_contract_conditional_tooling_boundary';
   end if;
 
   foreach v_role in array array['anon','authenticated']
@@ -2984,6 +3247,39 @@ begin
                   or item->>'objectType' not in ('r','S')) then
     raise exception using errcode = 'P0001',
       message = 'venisia_security_contract_unreviewed_global_defaults';
+  end if;
+
+  if v_contract->'functionSecurity'->'clientRoles' is distinct from v_contract->'clientRoles'
+     or v_contract->'functionSecurity'->'allowClientExecute' is distinct from '[]'::jsonb
+     or v_contract->'functionSecurity'->>'forbidClientSecurityDefinerExecute' is distinct from 'true'
+     or v_contract->'functionSecurity'->>'forbidClientGrantOptions' is distinct from 'true'
+     or v_contract->'functionSecurity'->>'defaultClientExecute' is distinct from 'false' then
+    raise exception using errcode='P0001', message='venisia_security_contract_function_boundary_invalid';
+  end if;
+  for v_entry in select jsonb_build_object('identity',format('%I.%I(%s)',n.nspname,p.proname,
+      pg_catalog.pg_get_function_identity_arguments(p.oid)))
+    from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public' and p.prokind in ('f','p')
+  loop
+    execute format('revoke all privileges on function %s from public, anon, authenticated restrict',v_entry->>'identity');
+  end loop;
+  alter default privileges for role postgres in schema public
+    revoke execute on functions from public, anon, authenticated;
+  if exists (select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+      where n.nspname='public' and p.prokind in ('f','p') and (
+        pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE')
+        or pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE')))
+     or exists(select 1 from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+       cross join lateral pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
+       where n.nspname='public' and a.is_grantable
+         and (a.grantee=0 or a.grantee in ('anon'::regrole,'authenticated'::regrole)))
+     or exists(select 1 from pg_catalog.pg_default_acl d
+       cross join lateral pg_catalog.aclexplode(d.defaclacl) a
+       where d.defaclrole='postgres'::regrole and d.defaclobjtype='f'
+         and (d.defaclnamespace=0 or d.defaclnamespace='public'::regnamespace)
+         and a.privilege_type='EXECUTE'
+         and (a.grantee=0 or a.grantee in ('anon'::regrole,'authenticated'::regrole))) then
+    raise exception using errcode='P0001', message='venisia_security_contract_function_execute_postcondition';
   end if;
 
   execute v_immutable_catalog_sql into v_immutable_before;

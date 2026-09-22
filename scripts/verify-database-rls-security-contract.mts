@@ -11,10 +11,14 @@ const tablePrivileges = ["SELECT", "INSERT", "UPDATE", "DELETE", "TRUNCATE", "RE
 const clone = <T,>(value: T): T => structuredClone(value);
 
 function fixture(): DatabaseSecurityContract {
-  const roles = ["anon", "authenticated", "postgres", "service_role"].map(name => ({ name,
-    superuser: false, bypassRls: ["postgres", "service_role"].includes(name), inherit: true, canLogin: name === "postgres",
-    createRole: name === "postgres", createDb: name === "postgres", replication: name === "postgres" }));
-  return { formatVersion: 1, contractId: "venisia-public-table-security", revision: 1, supersedes: null,
+  const exact = (value: boolean) => value ? "require" as const : "deny" as const;
+  const roles: DatabaseSecurityContract["roles"] = ["anon", "authenticated", "postgres", "service_role"].map(name => {
+    const values = { superuser: false, bypassRls: ["postgres", "service_role"].includes(name), inherit: true, canLogin: name === "postgres",
+      createRole: name === "postgres", createDb: name === "postgres", replication: name === "postgres" };
+    return { name, classification: name === "postgres" ? "platform-administration" : name === "service_role" ? "application-server" : "application-public",
+      presence: "required", attributeRules: Object.fromEntries(Object.entries(values).map(([field, value]) => [field, exact(value)])) as DatabaseSecurityContract["roles"][number]["attributeRules"] };
+  });
+  return { formatVersion: 2, contractId: "venisia-public-table-security", revision: 1, supersedes: null,
     schema: "public", clientRoles: ["anon", "authenticated"], ddlRoles: ["postgres"],
     tables: [
       { name: "public_records", classification: "A", owner: "postgres", forceRls: false,
@@ -27,6 +31,8 @@ function fixture(): DatabaseSecurityContract {
     defaultPrivileges: [{ owner: "postgres", schema: "public", objectType: "r", grants: { postgres: tablePrivileges, service_role: ["SELECT"] } }],
     columnPrivileges: [],
     sequencePrivileges: [{ name: "private_records_id_seq", owner: "postgres", grants: { postgres: ["USAGE", "SELECT", "UPDATE"], service_role: ["USAGE", "SELECT", "UPDATE"] } }],
+    functionSecurity: { clientRoles: ["anon", "authenticated"], allowClientExecute: [], forbidClientSecurityDefinerExecute: true,
+      forbidClientGrantOptions: true, defaultClientExecute: false },
   };
 }
 function source(contract: DatabaseSecurityContract, version = "19990101000000") {
@@ -35,7 +41,11 @@ function source(contract: DatabaseSecurityContract, version = "19990101000000") 
 }
 function catalog(loaded: LoadedDatabaseSecurityContract): DatabaseSecurityCatalog {
   const contract = clone(loaded.contract);
-  return { schema: contract.schema, roles: contract.roles, memberships: contract.memberships,
+  const roles = contract.roles.filter(role => role.presence === "required").map(role => ({ name: role.name,
+    ...Object.fromEntries(Object.entries(role.attributeRules).map(([field, rule]) => [field, rule === "require"])) })) as DatabaseSecurityCatalog["roles"];
+  return { schema: contract.schema, roles, memberships: contract.memberships.filter(row => row.presence === "required")
+      .map(row => ({ role: row.role, member: row.member, inheritOption: row.inheritOption,
+        setOption: row.setOption, adminOption: row.adminOption })),
     schemaPrivileges: contract.schemaPrivileges, defaultPrivileges: contract.defaultPrivileges, columnPrivileges: contract.columnPrivileges,
     tables: contract.tables.map(table => ({ name: table.name, owner: table.owner, rlsEnabled: table.classification !== "C", forceRls: table.forceRls,
       grants: table.grants, policies: table.policies, grantOptions: {},
@@ -43,6 +53,8 @@ function catalog(loaded: LoadedDatabaseSecurityContract): DatabaseSecurityCatalo
       effectiveColumnPrivileges: Object.fromEntries(contract.clientRoles.map(role => [role, [...new Set([...(table.grants[role] ?? []), ...(table.grants.PUBLIC ?? [])])]])),
     })),
     sequencePrivileges: contract.sequencePrivileges.map(sequence => ({ ...sequence, effectivePrivileges: { anon: [], authenticated: [] } })),
+    functionSecurity: { clientExecutable: [], securityDefinerClientExecutable: [], clientGrantOptions: [], defaultClientExecute: [] },
+    toolingRoles: [],
   };
 }
 
@@ -62,7 +74,7 @@ export async function verifyDatabaseRlsSecurityContract() {
   rejects(() => loadDatabaseSecurityContract([]));
   rejects(() => loadDatabaseSecurityContract([initial], { throughVersion: "19980101000000" }));
   rejects(() => loadDatabaseSecurityContract([initial, initial]));
-  rejects(() => loadDatabaseSecurityContract([{ ...initial, sql: initial.sql.replace('"formatVersion":1', '"formatVersion":1,"formatVersion":1') }]));
+  rejects(() => loadDatabaseSecurityContract([{ ...initial, sql: initial.sql.replace('"formatVersion":2', '"formatVersion":2,"formatVersion":2') }]));
   rejects(() => loadDatabaseSecurityContract([{ ...initial, sql: `${initial.sql}\n${initial.sql}` }]));
   rejects(() => loadDatabaseSecurityContract([{ ...initial, sql: initial.sql.replace("v_contract jsonb :=", "v_unowned jsonb :=") }]));
   rejects(() => validateDatabaseSecurityContract({ ...fixture(), captureStatus: "pending-isolated-catalog-review" }));
@@ -76,11 +88,11 @@ export async function verifyDatabaseRlsSecurityContract() {
   badContract(value => { value.tables[0].policies[0].command = "UPDATE"; });
   badContract(value => { value.tables[0].policies[0].using = null; });
   badContract(value => { value.tables[0].policies[0].roles = ["unknown_role"]; });
-  badContract(value => { value.roles[0].bypassRls = true; });
-  badContract(value => { value.roles[0].createRole = true; });
-  badContract(value => { value.roles[0].replication = true; });
-  badContract(value => { value.memberships = [{ role: "postgres", member: "anon", inheritOption: false, setOption: true, adminOption: false }]; });
-  badContract(value => { value.memberships = [{ role: "postgres", member: "anon", inheritOption: false, setOption: false, adminOption: true }]; });
+  badContract(value => { value.roles[0].attributeRules.bypassRls = "allow"; });
+  badContract(value => { value.roles[0].attributeRules.createRole = "require"; });
+  badContract(value => { value.roles[0].attributeRules.replication = "allow"; });
+  badContract(value => { value.memberships = [{ role: "postgres", member: "anon", inheritOption: false, setOption: true, adminOption: false, presence: "optional" }]; });
+  badContract(value => { value.memberships = [{ role: "postgres", member: "anon", inheritOption: false, setOption: false, adminOption: true, presence: "optional" }]; });
   badContract(value => { value.schemaPrivileges.find(row => row.role === "anon")!.privileges.push("CREATE"); });
   badContract(value => { value.defaultPrivileges[0].grants.PUBLIC = ["SELECT"]; });
   badContract(value => { value.sequencePrivileges[0].grants.authenticated = ["USAGE"]; });
@@ -105,7 +117,40 @@ export async function verifyDatabaseRlsSecurityContract() {
   badCatalog(value => { value.schemaPrivileges.find(row => row.role === "anon")!.privileges = ["USAGE", "CREATE"]; });
   badCatalog(value => { value.defaultPrivileges[0].grants.anon = ["SELECT"]; });
   badCatalog(value => { value.sequencePrivileges[0].effectivePrivileges.authenticated = ["USAGE"]; });
+  badCatalog(value => { value.functionSecurity.clientExecutable = ["unsafe_public_function()"]; });
+  badCatalog(value => { value.functionSecurity.securityDefinerClientExecutable = ["unsafe_definer()"]; });
+  badCatalog(value => { value.functionSecurity.clientGrantOptions = ["grantable_public_function()"]; });
+  badCatalog(value => { value.functionSecurity.defaultClientExecute = ["postgres/public/PUBLIC"]; });
   rejects(() => { const tampered = clone(loaded); tampered.contract.tables[0].policies[0].using = "true"; assertDatabaseSecurityCatalog(tampered, catalog(tampered)); });
+
+  const platformAware = fixture();
+  const denied = { superuser: "deny", bypassRls: "deny", inherit: "deny", canLogin: "deny",
+    createRole: "deny", createDb: "deny", replication: "deny" } as const;
+  platformAware.roles.push({ name: "supabase_realtime_admin", classification: "platform-managed", presence: "optional", attributeRules: denied });
+  platformAware.roles.push({ name: "cli_login_postgres", classification: "conditional-platform-tooling", presence: "optional",
+    managedBy: "supabase-cli-login-role", attributeRules: { ...denied, canLogin: "require" } });
+  platformAware.memberships.push({ role: "postgres", member: "cli_login_postgres", inheritOption: false,
+    setOption: true, adminOption: false, presence: "optional", classification: "conditional-platform-tooling" });
+  platformAware.memberships.push({ role: "anon", member: "supabase_realtime_admin", inheritOption: false,
+    setOption: true, adminOption: false, presence: "optional", classification: "platform-managed" });
+  const platformLoaded = loadDatabaseSecurityContract([source(platformAware)]);
+  const safePlatform = catalog(platformLoaded);
+  safePlatform.roles.push({ name: "supabase_realtime_admin", superuser: false, bypassRls: false, inherit: false,
+    canLogin: false, createRole: false, createDb: false, replication: false });
+  safePlatform.memberships.push({ role: "anon", member: "supabase_realtime_admin", inheritOption: false, setOption: true, adminOption: false });
+  check(() => assert.equal(assertDatabaseSecurityCatalog(platformLoaded, safePlatform).roleProof.optionalRolesAbsent.includes("cli_login_postgres"), true));
+  const safeTooling = clone(safePlatform);
+  safeTooling.roles.push({ name: "cli_login_postgres", superuser: false, bypassRls: false, inherit: false,
+    canLogin: true, createRole: false, createDb: false, replication: false });
+  safeTooling.memberships.push({ role: "postgres", member: "cli_login_postgres", inheritOption: false, setOption: true, adminOption: false });
+  safeTooling.toolingRoles.push({ name: "cli_login_postgres", passwordConfigured: true, validUntil: "2099-01-01 00:00:00+00",
+    activeSessions: 0, ownsApplicationObjects: 0, directApplicationAclEntries: 0 });
+  check(() => assert.deepEqual(assertDatabaseSecurityCatalog(platformLoaded, safeTooling).roleProof.conditionalToolingRoles, ["cli_login_postgres"]));
+  rejects(() => { const value = clone(safePlatform); value.roles.push({ name: "unknown_platform_role", superuser: false, bypassRls: false,
+    inherit: false, canLogin: false, createRole: false, createDb: false, replication: false }); assertDatabaseSecurityCatalog(platformLoaded, value); });
+  rejects(() => { const value = clone(safeTooling); value.toolingRoles[0].activeSessions = 1; assertDatabaseSecurityCatalog(platformLoaded, value); });
+  rejects(() => { const value = clone(safeTooling); value.toolingRoles[0].directApplicationAclEntries = 1; assertDatabaseSecurityCatalog(platformLoaded, value); });
+  rejects(() => { const value = clone(safeTooling); value.memberships[0].adminOption = true; assertDatabaseSecurityCatalog(platformLoaded, value); });
 
   const revised = fixture();
   revised.revision = 2;

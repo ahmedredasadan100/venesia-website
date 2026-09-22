@@ -214,11 +214,19 @@ export function verifyMigrationHistoryCompatibility(selectedVersion) {
   const contract = loadMigrationHistoryCompatibility(version);
   const migration = { version: contract.version, name: contract.name, sql: contract.correctedSql, sha256: contract.correctedSourceSha256 };
   const old = { version: contract.version, name: contract.name, statements: [contract.historicalSql] };
+  const superseded = contract.supersededFreshSql === undefined ? undefined
+    : { ...old, statements: [contract.supersededFreshSql] };
   const revised = { ...old, statements: [contract.correctedSql] };
-  const before = JSON.stringify([migration, old, revised]);
+  const before = JSON.stringify([migration, old, superseded, revised]);
   check(assertWholeFileMigrationProvenance(old, migration).revision === "historical-applied", "Original applied SQL retains its actual revision identity.");
+  if (superseded !== undefined) {
+    const provenance = assertWholeFileMigrationProvenance(superseded, migration);
+    check(provenance.revision === "fresh-bootstrap-superseded"
+      && provenance.sourceSha256 === contract.supersededFreshSourceSha256,
+    "Superseded fresh SQL retains its exact historical execution identity.");
+  }
   check(assertWholeFileMigrationProvenance(revised, migration).revision === "fresh-bootstrap-corrected", "Corrected SQL has a distinct source identity.");
-  check(JSON.stringify([migration, old, revised]) === before, "Provenance verification never rewrites its inputs.");
+  check(JSON.stringify([migration, old, superseded, revised]) === before, "Provenance verification never rewrites its inputs.");
   for (const row of [
     { ...old, name: `${old.name}_wrong` },
     { ...old, version: "19990101000000" },
@@ -237,6 +245,12 @@ export function verifyMigrationHistoryCompatibility(selectedVersion) {
   fails(() => assertMigrationSourceProvenance({ ...migration, sha256: "0".repeat(64) }), "Caller-supplied current hash cannot override source bytes.");
   fails(() => verifyMigrationHistoryCompatibilitySources(contract, `${contract.historicalSql}\n`, contract.correctedSql), "Archive drift is rejected.");
   fails(() => verifyMigrationHistoryCompatibilitySources(contract, contract.historicalSql, `${contract.correctedSql}\n`), "Corrected source drift is rejected.");
+  if (contract.supersededFreshSql !== undefined) {
+    fails(() => verifyMigrationHistoryCompatibilitySources(contract, contract.historicalSql, contract.correctedSql,
+      `${contract.supersededFreshSql}\n`), "Superseded fresh archive drift is rejected.");
+    fails(() => verifyMigrationHistoryCompatibilitySources(contract, contract.historicalSql, contract.correctedSql),
+      "A declared superseded fresh revision requires its immutable archive.");
+  }
   fails(() => verifyMigrationHistoryCompatibilitySources({ ...contract, correctedSourceSha256: contract.historicalSourceSha256 }, contract.historicalSql, contract.correctedSql), "Ambiguous revision identities are rejected.");
   const unrelated = { version: "19990101000000", name: "unrelated", sql: "select 1;\n" };
   check(assertWholeFileMigrationProvenance({ ...unrelated, statements: [unrelated.sql] }, unrelated).revision === "canonical-current", "Unrelated migrations retain exact current SQL provenance.");

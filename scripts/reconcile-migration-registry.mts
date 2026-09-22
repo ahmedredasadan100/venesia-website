@@ -233,7 +233,7 @@ export type SelectedCliRegistryReport = {
   wouldUpdate: number;
   updated: number;
   untouched: number;
-  preservedRevisions: Array<{ version: string; revision: "historical-applied" | "fresh-bootstrap-corrected"; sourceSha256: string }>;
+  preservedRevisions: Array<{ version: string; revision: "historical-applied" | "fresh-bootstrap-superseded" | "fresh-bootstrap-corrected"; sourceSha256: string }>;
 };
 
 type CompleteRegistryRow = RegistryRow & { full_row: Record<string, unknown> };
