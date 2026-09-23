@@ -9,8 +9,6 @@ import { fileURLToPath } from "node:url";
 // @ts-expect-error This workspace uses pg without separate declarations.
 import pg from "pg";
 
-import { runEntitySeoBackfill } from "../backfill-entity-seo-scores.mts";
-
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const CONFIG = join(ROOT, "supabase", "config.toml");
 const CANONICAL_MIGRATIONS = join(ROOT, "sql", "migrations");
@@ -183,6 +181,7 @@ async function runSeed(client: pg.Client, file: string): Promise<void> {
 }
 
 async function advance(client: pg.Client, history: LocalHistory[], corpus: LocalMigration[]): Promise<void> {
+  const { runEntitySeoBackfill } = await import("../backfill-entity-seo-scores.mts");
   const firstExpand = corpus.findIndex(item => item.version === FIRST_SEO_EXPAND);
   const secondExpand = corpus.findIndex(item => item.version === SECOND_SEO_EXPAND);
   const enforce = corpus.findIndex(item => item.version === SEO_ENFORCE);

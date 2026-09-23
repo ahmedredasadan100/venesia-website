@@ -10,7 +10,7 @@
     "dev:db:start": "node --experimental-strip-types scripts/local-development-supabase.mts start",
     "dev:db:stop": "node --experimental-strip-types scripts/local-development-supabase.mts stop",
     "dev:db:reset": "node --experimental-strip-types scripts/local-development-supabase.mts reset",
-    "dev:db:preflight": "node --experimental-strip-types scripts/local-development-supabase.mts preflight",
+    "dev:db:preflight": "node --experimental-strip-types scripts/development-supabase-preflight.mts",
     "verify:local-development-supabase": "node --experimental-strip-types scripts/verify-local-development-supabase.mts",
     "build": "next build",
     "start": "next start",
