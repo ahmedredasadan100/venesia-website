@@ -1963,6 +1963,24 @@ export type Database = {
           },
         ]
       }
+      page_composition_layouts: {
+        Row: { id: number; key: string; admin_label: string }
+        Insert: { id?: number; key: string; admin_label: string }
+        Update: { id?: number; key?: string; admin_label?: string }
+        Relationships: []
+      }
+      page_composition_regions: {
+        Row: { layout_id: number; key: string; admin_label: string; sort_order: number }
+        Insert: { layout_id: number; key: string; admin_label: string; sort_order: number }
+        Update: { layout_id?: number; key?: string; admin_label?: string; sort_order?: number }
+        Relationships: [{
+          foreignKeyName: "page_composition_regions_layout_id_fkey"
+          columns: ["layout_id"]
+          isOneToOne: false
+          referencedRelation: "page_composition_layouts"
+          referencedColumns: ["id"]
+        }]
+      }
       pages: {
         Row: {
           canonical_url: string | null
@@ -1970,6 +1988,7 @@ export type Database = {
           focus_keyword: string
           id: number
           is_system: boolean
+          layout_id: number
           og_image: string | null
           og_image_alt: string
           page_type: string
@@ -1991,6 +2010,7 @@ export type Database = {
           focus_keyword?: string
           id?: number
           is_system?: boolean
+          layout_id?: number
           og_image?: string | null
           og_image_alt?: string
           page_type?: string
@@ -2012,6 +2032,7 @@ export type Database = {
           focus_keyword?: string
           id?: number
           is_system?: boolean
+          layout_id?: number
           og_image?: string | null
           og_image_alt?: string
           page_type?: string
@@ -2027,7 +2048,13 @@ export type Database = {
           title?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [{
+          foreignKeyName: "pages_layout_id_fkey"
+          columns: ["layout_id"]
+          isOneToOne: false
+          referencedRelation: "page_composition_layouts"
+          referencedColumns: ["id"]
+        }]
       }
       project_delivery_items: {
         Row: {
@@ -3824,6 +3851,14 @@ export type Database = {
       }
       global_seo_infrastructure_health: { Args: never; Returns: Json }
       public_media_closure_provenance: { Args: never; Returns: Json }
+      public_feed_category_counts: {
+        Args: { p_categories: Json; p_series_slugs?: string[] }
+        Returns: { category_id: number; article_count: number }[]
+      }
+      public_feed_series_representatives: {
+        Args: { p_series_slugs: string[] }
+        Returns: { series_slug: string; representative: Json }[]
+      }
       footer_public_composition_provenance: { Args: never; Returns: Json }
       global_truth_atomic_closure_health: { Args: never; Returns: Json }
       increment_topic_view: {

@@ -14,6 +14,7 @@ import {
   getDefaultAssignmentPosition,
   isAssignmentPositionAllowed,
 } from "../page-composition/page-assignment-contract";
+import { loadPageRegionsForPage } from "../page-composition/load-page-regions";
 import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
 import { loadHomepageProjects } from "../projects/load-homepage-projects";
 import { isHomeProjectsTemplate } from "./configs";
@@ -23,9 +24,9 @@ import type { PageLayoutSlot } from "./layout-slots";
 import type { PageComposition, SlotEntry } from "./page-composition-types";
 import type { ResolvedPageBlock } from "./types";
 
-function emptySlots(): Record<PageLayoutSlot, SlotEntry[]> {
+function emptySlots(regions: readonly string[]): Record<PageLayoutSlot, SlotEntry[]> {
   return Object.fromEntries(
-    PAGE_COMPOSITION_POSITIONS.map((position) => [position, []]),
+    [...new Set([...PAGE_COMPOSITION_POSITIONS, ...regions])].map((position) => [position, []]),
   ) as unknown as Record<PageLayoutSlot, SlotEntry[]>;
 }
 
@@ -49,8 +50,9 @@ function sortEntries(entries: SlotEntry[]) {
 function pushBlock(
   slots: Record<PageLayoutSlot, SlotEntry[]>,
   block: ResolvedPageBlock,
+  regions: readonly string[],
 ) {
-  if (!isAssignmentPositionAllowed(block.blockType, block.slot)) return;
+  if (!isAssignmentPositionAllowed(block.blockType, block.slot, regions)) return false;
   const slot = normalizeLayoutSlot(block.slot);
   slots[slot].push({
     kind: "block",
@@ -58,6 +60,7 @@ function pushBlock(
     sortOrder: block.sortOrder,
     block,
   });
+  return true;
 }
 
 export async function loadPageCompositionBySlug(
@@ -90,7 +93,21 @@ export async function loadPageCompositionBySlug(
     queryMediaSidebarModules(pageSlug),
   ]);
 
-  const slots = emptySlots();
+  let layoutError = false;
+  const layout = pageState.page
+    ? await loadPageRegionsForPage(pageState.page.id).catch(() => {
+        layoutError = true;
+        return null;
+      })
+    : null;
+  const regions = layout?.regions ?? [];
+  // Routes without a persisted Page retain their historical static shell.
+  // Persisted Pages take their Region authority only from their Layout.
+  const regionKeys = pageState.page
+    ? regions.map((region) => region.key)
+    : [...PAGE_COMPOSITION_POSITIONS];
+  const slots = emptySlots(regionKeys);
+  let invalidAssignmentRegion = false;
   const homepageProjects = blockState.blocks.some((block) =>
     isHomeProjectsTemplate(block.template.slug, block.template.variant),
   )
@@ -98,11 +115,14 @@ export async function loadPageCompositionBySlug(
     : null;
 
   for (const block of blockState.blocks) {
-    pushBlock(slots, block);
+    if (!pushBlock(slots, block, regionKeys)) invalidAssignmentRegion = true;
   }
 
   for (const feed of feedState.modules) {
-    if (!isAssignmentPositionAllowed("feed", feed.slot)) continue;
+    if (!isAssignmentPositionAllowed("feed", feed.slot, regionKeys)) {
+      invalidAssignmentRegion = true;
+      continue;
+    }
     slots[feed.slot].push({
       kind: "feed",
       assignmentId: feed.assignmentId,
@@ -112,7 +132,10 @@ export async function loadPageCompositionBySlug(
   }
 
   for (const featured of featuredState.modules) {
-    if (!isAssignmentPositionAllowed("featured", featured.slot)) continue;
+    if (!isAssignmentPositionAllowed("featured", featured.slot, regionKeys)) {
+      invalidAssignmentRegion = true;
+      continue;
+    }
     slots[featured.slot].push({
       kind: "featured",
       assignmentId: featured.assignmentId,
@@ -123,7 +146,10 @@ export async function loadPageCompositionBySlug(
 
   for (const widget of mediaSidebarModules.widgets) {
     if (!widget.isVisible) continue;
-    if (!isAssignmentPositionAllowed("media-sidebar", widget.slot)) continue;
+    if (!isAssignmentPositionAllowed("media-sidebar", widget.slot, regionKeys)) {
+      invalidAssignmentRegion = true;
+      continue;
+    }
     slots[widget.slot].push({
       kind: "media-sidebar",
       assignmentId: widget.assignmentId,
@@ -133,10 +159,11 @@ export async function loadPageCompositionBySlug(
   }
 
   for (const hubModule of mediaHubModules.modules) {
-    if (
-      !hubModule.isVisible ||
-      !isAssignmentPositionAllowed("media-hub", hubModule.slot)
-    ) continue;
+    if (!hubModule.isVisible) continue;
+    if (!isAssignmentPositionAllowed("media-hub", hubModule.slot, regionKeys)) {
+      invalidAssignmentRegion = true;
+      continue;
+    }
     slots[hubModule.slot].push({
       kind: "media-hub",
       assignmentId: hubModule.assignmentId,
@@ -146,13 +173,17 @@ export async function loadPageCompositionBySlug(
   }
 
   if (heroState.hero && heroState.assignmentId !== null) {
-    const position = getDefaultAssignmentPosition("hero");
-    if (isAssignmentPositionAllowed("hero", position)) slots[position].push({
-      kind: "hero",
-      assignmentId: heroState.assignmentId,
-      sortOrder: 0,
-      hero: heroState.hero,
-    });
+    const position = getDefaultAssignmentPosition("hero", regionKeys);
+    if (position && isAssignmentPositionAllowed("hero", position, regionKeys)) {
+      slots[position].push({
+        kind: "hero",
+        assignmentId: heroState.assignmentId,
+        sortOrder: 0,
+        hero: heroState.hero,
+      });
+    } else {
+      invalidAssignmentRegion = true;
+    }
   }
 
   for (const key of Object.keys(slots) as PageLayoutSlot[]) {
@@ -174,7 +205,7 @@ export async function loadPageCompositionBySlug(
     mediaHubModules.hasRenderableModules ||
     mediaSidebarModules.hasRenderableModules;
   const hasCompositionError =
-    pageState.sourceStatus === "error" ||
+    pageState.sourceStatus === "error" || layoutError || invalidAssignmentRegion ||
     heroState.visibility === "error" ||
     blockState.hasCompositionError ||
     feedState.hasCompositionError ||
@@ -184,6 +215,8 @@ export async function loadPageCompositionBySlug(
 
   return {
     pageIdentity: pageState.page ? toPublicPageIdentity(pageState.page) : null,
+    layoutKey: layout?.key ?? (pageState.page ? "" : "venisia-legacy"),
+    regions,
     slots,
     blockStates: blockState.blockStates ?? [],
     heroVisibility: heroState.visibility,

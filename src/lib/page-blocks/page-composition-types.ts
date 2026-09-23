@@ -8,6 +8,7 @@ import type { HeroSectionData } from "../page-sections";
 import type { PublicPageIdentity } from "../pages/get-published-page-by-slug";
 import type { HomepageProjectCard } from "../projects/public-types";
 import type { PageLayoutSlot } from "./layout-slots";
+import type { PageRegionDefinition } from "../page-composition/load-page-regions";
 import type { PageBlockPublicState, ResolvedPageBlock } from "./types";
 
 export type ListingRenderContext = {
@@ -71,6 +72,9 @@ export type SlotEntry =
 export type PageComposition = {
   /** Canonical CMS page identity consumed by the public shell. */
   pageIdentity: PublicPageIdentity | null;
+  /** One Layout-owned Region inventory for this Page; never a data-query selector. */
+  layoutKey: string;
+  regions: readonly PageRegionDefinition[];
   slots: Record<PageLayoutSlot, SlotEntry[]>;
   /** Page Block assignment/publication truth before render filtering. */
   blockStates: PageBlockPublicState[];

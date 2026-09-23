@@ -155,8 +155,9 @@ class SupabaseQueryMock implements PromiseLike<QueryResult> {
   readonly #operations: QueryOperation[] = [];
   readonly table: string;
 
-  constructor(table: string) {
+  constructor(table: string, initialOperations: QueryOperation[] = []) {
     this.table = table;
+    this.#operations.push(...initialOperations);
   }
 
   #record(method: string, args: unknown[]) {
@@ -451,6 +452,9 @@ const owner = loadTranspiledModule(
     "../../supabase-admin": {
       getSupabaseAdmin: () => ({
         from: (table: string) => new SupabaseQueryMock(table),
+        rpc: (name: string, args: unknown) => new SupabaseQueryMock(`rpc:${name}`, [
+          { method: "rpc", args: [args] },
+        ]),
       }),
     },
     "../reading-time": readingTime,
@@ -1374,28 +1378,15 @@ replaceQueryPlan([
     result: success([{ category_id: 302 }]),
   },
   {
-    label: "Feed parent exact count",
-    table: "topics",
+    label: "Feed parent grouped exact count",
+    table: "rpc:public_feed_category_counts",
     inspect: (operations) => {
-      const select = operations.find((operation) => operation.method === "select");
-      assert.deepEqual(select?.args, ["id", { count: "exact", head: true }]);
-      const categoryFilter = operations.find(
-        (operation) =>
-          operation.method === "in" &&
-          operation.args[0] === "category_slug",
-      );
-      assert.deepEqual(categoryFilter?.args[1], ["feed-parent", "feed-child"]);
-      const seriesFilter = operations.find(
-        (operation) =>
-          operation.method === "in" && operation.args[0] === "series_slug",
-      );
-      assert.deepEqual(seriesFilter?.args[1], ["series-a"]);
-      assert.equal(
-        operations.some((operation) => operation.method === "limit"),
-        false,
-      );
+      assert.deepEqual(operations[0]?.args[0], {
+        p_categories: [{ id: 301, slugs: ["feed-parent", "feed-child"] }],
+        p_series_slugs: ["series-a"],
+      });
     },
-    result: success([], { count: 260 }),
+    result: success([{ category_id: 301, article_count: 260 }]),
   },
 ]);
 const feedCategories = await loadPublicContentFeedCategories({
@@ -1407,7 +1398,38 @@ check(
   "Feed category count is the true parent-plus-descendants total, not item limit",
   feedCategories.length === 1 && feedCategories[0]?.count === 260,
 );
-assertPlanConsumed("Feed parent exact count");
+assertPlanConsumed("Feed parent grouped exact count");
+
+resetScenario();
+replaceQueryPlan([
+  {
+    label: "Feed category RPC failure hierarchy",
+    table: "topic_categories",
+    result: success([{ id: 301, name: "Parent", slug: "feed-parent", parent_id: null,
+      sort_order: 1, is_active: true, status: "published" }]),
+  },
+  {
+    label: "Feed category RPC failure",
+    table: "rpc:public_feed_category_counts",
+    result: failure("Grouped category count unavailable"),
+  },
+]);
+await expectQueryFailure("Feed grouped Category RPC Query Failure", () =>
+  loadPublicContentFeedCategories({ limit: 1, categorySlugs: ["feed-parent"], seriesSlugs: [] }),
+);
+check("Feed grouped Category RPC failure is not cached as Empty", cacheWrites === 1);
+assertPlanConsumed("Feed grouped Category RPC failure");
+replaceQueryPlan([{
+  label: "Feed category RPC recovery",
+  table: "rpc:public_feed_category_counts",
+  result: success([{ category_id: 301, article_count: 2 }]),
+}]);
+const recoveredGroupedCategories = await loadPublicContentFeedCategories({
+  limit: 1, categorySlugs: ["feed-parent"], seriesSlugs: [],
+});
+check("Feed grouped Category RPC recovery reaches source and returns count",
+  recoveredGroupedCategories[0]?.count === 2 && queryLog.length === 3);
+assertPlanConsumed("Feed grouped Category RPC recovery");
 
 resetScenario();
 const feedCategoryRecoveryInput = {
@@ -1447,8 +1469,8 @@ replaceQueryPlan([
   },
   {
     label: "Feed category count recovery",
-    table: "topics",
-    result: success([], { count: 12 }),
+    table: "rpc:public_feed_category_counts",
+    result: success([{ category_id: 303, article_count: 12 }]),
   },
 ]);
 const recoveredFeedCategories = await loadPublicContentFeedCategories(
@@ -1525,56 +1547,24 @@ replaceQueryPlan([
     ]),
   },
   {
-    label: "Series 61 representative",
-    table: "topics",
+    label: "Grouped Series representatives",
+    table: "rpc:public_feed_series_representatives",
     inspect: (operations) => {
       assert.deepEqual(
-        operations.find(
-          (operation) =>
-            operation.method === "eq" && operation.args[0] === "series_slug",
-        )?.args,
-        ["series_slug", "series-61"],
-      );
-      assert.deepEqual(
-        operations.find((operation) => operation.method === "range")?.args,
-        [0, 0],
+        operations[0]?.args[0],
+        { p_series_slugs: ["series-61", "series-62"] },
       );
     },
     result: success([
-      topicRow({
-        id: 4611,
-        slug: "series-61-representative",
-        image: "/series-61.jpg",
-        image_alt: "Authored Series 61 alt",
-        series_slug: "series-61",
-      }),
-    ], { count: 1 }),
-  },
-  {
-    label: "Series 62 representative",
-    table: "topics",
-    inspect: (operations) => {
-      assert.deepEqual(
-        operations.find(
-          (operation) =>
-            operation.method === "eq" && operation.args[0] === "series_slug",
-        )?.args,
-        ["series_slug", "series-62"],
-      );
-      assert.deepEqual(
-        operations.find((operation) => operation.method === "range")?.args,
-        [0, 0],
-      );
-    },
-    result: success([
-      topicRow({
-        id: 4621,
-        slug: "series-62-representative",
-        image: "/series-62.jpg",
-        image_alt: "Authored Series 62 alt",
-        series_slug: "series-62",
-      }),
-    ], { count: 1 }),
+      { series_slug: "series-61", representative: topicRow({
+        id: 4611, slug: "series-61-representative", image: "/series-61.jpg",
+        image_alt: "Authored Series 61 alt", series_slug: "series-61",
+      }) },
+      { series_slug: "series-62", representative: topicRow({
+        id: 4621, slug: "series-62-representative", image: "/series-62.jpg",
+        image_alt: "Authored Series 62 alt", series_slug: "series-62",
+      }) },
+    ]),
   },
 ]);
 const feedSeries = await loadPublicContentFeedSeries({
@@ -1588,6 +1578,45 @@ check(
     feedSeries[1]?.representative?.imageAlt === "Authored Series 62 alt",
 );
 assertPlanConsumed("Feed Series representatives");
+
+resetScenario();
+replaceQueryPlan([
+  {
+    label: "Feed empty Series hierarchy",
+    table: "topic_categories",
+    result: success([]),
+  },
+  {
+    label: "Feed empty Series rows",
+    table: "topic_series",
+    result: success([{ id: 463, name: "Empty", slug: "series-empty",
+      description: null, category_id: null }]),
+  },
+  {
+    label: "Feed empty Series grouped read",
+    table: "rpc:public_feed_series_representatives",
+    result: success([]),
+  },
+]);
+const emptyFeedSeries = await loadPublicContentFeedSeries({ limit: 1 });
+check("Feed Series without a published Article keeps a null representative",
+  emptyFeedSeries.length === 1 && emptyFeedSeries[0]?.representative === null);
+assertPlanConsumed("Feed empty Series");
+
+resetScenario();
+replaceQueryPlan([
+  { label: "Feed Series RPC failure hierarchy", table: "topic_categories", result: success([]) },
+  { label: "Feed Series RPC failure selection", table: "topic_series",
+    result: success([{ id: 463, name: "Empty", slug: "series-empty",
+      description: null, category_id: null }]) },
+  { label: "Feed Series RPC failure", table: "rpc:public_feed_series_representatives",
+    result: failure("Grouped Series read unavailable") },
+]);
+await expectQueryFailure("Feed grouped Series RPC Query Failure", () =>
+  loadPublicContentFeedSeries({ limit: 1 }),
+);
+check("Feed grouped Series RPC failure is not cached as Empty", cacheWrites === 1);
+assertPlanConsumed("Feed grouped Series RPC failure");
 
 resetScenario();
 replaceQueryPlan([

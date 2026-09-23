@@ -8,6 +8,13 @@ const normalize = (value: string) => value.replaceAll("\\", "/");
 
 /** The groups below are the existing owners in the architecture constitution. */
 function boundaryFor(source: string, dependency: string): BoundaryFailure | null {
+  if ((source.startsWith("src/app/(site)/")
+    || (source.startsWith("src/components/") && !source.startsWith("src/components/admin/")))
+    && (dependency === "src/lib/supabase-admin.ts" || dependency === "src/lib/supabase-fetch.ts"
+      || dependency.startsWith("node_modules/@supabase/supabase-js/")
+      || /node_modules\/next\/cache(?:\.d)?\.(?:ts|js)$/u.test(dependency)))
+    return { owner: "Public presentation and composition", source, dependency,
+      contract: "Public templates and presentation modules must use existing public data and cache owners, never database clients, transport, or revalidation directly." };
   if (source.startsWith("src/components/admin/entity-list/")
     && (dependency === "src/lib/supabase-admin.ts" || dependency.startsWith("src/app/admin/")))
     return { owner: "Admin Entity List shared presentation", source, dependency,
@@ -64,6 +71,7 @@ export function evaluateArchitectureBoundaries(root: string, files: readonly str
 
 export function currentArchitectureBoundaryFiles(root: string) {
   return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", "src/components/admin/entity-list",
-    "src/lib/admin/entity-list/data-engine", "src/lib/admin/projects", "src/lib/content/public-content-read"],
+    "src/lib/admin/entity-list/data-engine", "src/lib/admin/projects", "src/lib/content/public-content-read",
+    "src/app/(site)", "src/components"],
     { cwd: root }).toString("utf8").split("\0").filter(Boolean);
 }

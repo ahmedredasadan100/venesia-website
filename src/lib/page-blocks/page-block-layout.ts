@@ -3,8 +3,8 @@ import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
 
 function sortBlocks(a: ResolvedPageBlock, b: ResolvedPageBlock) {
   if (a.slot !== b.slot) {
-    return PAGE_COMPOSITION_POSITIONS.indexOf(a.slot)
-      - PAGE_COMPOSITION_POSITIONS.indexOf(b.slot);
+    return (PAGE_COMPOSITION_POSITIONS as readonly string[]).indexOf(a.slot)
+      - (PAGE_COMPOSITION_POSITIONS as readonly string[]).indexOf(b.slot);
   }
   if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
   return a.assignmentId - b.assignmentId;

@@ -241,7 +241,14 @@ export async function runApplicationHandoff(
     assert.equal(migrations[seoBoundary + 2]?.file, seoEnforce);
     assert.equal(migrations[seoBoundary + 3]?.file, postSeoSecurityDeclaration,
       "The reviewed post-SEO security declaration must follow ENFORCE.");
-    assert.equal(migrations.length, seoBoundary + 4, "A later migration needs an explicit reviewed phase boundary.");
+    assert.deepEqual(
+      migrations.slice(seoBoundary + 4).map(({ file }) => file),
+      [
+        "20260920010000_public_feed_aggregated_reads.sql",
+        "20260920011000_page_composition_layout_regions.sql",
+      ],
+      "Only the reviewed Public Composition migration extension may follow the SEO security declaration.",
+    );
     const baseline = migrations.slice(0, seoBoundary);
     assert.equal(new Set(checkpoints.map(({ version }) => version)).size, checkpoints.length);
     const orderedCheckpoints = checkpoints.map((checkpoint) => {
@@ -380,6 +387,15 @@ export async function runApplicationHandoff(
     // The canonical ENFORCE file also locks and rechecks all tuples atomically.
     await applyPhase(migrations.slice(0, seoBoundary + 3));
     report.seoEnforceVerified = true;
+    const legacyPositions = await handle.query(`select assignment.slot, count(*)::int as assignments
+      from public.page_composition_assignments assignment
+      join public.pages page on page.id=assignment.page_id
+      where assignment.slot not in ('main','sidebar','bottom','footer','hero')
+      group by assignment.slot order by assignment.slot`);
+    handle.record("legacy-assignment-position-preflight", {
+      positionSummary: legacyPositions.rows.map((row) => `${String(row.slot)}=${Number(row.assignments)}`).join(",").slice(0, 256),
+      unknownPositionKinds: legacyPositions.rows.length,
+    });
     await applyPhase(migrations);
     // The official CLI owns statement splitting. Preserve its rows and prove
     // source-bound execution; never relabel them as whole-file registry SQL.

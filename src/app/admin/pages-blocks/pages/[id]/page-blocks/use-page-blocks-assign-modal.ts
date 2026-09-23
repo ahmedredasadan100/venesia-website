@@ -41,12 +41,14 @@ function sameTemplateOptions(left: InitialContentTemplateOptions, right: Initial
 
 type UsePageBlocksAssignModalOptions = {
   assignments: PageBlockAssignmentRow[];
+  regionKeys: readonly string[];
   initialContentTemplates?: InitialContentTemplateOptions | null;
   setActionMessage: (message: string | null) => void;
 };
 
 export function usePageBlocksAssignModal({
   assignments,
+  regionKeys,
   initialContentTemplates,
   setActionMessage,
 }: UsePageBlocksAssignModalOptions) {
@@ -145,8 +147,8 @@ export function usePageBlocksAssignModal({
   }, [assignments, assignModuleKind]);
 
   const slotOptions = useMemo(
-    (): PageLayoutSlot[] => getSlotOptions(assignModuleKind),
-    [assignModuleKind],
+    (): PageLayoutSlot[] => getSlotOptions(assignModuleKind, regionKeys),
+    [assignModuleKind, regionKeys],
   );
 
   const assignableTemplates = useMemo(

@@ -1490,7 +1490,7 @@ check(
     assignmentGrid.includes('sortProps("slot")') &&
     assignmentGrid.includes(">موضع العرض</") &&
     assignmentRow.includes(
-      "LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]",
+      "regionLabels[normalizeLayoutSlot(row.slot)]",
     ) &&
     assignmentRow.includes("AdminListboxSelect") &&
     pagesClient.includes("handleDisplayPositionChange") &&
@@ -1498,7 +1498,7 @@ check(
     pagesClient.includes("<PageVisualSlotMap assignments={instant.rows}") &&
     pagesClient.includes("reconcileSuccess:") &&
     pagesClient.includes('paramKey: "slot"') &&
-    pagesClient.includes("PAGE_COMPOSITION_POSITIONS.map") &&
+    pagesClient.includes("options: regions.map((region) => ({") &&
     pagesClient.includes("slot: (row: PageBlockAssignmentRow)") &&
     pagesClient.includes(
       "values={{ module_type: moduleType, slot, visibility }}",

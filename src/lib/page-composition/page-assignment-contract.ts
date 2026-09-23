@@ -1,5 +1,4 @@
 import {
-  isPageCompositionPosition,
   PAGE_COMPOSITION_POSITIONS,
   type PageCompositionPosition,
 } from "./positions.ts";
@@ -98,15 +97,16 @@ export function getPageCompositionPositions(): PageCompositionPosition[] {
  */
 export function getAssignablePositions(
   moduleKind: string,
-): PageCompositionPosition[] {
+  layoutRegions: readonly string[] = PAGE_COMPOSITION_POSITIONS,
+): string[] {
   const kind = normalizeModuleKind(moduleKind);
   if (!kind) return [];
 
-  const pagePositions = getPageCompositionPositions();
+  const pagePositions = [...layoutRegions];
   const capability = MODULE_POSITION_CAPABILITIES[kind];
   if (capability.mode === "page") return pagePositions;
 
-  const fixed = new Set(capability.positions);
+  const fixed = new Set<string>(capability.positions);
   return pagePositions.filter((position) => fixed.has(position));
 }
 
@@ -121,12 +121,18 @@ export function getDefaultAssignmentPosition(
   moduleKind: PageModuleKind,
 ): PageCompositionPosition;
 export function getDefaultAssignmentPosition(
-  moduleKind: string,
-): PageCompositionPosition | null;
+  moduleKind: PageModuleKind,
+  layoutRegions: readonly string[],
+): string | null;
 export function getDefaultAssignmentPosition(
   moduleKind: string,
-): PageCompositionPosition | null {
-  return getAssignablePositions(moduleKind)[0] ?? null;
+  layoutRegions?: readonly string[],
+): string | null;
+export function getDefaultAssignmentPosition(
+  moduleKind: string,
+  layoutRegions?: readonly string[],
+): string | null {
+  return getAssignablePositions(moduleKind, layoutRegions)[0] ?? null;
 }
 
 export function getProductFixedPositionReason(moduleKind: string): string | null {
@@ -139,17 +145,19 @@ export function getProductFixedPositionReason(moduleKind: string): string | null
 export function isAssignmentPositionAllowed(
   moduleKind: string,
   slot: string | null | undefined,
+  layoutRegions?: readonly string[],
 ): boolean {
-  if (!isPageCompositionPosition(slot)) return false;
-  return getAssignablePositions(moduleKind).includes(slot);
+  if (!slot) return false;
+  return getAssignablePositions(moduleKind, layoutRegions).includes(slot);
 }
 
 /** Safe Arabic message for rejected create/update. */
 export function getUnsupportedAssignmentPositionMessage(
   moduleKind: string,
   slot: string | null | undefined,
+  layoutRegions?: readonly string[],
 ): string {
-  const options = getAssignablePositions(moduleKind);
+  const options = getAssignablePositions(moduleKind, layoutRegions);
   const requested = String(slot ?? "").trim() || "غير محدد";
   const kindLabel = moduleKind.trim() || "الموديول";
   const fixedReason = getProductFixedPositionReason(moduleKind);

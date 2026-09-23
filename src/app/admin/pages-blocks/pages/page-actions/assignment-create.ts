@@ -49,7 +49,7 @@ async function saveAssignment(options: {
 }): Promise<PageBlockActionResult> {
   const actor = await requireAdminSession();
   if (!(await pageExists(options.pageId))) return failure("الصفحة غير موجودة.");
-  const slotRejection = positionPolicyFailure(options.kind, options.slot);
+  const slotRejection = await positionPolicyFailure(options.pageId, options.kind, options.slot);
   if (slotRejection) return slotRejection;
   try {
     await mutatePageComposition(options.pageId, "save_assignment", {
@@ -131,7 +131,8 @@ export async function assignHeroModule(
   if (!pageId || !heroId) return failure("بيانات ربط الهيرو غير مكتملة.");
   if (!(await pageExists(pageId))) return failure("الصفحة غير موجودة.");
   const slot = getDefaultAssignmentPosition("hero");
-  const slotRejection = positionPolicyFailure(
+  const slotRejection = await positionPolicyFailure(
+    pageId,
     "hero",
     slot,
   );

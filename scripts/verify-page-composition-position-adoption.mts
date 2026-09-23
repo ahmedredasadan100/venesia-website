@@ -129,7 +129,7 @@ const ADOPTION_MATRIX = {
     syncSource: "src/app/admin/pages-blocks/blocks/feed/actions.ts",
     syncMarker: 'saveModuleTemplateWithPageAssignments("feed"',
     publicSource: "src/lib/page-blocks/load-page-composition.ts",
-    publicMarker: 'isAssignmentPositionAllowed("feed", feed.slot)',
+    publicMarker: 'isAssignmentPositionAllowed("feed", feed.slot, regionKeys)',
     rendererSource: "src/components/page-composition/PageSlotLayout.tsx",
     rendererMarker: "FeedModuleSection",
   },
@@ -141,7 +141,7 @@ const ADOPTION_MATRIX = {
     syncSource: "src/app/admin/pages-blocks/blocks/featured/actions.ts",
     syncMarker: 'saveModuleTemplateWithPageAssignments("featured"',
     publicSource: "src/lib/page-blocks/load-page-composition.ts",
-    publicMarker: 'isAssignmentPositionAllowed("featured", featured.slot)',
+    publicMarker: 'isAssignmentPositionAllowed("featured", featured.slot, regionKeys)',
     rendererSource: "src/components/page-composition/PageSlotLayout.tsx",
     rendererMarker: "FeaturedModuleSection",
   },
@@ -234,6 +234,16 @@ assert.deepEqual(
   [...ASSIGNABLE_MODULE_KINDS].sort(),
   "Position adoption matrix must cover every assignable Page Module kind",
 );
+assert.deepEqual(getAssignablePositions("content", ["north-gallery"]), ["north-gallery"]);
+assert.deepEqual(getAssignablePositions("feed", ["north-gallery"]), ["north-gallery"]);
+assert.deepEqual(getAssignablePositions("hero", ["north-gallery"]), []);
+assert.ok(read("src/lib/page-composition/load-page-regions.ts").includes('page_composition_layouts!pages_layout_id_fkey'));
+assert.ok(read("src/lib/page-blocks/load-page-composition.ts").includes("regions.map((region) => region.key)"));
+assert.doesNotMatch(
+  read("src/components/page-composition/PageSlotLayout.tsx"),
+  /getSupabaseAdmin|\.from\(|\.rpc\(|unstable_cache/u,
+  "Presentation must not own data or cache behavior for any Region key",
+);
 const assignmentTypes = read("src/lib/page-blocks/types.ts");
 assert.ok(assignmentTypes.includes("export const PAGE_MODULE_KINDS"));
 assert.ok(assignmentTypes.includes('"hero", ...PAGE_BLOCK_TYPES, "media-sidebar", "media-hub"'));
@@ -275,9 +285,9 @@ const slotModuleNodes = read("src/components/page-composition/slot-module-nodes.
 const projectsLoader = read("src/lib/projects/load-projects-hub-composition.ts");
 const projectsPlan = read("src/lib/projects/build-projects-hub-render-plan.ts");
 
-assert.ok(pageClient.includes("getAssignablePositions(row.module_kind)"));
-assert.ok(pageClient.includes("PAGE_COMPOSITION_POSITIONS"));
-assert.ok(assignmentModal.includes("getSlotOptions(assignModuleKind)"));
+assert.ok(pageClient.includes("getAssignablePositions(row.module_kind, regionKeys)"));
+assert.ok(pageClient.includes("regions.map((region) => ({"));
+assert.ok(assignmentModal.includes("getSlotOptions(assignModuleKind, regionKeys)"));
 assert.ok(assignmentModalView.includes('name="slot"'));
 assert.ok(
   assignmentModal.includes("export type AssignableModuleKind = PageModuleKind"),
@@ -298,16 +308,16 @@ assert.ok(
   ),
   "Module metadata must exhaustively cover PageModuleKind",
 );
-assert.ok(assignmentCreate.includes("positionPolicyFailure(options.kind, options.slot)"));
+assert.ok(assignmentCreate.includes("positionPolicyFailure(options.pageId, options.kind, options.slot)"));
 assert.ok(
   assignmentCreate.includes('cleanText(formData.get("slot")) || getDefaultAssignmentPosition("media-sidebar")') &&
     assignmentCreate.includes('cleanText(formData.get("slot")) || getDefaultAssignmentPosition("media-hub")'),
   "specialized Media create actions must persist the selected Assignment Position",
 );
-assert.ok(assignmentUpdate.includes("positionPolicyFailure(kind, slot)"));
+assert.ok(assignmentUpdate.includes("positionPolicyFailure(pageId, kind, slot)"));
 assert.ok(assignmentSync.includes("getDefaultAssignmentPosition(moduleKind)"));
 assert.doesNotMatch(assignmentSync, /defaultSlotFor|default_slot:\s*["']/u);
-assert.ok(adminRead.includes("PAGE_COMPOSITION_POSITIONS.indexOf(normalizeLayoutSlot(slot))"));
+assert.ok(adminRead.includes("PAGE_COMPOSITION_POSITIONS as readonly string[]"));
 assert.ok(
   adminRead.includes("comparePageAssignmentOrder(") &&
     slotRenderPlan.includes("comparePageAssignmentOrder(left, right)") &&
@@ -315,11 +325,11 @@ assert.ok(
   "Admin reload and Public plans must share the canonical cross-kind Assignment comparator",
 );
 assert.doesNotMatch(adminRead, /slot\s*===\s*["']top["']/u);
-assert.ok(compositionLoader.includes("PAGE_COMPOSITION_POSITIONS.map"));
-assert.ok(compositionLoader.includes("isAssignmentPositionAllowed(block.blockType, block.slot)"));
-assert.ok(compositionLoader.includes('isAssignmentPositionAllowed("media-sidebar", widget.slot)'));
+assert.ok(compositionLoader.includes("loadPageRegionsForPage(pageState.page.id)"));
+assert.ok(compositionLoader.includes("isAssignmentPositionAllowed(block.blockType, block.slot, regions)"));
+assert.ok(compositionLoader.includes('isAssignmentPositionAllowed("media-sidebar", widget.slot, regionKeys)'));
 assert.ok(compositionLoader.includes("slots[widget.slot].push"));
-assert.ok(compositionLoader.includes('isAssignmentPositionAllowed("media-hub", hubModule.slot)'));
+assert.ok(compositionLoader.includes('isAssignmentPositionAllowed("media-hub", hubModule.slot, regionKeys)'));
 assert.ok(compositionLoader.includes("slots[hubModule.slot].push"));
 assert.doesNotMatch(
   read("src/lib/media-sidebar-modules/load-media-sidebar-modules.ts"),
@@ -389,4 +399,4 @@ for (const kind of ASSIGNABLE_MODULE_KINDS) {
   console.log(`${kind} | ${row.assignmentStore} | ${policy} | Full`);
 }
 
-console.log("\nNo route-, page-, Template-, Theme-, CSS-, or local Consumer Position policy remains in the audited Assignment paths.");
+console.log("\nLayout-owned Regions drive Page assignments; the legacy Position list is a compatibility default for existing module-editor sync.");

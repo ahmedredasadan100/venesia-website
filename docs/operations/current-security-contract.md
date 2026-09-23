@@ -1,7 +1,8 @@
 # Current Database Security Contract
 
 Owner: Database security and migration provenance. The executable declarations
-remain in migrations 107 and 108; `scripts/lib/database-rls-security-contract.mts`
+start in migrations 107 and 108, then migration 110 records revision 3 after its
+new Layout and Region objects exist. `scripts/lib/database-rls-security-contract.mts`
 is their read only parser and verifier.
 
 ## Why the historical contract was brittle
@@ -63,7 +64,10 @@ Both files were never applied to Production and may be revised without changing
 an applied receipt. Their old committed forms are retained as historical source
 evidence. Migration 107 now adopts the platform aware revision 1 and migration
 108 verifies and supersedes it with revision 2 after the later application
-tables exist. The fresh database branches in migrations 86 and 99 recognize the
+tables exist. Migration 110 verifies revision 2 and supersedes it with revision
+3 so the same contract covers `page_composition_layouts`,
+`page_composition_regions`, their sequence and the three Region validation
+functions. The fresh database branches in migrations 86 and 99 recognize the
 explicit historical, superseded fresh, and corrected source revisions. They do
 not rewrite an existing registry row or invent an applied receipt.
 
@@ -79,7 +83,8 @@ No step below is authorized by this document.
 4. Apply revised 108 through the same mechanism and run the read only current
    contract verifier.
 5. Apply 109 and 110 only after their Draft PR head and database contract are
-   unchanged, then run their read only Feed and Region checks.
+   unchanged. Verify revision 3 plus the read only Feed and Region checks after
+   110.
 6. Stop before Ready, merge or deploy and report the new registry and runtime
    state.
 

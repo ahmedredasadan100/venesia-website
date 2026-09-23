@@ -51,6 +51,24 @@ const shared = "src/components/admin/entity-list/AdminEntityList.tsx";
 assert.equal(evaluateArchitectureBoundaries(root, [shared], new Map([
   [shared, 'import { getSupabaseAdmin } from "../../../lib/supabase-admin"; export { getSupabaseAdmin };'],
 ])).length, 1, "A shared component bypassing its data owner must fail.");
+const publicConsumers = [
+  ["src/app/(site)/topics/page.tsx", "../../../lib"],
+  ["src/components/page-composition/PageSlotLayout.tsx", "../../lib"],
+] as const;
+for (const [source, lib] of publicConsumers) {
+  assert.equal(evaluateArchitectureBoundaries(root, [source], new Map([
+    [source, `import { getSupabaseAdmin } from "${lib}/supabase-admin"; export { getSupabaseAdmin };`],
+  ])).length, 1, "A public template or presenter bypassing its public data owner must fail.");
+  assert.equal(evaluateArchitectureBoundaries(root, [source], new Map([
+    [source, 'import { createClient } from "@supabase/supabase-js"; export { createClient };'],
+  ])).length, 1, "A public template or presenter creating a parallel Supabase client must fail.");
+  assert.equal(evaluateArchitectureBoundaries(root, [source], new Map([
+    [source, 'import { unstable_cache } from "next/cache"; export { unstable_cache };'],
+  ])).length, 1, "A public template or presenter creating a parallel cache must fail.");
+  assert.deepEqual(evaluateArchitectureBoundaries(root, [source], new Map([
+    [source, `import { loadPublicContentCollection } from "${lib}/content/public-content-read/owner"; export { loadPublicContentCollection };`],
+  ])), [], "A public consumer adopting the existing read owner must pass.");
+}
 const runtime = "src/lib/admin/entity-list/data-engine/fixture.ts";
 assert.equal(evaluateArchitectureBoundaries(root, [runtime], new Map([
   [runtime, 'import { loadProjectEntry } from "../../projects/project-entry-data"; export { loadProjectEntry };'],

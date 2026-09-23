@@ -29,7 +29,7 @@ export async function updatePageBlockAssignment(
   }
   const slot = cleanText(formData.get("slot")) || getDefaultAssignmentPosition(kind);
   if (!(await pageExists(pageId))) return failure("الصفحة غير موجودة.");
-  const slotRejection = positionPolicyFailure(kind, slot);
+  const slotRejection = await positionPolicyFailure(pageId, kind, slot);
   if (slotRejection) return slotRejection;
   let updatedAt: string | undefined;
   try {
@@ -58,7 +58,8 @@ export async function updateHeroPageAssignment(
   const heroId = parseNumber(formData.get("template_id"));
   if (!pageId || !assignmentId || !heroId) return failure("بيانات الربط غير مكتملة.");
   if (!(await pageExists(pageId))) return failure("الصفحة غير موجودة.");
-  const slotRejection = positionPolicyFailure(
+  const slotRejection = await positionPolicyFailure(
+    pageId,
     "hero",
     getDefaultAssignmentPosition("hero"),
   );

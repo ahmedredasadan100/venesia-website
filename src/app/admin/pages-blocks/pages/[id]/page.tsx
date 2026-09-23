@@ -4,6 +4,7 @@ import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedba
 import { AdminPageContextHeader, AdminPageExperience } from "../../../../../components/admin/ui";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageModuleAssignmentsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
+import { loadPageRegionsForPage } from "../../../../../lib/page-composition/load-page-regions";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { getGlobalSeoDefaults } from "../../../../../lib/seo/global-seo-defaults";
@@ -88,6 +89,13 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     notFound();
   }
 
+  const layout = await loadPageRegionsForPage(page.id).catch((error: unknown) =>
+    error instanceof Error ? error : new Error(String(error)),
+  );
+  if (layout instanceof Error) {
+    return <PageCompositionLoadError title="تكوين الصفحة" message={layout.message} />;
+  }
+
   if (assignmentsResult.error || !assignmentsResult.data) {
     const message = assignmentsResult.error instanceof Error
       ? assignmentsResult.error.message
@@ -115,6 +123,7 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     <PageBlocksClient
       returnTo={resolveAdminFormReturnPath(resolvedSearchParams?.return_to, "/admin/pages-blocks/pages")}
       page={page}
+      regions={layout.regions}
       assignments={assignmentsData.assignments}
       initialContentTemplates={assignmentsData.initialContentTemplates}
       seo={{

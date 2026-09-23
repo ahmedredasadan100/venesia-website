@@ -1,5 +1,4 @@
 import type { PageModuleKind } from "../page-blocks/types";
-import type { PageCompositionPosition } from "./positions";
 import { getAssignablePositions } from "./page-assignment-contract.ts";
 
 export type ModuleEditorIconToken =
@@ -545,7 +544,7 @@ export function getModuleEditorSectionOrder(metadata: ModuleEditorSectionMetadat
 export function getSlotCompatibilityLabel(kind: string) {
   const positions = getAssignablePositions(kind);
   if (!positions.length) return null;
-  const labels: Record<PageCompositionPosition, string> = {
+  const labels: Record<string, string> = {
     hero: "الهيرو",
     main: "المحتوى الرئيسي",
     sidebar: "الشريط الجانبي",

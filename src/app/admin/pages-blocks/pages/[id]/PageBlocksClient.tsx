@@ -36,8 +36,6 @@ import {
 } from "../../../../../lib/page-blocks/admin-utils";
 import { resolveModuleProductKind } from "../../../../../lib/page-blocks/module-edit-registry";
 import {
-  LAYOUT_SLOT_LABELS_AR,
-  PAGE_COMPOSITION_POSITIONS,
   type PageLayoutSlot,
   normalizeLayoutSlot,
 } from "../../../../../lib/page-blocks/layout-slots";
@@ -45,6 +43,7 @@ import {
   comparePageAssignmentOrder,
   getAssignablePositions,
 } from "../../../../../lib/page-composition/page-assignment-contract";
+import type { PageRegionDefinition } from "../../../../../lib/page-composition/load-page-regions";
 import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/types";
 import { resolvePagePublicPath } from "../../../../../lib/pages/page-admin-policy";
 import {
@@ -83,6 +82,7 @@ type PageRow = {
 type PageBlocksClientProps = {
   returnTo?: string;
   page: PageRow;
+  regions: readonly PageRegionDefinition[];
   assignments: PageBlockAssignmentRow[];
   initialContentTemplates: InitialContentTemplateOptions | null;
   seo: {
@@ -116,6 +116,7 @@ type SortKey = "module_kind" | "template_name" | "slot" | "visibility";
 export default function PageBlocksClient({
   returnTo,
   page,
+  regions,
   assignments,
   initialContentTemplates,
   seo,
@@ -146,6 +147,10 @@ export default function PageBlocksClient({
     [visibleColumns],
   );
   const previewHref = resolvePagePublicPath(page);
+  const regionKeys = useMemo(() => regions.map((region) => region.key), [regions]);
+  const regionLabels = useMemo(() => Object.fromEntries(
+    regions.map((region) => [region.key, region.adminLabel]),
+  ) as Record<string, string>, [regions]);
   const setActionMessage = (message: string | null) =>
     setActionFeedback(message ? { message, ok: false } : null);
 
@@ -177,6 +182,7 @@ export default function PageBlocksClient({
     assignMediaHubAction,
   } = usePageBlocksAssignModal({
     assignments: instant.rows,
+    regionKeys,
     initialContentTemplates,
     setActionMessage,
   });
@@ -186,11 +192,11 @@ export default function PageBlocksClient({
       module_kind: (row: PageBlockAssignmentRow) =>
         moduleKindLabel(row.module_kind, row.template_slug, row.template_variant),
       template_name: (row: PageBlockAssignmentRow) => row.template_name,
-      slot: (row: PageBlockAssignmentRow) => PAGE_COMPOSITION_POSITIONS.indexOf(normalizeLayoutSlot(row.slot)),
+      slot: (row: PageBlockAssignmentRow) => regionKeys.indexOf(normalizeLayoutSlot(row.slot)),
       visibility: (row: PageBlockAssignmentRow) =>
         (normalizeBoolean(row.is_publicly_visible, false) ? 0 : 1),
     }),
-    [],
+    [regionKeys],
   );
 
   const pageDisplayRows = useMemo(
@@ -228,9 +234,9 @@ export default function PageBlocksClient({
         type: "single_select",
         allValue: "all",
         placeholder: "موضع العرض",
-        options: PAGE_COMPOSITION_POSITIONS.map((value) => ({
-          value,
-          label: LAYOUT_SLOT_LABELS_AR[value],
+        options: regions.map((region) => ({
+          value: region.key,
+          label: region.adminLabel,
         })),
       },
       {
@@ -246,7 +252,7 @@ export default function PageBlocksClient({
         ],
       },
     ];
-  }, [assignments]);
+  }, [assignments, regions]);
   const queryContract = useMemo<
     AdminBoundedClientQueryContract<PageBlockAssignmentRow>
   >(
@@ -258,7 +264,7 @@ export default function PageBlocksClient({
         if (
           query.search &&
           !adminCollectionSearchIncludes(
-            `${row.template_name} ${moduleKindLabel(row.module_kind, row.template_slug, row.template_variant)} ${LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]}`,
+            `${row.template_name} ${moduleKindLabel(row.module_kind, row.template_slug, row.template_variant)} ${regionLabels[normalizeLayoutSlot(row.slot)] ?? normalizeLayoutSlot(row.slot)}`,
             query.search,
           )
         ) return false;
@@ -277,7 +283,7 @@ export default function PageBlocksClient({
       },
       getRowId: assignmentRowId,
     }),
-    [assignmentFilters],
+    [assignmentFilters, regionLabels],
   );
   const pagination = useAdminBoundedClientPagination({
     rows: table.rows,
@@ -466,7 +472,7 @@ export default function PageBlocksClient({
   }
 
   function getDisplayPositionOptions(row: PageBlockAssignmentRow): PageLayoutSlot[] {
-    return getAssignablePositions(row.module_kind);
+    return getAssignablePositions(row.module_kind, regionKeys);
   }
 
   async function handleDisplayPositionChange(
@@ -491,7 +497,7 @@ export default function PageBlocksClient({
         : candidate,
     );
     const canonicalPositionByRowId = new Map<string, { slot: string; sortOrder: number }>();
-    for (const candidateSlot of PAGE_COMPOSITION_POSITIONS) {
+    for (const candidateSlot of regionKeys) {
       positionedRows
         .filter(
           (candidate) =>
@@ -813,7 +819,7 @@ export default function PageBlocksClient({
             icon: "plans",
             content: (
               <section className="rounded-[28px] border border-white/10 bg-[#080B10]/92 p-6" dir="rtl">
-                <PageVisualSlotMap assignments={instant.rows} returnTo={returnTo} />
+                <PageVisualSlotMap assignments={instant.rows} regions={regions} returnTo={returnTo} />
               </section>
             ),
           },
@@ -904,6 +910,7 @@ export default function PageBlocksClient({
                 }
                 table={
                   <PageBlocksAssignmentsGrid
+                    regionLabels={regionLabels}
                     returnTo={returnTo}
                     rows={paginatedRows}
                     previewHref={previewHref}
@@ -948,6 +955,7 @@ export default function PageBlocksClient({
 
       {assignModalOpen ? (
         <PageBlocksAssignModal
+          regionLabels={regionLabels}
           pageId={page.id}
           onClose={closeAssignModal}
           assignModuleKind={assignModuleKind}

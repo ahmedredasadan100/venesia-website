@@ -80,7 +80,13 @@ function reset() {
   footerFailure = false;
   navigationFailure = false;
   const hero = { id: 1, page_id: page.id, section_key: "hero", section_type: "hero", slot: "hero", variant: "internal-page", style_preset: "premium-dark", source_type: "manual", source_id: null, source_slug: null, limit_count: 1, is_visible: true, sort_order: 0, config: { title: "Composite hero", subtitle: "Fixture subtitle", showTitle: true, showSubtitle: true, showImage: false, showCta: false }, page };
-  composition = { pageIdentity: page, slots: {
+  composition = { pageIdentity: page, layoutKey: "venisia-legacy", regions: [
+    { key: "main", adminLabel: "Main", sortOrder: 0 },
+    { key: "sidebar", adminLabel: "Sidebar", sortOrder: 1 },
+    { key: "bottom", adminLabel: "Bottom", sortOrder: 2 },
+    { key: "footer", adminLabel: "Footer", sortOrder: 3 },
+    { key: "hero", adminLabel: "Hero", sortOrder: 4 },
+  ], slots: {
     hero: [{ kind: "hero", assignmentId: 1, sortOrder: 0, hero }, block(2, "hero", "breadcrumb", { showHome: true, homeLabel: "Fixture home", currentLabel: "Ignored configured label" })],
     main: [block(4, "main", "content", { title: "Main second", body: "Second content" }, 20), block(3, "main", "content", { title: "Main first", body: "First content" }, 10)],
     sidebar: [block(5, "sidebar", "content", { title: "Sidebar content", body: "Sidebar body" })],
@@ -116,6 +122,19 @@ try {
     assert.ok(!html.includes("Ignored configured label"), "Page identity owns current breadcrumb label");
     assert.ok(calls.some(([kind, value]) => kind === "composition" && value === page.slug));
     writeFileSync(path.join(out, "composed-page.html"), html);
+  });
+  await check("a-new-layout-region-renders-an-unchanged-content-module", async () => {
+    composition.layoutKey = "future-layout";
+    composition.regions = [
+      { key: "hero", adminLabel: "Hero", sortOrder: 0 },
+      { key: "north-gallery", adminLabel: "North gallery", sortOrder: 1 },
+    ];
+    composition.slots["north-gallery"] = [block(8, "north-gallery", "content", {
+      title: "Future region content", body: "Same Content module",
+    })];
+    const html = await render();
+    assert.ok(html.includes('data-layout-slot="north-gallery"'));
+    assert.ok(html.includes("Future region content"));
   });
   await check("empty-resolved-composition-does-not-invent-content", async () => {
     for (const slot of Object.keys(composition.slots)) composition.slots[slot] = [];
