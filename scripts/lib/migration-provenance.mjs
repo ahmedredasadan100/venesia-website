@@ -21,6 +21,30 @@ const CANONICAL_REGISTRY_REPRESENTATIONS = Object.freeze({
     statementArraySha256: "c0b1d13cfb49256a9811c7e6d97c94fe0e35f102a8b862e336c0f5d71a310587",
     reconstructedSourceSha256: "409b501179fc89d8442b09554c2f85f595e99ed3e678d81124c88cf596e31637",
   }),
+  "20260916201230": Object.freeze({
+    version: "20260916201230",
+    name: "database_rls_post_platform_classification",
+    kind: "canonical-statement-array-with-source-trivia-v1",
+    statementCount: 3,
+    statementArraySha256: "aafc443cc836c4186e9f85684cc0a352e7078b620e465be98bae625006509805",
+    reconstructedSourceSha256: "19f6d457df2106777a91a6434ad80cfb74470bb4c16e7490b79dc00b0350f82b",
+  }),
+  "20260920010000": Object.freeze({
+    version: "20260920010000",
+    name: "public_feed_aggregated_reads",
+    kind: "canonical-statement-array-with-source-trivia-v1",
+    statementCount: 8,
+    statementArraySha256: "b3482df9a29f3be2a30ca8897745dbde58d74df68399cc45c7fd2753f6062d73",
+    reconstructedSourceSha256: "c0c73d1fd71300df3d0cf4807488ee3c285df49e4a1f47a2effb937e4f1b8627",
+  }),
+  "20260920011000": Object.freeze({
+    version: "20260920011000",
+    name: "page_composition_layout_regions",
+    kind: "canonical-statement-array-with-source-trivia-v1",
+    statementCount: 36,
+    statementArraySha256: "c6b4d4b817a75dfe0f53ea55efabe4e824dd0885506f0e0a6d13a00ebda21645",
+    reconstructedSourceSha256: "f024e3fda109b47c2251fc5ef6d4da49f2b4142fa697a5c50629d7241ec1c67c",
+  }),
 });
 
 /** @typedef {{version:string,name:string,sql:string,sha256?:string}} MigrationSource */
@@ -106,6 +130,56 @@ export function assertMigrationSourceProvenance(migration) {
 }
 
 /**
+ * Supabase stores the executable statements but not their terminators or the
+ * whitespace/comments between them. Reinsert only those exact bytes from the
+ * hash-frozen canonical source. Any omitted executable token fails closed.
+ * @param {string[]} statements
+ * @param {string} canonicalSql
+ * @returns {string|null}
+ */
+function reconstructCanonicalStatementReceipt(statements, canonicalSql) {
+  const isTrivia = (value) => {
+    let offset = 0;
+    while (offset < value.length) {
+      if (/\s/u.test(value[offset]) || value[offset] === ";") { offset++; continue; }
+      if (value.startsWith("--", offset)) {
+        const newline = value.indexOf("\n", offset + 2);
+        offset = newline < 0 ? value.length : newline + 1;
+        continue;
+      }
+      if (value.startsWith("/*", offset)) {
+        let depth = 1;
+        offset += 2;
+        while (offset < value.length && depth > 0) {
+          if (value.startsWith("/*", offset)) { depth++; offset += 2; }
+          else if (value.startsWith("*/", offset)) { depth--; offset += 2; }
+          else offset++;
+        }
+        if (depth !== 0) return false;
+        continue;
+      }
+      return false;
+    }
+    return true;
+  };
+
+  let offset = 0;
+  let reconstructed = "";
+  for (const statement of statements) {
+    if (statement.length === 0) return null;
+    const statementOffset = canonicalSql.indexOf(statement, offset);
+    if (statementOffset < 0) return null;
+    const gap = canonicalSql.slice(offset, statementOffset);
+    if (!isTrivia(gap)) return null;
+    reconstructed += gap + statement;
+    offset = statementOffset + statement.length;
+  }
+  const tail = canonicalSql.slice(offset);
+  if (!isTrivia(tail)) return null;
+  return reconstructed + tail;
+}
+
+/**
  * Recognize only the reviewed exact registry representation of canonical source.
  * This is not migration-history compatibility: the reconstructed bytes must be
  * the current executable source, and every receipt byte remains fail closed.
@@ -121,7 +195,8 @@ export function classifyCanonicalRegistryRepresentation(row, migration) {
     || row.statements.some(statement => typeof statement !== "string")) return null;
   const statementArraySha256 = digest(JSON.stringify(row.statements));
   if (statementArraySha256 !== representation.statementArraySha256) return null;
-  const reconstructedSql = `${row.statements.join(";\n\n")};\n`;
+  const reconstructedSql = reconstructCanonicalStatementReceipt(row.statements, migration.sql);
+  if (reconstructedSql === null) return null;
   if (digest(reconstructedSql) !== representation.reconstructedSourceSha256
     || digest(migration.sql) !== representation.reconstructedSourceSha256
     || reconstructedSql !== migration.sql) return null;
