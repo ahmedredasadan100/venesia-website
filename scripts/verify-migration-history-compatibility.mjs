@@ -199,6 +199,58 @@ export function verifyMigrationCorpusProvenanceTests() {
     databaseAccess: false, networkAccess: false, temporaryGitFixtureCleaned: true };
 }
 
+function verifyCanonicalRegistryRepresentation() {
+  let checks = 0;
+  const check = (value, message) => { assert.ok(value, message); checks++; };
+  const version = "20260819040000";
+  const name = "database_rls_security_contract";
+  const sql = normalize(readFileSync(join(ROOT, "sql/migrations", `${version}_${name}.sql`), "utf8"));
+  const migration = { version, name, sql, sha256: digest(sql) };
+  const receiptMatch = /^([\s\S]*\bbegin);\n\n(do \$venisia_security_adoption\$[\s\S]*\$venisia_security_adoption\$);\n\n(commit);\n$/u.exec(sql);
+  assert.ok(receiptMatch, "Canonical Migration 107 no longer has its reviewed three-statement CLI boundaries.");
+  const statements = receiptMatch.slice(1);
+  const row = { version, name, statements };
+  const before = JSON.stringify([migration, row]);
+  const provenance = assertWholeFileMigrationProvenance(row, migration);
+  check(provenance.revision === "canonical-current"
+    && provenance.registryRepresentation === "supabase-cli-v2.116-three-statement"
+    && provenance.statementArraySha256 === "c0b1d13cfb49256a9811c7e6d97c94fe0e35f102a8b862e336c0f5d71a310587"
+    && provenance.sourceSha256 === "409b501179fc89d8442b09554c2f85f595e99ed3e678d81124c88cf596e31637",
+  "The exact Production three-statement receipt resolves to canonical Migration 107.");
+  check(JSON.stringify([migration, row]) === before, "Canonical registry representation verification never mutates its inputs.");
+
+  check(classifyWholeFileMigrationProvenance({ ...row, statements: statements.slice(0, 2) }, migration) === null,
+    "Wrong statement count fails closed.");
+  check(classifyWholeFileMigrationProvenance({ ...row,
+    statements: [statements[0], `${statements[1]} `, statements[2]] }, migration) === null,
+  "An altered statement fails closed.");
+
+  const body = sql.slice(0, -2);
+  const firstBoundary = body.indexOf(";\n\n");
+  const secondBoundary = body.indexOf(";\n\n", firstBoundary + 3);
+  assert.ok(firstBoundary >= 0 && secondBoundary > firstBoundary);
+  const differentlySegmented = [
+    body.slice(0, firstBoundary),
+    body.slice(firstBoundary + 3, secondBoundary),
+    body.slice(secondBoundary + 3),
+  ];
+  check(`${differentlySegmented.join(";\n\n")};\n` === sql
+    && digest(JSON.stringify(differentlySegmented)) !== "c0b1d13cfb49256a9811c7e6d97c94fe0e35f102a8b862e336c0f5d71a310587"
+    && classifyWholeFileMigrationProvenance({ ...row, statements: differentlySegmented }, migration) === null,
+  "A different statement-array hash fails closed even when source reconstruction is identical.");
+
+  const changedSql = sql.replace("-- Venesia public-table security contract", "-- Altered security contract");
+  check(classifyWholeFileMigrationProvenance(row,
+    { ...migration, sql: changedSql, sha256: digest(changedSql) }) === null,
+  "A receipt whose reconstruction does not match canonical source fails closed.");
+  check(classifyWholeFileMigrationProvenance({ ...row, version: "19990101000000" }, migration) === null,
+    "The exact receipt cannot authorize another migration version.");
+  check(classifyWholeFileMigrationProvenance({ ...row, name: `${name}_wrong` }, migration) === null,
+    "The exact receipt cannot authorize another migration name.");
+  return { checks, version, statementCount: statements.length,
+    statementArraySha256: provenance.statementArraySha256, sourceSha256: provenance.sourceSha256 };
+}
+
 export function verifyMigrationHistoryCompatibility(selectedVersion) {
   let checks = 0;
   const check = (value, message) => { assert.ok(value, message); checks++; };
@@ -260,9 +312,10 @@ export function verifyMigrationHistoryCompatibility(selectedVersion) {
     fails(() => assertWholeFileMigrationProvenance({ ...old, statements: [other.historicalSql] }, migration), "Compatibility source from another reviewed version is never accepted.");
   }
   }
+  const canonicalRegistryRepresentation = verifyCanonicalRegistryRepresentation();
   const corpus = selectedVersion === undefined ? verifyMigrationCorpusProvenanceTests() : undefined;
-  return { checks: checks + (corpus?.checks ?? 0), compatibilityVersions: versions,
-    ...(corpus ? { corpus } : {}), databaseAccess: false, registryWrites: false };
+  return { checks: checks + canonicalRegistryRepresentation.checks + (corpus?.checks ?? 0), compatibilityVersions: versions,
+    canonicalRegistryRepresentation, ...(corpus ? { corpus } : {}), databaseAccess: false, registryWrites: false };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

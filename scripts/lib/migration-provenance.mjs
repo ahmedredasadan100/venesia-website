@@ -12,10 +12,20 @@ const COMMIT = /^[a-f0-9]{40}$/u;
 const MIGRATION_FILE = /^(\d{14})_([a-z0-9_]+)\.sql$/u;
 const digest = (value) => createHash("sha256").update(value, "utf8").digest("hex");
 const source = (path) => readFileSync(path, "utf8").replace(/\r\n?/gu, "\n");
+const CANONICAL_REGISTRY_REPRESENTATIONS = Object.freeze({
+  "20260819040000": Object.freeze({
+    version: "20260819040000",
+    name: "database_rls_security_contract",
+    kind: "supabase-cli-v2.116-three-statement",
+    statementCount: 3,
+    statementArraySha256: "c0b1d13cfb49256a9811c7e6d97c94fe0e35f102a8b862e336c0f5d71a310587",
+    reconstructedSourceSha256: "409b501179fc89d8442b09554c2f85f595e99ed3e678d81124c88cf596e31637",
+  }),
+});
 
 /** @typedef {{version:string,name:string,sql:string,sha256?:string}} MigrationSource */
 /** @typedef {{version:string,name:string|null,statements:string[]|null}} MigrationRegistryRow */
-/** @typedef {{revision:'canonical-current'|'historical-applied'|'fresh-bootstrap-superseded'|'fresh-bootstrap-corrected',sourceSha256:string}} Provenance */
+/** @typedef {{revision:'canonical-current'|'historical-applied'|'fresh-bootstrap-superseded'|'fresh-bootstrap-corrected',sourceSha256:string,registryRepresentation?:string,statementArraySha256?:string}} Provenance */
 /** @typedef {{version:string,name:string,historicalSourceSha256:string,supersededFreshSourceSha256?:string,correctedSourceSha256:string,reason:string,existingDatabasePolicy:string,freshDatabasePolicy:string}} MigrationCompatibilityRecord */
 
 /** @returns {MigrationCompatibilityRecord[]} */
@@ -96,16 +106,46 @@ export function assertMigrationSourceProvenance(migration) {
 }
 
 /**
- * Whole-file registry provenance only. Official CLI statement receipts are a
- * different execution representation and must never be normalized into this one.
+ * Recognize only the reviewed exact registry representation of canonical source.
+ * This is not migration-history compatibility: the reconstructed bytes must be
+ * the current executable source, and every receipt byte remains fail closed.
+ * @param {MigrationRegistryRow} row
+ * @param {MigrationSource} migration
+ * @returns {Provenance|null}
+ */
+export function classifyCanonicalRegistryRepresentation(row, migration) {
+  const representation = CANONICAL_REGISTRY_REPRESENTATIONS[migration.version];
+  if (representation === undefined || row.version !== representation.version
+    || row.name !== representation.name || migration.name !== representation.name
+    || row.statements?.length !== representation.statementCount
+    || row.statements.some(statement => typeof statement !== "string")) return null;
+  const statementArraySha256 = digest(JSON.stringify(row.statements));
+  if (statementArraySha256 !== representation.statementArraySha256) return null;
+  const reconstructedSql = `${row.statements.join(";\n\n")};\n`;
+  if (digest(reconstructedSql) !== representation.reconstructedSourceSha256
+    || digest(migration.sql) !== representation.reconstructedSourceSha256
+    || reconstructedSql !== migration.sql) return null;
+  return {
+    revision: "canonical-current",
+    sourceSha256: representation.reconstructedSourceSha256,
+    registryRepresentation: representation.kind,
+    statementArraySha256,
+  };
+}
+
+/**
+ * Exact registry provenance. Whole-file receipts remain the default; a bounded
+ * canonical CLI representation is recognized only by the contract above.
  * @param {MigrationRegistryRow} row
  * @param {MigrationSource} migration
  * @returns {Provenance|null}
  */
 export function classifyWholeFileMigrationProvenance(row, migration) {
   assertMigrationSourceProvenance(migration);
-  if (row.version !== migration.version || row.name !== migration.name
-    || row.statements?.length !== 1 || typeof row.statements[0] !== "string") return null;
+  if (row.version !== migration.version || row.name !== migration.name) return null;
+  const canonicalRepresentation = classifyCanonicalRegistryRepresentation(row, migration);
+  if (canonicalRepresentation !== null) return canonicalRepresentation;
+  if (row.statements?.length !== 1 || typeof row.statements[0] !== "string") return null;
   const recordedSql = row.statements[0];
   if (!isMigrationHistoryCompatibilityVersion(migration.version)) {
     return recordedSql === migration.sql ? { revision: "canonical-current", sourceSha256: digest(recordedSql) } : null;

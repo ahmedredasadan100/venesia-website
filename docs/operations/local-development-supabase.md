@@ -15,6 +15,12 @@ read only transaction, and compares the complete ordered migration registry to
 `sql/migrations`. A missing, renamed, extra, reordered, or pending migration
 stops startup. The preflight never applies SQL or repairs migration history.
 
+The same preflight proves workspace identity before database access. Detached
+HEAD, a checkout not descended from `origin/main`, a divergent local `main`, or
+a mismatched Git worktree root stops startup with an explicit error. A named
+feature or intentional isolated-verification branch remains valid when its HEAD
+contains `origin/main` and its Git root identifies the current workspace.
+
 ## Optional persistent Local Supabase
 
 Persistent Local Supabase remains an explicit QA, migration rehearsal, and
@@ -73,3 +79,9 @@ secrets, Preview, or Production.
   reset command only if discarding local data is acceptable.
 - `REMOTE_PROJECT_LINK_PRESENT`: unlink the local CLI project through the
   official Supabase workflow before using Local DB commands.
+- `DEVELOPMENT_WORKSPACE_DETACHED`: switch the intended daily workspace to a
+  named branch; do not develop from an unidentified detached checkout.
+- `DEVELOPMENT_WORKSPACE_BEHIND_CANONICAL_MAIN`: refresh the branch from the
+  reviewed canonical baseline before relying on it.
+- `DEVELOPMENT_WORKSPACE_IDENTITY_AMBIGUOUS` or `DEVELOPMENT_MAIN_DIVERGED`:
+  resolve the Git root or local-main ambiguity rather than bypassing the guard.

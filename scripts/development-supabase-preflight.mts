@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 // @ts-expect-error This workspace uses pg without separate declarations.
@@ -15,6 +16,13 @@ const ENV_FILE = join(ROOT, ".env.local");
 const APPROVED_ONLINE_PROJECT_REF = "pmqsfqvvekrlujqgurcu";
 
 type OnlineHistory = { version: string; name: string };
+export type DevelopmentWorkspaceIdentity = {
+  rootMatches: boolean;
+  branch: string | null;
+  head: string;
+  originMain: string;
+  originMainIsAncestor: boolean;
+};
 type DevelopmentTarget =
   | { kind: "local"; apiUrl: string }
   | { kind: "online"; apiUrl: string; databaseUrl: string; projectRef: string };
@@ -30,6 +38,52 @@ export class DevelopmentSupabasePreflightError extends Error {
 
 function check(condition: unknown, code: string): asserts condition {
   if (!condition) throw new DevelopmentSupabasePreflightError(code);
+}
+
+export function assertDevelopmentWorkspaceIdentity(identity: DevelopmentWorkspaceIdentity): DevelopmentWorkspaceIdentity {
+  check(identity.rootMatches, "DEVELOPMENT_WORKSPACE_IDENTITY_AMBIGUOUS");
+  check(identity.branch !== null && identity.branch.length > 0, "DEVELOPMENT_WORKSPACE_DETACHED");
+  check(identity.originMainIsAncestor, "DEVELOPMENT_WORKSPACE_BEHIND_CANONICAL_MAIN");
+  if (identity.branch === "main") check(identity.head === identity.originMain, "DEVELOPMENT_MAIN_DIVERGED");
+  return Object.freeze({ ...identity });
+}
+
+function git(args: string[]): string {
+  return execFileSync("git", args, {
+    cwd: ROOT, encoding: "utf8", windowsHide: true,
+    env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" },
+    stdio: ["ignore", "pipe", "ignore"],
+  }).trim();
+}
+
+function readDevelopmentWorkspaceIdentity(): DevelopmentWorkspaceIdentity {
+  try {
+    const head = git(["rev-parse", "--verify", "HEAD^{commit}"]);
+    const originMain = git(["rev-parse", "--verify", "origin/main^{commit}"]);
+    const branchResult = spawnSync("git", ["symbolic-ref", "--quiet", "--short", "HEAD"], {
+      cwd: ROOT, encoding: "utf8", windowsHide: true,
+      env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" },
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const ancestry = spawnSync("git", ["merge-base", "--is-ancestor", "origin/main", "HEAD"], {
+      cwd: ROOT, encoding: "utf8", windowsHide: true,
+      env: { ...process.env, GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0" },
+      stdio: ["ignore", "ignore", "ignore"],
+    });
+    check(branchResult.status === 0 || branchResult.status === 1,
+      "DEVELOPMENT_WORKSPACE_GIT_EVIDENCE_UNAVAILABLE");
+    check(ancestry.status === 0 || ancestry.status === 1, "DEVELOPMENT_WORKSPACE_GIT_EVIDENCE_UNAVAILABLE");
+    return {
+      rootMatches: realpathSync(git(["rev-parse", "--show-toplevel"])) === realpathSync(ROOT),
+      branch: branchResult.status === 0 ? branchResult.stdout.trim() : null,
+      head,
+      originMain,
+      originMainIsAncestor: ancestry.status === 0,
+    };
+  } catch (error) {
+    if (error instanceof DevelopmentSupabasePreflightError) throw error;
+    throw new DevelopmentSupabasePreflightError("DEVELOPMENT_WORKSPACE_GIT_EVIDENCE_UNAVAILABLE");
+  }
 }
 
 function envValues(source: string): Map<string, string> {
@@ -138,13 +192,14 @@ async function preflightOnlineDevelopmentSupabase(
 }
 
 export async function preflightDevelopmentSupabase(): Promise<Record<string, unknown>> {
+  const workspace = assertDevelopmentWorkspaceIdentity(readDevelopmentWorkspaceIdentity());
   check(existsSync(ENV_FILE), "DEVELOPMENT_ENVIRONMENT_MISSING");
   const target = classifyDevelopmentSupabaseTarget(readFileSync(ENV_FILE, "utf8"));
   if (target.kind === "local") {
     const result = await preflightLocalDevelopmentSupabase();
-    return { ...result, target: "local", readOnly: true };
+    return { ...result, target: "local", readOnly: true, workspace };
   }
-  return preflightOnlineDevelopmentSupabase(target);
+  return { ...await preflightOnlineDevelopmentSupabase(target), workspace };
 }
 
 if (resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
