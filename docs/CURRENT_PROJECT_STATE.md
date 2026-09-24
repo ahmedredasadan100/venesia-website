@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-09-13
+**Updated:** 2026-09-24
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -12,32 +12,34 @@ This file records the minimum current facts needed to begin work safely. Archite
 The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
 
 ```text
-672cf81dff4e39c300adb68e5f41750ef980e9c1
+6ade5a46dc22f59bf72ccbfdb0be3494d751717c
 ```
 
-Verified during the authorized Shared Corrections cutover on 2026-09-13 (01:38 UTC):
+Verified after the authorized PR #180 standard merge and automatic Production deployment on 2026-09-24 (19:35 UTC):
 
-| Surface                       | SHA / state                                                                                                                                                             |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Verified cutover baseline     | `672cf81dff4e39c300adb68e5f41750ef980e9c1` |
-| `origin/main` / GitHub `main` | `672cf81dff4e39c300adb68e5f41750ef980e9c1` |
-| Delivery state                | Shared Corrections & Adoption merged through PR #155 after migration 103. Automatic Production deployment is READY on that merge. Final gate and closure evidence remain recorded separately. |
+| Surface                       | SHA / state |
+| ----------------------------- | ----------- |
+| Verified canonical baseline   | `6ade5a46dc22f59bf72ccbfdb0be3494d751717c` |
+| Local `main` / `origin/main` / GitHub `main` | `6ade5a46dc22f59bf72ccbfdb0be3494d751717c` |
+| Vercel Production             | Automatic Production deployment is READY on `6ade5a46dc22f59bf72ccbfdb0be3494d751717c`. |
+| Migration registry            | `110` migrations; head `20260920011000`; `pending=[]`; provenance `1→110` reconciled by the canonical verifier. |
+| Delivery state                | PR #180 restored the accepted Feed presentation capabilities on the current owners and merged as the verified canonical baseline. |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-P2-S + ADM-01 closed through PR #152 with DB first, standard merge commit, automatic Production deployment and bounded verification. Existing local closure evidence is retained under `.tmp-qa/p2-s-adm01/production-cutover-20260912/`. Earlier Smoke counter blocking remains **unproven**; only the separately recorded cutover Smoke has positive interception evidence. The transient read timeout recovered; its original cause is not established.
+Migration provenance `1→110` is reconciled on the canonical verifier, and PR #180 restored the accepted Feed presentation variants on the current shared owners. Local `main`, `origin/main`, GitHub `main`, and the automatic Vercel Production deployment all identify `6ade5a46dc22f59bf72ccbfdb0be3494d751717c`. The post-merge canonical Quality Gate and every specialized verifier passed except the disposable Topics type-generation step: its application verifier passed, then the external `public.ecr.aws/supabase/postgres-meta:v0.98.0` pull was rate-limited on all authorized attempts. This remains an external CI infrastructure blocker, not a Product or database regression.
 
 ## Active phase
 
-- **Title:** Shared Corrections & Adoption — controlled activation and closure.
-- **Implementation baseline:** `d60938a6781db3630a64c1cf1798f7ef269c38b4`.
-- **Branch:** `codex/shared-corrections-adoption`.
-- **Scope:** the accepted 59-path delivery and its existing Composition/Menu, Form, Data/Feedback, Navigation and Audit owners; operation-specific limits remain in `reports/SHARED_CORRECTIONS_PROOF.md`.
-- **Authorization:** the project owner authorized the exact migration, Git delivery, Standard Merge Commit and automatic Production verification. The owner confirmed that Production and Preview share the original database; the hidden Vercel value was not independently extracted.
-- **Outside scope:** A04 remains deferred; no subsequent audit or capability phase begins through this closure.
-- **Closure:** `globalClosed=false`; original items 12–13 remain measurement without additional optimization, with Production performance impact unproven. Original item 14 is per-operation adoption proof, not a global adoption claim.
+- **Title:** Final Repository, Architecture & Workspace Hygiene Closure — Final Housekeeping.
+- **Implementation baseline:** `6ade5a46dc22f59bf72ccbfdb0be3494d751717c`.
+- **Branch:** `main`.
+- **Scope:** current-state documentation correction, proven-safe local branch cleanup, and temporary QA evidence distillation only; no Product or architecture implementation.
+- **Authorization:** this documentation-only closure is authorized through a Standard Merge Commit and automatic Vercel Production deployment. Squash, Rebase, Auto-merge, manual deploy, Production database writes, migrations, registry writes, and remote branch deletion remain prohibited.
+- **Outside scope:** Docker, Local Supabase state/projection, Production database execution, Auth/Permissions/Cron, performance optimization, feature work, and reopened architecture/adoption audits.
+- **Closure:** architecture and adoption remain reconciled. Full post-merge CI closure remains blocked only by the recorded external ECR rate limit until a later successful failed-job rerun.
 
 ## Current architecture truth
 
