@@ -4,6 +4,8 @@ import { COLLECTION_ITEM_LIMIT_MAX } from "../collection-modules/item-limit";
 import {
   DEFAULT_FEED_ARTICLE_CARD_PRESENTATION,
   DEFAULT_FEED_CATEGORY_CARD_PRESENTATION,
+  DEFAULT_FEED_LIST_PRESENTATION,
+  DEFAULT_FEED_PRESENTATION_VARIANTS,
   DEFAULT_FEED_SERIES_CARD_PRESENTATION,
   DEFAULT_FEED_SERIES_LINK_TEXT,
   type FeedArticleCardPresentation,
@@ -11,6 +13,8 @@ import {
   type FeedModuleConfig,
   type FeedModulePresentation,
   type FeedModuleQueryConfig,
+  type FeedPresentationDensity,
+  type FeedPresentationVariants,
   type FeedSeriesCardPresentation,
   type TopicsFeedType,
 } from "./types";
@@ -30,6 +34,7 @@ const DEFAULT_PRESENTATION: FeedModulePresentation = {
   showDate: true,
   showExcerpt: false,
   emptyBehavior: "hide",
+  variants: DEFAULT_FEED_PRESENTATION_VARIANTS,
 };
 
 const DEFAULT_QUERY: FeedModuleQueryConfig = {
@@ -37,6 +42,50 @@ const DEFAULT_QUERY: FeedModuleQueryConfig = {
   categorySlugs: [],
   seriesSlugs: [],
 };
+
+const presentationDensitySchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+const feedListPresentationSchema = z
+  .object({
+    itemsPerGroup: z.number().int().min(1),
+    showDots: z.boolean(),
+    intervalSeconds: z.number().int().min(3).max(60),
+  })
+  .strict();
+const feedPresentationVariantsSchema = z
+  .object({
+    latest: z
+      .object({
+        layout: z.enum(["slider", "grid", "list"]),
+        density: presentationDensitySchema,
+        showArrows: z.boolean(),
+        showDots: z.boolean(),
+        list: feedListPresentationSchema,
+      })
+      .strict(),
+    popular: z
+      .object({
+        layout: z.enum(["list", "grid"]),
+        columns: presentationDensitySchema,
+        list: feedListPresentationSchema,
+      })
+      .strict(),
+    categories: z
+      .object({
+        layout: z.enum(["list", "grid"]),
+        columns: presentationDensitySchema,
+        list: feedListPresentationSchema,
+      })
+      .strict(),
+    series: z
+      .object({
+        layout: z.enum(["slider", "grid", "list"]),
+        columns: presentationDensitySchema,
+        showArrows: z.boolean(),
+        list: feedListPresentationSchema,
+      })
+      .strict(),
+  })
+  .strict();
 
 export const feedModuleConfigSchema: z.ZodType<FeedModuleConfig> = z
   .object({
@@ -94,6 +143,7 @@ export const feedModuleConfigSchema: z.ZodType<FeedModuleConfig> = z
           })
           .strict()
           .optional(),
+        variants: feedPresentationVariantsSchema,
       })
       .strict(),
     query: z
@@ -159,6 +209,224 @@ function readObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};
+}
+
+function normalizePresentationDensity(
+  value: unknown,
+  fallback: FeedPresentationDensity,
+): FeedPresentationDensity {
+  const parsed = Number(value);
+  return parsed === 1 || parsed === 2 || parsed === 3 ? parsed : fallback;
+}
+
+function normalizePresentationLayout<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  const normalized = String(value ?? "").trim() as T;
+  return allowed.includes(normalized) ? normalized : fallback;
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 1
+    ? parsed
+    : Math.max(1, Math.floor(fallback));
+}
+
+function normalizeListIntervalSeconds(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 3 && parsed <= 60 ? parsed : fallback;
+}
+
+function parseFeedListPresentation(
+  variantRaw: Record<string, unknown>,
+  fallbackItemsPerGroup: number,
+) {
+  const listRaw = readObject(variantRaw.list);
+
+  return {
+    itemsPerGroup: normalizePositiveInteger(
+      listRaw.itemsPerGroup,
+      fallbackItemsPerGroup,
+    ),
+    showDots: normalizeBoolean(
+      listRaw.showDots,
+      DEFAULT_FEED_LIST_PRESENTATION.showDots,
+    ),
+    intervalSeconds: normalizeListIntervalSeconds(
+      listRaw.intervalSeconds,
+      DEFAULT_FEED_LIST_PRESENTATION.intervalSeconds,
+    ),
+  };
+}
+
+function buildFeedListPresentation(
+  formData: FormData,
+  fieldPrefix: TopicsFeedType,
+  fallbackItemsPerGroup: number,
+) {
+  return {
+    itemsPerGroup: normalizePositiveInteger(
+      formData.get(`${fieldPrefix}_list_items_per_group`),
+      fallbackItemsPerGroup,
+    ),
+    showDots: parseFormBoolean(
+      formData,
+      `${fieldPrefix}_list_show_dots`,
+      DEFAULT_FEED_LIST_PRESENTATION.showDots,
+    ),
+    intervalSeconds: normalizeListIntervalSeconds(
+      formData.get(`${fieldPrefix}_list_interval_seconds`),
+      DEFAULT_FEED_LIST_PRESENTATION.intervalSeconds,
+    ),
+  };
+}
+
+function parseFeedPresentationVariants(
+  presentationRaw: Record<string, unknown>,
+  fallbackItemsPerGroup: number,
+): FeedPresentationVariants {
+  const variantsRaw = readObject(presentationRaw.variants);
+  const latestRaw = readObject(variantsRaw.latest);
+  const popularRaw = readObject(variantsRaw.popular);
+  const categoriesRaw = readObject(variantsRaw.categories);
+  const seriesRaw = readObject(variantsRaw.series);
+
+  return {
+    latest: {
+      layout: normalizePresentationLayout(
+        latestRaw.layout,
+        ["slider", "grid", "list"],
+        DEFAULT_FEED_PRESENTATION_VARIANTS.latest.layout,
+      ),
+      density: normalizePresentationDensity(
+        latestRaw.density,
+        DEFAULT_FEED_PRESENTATION_VARIANTS.latest.density,
+      ),
+      showArrows: normalizeBoolean(
+        latestRaw.showArrows,
+        DEFAULT_FEED_PRESENTATION_VARIANTS.latest.showArrows,
+      ),
+      showDots: normalizeBoolean(
+        latestRaw.showDots,
+        DEFAULT_FEED_PRESENTATION_VARIANTS.latest.showDots,
+      ),
+      list: parseFeedListPresentation(latestRaw, fallbackItemsPerGroup),
+    },
+    popular: {
+      layout: normalizePresentationLayout(
+        popularRaw.layout,
+        ["list", "grid"],
+        DEFAULT_FEED_PRESENTATION_VARIANTS.popular.layout,
+      ),
+      columns: normalizePresentationDensity(
+        popularRaw.columns,
+        DEFAULT_FEED_PRESENTATION_VARIANTS.popular.columns,
+      ),
+      list: parseFeedListPresentation(popularRaw, fallbackItemsPerGroup),
+    },
+    categories: {
+      layout: normalizePresentationLayout(
+        categoriesRaw.layout,
+        ["list", "grid"],
+        DEFAULT_FEED_PRESENTATION_VARIANTS.categories.layout,
+      ),
+      columns: normalizePresentationDensity(
+        categoriesRaw.columns,
+        DEFAULT_FEED_PRESENTATION_VARIANTS.categories.columns,
+      ),
+      list: parseFeedListPresentation(categoriesRaw, fallbackItemsPerGroup),
+    },
+    series: {
+      layout: normalizePresentationLayout(
+        seriesRaw.layout,
+        ["slider", "grid", "list"],
+        DEFAULT_FEED_PRESENTATION_VARIANTS.series.layout,
+      ),
+      columns: normalizePresentationDensity(
+        seriesRaw.columns,
+        DEFAULT_FEED_PRESENTATION_VARIANTS.series.columns,
+      ),
+      showArrows: normalizeBoolean(
+        seriesRaw.showArrows,
+        DEFAULT_FEED_PRESENTATION_VARIANTS.series.showArrows,
+      ),
+      list: parseFeedListPresentation(seriesRaw, fallbackItemsPerGroup),
+    },
+  };
+}
+
+function buildFeedPresentationVariants(
+  formData: FormData,
+  fallbackItemsPerGroup: number,
+): FeedPresentationVariants {
+  return {
+    latest: {
+      layout: normalizePresentationLayout(
+        formData.get("latest_layout"),
+        ["slider", "grid", "list"],
+        DEFAULT_FEED_PRESENTATION_VARIANTS.latest.layout,
+      ),
+      density: normalizePresentationDensity(
+        formData.get("latest_density"),
+        DEFAULT_FEED_PRESENTATION_VARIANTS.latest.density,
+      ),
+      showArrows: parseFormBoolean(
+        formData,
+        "latest_show_arrows",
+        DEFAULT_FEED_PRESENTATION_VARIANTS.latest.showArrows,
+      ),
+      showDots: parseFormBoolean(
+        formData,
+        "latest_show_dots",
+        DEFAULT_FEED_PRESENTATION_VARIANTS.latest.showDots,
+      ),
+      list: buildFeedListPresentation(formData, "latest", fallbackItemsPerGroup),
+    },
+    popular: {
+      layout: normalizePresentationLayout(
+        formData.get("popular_layout"),
+        ["list", "grid"],
+        DEFAULT_FEED_PRESENTATION_VARIANTS.popular.layout,
+      ),
+      columns: normalizePresentationDensity(
+        formData.get("popular_columns"),
+        DEFAULT_FEED_PRESENTATION_VARIANTS.popular.columns,
+      ),
+      list: buildFeedListPresentation(formData, "popular", fallbackItemsPerGroup),
+    },
+    categories: {
+      layout: normalizePresentationLayout(
+        formData.get("categories_layout"),
+        ["list", "grid"],
+        DEFAULT_FEED_PRESENTATION_VARIANTS.categories.layout,
+      ),
+      columns: normalizePresentationDensity(
+        formData.get("categories_columns"),
+        DEFAULT_FEED_PRESENTATION_VARIANTS.categories.columns,
+      ),
+      list: buildFeedListPresentation(formData, "categories", fallbackItemsPerGroup),
+    },
+    series: {
+      layout: normalizePresentationLayout(
+        formData.get("series_layout"),
+        ["slider", "grid", "list"],
+        DEFAULT_FEED_PRESENTATION_VARIANTS.series.layout,
+      ),
+      columns: normalizePresentationDensity(
+        formData.get("series_columns"),
+        DEFAULT_FEED_PRESENTATION_VARIANTS.series.columns,
+      ),
+      showArrows: parseFormBoolean(
+        formData,
+        "series_show_arrows",
+        DEFAULT_FEED_PRESENTATION_VARIANTS.series.showArrows,
+      ),
+      list: buildFeedListPresentation(formData, "series", fallbackItemsPerGroup),
+    },
+  };
 }
 
 type FeedCardTextFormat = {
@@ -399,6 +667,7 @@ export function parseFeedModuleConfig(
       ? normalizeBoolean(presentationRaw.showExcerpt, DEFAULT_PRESENTATION.showExcerpt)
       : DEFAULT_FEED_SERIES_CARD_PRESENTATION.showDescription,
   );
+  const variants = parseFeedPresentationVariants(presentationRaw, limit);
 
   return feedModuleConfigSchema.parse({
     presentation: {
@@ -423,6 +692,7 @@ export function parseFeedModuleConfig(
       articleCard,
       categoryCard,
       seriesCard,
+      variants,
     },
     query: {
       limit,
@@ -465,6 +735,7 @@ export function buildFeedModuleConfig(
   const articleCard = buildArticleCardPresentation(formData);
   const categoryCard = buildCategoryCardPresentation(formData);
   const seriesCard = buildSeriesCardPresentation(formData);
+  const variants = buildFeedPresentationVariants(formData, limit);
 
   return feedModuleConfigSchema.parse({
     presentation: {
@@ -486,6 +757,7 @@ export function buildFeedModuleConfig(
       articleCard,
       categoryCard,
       seriesCard,
+      variants,
     },
     query: {
       limit,

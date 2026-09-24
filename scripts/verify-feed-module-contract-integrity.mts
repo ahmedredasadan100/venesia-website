@@ -81,6 +81,12 @@ const adminUtils = loadTranspiledModule("src/lib/page-blocks/admin-utils.ts", {
   "./module-edit-registry": moduleEditRegistry,
 });
 const feedTypes = loadTranspiledModule("src/lib/feed-modules/types.ts");
+const groupedListContract = loadTranspiledModule(
+  "src/components/feed-modules/feed-grouped-list-contract.ts",
+);
+const presentationLayoutContract = loadTranspiledModule(
+  "src/components/feed-modules/feed-presentation-layout.ts",
+);
 const itemLimitContract = await jiti.import<Record<string, unknown>>(
   "../src/lib/collection-modules/item-limit.ts",
 );
@@ -125,6 +131,18 @@ const parseFormStatus = adminUtils.parseFormStatus as (
   formData: FormData,
   key?: string,
 ) => "published" | "unpublished";
+const chunkFeedListItems = groupedListContract.chunkFeedListItems as <T>(
+  items: readonly T[],
+  itemsPerGroup: number,
+) => T[][];
+const resolveCompactFeedDotIndices = groupedListContract.resolveCompactFeedDotIndices as (
+  count: number,
+  activeIndex: number,
+  maxVisible?: number,
+) => number[];
+const feedGridColumnsClass = presentationLayoutContract.feedGridColumnsClass as (
+  columns: 1 | 2 | 3,
+) => string;
 const topicFilterOptionsContract = loadTranspiledModule(
   "src/lib/feed-modules/load-topic-filter-options.ts",
   {
@@ -178,6 +196,13 @@ const uncheckedStatusForm = new FormData();
 uncheckedStatusForm.append("status", "unpublished");
 assert.equal(parseFormStatus(uncheckedStatusForm), "unpublished");
 
+assert.deepEqual(chunkFeedListItems([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+assert.deepEqual(resolveCompactFeedDotIndices(9, 0, 5), [0, 1, 2, 3, 4]);
+assert.deepEqual(resolveCompactFeedDotIndices(9, 5, 5), [3, 4, 5, 6, 7]);
+assert.deepEqual(resolveCompactFeedDotIndices(9, 8, 5), [4, 5, 6, 7, 8]);
+assert.ok(feedGridColumnsClass(3).includes("@3xl/slot-module:grid-cols-3"));
+assert.ok(feedGridColumnsClass(3).includes("[data-layout-slot=sidebar"));
+
 function createFeedForm() {
   const formData = new FormData();
   formData.set("widget_title", "أحدث الموضوعات");
@@ -202,6 +227,10 @@ enabledForm.append("show_article_excerpt", "true");
 enabledForm.set("article_excerpt_bold", "true");
 enabledForm.set("article_excerpt_alignment", "right");
 const enabledConfig = buildFeedModuleConfig(enabledForm, "latest");
+assert.deepEqual(
+  enabledConfig.presentation.variants,
+  feedTypes.DEFAULT_FEED_PRESENTATION_VARIANTS,
+);
 assert.equal(enabledConfig.presentation.showImage, true);
 assert.equal(enabledConfig.presentation.showDate, true);
 assert.equal(enabledConfig.presentation.showExcerpt, true);
@@ -317,16 +346,65 @@ preservedVariantForm.set("show_details", "false");
 preservedVariantForm.set("details_bold", "true");
 preservedVariantForm.set("details_alignment", "right");
 preservedVariantForm.set("link_text", "نص السلسلة المحفوظ");
+preservedVariantForm.set("latest_layout", "grid");
+preservedVariantForm.set("latest_density", "2");
+preservedVariantForm.set("latest_show_arrows", "true");
+preservedVariantForm.set("latest_show_dots", "false");
+preservedVariantForm.set("latest_list_items_per_group", "4");
+preservedVariantForm.set("latest_list_show_dots", "true");
+preservedVariantForm.set("latest_list_interval_seconds", "6");
+preservedVariantForm.set("popular_layout", "grid");
+preservedVariantForm.set("popular_columns", "3");
+preservedVariantForm.set("popular_list_items_per_group", "5");
+preservedVariantForm.set("popular_list_show_dots", "false");
+preservedVariantForm.set("popular_list_interval_seconds", "7");
+preservedVariantForm.set("categories_layout", "grid");
+preservedVariantForm.set("categories_columns", "2");
+preservedVariantForm.set("categories_list_items_per_group", "6");
+preservedVariantForm.set("categories_list_show_dots", "true");
+preservedVariantForm.set("categories_list_interval_seconds", "9");
+preservedVariantForm.set("series_layout", "list");
+preservedVariantForm.set("series_columns", "3");
+preservedVariantForm.set("series_show_arrows", "false");
+preservedVariantForm.set("series_list_items_per_group", "2");
+preservedVariantForm.set("series_list_show_dots", "false");
+preservedVariantForm.set("series_list_interval_seconds", "12");
 
 const latestVariantConfig = buildFeedModuleConfig(preservedVariantForm, "latest");
+const popularVariantConfig = buildFeedModuleConfig(preservedVariantForm, "popular");
 const categoryVariantConfig = buildFeedModuleConfig(preservedVariantForm, "categories");
 const seriesVariantConfig = buildFeedModuleConfig(preservedVariantForm, "series");
-for (const config of [latestVariantConfig, categoryVariantConfig, seriesVariantConfig]) {
+for (const config of [latestVariantConfig, popularVariantConfig, categoryVariantConfig, seriesVariantConfig]) {
   assert.deepEqual(config.presentation.articleCard, latestVariantConfig.presentation.articleCard);
   assert.deepEqual(config.presentation.categoryCard, latestVariantConfig.presentation.categoryCard);
   assert.deepEqual(config.presentation.seriesCard, latestVariantConfig.presentation.seriesCard);
   assert.equal(config.presentation.linkText, "نص السلسلة المحفوظ");
   assert.equal(config.presentation.showImage, false);
+  assert.deepEqual(config.presentation.variants, {
+    latest: {
+      layout: "grid",
+      density: 2,
+      showArrows: true,
+      showDots: false,
+      list: { itemsPerGroup: 4, showDots: true, intervalSeconds: 6 },
+    },
+    popular: {
+      layout: "grid",
+      columns: 3,
+      list: { itemsPerGroup: 5, showDots: false, intervalSeconds: 7 },
+    },
+    categories: {
+      layout: "grid",
+      columns: 2,
+      list: { itemsPerGroup: 6, showDots: true, intervalSeconds: 9 },
+    },
+    series: {
+      layout: "list",
+      columns: 3,
+      showArrows: false,
+      list: { itemsPerGroup: 2, showDots: false, intervalSeconds: 12 },
+    },
+  });
 }
 assert.equal(latestVariantConfig.presentation.showExcerpt, true);
 assert.equal(latestVariantConfig.presentation.showDate, false);
@@ -469,6 +547,33 @@ assert.equal(legacySeriesPresentation.presentation.seriesCard?.showSeries, true)
 assert.equal(legacySeriesPresentation.presentation.seriesCard?.showDescription, true);
 assert.equal(legacySeriesPresentation.presentation.seriesCard?.showDetails, true);
 assert.equal(legacySeriesPresentation.presentation.seriesCard?.detailsAlignment, "left");
+const productionPartialVariants = parseFeedModuleConfig(
+  {
+    presentation: {
+      title: "Production compatibility",
+      variants: {
+        latest: {
+          layout: "slider",
+          density: 3,
+          showDots: true,
+          showArrows: false,
+        },
+        series: { layout: "slider", columns: 1, showArrows: true },
+        popular: { layout: "grid", columns: 3 },
+        categories: { layout: "list", columns: 1 },
+      },
+    },
+    query: { limit: 30 },
+  },
+  "popular",
+);
+assert.equal(productionPartialVariants.presentation.variants.popular.layout, "grid");
+assert.equal(productionPartialVariants.presentation.variants.popular.columns, 3);
+assert.deepEqual(productionPartialVariants.presentation.variants.popular.list, {
+  itemsPerGroup: 30,
+  showDots: true,
+  intervalSeconds: 8,
+});
 assert.equal(isPersistedFeedModuleConfigEqual(disabledConfig, disabledConfig), true);
 assert.equal(
   isPersistedFeedModuleConfigEqual(
@@ -831,6 +936,10 @@ const latestWidgetContract = loadTranspiledModule(
     "../../lib/feed-modules/types": feedTypes,
     "../../lib/page-blocks/configs": pageBlockConfigs,
     "../feed-modules/FeedCarouselDots": { default: () => null },
+    "../feed-modules/FeedCarouselNavigation": { default: () => null },
+    "../feed-modules/FeedGroupedList": { default: () => null },
+    "../feed-modules/feed-grouped-list-contract": groupedListContract,
+    "../feed-modules/feed-presentation-layout": presentationLayoutContract,
     "./SidebarFeedPanel": { SidebarFeedPanel: () => null },
   },
   (source) => source.replace(
@@ -840,9 +949,11 @@ const latestWidgetContract = loadTranspiledModule(
 );
 const chunkLatestItems = latestWidgetContract.chunkItems as (
   items: Array<{ id: number }>,
+  density: 1 | 2 | 3,
 ) => Array<Array<{ id: number }>>;
 const latestSlides = chunkLatestItems(
   Array.from({ length: 7 }, (_, index) => ({ id: index + 1 })),
+  3,
 );
 assert.deepEqual(latestSlides.map((slide) => slide.length), [3, 3, 1]);
 assert.deepEqual(
@@ -965,6 +1076,10 @@ const editor = readFileSync(
   "src/components/admin/page-blocks/FeedModuleEditClient.tsx",
   "utf8",
 );
+const presentationEditor = readFileSync(
+  "src/components/admin/page-blocks/FeedPresentationVariantFields.tsx",
+  "utf8",
+);
 const feedConfigSource = readFileSync(
   "src/lib/feed-modules/parse-feed-config.ts",
   "utf8",
@@ -1027,6 +1142,22 @@ const mediaHubRenderer = readFileSync(
   "utf8",
 );
 const section = readFileSync("src/components/feed-modules/FeedModuleSection.tsx", "utf8");
+const groupedList = readFileSync(
+  "src/components/feed-modules/FeedGroupedList.tsx",
+  "utf8",
+);
+const carouselDots = readFileSync(
+  "src/components/feed-modules/FeedCarouselDots.tsx",
+  "utf8",
+);
+const carouselNavigation = readFileSync(
+  "src/components/feed-modules/FeedCarouselNavigation.tsx",
+  "utf8",
+);
+const presentationLayout = readFileSync(
+  "src/components/feed-modules/feed-presentation-layout.ts",
+  "utf8",
+);
 const latest = readFileSync(
   "src/components/sidebar-feeds/SidebarLatestArticlesWidget.tsx",
   "utf8",
@@ -1069,6 +1200,33 @@ for (const label of [
   assert.ok(editor.includes(label), `missing Arabic Feed editor label: ${label}`);
 }
 assert.ok(editor.includes("FEED_MODULE_DISPLAY_FORMATTING_CAPABILITY.variants[feedType]"));
+assert.ok(editor.includes("<FeedPresentationVariantFields"));
+for (const label of [
+  "شكل العرض",
+  "عدد العناصر المعروضة",
+  "عدد العناصر في المجموعة",
+  "مدة الانتقال بالثواني",
+  "إظهار مؤشرات التنقل",
+  "عدد الكروت الظاهرة",
+  "عدد أعمدة الشبكة",
+  "إظهار الأسهم",
+  "إظهار النقاط",
+]) {
+  assert.ok(
+    presentationEditor.includes(label),
+    `missing Feed presentation editor label: ${label}`,
+  );
+}
+for (const feedType of ["latest", "popular", "categories", "series"]) {
+  assert.ok(
+    presentationEditor.includes(`feedType="${feedType}"`) ||
+      presentationEditor.includes(`feedType={feedType}`),
+    `missing Feed presentation panel: ${feedType}`,
+  );
+}
+assert.ok(presentationEditor.includes("data-feed-presentation-controls-active"));
+assert.ok(feedConfigSource.includes("buildFeedPresentationVariants(formData, limit)"));
+assert.ok(feedConfigSource.includes("parseFeedPresentationVariants(presentationRaw, limit)"));
 assert.deepEqual(feedTypes.TOPICS_FEED_TYPES, ["latest", "popular", "categories", "series"]);
 assert.ok(editor.includes("value={feedType}"));
 assert.ok(editor.includes("setFeedType(nextFeedType as TopicsFeedType)"));
@@ -1110,7 +1268,7 @@ for (const persistedCardBuilder of [
 for (const staleLabel of ["Show Image", "Show Date", "Show Excerpt", "Feed Type", "Series Link Text"]) {
   assert.equal(editor.includes(staleLabel), false, `stale English Feed editor label: ${staleLabel}`);
 }
-assert.ok(editor.includes("عدد العناصر المعروضة"));
+assert.ok(presentationEditor.includes("عدد العناصر المعروضة"));
 assert.equal(editor.includes("عدد النتائج"), false);
 for (const label of ["نطاق المحتوى", "التصنيفات", "السلاسل", "كل السلاسل"]) {
   assert.ok(filters.includes(label), `missing Feed content-scope label: ${label}`);
@@ -1330,6 +1488,12 @@ assert.equal(
 );
 assert.ok(section.includes("cardFormatting={presentation.categoryCard}"));
 assert.ok(section.includes("cardFormatting={presentation.seriesCard}"));
+for (const variant of ["latest", "popular", "categories", "series"]) {
+  assert.ok(
+    section.includes(`presentationVariant={presentation.variants.${variant}}`),
+    `Feed public adoption is missing presentation variant: ${variant}`,
+  );
+}
 assert.ok(latest.includes("eyebrow={eyebrow ?? undefined}"));
 for (const articlePresenter of [latest, popular]) {
   assert.ok(articlePresenter.includes("resolvedCardFormatting.showTitle"));
@@ -1347,11 +1511,11 @@ assert.ok(categories.includes("resolvedCardFormatting.showCategory"));
 assert.ok(categories.includes("resolvedCardFormatting.showCount"));
 assert.ok(categories.includes("data-feed-category-name"));
 assert.ok(categories.includes("data-feed-category-count"));
-assert.ok(series.includes("showImage ? image"));
+assert.ok(series.includes("const image = showImage ?"));
 assert.ok(series.includes("alt={item.imageAlt}"));
-assert.ok(series.includes("resolvedCardFormatting.showDescription"));
-assert.ok(series.includes("resolvedCardFormatting.showSeries"));
-assert.ok(series.includes("resolvedCardFormatting.showDetails"));
+assert.ok(series.includes("formatting.showDescription"));
+assert.ok(series.includes("formatting.showSeries"));
+assert.ok(series.includes("formatting.showDetails"));
 assert.ok(series.includes("pageBlockTextAlignClass"));
 assert.ok(series.includes('data-feed-series-card=""'));
 assert.ok(series.includes('data-feed-series-title=""'));
@@ -1360,10 +1524,10 @@ assert.ok(series.includes('data-feed-series-image-frame=""'));
 assert.ok(series.includes('data-feed-series-navigation=""'));
 assert.ok(series.includes('data-feed-series-action-bar=""'));
 assert.ok(series.includes('data-feed-series-details=""'));
-assert.ok(series.includes("!showImage && !hasContent && !showDetails && !canAdvance"));
+assert.ok(series.includes("!showImage && !hasContent && !showDetails && !navigation"));
 const seriesImageFrameIndex = series.indexOf('data-feed-series-image-frame=""');
 const seriesImageControlsMountIndex = series.indexOf(
-  "{carouselControls}",
+  "{navigation}",
   seriesImageFrameIndex,
 );
 const seriesActionBarIndex = series.indexOf('data-feed-series-action-bar=""');
@@ -1375,10 +1539,22 @@ assert.ok(
 );
 assert.equal(series.includes("min-h-44"), false);
 assert.equal(series.includes("mt-auto"), false);
-assert.ok(series.includes("absolute inset-x-0 top-1/2"));
-assert.ok(series.includes("translate-x-1/2"));
-assert.ok(series.includes("-translate-x-1/2"));
+assert.ok(carouselNavigation.includes("absolute inset-x-0 top-1/2"));
+assert.ok(carouselNavigation.includes("translate-x-1/2"));
+assert.ok(carouselNavigation.includes("-translate-x-1/2"));
 assert.equal(series.includes("group relative overflow-hidden rounded-2xl"), false);
+assert.ok(latest.includes('data-feed-presentation="slider"'));
+assert.ok(latest.includes('data-feed-presentation="grid"'));
+assert.ok(popular.includes('data-feed-presentation="grid"'));
+assert.ok(categories.includes('data-feed-presentation="grid"'));
+assert.ok(series.includes('data-feed-presentation="slider"'));
+assert.ok(series.includes('data-feed-presentation="grid"'));
+assert.ok(groupedList.includes('data-feed-presentation="list"'));
+assert.ok(groupedList.includes("intervalSeconds * 1000"));
+assert.ok(groupedList.includes("FEED_MAX_VISIBLE_DOTS"));
+assert.ok(carouselDots.includes("resolveCompactFeedDotIndices"));
+assert.ok(presentationLayout.includes("@container/slot-module") === false);
+assert.ok(presentationLayout.includes("[data-layout-slot=sidebar"));
 assert.ok(pageLayout.includes("<FeedModuleSection"));
 assert.ok(legacyStack.includes("<FeedModuleSection"));
 

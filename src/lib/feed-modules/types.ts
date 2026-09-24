@@ -18,6 +18,85 @@ export const TOPICS_FEED_TYPE_LABELS_AR: Record<TopicsFeedType, string> = {
   series: "سلاسل المحتوى",
 };
 
+export const FEED_PRESENTATION_LAYOUTS = ["slider", "grid", "list"] as const;
+export type FeedPresentationLayout = (typeof FEED_PRESENTATION_LAYOUTS)[number];
+
+export const FEED_PRESENTATION_DENSITIES = [1, 2, 3] as const;
+export type FeedPresentationDensity = (typeof FEED_PRESENTATION_DENSITIES)[number];
+
+export type FeedListPresentationVariant = {
+  itemsPerGroup: number;
+  showDots: boolean;
+  intervalSeconds: number;
+};
+
+export const DEFAULT_FEED_LIST_PRESENTATION = {
+  itemsPerGroup: 3,
+  showDots: true,
+  intervalSeconds: 8,
+} as const satisfies FeedListPresentationVariant;
+
+export type FeedLatestPresentationVariant = {
+  layout: FeedPresentationLayout;
+  density: FeedPresentationDensity;
+  showArrows: boolean;
+  showDots: boolean;
+  list: FeedListPresentationVariant;
+};
+
+export type FeedPopularPresentationVariant = {
+  layout: Extract<FeedPresentationLayout, "list" | "grid">;
+  columns: FeedPresentationDensity;
+  list: FeedListPresentationVariant;
+};
+
+export type FeedCategoriesPresentationVariant = {
+  layout: Extract<FeedPresentationLayout, "list" | "grid">;
+  columns: FeedPresentationDensity;
+  list: FeedListPresentationVariant;
+};
+
+export type FeedSeriesPresentationVariant = {
+  layout: FeedPresentationLayout;
+  columns: FeedPresentationDensity;
+  showArrows: boolean;
+  list: FeedListPresentationVariant;
+};
+
+export type FeedPresentationVariants = {
+  latest: FeedLatestPresentationVariant;
+  popular: FeedPopularPresentationVariant;
+  categories: FeedCategoriesPresentationVariant;
+  series: FeedSeriesPresentationVariant;
+};
+
+/** Defaults preserve the pre-variant public output for configs without this contract. */
+export const DEFAULT_FEED_PRESENTATION_VARIANTS = {
+  latest: {
+    layout: "slider",
+    density: 3,
+    showArrows: false,
+    showDots: true,
+    list: DEFAULT_FEED_LIST_PRESENTATION,
+  },
+  popular: {
+    layout: "list",
+    columns: 1,
+    list: DEFAULT_FEED_LIST_PRESENTATION,
+  },
+  categories: {
+    layout: "list",
+    columns: 1,
+    list: DEFAULT_FEED_LIST_PRESENTATION,
+  },
+  series: {
+    layout: "slider",
+    columns: 1,
+    showArrows: true,
+    list: DEFAULT_FEED_LIST_PRESENTATION,
+  },
+} as const satisfies FeedPresentationVariants;
+
 export type FeedModuleDisplayFormattingField =
   | "image"
   | "title"
@@ -143,6 +222,7 @@ export type FeedModulePresentation = PageBlockTextFormattingConfig & {
   articleCard?: FeedArticleCardPresentation;
   categoryCard?: FeedCategoryCardPresentation;
   seriesCard?: FeedSeriesCardPresentation;
+  variants: FeedPresentationVariants;
 };
 
 export type FeedModuleQueryConfig = {
