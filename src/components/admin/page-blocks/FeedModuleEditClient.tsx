@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { AdminFormListboxSelect } from "../ui";
 import FeedModuleFilterFields from "./FeedModuleFilterFields";
+import FeedPresentationVariantFields from "./FeedPresentationVariantFields";
 import {
   ModuleEditorFeedback,
   ModuleEditorField,
@@ -139,20 +140,16 @@ export default function FeedModuleEditClient({
                         </ModuleEditorVisibilityAlignRow>
                       </ModuleEditorField>
 
-                      <ModuleEditorField nature="standard" span={4}><label className="block space-y-2">
-                        <span className="text-xs font-semibold text-white/55">عدد العناصر المعروضة</span>
-                        <input
-                          name="limit"
-                          type="number"
-                          min={1}
-                          max={COLLECTION_ITEM_LIMIT_MAX}
-                          defaultValue={config.query.limit}
-                          className={fieldClassName()}
-                        />
-                      </label></ModuleEditorField>
                     </ModuleEditorFieldGrid>
 
                     <FeedModuleFilterFields config={config} filterOptions={filterOptions} />
+
+                    <FeedPresentationVariantFields
+                      activeFeedType={feedType}
+                      variants={config.presentation.variants}
+                      limit={config.query.limit}
+                      maxLimit={COLLECTION_ITEM_LIMIT_MAX}
+                    />
 
                     <div className="mt-6 space-y-3">
                       <ModuleEditorSectionHeading intent="settings">

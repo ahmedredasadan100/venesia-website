@@ -33,6 +33,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
         title={presentation.title}
         formatting={presentation}
         cardFormatting={presentation.categoryCard}
+        presentationVariant={presentation.variants.categories}
       />
     );
   }
@@ -48,6 +49,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
         showImage={presentation.showImage}
         showExcerpt={presentation.showExcerpt}
         cardFormatting={presentation.seriesCard}
+        presentationVariant={presentation.variants.series}
       />
     );
   }
@@ -63,6 +65,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
         showExcerpt={presentation.showExcerpt}
         formatting={presentation}
         cardFormatting={presentation.articleCard}
+        presentationVariant={presentation.variants.popular}
       />
     );
   }
@@ -77,6 +80,7 @@ export default function FeedModuleSection({ module }: FeedModuleSectionProps) {
       showExcerpt={presentation.showExcerpt}
       formatting={presentation}
       cardFormatting={presentation.articleCard}
+      presentationVariant={presentation.variants.latest}
     />
   );
 }

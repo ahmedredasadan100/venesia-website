@@ -1,8 +1,11 @@
+import { resolveCompactFeedDotIndices } from "./feed-grouped-list-contract";
+
 type FeedCarouselDotsProps = {
   count: number;
   activeIndex: number;
   onSelect: (index: number) => void;
   itemLabel: string;
+  maxVisible?: number;
 };
 
 export default function FeedCarouselDots({
@@ -10,12 +13,20 @@ export default function FeedCarouselDots({
   activeIndex,
   onSelect,
   itemLabel,
+  maxVisible,
 }: FeedCarouselDotsProps) {
   if (count <= 0) return null;
+  const dotIndices = resolveCompactFeedDotIndices(count, activeIndex, maxVisible ?? count);
 
   return (
-    <div className="mt-5 flex justify-center gap-1.5" aria-label={`التنقل بين ${itemLabel}`}>
-      {Array.from({ length: count }, (_, index) => (
+    <div
+      className="mt-5 flex max-w-full justify-center gap-1.5 overflow-hidden"
+      aria-label={`التنقل بين ${itemLabel}`}
+      data-feed-carousel-dots=""
+      data-feed-carousel-dot-count={dotIndices.length}
+      data-feed-carousel-group-count={count}
+    >
+      {dotIndices.map((index) => (
         <button
           key={index}
           type="button"
