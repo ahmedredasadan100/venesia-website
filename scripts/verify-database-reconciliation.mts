@@ -367,10 +367,12 @@ async function verifyLiveContract(migrations: Migration[]) {
     );
 
     const registeredRevisions = [];
+    const recognizedRegistryRepresentations = [];
     for (const [index, migration] of migrations.entries()) {
       const row = registry.rows[index];
       const provenance = assertWholeFileMigrationProvenance(row, migration);
       if (provenance.revision !== "canonical-current") registeredRevisions.push({ version: row.version, ...provenance });
+      if (provenance.registryRepresentation) recognizedRegistryRepresentations.push({ version: row.version, ...provenance });
     }
 
     const corpus = migrations.map((migration) => migration.sql.toLowerCase()).join("\n");
@@ -507,6 +509,7 @@ async function verifyLiveContract(migrations: Migration[]) {
     return {
       registryVersions: registry.rows.length,
       registeredRevisions,
+      recognizedRegistryRepresentations,
       catalogObjectsWithRepositoryProvenance: catalog.rows.length,
       publicTables: state.public_tables,
       rlsEnabledTables: state.rls_enabled_tables,

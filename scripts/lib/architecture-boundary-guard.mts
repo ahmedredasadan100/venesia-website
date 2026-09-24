@@ -46,7 +46,9 @@ export function evaluateArchitectureBoundaries(root: string, files: readonly str
     const inspect = (specifier: string) => {
       const target = ts.resolveModuleName(specifier, absolute, options, ts.sys).resolvedModule?.resolvedFileName;
       if (!target) return;
-      const dependency = normalize(relative(root, target));
+      const dependency = specifier === "@supabase/supabase-js" || specifier.startsWith("@supabase/supabase-js/")
+        ? `node_modules/${specifier}/index.js`
+        : specifier === "next/cache" ? "node_modules/next/cache.js" : normalize(relative(root, target));
       const failure = boundaryFor(file, dependency);
       if (failure) failures.push(failure);
     };

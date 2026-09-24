@@ -121,10 +121,8 @@ try {
     if (preservedRevisions.has(row.version)) return false;
     const canonicalVersion = VERSION_ALIASES.get(row.version) ?? row.version;
     const migration = byVersion.get(canonicalVersion);
-    return row.version !== canonicalVersion
-      || row.name !== migration?.name
-      || row.statements?.length !== 1
-      || sha256(row.statements?.[0] ?? "") !== migration?.sha256;
+    return row.version !== canonicalVersion || migration === undefined
+      || classifyWholeFileMigrationProvenance(row, migration) === null;
   });
 
   const plan = {

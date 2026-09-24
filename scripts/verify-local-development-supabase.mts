@@ -10,6 +10,7 @@ import {
   readLocalDevelopmentMigrationCorpus,
 } from "./lib/local-development-supabase.mts";
 import {
+  assertDevelopmentWorkspaceIdentity,
   assertOnlineMigrationHistory,
   classifyDevelopmentSupabaseTarget,
 } from "./development-supabase-preflight.mts";
@@ -58,6 +59,25 @@ assert.throws(() => assertOnlineMigrationHistory(onlineHistory.slice(0, -1), cor
 assert.throws(() => assertOnlineMigrationHistory([{ ...onlineHistory[0], name: "drift" }, ...onlineHistory.slice(1)], corpus),
   /ONLINE_HISTORY_DIVERGED/u);
 
+const canonicalWorkspace = {
+  rootMatches: true,
+  branch: "main",
+  head: "a".repeat(40),
+  originMain: "a".repeat(40),
+  originMainIsAncestor: true,
+};
+assert.doesNotThrow(() => assertDevelopmentWorkspaceIdentity(canonicalWorkspace));
+assert.doesNotThrow(() => assertDevelopmentWorkspaceIdentity({ ...canonicalWorkspace,
+  branch: "codex/intentional-isolated-verification", head: "b".repeat(40) }));
+assert.throws(() => assertDevelopmentWorkspaceIdentity({ ...canonicalWorkspace, branch: null }),
+  /DEVELOPMENT_WORKSPACE_DETACHED/u);
+assert.throws(() => assertDevelopmentWorkspaceIdentity({ ...canonicalWorkspace, originMainIsAncestor: false }),
+  /DEVELOPMENT_WORKSPACE_BEHIND_CANONICAL_MAIN/u);
+assert.throws(() => assertDevelopmentWorkspaceIdentity({ ...canonicalWorkspace, rootMatches: false }),
+  /DEVELOPMENT_WORKSPACE_IDENTITY_AMBIGUOUS/u);
+assert.throws(() => assertDevelopmentWorkspaceIdentity({ ...canonicalWorkspace, head: "b".repeat(40) }),
+  /DEVELOPMENT_MAIN_DIVERGED/u);
+
 const owner = read("scripts/lib/local-development-supabase.mts");
 assert.match(owner, /REMOTE_PROJECT_LINK_PRESENT/u);
 assert.match(owner, /127\.0\.0\.1:54322/u);
@@ -91,6 +111,10 @@ const developmentPreflight = read("scripts/development-supabase-preflight.mts");
 assert.match(developmentPreflight, /begin transaction read only/u);
 assert.match(developmentPreflight, /select version,name from supabase_migrations\.schema_migrations order by version/u);
 assert.match(developmentPreflight, /APPROVED_ONLINE_PROJECT_REF = "pmqsfqvvekrlujqgurcu"/u);
+assert.match(developmentPreflight, /merge-base", "--is-ancestor", "origin\/main", "HEAD"/u);
+assert.match(developmentPreflight, /DEVELOPMENT_WORKSPACE_DETACHED/u);
+assert.match(developmentPreflight, /DEVELOPMENT_WORKSPACE_BEHIND_CANONICAL_MAIN/u);
+assert.match(developmentPreflight, /DEVELOPMENT_WORKSPACE_IDENTITY_AMBIGUOUS/u);
 assert.doesNotMatch(developmentPreflight, /client\.query\(\s*["'`](?:insert|update|delete|alter|create|drop|grant|revoke)\b/iu);
 assert.doesNotMatch(packageJson.scripts["dev:db:preflight"], /disable-warning|no-warnings/u);
 
@@ -123,6 +147,7 @@ console.log(JSON.stringify({
   dailyOnlineTargetAccepted: true,
   localTargetStillSupported: true,
   onlinePreflightReadOnly: true,
+  workspaceIdentityContract: true,
   packageTypeChanged: false,
   isolatedQaCoupling: false,
 }, null, 2));
