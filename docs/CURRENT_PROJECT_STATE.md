@@ -19,6 +19,7 @@ Verified after the authorized PR #180 standard merge and automatic Production de
 
 | Surface                       | SHA / state |
 | ----------------------------- | ----------- |
+| Verified cutover baseline     | `672cf81dff4e39c300adb68e5f41750ef980e9c1` |
 | Verified canonical baseline   | `6ade5a46dc22f59bf72ccbfdb0be3494d751717c` |
 | Local `main` / `origin/main` / GitHub `main` | `6ade5a46dc22f59bf72ccbfdb0be3494d751717c` |
 | Vercel Production             | Automatic Production deployment is READY on `6ade5a46dc22f59bf72ccbfdb0be3494d751717c`. |
