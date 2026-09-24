@@ -94,27 +94,27 @@ PR #98 closed the evidence-backed Platform Health findings and `DEBT-TYPE-01` wi
 
 ## Production database reconciliation
 
-The authorized cutover readback on 2026-09-13 established the current Production registry and catalog counts below. The former 2026-09-05 snapshot described migration 100 and is superseded for these volatile metrics. Repository SQL and all 103 registry versions match exactly; the canonical live verifier retains its original assertions.
+The authorized cutover readback on 2026-09-13 established the historical 103-migration corpus snapshot used by the structural Git guard. A read-only Production reconciliation on 2026-09-24 refreshed the volatile registry and catalog metrics below through migration 110; all 110 receipts have exact recognized source provenance. The `Repository migration files` row intentionally remains the immutable 103-file snapshot count, not the current corpus size.
 
 The Shared Corrections & Adoption continuation on baseline `d60938a6781db3630a64c1cf1798f7ef269c38b4` added `20260912224809_shared_composition_menu_atomic_completion.sql` as migration 103. After isolated proof and separate owner authorization, the exact approved SQL was applied once on 2026-09-13 at 01:33:23 UTC, with its canonical registry record in the same transaction. It extends the existing Composition/Menu RPC owners for atomic template saves and Page/Menu batch deletion, preserving their signatures, ACL and Audit policy. Independent readback matched both expected function hashes and permissions; PostgREST exposes the unchanged signatures. PR #155 then standard-merged feature `a451527489ce7b5e7545e737a056c6ed6cdc6467` as `672cf81dff4e39c300adb68e5f41750ef980e9c1`, followed by automatic Production deployment. No CMS write test or historical migration replay was performed. Isolated behavioral evidence remains scoped as documented in `reports/SHARED_CORRECTIONS_PROOF.md`; A04 is deferred and `globalClosed=false`.
 
 | Proof                                             |                                  Reconciled state |
 | ------------------------------------------------- | ------------------------------------------------: |
 | Repository migration files                        |                                               103 |
-| Production registry versions                      |                                               103 |
+| Production registry versions                      |                                               110 |
 | Migration 101 rollout state                       |                 Applied / exact registry provenance |
 | Migration 103 rollout state                       |                 Applied once before PR #155 merge |
-| Current Production live state                     |                    Verified on 2026-09-13 |
-| Registry SQL provenance                           | Exact repository SQL for all 103 recorded versions |
-| Public tables                                     |                                                61 |
-| Public tables with RLS enabled                    |                                                61 |
-| Public catalog objects with repository provenance |                                               310 |
+| Current Production live state                     |                    Verified on 2026-09-24 |
+| Registry SQL provenance                           | Exact recognized source provenance for all 110 recorded versions |
+| Public tables                                     |                                                63 |
+| Public tables with RLS enabled                    |                                                63 |
+| Public catalog objects with repository provenance |                                               336 |
 | Invalid, unready, or non-live indexes             |                                                 0 |
 | Unvalidated public constraints                    |                                                 0 |
 | Parallel public function overload names           |                                                 0 |
 | Public RLS policies                               |                                                 3 |
 | Anonymous-callable application data functions     |                                                 0 |
-| Registry reconciliation audit records             |                                                25 |
+| Registry reconciliation audit records             |                                                28 |
 
 `public.rls_auto_enable()` is owned by the Supabase platform event-trigger boundary. It is deliberately excluded from application-object provenance and must not be removed as application legacy.
 

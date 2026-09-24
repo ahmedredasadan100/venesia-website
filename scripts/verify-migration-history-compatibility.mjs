@@ -199,56 +199,110 @@ export function verifyMigrationCorpusProvenanceTests() {
     databaseAccess: false, networkAccess: false, temporaryGitFixtureCleaned: true };
 }
 
-function verifyCanonicalRegistryRepresentation() {
+function splitCanonicalStatements(sql) {
+  const statements = [];
+  let start = 0;
+  let offset = 0;
+  while (offset < sql.length) {
+    if (sql.startsWith("--", offset)) {
+      const newline = sql.indexOf("\n", offset + 2);
+      offset = newline < 0 ? sql.length : newline + 1;
+      continue;
+    }
+    if (sql.startsWith("/*", offset)) {
+      let depth = 1;
+      offset += 2;
+      while (offset < sql.length && depth > 0) {
+        if (sql.startsWith("/*", offset)) { depth++; offset += 2; }
+        else if (sql.startsWith("*/", offset)) { depth--; offset += 2; }
+        else offset++;
+      }
+      assert.equal(depth, 0, "Canonical SQL has an unterminated block comment.");
+      continue;
+    }
+    if (sql[offset] === "'" || sql[offset] === "\"") {
+      const quote = sql[offset++];
+      while (offset < sql.length) {
+        if (sql[offset] !== quote) { offset++; continue; }
+        if (sql[offset + 1] === quote) { offset += 2; continue; }
+        offset++;
+        break;
+      }
+      continue;
+    }
+    if (sql[offset] === "$") {
+      const tag = /^\$(?:[a-z_][a-z0-9_]*)?\$/iu.exec(sql.slice(offset))?.[0];
+      if (tag !== undefined) {
+        const close = sql.indexOf(tag, offset + tag.length);
+        assert.ok(close >= 0, "Canonical SQL has an unterminated dollar quote.");
+        offset = close + tag.length;
+        continue;
+      }
+    }
+    if (sql[offset] !== ";") { offset++; continue; }
+    statements.push(sql.slice(start, offset));
+    offset++;
+    while (offset < sql.length && /\s/u.test(sql[offset])) offset++;
+    start = offset;
+  }
+  assert.equal(sql.slice(start), "", "Canonical SQL has unterminated executable bytes.");
+  assert.ok(statements.every(statement => statement.length > 0), "Canonical SQL has an empty statement.");
+  return statements;
+}
+
+function verifyCanonicalRegistryRepresentations() {
   let checks = 0;
   const check = (value, message) => { assert.ok(value, message); checks++; };
-  const version = "20260819040000";
-  const name = "database_rls_security_contract";
-  const sql = normalize(readFileSync(join(ROOT, "sql/migrations", `${version}_${name}.sql`), "utf8"));
-  const migration = { version, name, sql, sha256: digest(sql) };
-  const receiptMatch = /^([\s\S]*\bbegin);\n\n(do \$venisia_security_adoption\$[\s\S]*\$venisia_security_adoption\$);\n\n(commit);\n$/u.exec(sql);
-  assert.ok(receiptMatch, "Canonical Migration 107 no longer has its reviewed three-statement CLI boundaries.");
-  const statements = receiptMatch.slice(1);
-  const row = { version, name, statements };
-  const before = JSON.stringify([migration, row]);
-  const provenance = assertWholeFileMigrationProvenance(row, migration);
-  check(provenance.revision === "canonical-current"
-    && provenance.registryRepresentation === "supabase-cli-v2.116-three-statement"
-    && provenance.statementArraySha256 === "c0b1d13cfb49256a9811c7e6d97c94fe0e35f102a8b862e336c0f5d71a310587"
-    && provenance.sourceSha256 === "409b501179fc89d8442b09554c2f85f595e99ed3e678d81124c88cf596e31637",
-  "The exact Production three-statement receipt resolves to canonical Migration 107.");
-  check(JSON.stringify([migration, row]) === before, "Canonical registry representation verification never mutates its inputs.");
-
-  check(classifyWholeFileMigrationProvenance({ ...row, statements: statements.slice(0, 2) }, migration) === null,
-    "Wrong statement count fails closed.");
-  check(classifyWholeFileMigrationProvenance({ ...row,
-    statements: [statements[0], `${statements[1]} `, statements[2]] }, migration) === null,
-  "An altered statement fails closed.");
-
-  const body = sql.slice(0, -2);
-  const firstBoundary = body.indexOf(";\n\n");
-  const secondBoundary = body.indexOf(";\n\n", firstBoundary + 3);
-  assert.ok(firstBoundary >= 0 && secondBoundary > firstBoundary);
-  const differentlySegmented = [
-    body.slice(0, firstBoundary),
-    body.slice(firstBoundary + 3, secondBoundary),
-    body.slice(secondBoundary + 3),
+  const expected = [
+    ["20260819040000", "database_rls_security_contract", 3, "supabase-cli-v2.116-three-statement",
+      "c0b1d13cfb49256a9811c7e6d97c94fe0e35f102a8b862e336c0f5d71a310587", "409b501179fc89d8442b09554c2f85f595e99ed3e678d81124c88cf596e31637"],
+    ["20260916201230", "database_rls_post_platform_classification", 3, "canonical-statement-array-with-source-trivia-v1",
+      "aafc443cc836c4186e9f85684cc0a352e7078b620e465be98bae625006509805", "19f6d457df2106777a91a6434ad80cfb74470bb4c16e7490b79dc00b0350f82b"],
+    ["20260920010000", "public_feed_aggregated_reads", 8, "canonical-statement-array-with-source-trivia-v1",
+      "b3482df9a29f3be2a30ca8897745dbde58d74df68399cc45c7fd2753f6062d73", "c0c73d1fd71300df3d0cf4807488ee3c285df49e4a1f47a2effb937e4f1b8627"],
+    ["20260920011000", "page_composition_layout_regions", 36, "canonical-statement-array-with-source-trivia-v1",
+      "c6b4d4b817a75dfe0f53ea55efabe4e824dd0885506f0e0a6d13a00ebda21645", "f024e3fda109b47c2251fc5ef6d4da49f2b4142fa697a5c50629d7241ec1c67c"],
   ];
-  check(`${differentlySegmented.join(";\n\n")};\n` === sql
-    && digest(JSON.stringify(differentlySegmented)) !== "c0b1d13cfb49256a9811c7e6d97c94fe0e35f102a8b862e336c0f5d71a310587"
-    && classifyWholeFileMigrationProvenance({ ...row, statements: differentlySegmented }, migration) === null,
-  "A different statement-array hash fails closed even when source reconstruction is identical.");
+  const reports = [];
+  for (const [version, name, statementCount, kind, statementArraySha256, sourceSha256] of expected) {
+    const sql = normalize(readFileSync(join(ROOT, "sql/migrations", `${version}_${name}.sql`), "utf8"));
+    const migration = { version, name, sql, sha256: digest(sql) };
+    const statements = splitCanonicalStatements(sql);
+    const row = { version, name, statements };
+    const before = JSON.stringify([migration, row]);
+    check(statements.length === statementCount && digest(JSON.stringify(statements)) === statementArraySha256,
+      `Canonical ${version} projects to the frozen ordered Production statement array.`);
+    const provenance = assertWholeFileMigrationProvenance(row, migration);
+    check(provenance.revision === "canonical-current" && provenance.registryRepresentation === kind
+      && provenance.statementArraySha256 === statementArraySha256 && provenance.sourceSha256 === sourceSha256,
+    `The exact Production receipt resolves to canonical ${version}.`);
+    check(JSON.stringify([migration, row]) === before, `Canonical ${version} verification never mutates its inputs.`);
 
-  const changedSql = sql.replace("-- Venesia public-table security contract", "-- Altered security contract");
-  check(classifyWholeFileMigrationProvenance(row,
-    { ...migration, sql: changedSql, sha256: digest(changedSql) }) === null,
-  "A receipt whose reconstruction does not match canonical source fails closed.");
-  check(classifyWholeFileMigrationProvenance({ ...row, version: "19990101000000" }, migration) === null,
-    "The exact receipt cannot authorize another migration version.");
-  check(classifyWholeFileMigrationProvenance({ ...row, name: `${name}_wrong` }, migration) === null,
-    "The exact receipt cannot authorize another migration name.");
-  return { checks, version, statementCount: statements.length,
-    statementArraySha256: provenance.statementArraySha256, sourceSha256: provenance.sourceSha256 };
+    check(classifyWholeFileMigrationProvenance({ ...row, statements: statements.slice(0, -1) }, migration) === null,
+      `Wrong statement count fails closed for ${version}.`);
+    check(classifyWholeFileMigrationProvenance({ ...row,
+      statements: statements.map((statement, index) => index === 1 ? `${statement} ` : statement) }, migration) === null,
+    `An altered statement fails closed for ${version}.`);
+    const reordered = [...statements];
+    [reordered[0], reordered[1]] = [reordered[1], reordered[0]];
+    check(classifyWholeFileMigrationProvenance({ ...row, statements: reordered }, migration) === null,
+      `Reordered statements fail closed for ${version}.`);
+    const differentlySegmented = [...statements];
+    differentlySegmented[0] = `${differentlySegmented[0]};`;
+    check(digest(JSON.stringify(differentlySegmented)) !== statementArraySha256
+      && classifyWholeFileMigrationProvenance({ ...row, statements: differentlySegmented }, migration) === null,
+    `A different statement-array hash fails closed for ${version} even when canonical bytes can be reconstructed.`);
+    const changedSql = `${statements[0]};\nselect 'unregistered executable token';\n${sql.slice(statements[0].length + 2)}`;
+    check(classifyWholeFileMigrationProvenance(row,
+      { ...migration, sql: changedSql, sha256: digest(changedSql) }) === null,
+    `A reconstruction/source mismatch fails closed for ${version}.`);
+    check(classifyWholeFileMigrationProvenance({ ...row, version: "19990101000000" }, migration) === null,
+      `The exact receipt cannot authorize another version for ${version}.`);
+    check(classifyWholeFileMigrationProvenance({ ...row, name: `${name}_wrong` }, migration) === null,
+      `The exact receipt cannot authorize another name for ${version}.`);
+    reports.push({ version, statementCount, statementArraySha256, sourceSha256, kind });
+  }
+  return { checks, reports };
 }
 
 export function verifyMigrationHistoryCompatibility(selectedVersion) {
@@ -312,10 +366,10 @@ export function verifyMigrationHistoryCompatibility(selectedVersion) {
     fails(() => assertWholeFileMigrationProvenance({ ...old, statements: [other.historicalSql] }, migration), "Compatibility source from another reviewed version is never accepted.");
   }
   }
-  const canonicalRegistryRepresentation = verifyCanonicalRegistryRepresentation();
+  const canonicalRegistryRepresentations = verifyCanonicalRegistryRepresentations();
   const corpus = selectedVersion === undefined ? verifyMigrationCorpusProvenanceTests() : undefined;
-  return { checks: checks + canonicalRegistryRepresentation.checks + (corpus?.checks ?? 0), compatibilityVersions: versions,
-    canonicalRegistryRepresentation, ...(corpus ? { corpus } : {}), databaseAccess: false, registryWrites: false };
+  return { checks: checks + canonicalRegistryRepresentations.checks + (corpus?.checks ?? 0), compatibilityVersions: versions,
+    canonicalRegistryRepresentations, ...(corpus ? { corpus } : {}), databaseAccess: false, registryWrites: false };
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
