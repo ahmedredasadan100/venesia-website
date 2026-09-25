@@ -22,3 +22,5 @@ export { detachPageBlockAssignment } from "./assignment-delete";
 export { duplicateAssignedPageModule } from "./assignment-duplicate";
 export { bulkPageBlockAssignments } from "./bulk";
 export { reorderPageComposition } from "./assignment-reorder";
+export { savePageLayout, selectPageLayout } from "./page-layout";
+export type { PageLayoutActionResult, PageLayoutRegionInput } from "./page-layout";

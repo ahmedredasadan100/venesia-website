@@ -1,5 +1,9 @@
 import type { SeoOpenGraphType, SeoRobotsDirective } from "../../config/seo/seo-types";
 
+// Persisted tuple contract version. Calculators may consume and re-export it,
+// while collection reads can validate provenance without importing a calculator.
+export const ENTITY_SEO_SCORE_VERSION = 1 as const;
+
 export const PERSISTED_ENTITY_SEO_FIELDS = [
   "seo_score", "seo_score_version", "seo_score_input_hash",
 ] as const;
@@ -23,6 +27,16 @@ export function isPersistedEntitySeoScore(
     && Number.isInteger(value.seo_score_version) && value.seo_score_version! > 0
     && typeof value.seo_score_input_hash === "string"
     && /^[a-f0-9]{64}$/.test(value.seo_score_input_hash));
+}
+
+export function persistedEntitySeoScoreMatches(
+  expected: PersistedEntitySeoScore,
+  actual: PersistedEntitySeoScoreSource | null | undefined,
+): actual is PersistedEntitySeoScore {
+  return isPersistedEntitySeoScore(actual)
+    && actual.seo_score === expected.seo_score
+    && actual.seo_score_version === expected.seo_score_version
+    && actual.seo_score_input_hash === expected.seo_score_input_hash;
 }
 
 export const ENTITY_SEO_FIELD_NAMES = {

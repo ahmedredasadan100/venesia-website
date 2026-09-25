@@ -237,6 +237,7 @@ try {
     projects: [{ ...projectSource, id: 1 }, { ...projectSource, id: 2, slug: "proof-project-copy" }, { ...projectSource, id: 91 }],
     project_floor_plans: [], project_media: [], project_videos: [],
   };
+  let savedProjectReadback = null;
   const projectFrom = (table) => {
     assert.ok(Object.hasOwn(projectTables, table), `Unexpected Project table: ${table}`);
     const predicates = [];
@@ -261,12 +262,25 @@ try {
   check("Project equality and candidate filters intersect", (await projectFrom("projects").select("slug").eq("id", 1).in("slug", ["proof-project-copy"])).data, []);
   const projectSetup = portsFor(async (name, args) => {
     projectCalls++;
-    if (!baseline && name === "duplicate_project_admin_entry") check("Project duplicate skips the occupied candidate before its RPC", args.p_seo_proof.expected_result.slug, "proof-project-copy-2");
+    if (name === "save_project_admin_entry") {
+      savedProjectReadback = { ...args.p_payload.project, id: projectRow.project_id };
+    }
+    if (name === "duplicate_project_admin_entry") {
+      if (!baseline) check("Project duplicate skips the occupied candidate before its RPC", args.p_seo_proof.expected_result.slug, "proof-project-copy-2");
+      Object.assign(
+        projectTables.projects.find((row) => row.id === projectRow.project_id),
+        args.p_seo_proof.score,
+      );
+    }
     return { data: [projectRow], error: null };
   }, projectFrom);
   const payload = { project: { id: null, type: "residential", slug: "proof-project", arabic_name: "proof", publication_status: "unpublished", seo_title: "", seo_description: "" } };
   projectSetup.ports["/project-entry-contract"] = { projectEntryPayloadFromFormData: () => payload, assessProjectEntryPayload: () => ({ fieldErrors: {}, checks: [] }), projectEntryFirstErrorTarget: () => null };
-  projectSetup.ports["/project-entry-data"] = { loadProjectEntry: async () => ({ ...payload, project: { ...payload.project, id: 91 } }) };
+  projectSetup.ports["/project-entry-data"] = {
+    loadProjectEntry: async () => ({ ...payload, project: savedProjectReadback }),
+    loadProjectPostMutationReadback: async (id) =>
+      projectTables.projects.find((row) => row.id === id) ?? null,
+  };
   projectSetup.ports["/project-publishing-capability"] = { getProjectPublishingReadiness: () => ({ ready: true }), isProjectPublicationStatus: () => true, resolveProjectPublicationAuditOperation: () => "create" };
   const projectLoad = loader(projectSetup.ports);
   for (const [name, operation] of [

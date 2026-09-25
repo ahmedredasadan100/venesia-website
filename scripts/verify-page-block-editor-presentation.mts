@@ -1557,7 +1557,7 @@ check(
 );
 
 check(
-  "Page Blocks read owners join assigned metadata, preload only default Content summaries and keep other picker catalogs on demand",
+  "Page Blocks read owners join assigned metadata, preload the canonical Layout and default Content summaries, and keep other picker catalogs on demand",
   adminQueries.includes("content_block_templates(id,name,slug,status,variant,config)") &&
     adminQueries.includes("hero_templates(id,name,slug,status,variant,config)") &&
     adminQueries.includes("const template = row.content_block_templates;") &&
@@ -1572,8 +1572,10 @@ check(
     !heroDetailRoute.includes('.from("pages")') &&
     !heroDetailRoute.includes("hero_assignments(") &&
     pageCompositionRoute.includes(
-      "const [pageResult, preference, assignmentsResult, globalSeo] = await Promise.all",
+      "const [pageResult, preference, assignmentsResult, globalSeo, layoutsResult] = await Promise.all",
     ) &&
+    pageCompositionRoute.includes("loadPageCompositionLayouts()") &&
+    pageCompositionRoute.includes("loadPageRegionsForPage(page.id)") &&
     !pageCompositionRoute.includes(
       "assignmentsData = await getPageModuleAssignmentsForAdmin",
     ),

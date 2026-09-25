@@ -3,7 +3,7 @@
 import Link from "next/link";
 
 import type { ModuleAssignmentRow } from "../../../lib/page-blocks/module-assignments-query";
-import { LAYOUT_SLOT_LABELS_AR, normalizeLayoutSlot } from "../../../lib/page-blocks/layout-slots";
+import { resolveLayoutRegionAdminLabel } from "../../../lib/page-blocks/layout-slots";
 
 type ModuleCrossPageUsageBannerProps = {
   moduleName: string;
@@ -36,7 +36,7 @@ export default function ModuleCrossPageUsageBanner({
               </span>
             </span>
             <div className="flex items-center gap-2 text-xs text-white/45">
-              <span>{LAYOUT_SLOT_LABELS_AR[normalizeLayoutSlot(row.slot)]}</span>
+              <span>{resolveLayoutRegionAdminLabel(row.slot, row.region_admin_label)}</span>
               <Link
                 href={`/admin/pages-blocks/pages/${row.page_id}`}
                 className="rounded-full border border-amber-300/25 px-2.5 py-1 text-amber-100 hover:bg-amber-400/10"

@@ -40,6 +40,7 @@ import {
   toProjectSeoScoreInput,
   type PersistedEntitySeoScoreSource,
 } from "../../../../lib/admin/seo/entity-seo-persistence";
+import { persistedEntitySeoScoreMatches } from "../../../../lib/seo/entity-seo-types";
 
 export type ProjectEntrySaveResult = {
   mediaSynchronizationStatus: "synced" | "warning";
@@ -282,24 +283,26 @@ export async function saveProjectEntry(
       coordinated.mediaSynchronization.status === "saved_with_media_sync_warning";
     let reconciledBundle: ProjectEntryBundle | null = null;
 
-    if (mode === "edit") {
-      try {
-        reconciledBundle = await loadProjectEntry(
-          saved.id,
-          coordinated.reconciliationMediaSeed,
-          {
-            runAsync: runWithSupabaseRpcCorrelationPhase,
-            runSync: runWithSupabaseRpcCorrelationSyncPhase,
-          },
-        );
-      } catch (reconciliationError) {
-        console.error("Project entry post-save reconciliation read failed", {
-          projectId: saved.id,
-          error: reconciliationError,
-        });
-      }
+    try {
+      reconciledBundle = await loadProjectEntry(
+        saved.id,
+        coordinated.reconciliationMediaSeed,
+        {
+          runAsync: runWithSupabaseRpcCorrelationPhase,
+          runSync: runWithSupabaseRpcCorrelationSyncPhase,
+        },
+      );
+    } catch (reconciliationError) {
+      console.error("Project entry post-save reconciliation read failed", {
+        projectId: saved.id,
+        error: reconciliationError,
+      });
     }
-    const reconciliationWarning = mode === "edit" && !reconciledBundle;
+    const scoreReadbackVerified = persistedEntitySeoScoreMatches(
+      trustedPayload.project,
+      reconciledBundle?.project,
+    );
+    const reconciliationWarning = !reconciledBundle || !scoreReadbackVerified;
     const nextPublicationStatus =
       reconciledBundle?.project.publication_status ??
       trustedPayload.project.publication_status;
@@ -343,6 +346,7 @@ export async function saveProjectEntry(
           firstPublishedAt,
           featured: payload.project.featured,
           mutationSource: "form_save",
+          seoScoreReadbackVerified: scoreReadbackVerified,
         },
       },
       actor,

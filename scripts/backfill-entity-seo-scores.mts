@@ -9,7 +9,7 @@ import ts from "typescript";
 import pg from "pg";
 import type { SeoScoreInput } from "../src/lib/admin/seo-score.ts";
 import type { PersistedEntitySeoScore, PersistedEntitySeoScoreSource } from "../src/lib/seo/entity-seo-types.ts";
-import type { TopicSeoSource, ProjectSeoSource } from "../src/lib/admin/seo/entity-seo-persistence.ts";
+import type { TopicSeoSource, ProjectSeoSource, PageSeoSource } from "../src/lib/admin/seo/entity-seo-persistence.ts";
 import { ADMIN_ENTITY_SEO_ADOPTION_MANIFEST, type AdminEntitySeoAdoptionEntry } from "../src/lib/admin/seo/entity-seo-adoption-manifest.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -48,9 +48,11 @@ export function loadEntitySeoPersistenceOwner() {
     ENTITY_SEO_SCORE_VERSION: number;
     TOPIC_SEO_SOURCE_COLUMNS: readonly string[];
     PROJECT_SEO_SOURCE_COLUMNS: readonly string[];
+    PAGE_SEO_SOURCE_COLUMNS: readonly string[];
     PERSISTED_ENTITY_SEO_FIELDS: readonly string[];
     toTopicSeoScoreInput(row: TopicSeoSource): SeoScoreInput;
     toProjectSeoScoreInput(row: ProjectSeoSource): SeoScoreInput;
+    toPageSeoScoreInput(row: PageSeoSource): SeoScoreInput;
     deriveEntitySeoScore(input: SeoScoreInput, previous?: PersistedEntitySeoScoreSource): PersistedEntitySeoScore;
     entitySeoInputHash(input: SeoScoreInput): string;
   };
@@ -191,7 +193,12 @@ export async function runEntitySeoBackfill(options: EntitySeoBackfillOptions): P
   if (options.production && options.apply) assertEntitySeoBackfillReceipt(options.production.dryRunReceipt, receiptIdentity);
   const inventory: readonly AdminEntitySeoAdoptionEntry[] = ADMIN_ENTITY_SEO_ADOPTION_MANIFEST;
   const adoptedTables = [...new Set(inventory.flatMap((entry) =>
-    entry.persistedScore?.status === "adopted" && entry.persistedScore.table ? [entry.persistedScore.table] : []))];
+    entry.persistedScore?.status === "adopted"
+      && entry.persistedScore.table
+      && entry.persistedScore.backfillEligible !== false
+      && entry.persistedScore.table !== "pages"
+      ? [entry.persistedScore.table]
+      : []))] as Entity[];
   const client = new pg.Client({
     connectionString: options.connectionString,
     application_name: options.production ? "production-entity-seo-backfill" : "isolated-entity-seo-backfill",
@@ -204,7 +211,10 @@ export async function runEntitySeoBackfill(options: EntitySeoBackfillOptions): P
     database: options.expectedDatabase,
     entities: [],
     excluded: inventory.flatMap((entry) => entry.persistedScore?.status === "gap"
-      ? [{ entity: entry.id, reason: entry.persistedScore.reason }] : []),
+      ? [{ entity: entry.id, reason: entry.persistedScore.reason }]
+      : entry.persistedScore?.status === "adopted" && entry.persistedScore.backfillEligible === false
+        ? [{ entity: entry.id, reason: entry.persistedScore.backfillReason ?? "Backfill is not enabled for this source." }]
+        : []),
     complete: false,
     readyForEnforcement: false,
     counts: { targeted: 0, calculated: 0, written: 0, unchanged: 0, conflicted: 0, failed: 0, unresolved: 0 },

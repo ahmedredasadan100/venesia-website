@@ -17,6 +17,8 @@ import {
   PROJECT_DUPLICATE_MAX_COPY_NUMBER,
   PROJECT_DUPLICATE_SEO_MAX_ATTEMPTS,
 } from "../../../../lib/admin/projects/project-duplicate-seo";
+import { loadProjectPostMutationReadback } from "../../../../lib/admin/projects/project-entry-data";
+import { persistedEntitySeoScoreMatches } from "../../../../lib/seo/entity-seo-types";
 
 const projectIdSchema = z.number().int().positive();
 
@@ -36,8 +38,8 @@ async function duplicateProjectWithSeo(projectId: number) {
       .select("updated_at,arabic_name,general_description,overview_body,slug,hero_image,hero_image_alt,og_image,og_image_alt,seo_title,seo_description,seo_keywords,focus_keyword")
       .eq("id", projectId)
       .maybeSingle();
-    if (source.error) return { data: null, error: source.error };
-    if (!source.data) return { data: null, error: { code: "P0002" } };
+    if (source.error) return { data: null, error: source.error, expectedSeoScore: null };
+    if (!source.data) return { data: null, error: { code: "P0002" }, expectedSeoScore: null };
     const sourceRow = source.data;
 
     // Bounded batches avoid reading unrelated Projects or relying on a capped
@@ -47,7 +49,7 @@ async function duplicateProjectWithSeo(projectId: number) {
       const candidates = Array.from({ length: 100 }, (_, index) =>
         projectDuplicateSlug(sourceRow.slug, first + index));
       const occupied = await supabase.from("projects").select("slug").in("slug", candidates);
-      if (occupied.error) return { data: null, error: occupied.error };
+      if (occupied.error) return { data: null, error: occupied.error, expectedSeoScore: null };
       const slugs = new Set((occupied.data ?? []).map((row) => row.slug));
       const available = candidates.findIndex((slug) => !slugs.has(slug));
       if (available !== -1) {
@@ -55,17 +57,20 @@ async function duplicateProjectWithSeo(projectId: number) {
         break;
       }
     }
-    if (!copyNumber) return { data: null, error: { code: "54000" } };
+    if (!copyNumber) return { data: null, error: { code: "54000" }, expectedSeoScore: null };
 
+    const proof = buildProjectDuplicateSeoProof(sourceRow, copyNumber);
     const result = await supabase.rpc("duplicate_project_admin_entry", {
       p_project_id: projectId,
-      p_seo_proof: buildProjectDuplicateSeoProof(sourceRow, copyNumber),
+      p_seo_proof: proof,
     });
     // This code is raised only before commit by our atomic proof checks. An
     // ambiguous transport/result error must never repeat a committed duplicate.
-    if (result.error?.code !== "VSE01") return result;
+    if (result.error?.code !== "VSE01") {
+      return { ...result, expectedSeoScore: proof.score };
+    }
   }
-  return { data: null, error: { code: "VSE01" } };
+  return { data: null, error: { code: "VSE01" }, expectedSeoScore: null };
 }
 
 async function synchronizeDuplicatedProjectMedia(projectId: number) {
@@ -121,7 +126,7 @@ export async function duplicateProjectAjax(id: number) {
     };
   }
 
-  const { data, error } = await duplicateProjectWithSeo(projectId.data);
+  const { data, error, expectedSeoScore } = await duplicateProjectWithSeo(projectId.data);
   if (error) {
     return {
       ok: false as const,
@@ -144,20 +149,17 @@ export async function duplicateProjectAjax(id: number) {
   }
 
   const duplicated = parsed.data;
-  const { data: publication, error: publicationError } = await Promise.resolve(getSupabaseAdmin()
-    .from("projects")
-    .select("publication_status,published_at,published_by,featured")
-    .eq("id", duplicated.project_id)
-    .maybeSingle())
-    .catch(() => ({ data: null, error: { message: "project_duplicate_publication_read_failed" } }));
+  const publication = await loadProjectPostMutationReadback(duplicated.project_id)
+    .catch(() => null);
   const publicationUnproven = Boolean(
-    publicationError ||
     !publication ||
     publication.publication_status !== "unpublished" ||
     publication.published_at !== null ||
     publication.published_by !== null ||
     publication.featured !== false
   );
+  const seoScoreUnproven = !expectedSeoScore
+    || !persistedEntitySeoScoreMatches(expectedSeoScore, publication);
   const mediaSynchronization = await synchronizeDuplicatedProjectMedia(
     duplicated.project_id,
   );
@@ -175,6 +177,7 @@ export async function duplicateProjectAjax(id: number) {
         mediaSynchronization: mediaSynchronization.status,
         publicationStatus: publication?.publication_status ?? null,
         publicationResultVerified: !publicationUnproven,
+        seoScoreReadbackVerified: !seoScoreUnproven,
       },
     },
     actor,
@@ -204,11 +207,15 @@ export async function duplicateProjectAjax(id: number) {
     },
     mediaSynchronization,
   );
-  if (publicationUnproven) return {
+  if (publicationUnproven || seoScoreUnproven) return {
     ...result,
     feedbackStatus: "warning" as const,
-    code: "project_duplicate_publication_result_invalid" as const,
-    message: ["أُنشئت النسخة، لكن تعذر التحقق من حالة نشرها. حدّث القائمة للتحقق ولا تعِد النسخ.", ...(result.feedbackStatus === "warning" ? [result.message] : []), ...(!cache.ok ? ["تعذر تحديث العرض فورًا."] : [])].join(" "),
+    code: publicationUnproven
+      ? "project_duplicate_publication_result_invalid" as const
+      : "project_duplicate_seo_result_invalid" as const,
+    message: [publicationUnproven
+      ? "أُنشئت النسخة، لكن تعذر التحقق من حالة نشرها. حدّث القائمة للتحقق ولا تعِد النسخ."
+      : "أُنشئت النسخة، لكن تعذرت مطابقة درجة SEO المحفوظة مع نتيجة الحساب الموثوقة. حدّث القائمة للتحقق ولا تعِد النسخ.", ...(result.feedbackStatus === "warning" ? [result.message] : []), ...(!cache.ok ? ["تعذر تحديث العرض فورًا."] : [])].join(" "),
   };
   return cache.ok ? result : {
     ...result,

@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import type { SeoScoreInput } from "../seo-score";
+import {
+  ENTITY_SEO_SCORE_VERSION,
+  isPersistedEntitySeoScore,
+} from "../../seo/entity-seo-types.ts";
 import type {
   PageEntityListMetrics,
   PageEntityListRow,
@@ -18,21 +21,9 @@ const pagesReadModelRowSchema = z.object({
   status: z.string(),
   block_count: z.number().int().nonnegative(),
   updated_at: transitionalString,
-  seo_title: transitionalString,
-  seo_description: transitionalString,
-  seo_keywords: z.array(z.string()).nullable().optional(),
-  focus_keyword: transitionalString,
-  og_image: transitionalString,
-  og_image_alt: transitionalString,
-});
-
-const completePageSeoSourceSchema = z.object({
-  seo_title: z.string(),
-  seo_description: z.string(),
-  seo_keywords: z.array(z.string()),
-  focus_keyword: z.string(),
-  og_image: z.string().nullable(),
-  og_image_alt: z.string(),
+  seo_score: z.number().int().min(0).max(100).nullable().optional(),
+  seo_score_version: z.number().int().positive().nullable().optional(),
+  seo_score_input_hash: transitionalString,
 });
 
 const pagesReadModelSchema = z.object({
@@ -42,14 +33,7 @@ const pagesReadModelSchema = z.object({
   contract_version: z.number().int().positive().optional(),
 });
 
-type PageSeoAnalyzerOutput = {
-  score: number;
-  label: string;
-  blockingErrors: number;
-};
-
 type AdaptPagesReadModelOptions = {
-  analyzeSeo: (input: SeoScoreInput) => PageSeoAnalyzerOutput;
   legacySortFields: readonly PageSortField[];
   extendedSortFields: readonly PageSortField[];
 };
@@ -63,8 +47,8 @@ export type AdaptedPagesReadModel = {
 
 /**
  * Transitional translation boundary for the current and pending Pages RPC
- * shapes. Missing extended fields remain explicit nulls and never become
- * synthesized SEO inputs.
+ * shapes. Collection reads consume only the persisted tuple and never invoke
+ * the shared SEO calculator or reconstruct semantic Page inputs.
  */
 export function adaptPagesReadModel(
   data: unknown,
@@ -72,31 +56,22 @@ export function adaptPagesReadModel(
 ): AdaptedPagesReadModel {
   const readModel = pagesReadModelSchema.parse(data);
   const readModelContractVersion = readModel.contract_version ?? 1;
-  const extendedContractAvailable = readModelContractVersion >= 2;
+  const extendedContractAvailable = readModelContractVersion >= 3;
 
   return {
     rows: readModel.rows.map((source) => {
-      const seoSource = completePageSeoSourceSchema.safeParse(source);
-      const seo = seoSource.success
-        ? options.analyzeSeo({
-            profile: "entity",
-            title: source.title,
-            description: "",
-            content: "",
-            slug:
-              source.path === "/"
-                ? ""
-                : source.path.replace(/^\/+/, ""),
-            image: "",
-            imageAlt: "",
-            ogImage: seoSource.data.og_image ?? "",
-            ogImageAlt: seoSource.data.og_image_alt,
-            seoTitle: seoSource.data.seo_title,
-            seoDescription: seoSource.data.seo_description,
-            seoKeywords: seoSource.data.seo_keywords,
-            focusKeyword: seoSource.data.focus_keyword,
-            faq: [],
-          })
+      const persisted = isPersistedEntitySeoScore(source)
+        && source.seo_score_version === ENTITY_SEO_SCORE_VERSION
+        ? source
+        : null;
+      const seoLabel = persisted
+        ? persisted.seo_score >= 80
+          ? "جيد جدًا"
+          : persisted.seo_score >= 60
+            ? "جيد"
+            : persisted.seo_score >= 40
+              ? "يحتاج تحسين"
+              : "غير مكتمل"
         : null;
 
       return {
@@ -108,9 +83,9 @@ export function adaptPagesReadModel(
         status: source.status,
         moduleCount: source.block_count,
         updatedAt: source.updated_at ?? null,
-        seoScore: seo?.score ?? null,
-        seoLabel: seo?.label ?? null,
-        seoBlockingErrors: seo?.blockingErrors ?? null,
+        seoScore: persisted?.seo_score ?? null,
+        seoLabel,
+        seoBlockingErrors: null,
       };
     }),
     totalRows: readModel.total_count,

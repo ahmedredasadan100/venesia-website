@@ -5569,7 +5569,10 @@ export const PRODUCT_SURFACE_IDENTITIES = [
     id: "admin-page-composition-builder",
     scope: "nested_surface",
     route: null,
-    sourceFiles: ["src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx"],
+    sourceFiles: [
+      "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
+      "src/app/admin/pages-blocks/pages/[id]/PageLayoutManager.tsx",
+    ],
     productSurfaceKind: "builder",
     workflowOwner: "page_composition_domain",
     runtimeOwners: ["feedback_runtime", "confirmation_runtime"],

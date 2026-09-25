@@ -246,8 +246,9 @@ export async function runApplicationHandoff(
       [
         "20260920010000_public_feed_aggregated_reads.sql",
         "20260920011000_page_composition_layout_regions.sql",
+        "20260925001602_f03_page_layout_admin_f07_page_seo_persistence.sql",
       ],
-      "Only the reviewed Public Composition migration extension may follow the SEO security declaration.",
+      "Only the reviewed Public Composition and Page SEO extensions may follow the SEO security declaration.",
     );
     const baseline = migrations.slice(0, seoBoundary);
     assert.equal(new Set(checkpoints.map(({ version }) => version)).size, checkpoints.length);

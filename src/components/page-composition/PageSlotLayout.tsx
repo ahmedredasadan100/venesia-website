@@ -19,7 +19,10 @@ import {
   buildSlotRenderPlan,
   type SlotRenderPlanItem,
 } from "./build-slot-render-plan";
-import { VENISIA_THEME_REGION_RENDER_ORDER } from "./venisia-theme-regions";
+import {
+  VENISIA_THEME_REGION_RENDER_ORDER,
+} from "./venisia-theme-regions";
+import { VENISIA_THEME_CONTRACT } from "./venisia-theme-contract";
 import { renderVenesiaThemeMediaHubNodes } from "./VenesiaThemeMediaHubLayout";
 import type { SearchPlatformSearchParams } from "../search-platform/SearchPlatformModule";
 import { isSearchPlatformTemplate } from "../../lib/page-blocks/search-platform-config";
@@ -111,7 +114,7 @@ function buildContextualSlotRenderPlan(
     searchParams: options.searchParams,
     listingContext: options.listingContext,
     suppressFeaturedDuringSearch: options.suppressFeaturedDuringSearch,
-  });
+  }, VENISIA_THEME_CONTRACT.modulePresentation);
 }
 
 export function hasRenderableSlotEntries(
@@ -427,10 +430,11 @@ export default function PageSlotLayout({
   // Venesia Theme decision only. Page Composition exposes a semantic sidebar
   // Region and remains unaware whether a Theme renders it as a column, drawer,
   // stack, or any other visual treatment.
-  const isMainSidebar = composition.layoutKey === "venisia-legacy" && hasSidebarContent;
-  const regionRenderOrder = composition.layoutKey === "venisia-legacy"
-    ? VENISIA_THEME_REGION_RENDER_ORDER
-    : composition.regions.map((region) => region.key);
+  const layoutPlan = VENISIA_THEME_CONTRACT.resolveLayout({
+    layoutKey: composition.layoutKey,
+    regions: composition.regions,
+    hasSidebarContent,
+  });
 
   const renderSlotStack = (slot: PageLayoutSlot) => {
     if (skip.has(slot)) return null;
@@ -483,7 +487,7 @@ export default function PageSlotLayout({
     );
   };
 
-  if (isMainSidebar) {
+  if (layoutPlan.topology === "main-sidebar") {
     return (
       <div
         className="page-layout page-layout--main-sidebar"
@@ -557,7 +561,7 @@ export default function PageSlotLayout({
       className="page-layout page-layout--stack"
       data-page-layout-contract="theme-owned"
     >
-      {regionRenderOrder.map(renderSlotStack)}
+      {layoutPlan.regionOrder.map(renderSlotStack)}
     </div>
   );
 }

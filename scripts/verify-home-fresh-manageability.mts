@@ -40,7 +40,7 @@ function load<T>(file: string): T {
       assert.ok(candidate, `Unresolved current owner: ${specifier}`);
       return load(candidate);
     }
-    assert.ok(["react", "react/jsx-runtime", "zod"].includes(specifier), `Undeclared package/transport: ${specifier}`);
+    assert.ok(["node:crypto", "react", "react/jsx-runtime", "zod"].includes(specifier), `Undeclared package/transport: ${specifier}`);
     return nativeRequire(specifier);
   };
   new vm.Script(`(function(require,module,exports){${compiled}\n})`, { filename })
@@ -141,6 +141,22 @@ port("src/lib/cache/revalidate-public-cache-tags", {
   revalidatePageCompositionCache: (...args: unknown[]) => cacheCall("composition", ...args),
   revalidateBlockModuleCache: (...args: unknown[]) => cacheCall("module", ...args),
 });
+const legacyLayout = {
+  id: 1,
+  key: "venisia-legacy",
+  adminLabel: "Venesia legacy",
+  regions: [
+    { key: "hero", adminLabel: "Hero", sortOrder: 0 },
+    { key: "main", adminLabel: "Main", sortOrder: 10 },
+    { key: "sidebar", adminLabel: "Sidebar", sortOrder: 20 },
+    { key: "bottom", adminLabel: "Bottom", sortOrder: 30 },
+    { key: "footer", adminLabel: "Footer", sortOrder: 40 },
+  ],
+};
+port("src/lib/page-composition/load-page-regions", {
+  async loadPageRegionsForPage() { return structuredClone(legacyLayout); },
+  async loadPageCompositionLayouts() { return [structuredClone(legacyLayout)]; },
+});
 port("src/lib/logging", { logError() {} });
 port("src/lib/admin/preferences/admin-column-preferences", { async readAdminColumnPreferences() { return { visibleColumns: null, error: null }; } });
 port("src/components/admin/AdminFeedbackProvider", { AdminFeedbackRegion: emptyComponent });
@@ -168,7 +184,6 @@ const assignment = load<typeof import("../src/lib/page-blocks/admin-queries.ts")
 const assignmentActions = load<typeof import("../src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts")>("src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts");
 const readModel = load<typeof import("../src/lib/admin/pages/entity-list-read-model-boundary.ts")>("src/lib/admin/pages/entity-list-read-model-boundary.ts");
 const rowContract = load<typeof import("../src/lib/admin/pages/entity-list-contract.ts")>("src/lib/admin/pages/entity-list-contract.ts");
-const seoOwner = load<typeof import("../src/lib/admin/seo-score.ts")>("src/lib/admin/seo-score.ts");
 const status = load<typeof import("../src/app/admin/pages-blocks/pages/page-actions/page-status.ts")>("src/app/admin/pages-blocks/pages/page-actions/page-status.ts");
 const edit = load<typeof import("../src/app/admin/pages-blocks/pages/page-seo-actions.ts")>("src/app/admin/pages-blocks/pages/page-seo-actions.ts");
 const publicRead = load<typeof import("../src/lib/pages/get-published-page-by-slug.ts")>("src/lib/pages/get-published-page-by-slug.ts");
@@ -197,8 +212,8 @@ const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => { throw new Error("Network forbidden in Home owner verification"); };
 try {
   await check("unpublished Home identity and zero-module list row are accepted", () => {
-    const result = readModel.adaptPagesReadModel({ rows: [{ ...state.page, block_count: 0 }], total_count: 1, page: 1, contract_version: 2 }, {
-      analyzeSeo: seoOwner.analyzeEntitySeo, legacySortFields: rowContract.legacyPageSortFields, extendedSortFields: rowContract.pageSortFields,
+    const result = readModel.adaptPagesReadModel({ rows: [{ ...state.page, block_count: 0 }], total_count: 1, page: 1, contract_version: 3 }, {
+      legacySortFields: rowContract.legacyPageSortFields, extendedSortFields: rowContract.pageSortFields,
     });
     assert.equal(result.rows.length, 1);
     assert.equal(result.rows[0].id, initialHome.id);

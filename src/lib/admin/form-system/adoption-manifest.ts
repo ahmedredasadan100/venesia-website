@@ -413,6 +413,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
           evidence: [
             "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
             "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
+            "src/app/admin/pages-blocks/pages/[id]/PageLayoutManager.tsx",
           ],
           rationale:
             "Page composition and per-page SEO are a compound builder workflow with ordering and assignment lifecycles outside a generic create/edit session.",
@@ -425,8 +426,9 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
       "src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx",
       "src/app/admin/pages-blocks/pages/[id]/page-blocks/PageBlocksAssignModal.tsx",
       "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
+      "src/app/admin/pages-blocks/pages/[id]/PageLayoutManager.tsx",
     ],
-    surfaces: ["composition", "assignment", "seo"],
+    surfaces: ["composition", "assignment", "layout", "seo"],
     rationale:
       "Composite page-builder workflow has specialized assignment, ordering, and SEO lifecycles.",
     exceptionContract: {

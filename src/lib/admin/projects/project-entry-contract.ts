@@ -70,6 +70,9 @@ export type ProjectEntryRoot = {
   robots_follow: boolean | null;
   og_image: string;
   og_image_alt: string;
+  seo_score: number | null;
+  seo_score_version: number | null;
+  seo_score_input_hash: string | null;
   publication_status: ProjectPublicationStatus;
   published_at: string | null;
   published_by: number | null;
@@ -395,6 +398,9 @@ export function createEmptyProjectEntry(
       robots_follow: null,
       og_image: "",
       og_image_alt: "",
+      seo_score: null,
+      seo_score_version: null,
+      seo_score_input_hash: null,
       publication_status: "unpublished",
       published_at: null,
       published_by: null,
@@ -644,6 +650,9 @@ export function projectEntryPayloadFromFormData(
       robots_follow: seo.robotsFollow,
       og_image: seo.ogImage,
       og_image_alt: seo.ogImageAlt,
+      seo_score: null,
+      seo_score_version: null,
+      seo_score_input_hash: null,
       publication_status: publicationStatus,
       published_at: null,
       published_by: null,

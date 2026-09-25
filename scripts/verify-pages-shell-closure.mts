@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 import { adaptPagesReadModel } from "../src/lib/admin/pages/entity-list-read-model-boundary.ts";
-import type { SeoScoreInput } from "../src/lib/admin/seo-score.ts";
 
 const root = resolve(import.meta.dirname, "..");
 const read = (path: string) =>
@@ -186,25 +185,24 @@ assert.match(
 );
 
 assert.match(readModelBoundary, /const transitionalString = z\.string\(\)\.nullable\(\)\.optional\(\)/u);
-assert.match(readModelBoundary, /seo_keywords:\s*z\.array\(z\.string\(\)\)\.nullable\(\)\.optional\(\)/u);
+assert.match(readModelBoundary, /seo_score:\s*z\.number\(\)\.int\(\)\.min\(0\)\.max\(100\)\.nullable\(\)\.optional\(\)/u);
+assert.match(readModelBoundary, /seo_score_version:\s*z\.number\(\)\.int\(\)\.positive\(\)\.nullable\(\)\.optional\(\)/u);
+assert.match(readModelBoundary, /seo_score_input_hash:\s*transitionalString/u);
 assert.match(readModelBoundary, /contract_version:\s*z\.number\(\)\.int\(\)\.positive\(\)\.optional\(\)/u);
-assert.match(readModelBoundary, /const seoSource = completePageSeoSourceSchema\.safeParse\(source\)/u);
-assert.match(readModelBoundary, /const seo = seoSource\.success[\s\S]*\? options\.analyzeSeo\(\{/u);
 assert.match(
   readModelBoundary,
-  /profile:\s*"entity"[\s\S]*title:\s*source\.title[\s\S]*description:\s*""[\s\S]*content:\s*""[\s\S]*slug:[\s\S]*source\.path === "\/"[\s\S]*source\.path\.replace\(\/\^\\\/\+\/, ""\)[\s\S]*image:\s*""[\s\S]*imageAlt:\s*""[\s\S]*ogImage:\s*seoSource\.data\.og_image \?\? ""[\s\S]*ogImageAlt:\s*seoSource\.data\.og_image_alt[\s\S]*seoTitle:\s*seoSource\.data\.seo_title[\s\S]*seoDescription:\s*seoSource\.data\.seo_description[\s\S]*seoKeywords:\s*seoSource\.data\.seo_keywords[\s\S]*focusKeyword:\s*seoSource\.data\.focus_keyword[\s\S]*faq:\s*\[\]/u,
+  /const persisted = isPersistedEntitySeoScore\(source\)[\s\S]*source\.seo_score_version === ENTITY_SEO_SCORE_VERSION/u,
 );
 assert.match(readModelBoundary, /updatedAt:\s*source\.updated_at \?\? null/u);
-assert.match(readModelBoundary, /seoScore:\s*seo\?\.score \?\? null/u);
-assert.match(readModelBoundary, /seoLabel:\s*seo\?\.label \?\? null/u);
-assert.match(readModelBoundary, /seoBlockingErrors:\s*seo\?\.blockingErrors \?\? null/u);
+assert.match(readModelBoundary, /seoScore:\s*persisted\?\.seo_score \?\? null/u);
+assert.match(readModelBoundary, /seoLabel,/u);
+assert.match(readModelBoundary, /seoBlockingErrors:\s*null/u);
 assert.match(readModelBoundary, /readModelContractVersion = readModel\.contract_version \?\? 1/u);
 assert.match(
   readModelBoundary,
   /extendedContractAvailable[\s\S]*\? options\.extendedSortFields[\s\S]*: options\.legacySortFields/u,
 );
 assert.match(adapter, /adaptPagesReadModel\(data, \{/u);
-assert.match(adapter, /analyzeSeo:\s*analyzeEntitySeo/u);
 assert.match(adapter, /legacySortFields:\s*legacyPageSortFields/u);
 assert.match(adapter, /extendedSortFields:\s*pageSortFields/u);
 assert.match(adapter, /metrics:\s*readModel\.metrics/u);
@@ -215,32 +213,15 @@ assert.match(
   officialSeoOwner,
   /leftScore === null && rightScore === null[\s\S]*getId\(left\) - getId\(right\)[\s\S]*if \(leftScore === null\) return 1;[\s\S]*if \(rightScore === null\) return -1;[\s\S]*\(leftScore - rightScore\) \* multiplier/u,
 );
-assert.match(
-  adapter,
-  /query\.sort\.field === "seo"[\s\S]*loadSeoSortedPagesReadModel\(query\)/u,
-);
-assert.match(
-  adapter,
-  /batchSize = pagesQueryContract\.maxPageSize[\s\S]*sortField:\s*"id"[\s\S]*for \(let page = 2; page <= totalBatches; page \+= 1\)[\s\S]*batch\.totalRows !== totalRows/u,
-);
-assert.match(
-  adapter,
-  /sortRowsBySeoScore\([\s\S]*row\.seoScore[\s\S]*sortedRows\.slice\(from, from \+ query\.pageSize\)/u,
-);
+assert.doesNotMatch(adapter, /analyzeEntitySeo|sortRowsBySeoScore|loadSeoSortedPagesReadModel/u);
+assert.doesNotMatch(adapter, /for \(let page = 2|totalBatches|batchSize/u);
 assert.doesNotMatch(adapter, /\.from\("pages"\)/u);
 assert.doesNotMatch(
   `${adapter}\n${readModelBoundary}`,
   /function\s+(?:calculate|get)Seo|score\s*[+*/-]=/iu,
 );
 
-let transitionSeoCalls = 0;
-const transitionSeoInputs: SeoScoreInput[] = [];
 const transitionOptions = {
-  analyzeSeo: (input: SeoScoreInput) => {
-    transitionSeoCalls += 1;
-    transitionSeoInputs.push(input);
-    return { score: 84, label: "ready", blockingErrors: 0 };
-  },
   legacySortFields: ["id", "title", "status"] as const,
   extendedSortFields: [
     "id",
@@ -271,7 +252,6 @@ const legacyReadModel = adaptPagesReadModel(
   },
   transitionOptions,
 );
-assert.equal(transitionSeoCalls, 0, "Legacy RPC rows must not create fake SEO inputs.");
 assert.deepEqual(legacyReadModel.rows[0], {
   id: 1,
   title: "Home",
@@ -302,22 +282,19 @@ const extendedReadModel = adaptPagesReadModel(
         status: "published",
         block_count: 3,
         updated_at: "2026-08-10T00:00:00.000Z",
-        seo_title: "About Venesia",
-        seo_description: "About page",
-        seo_keywords: ["venesia"],
-        focus_keyword: "venesia",
-        og_image: null,
-        og_image_alt: "Venesia",
+        seo_score: 84,
+        seo_score_version: 1,
+        seo_score_input_hash: "a".repeat(64),
       },
     ],
     total_count: 1,
     page: 1,
-    contract_version: 2,
+    contract_version: 3,
   },
   transitionOptions,
 );
-assert.equal(transitionSeoCalls, 1);
 assert.equal(extendedReadModel.rows[0]?.seoScore, 84);
+assert.equal(extendedReadModel.rows[0]?.seoLabel, "جيد جدًا");
 assert.equal(
   extendedReadModel.rows[0]?.updatedAt,
   "2026-08-10T00:00:00.000Z",
@@ -332,23 +309,6 @@ assert.deepEqual(extendedReadModel.metrics.supportedSortFields, [
   "updatedAt",
   "status",
 ]);
-assert.deepEqual(transitionSeoInputs[0], {
-  profile: "entity",
-  title: "About",
-  description: "",
-  content: "",
-  slug: "about",
-  image: "",
-  imageAlt: "",
-  ogImage: "",
-  ogImageAlt: "Venesia",
-  seoTitle: "About Venesia",
-  seoDescription: "About page",
-  seoKeywords: ["venesia"],
-  focusKeyword: "venesia",
-  faq: [],
-});
-
 const partialExtendedReadModel = adaptPagesReadModel(
   {
     rows: [
@@ -361,19 +321,16 @@ const partialExtendedReadModel = adaptPagesReadModel(
         status: "published",
         block_count: 1,
         updated_at: "2026-08-10T00:00:00.000Z",
-        seo_title: "Contact",
+        seo_score: 50,
+        seo_score_version: null,
+        seo_score_input_hash: null,
       },
     ],
     total_count: 1,
     page: 1,
-    contract_version: 2,
+    contract_version: 3,
   },
   transitionOptions,
-);
-assert.equal(
-  transitionSeoCalls,
-  1,
-  "Partial SEO sources must not invoke the official analyzer with empty fallbacks.",
 );
 assert.equal(partialExtendedReadModel.rows[0]?.seoScore, null);
 assert.equal(partialExtendedReadModel.rows[0]?.seoLabel, null);

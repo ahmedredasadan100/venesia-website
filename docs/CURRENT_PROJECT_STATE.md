@@ -1,7 +1,7 @@
 # Current Project State
 
 **Status:** Official volatile state record
-**Updated:** 2026-09-24
+**Updated:** 2026-09-25
 **Repository:** `ahmedredasadan100/venesia-website`
 **Default branch:** `main`
 
@@ -12,35 +12,37 @@ This file records the minimum current facts needed to begin work safely. Archite
 The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
 
 ```text
-6ade5a46dc22f59bf72ccbfdb0be3494d751717c
+28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e
 ```
 
-Verified after the authorized PR #180 standard merge and automatic Production deployment on 2026-09-24 (19:35 UTC):
+Verified after PR #182 merged and the automatic Production deployment reached READY on the exact merge commit:
 
 | Surface                       | SHA / state |
 | ----------------------------- | ----------- |
 | Verified cutover baseline     | `672cf81dff4e39c300adb68e5f41750ef980e9c1` |
-| Verified canonical baseline   | `6ade5a46dc22f59bf72ccbfdb0be3494d751717c` |
-| Local `main` / `origin/main` / GitHub `main` | `6ade5a46dc22f59bf72ccbfdb0be3494d751717c` |
-| Vercel Production             | Automatic Production deployment is READY on `6ade5a46dc22f59bf72ccbfdb0be3494d751717c`. |
+| Verified canonical baseline   | `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e` |
+| Local `main` / `origin/main` / GitHub `main` | `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e` |
+| Vercel Production             | Automatic Production deployment is READY on `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e`. |
 | Migration registry            | `110` migrations; head `20260920011000`; `pending=[]`; provenance `1→110` reconciled by the canonical verifier. |
-| Delivery state                | PR #180 restored the accepted Feed presentation capabilities on the current owners and merged as the verified canonical baseline. |
+| Delivery state                | PR #182 normalized migration-source line endings. It did not implement or close F09. |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-Migration provenance `1→110` is reconciled on the canonical verifier, and PR #180 restored the accepted Feed presentation variants on the current shared owners. Local `main`, `origin/main`, GitHub `main`, and the automatic Vercel Production deployment all identify `6ade5a46dc22f59bf72ccbfdb0be3494d751717c`. The post-merge canonical Quality Gate and every specialized verifier passed except the disposable Topics type-generation step: its application verifier passed, then the external `public.ecr.aws/supabase/postgres-meta:v0.98.0` pull was rate-limited on all authorized attempts. This remains an external CI infrastructure blocker, not a Product or database regression.
+Migration provenance `1→110` remains reconciled on the canonical verifier. Local `main`, `origin/main`, GitHub `main`, and the READY Vercel Production deployment all identify `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e`. PR #182 changed only the canonical line-ending policy for migration sources; it is not evidence for F09 behavior or closure.
+
+The F01–F08 closure work is currently local and unpublished in the isolated `codex/f01-f08-closure` worktree. It is not part of `main` or Production. F01–F04 have local implementation and targeted source, browser, and isolated-database evidence. F07 has local Page and Project `score/version/input fingerprint` implementation and isolated `calculate → persist → readback` evidence, including invalidation when Page fields, Layout/Regions, or Assignments change. Its global persisted-score closure remains false because applying the Page schema to Production and backfilling existing Page rows were not authorized. F05 and F06 retain their existing open global closure claims: scoped shared-owner behavior is proven, but full authenticated consumer/domain parity is not. The new migration was applied only to disposable local Supabase environments. No Production migration/write, Auth/Permissions change, commit, push, PR, merge, or deployment was performed in this phase.
 
 ## Active phase
 
-- **Title:** Final Repository, Architecture & Workspace Hygiene Closure — Final Housekeeping.
-- **Implementation baseline:** `6ade5a46dc22f59bf72ccbfdb0be3494d751717c`.
-- **Branch:** `main`.
-- **Scope:** current-state documentation correction, proven-safe local branch cleanup, and temporary QA evidence distillation only; no Product or architecture implementation.
-- **Authorization:** this documentation-only closure is authorized through a Standard Merge Commit and automatic Vercel Production deployment. Squash, Rebase, Auto-merge, manual deploy, Production database writes, migrations, registry writes, and remote branch deletion remain prohibited.
-- **Outside scope:** Docker, Local Supabase state/projection, Production database execution, Auth/Permissions/Cron, performance optimization, feature work, and reopened architecture/adoption audits.
-- **Closure:** architecture and adoption remain reconciled. Full post-merge CI closure remains blocked only by the recorded external ECR rate limit until a later successful failed-job rerun.
+- **Title:** Venesia F01–F08 Discover → Execute → Verify → Deliver.
+- **Published baseline:** `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e` on `main` and READY in Production.
+- **Local implementation:** isolated worktree branch `codex/f01-f08-closure`; uncommitted and unpublished.
+- **Scope:** extensible Theme/Layout and branded module-presentation contracts, atomic Admin Layout/Region management, Region label recovery, evidence-only Form/Interaction verification, Page and Project persisted-score paths, and this state record.
+- **Local schema state:** `20260925001602_f03_page_layout_admin_f07_page_seo_persistence.sql` is uncommitted and was executed only in disposable local Supabase. It is not present in the Production registry.
+- **Authorization boundary:** Production migrations/writes, Auth/Permissions changes, commit, push, PR, merge, and deployment remain prohibited without explicit authorization.
+- **F09:** independent workstream only. PR #182 is migration-source line-ending normalization and must not be counted as an F09 fix.
 
 ## Current architecture truth
 
@@ -53,8 +55,10 @@ Migration provenance `1→110` is reconciled on the canonical verifier, and PR #
 - Project create/edit delegates generic lifecycle, dirty protection, feedback, validation focus, and Create-to-Edit handoff to the current Form Runtime; Project validation and aggregate persistence remain domain-owned.
 - Media writes use the Media coordination contract; the global writer-adoption manifest is closed and contains no unadopted tooling owner.
 - Menu ordering and Page Composition assignment ordering use their aggregate atomic mutation RPCs; direct parallel ordering writes are guarded.
+- Page Composition owns Layout identity, Regions, ordering, Page selection, and Assignment compatibility through the existing `mutate_page_composition` mutation owner. The Venisia Theme owns only the projection of those semantic Regions into legacy main/sidebar geometry or an ordered stack; it does not add a second renderer or Region registry.
 - Page deletion remains a hard delete in `mutate_page_composition`; its `delete_page` branch removes only page-target Hero assignments before deleting the Page and never deletes Hero templates.
 - The official Pages Collection read model is the only Pages list path and exposes its existing assignment aggregate as `moduleCount` through the shared output contract.
+- Page Entity SEO uses Page identity/metadata plus visible, published, authored Page Composition config copy in Layout/Assignment order as its canonical semantic input. Dynamic child entities retain their own SEO ownership. Page list/card reads consume only a current persisted tuple and never run the SEO calculator or issue per-row queries; local Page persistence is not a claim that the unapplied Production schema/backfill exists.
 - Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
 - Product Identity, Runtime, Capability, and Adoption are four independent governance axes. The existing interaction adoption manifest contains the typed Product Surface Identity ledger; its records contain no Adoption or Capability registration ids, and Product Kind is never inferred from Runtime ownership, `workflowClassification`, Collection/Form adoption, or capability applicability.

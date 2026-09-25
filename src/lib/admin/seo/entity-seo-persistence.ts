@@ -32,6 +32,11 @@ export const PROJECT_SEO_SOURCE_COLUMNS = [
   "seo_keywords", "focus_keyword",
 ] as const;
 
+export const PAGE_SEO_SOURCE_COLUMNS = [
+  "title", "path", "seo_title", "seo_description", "seo_keywords",
+  "focus_keyword", "og_image", "og_image_alt",
+] as const;
+
 type SeoMetadataSource = {
   slug?: string | null;
   og_image?: string | null;
@@ -58,6 +63,13 @@ export type ProjectSeoSource = SeoMetadataSource & {
   overview_body?: string | null;
   hero_image?: string | null;
   hero_image_alt?: string | null;
+};
+
+export type PageSeoSource = SeoMetadataSource & {
+  title?: string | null;
+  path?: string | null;
+  /** Visible, published, authored Page Composition copy in public Region/order order. */
+  semanticContent?: string | null;
 };
 
 function text(value: string | null | undefined): string {
@@ -106,6 +118,26 @@ export function toProjectSeoScoreInput(row: ProjectSeoSource): SeoScoreInput {
     description: text(row.general_description), content: text(row.overview_body),
     image: text(row.hero_image), imageAlt: text(row.hero_image_alt),
     ...metadata(row),
+    faq: [],
+  });
+}
+
+/**
+ * Pages own their identity, SEO metadata, and authored visible/published module
+ * config copy. Dynamic child entities keep their own SEO ownership and are not
+ * folded into this Page fingerprint.
+ */
+export function toPageSeoScoreInput(row: PageSeoSource): SeoScoreInput {
+  const path = text(row.path);
+  return resolveEntitySeoScoreInput({
+    profile: "entity",
+    title: text(row.title),
+    description: "",
+    content: text(row.semanticContent),
+    image: "",
+    imageAlt: "",
+    ...metadata(row),
+    slug: path === "/" ? "" : path.replace(/^\/+/, ""),
     faq: [],
   });
 }

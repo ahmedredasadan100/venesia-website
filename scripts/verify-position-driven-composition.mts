@@ -77,6 +77,9 @@ const slotPlan = read(
 const slotNodes = read(
   "src/components/page-composition/slot-module-nodes.tsx",
 );
+const slotPresentationContract = read(
+  "src/components/page-composition/slot-module-presentation-contract.ts",
+);
 const slotLayout = read(
   "src/components/page-composition/PageSlotLayout.tsx",
 );
@@ -375,12 +378,12 @@ assert.deepEqual(
 );
 
 assert.ok(
-  slotPlan.includes("function buildAdjacentContactFormPairs(entries: SlotEntry[])") &&
-    slotPlan.includes("comparePageAssignmentOrder(slotEntryOrder(left), slotEntryOrder(right))") &&
-    slotPlan.includes("const next = ordered[index + 1]") &&
-    slotPlan.includes('current.kind !== "block" || next.kind !== "block"') &&
-    slotPlan.includes("buildSlotModuleNodes(blocks, context, contactFormPairs)"),
-  "Contact pairing must use adjacency in the complete canonical slot sequence",
+  slotNodes.includes("function buildAdjacentContactFormPairs(entries: SlotEntry[])") &&
+    slotNodes.includes("comparePageAssignmentOrder(slotEntryOrder(left), slotEntryOrder(right))") &&
+    slotNodes.includes("const next = ordered[index + 1]") &&
+    slotNodes.includes('current.kind !== "block" || next.kind !== "block"') &&
+    slotPlan.includes("presentation.buildNodes({"),
+  "Theme-owned Contact pairing must use adjacency in the complete canonical slot sequence",
 );
 assert.ok(
   slotNodes.includes("contactFormPairs: readonly ContactFormPair[] = []") &&
@@ -522,7 +525,7 @@ assert.ok(
 );
 assert.ok(
   compositionTypes.includes("export type ListingRenderContext") &&
-    slotNodes.includes("listingContext?: ListingRenderContext") &&
+    slotPresentationContract.includes("listingContext?: ListingRenderContext") &&
     mediaHubRenderer.includes("listingContext?: ListingRenderContext") &&
     slotLayout.includes("listingContext?: ListingRenderContext"),
   "Topics and Media Listing must consume one shared request-context contract",

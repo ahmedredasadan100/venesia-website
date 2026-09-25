@@ -22,6 +22,8 @@ export type ModuleAssignmentRow = {
   page_title: string;
   page_slug: string;
   page_path: string;
+  /** Stored Layout Region label; null only for legacy/missing read context. */
+  region_admin_label: string | null;
 };
 
 export type ModuleAssignmentContext = {
@@ -33,6 +35,32 @@ export type HeroAssignmentConflict = {
   pageId: number;
   heroId: number;
 };
+
+type AssignmentPageContextRow = {
+  id: number;
+  title: string;
+  slug: string;
+  path: string;
+  page_composition_layouts: {
+    page_composition_regions: Array<{
+      key: string;
+      admin_label: string;
+    }>;
+  } | null;
+};
+
+function storedRegionAdminLabel(
+  page: AssignmentPageContextRow | undefined,
+  slot: string,
+) {
+  const key = normalizeLayoutSlot(slot);
+  return page?.page_composition_layouts?.page_composition_regions
+    .find((region) => region.key === key)?.admin_label?.trim() || null;
+}
+
+function toPageSummary(page: AssignmentPageContextRow) {
+  return { id: page.id, title: page.title, slug: page.slug, path: page.path };
+}
 
 export async function getHeroAssignmentConflicts(
   pageIds: readonly number[],
@@ -69,7 +97,7 @@ async function loadModuleAssignmentContext(
       .order("sort_order", { ascending: true }),
     getSupabaseAdmin()
       .from("pages")
-      .select("id,title,slug,path")
+      .select("id,title,slug,path,page_composition_layouts!pages_layout_id_fkey(page_composition_regions(key,admin_label))")
       .order("sort_order", { ascending: true }),
   ]);
   if (assignmentsResult.error) {
@@ -79,7 +107,7 @@ async function loadModuleAssignmentContext(
     throw new Error(`Module assignment page context read failed: ${pagesResult.error.message}`);
   }
   const assignments = assignmentsResult.data;
-  const pages = pagesResult.data;
+  const pages = (pagesResult.data ?? []) as AssignmentPageContextRow[];
 
   const pageById = new Map((pages ?? []).map((page) => [page.id, page]));
   const rows: ModuleAssignmentRow[] = [];
@@ -96,12 +124,13 @@ async function loadModuleAssignmentContext(
       page_title: page?.title ?? "—",
       page_slug: page?.slug ?? "—",
       page_path: page?.path ?? "—",
+      region_admin_label: storedRegionAdminLabel(page, row.slot),
     });
   }
 
   return {
     assignments: rows,
-    pages: pages ?? [],
+    pages: pages.map(toPageSummary),
   };
 }
 
@@ -131,7 +160,10 @@ export async function getHeroModuleAssignmentContext(templateId: number): Promis
       .eq("hero_id", templateId)
       .eq("target_type", "page")
       .order("priority", { ascending: true }),
-    getSupabaseAdmin().from("pages").select("id,title,slug,path").order("sort_order", { ascending: true }),
+    getSupabaseAdmin()
+      .from("pages")
+      .select("id,title,slug,path,page_composition_layouts!pages_layout_id_fkey(page_composition_regions(key,admin_label))")
+      .order("sort_order", { ascending: true }),
   ]);
   if (assignmentsResult.error) {
     throw new Error(`Hero assignment read failed: ${assignmentsResult.error.message}`);
@@ -140,7 +172,7 @@ export async function getHeroModuleAssignmentContext(templateId: number): Promis
     throw new Error(`Hero assignment page context read failed: ${pagesResult.error.message}`);
   }
   const assignments = assignmentsResult.data;
-  const pages = pagesResult.data;
+  const pages = (pagesResult.data ?? []) as AssignmentPageContextRow[];
 
   const pageById = new Map((pages ?? []).map((page) => [page.id, page]));
   const rows: ModuleAssignmentRow[] = [];
@@ -160,11 +192,12 @@ export async function getHeroModuleAssignmentContext(templateId: number): Promis
       page_title: page.title ?? "—",
       page_slug: page.slug ?? "—",
       page_path: page.path ?? "—",
+      region_admin_label: storedRegionAdminLabel(page, getDefaultAssignmentPosition("hero")),
     });
   }
 
   return {
     assignments: rows,
-    pages: pages ?? [],
+    pages: pages.map(toPageSummary),
   };
 }
