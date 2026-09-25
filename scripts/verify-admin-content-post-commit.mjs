@@ -292,21 +292,26 @@ try {
     const commands = kind === "topics" ? ["toggleUnifiedContentFeatured", "softDeleteUnifiedContent"]
       : kind === "categories" ? ["toggleCategoryStatusAjax"] : ["toggleSeriesStatusAjax"];
     for (const command of commands) {
+      const topicForm = () => {
+        const value = form();
+        if (command === "toggleUnifiedContentFeatured") value.set("desired_featured", "true");
+        return value;
+      };
       await check(`${command}: committed cache exhaustion stays ok:true`, async () => {
         const { actions, calls } = harness(kind, { cacheFailures: 99 });
-        const result = await (kind === "topics" ? actions[command](form()) : actions[command](7, "unpublished"));
+        const result = await (kind === "topics" ? actions[command](topicForm()) : actions[command](7, "unpublished"));
         assert.equal(result.ok, true); assert.equal(result.feedbackStatus, "warning");
         assert.equal(calls.writes, 1); assert.equal(calls.audits, 1); assert.equal(calls.cache, 2);
       });
       await check(`${command}: rejected write stays failure without cache or audit`, async () => {
         const { actions, calls } = harness(kind, { cacheFailures: 99, writeError: true });
-        const result = await (kind === "topics" ? actions[command](form()) : actions[command](7, "unpublished"));
+        const result = await (kind === "topics" ? actions[command](topicForm()) : actions[command](7, "unpublished"));
         assert.equal(result.ok, false); assert.equal(calls.cache, 0); assert.equal(calls.audits, 0);
       });
       for (const failure of ["missingData", "missingIdentity"]) {
         await check(`${command}: ${failure} cannot claim committed success`, async () => {
           const { actions, calls } = harness(kind, { [failure]: true, cacheFailures: 99 });
-          const result = await (kind === "topics" ? actions[command](form()) : actions[command](7, "unpublished"));
+          const result = await (kind === "topics" ? actions[command](topicForm()) : actions[command](7, "unpublished"));
           assert.equal(result.ok, false); assert.equal(calls.writes, 1); assert.equal(calls.audits, 0); assert.equal(calls.cache, 0);
         });
       }

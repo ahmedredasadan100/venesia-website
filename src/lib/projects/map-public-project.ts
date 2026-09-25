@@ -193,7 +193,7 @@ function mapLocationLevel(
   return {
     id: String(id),
     nameAr: requiredString(row, "name_ar"),
-    nameEn: requiredString(row, "name_en"),
+    nameEn: optionalString(row.name_en),
   };
 }
 

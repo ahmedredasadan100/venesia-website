@@ -59,6 +59,7 @@ const [
   articleSave,
   mediaSave,
   topicActions,
+  atomicSql,
   taxonomyActions,
   taxonomyLoader,
 ] = await Promise.all([
@@ -71,6 +72,7 @@ const [
   read("src/app/admin/content/topics/article-actions/save.ts"),
   read("src/app/admin/content/topics/media-actions/save.ts"),
   read("src/app/admin/content/topics/actions.ts"),
+  read("sql/migrations/20260925200723_topics_batch_atomic_current_state.sql"),
   read("src/app/admin/content/taxonomy-form-actions.ts"),
   read("src/lib/admin/content/load-taxonomy-form-data.ts"),
 ]);
@@ -147,16 +149,18 @@ check(
   ),
 );
 check(
-  "bulk category moves preflight linked series before writing",
+  "bulk category moves validate linked series inside the atomic write owner",
   topicActions.includes("validateBulkCategoryMoveSeries") &&
-    topicActions.indexOf("validateBulkCategoryMoveSeries(\n        ids") <
-      topicActions.indexOf("category_id: category.id"),
+    topicActions.includes('atomicAction = "move_category"') &&
+    atomicSql.includes("for share of series") &&
+    atomicSql.includes("series.category_id is distinct from p_category_id"),
 );
 check(
   "bulk Topic relationship write failure returns before success effects",
-  topicActions.includes("if (error) return invalidMutation(error.message)") &&
-    topicActions.indexOf("if (error) return invalidMutation(error.message)") <
-      topicActions.indexOf("await finishMutation({", topicActions.indexOf('action === "move_category"')),
+  topicActions.includes("if (!updated.ok)") &&
+    topicActions.indexOf("if (!updated.ok)") <
+      topicActions.indexOf("const cacheRevalidation = await finishMutation({", topicActions.indexOf("if (!updated.ok)")) &&
+    atomicSql.includes("topics_batch_atomic_membership_mismatch"),
 );
 check(
   "series category changes reject linked topic conflicts before the RPC",

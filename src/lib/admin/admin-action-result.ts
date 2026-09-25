@@ -1,6 +1,7 @@
 export type AdminActionResultCode =
   | "batch_limit"
   | "committed_cache_revalidation_pending"
+  | "committed_reconciliation_pending"
   | "created"
   | "database_failure"
   | "deleted_topics"
@@ -97,5 +98,24 @@ export function withAdminActionCacheWarning<T extends AdminActionResult>(
     code: result.feedbackStatus === "warning"
       ? result.code
       : "committed_cache_revalidation_pending",
+  };
+}
+
+/** Preserve a confirmed domain result while carrying the Data owner's final read state. */
+export function withAdminActionSettledResult(
+  result: AdminActionResult,
+  settled: { message: string; feedbackStatus?: "success" | "warning" },
+): AdminActionResult {
+  if (!result.ok || settled.feedbackStatus !== "warning") return result;
+  return {
+    ...result,
+    feedbackStatus: "warning",
+    title: result.feedbackStatus === "warning"
+      ? result.title
+      : "تم الحفظ مع تنبيه للعرض",
+    message: settled.message,
+    code: result.feedbackStatus === "warning"
+      ? result.code
+      : "committed_reconciliation_pending",
   };
 }

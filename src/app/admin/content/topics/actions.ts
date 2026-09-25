@@ -275,6 +275,75 @@ function hasExactTopicIds(expected: readonly number[], actual: readonly number[]
   return sortedExpected.every((id, index) => id === actual[index]);
 }
 
+type AtomicTopicsBatchAction =
+  | "unpublish"
+  | "delete"
+  | "move_to_trash"
+  | "feature"
+  | "unfeature"
+  | "move_category"
+  | "restore"
+  | "permanent_delete"
+  | "empty_trash";
+
+type AtomicTopicsBatchResult =
+  | { ok: true; changedIds: number[] }
+  | { ok: false; code: string };
+
+async function runAtomicTopicsBatch(input: {
+  actor: TopicMutationActor;
+  action: AtomicTopicsBatchAction;
+  ids: number[];
+  categoryId?: number;
+  expectedDeletedCount?: number;
+}): Promise<AtomicTopicsBatchResult> {
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "admin_mutate_topics_batch_atomically",
+    {
+      p_actor_id: input.actor.id,
+      p_action: input.action,
+      p_topic_ids: input.ids,
+      ...(input.categoryId ? { p_category_id: input.categoryId } : {}),
+      ...(input.expectedDeletedCount
+        ? { p_expected_deleted_count: input.expectedDeletedCount }
+        : {}),
+    },
+  );
+  if (error) throw error;
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error("تعذر تأكيد نتيجة العملية الذرية. حدّث القائمة قبل إعادة المحاولة.");
+  }
+  const result = data as Record<string, unknown>;
+  if (result.ok === false && typeof result.code === "string") {
+    return { ok: false, code: result.code };
+  }
+  const changedIds = result.changedIds;
+  const requestedIds = result.requestedIds;
+  if (
+    result.ok !== true ||
+    !Array.isArray(changedIds) ||
+    !Array.isArray(requestedIds) ||
+    !changedIds.every((id) => Number.isSafeInteger(id) && id > 0) ||
+    !requestedIds.every((id) => Number.isSafeInteger(id) && id > 0) ||
+    !hasExactTopicIds(input.ids, changedIds) ||
+    !hasExactTopicIds(input.ids, requestedIds)
+  ) {
+    throw new Error("تعذر تأكيد نتيجة العملية الذرية. حدّث القائمة قبل إعادة المحاولة.");
+  }
+  return { ok: true, changedIds };
+}
+
+function atomicTopicsBatchFailure(code: string, title: string): AdminActionResult {
+  return adminActionFailure(
+    title,
+    code === "revision_conflict"
+      ? "تغيرت حالة بعض الموضوعات أثناء التنفيذ؛ لم تتغير المجموعة. حدّث القائمة ثم راجع الاختيار."
+      : code === "missing_topics"
+        ? "بعض الموضوعات المحددة لم تعد موجودة؛ لم تتغير المجموعة. حدّث القائمة."
+        : "تعذر تنفيذ الإجراء على المجموعة كاملة؛ لم تتغير المجموعة. حدّث القائمة وراجع الاختيار.",
+    { code: code === "revision_conflict" ? "revision_conflict" : "database_failure" },
+  );
+}
 async function validateBulkCategoryMoveSeries(
   topicIds: number[],
   categoryId: number,
@@ -421,11 +490,11 @@ export async function setUnifiedContentStatus(
     payload.published_at = topic.published_at || now;
     payload.published_by = actor.id;
   }
-  payload.deleted_at = null;
+  // A status command never restores a topic. Restore is an explicit lifecycle intent.
 
-  const { data: updated, error } = await getSupabaseAdmin().from("topics").update(payload).eq("id", id).select("id").maybeSingle();
+  const { data: updated, error } = await getSupabaseAdmin().from("topics").update(payload).eq("id", id).eq("status", topic.status).eq("updated_at", topic.updated_at).is("deleted_at", null).select("id").maybeSingle();
   if (error) return invalidMutation(error.message);
-  if (updated?.id !== id) return invalidMutation("تعذر تأكيد نتيجة تحديث المحتوى. حدّث القائمة للتحقق قبل إعادة المحاولة.");
+  if (updated?.id !== id) return adminActionFailure("تغير المحتوى أثناء التنفيذ", "تغيرت حالة الموضوع أو نسخته قبل الحفظ. حدّث القائمة وراجع أحدث نسخة قبل إعادة المحاولة.", { code: "revision_conflict", entityId: id });
 
   const cacheRevalidation = await finishMutation({
     actor,
@@ -448,9 +517,22 @@ export async function toggleUnifiedContentFeatured(
   const id = Number(getString(formData, "id"));
   if (!Number.isInteger(id) || id <= 0) return invalidMutation();
 
+  const requested = getString(formData, "desired_featured");
+  if (requested !== "true" && requested !== "false") {
+    return invalidMutation("حدد حالة التمييز المطلوبة صراحةً.");
+  }
+  const isFeatured = requested === "true";
   const topic = await loadTopic(id);
   if (!topic) return invalidMutation("المحتوى غير موجود أو تم حذفه.");
-  const isFeatured = !Boolean(topic.is_featured);
+
+  if (Boolean(topic.is_featured) === isFeatured) {
+    return adminActionSuccess(
+      "التمييز محدّث بالفعل",
+      isFeatured ? "المحتوى مميز بالفعل." : "المحتوى غير مميز بالفعل.",
+      { code: isFeatured ? "featured" : "unfeatured", entityId: id },
+    );
+  }
+
   const { data: updated, error } = await getSupabaseAdmin()
     .from("topics")
     .update({
@@ -459,10 +541,17 @@ export async function toggleUnifiedContentFeatured(
       updated_by: actor.id,
     })
     .eq("id", id)
+    .is("deleted_at", null)
     .select("id")
     .maybeSingle();
   if (error) return invalidMutation(error.message);
-  if (updated?.id !== id) return invalidMutation("تعذر تأكيد نتيجة تحديث التمييز. حدّث القائمة للتحقق قبل إعادة المحاولة.");
+  if (updated?.id !== id) {
+    return adminActionFailure(
+      "تغير المحتوى أثناء التنفيذ",
+      "نُقل الموضوع إلى المحذوفات قبل تحديث التمييز. حدّث القائمة.",
+      { code: "revision_conflict", entityId: id },
+    );
+  }
 
   const cacheRevalidation = await finishMutation({
     actor,
@@ -477,7 +566,6 @@ export async function toggleUnifiedContentFeatured(
     { code: isFeatured ? "featured" : "unfeatured", entityId: id },
   ), cacheRevalidation.ok);
 }
-
 async function createUniqueCopySlug(baseSlug: string) {
   let candidate = `${baseSlug || "content"}-copy`;
   let suffix = 2;
@@ -648,20 +736,15 @@ async function restoreTopicsWithCanonicalOwner(input: {
     return topicRestoreSlugConflict(topic.slug, topic.id);
   }
 
-  const now = new Date().toISOString();
-  const { data: restored, error } = await getSupabaseAdmin()
-    .from("topics")
-    .update({
-      status: "unpublished",
-      deleted_at: null,
-      updated_at: now,
-      updated_by: input.actor.id,
-    })
-    .in("id", input.ids)
-    .not("deleted_at", "is", null)
-    .select("id");
-  if (error) {
-    if (isTopicSlugConflictError(error)) {
+  let restored: AtomicTopicsBatchResult;
+  try {
+    restored = await runAtomicTopicsBatch({
+      actor: input.actor,
+      action: "restore",
+      ids: input.ids,
+    });
+  } catch (error) {
+    if (isTopicSlugConflictError(error as { code?: string; message?: string })) {
       let conflictAfterWrite: { id: number; slug: string } | null = null;
       try {
         conflictAfterWrite = await findActiveTopicSlugConflict(topics);
@@ -671,14 +754,15 @@ async function restoreTopicsWithCanonicalOwner(input: {
         : topics[0];
       return topicRestoreSlugConflict(topic.slug, topic.id);
     }
-    return invalidMutation(error.message);
-  }
-  if ((restored ?? []).length !== topics.length) {
-    return invalidMutation(
-      "تغيرت حالة بعض الموضوعات أثناء الاستعادة. حدّث الصفحة وحاول مرة أخرى.",
+    return adminActionFailure(
+      "تعذر تأكيد الاستعادة",
+      "تعذر تأكيد نتيجة الاستعادة. حدّث المحذوفات قبل إعادة الطلب.",
+      { code: "database_failure" },
     );
   }
-
+  if (!restored.ok) {
+    return atomicTopicsBatchFailure(restored.code, "تعذر الاستعادة");
+  }
   const singleTopic = input.scope === "single" ? topics[0] : null;
   const cacheRevalidation = await finishMutation({
     actor: input.actor,
@@ -768,20 +852,26 @@ async function permanentlyDeleteTopicsWithCanonicalOwner(input: {
     }
   }
 
-  const { data: deleted, error } = await getSupabaseAdmin()
-    .from("topics")
-    .delete()
-    .in("id", input.ids)
-    .not("deleted_at", "is", null)
-    .select("id");
-  if (error) return invalidMutation(error.message);
-  if ((deleted ?? []).length !== topics.length) {
-    return invalidMutation(
-      "تغيرت حالة بعض الموضوعات أثناء الحذف النهائي. حدّث الصفحة وراجع المحذوفات.",
+  let deleted: AtomicTopicsBatchResult;
+  try {
+    deleted = await runAtomicTopicsBatch({
+      actor: input.actor,
+      action: input.scope === "empty_trash" ? "empty_trash" : "permanent_delete",
+      ids: input.ids,
+      expectedDeletedCount: input.expectedTotalDeletedCount,
+    });
+  } catch {
+    return adminActionFailure(
+      "تعذر تأكيد الحذف النهائي",
+      "تعذر تأكيد نتيجة الحذف النهائي. حدّث المحذوفات قبل إعادة الطلب.",
+      { code: "database_failure" },
     );
   }
+  if (!deleted.ok) {
+    return atomicTopicsBatchFailure(deleted.code, "تعذر الحذف النهائي");
+  }
 
-  const deletedIds = (deleted ?? []).map((row) => Number(row.id));
+  const deletedIds = deleted.changedIds;
   const mediaSynchronization =
     await synchronizeMediaReferenceWriteScopesAfterDomainMutation(
       [],
@@ -950,8 +1040,8 @@ export async function bulkUpdateUnifiedContent(
     });
   }
 
-  const now = new Date().toISOString();
-  let payload: TablesUpdate<"topics"> | null = null;
+  let atomicAction: AtomicTopicsBatchAction | null = null;
+  let categoryId: number | undefined;
   const moveToTrash = action === "delete" || action === "move_to_trash";
 
   if (action === "publish") {
@@ -1140,18 +1230,17 @@ export async function bulkUpdateUnifiedContent(
       `تم نشر ${publishResult.publishedIds.length} من عناصر المحتوى بنجاح.${alreadyPublishedMessage}`,
       { code: "published" },
     );
-  } else if (action === "unpublish") {
-    payload = { status: "unpublished", updated_by: actor.id, updated_at: now };
-  } else if (moveToTrash) {
-    payload = { status: "unpublished", deleted_at: now, updated_by: actor.id, updated_at: now };
-  } else if (action === "feature" || action === "unfeature") {
-    payload = { is_featured: action === "feature", updated_by: actor.id, updated_at: now };
+  } else if (
+    action === "unpublish" || moveToTrash ||
+    action === "feature" || action === "unfeature"
+  ) {
+    atomicAction = action as AtomicTopicsBatchAction;
   } else if (action === "move_category") {
-    const categoryId = Number(getString(formData, "category_id"));
+    const requestedCategoryId = Number(getString(formData, "category_id"));
     const { data: category } = await getSupabaseAdmin()
       .from("topic_categories")
       .select("id,name,slug")
-      .eq("id", categoryId)
+      .eq("id", requestedCategoryId)
       .is("deleted_at", null)
       .eq("is_active", true)
       .maybeSingle();
@@ -1169,16 +1258,11 @@ export async function bulkUpdateUnifiedContent(
           : "تعذر التحقق من توافق السلاسل مع التصنيف.",
       );
     }
-    payload = {
-      category_id: category.id,
-      category: category.name,
-      category_slug: category.slug,
-      updated_by: actor.id,
-      updated_at: now,
-    };
+    categoryId = category.id;
+    atomicAction = "move_category";
   }
 
-  if (!payload) return invalidMutation("الإجراء الجماعي غير صالح.");
+  if (!atomicAction) return invalidMutation("الإجراء الجماعي غير صالح.");
   const { data: activeTopics, error: activeTopicsError } =
     await getSupabaseAdmin()
       .from("topics")
@@ -1192,26 +1276,31 @@ export async function bulkUpdateUnifiedContent(
       "بعض السجلات غير موجودة أو داخل المحذوفات. لم يتم تعديل أي Topic محذوف.",
     );
   }
-  const { data: updated, error } = await getSupabaseAdmin()
-    .from("topics")
-    .update(payload)
-    .in("id", ids)
-    .is("deleted_at", null)
-    .select("id");
-  if (error) return invalidMutation(error.message);
-  if ((updated ?? []).length !== ids.length) {
-    return invalidMutation(
-      "تغيرت حالة بعض الموضوعات أثناء التنفيذ. حدّث الصفحة وحاول مرة أخرى.",
+  let updated: AtomicTopicsBatchResult;
+  try {
+    updated = await runAtomicTopicsBatch({
+      actor,
+      action: atomicAction,
+      ids,
+      categoryId,
+    });
+  } catch {
+    return adminActionFailure(
+      "تعذر تأكيد نتيجة الإجراء الجماعي",
+      "تعذر تأكيد نتيجة العملية. حدّث القائمة قبل إعادة الطلب.",
+      { code: "database_failure" },
     );
   }
-
+  if (!updated.ok) {
+    return atomicTopicsBatchFailure(updated.code, "تعذر تنفيذ الإجراء الجماعي");
+  }
   const cacheRevalidation = await finishMutation({
     actor,
     action: action === "publish" ? "publish" : action === "unpublish" ? "unpublish" : moveToTrash ? "delete" : "update",
     metadata: {
       bulk_action: action,
-      topic_ids: ids,
-      count: ids.length,
+      topic_ids: updated.changedIds,
+      count: updated.changedIds.length,
       ...(moveToTrash
         ? { permanent: false, slug_retained: true }
         : {}),

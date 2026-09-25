@@ -23,7 +23,7 @@ export type PublicProjectLocationPoint = {
 export type PublicProjectLocationLevel = {
   id: string;
   nameAr: string;
-  nameEn: string;
+  nameEn: string | null;
 };
 
 export type PublicProjectPlan = {

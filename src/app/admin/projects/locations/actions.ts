@@ -21,7 +21,7 @@ import {
 import { loadProjectLocationManagementRow } from "../../../../lib/admin/projects/location-management-adapter";
 import type { Json } from "../../../../lib/database.types";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
-import { runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
+import { revalidateProjectsCache, runBoundedPublicCacheRevalidation } from "../../../../lib/cache/revalidate-public-cache-tags";
 
 export type ProjectLocationFormActionState =
   AdminFormActionState<ProjectLocationManagementRow>;
@@ -69,6 +69,7 @@ function parseActive(formData: FormData) {
 
 function revalidateLocationDomain() {
   return runBoundedPublicCacheRevalidation(() => {
+    revalidateProjectsCache();
     revalidatePath("/admin/projects/locations", "layout");
     revalidatePath("/admin/projects/new", "page");
     revalidatePath("/admin/projects/[id]", "page");

@@ -125,7 +125,6 @@ function fixture(options: FixtureOptions = {}) {
   const supabase = {
     from(table: string) {
       let columns = "";
-      let deleting = false;
       const filters = new Map<string, unknown>();
       let ids: number[] = [];
       const query = {
@@ -137,7 +136,7 @@ function fixture(options: FixtureOptions = {}) {
           return query;
         },
         order() { return query; },
-        delete() { assert.equal(table, "topics"); deletes += 1; deleting = true; return query; },
+        delete: unexpected,
         insert: unexpected,
         update: unexpected,
         upsert: unexpected,
@@ -147,11 +146,6 @@ function fixture(options: FixtureOptions = {}) {
         },
       };
       async function execute() {
-        if (deleting) {
-          assert.equal(columns, "id");
-          assert.deepEqual(ids, [TOPIC_ID]);
-          return { data: [{ id: TOPIC_ID }], error: null };
-        }
         if (table === "topics" && columns === "id,title,slug,content_type,deleted_at") {
           assert.deepEqual(ids, [TOPIC_ID]);
           return { data: [topic], error: null };
@@ -174,7 +168,13 @@ function fixture(options: FixtureOptions = {}) {
       }
       return query;
     },
-    rpc: unexpected,
+    async rpc(name: string, args: Record<string, unknown>) {
+      assert.equal(name, "admin_mutate_topics_batch_atomically");
+      assert.equal(args.p_action, "permanent_delete");
+      assert.deepEqual(args.p_topic_ids, [TOPIC_ID]);
+      deletes += 1;
+      return { data: { ok: true, requestedIds: [TOPIC_ID], changedIds: [TOPIC_ID] }, error: null };
+    },
   };
 
   const usage = loadSource<typeof import("../src/lib/admin/links/usage")>("src/lib/admin/links/usage.ts", {
@@ -314,7 +314,7 @@ await check("footer contact link still blocks when slots are absent", async () =
 });
 
 for (const slotsMissing of [false, true]) {
-  await check(`complete successful zero usage allows one mocked DELETE (slots missing=${slotsMissing})`, async () => {
+  await check(`complete successful zero usage allows one atomic purge RPC (slots missing=${slotsMissing})`, async () => {
     const proof = fixture({ slotsMissing });
     assert.equal(await proof.usage.getResourceLinkUsageCount(topicQuery), 0);
     assert.equal(await proof.usage.isResourceLinked(topicQuery), false);
