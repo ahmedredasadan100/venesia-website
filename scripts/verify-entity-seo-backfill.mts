@@ -8,10 +8,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 import type { EntitySeoBackfillOptions, EntitySeoBackfillReceipt, EntitySeoBackfillReport } from "./backfill-entity-seo-scores.mts";
 import { loadEntitySeoPersistenceOwner } from "./backfill-entity-seo-scores.mts";
-import type { TopicSeoSource, ProjectSeoSource } from "../src/lib/admin/seo/entity-seo-persistence.ts";
+import type { TopicSeoSource, ProjectSeoSource, PageSeoSource } from "../src/lib/admin/seo/entity-seo-persistence.ts";
 
-type Row = Record<string, unknown> & ProjectSeoSource & Partial<TopicSeoSource> & { id: number };
-type Entity = "topics" | "projects";
+type Row = Record<string, unknown> & Partial<ProjectSeoSource & TopicSeoSource & PageSeoSource> & { id: number };
+type Entity = "topics" | "projects" | "pages";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const owner = loadEntitySeoPersistenceOwner();
 
@@ -21,6 +21,8 @@ export async function verifyEntitySeoBackfill() {
   const check = (condition: unknown, message: string) => { assert.ok(condition, message); checks++; };
   let state!: {
     tables: Record<Entity, Row[]>; queries: Array<{ sql: string; params: unknown[] }>;
+    pageRegions: Array<{ page_id: number; key: string }>;
+    pageSources: Array<Record<string, unknown>>;
     connections: number; updates: number; options?: Record<string, unknown>;
     beforeUpdate?: (entity: Entity, row: Row) => void;
     beforeRead?: (entity: Entity) => void;
@@ -31,10 +33,17 @@ export async function verifyEntitySeoBackfill() {
       tables: {
         topics: [{ id: 1, content_type: "article", title: "Actual title", excerpt: "Actual summary", slug: "topic-one", content: "Actual authored body", faq: [], seo_keywords: [], seo_score: null, seo_score_version: null, seo_score_input_hash: null, updated_at: "unchanged-editorial-time" }],
         projects: [{ id: 2, arabic_name: "Actual project", general_description: "Summary", overview_body: "Body", slug: "project-two", seo_keywords: [], seo_score: null, seo_score_version: null, seo_score_input_hash: null, updated_at: "unchanged-editorial-time" }],
-      }, queries: [], connections: 0, updates: 0,
+        pages: [{ id: 3, title: "Actual page", path: "/actual-page", seo_keywords: [], seo_score: null, seo_score_version: null, seo_score_input_hash: null, updated_at: "unchanged-editorial-time" }],
+      },
+      pageRegions: [{ page_id: 3, key: "hero" }, { page_id: 3, key: "main" }],
+      pageSources: [
+        { page_id: 3, slot: "main", sort_order: 10, module_kind: "content", assignment_id: 20, assignment_visible: true, template_status: "published", template_slug: "page-body", config: { title: "Visible page body" } },
+        { page_id: 3, slot: "hero", sort_order: 1, module_kind: "hero", assignment_id: 21, assignment_visible: true, template_status: "published", template_slug: "page-hero", config: { title: "Visible page hero" } },
+      ],
+      queries: [], connections: 0, updates: 0,
     };
   }
-  const input = (entity: Entity, row: Row) => entity === "topics"
+  const input = (entity: Exclude<Entity, "pages">, row: Row) => entity === "topics"
     ? owner.toTopicSeoScoreInput({ ...row, content_type: row.content_type ?? "" })
     : owner.toProjectSeoScoreInput(row);
   class FakePgClient {
@@ -44,7 +53,16 @@ export async function verifyEntitySeoBackfill() {
     async query(sql: string, params: unknown[] = []) {
       state.queries.push({ sql, params });
       if (sql.startsWith("select current_database()")) return { rows: [{ database: state.options?.application_name === "production-entity-seo-backfill" ? "postgres" : "entity_seo_test", role: "postgres" }] };
-      const match = sql.match(/(?:from|update) public\.(topics|projects)/u);
+      if (/^(begin|commit|rollback)/u.test(sql)) return { rows: [], rowCount: 0 };
+      if (sql.startsWith("select page.id page_id,region.key")) {
+        const ids = params[0] as number[];
+        return { rows: structuredClone(state.pageRegions.filter((row) => ids.includes(row.page_id))) };
+      }
+      if (sql.startsWith("select source.* from (")) {
+        const ids = params[0] as number[];
+        return { rows: structuredClone(state.pageSources.filter((row) => ids.includes(Number(row.page_id)))) };
+      }
+      const match = sql.match(/(?:from|update) public\.(topics|projects|pages)/u);
       assert.ok(match, `Unexpected query contract: ${sql}`);
       const entity = match[1] as Entity;
       const rows = state.tables[entity];
@@ -58,6 +76,11 @@ export async function verifyEntitySeoBackfill() {
       if (!row) return { rows: [], rowCount: 0 };
       state.beforeUpdate?.(entity, row);
       if (state.updateFailure) throw new Error("PRIVATE_SECRET and PRIVATE_PERSON in remote SQL error");
+      if (entity === "pages") {
+        Object.assign(row, { seo_score: params[0], seo_score_version: params[1], seo_score_input_hash: params[2] });
+        state.updates++;
+        return { rows: [{ id: row.id }], rowCount: 1 };
+      }
       // Model the existing CAS predicate, not the PostgreSQL trigger. Native
       // trigger/projection proof belongs to the separate cutover rehearsal.
       if (owner.entitySeoInputHash(input(entity, row)) !== params[2]) return { rows: [], rowCount: 0 };
@@ -77,10 +100,12 @@ export async function verifyEntitySeoBackfill() {
     runEntitySeoBackfill(options: EntitySeoBackfillOptions): Promise<EntitySeoBackfillReport>;
     assertProductionSeoBackfillTarget(options: EntitySeoBackfillOptions): string;
   };
-  const isolated = { connectionString: "postgresql://fixture@127.0.0.1:55445/entity_seo_test", expectedDatabase: "entity_seo_test", batchSize: 1 };
+  const isolated = { connectionString: "postgresql://fixture@127.0.0.1:55445/entity_seo_test", expectedDatabase: "entity_seo_test", batchSize: 1,
+    entities: ["topics", "projects"] as const };
   const production: EntitySeoBackfillOptions = {
     connectionString: "postgresql://postgres.abcdefghijklmnopqrst:PRIVATE_SECRET@aws-1-eu-central-1.pooler.supabase.com:5432/postgres",
     expectedDatabase: "postgres", batchSize: 1,
+    entities: ["topics", "projects"],
     production: { confirmation: "production-entity-seo-backfill", projectRef: "abcdefghijklmnopqrst", expectedHost: "aws-1-eu-central-1.pooler.supabase.com", maxRows: 10 },
   };
   async function blocked(options: EntitySeoBackfillOptions) {
@@ -94,7 +119,7 @@ export async function verifyEntitySeoBackfill() {
 
   reset();
   const dry = await tool.runEntitySeoBackfill(isolated);
-  check(dry.counts.targeted === 2 && dry.counts.calculated === 2 && dry.counts.unresolved === 2 && state.updates === 0, "Dry-run reports pending tuples without writes.");
+  check(dry.counts.targeted === 2 && dry.counts.calculated === 2 && dry.counts.wouldWrite === 2 && dry.counts.unresolved === 0 && state.updates === 0, "Dry-run reports pending tuples without writes.");
   check(dry.complete && !dry.readyForEnforcement, "A successful dry-run cannot authorize enforcement.");
   const originalFields = structuredClone(state.tables);
   const applied = await tool.runEntitySeoBackfill({ ...isolated, apply: true });
@@ -109,6 +134,32 @@ export async function verifyEntitySeoBackfill() {
     }
   }
   check(state.queries.filter((query) => query.sql.includes("where id >")).every((query) => query.params[1] === 1 && query.sql.includes("id <= $3")), "Reads use bounded keyset pages.");
+
+  reset();
+  const pages = { ...isolated, entities: ["pages"] as const };
+  const pageDry = await tool.runEntitySeoBackfill(pages);
+  check(pageDry.counts.targeted === 1 && pageDry.counts.calculated === 1 && pageDry.counts.wouldWrite === 1 && state.updates === 0,
+    "Page dry-run derives one pending tuple without writes.");
+  check(state.queries.some((query) => query.sql === "begin isolation level repeatable read read only")
+    && state.queries.some((query) => query.sql === "commit"), "Page dry-run owns one repeatable-read read-only snapshot.");
+  check(state.queries.some((query) => query.sql.includes("page_featured_module_assignments"))
+    && state.queries.some((query) => query.sql.includes("hero_assignments")), "Page semantic projection reads every canonical assignment family through the official owner.");
+  const pageApplied = await tool.runEntitySeoBackfill({ ...pages, apply: true });
+  check(pageApplied.counts.written === 1 && pageApplied.counts.unresolved === 0,
+    "Page apply writes only the derived tuple.");
+  check(state.queries.some((query) => query.sql === "begin isolation level serializable")
+    && state.queries.some((query) => query.sql.includes("from public.pages") && query.sql.endsWith(" for update")),
+    "Page apply serializes against source changes and locks its bounded row set.");
+  const pageVerified = await tool.runEntitySeoBackfill({ ...pages, verify: true });
+  check(pageVerified.readyForEnforcement && pageVerified.counts.unchanged === 1 && pageVerified.counts.written === 0,
+    "Independent Page verification recalculates the canonical semantic projection without writes.");
+  const pageAgain = await tool.runEntitySeoBackfill({ ...pages, apply: true });
+  check(pageAgain.counts.written === 0 && pageAgain.counts.unchanged === 1,
+    "Page apply rerun is idempotent.");
+  check(state.tables.pages[0].updated_at === "unchanged-editorial-time", "Page backfill preserves non-derived fields and editorial timestamps.");
+
+  reset();
+  await tool.runEntitySeoBackfill({ ...isolated, apply: true });
   state.tables.topics[0].seo_score = (Number(state.tables.topics[0].seo_score) + 1) % 101;
   const forged = await blocked({ ...isolated, verify: true });
   check(forged?.counts.unresolved === 1 && !forged.readyForEnforcement, "Independent verify detects a wrong score with an otherwise matching hash.");
@@ -122,7 +173,7 @@ export async function verifyEntitySeoBackfill() {
   reset();
   state.tables.topics[0].faq = [{ question: "PRIVATE_PERSON" }];
   const invalid = await blocked(isolated);
-  check(invalid?.counts.failed === 1 && invalid.counts.unresolved === 2 && state.updates === 0, "Malformed canonical inputs fail dry-run without leaking source data.");
+  check(invalid?.counts.failed === 1 && invalid.counts.unresolved === 1 && invalid.counts.wouldWrite === 1 && state.updates === 0, "Malformed canonical inputs fail dry-run without leaking source data.");
   reset(); state.connectFailure = true;
   const disconnected = await blocked(isolated);
   check(disconnected?.counts.failed === 1 && !disconnected.readyForEnforcement, "Connection failures produce sanitized blocking counts.");
@@ -165,7 +216,7 @@ export async function verifyEntitySeoBackfill() {
 
   const plan = await tool.runEntitySeoBackfill(production);
   const receipt = plan.dryRunReceipt as EntitySeoBackfillReceipt;
-  check(receipt?.kind === "entity-seo-production-dry-run" && plan.counts.unresolved === 2 && state.updates === 0, "Production dry-run issues a bounded receipt and performs no writes.");
+  check(receipt?.kind === "entity-seo-production-dry-run" && plan.counts.wouldWrite === 2 && plan.counts.unresolved === 0 && state.updates === 0, "Production dry-run issues a bounded receipt and performs no writes.");
   check((state.options?.ssl as { rejectUnauthorized?: boolean }).rejectUnauthorized === true, "Production TLS certificate verification remains enabled.");
   check(!JSON.stringify(receipt).includes("PRIVATE_SECRET") && !JSON.stringify(receipt).includes("Actual title"), "Receipt contains identity hashes and population bounds, no credentials/source text.");
   for (const patch of [{ sourceFingerprint: "changed" }, { targetFingerprint: "changed" }, { scoreVersion: 999 }, { maxRows: 11 }, { failed: 1 }, { conflicted: 1 }]) {
@@ -223,7 +274,7 @@ export async function verifyEntitySeoBackfill() {
   const cliReports = cliFailure.stderr.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line.startsWith("{"));
   check(cliReports.length === 1, "CLI failure emits exactly one structured report alongside any Node diagnostics.");
   const cliCounts = JSON.parse(cliReports[0]) as { counts: Record<string, number>; readyForEnforcement: boolean };
-  check(["targeted", "calculated", "written", "unchanged", "conflicted", "failed", "unresolved"].every((field) => typeof cliCounts.counts[field] === "number") && !cliCounts.readyForEnforcement,
+  check(["targeted", "calculated", "written", "unchanged", "wouldWrite", "conflicted", "failed", "unresolved"].every((field) => typeof cliCounts.counts[field] === "number") && !cliCounts.readyForEnforcement,
     "Even pre-connection CLI failures report every required count and block enforcement.");
   console.log(`Entity SEO backfill verified (${checks} assertions; actual shared owner and tooling, isolated pg transport only).`);
 }

@@ -22,9 +22,7 @@ const closureBlockers: readonly string[] = ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE
 assert.equal(ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE.persistedScore.globalClosed,
   gaps.length === 0 && closureBlockers.length === 0);
 assert.deepEqual(gaps.map((entry) => entry.id), []);
-assert.deepEqual(closureBlockers, [
-  "page-seo:production-migration-and-existing-row-backfill-not-authorized",
-]);
+assert.deepEqual(closureBlockers, []);
 
 for (const entry of eligible) {
   const adoption = entry.persistedScore;
@@ -105,5 +103,5 @@ assert.match(enforcement, /create constraint trigger projects_entity_seo_score_w
 assert.match(enforcement, /deferrable initially deferred/u);
 assert.doesNotMatch(schema, /analyzeEntitySeo\s*\(|keywordDensity|readinessScore|seoScore\s*\*/u, "SQL must not implement the SEO algorithm.");
 assert.doesNotMatch(enforcement, /analyzeEntitySeo\s*\(|keywordDensity|readinessScore|seoScore\s*\*/u, "Enforcement must not implement a second SEO algorithm.");
-console.log(`Entity SEO persistence: ${eligible.length - gaps.length} adopted surfaces; Page persistence is source-closed while Production migration/backfill remains explicitly unauthorized; executable ownership, provenance, invariance, failure and isolated-target checks passed.`);
+console.log(`Entity SEO persistence: ${eligible.length - gaps.length} adopted surfaces; persisted-score ownership is globally closed after the bounded Production Page backfill and independent verification; executable ownership, provenance, invariance, failure and isolated-target checks passed.`);
 await verifyEntitySeoBackfill();

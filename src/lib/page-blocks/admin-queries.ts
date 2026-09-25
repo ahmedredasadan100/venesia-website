@@ -21,6 +21,10 @@ import {
 } from "../page-composition/page-assignment-contract";
 import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
 import { loadPageRegionsForPage } from "../page-composition/load-page-regions";
+import {
+  buildPageSeoSemanticContent,
+  type PageSeoSemanticPart,
+} from "./page-seo-semantic-source";
 
 export { blockModuleHref, blockModuleListHref };
 
@@ -115,14 +119,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   ] = results;
 
   const assignments: PageBlockAssignmentRow[] = [];
-  const regionOrder = new Map(layout.regions.map((region, index) => [region.key, index]));
-  const seoContentParts: Array<{
-    content: string;
-    slot: string;
-    sortOrder: number;
-    moduleKind: PageModuleKind;
-    assignmentId: number;
-  }> = [];
+  const seoContentParts: PageSeoSemanticPart[] = [];
 
   function appendSeoContent(
     row: { is_visible?: unknown; is_active?: unknown },
@@ -393,13 +390,9 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   return {
     initialContentTemplates,
     assignments,
-    seoContent: seoContentParts
-      .sort((first, second) =>
-        (regionOrder.get(first.slot) ?? Number.MAX_SAFE_INTEGER)
-          - (regionOrder.get(second.slot) ?? Number.MAX_SAFE_INTEGER)
-        || comparePageAssignmentOrder(first, second),
-      )
-      .map((entry) => entry.content)
-      .join("\n"),
+    seoContent: buildPageSeoSemanticContent(
+      seoContentParts,
+      layout.regions.map((region) => region.key),
+    ),
   };
 }

@@ -38,12 +38,17 @@ export function loadEntitySeoPersistenceOwner() {
     return loaded.exports;
   }
   const owner = load(resolve(ROOT, "src/lib/admin/seo/entity-seo-persistence.ts"));
+  const semantic = load(resolve(ROOT, "src/lib/page-blocks/page-seo-semantic-source.ts"));
+  const configs = load(resolve(ROOT, "src/lib/page-blocks/configs.ts"));
+  const visibility = load(resolve(ROOT, "src/lib/page-blocks/admin-utils.ts"));
+  const slots = load(resolve(ROOT, "src/lib/page-blocks/layout-slots.ts"));
+  const retired = load(resolve(ROOT, "src/lib/page-blocks/deprecated-block-modules.ts"));
   const sourceFiles = [...cache.keys(), fileURLToPath(import.meta.url),
     resolve(ROOT, "src/lib/admin/seo/entity-seo-adoption-manifest.ts")].sort();
   const sourceFingerprint = createHash("sha256").update(JSON.stringify(sourceFiles.map((file) => [
     relative(ROOT, file).replaceAll("\\", "/"), createHash("sha256").update(readFileSync(file)).digest("hex"),
   ]))).digest("hex");
-  return { ...owner, sourceFingerprint } as unknown as {
+  return { ...owner, ...semantic, ...configs, ...visibility, ...slots, ...retired, sourceFingerprint } as unknown as {
     sourceFingerprint: string;
     ENTITY_SEO_SCORE_VERSION: number;
     TOPIC_SEO_SOURCE_COLUMNS: readonly string[];
@@ -55,6 +60,11 @@ export function loadEntitySeoPersistenceOwner() {
     toPageSeoScoreInput(row: PageSeoSource): SeoScoreInput;
     deriveEntitySeoScore(input: SeoScoreInput, previous?: PersistedEntitySeoScoreSource): PersistedEntitySeoScore;
     entitySeoInputHash(input: SeoScoreInput): string;
+    buildPageSeoSemanticContent(parts: readonly Record<string, unknown>[], regionKeys: readonly string[]): string;
+    extractPageBlockSeoText(config: unknown): string;
+    isPageModulePubliclyVisible(assignmentValue: unknown, templateStatus: string | null | undefined): boolean;
+    isRetiredContentBlockTemplateSlug(slug: string | null | undefined): boolean;
+    normalizeLayoutSlot(slot: string | null | undefined): string;
   };
 }
 
@@ -70,7 +80,7 @@ export function assertIsolatedSeoBackfillTarget(connectionString: string, expect
   assert.equal(decodeURIComponent(target.pathname.slice(1)), expectedDatabase, "Database identity mismatch.");
 }
 
-type Entity = "topics" | "projects";
+type Entity = "topics" | "projects" | "pages";
 type Scope = { entity: Entity; upperId: string; targeted: number };
 export type EntitySeoBackfillCounts = {
   entity: Entity;
@@ -78,6 +88,7 @@ export type EntitySeoBackfillCounts = {
   calculated: number;
   written: number;
   unchanged: number;
+  wouldWrite: number;
   conflicted: number;
   failed: number;
   unresolved: number;
@@ -102,7 +113,7 @@ export type EntitySeoBackfillReport = {
   excluded: Array<{ entity: string; reason: string | undefined }>;
   complete: boolean;
   readyForEnforcement: boolean;
-  counts: { targeted: number; calculated: number; written: number; unchanged: number; conflicted: number; failed: number; unresolved: number };
+  counts: { targeted: number; calculated: number; written: number; unchanged: number; wouldWrite: number; conflicted: number; failed: number; unresolved: number };
   preflight?: EntitySeoBackfillReport["counts"];
   dryRunReceipt?: EntitySeoBackfillReceipt;
 };
@@ -128,6 +139,7 @@ export type EntitySeoBackfillOptions = {
   apply?: boolean;
   verify?: boolean;
   recalculate?: boolean;
+  entities?: readonly Entity[];
   batchSize?: number;
   production?: EntitySeoProductionBackfill;
 };
@@ -196,9 +208,11 @@ export async function runEntitySeoBackfill(options: EntitySeoBackfillOptions): P
     entry.persistedScore?.status === "adopted"
       && entry.persistedScore.table
       && entry.persistedScore.backfillEligible !== false
-      && entry.persistedScore.table !== "pages"
       ? [entry.persistedScore.table]
-      : []))] as Entity[];
+      : []))].filter((entity): entity is Entity =>
+        !options.entities || options.entities.includes(entity as Entity));
+  assert.ok(adoptedTables.length > 0, "At least one adopted Entity SEO scope is required.");
+  if (options.production) assert.ok(options.entities?.length, "Production requires an explicit --entity scope.");
   const client = new pg.Client({
     connectionString: options.connectionString,
     application_name: options.production ? "production-entity-seo-backfill" : "isolated-entity-seo-backfill",
@@ -217,7 +231,7 @@ export async function runEntitySeoBackfill(options: EntitySeoBackfillOptions): P
         : []),
     complete: false,
     readyForEnforcement: false,
-    counts: { targeted: 0, calculated: 0, written: 0, unchanged: 0, conflicted: 0, failed: 0, unresolved: 0 },
+    counts: { targeted: 0, calculated: 0, written: 0, unchanged: 0, wouldWrite: 0, conflicted: 0, failed: 0, unresolved: 0 },
   };
   const summarize = () => {
     for (const field of Object.keys(report.counts) as Array<keyof EntitySeoBackfillReport["counts"]>) {
@@ -229,6 +243,12 @@ export async function runEntitySeoBackfill(options: EntitySeoBackfillOptions): P
     const identity = await client.query("select current_database() as database, current_user as role");
     assert.equal(identity.rows[0].database, options.expectedDatabase);
     if (options.production) assert.equal(identity.rows[0].role, "postgres", "Production database role mismatch.");
+    const pageTransaction = adoptedTables.includes("pages");
+    if (pageTransaction) {
+      await client.query(options.apply
+        ? "begin isolation level serializable"
+        : "begin isolation level repeatable read read only");
+    }
     const scopes: Scope[] = [];
     for (const entity of adoptedTables) {
       const population = await client.query(`select count(*)::text as targeted, coalesce(max(id),0)::text as upper_id, coalesce(min(id),1)::text as lower_id from public.${entity}`);
@@ -248,20 +268,80 @@ export async function runEntitySeoBackfill(options: EntitySeoBackfillOptions): P
       const entities: EntitySeoBackfillCounts[] = [];
       report.entities = entities;
       for (const { entity, targeted, upperId } of scopes) {
-      const columns = entity === "topics" ? owner.TOPIC_SEO_SOURCE_COLUMNS : owner.PROJECT_SEO_SOURCE_COLUMNS;
+      const columns = entity === "topics" ? owner.TOPIC_SEO_SOURCE_COLUMNS
+        : entity === "projects" ? owner.PROJECT_SEO_SOURCE_COLUMNS
+          : owner.PAGE_SEO_SOURCE_COLUMNS;
       const projection = ["id", ...columns, ...owner.PERSISTED_ENTITY_SEO_FIELDS].map((column) => `"${column}"`).join(",");
       const counts: EntitySeoBackfillCounts = { entity, targeted, calculated: 0, written: 0, unchanged: 0,
-        conflicted: 0, failed: 0, unresolved: 0, scanned: 0, recalculated: 0 };
+        wouldWrite: 0, conflicted: 0, failed: 0, unresolved: 0, scanned: 0, recalculated: 0 };
       entities.push(counts);
       let afterId = "0";
       while (true) {
         // The table/projection come only from the closed adoption contract above.
-        const batch = await client.query(`select ${projection} from public.${entity} where id > $1 and id <= $3 order by id limit $2`, [afterId, batchSize, upperId]);
+        const batch = await client.query(
+          `select ${projection} from public.${entity} where id > $1 and id <= $3 order by id limit $2${entity === "pages" && write ? " for update" : ""}`,
+          [afterId, batchSize, upperId],
+        );
         if (!batch.rows.length) break;
+        const pageIds = entity === "pages"
+          ? batch.rows.map((row: Record<string, unknown>) => Number(row.id))
+          : [];
+        const pageSemanticContent = new Map<number, string>();
+        if (entity === "pages") {
+          const regions = await client.query(`select page.id page_id,region.key from public.pages page
+              join public.page_composition_regions region on region.layout_id=page.layout_id
+              where page.id=any($1::integer[]) order by page.id,region.sort_order,region.key`, [pageIds]);
+          const sources = await client.query(`select source.* from (
+              select a.page_id,a.slot,a.sort_order,'content'::text module_kind,a.id assignment_id,a.is_visible assignment_visible,
+                t.status template_status,t.slug template_slug,t.config
+                from public.page_content_block_assignments a join public.content_block_templates t on t.id=a.template_id
+              union all select a.page_id,a.slot,a.sort_order,'cta',a.id,a.is_visible,t.status,t.slug,t.config
+                from public.page_cta_block_assignments a join public.cta_block_templates t on t.id=a.template_id
+              union all select a.page_id,a.slot,a.sort_order,'cards',a.id,a.is_visible,t.status,t.slug,t.config
+                from public.page_cards_block_assignments a join public.cards_block_templates t on t.id=a.template_id
+              union all select a.page_id,a.slot,a.sort_order,'breadcrumb',a.id,a.is_visible,t.status,t.slug,t.config
+                from public.page_breadcrumb_block_assignments a join public.breadcrumb_block_templates t on t.id=a.template_id
+              union all select a.page_id,a.slot,a.sort_order,'feed',a.id,a.is_visible,t.status,t.slug,t.config
+                from public.page_feed_module_assignments a join public.feed_module_templates t on t.id=a.template_id
+              union all select a.page_id,a.slot,a.sort_order,'featured',a.id,a.is_visible,t.status,t.slug,t.config
+                from public.page_featured_module_assignments a join public.featured_module_templates t on t.id=a.template_id
+              union all select a.page_id,a.slot,a.sort_order,'media-sidebar',a.id,a.is_visible,t.status,t.slug,t.config
+                from public.page_media_sidebar_module_assignments a join public.media_sidebar_module_templates t on t.id=a.template_id
+              union all select a.page_id,a.slot,a.sort_order,'media-hub',a.id,a.is_visible,t.status,t.slug,t.config
+                from public.page_media_hub_module_assignments a join public.media_hub_module_templates t on t.id=a.template_id
+              union all select a.target_id,'hero',greatest(0,1000-coalesce(a.priority,1000)),'hero',a.id,a.is_active,
+                t.status,t.slug,t.config
+                from public.hero_assignments a join public.hero_templates t on t.id=a.hero_id where a.target_type='page'
+            ) source where source.page_id=any($1::integer[])`, [pageIds]);
+          for (const pageId of pageIds) {
+            const regionKeys = regions.rows
+              .filter((row: Record<string, unknown>) => Number(row.page_id) === pageId)
+              .map((row: Record<string, unknown>) => String(row.key));
+            const parts = sources.rows.flatMap((source: Record<string, unknown>) => {
+              const moduleKind = String(source.module_kind);
+              if (Number(source.page_id) !== pageId
+                || !owner.isPageModulePubliclyVisible(source.assignment_visible,
+                  source.template_status as string | null | undefined)
+                || (moduleKind === "content"
+                  && owner.isRetiredContentBlockTemplateSlug(String(source.template_slug ?? "")))) return [];
+              const content = owner.extractPageBlockSeoText(source.config);
+              return content ? [{
+                content,
+                slot: owner.normalizeLayoutSlot(source.slot as string | null | undefined),
+                sortOrder: Number(source.sort_order),
+                moduleKind,
+                assignmentId: Number(source.assignment_id),
+              }] : [];
+            });
+            pageSemanticContent.set(pageId, owner.buildPageSeoSemanticContent(parts, regionKeys));
+          }
+        }
         for (const row of batch.rows) {
           counts.scanned++;
           try {
-            const input = entity === "topics" ? owner.toTopicSeoScoreInput(row) : owner.toProjectSeoScoreInput(row);
+            const input = entity === "topics" ? owner.toTopicSeoScoreInput(row)
+              : entity === "projects" ? owner.toProjectSeoScoreInput(row)
+                : owner.toPageSeoScoreInput({ ...row, semanticContent: pageSemanticContent.get(Number(row.id)) ?? "" });
             const derived = owner.deriveEntitySeoScore(input, verify || options.recalculate ? undefined : row);
             const unchanged = owner.PERSISTED_ENTITY_SEO_FIELDS.every((field) => row[field] === derived[field as keyof PersistedEntitySeoScore]);
             if (verify || options.recalculate || !unchanged) counts.calculated++;
@@ -270,15 +350,20 @@ export async function runEntitySeoBackfill(options: EntitySeoBackfillOptions): P
             else if (write) {
               // A concurrent SEO edit cannot receive a score from this snapshot.
               // Updating only the derived tuple preserves editorial timestamps.
-              const written = await client.query(
-                `update public.${entity} entity set seo_score=$1, seo_score_version=$2, seo_score_input_hash=$3
-                 where id=$4 and public.entity_seo_score_input_hash($5, to_jsonb(entity))=$3 returning id`,
-                [derived.seo_score, derived.seo_score_version, derived.seo_score_input_hash, row.id, entity],
-              );
+              const written = entity === "pages"
+                ? await client.query(
+                  "update public.pages set seo_score=$1,seo_score_version=$2,seo_score_input_hash=$3 where id=$4 returning id",
+                  [derived.seo_score, derived.seo_score_version, derived.seo_score_input_hash, row.id],
+                )
+                : await client.query(
+                  `update public.${entity} entity set seo_score=$1, seo_score_version=$2, seo_score_input_hash=$3
+                   where id=$4 and public.entity_seo_score_input_hash($5, to_jsonb(entity))=$3 returning id`,
+                  [derived.seo_score, derived.seo_score_version, derived.seo_score_input_hash, row.id, entity],
+                );
               if (written.rowCount === 1) counts.written++;
               else { counts.conflicted++; counts.unresolved++; }
             }
-            else counts.unresolved++;
+            else counts.wouldWrite++;
           } catch {
             counts.failed++;
             counts.unresolved++;
@@ -319,8 +404,10 @@ export async function runEntitySeoBackfill(options: EntitySeoBackfillOptions): P
     if (options.production && !options.apply && !options.verify) {
       report.dryRunReceipt = { kind: "entity-seo-production-dry-run", ...receiptIdentity, scopes, failed: 0, conflicted: 0 };
     }
+    if (pageTransaction) await client.query("commit");
     return report;
   } catch (error) {
+    try { await client.query("rollback"); } catch { /* the sanitized report remains authoritative */ }
     if (error instanceof EntitySeoBackfillBlocked) throw error;
     // Connection/SQL/validation errors can contain credentials or source text.
     // Never include them, even as Error.cause, in the execution artifact.
@@ -357,6 +444,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const report = await runEntitySeoBackfill({
     connectionString, expectedDatabase,
     apply: args.includes("--apply"), verify: args.includes("--verify"), recalculate: args.includes("--recalculate"),
+    entities: args.flatMap((arg, index) => arg === "--entity" ? [args[index + 1] as Entity] : [])
+      .filter((entity): entity is Entity => ["topics", "projects", "pages"].includes(entity)),
     ...(production ? { production: {
       confirmation: value("--confirm") as EntitySeoProductionBackfill["confirmation"],
       projectRef: value("--project-ref") ?? "", expectedHost: value("--host") ?? "",
@@ -371,7 +460,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   } catch (error) {
     console.error(JSON.stringify(error instanceof EntitySeoBackfillBlocked
       ? { counts: error.report.counts, entities: error.report.entities, complete: false, readyForEnforcement: false }
-      : { counts: { targeted: 0, calculated: 0, written: 0, unchanged: 0, conflicted: 0, failed: 1, unresolved: 1 }, complete: false, readyForEnforcement: false }));
+      : { counts: { targeted: 0, calculated: 0, written: 0, unchanged: 0, wouldWrite: 0, conflicted: 0, failed: 1, unresolved: 1 }, complete: false, readyForEnforcement: false }));
     process.exitCode = 1;
   }
 }

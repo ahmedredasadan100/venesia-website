@@ -48,10 +48,8 @@ export const ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE = {
     contract: "src/lib/seo/entity-seo-types.ts",
     adoption: "src/lib/admin/seo/entity-seo-persistence.ts",
     backfill: "scripts/backfill-entity-seo-scores.mts",
-    globalClosed: false,
-    blockers: [
-      "page-seo:production-migration-and-existing-row-backfill-not-authorized",
-    ],
+    globalClosed: true,
+    blockers: [],
   },
 } as const;
 
@@ -133,8 +131,7 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
       inputAdapter: "toPageSeoScoreInput",
       writeOwners: ["src/app/admin/pages-blocks/pages/page-seo-actions.ts"],
       readOwners: ["src/lib/admin/pages/entity-list-adapter.ts"],
-      backfillEligible: false,
-      backfillReason: "Existing Production Page rows cannot be populated until the approved schema migration is deployed and a concurrency-safe Page Composition snapshot backfill is separately authorized.",
+      backfillEligible: true,
     },
     label: "Per-page SEO overrides",
     surfaceKind: "entity_seo_editor",
