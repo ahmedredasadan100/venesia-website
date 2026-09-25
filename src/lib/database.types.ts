@@ -3649,6 +3649,16 @@ export type Database = {
         }
         Returns: Json
       }
+      admin_mutate_topics_batch_atomically: {
+        Args: {
+          p_actor_id: number
+          p_action: string
+          p_topic_ids: number[]
+          p_category_id?: number | null
+          p_expected_deleted_count?: number | null
+        }
+        Returns: Json
+      }
       admin_publish_topics_atomically: {
         Args: { p_actor_id: number; p_topics: Json }
         Returns: Json

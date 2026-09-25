@@ -27,7 +27,7 @@ import {
   type AdminMetricCardsGridItem,
 } from "../ui";
 import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
-import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
+import { withAdminActionSettledResult, type AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminContentCategoryNode } from "../../../lib/admin/content/category-hierarchy";
 import { mapTopicsActionResultToFeedback } from "../../../lib/admin/content/topics-action-feedback";
 import {
@@ -143,7 +143,7 @@ export default function TopicsListClient({
       let actionResult: AdminActionResult | null = null;
 
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "visibility",
           optimistic: (cache) => {
@@ -181,7 +181,7 @@ export default function TopicsListClient({
             );
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return unexpectedMutationFailure(error, {
@@ -206,7 +206,7 @@ export default function TopicsListClient({
       let actionResult: AdminActionResult | null = null;
 
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "featured",
           optimistic: (cache) => {
@@ -222,7 +222,7 @@ export default function TopicsListClient({
           },
           execute: async () => {
             actionResult = await toggleUnifiedContentFeatured(
-              topicActionFormData(row.id),
+              topicActionFormData(row.id, { desired_featured: String(nextFeatured) }),
             );
             return toInstantMutationResult(
               actionResult,
@@ -244,7 +244,7 @@ export default function TopicsListClient({
             );
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return unexpectedMutationFailure(error, {
@@ -268,7 +268,7 @@ export default function TopicsListClient({
       let actionResult: AdminActionResult | null = null;
 
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "duplicate",
           optimistic: () => undefined,
@@ -282,7 +282,7 @@ export default function TopicsListClient({
             );
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return unexpectedMutationFailure(error, {
@@ -306,7 +306,7 @@ export default function TopicsListClient({
       let actionResult: AdminActionResult | null = null;
 
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "delete",
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
@@ -320,7 +320,7 @@ export default function TopicsListClient({
             );
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return unexpectedMutationFailure(error, {
@@ -344,7 +344,7 @@ export default function TopicsListClient({
       let actionResult: AdminActionResult | null = null;
 
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "restore",
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
@@ -358,7 +358,7 @@ export default function TopicsListClient({
             );
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return unexpectedMutationFailure(error, {
@@ -382,7 +382,7 @@ export default function TopicsListClient({
       let actionResult: AdminActionResult | null = null;
 
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "permanent_delete",
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
@@ -396,7 +396,7 @@ export default function TopicsListClient({
             );
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return unexpectedMutationFailure(error, {
@@ -446,7 +446,7 @@ export default function TopicsListClient({
     ): Promise<AdminActionResult> => {
       let actionResult: AdminActionResult | null = null;
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           action: `bulk-${action}`,
           bulk: true,
           optimistic: () => undefined,
@@ -467,7 +467,7 @@ export default function TopicsListClient({
             );
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return {

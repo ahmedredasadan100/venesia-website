@@ -16,7 +16,7 @@ import {
 } from "../../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
-import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import { withAdminActionSettledResult, type AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import {
   CATEGORIES_DEFAULT_COLUMN_KEYS,
 } from "../../../../lib/admin/content/categories-list-config";
@@ -322,7 +322,7 @@ export default function CategoriesListClient({
     ): Promise<AdminActionResult> => {
       let actionResult: AdminActionResult | null = null;
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: category.id,
           action,
           optimistic: (cache) => cache.removeRows(new Set([category.id])),
@@ -344,7 +344,7 @@ export default function CategoriesListClient({
                 };
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return {
@@ -370,7 +370,7 @@ export default function CategoriesListClient({
     async (action: string, ids: number[]): Promise<AdminActionResult> => {
       let actionResult: AdminActionResult | null = null;
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           action: `bulk-${action}`,
           bulk: true,
           optimistic: () => undefined,
@@ -396,7 +396,7 @@ export default function CategoriesListClient({
                 };
           },
         });
-        if (actionResult) return actionResult;
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
         return {

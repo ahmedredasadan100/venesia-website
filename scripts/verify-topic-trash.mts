@@ -38,6 +38,7 @@ const contract = read(
 );
 const loader = read("src/lib/admin/content/load-unified-content.ts");
 const actions = read("src/app/admin/content/topics/actions.ts");
+const atomicSql = read("sql/migrations/20260925200723_topics_batch_atomic_current_state.sql");
 const rowActions = read(
   "src/components/admin/content/UnifiedContentRowActions.tsx",
 );
@@ -126,9 +127,10 @@ check(
 check(
   "Restore only targets deleted Topics and restores them unpublished",
   restoreOwner.includes("loadDeletedTopics(input.ids)") &&
-    restoreOwner.includes('.not("deleted_at", "is", null)') &&
-    restoreOwner.includes('status: "unpublished"') &&
-    restoreOwner.includes("deleted_at: null"),
+    restoreOwner.includes('action: "restore"') &&
+    atomicSql.includes("p_action = 'restore' and topic.deleted_at is not null") &&
+    atomicSql.includes("when p_action = 'restore' then null") &&
+    atomicSql.includes("'unpublished' else topic.status end"),
 );
 check(
   "Restore blocks a conflicting active slug with a clear domain result",
@@ -141,8 +143,9 @@ check(
   purgeAction.includes('getString(formData, "confirm_permanent") !== "true"') &&
     purgeAction.includes("permanentlyDeleteTopicsWithCanonicalOwner") &&
     purgeOwner.includes("loadDeletedTopics(input.ids)") &&
-    purgeOwner.includes(".delete()") &&
-    purgeOwner.includes('.not("deleted_at", "is", null)'),
+    purgeOwner.includes('action: input.scope === "empty_trash" ? "empty_trash" : "permanent_delete"') &&
+    atomicSql.includes("delete from public.topics as topic") &&
+    atomicSql.includes("topic.deleted_at is not null"),
 );
 check(
   "Permanent delete releases the slug and delegates media cleanup",
@@ -171,7 +174,8 @@ check(
     emptyTrashAction.includes("topics.length !== expectedCount") &&
     emptyTrashAction.includes('scope: "empty_trash"') &&
     purgeOwner.includes("expectedTotalDeletedCount") &&
-    purgeOwner.includes('.not("deleted_at", "is", null)'),
+    atomicSql.includes("lock table public.topics in share row exclusive mode") &&
+    atomicSql.includes("p_expected_deleted_count"),
 );
 check(
   "Restore and permanent delete use the existing Topic audit owner",

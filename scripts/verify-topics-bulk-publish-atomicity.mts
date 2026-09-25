@@ -613,7 +613,7 @@ const actions = read(ACTION_PATH);
 const publishBranch = sourceSection(
   actions,
   'if (action === "publish")',
-  '} else if (action === "unpublish")',
+  '} else if (',
 );
 assert.doesNotMatch(
   publishBranch,
@@ -966,10 +966,14 @@ const expectedDynamicTopicWriters = [
 ];
 assert.deepEqual(actualDynamicTopicWriters, expectedDynamicTopicWriters);
 
+const genericAtomicMigration = read("sql/migrations/20260925200723_topics_batch_atomic_current_state.sql");
+assert.match(actions, /admin_mutate_topics_batch_atomically/u);
+assert.match(genericAtomicMigration, /create function public\.admin_mutate_topics_batch_atomically\(/u);
+assert.match(genericAtomicMigration, /topics_batch_atomic_membership_mismatch/u);
 const expectedDirectWriters = new Map<string, TopicMutationOperation[]>([
   [
     "src/app/admin/content/topics/actions.ts",
-    ["delete", "insert", "update", "update", "update", "update", "update"],
+    ["insert", "update", "update", "update"],
   ],
   ["src/app/admin/content/topics/article-actions/create-domain.ts", ["insert"]],
   ["src/app/admin/content/topics/article-actions/save.ts", ["update"]],
@@ -1055,7 +1059,6 @@ for (const [startToken, endToken] of [
   ["export async function toggleUnifiedContentFeatured", "async function createUniqueCopySlug"],
   ["export async function duplicateUnifiedContent", "export async function softDeleteUnifiedContent"],
   ["export async function softDeleteUnifiedContent", "async function restoreTopicsWithCanonicalOwner"],
-  ["async function restoreTopicsWithCanonicalOwner", "async function permanentlyDeleteTopicsWithCanonicalOwner"],
 ] as const) {
   assert.match(
     sourceSection(actions, startToken, endToken),
@@ -1063,10 +1066,7 @@ for (const [startToken, endToken] of [
     `${startToken} must advance the Topic revision.`,
   );
 }
-assert.match(
-  sourceSection(actions, "export async function bulkUpdateUnifiedContent"),
-  /updated_at\s*:\s*now/u,
-);
+assert.match(genericAtomicMigration, /updated_at\s*=\s*v_now/u);
 
 const activeSqlTopicWriters = new Map(
   [...sqlFunctions.entries()].filter(([, source]) =>
@@ -1078,6 +1078,7 @@ const activeSqlTopicWriters = new Map(
 assert.deepEqual(
   [...activeSqlTopicWriters.keys()].sort(),
   [
+    "admin_mutate_topics_batch_atomically",
     "admin_publish_topics_atomically",
     "admin_update_topic_category",
     "admin_update_topic_series",
@@ -1087,6 +1088,7 @@ assert.deepEqual(
 );
 
 for (const name of [
+  "admin_mutate_topics_batch_atomically",
   "admin_publish_topics_atomically",
   "admin_update_topic_category",
   "admin_update_topic_series",

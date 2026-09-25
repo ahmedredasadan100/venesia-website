@@ -162,7 +162,7 @@ export function useAdminEntityInstantMutation<
         await queryClient.invalidateQueries({
           queryKey: adminEntityListQueryKeys.entity(entity),
           refetchType: "active",
-        });
+        }, { throwOnError: true });
       } catch (error) {
         result.feedbackStatus = "warning";
         result.message += " تعذر إعادة القراءة؛ أعد تحديث القائمة للتحقق من النتيجة المحفوظة.";

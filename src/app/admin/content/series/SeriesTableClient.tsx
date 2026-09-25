@@ -16,7 +16,7 @@ import {
 } from "../../../../components/admin/ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import type { AdminActionFeedback } from "../../../../lib/admin/admin-action-feedback";
-import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import { withAdminActionSettledResult, type AdminActionResult } from "../../../../lib/admin/admin-action-result";
 import { SERIES_DEFAULT_COLUMN_KEYS } from "../../../../lib/admin/content/series-list-config";
 import {
   seriesQueryContract,
@@ -244,7 +244,7 @@ export default function SeriesTableClient({
     ): Promise<AdminActionResult> => {
       const resultHolder: { current?: AdminActionResult } = {};
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action,
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
@@ -267,7 +267,7 @@ export default function SeriesTableClient({
                 };
           },
         });
-        if (resultHolder.current) return resultHolder.current;
+        if (resultHolder.current) return withAdminActionSettledResult(resultHolder.current, settledResult);
       } catch (error) {
         if (resultHolder.current) return resultHolder.current;
         return {
