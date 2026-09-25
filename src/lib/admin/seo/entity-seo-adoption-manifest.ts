@@ -22,10 +22,12 @@ export type AdminEntitySeoAdoptionEntry = {
   rationale: string;
   persistedScore?: {
     status: "adopted" | "gap";
-    table?: "topics" | "projects";
+    table?: "topics" | "projects" | "pages";
     inputAdapter?: string;
     writeOwners?: readonly string[];
     readOwners?: readonly string[];
+    backfillEligible?: boolean;
+    backfillReason?: string;
     reason?: string;
   };
 };
@@ -48,8 +50,7 @@ export const ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE = {
     backfill: "scripts/backfill-entity-seo-scores.mts",
     globalClosed: false,
     blockers: [
-      "page-seo:canonical-semantic-content-resolver",
-      "project-seo:create-duplicate-verification-blocked-by-existing-required-code-insert",
+      "page-seo:production-migration-and-existing-row-backfill-not-authorized",
     ],
   },
 } as const;
@@ -104,7 +105,9 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
         "src/app/admin/projects/project-actions/duplicate.ts",
         "src/lib/admin/projects/project-duplicate-seo.ts",
       ],
-      readOwners: [],
+      readOwners: [
+        "src/lib/admin/projects/project-entry-data.ts",
+      ],
     },
     label: "Project create and edit SEO",
     surfaceKind: "entity_seo_editor",
@@ -125,8 +128,13 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
   {
     id: "page-seo",
     persistedScore: {
-      status: "gap",
-      reason: "The current Page Block config extractor covers five authored module kinds, not all resolved public semantic content or metadata. Feed, Featured and other dynamic sources plus navigation-derived Breadcrumb labels require a canonical semantic resolver before atomic Page SEO adoption; template names are never a substitute.",
+      status: "adopted",
+      table: "pages",
+      inputAdapter: "toPageSeoScoreInput",
+      writeOwners: ["src/app/admin/pages-blocks/pages/page-seo-actions.ts"],
+      readOwners: ["src/lib/admin/pages/entity-list-adapter.ts"],
+      backfillEligible: false,
+      backfillReason: "Existing Production Page rows cannot be populated until the approved schema migration is deployed and a concurrency-safe Page Composition snapshot backfill is separately authorized.",
     },
     label: "Per-page SEO overrides",
     surfaceKind: "entity_seo_editor",
@@ -134,6 +142,8 @@ export const ADMIN_ENTITY_SEO_ADOPTION_MANIFEST = [
     sourceFiles: [
       "src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx",
       "src/app/admin/pages-blocks/pages/page-seo-actions.ts",
+      "src/lib/page-blocks/admin-queries.ts",
+      "src/lib/admin/pages/entity-list-adapter.ts",
     ],
     surfaces: ["page:edit"],
     rationale:

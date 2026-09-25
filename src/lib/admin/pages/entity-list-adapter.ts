@@ -1,10 +1,7 @@
 import "server-only";
 
-import { analyzeEntitySeo, sortRowsBySeoScore } from "../seo-score";
 import type { AdminEntityListAdapter } from "../entity-list/data-engine/adapter";
-import {
-  type AdminEntityListQuery,
-} from "../entity-list/data-engine/contracts";
+import { type AdminEntityListQuery } from "../entity-list/data-engine/contracts";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   legacyPageSortFields,
@@ -56,93 +53,21 @@ async function loadPagesReadModelPage(
   if (error) throw new PagesEntityListDatabaseError(error);
 
   return adaptPagesReadModel(data, {
-    analyzeSeo: analyzeEntitySeo,
     legacySortFields: legacyPageSortFields,
     extendedSortFields: pageSortFields,
   });
 }
 
-async function loadSeoSortedPagesReadModel(
-  query: AdminEntityListQuery<PageFilters, PageSortField>,
-): Promise<AdaptedPagesReadModel> {
-  const batchSize = pagesQueryContract.maxPageSize;
-  const firstBatch = await loadPagesReadModelPage({
-    page: 1,
-    pageSize: batchSize,
-    sortField: "id",
-    sortDirection: "asc",
-    search: query.search,
-  });
-
-  if (firstBatch.metrics.readModelContractVersion < 2) {
-    return loadPagesReadModelPage({
-      page: query.page,
-      pageSize: query.pageSize,
-      sortField: "id",
-      sortDirection: "asc",
-      search: query.search,
-    });
-  }
-
-  const totalRows = firstBatch.totalRows;
-  const sourceRows = [...firstBatch.rows];
-  const totalBatches = Math.ceil(totalRows / batchSize);
-
-  for (let page = 2; page <= totalBatches; page += 1) {
-    const batch = await loadPagesReadModelPage({
-      page,
-      pageSize: batchSize,
-      sortField: "id",
-      sortDirection: "asc",
-      search: query.search,
-    });
-    if (
-      batch.metrics.readModelContractVersion < 2 ||
-      batch.totalRows !== totalRows
-    ) {
-      throw new Error(
-        "The complete Pages SEO sorting source changed while it was being read.",
-      );
-    }
-    sourceRows.push(...batch.rows);
-  }
-
-  const uniqueRows = new Map(sourceRows.map((row) => [row.id, row]));
-  if (uniqueRows.size !== totalRows) {
-    throw new Error("The complete Pages SEO sorting source could not be read.");
-  }
-
-  const totalPages = Math.max(1, Math.ceil(totalRows / query.pageSize));
-  const page = Math.min(Math.max(query.page, 1), totalPages);
-  const from = (page - 1) * query.pageSize;
-  const sortedRows = sortRowsBySeoScore(
-    [...uniqueRows.values()],
-    query.sort.direction,
-    (row) => row.seoScore,
-    (row) => row.id,
-  );
-
-  return {
-    rows: sortedRows.slice(from, from + query.pageSize),
-    totalRows,
-    page,
-    metrics: firstBatch.metrics,
-  };
-}
-
 export async function loadPagesEntityListResult(
   query: AdminEntityListQuery<PageFilters, PageSortField>,
 ) {
-  const readModel =
-    query.sort.field === "seo"
-      ? await loadSeoSortedPagesReadModel(query)
-      : await loadPagesReadModelPage({
-          page: query.page,
-          pageSize: query.pageSize,
-          sortField: query.sort.field,
-          sortDirection: query.sort.direction,
-          search: query.search,
-        });
+  const readModel = await loadPagesReadModelPage({
+    page: query.page,
+    pageSize: query.pageSize,
+    sortField: query.sort.field,
+    sortDirection: query.sort.direction,
+    search: query.search,
+  });
   const totalRows = readModel.totalRows;
   const totalPages = Math.max(1, Math.ceil(totalRows / query.pageSize));
   const page = readModel.page;

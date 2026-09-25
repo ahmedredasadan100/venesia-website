@@ -19,9 +19,12 @@ export {
   togglePageStatus,
   updateHeroPageAssignment,
   updatePageBlockAssignment,
+  savePageLayout,
+  selectPageLayout,
 } from "./page-actions/index";
 
 export type {
   CreatePageFormActionState,
 } from "./page-actions/index";
 export type { PagesTableResult } from "./page-actions/types";
+export type { PageLayoutActionResult, PageLayoutRegionInput } from "./page-actions/page-layout";

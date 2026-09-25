@@ -24,6 +24,7 @@ function assert(condition, message) {
 const layout = read("src/components/page-composition/PageSlotLayout.tsx");
 const plan = read("src/components/page-composition/build-slot-render-plan.ts");
 const nodes = read("src/components/page-composition/slot-module-nodes.tsx");
+const presentationContract = read("src/components/page-composition/slot-module-presentation-contract.ts");
 const mediaHubPlan = read("src/lib/media-hub-modules/build-media-hub-render-plan.ts");
 const orderContract = read("src/lib/page-composition/page-assignment-contract.ts");
 const compositionLoader = read("src/lib/page-blocks/load-page-composition.ts");
@@ -39,28 +40,28 @@ assert(
   !layout.includes("blocks={[entry.block]}"),
   "PageSlotLayout must not render singleton block arrays (breaks peer composites)",
 );
-assert(plan.includes("SLOT_COMPOSITE_RELATIONSHIPS"), "Composite relationships catalog missing");
-assert(plan.includes("contact-office-form"), "Contact composite relationship missing");
+assert(nodes.includes("VENISIA_SLOT_COMPOSITE_RELATIONSHIPS"), "Venisia composite relationships catalog missing");
+assert(nodes.includes("contact-office-form"), "Contact composite relationship missing");
 assert(
   !plan.includes("about-intro-beats") && !plan.includes("about-documentary-beats"),
   "Content composition must not declare a Cards template as an About intro data peer",
 );
 assert(nodes.includes('slug === "contact-form-office" || slug === "contact-form"'), "Contact pairing missing");
 assert(
-  plan.includes("buildAdjacentContactFormPairs(composableEntries)") &&
-    plan.includes("const next = ordered[index + 1]") &&
-    plan.includes('current.kind !== "block" || next.kind !== "block"'),
-  "Contact pairs must be derived from adjacency in the composable canonical sequence below fixed Hero",
+  nodes.includes("buildAdjacentContactFormPairs(orderedEntries)") &&
+    nodes.includes("const next = ordered[index + 1]") &&
+    nodes.includes('current.kind !== "block" || next.kind !== "block"'),
+  "Venisia Contact pairs must be derived from adjacency in the composable canonical sequence below fixed Hero",
 );
 assert(
-  plan.includes('currentSlug === "contact-form-office" && nextSlug === "contact-form"') &&
-    plan.includes('currentSlug === "contact-form" && nextSlug === "contact-form-office"') &&
-    plan.includes("index += 1"),
+  nodes.includes('currentSlug === "contact-form-office" && nextSlug === "contact-form"') &&
+    nodes.includes('currentSlug === "contact-form" && nextSlug === "contact-form-office"') &&
+    nodes.includes("index += 1"),
   "Only complementary adjacent Contact halves may pair, one-to-one",
 );
 assert(
   nodes.includes("contactFormPairs: readonly ContactFormPair[] = []") &&
-    plan.includes("buildSlotModuleNodes(blocks, context, contactFormPairs)"),
+    plan.includes("presentation.buildNodes({"),
   "The full-sequence Contact pairing decision must reach the Page Block renderer",
 );
 assert(
@@ -83,7 +84,8 @@ assert(
 assert(nodes.includes("assignmentId: block.assignmentId"), "Every slot module node must retain Assignment identity");
 assert(nodes.includes("moduleKind: block.blockType"), "Every Page Block node must retain its canonical module kind");
 assert(nodes.includes("comparePageAssignmentOrder"), "Page Block nodes must consume the canonical cross-kind comparator");
-assert(plan.includes("buildSlotModuleNodes(blocks"), "Plan must batch blocks into buildSlotModuleNodes after full-sequence pairing");
+assert(plan.includes("presentation.buildNodes({"), "Plan must delegate branded template presentation through the Theme contract");
+assert(!plan.includes('contact-form-office') && !plan.includes('contact-form"'), "Shared render plan must not know Venisia template names");
 assert(plan.includes('kind: "feed"'), "Plan must keep feed items separate");
 assert(
   plan.includes('const composableEntries = entries.filter((entry) => entry.kind !== "hero")') &&
@@ -98,9 +100,9 @@ assert(!plan.includes("key.localeCompare"), "Final slot plan must not use lexico
 assert(mediaHubPlan.includes("comparePageAssignmentOrder"), "Media Hub plan must consume the canonical comparator");
 assert(!mediaHubPlan.includes("sectionKey.localeCompare"), "Media Hub ties must not use section-key ordering");
 assert(
-  orderContract.includes("left.sortOrder - right.sortOrder") &&
-    orderContract.includes("left.moduleKind.localeCompare(right.moduleKind)") &&
-    orderContract.includes("left.assignmentId - right.assignmentId"),
+  orderContract.includes("first.sortOrder - second.sortOrder") &&
+    orderContract.includes("first.moduleKind.localeCompare(second.moduleKind)") &&
+    orderContract.includes("first.assignmentId - second.assignmentId"),
   "Canonical ordering must be sortOrder -> moduleKind -> numeric assignmentId",
 );
 for (const [source, owner] of [
@@ -170,7 +172,7 @@ assert(
 
 assert(
   compositionTypes.includes("export type ListingRenderContext") &&
-    nodes.includes("listingContext?: ListingRenderContext") &&
+    presentationContract.includes("listingContext?: ListingRenderContext") &&
     mediaHubRenderer.includes("listingContext?: ListingRenderContext"),
   "Topics and Media Listing must share one ListingRenderContext owner",
 );

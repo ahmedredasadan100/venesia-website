@@ -21,7 +21,10 @@ const gaps = eligible.filter((entry) => entry.persistedScore?.status === "gap");
 const closureBlockers: readonly string[] = ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE.persistedScore.blockers;
 assert.equal(ADMIN_ENTITY_SEO_PRESENTATION_CLOSURE.persistedScore.globalClosed,
   gaps.length === 0 && closureBlockers.length === 0);
-assert.deepEqual(gaps.map((entry) => entry.id), ["page-seo"]);
+assert.deepEqual(gaps.map((entry) => entry.id), []);
+assert.deepEqual(closureBlockers, [
+  "page-seo:production-migration-and-existing-row-backfill-not-authorized",
+]);
 
 for (const entry of eligible) {
   const adoption = entry.persistedScore;
@@ -66,6 +69,17 @@ assert.deepEqual(owner.deriveEntitySeoScore(input, { ...score, seo_score_version
 assert.deepEqual(owner.toTopicSeoScoreInput({ ...row, faq: [{ question: "أين؟", answer: "هنا" }] }), input);
 assert.deepEqual(input.seoKeywords, row.seo_keywords, "The canonical input preserves the editor's keywords; normalization remains in analyzeEntitySeo.");
 assert.notEqual(owner.deriveEntitySeoScore({ ...input, slug: "venisia-copy" }).seo_score_input_hash, score.seo_score_input_hash);
+const pageInput = owner.toPageSeoScoreInput({
+  title: "صفحة فينيسيا", path: "/about", semanticContent: "محتوى مؤلف ظاهر",
+  seo_title: "صفحة فينيسيا", seo_description: "وصف الصفحة", seo_keywords: ["فينيسيا"],
+  focus_keyword: "فينيسيا", og_image: "/page.webp", og_image_alt: "صفحة فينيسيا",
+});
+const pageScore = owner.deriveEntitySeoScore(pageInput);
+assert.ok(isPersistedEntitySeoScore(pageScore));
+assert.notEqual(
+  owner.deriveEntitySeoScore({ ...pageInput, content: "محتوى مؤلف متغير" }).seo_score_input_hash,
+  pageScore.seo_score_input_hash,
+);
 assert.equal(owner.entitySeoInputHash(owner.toTopicSeoScoreInput({ ...row, ...{ is_featured: true, status: "published", views_count: 100 } })), score.seo_score_input_hash);
 assert.equal(owner.toTopicSeoScoreInput({ ...row, content_type: "news" }).profile, "entity");
 assert.equal(owner.entitySeoInputHash(owner.toTopicSeoScoreInput({ ...row, content_type: "news" })), owner.entitySeoInputHash(owner.toTopicSeoScoreInput({ ...row, content_type: "press" })));
@@ -91,5 +105,5 @@ assert.match(enforcement, /create constraint trigger projects_entity_seo_score_w
 assert.match(enforcement, /deferrable initially deferred/u);
 assert.doesNotMatch(schema, /analyzeEntitySeo\s*\(|keywordDensity|readinessScore|seoScore\s*\*/u, "SQL must not implement the SEO algorithm.");
 assert.doesNotMatch(enforcement, /analyzeEntitySeo\s*\(|keywordDensity|readinessScore|seoScore\s*\*/u, "Enforcement must not implement a second SEO algorithm.");
-console.log(`Entity SEO persistence: ${eligible.length - gaps.length} adopted surfaces, ${gaps.length} explicit semantic resolver gap; executable ownership, provenance, invariance, failure and isolated-target checks passed.`);
+console.log(`Entity SEO persistence: ${eligible.length - gaps.length} adopted surfaces; Page persistence is source-closed while Production migration/backfill remains explicitly unauthorized; executable ownership, provenance, invariance, failure and isolated-target checks passed.`);
 await verifyEntitySeoBackfill();

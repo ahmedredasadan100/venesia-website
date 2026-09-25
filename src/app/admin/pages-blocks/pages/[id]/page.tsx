@@ -4,7 +4,10 @@ import { AdminFeedbackRegion } from "../../../../../components/admin/AdminFeedba
 import { AdminPageContextHeader, AdminPageExperience } from "../../../../../components/admin/ui";
 import { readAdminColumnPreferences } from "../../../../../lib/admin/preferences/admin-column-preferences";
 import { getPageModuleAssignmentsForAdmin } from "../../../../../lib/page-blocks/admin-queries";
-import { loadPageRegionsForPage } from "../../../../../lib/page-composition/load-page-regions";
+import {
+  loadPageCompositionLayouts,
+  loadPageRegionsForPage,
+} from "../../../../../lib/page-composition/load-page-regions";
 import { getPageCompositionColumnPreferenceConfig } from "../../../../../lib/page-blocks/admin-collection-columns";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import { getGlobalSeoDefaults } from "../../../../../lib/seo/global-seo-defaults";
@@ -21,7 +24,7 @@ type PageProps = {
 };
 
 function resolveInitialTabId(tab: string | undefined, hasSeoFeedback: boolean) {
-  if (tab === "seo" || tab === "map" || tab === "modules") return tab;
+  if (tab === "seo" || tab === "layout" || tab === "map" || tab === "modules") return tab;
   if (hasSeoFeedback) return "seo";
   return "modules";
 }
@@ -60,10 +63,10 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
     notFound();
   }
 
-  const [pageResult, preference, assignmentsResult, globalSeo] = await Promise.all([
+  const [pageResult, preference, assignmentsResult, globalSeo, layoutsResult] = await Promise.all([
     getSupabaseAdmin()
       .from("pages")
-      .select("id,title,slug,path,page_type,status,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt")
+      .select("id,title,slug,path,page_type,status,layout_id,seo_title,seo_description,focus_keyword,seo_keywords,canonical_url,robots_index,robots_follow,og_image,og_image_alt")
       .eq("id", pageId)
       .maybeSingle(),
     readAdminColumnPreferences(
@@ -73,6 +76,9 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       .then((data) => ({ data, error: null }))
       .catch((error: unknown) => ({ data: null, error })),
     loadGlobalSeoSettings().catch(() => getGlobalSeoDefaults()),
+    loadPageCompositionLayouts()
+      .then((data) => ({ data, error: null }))
+      .catch((error: unknown) => ({ data: null, error })),
   ]);
   const { data: page, error: pageError } = pageResult;
 
@@ -107,6 +113,12 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       />
     );
   }
+  if (layoutsResult.error || !layoutsResult.data) {
+    const message = layoutsResult.error instanceof Error
+      ? layoutsResult.error.message
+      : "خطأ غير معروف";
+    return <PageCompositionLoadError title={`تكوين ${page.title}`} message={message} />;
+  }
 
   const assignmentsData = assignmentsResult.data;
   const resolvedSeoFallback = resolveSeoMetadata(
@@ -124,6 +136,8 @@ export default async function PageBlocksDetailsPage({ params, searchParams }: Pa
       returnTo={resolveAdminFormReturnPath(resolvedSearchParams?.return_to, "/admin/pages-blocks/pages")}
       page={page}
       regions={layout.regions}
+      layouts={layoutsResult.data}
+      currentLayoutId={page.layout_id}
       assignments={assignmentsData.assignments}
       initialContentTemplates={assignmentsData.initialContentTemplates}
       seo={{

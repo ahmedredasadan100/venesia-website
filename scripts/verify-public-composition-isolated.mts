@@ -23,6 +23,7 @@ await runIsolatedSupabase({
   async handoff(handle) {
     const migration = await runApplicationHandoff(handle);
     assert.equal(migration.status, "complete");
+    const seo = loadEntitySeoPersistenceOwner();
     handle.record("public-composition-migrations", { status: "pass", registered: migration.registered });
     if (process.argv.includes("--browser")) {
       await handle.preparePublicVerification();
@@ -83,6 +84,246 @@ await runIsolatedSupabase({
     });
     handle.record("public-composition-regions", { legacyCompatible: true, arbitraryRegion: true, crossLayoutRejected: true });
 
+    const actor = await handle.query("select id,username from public.admin_users where is_active order by id limit 1");
+    assert.equal(actor.rows.length, 1, "The isolated baseline must provide an active Admin actor.");
+    const actorId = Number(actor.rows[0].id);
+    const actorUsername = String(actor.rows[0].username);
+    const managedPage = await handle.query(`insert into public.pages(title,slug,path,status)
+      values ('F03 F07 isolated page','f03-f07-isolated','/f03-f07-isolated','published') returning id`);
+    const managedPageId = Number(managedPage.rows[0].id);
+    const mutate = async (operation: string, payload: unknown) => {
+      const result = await handle.query(`select public.mutate_page_composition($1,$2,$3::jsonb,$4,$5) as result`,
+        [managedPageId, operation, JSON.stringify(payload), actorId, actorUsername]);
+      return result.rows[0].result as Record<string, unknown>;
+    };
+    const rejectsSqlState = (operation: Promise<unknown>, state: string) => assert.rejects(
+      operation,
+      (error: unknown) => typeof error === "object" && error !== null && "code" in error && error.code === state,
+    );
+
+    const createdLayout = await mutate("save_layout", {
+      key: "isolated-editorial", admin_label: "Isolated editorial",
+      regions: [
+        { key: "hero", admin_label: "Hero", sort_order: 10 },
+        { key: "story", admin_label: "Story", sort_order: 20 },
+        { key: "rail", admin_label: "Rail", sort_order: 30 },
+      ],
+      assign_page: true,
+    });
+    const managedLayoutId = Number(createdLayout.layout_id);
+    assert.ok(Number.isSafeInteger(managedLayoutId) && managedLayoutId > 0);
+    const layoutReadback = await handle.query(`select l.key,l.admin_label,
+      array_agg(r.key order by r.sort_order) regions,
+      (select layout_id::int from public.pages where id=$1) page_layout_id
+      from public.page_composition_layouts l join public.page_composition_regions r on r.layout_id=l.id
+      where l.id=$2 group by l.id`, [managedPageId, managedLayoutId]);
+    assert.deepEqual(layoutReadback.rows[0], {
+      key: "isolated-editorial", admin_label: "Isolated editorial",
+      regions: ["hero", "story", "rail"], page_layout_id: managedLayoutId,
+    });
+
+    const managedTemplate = await handle.query(`select id from public.content_block_templates order by id limit 1`);
+    assert.equal(managedTemplate.rows.length, 1);
+    const managedTemplateId = Number(managedTemplate.rows[0].id);
+    await handle.query(`update public.content_block_templates
+      set status='published',config='{"title":"Isolated semantic page copy"}'::jsonb where id=$1`, [managedTemplateId]);
+    const assignment = await mutate("save_assignment", {
+      kind: "content", template_id: managedTemplateId, slot: "story", sort_order: 10, is_visible: true,
+    });
+    const managedAssignmentId = Number(assignment.assignment_id);
+    const assignmentReadback = await handle.query(`select assignment.slot,assignment.sort_order,layout.key layout_key
+      from public.page_content_block_assignments assignment
+      join public.pages page on page.id=assignment.page_id
+      join public.page_composition_layouts layout on layout.id=page.layout_id
+      where assignment.id=$1`, [managedAssignmentId]);
+    assert.deepEqual(assignmentReadback.rows[0], {
+      slot: "story", sort_order: 10, layout_key: "isolated-editorial",
+    });
+    await rejectsSqlState(mutate("save_assignment", {
+      kind: "content", assignment_id: managedAssignmentId, template_id: managedTemplateId,
+      slot: "missing-region", sort_order: 10, is_visible: true,
+    }), "23514");
+
+    const incompatibleLayout = await mutate("save_layout", {
+      key: "isolated-incompatible", admin_label: "Incompatible",
+      regions: [{ key: "main", admin_label: "Main", sort_order: 10 }], assign_page: false,
+    });
+    await rejectsSqlState(mutate("select_layout", { layout_id: Number(incompatibleLayout.layout_id) }), "23514");
+    await rejectsSqlState(mutate("save_layout", {
+      layout_id: managedLayoutId, key: "isolated-editorial", admin_label: "Must roll back",
+      regions: [
+        { key: "hero", admin_label: "Hero", sort_order: 10 },
+        { key: "rail", admin_label: "Rail", sort_order: 20 },
+      ], assign_page: false,
+    }), "23514");
+    const rollbackReadback = await handle.query(`select l.admin_label,array_agg(r.key order by r.sort_order) regions
+      from public.page_composition_layouts l join public.page_composition_regions r on r.layout_id=l.id
+      where l.id=$1 group by l.id`, [managedLayoutId]);
+    assert.deepEqual(rollbackReadback.rows[0], {
+      admin_label: "Isolated editorial", regions: ["hero", "story", "rail"],
+    });
+    const reorderedLayout = await mutate("save_layout", {
+      layout_id: managedLayoutId, key: "isolated-editorial", admin_label: "Isolated editorial updated",
+      regions: [
+        { key: "rail", admin_label: "Rail", sort_order: 10 },
+        { key: "story", admin_label: "Story", sort_order: 20 },
+        { key: "hero", admin_label: "Hero", sort_order: 30 },
+      ], assign_page: true,
+    });
+    assert.equal(reorderedLayout.assigned, true);
+    const reorderedReadback = await handle.query(`select array_agg(key order by sort_order) regions
+      from public.page_composition_regions where layout_id=$1`, [managedLayoutId]);
+    assert.deepEqual(reorderedReadback.rows[0].regions, ["rail", "story", "hero"]);
+    const legacyId = await handle.query("select id from public.page_composition_layouts where key='venisia-legacy'");
+    await rejectsSqlState(mutate("save_layout", {
+      layout_id: Number(legacyId.rows[0].id), key: "venisia-legacy", admin_label: "Forbidden",
+      regions: [{ key: "main", admin_label: "Main", sort_order: 10 }], assign_page: false,
+    }), "23514");
+
+    const pageSeoSource = {
+      title: "F03 F07 isolated page", path: "/f03-f07-isolated",
+      semanticContent: "Isolated semantic page copy",
+      seo_title: "Isolated SEO page", seo_description: "Isolated page description",
+      seo_keywords: ["isolated", "page"], focus_keyword: "isolated",
+      og_image: "/isolated-page.webp", og_image_alt: "Isolated page",
+    };
+    const pageScore = seo.deriveEntitySeoScore(seo.toPageSeoScoreInput(pageSeoSource));
+    await handle.query(`update public.pages set seo_title=$1,seo_description=$2,seo_keywords=$3,
+      focus_keyword=$4,og_image=$5,og_image_alt=$6,seo_score=$7,seo_score_version=$8,seo_score_input_hash=$9
+      where id=$10`, [pageSeoSource.seo_title,pageSeoSource.seo_description,pageSeoSource.seo_keywords,
+      pageSeoSource.focus_keyword,pageSeoSource.og_image,pageSeoSource.og_image_alt,
+      pageScore.seo_score,pageScore.seo_score_version,pageScore.seo_score_input_hash,managedPageId]);
+    let pageScoreReadback = await handle.query(`select seo_score,seo_score_version,seo_score_input_hash
+      from public.pages where id=$1`, [managedPageId]);
+    assert.deepEqual(pageScoreReadback.rows[0], pageScore);
+    await handle.query("update public.pages set title='F03 F07 changed title' where id=$1", [managedPageId]);
+    pageScoreReadback = await handle.query(`select seo_score,seo_score_version,seo_score_input_hash
+      from public.pages where id=$1`, [managedPageId]);
+    assert.deepEqual(pageScoreReadback.rows[0], {
+      seo_score: null, seo_score_version: null, seo_score_input_hash: null,
+    });
+    const changedPageScore = seo.deriveEntitySeoScore(seo.toPageSeoScoreInput({
+      ...pageSeoSource, title: "F03 F07 changed title",
+    }));
+    await handle.query(`update public.pages set seo_score=$1,seo_score_version=$2,seo_score_input_hash=$3 where id=$4`,
+      [changedPageScore.seo_score,changedPageScore.seo_score_version,changedPageScore.seo_score_input_hash,managedPageId]);
+    await mutate("save_layout", {
+      layout_id: managedLayoutId, key: "isolated-editorial", admin_label: "Isolated editorial updated",
+      regions: [
+        { key: "story", admin_label: "Story", sort_order: 10 },
+        { key: "rail", admin_label: "Rail", sort_order: 20 },
+        { key: "hero", admin_label: "Hero", sort_order: 30 },
+      ], assign_page: false,
+    });
+    pageScoreReadback = await handle.query(`select seo_score,seo_score_version,seo_score_input_hash
+      from public.pages where id=$1`, [managedPageId]);
+    assert.deepEqual(pageScoreReadback.rows[0], {
+      seo_score: null, seo_score_version: null, seo_score_input_hash: null,
+    });
+    await handle.query(`update public.pages set seo_score=$1,seo_score_version=$2,seo_score_input_hash=$3 where id=$4`,
+      [changedPageScore.seo_score,changedPageScore.seo_score_version,changedPageScore.seo_score_input_hash,managedPageId]);
+    await mutate("save_assignment", {
+      kind: "content", assignment_id: managedAssignmentId, template_id: managedTemplateId,
+      slot: "story", sort_order: 20, is_visible: true,
+    });
+    pageScoreReadback = await handle.query(`select seo_score,seo_score_version,seo_score_input_hash
+      from public.pages where id=$1`, [managedPageId]);
+    assert.deepEqual(pageScoreReadback.rows[0], {
+      seo_score: null, seo_score_version: null, seo_score_input_hash: null,
+    });
+    await rejectsSqlState(handle.query("update public.pages set seo_score=50 where id=$1", [managedPageId]), "23514");
+    const listReadback = await handle.query(`select public.admin_list_pages(1,10,'seo','desc','f03-f07-isolated') result`);
+    const listResult = listReadback.rows[0].result as { contract_version: number; rows: Array<{ id: number }> };
+    assert.equal(listResult.contract_version, 3);
+    assert.equal(listResult.rows[0].id, managedPageId);
+    handle.record("f03-f07-page-proof", {
+      layoutCreated: true, regionsSavedAndReordered: true, assignmentReadback: true,
+      incompatibleAssignmentRejected: true, incompatibleSelectionRejected: true,
+      usedRegionRemovalRolledBack: true, legacyProtected: true,
+      pageScorePersistedAndReadBack: true, inputChangeInvalidated: true,
+      layoutChangeInvalidated: true, compositionChangeInvalidated: true, listContractVersion: 3,
+    });
+
+    const locations = await handle.query(`select governorate.id::int governorate_id,city.id::int city_id,
+      area.id::int main_area_id from public.project_locations governorate
+      join public.project_locations city on city.parent_id=governorate.id and city.level='city' and city.is_active
+      join public.project_locations area on area.parent_id=city.id and area.level='main_area' and area.is_active
+      where governorate.level='governorate' and governorate.is_active limit 1`);
+    assert.equal(locations.rows.length, 1);
+    const project = {
+      type: "residential", code: "SEO-ISOLATED", arabic_name: "مشروع فينيسيا المعزول",
+      english_name: "Isolated SEO Project", slug: "seo-isolated-project",
+      general_description: "وصف مشروع فينيسيا", short_description: "وصف مختصر",
+      image: "/images/card.jpg", image_alt: "بطاقة", hero_image: "/images/hero.jpg", hero_image_alt: "فينيسيا",
+      small_box_image: "/images/small.jpg", small_box_image_alt: "مصغرة",
+      ...locations.rows[0], sub_area_id: null,
+      location_label: "الموقع", location_description: "وصف الموقع",
+      google_maps_url: "https://maps.example.com/project", latitude: "30.012345", longitude: "31.123456", map_zoom: "15",
+      overview_title: "نظرة عامة", overview_body: "<p>تفاصيل مشروع فينيسيا</p>", overview_media_type: "image",
+      overview_main_image: "/images/overview.jpg", overview_main_image_alt: "نظرة عامة",
+      delivery_title: "التسليم", delivery_body: "<p>تفاصيل التسليم</p>", plans_title: "المخططات",
+      gallery_title: "المعرض", location_title: "الموقع", seo_title: "", seo_description: "",
+      focus_keyword: "فينيسيا", seo_keywords: ["عقارات"], canonical_url: null,
+      robots_index: true, robots_follow: true, og_image: null, og_image_alt: "",
+      publication_status: "unpublished", featured: false, show_on_homepage: false,
+      homepage_order: 0, brochure_url: null,
+    };
+    const projectScore = seo.deriveEntitySeoScore(seo.toProjectSeoScoreInput(project));
+    const projectPayload = {
+      project: { ...project, ...projectScore },
+      location_section_presentation: { show_location_label: true, show_location_tags: true },
+      publication_actor_id: actorId, publication_previous_status: null,
+      deleted: {}, location_points: [],
+      features: [{ client_key: "f03f0700-0000-4000-8000-000000000001", body: "ميزة فينيسيا" }],
+      floor_plans: [], delivery_items: [], media: [], videos: [],
+    };
+    const savedProject = await handle.query(`select * from public.save_project_admin_entry(null,$1::jsonb)`,
+      [JSON.stringify(projectPayload)]);
+    assert.equal(savedProject.rows.length, 1);
+    const savedProjectId = Number(savedProject.rows[0].project_id);
+    const projectReadback = await handle.query("select to_jsonb(project) project from public.projects project where id=$1",
+      [savedProjectId]);
+    const actualProject = projectReadback.rows[0].project as Record<string, unknown>;
+    const expectedProjectScore = seo.deriveEntitySeoScore(seo.toProjectSeoScoreInput(actualProject));
+    assert.equal(actualProject.seo_score, expectedProjectScore.seo_score);
+    assert.equal(actualProject.seo_score_input_hash, expectedProjectScore.seo_score_input_hash);
+
+    const expectedSource = Object.fromEntries(seo.PROJECT_SEO_SOURCE_COLUMNS.map((key) => [key, actualProject[key] ?? null]));
+    const expectedResult = {
+      ...expectedSource,
+      arabic_name: `${String(actualProject.arabic_name)} — نسخة`,
+      slug: `${String(actualProject.slug)}-copy`,
+    };
+    const duplicateProof = {
+      expected_updated_at: actualProject.updated_at,
+      expected_source: expectedSource,
+      expected_result: expectedResult,
+      score: seo.deriveEntitySeoScore(seo.toProjectSeoScoreInput({ ...actualProject, ...expectedResult })),
+    };
+    const duplicatedProject = await handle.query(`select * from public.duplicate_project_admin_entry($1,$2::jsonb)`,
+      [savedProjectId, JSON.stringify(duplicateProof)]);
+    assert.equal(duplicatedProject.rows.length, 1);
+    const duplicateId = Number(duplicatedProject.rows[0].project_id);
+    const duplicateReadback = await handle.query("select to_jsonb(project) project from public.projects project where id=$1",
+      [duplicateId]);
+    const duplicate = duplicateReadback.rows[0].project as Record<string, unknown>;
+    const expectedDuplicateScore = seo.deriveEntitySeoScore(seo.toProjectSeoScoreInput(duplicate));
+    assert.equal(duplicate.seo_score, expectedDuplicateScore.seo_score);
+    assert.equal(duplicate.seo_score_input_hash, expectedDuplicateScore.seo_score_input_hash);
+    assert.equal(duplicate.publication_status, "unpublished");
+    assert.equal(duplicate.featured, false);
+    const projectCountBeforeRejection = await handle.query("select count(*)::int count from public.projects");
+    await rejectsSqlState(handle.query(`select * from public.duplicate_project_admin_entry($1,$2::jsonb)`, [
+      savedProjectId,
+      JSON.stringify({ ...duplicateProof, expected_updated_at: "2000-01-01T00:00:00Z" }),
+    ]), "VSE01");
+    const projectCountAfterRejection = await handle.query("select count(*)::int count from public.projects");
+    assert.equal(projectCountAfterRejection.rows[0].count, projectCountBeforeRejection.rows[0].count);
+    handle.record("f07-project-proof", {
+      createdWithTuple: true, createReadbackMatched: true, duplicatedWithTuple: true,
+      duplicateReadbackMatched: true, staleSourceRejectedAtomically: true,
+    });
+
     const rootCategory = await handle.query(`insert into public.topic_categories(name,slug,sort_order,status)
       values ('Isolated root','isolated-feed-root',1,'published') returning id`);
     const childCategory = await handle.query(`insert into public.topic_categories(name,slug,parent_id,sort_order,status)
@@ -98,7 +339,6 @@ await runIsolatedSupabase({
       ["e2e-test-isolated-article", "isolated-feed-child", "2020-04-01T00:00:00Z", "published", null],
     ] as const;
     let latestId = 0;
-    const seo = loadEntitySeoPersistenceOwner();
     await handle.query("begin");
     for (const [slug, categorySlug, publishedAt, status, deletedAt] of topics) {
       const inserted = await handle.query(`insert into public.topics

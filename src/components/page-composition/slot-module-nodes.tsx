@@ -47,13 +47,11 @@ import { mapTopicsInsightCtaBlock } from "../topics/topics-cms-mappers";
 import { mapAboutCtaBlock, mapLegacyProjectsCtaBlock } from "../modules/about-cta-mappers";
 import { mapLegacyPrinciplesCardsBlock } from "../modules/about-principles-mappers";
 import type {
-  ListingRenderContext,
+  SlotEntry,
 } from "../../lib/page-blocks/page-composition-types";
 import type {
-  PageBlockType,
   ResolvedPageBlock,
 } from "../../lib/page-blocks/types";
-import type { HomepageProjectCard } from "../../lib/projects/public-types";
 import { mapVisionGoalsBlock } from "../modules/vision-goals-mappers";
 import {
   asBreadcrumbConfig,
@@ -72,10 +70,14 @@ import {
 } from "../../lib/page-blocks/configs";
 import SectionRenderer from "../sections/SectionRenderer";
 import SearchPlatformModule, {
-  type SearchPlatformSearchParams,
 } from "../search-platform/SearchPlatformModule";
 import { isSearchPlatformTemplate } from "../../lib/page-blocks/search-platform-config";
 import { comparePageAssignmentOrder } from "../../lib/page-composition/page-assignment-contract";
+import type {
+  SlotModuleNode,
+  SlotModulePresentationContract,
+  SlotModuleRenderContext,
+} from "./slot-module-presentation-contract";
 
 function isWhoWeAreContentBlock(block: ResolvedPageBlock) {
   return block.blockType === "content" && isAboutIntroTemplate(block.template.slug, block.template.variant);
@@ -120,18 +122,52 @@ function isAboutApproachContentBlock(block: ResolvedPageBlock) {
   return block.blockType === "content" && isAboutApproachTemplate(block.template.slug, block.template.variant);
 }
 
-export type SlotModuleNode = {
-  key: string;
-  moduleKind: PageBlockType;
-  assignmentId: number;
-  sortOrder: number;
-  node: ReactNode;
-};
-
 export type ContactFormPair = {
   office: ResolvedPageBlock;
   form: ResolvedPageBlock;
 };
+
+export const VENISIA_SLOT_COMPOSITE_RELATIONSHIPS = [
+  {
+    id: "contact-office-form",
+    parentSlugs: ["contact-form-office", "contact-form"] as const,
+    peerSlugs: ["contact-form-office", "contact-form"] as const,
+    notes: "Adjacent Office/Form occurrences pair one-to-one; every non-adjacent or unmatched occurrence renders a half section at its saved order.",
+  },
+] as const;
+
+function slotEntryOrder(entry: SlotEntry) {
+  return {
+    sortOrder: entry.sortOrder,
+    moduleKind: entry.kind === "block" ? entry.block.blockType : entry.kind,
+    assignmentId: entry.assignmentId,
+  };
+}
+
+function buildAdjacentContactFormPairs(entries: SlotEntry[]): ContactFormPair[] {
+  const ordered = [...entries].sort((left, right) =>
+    comparePageAssignmentOrder(slotEntryOrder(left), slotEntryOrder(right)),
+  );
+  const pairs: ContactFormPair[] = [];
+
+  for (let index = 0; index < ordered.length - 1; index += 1) {
+    const current = ordered[index];
+    const next = ordered[index + 1];
+    if (current.kind !== "block" || next.kind !== "block") continue;
+    const currentSlug = current.block.template.slug;
+    const nextSlug = next.block.template.slug;
+    const isComplementaryPair =
+      (currentSlug === "contact-form-office" && nextSlug === "contact-form") ||
+      (currentSlug === "contact-form" && nextSlug === "contact-form-office");
+    if (!isComplementaryPair) continue;
+    pairs.push({
+      office: currentSlug === "contact-form-office" ? current.block : next.block,
+      form: currentSlug === "contact-form" ? current.block : next.block,
+    });
+    index += 1;
+  }
+  return pairs;
+}
 
 function sortBlocks(blocks: ResolvedPageBlock[]) {
   return [...blocks].sort((left, right) =>
@@ -149,15 +185,6 @@ function sortBlocks(blocks: ResolvedPageBlock[]) {
     ),
   );
 }
-
-export type SlotModuleRenderContext = {
-  homepageProjects?: HomepageProjectCard[];
-  breadcrumbCurrentLabel?: string;
-  publicPath?: string;
-  searchParams?: SearchPlatformSearchParams;
-  listingContext?: ListingRenderContext;
-  suppressFeaturedDuringSearch?: boolean;
-};
 
 /**
  * Builds ordered React nodes for modules assigned to a single layout slot.
@@ -463,3 +490,16 @@ export function buildSlotModuleNodes(
   );
   return nodes;
 }
+
+/** Venisia-specific template mapping behind the shared Theme seam. */
+export const VENISIA_THEME_MODULE_PRESENTATION: SlotModulePresentationContract =
+  Object.freeze({
+    id: "venisia",
+    buildNodes({ blocks, orderedEntries, context }) {
+      return buildSlotModuleNodes(
+        blocks,
+        context,
+        buildAdjacentContactFormPairs(orderedEntries),
+      );
+    },
+  });

@@ -11,6 +11,7 @@ import {
   stripHtml,
 } from "../rich-text/html-utils";
 import { composeSeoTitle } from "../seo/seo-utils";
+export { ENTITY_SEO_SCORE_VERSION } from "../seo/entity-seo-types";
 
 export type FaqItem = {
   question?: string;
@@ -18,11 +19,6 @@ export type FaqItem = {
 };
 
 export type SeoScoreProfile = "article" | "entity";
-
-// Bump when the algorithm or an adopted entity input projection changes.
-// Persisted scores from older versions are rebuilt by the controlled backfill,
-// never by collection reads.
-export const ENTITY_SEO_SCORE_VERSION = 1 as const;
 
 export type SeoScoreInput = {
   profile: SeoScoreProfile;

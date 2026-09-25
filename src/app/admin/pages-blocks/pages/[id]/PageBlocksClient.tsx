@@ -43,7 +43,10 @@ import {
   comparePageAssignmentOrder,
   getAssignablePositions,
 } from "../../../../../lib/page-composition/page-assignment-contract";
-import type { PageRegionDefinition } from "../../../../../lib/page-composition/load-page-regions";
+import type {
+  PageLayoutDefinition,
+  PageRegionDefinition,
+} from "../../../../../lib/page-composition/load-page-regions";
 import { type PageBlockAssignmentRow } from "../../../../../lib/page-blocks/types";
 import { resolvePagePublicPath } from "../../../../../lib/pages/page-admin-policy";
 import {
@@ -59,6 +62,7 @@ import {
   savePageCompositionColumnPreferences,
 } from "../../column-preferences";
 import PageSeoPanel from "./PageSeoPanel";
+import PageLayoutManager from "./PageLayoutManager";
 import PageBlocksAssignModal from "./page-blocks/PageBlocksAssignModal";
 import PageBlocksAssignmentsGrid from "./page-blocks/PageBlocksAssignmentsGrid";
 import PageBlocksHeader, { PageModuleKindsSummary } from "./page-blocks/PageBlocksHeader";
@@ -77,12 +81,15 @@ type PageRow = {
   path: string;
   page_type: string;
   status: string;
+  layout_id: number;
 };
 
 type PageBlocksClientProps = {
   returnTo?: string;
   page: PageRow;
   regions: readonly PageRegionDefinition[];
+  layouts: readonly PageLayoutDefinition[];
+  currentLayoutId: number;
   assignments: PageBlockAssignmentRow[];
   initialContentTemplates: InitialContentTemplateOptions | null;
   seo: {
@@ -117,6 +124,8 @@ export default function PageBlocksClient({
   returnTo,
   page,
   regions,
+  layouts,
+  currentLayoutId,
   assignments,
   initialContentTemplates,
   seo,
@@ -808,6 +817,20 @@ export default function PageBlocksClient({
                 ogImageAlt={seo.ogImageAlt}
                 notice={seo.notice}
                 error={seo.error}
+              />
+            ),
+          },
+          {
+            id: "layout",
+            navigationLabel: "التخطيط",
+            sectionHeading: "تخطيط الصفحة ومناطقها",
+            sectionDescription: "أنشئ تخطيطًا مدعومًا، رتّب مناطقه، واختره للصفحة عبر Page Composition owner الذري.",
+            icon: "settings",
+            content: (
+              <PageLayoutManager
+                pageId={page.id}
+                currentLayoutId={currentLayoutId}
+                layouts={layouts}
               />
             ),
           },

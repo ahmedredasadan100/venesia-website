@@ -82,7 +82,7 @@ const ADOPTION_MATRIX = {
     syncMarker: 'saveModuleTemplateWithPageAssignments("content"',
     publicSource: "src/lib/page-blocks/load-page-blocks.ts",
     publicMarker: 'blockType: "content"',
-    rendererSource: "src/components/page-composition/build-slot-render-plan.ts",
+    rendererSource: "src/components/page-composition/slot-module-nodes.tsx",
     rendererMarker: "buildSlotModuleNodes",
   },
   cta: {
@@ -94,7 +94,7 @@ const ADOPTION_MATRIX = {
     syncMarker: 'saveModuleTemplateWithPageAssignments("cta"',
     publicSource: "src/lib/page-blocks/load-page-blocks.ts",
     publicMarker: 'blockType: "cta"',
-    rendererSource: "src/components/page-composition/build-slot-render-plan.ts",
+    rendererSource: "src/components/page-composition/slot-module-nodes.tsx",
     rendererMarker: "buildSlotModuleNodes",
   },
   cards: {
@@ -106,7 +106,7 @@ const ADOPTION_MATRIX = {
     syncMarker: 'saveModuleTemplateWithPageAssignments("cards"',
     publicSource: "src/lib/page-blocks/load-page-blocks.ts",
     publicMarker: 'blockType: "cards"',
-    rendererSource: "src/components/page-composition/build-slot-render-plan.ts",
+    rendererSource: "src/components/page-composition/slot-module-nodes.tsx",
     rendererMarker: "buildSlotModuleNodes",
   },
   breadcrumb: {
@@ -118,7 +118,7 @@ const ADOPTION_MATRIX = {
     syncMarker: 'saveModuleTemplateWithPageAssignments("breadcrumb"',
     publicSource: "src/lib/page-blocks/load-page-blocks.ts",
     publicMarker: 'blockType: "breadcrumb"',
-    rendererSource: "src/components/page-composition/build-slot-render-plan.ts",
+    rendererSource: "src/components/page-composition/slot-module-nodes.tsx",
     rendererMarker: "buildSlotModuleNodes",
   },
   feed: {

@@ -10,10 +10,16 @@ import { revalidatePublicCacheTags } from "../../../../lib/cache/revalidate-publ
 import { normalizePath } from "../../../../lib/seo/seo-utils";
 import {
   readEntitySeoFormData,
+  persistedEntitySeoScoreMatches,
   toEntitySeoPersistence,
   validateEntitySeoValues,
 } from "../../../../lib/seo/entity-seo-types";
 import { getSupabaseAdmin } from "../../../../lib/supabase-admin";
+import { getPageModuleAssignmentsForAdmin } from "../../../../lib/page-blocks/admin-queries";
+import {
+  deriveEntitySeoScore,
+  toPageSeoScoreInput,
+} from "../../../../lib/admin/seo/entity-seo-persistence";
 
 function readString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -43,10 +49,32 @@ export async function savePageSeoAction(formData: FormData) {
     redirect(appendSeoQuery(redirectTo, "seo_error", seoIssue.message));
   }
 
+  const [{ data: pageSource, error: pageSourceError }, composition] = await Promise.all([
+    getSupabaseAdmin().from("pages").select(
+      "title,path,seo_title,seo_description,seo_keywords,focus_keyword,og_image,og_image_alt,seo_score,seo_score_version,seo_score_input_hash",
+    ).eq("id", pageId).maybeSingle(),
+    getPageModuleAssignmentsForAdmin(pageId),
+  ]);
+  if (pageSourceError || !pageSource) {
+    redirect(appendSeoQuery(
+      redirectTo,
+      "seo_error",
+      pageSourceError?.message ?? "تعذر قراءة مصدر SEO الدلالي للصفحة",
+    ));
+  }
+
+  const persistence = toEntitySeoPersistence(seo);
+  const score = deriveEntitySeoScore(toPageSeoScoreInput({
+    ...pageSource,
+    ...persistence,
+    semanticContent: composition.seoContent,
+  }), pageSource);
+
   const { error } = await getSupabaseAdmin()
     .from("pages")
     .update({
-      ...toEntitySeoPersistence(seo),
+      ...persistence,
+      ...score,
       updated_at: new Date().toISOString(),
     })
     .eq("id", pageId);
@@ -57,12 +85,19 @@ export async function savePageSeoAction(formData: FormData) {
 
   const { data: page, error: pageReadError } = await getSupabaseAdmin()
     .from("pages")
-    .select("path")
+    .select("path,seo_score,seo_score_version,seo_score_input_hash")
     .eq("id", pageId)
     .maybeSingle();
 
   if (pageReadError) {
     redirect(appendSeoQuery(redirectTo, "seo_error", pageReadError.message));
+  }
+  if (!persistedEntitySeoScoreMatches(score, page)) {
+    redirect(appendSeoQuery(
+      redirectTo,
+      "seo_error",
+      "تم رفض نجاح الحفظ لأن قراءة درجة SEO المحفوظة لم تطابق المدخلات الحالية",
+    ));
   }
 
   revalidatePublicCacheTags(["page-seo", "pages"]);
@@ -77,7 +112,7 @@ export async function savePageSeoAction(formData: FormData) {
     action: buildCmsAuditAction("page", "update"),
     entityType: "page",
     entityId: pageId,
-    metadata: { scope: "page_seo" },
+    metadata: { scope: "page_seo", score: score.seo_score, scoreVersion: score.seo_score_version },
   });
 
   redirect(appendSeoQuery(redirectTo, "seo_notice", "saved"));

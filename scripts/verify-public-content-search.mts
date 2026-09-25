@@ -58,6 +58,9 @@ const moduleRegistryMetadata = read(
   "src/lib/page-composition/module-registry-metadata.ts",
 );
 const slotRenderer = read("src/components/page-composition/slot-module-nodes.tsx");
+const slotPresentationContract = read(
+  "src/components/page-composition/slot-module-presentation-contract.ts",
+);
 const dynamicPage = read("src/app/(site)/[...slug]/page.tsx");
 const publicSiteError = read("src/app/(site)/error.tsx");
 const migration = read("sql/migrations/20260830232134_search_platform_module.sql");
@@ -573,7 +576,8 @@ assert.ok(
   "Active Search Platform results must project Featured assignments out of the shared render plan",
 );
 assert.ok(
-  slotRenderer.includes("suppressFeaturedDuringSearch?: boolean"),
+  slotPresentationContract.includes("suppressFeaturedDuringSearch?: boolean") &&
+    slotRenderer.includes('from "./slot-module-presentation-contract"'),
   "The shared slot-render context must own the search-mode projection flag",
 );
 

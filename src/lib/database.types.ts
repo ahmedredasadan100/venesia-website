@@ -1997,6 +1997,9 @@ export type Database = {
           robots_index: boolean | null
           seo_description: string
           seo_keywords: string[]
+          seo_score: number | null
+          seo_score_input_hash: string | null
+          seo_score_version: number | null
           seo_title: string
           slug: string
           sort_order: number
@@ -2019,6 +2022,9 @@ export type Database = {
           robots_index?: boolean | null
           seo_description?: string
           seo_keywords?: string[]
+          seo_score?: number | null
+          seo_score_input_hash?: string | null
+          seo_score_version?: number | null
           seo_title?: string
           slug: string
           sort_order?: number
@@ -2041,6 +2047,9 @@ export type Database = {
           robots_index?: boolean | null
           seo_description?: string
           seo_keywords?: string[]
+          seo_score?: number | null
+          seo_score_input_hash?: string | null
+          seo_score_version?: number | null
           seo_title?: string
           slug?: string
           sort_order?: number

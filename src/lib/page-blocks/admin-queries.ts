@@ -20,6 +20,7 @@ import {
   getProductFixedPositionReason,
 } from "../page-composition/page-assignment-contract";
 import { PAGE_COMPOSITION_POSITIONS } from "../page-composition/positions";
+import { loadPageRegionsForPage } from "../page-composition/load-page-regions";
 
 export { blockModuleHref, blockModuleListHref };
 
@@ -50,7 +51,7 @@ export async function getPageModuleTemplateOptionsForAdmin(kind: PageModuleKind)
 }
 
 export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<AssignmentQueryResult> {
-  const [results, initialContentTemplates] = await Promise.all([
+  const [results, initialContentTemplates, layout] = await Promise.all([
     Promise.all([
     getSupabaseAdmin()
       .from("page_content_block_assignments")
@@ -70,7 +71,7 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_feed_module_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,feed_module_templates(id,name,slug,status,feed_type)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,feed_module_templates(id,name,slug,status,feed_type,config)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_featured_module_assignments")
@@ -83,16 +84,17 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
       .eq("target_id", pageId),
     getSupabaseAdmin()
       .from("page_media_sidebar_module_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,media_sidebar_module_templates(id,name,slug,status,widget_key)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,media_sidebar_module_templates(id,name,slug,status,widget_key,config)")
       .eq("page_id", pageId),
     getSupabaseAdmin()
       .from("page_media_hub_module_assignments")
-      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,media_hub_module_templates(id,name,slug,status,section_key)")
+      .select("id,page_id,template_id,slot,sort_order,is_visible,updated_at,media_hub_module_templates(id,name,slug,status,section_key,config)")
       .eq("page_id", pageId),
     ]),
     // A failed optional summary must not prevent editing current assignments.
     // Opening Assign can retry through the same authenticated read action.
     getPageModuleTemplateOptionsForAdmin("content").catch(() => null),
+    loadPageRegionsForPage(pageId),
   ]);
 
   const failedResult = results.find((result) => result.error);
@@ -113,25 +115,38 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   ] = results;
 
   const assignments: PageBlockAssignmentRow[] = [];
-  const seoContentParts: string[] = [];
+  const regionOrder = new Map(layout.regions.map((region, index) => [region.key, index]));
+  const seoContentParts: Array<{
+    content: string;
+    slot: string;
+    sortOrder: number;
+    moduleKind: PageModuleKind;
+    assignmentId: number;
+  }> = [];
 
   function appendSeoContent(
     row: { is_visible?: unknown; is_active?: unknown },
     template: { status: string } | null | undefined,
     config: unknown,
+    order: { slot: string; sortOrder: number; moduleKind: PageModuleKind; assignmentId: number },
   ) {
     if (!template) return;
     const assignmentVisible = row.is_visible ?? row.is_active;
     if (!isPageModulePubliclyVisible(assignmentVisible, template.status)) return;
     const content = extractPageBlockSeoText(config);
-    if (content) seoContentParts.push(content);
+    if (content) seoContentParts.push({ content, ...order });
   }
 
   for (const row of heroRows ?? []) {
     const template = row.hero_templates;
 
     if (!template) continue;
-    appendSeoContent(row, template, row.hero_templates?.config);
+    appendSeoContent(row, template, row.hero_templates?.config, {
+      slot: getDefaultAssignmentPosition("hero"),
+      sortOrder: Math.max(0, 1000 - Number(row.priority ?? 1000)),
+      moduleKind: "hero",
+      assignmentId: row.id,
+    });
 
     assignments.push({
       id: row.id,
@@ -155,7 +170,10 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   for (const row of contentRows ?? []) {
     const template = row.content_block_templates;
     if (!template || isRetiredContentBlockTemplateSlug(template.slug)) continue;
-    appendSeoContent(row, template, row.content_block_templates?.config);
+    appendSeoContent(row, template, row.content_block_templates?.config, {
+      slot: normalizeLayoutSlot(row.slot), sortOrder: row.sort_order,
+      moduleKind: "content", assignmentId: row.id,
+    });
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -177,7 +195,10 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of ctaRows ?? []) {
     const template = row.cta_block_templates;
-    appendSeoContent(row, template, row.cta_block_templates?.config);
+    appendSeoContent(row, template, row.cta_block_templates?.config, {
+      slot: normalizeLayoutSlot(row.slot), sortOrder: row.sort_order,
+      moduleKind: "cta", assignmentId: row.id,
+    });
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -199,7 +220,10 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of cardsRows ?? []) {
     const template = row.cards_block_templates;
-    appendSeoContent(row, template, row.cards_block_templates?.config);
+    appendSeoContent(row, template, row.cards_block_templates?.config, {
+      slot: normalizeLayoutSlot(row.slot), sortOrder: row.sort_order,
+      moduleKind: "cards", assignmentId: row.id,
+    });
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -221,7 +245,10 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of breadcrumbRows ?? []) {
     const template = row.breadcrumb_block_templates;
-    appendSeoContent(row, template, row.breadcrumb_block_templates?.config);
+    appendSeoContent(row, template, row.breadcrumb_block_templates?.config, {
+      slot: normalizeLayoutSlot(row.slot), sortOrder: row.sort_order,
+      moduleKind: "breadcrumb", assignmentId: row.id,
+    });
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -243,6 +270,10 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of feedRows ?? []) {
     const template = row.feed_module_templates;
+    appendSeoContent(row, template, template?.config, {
+      slot: normalizeLayoutSlot(row.slot), sortOrder: row.sort_order,
+      moduleKind: "feed", assignmentId: row.id,
+    });
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -265,6 +296,10 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   for (const row of featuredRows ?? []) {
     const template = row.featured_module_templates;
     const config = row.featured_module_templates?.config;
+    appendSeoContent(row, template, config, {
+      slot: normalizeLayoutSlot(row.slot), sortOrder: row.sort_order,
+      moduleKind: "featured", assignmentId: row.id,
+    });
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -289,6 +324,10 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of mediaSidebarRows ?? []) {
     const template = row.media_sidebar_module_templates;
+    appendSeoContent(row, template, template?.config, {
+      slot: normalizeLayoutSlot(row.slot), sortOrder: row.sort_order,
+      moduleKind: "media-sidebar", assignmentId: row.id,
+    });
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -310,6 +349,10 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
 
   for (const row of mediaHubRows ?? []) {
     const template = row.media_hub_module_templates;
+    appendSeoContent(row, template, template?.config, {
+      slot: normalizeLayoutSlot(row.slot), sortOrder: row.sort_order,
+      moduleKind: "media-hub", assignmentId: row.id,
+    });
     assignments.push({
       id: row.id,
       page_id: row.page_id,
@@ -350,6 +393,13 @@ export async function getPageModuleAssignmentsForAdmin(pageId: number): Promise<
   return {
     initialContentTemplates,
     assignments,
-    seoContent: seoContentParts.join("\n"),
+    seoContent: seoContentParts
+      .sort((first, second) =>
+        (regionOrder.get(first.slot) ?? Number.MAX_SAFE_INTEGER)
+          - (regionOrder.get(second.slot) ?? Number.MAX_SAFE_INTEGER)
+        || comparePageAssignmentOrder(first, second),
+      )
+      .map((entry) => entry.content)
+      .join("\n"),
   };
 }

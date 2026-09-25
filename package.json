@@ -143,6 +143,8 @@
     "verify:page-composition-position-adoption": "node --experimental-strip-types scripts/verify-page-composition-position-adoption.mts",
     "verify:position-driven-composition": "node --experimental-strip-types scripts/verify-position-driven-composition.mts",
     "verify:page-composition-position-postgres": "node --experimental-strip-types scripts/verify-page-composition-position-postgres.mts",
+    "verify:f01-f04-architecture": "node --experimental-strip-types scripts/verify-f01-f04-architecture.mts",
+    "qa:f01-f03-layout": "node scripts/qa-f01-f03-layout.mjs",
     "verify:page-block-editor-presentation": "node --experimental-strip-types scripts/verify-page-block-editor-presentation.mts",
     "verify:topics-listing-presentation": "node --experimental-strip-types scripts/verify-topics-listing-presentation.mts",
     "verify:feed-module-contract-integrity": "node --experimental-strip-types scripts/verify-feed-module-contract-integrity.mts",

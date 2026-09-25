@@ -265,10 +265,21 @@ export function createPageBlockPerformanceHarness(root, { delayMs = 0, fixtureRo
   const files = new Set();
   const state = { reads: [], cache: [], events: [], failTable: "", failTables: [], errorMessages: {}, publicFailure: false };
   const wait = () => delayMs ? new Promise(resolve => setTimeout(resolve, delayMs)) : Promise.resolve();
+  const layout = {
+    id: 1,
+    key: "venisia-legacy",
+    admin_label: "Venesia Legacy",
+    page_composition_regions: [
+      { key: "hero", admin_label: "Hero", sort_order: 0 },
+      { key: "main", admin_label: "Main", sort_order: 10 },
+      { key: "sidebar", admin_label: "Sidebar", sort_order: 20 },
+      { key: "footer", admin_label: "Footer", sort_order: 30 },
+    ],
+  };
   const pages = [
-    { id: 1, title: "Home", path: "/", slug: "home" },
-    { id: 2, title: "Detached", path: "/detached-custom", slug: "detached-custom" },
-    { id: 3, title: "Assigned", path: "/assigned-custom", slug: "assigned-custom" },
+    { id: 1, title: "Home", path: "/", slug: "home", layout_id: layout.id, page_composition_layouts: layout },
+    { id: 2, title: "Detached", path: "/detached-custom", slug: "detached-custom", layout_id: layout.id, page_composition_layouts: layout },
+    { id: 3, title: "Assigned", path: "/assigned-custom", slug: "assigned-custom", layout_id: layout.id, page_composition_layouts: layout },
   ];
   const template = { id: 501, name: "Template", slug: "sample", status: "published", variant: "default", config: { text: "Authored copy ".repeat(200) }, feed_type: "latest", widget_key: "sections", section_key: "featured" };
   const rows = {
@@ -281,11 +292,37 @@ export function createPageBlockPerformanceHarness(root, { delayMs = 0, fixtureRo
     topic_series: [{ id: 9, name: "Child series", slug: "child-series", category_id: 2, status: "published", deleted_at: null }],
     ...fixtureRows,
   };
+  function splitSelectFields(fields) {
+    const result = [];
+    let depth = 0;
+    let start = 0;
+    for (let index = 0; index < fields.length; index += 1) {
+      if (fields[index] === "(") depth += 1;
+      if (fields[index] === ")") depth -= 1;
+      if (fields[index] === "," && depth === 0) {
+        result.push(fields.slice(start, index));
+        start = index + 1;
+      }
+    }
+    result.push(fields.slice(start));
+    return result;
+  }
   function projectRow(row, fields) {
     if (fields === "*") return structuredClone(row);
-    return Object.fromEntries(fields.split(/,(?![^()]*\))/).map(field => {
+    return Object.fromEntries(splitSelectFields(fields).map(field => {
+      const hintedRelation = /^([a-z_]+)![^(]+\((.*)\)$/.exec(field);
+      if (hintedRelation) {
+        const related = row[hintedRelation[1]];
+        return [hintedRelation[1], related ? projectRow(related, hintedRelation[2]) : null];
+      }
       const relation = /^([a-z_]+)\(([^()]+)\)$/.exec(field);
       if (!relation) return [field, structuredClone(row[field])];
+      const embedded = row[relation[1]];
+      if (embedded) {
+        return [relation[1], Array.isArray(embedded)
+          ? embedded.map(item => projectRow(item, relation[2]))
+          : projectRow(embedded, relation[2])];
+      }
       const relatedRows = rows[relation[1]] ?? [template];
       const related = relatedRows.find(candidate => candidate.id === (row.template_id ?? row.hero_id));
       return [relation[1], related ? projectRow(related, relation[2]) : null];
@@ -305,6 +342,7 @@ export function createPageBlockPerformanceHarness(root, { delayMs = 0, fixtureRo
       in(key, values) { selected = selected.filter(row => values.includes(row[key])); return query; },
       not(key, operator, value) { assert.equal(operator, "is"); selected = selected.filter(row => (row[key] ?? null) !== value); return query; },
       maybeSingle() { single = true; return query; },
+      single() { single = true; return query; },
       then(resolve, reject) {
         const read = { table, fields, responseBytes: 0 };
         state.reads.push(read); state.events.push(`start:${table}`);
@@ -455,10 +493,13 @@ export async function verifyPageBlockReadAndRevalidationContract(root) {
     assert.ok(page.seoContent.includes(`Assigned ${kind} copy`), "Assigned authored config feeds SEO");
   }
   assert.ok(!page.seoContent.includes("Unused authored"));
-  assert.equal(projectionReads.length, 10, "Nine assigned metadata reads plus only the default Content summary run in the initial owner");
-  assert.equal(projectionReads.filter(read => read.fields.includes(",config)")).length, 6);
+  assert.equal(projectionReads.length, 11, "Nine assigned metadata reads plus the default Content summary and canonical Layout read run in the initial owner");
+  assert.equal(projectionReads.filter(read => read.fields.includes(",config)")).length, 9, "Every assigned module reads only its joined saved config");
   assert.equal(projectionReads.filter(read => read.table.endsWith("_assignments")).length, 9);
-  assert.deepEqual(projectionReads.filter(read => !read.table.endsWith("_assignments")).map(read => ({table:read.table,fields:read.fields})), [{table:"content_block_templates",fields:"id,name,slug,status"}], "Other eight catalogs remain on demand; default options contain no configs");
+  assert.deepEqual(projectionReads.filter(read => !read.table.endsWith("_assignments")).map(read => ({table:read.table,fields:read.fields})), [
+    {table:"content_block_templates",fields:"id,name,slug,status"},
+    {table:"pages",fields:"layout_id,page_composition_layouts!pages_layout_id_fkey(id,key,admin_label,page_composition_regions(key,admin_label,sort_order))"},
+  ], "Other eight catalogs remain on demand while the Page Composition owner reads the canonical Layout once");
   assert.equal(page.initialContentTemplates.length, 9);
   for (const row of page.initialContentTemplates) assert.deepEqual(Object.keys(row).sort(), ["id", "name", "slug", "status"]);
   for (const assignment of page.assignments) {
@@ -485,9 +526,12 @@ export async function verifyPageBlockReadAndRevalidationContract(root) {
     projection.reset(); projection.state.failTable = table; projection.state.errorMessages[table] = `failed:${table}`;
     await assert.rejects(() => projection.assignment.getPageModuleAssignmentsForAdmin(1), error => error.message === `Page Composition assignment read failed: failed:${table}`);
   }
-  projection.reset(); projection.state.failTables = projectionReads.map(read => read.table);
-  projection.state.errorMessages = Object.fromEntries(projectionReads.map(read => [read.table, `failed:${read.table}`]));
+  const assignmentReads = projectionReads.filter(read => read.table.endsWith("_assignments"));
+  projection.reset(); projection.state.failTables = assignmentReads.map(read => read.table);
+  projection.state.errorMessages = Object.fromEntries(assignmentReads.map(read => [read.table, `failed:${read.table}`]));
   await assert.rejects(() => projection.assignment.getPageModuleAssignmentsForAdmin(1), error => error.message === `Page Composition assignment read failed: failed:${projectionReads[0].table}`);
+  projection.reset(); projection.state.failTable = "pages";
+  await assert.rejects(() => projection.assignment.getPageModuleAssignmentsForAdmin(1), /Page Composition Layout read failed: isolated_read_failure/);
   const retiredRows = createPageCompositionProjectionFixture();
   retiredRows.content_block_templates[0].slug = "project-details-presentation";
   const retiredOwner = createPageBlockPerformanceHarness(root, { fixtureRows: retiredRows }).assignment;

@@ -292,8 +292,8 @@ function createPageColumns(
       label: "SEO",
       defaultVisible: true,
       hideable: true,
-      // The server adapter sorts the complete filtered RPC dataset by the
-      // official analyzeEntitySeo output before applying collection paging.
+      // The Pages read owner sorts the persisted tuple before pagination;
+      // collection reads never invoke the SEO calculator.
       sortable: supportedSortFields.has("seo"),
       sortKey: "seo",
       minWidth: PAGE_SEO_COLUMN_WIDTH,

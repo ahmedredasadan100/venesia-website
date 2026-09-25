@@ -13,17 +13,16 @@ import { comparePageAssignmentOrder } from "../../lib/page-composition/page-assi
 import { isFeedModuleRenderable } from "../feed-modules/FeedModuleSection";
 import { isFeaturedModuleRenderable } from "../featured/FeaturedModuleSection";
 import { isMediaHubModuleRenderable } from "../media-center/renderMediaHubSections";
-import {
-  buildSlotModuleNodes,
-  type ContactFormPair,
-  type SlotModuleRenderContext,
-} from "./slot-module-nodes";
+import type {
+  SlotModulePresentationContract,
+  SlotModuleRenderContext,
+} from "./slot-module-presentation-contract";
 
 /**
  * Explicit slot render plan items.
  *
  * - `feed` — standalone feed module (keeps its sort_order among blocks)
- * - `module` — output of buildSlotModuleNodes (a composite carries the
+ * - `module` — output of the Theme presentation contract (a composite carries the
  *   assignmentId of its earliest member)
  */
 export type SlotRenderPlanItem =
@@ -69,64 +68,11 @@ export type SlotRenderPlanItem =
     };
 
 /**
- * Peer-composite relationships resolved inside `buildSlotModuleNodes`.
- * Kept here so PageSlotLayout does not invent ad-hoc pairing rules.
- *
- * Complementary slug occurrences pair only when adjacent in the full canonical
- * slot sequence. Unmatched occurrences render a half section, so no legal
- * Assignment is dropped or moved across another Assignment.
- */
-export const SLOT_COMPOSITE_RELATIONSHIPS = [
-  {
-    id: "contact-office-form",
-    parentSlugs: ["contact-form-office", "contact-form"] as const,
-    peerSlugs: ["contact-form-office", "contact-form"] as const,
-    notes: "Adjacent Office/Form occurrences pair one-to-one; every non-adjacent or unmatched occurrence renders a half section at its saved order.",
-  },
-] as const;
-
-function slotEntryOrder(entry: SlotEntry) {
-  return {
-    sortOrder: entry.sortOrder,
-    moduleKind: entry.kind === "block" ? entry.block.blockType : entry.kind,
-    assignmentId: entry.assignmentId,
-  };
-}
-
-function buildAdjacentContactFormPairs(entries: SlotEntry[]): ContactFormPair[] {
-  const ordered = [...entries].sort((left, right) =>
-    comparePageAssignmentOrder(slotEntryOrder(left), slotEntryOrder(right)),
-  );
-  const pairs: ContactFormPair[] = [];
-
-  for (let index = 0; index < ordered.length - 1; index += 1) {
-    const current = ordered[index];
-    const next = ordered[index + 1];
-    if (current.kind !== "block" || next.kind !== "block") continue;
-
-    const currentSlug = current.block.template.slug;
-    const nextSlug = next.block.template.slug;
-    const isComplementaryPair =
-      (currentSlug === "contact-form-office" && nextSlug === "contact-form") ||
-      (currentSlug === "contact-form" && nextSlug === "contact-form-office");
-    if (!isComplementaryPair) continue;
-
-    pairs.push({
-      office: currentSlug === "contact-form-office" ? current.block : next.block,
-      form: currentSlug === "contact-form" ? current.block : next.block,
-    });
-    index += 1;
-  }
-
-  return pairs;
-}
-
-/**
  * Build an ordered render plan for one layout slot.
  *
  * Strategy:
- * 1. Resolve Contact composites only across adjacent assignments in the full
- *    canonical slot sequence, then batch Page Blocks through buildSlotModuleNodes.
+ * 1. Delegate branded Page Block mapping and composite rules to the Theme
+ *    presentation contract without changing canonical assignment order.
  * 2. Keep feed entries as separate plan items.
  * 3. Merge and sort by sort_order so feeds stay interleaved with modules.
  *
@@ -135,6 +81,7 @@ function buildAdjacentContactFormPairs(entries: SlotEntry[]): ContactFormPair[] 
 export function buildSlotRenderPlan(
   entries: SlotEntry[],
   context: SlotModuleRenderContext = {},
+  presentation: SlotModulePresentationContract,
 ): SlotRenderPlanItem[] {
   const feedItems: SlotRenderPlanItem[] = [];
   const featuredItems: SlotRenderPlanItem[] = [];
@@ -144,7 +91,6 @@ export function buildSlotRenderPlan(
   // Product invariant: Hero is a fixed singleton rendered above this
   // composable-module plan. It never participates in Position ordering.
   const composableEntries = entries.filter((entry) => entry.kind !== "hero");
-  const contactFormPairs = buildAdjacentContactFormPairs(composableEntries);
 
   for (const entry of composableEntries) {
     if (entry.kind === "feed") {
@@ -208,7 +154,11 @@ export function buildSlotRenderPlan(
     }
   }
 
-  const moduleItems: SlotRenderPlanItem[] = buildSlotModuleNodes(blocks, context, contactFormPairs).map((node) => ({
+  const moduleItems: SlotRenderPlanItem[] = presentation.buildNodes({
+    blocks,
+    orderedEntries: composableEntries,
+    context,
+  }).map((node) => ({
     kind: "module" as const,
     key: node.key,
     moduleKind: node.moduleKind,

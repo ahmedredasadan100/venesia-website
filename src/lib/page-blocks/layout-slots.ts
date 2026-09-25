@@ -56,3 +56,14 @@ export const LAYOUT_SLOT_LABELS_AR: Record<string, string> = {
   bottom: "أسفل الصفحة",
   footer: "قبل الفوتر",
 };
+
+/** Stored Layout Region label first; legacy vocabulary and a readable key last. */
+export function resolveLayoutRegionAdminLabel(
+  slot: string | null | undefined,
+  storedAdminLabel?: string | null,
+) {
+  const normalized = normalizeLayoutSlot(slot);
+  return storedAdminLabel?.trim()
+    || LAYOUT_SLOT_LABELS_AR[normalized]
+    || `المنطقة: ${normalized}`;
+}

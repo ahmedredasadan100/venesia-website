@@ -59,6 +59,10 @@ const expectedDuplicateProjection = ["updated_at", ...scoreContract.PROJECT_SEO_
 const expectedSaveProjection = ["publication_status", "published_at", "slug", ...scoreContract.PERSISTED_ENTITY_SEO_FIELDS].join(",");
 const saveSource = readFileSync(resolve(ROOT, "src/app/admin/projects/project-actions/save-entry.ts"), "utf8");
 assert.ok(saveSource.includes(`.select("${expectedSaveProjection}")`), "Save projection stays aligned with the persisted tuple and generated Database inference.");
+assert.doesNotMatch(saveSource, /if \(mode === "edit"\) \{\s*try \{\s*reconciledBundle/u,
+  "Create and edit must both execute the post-save aggregate readback.");
+assert.match(saveSource, /persistedEntitySeoScoreMatches\(\s*trustedPayload\.project,\s*reconciledBundle\?\.project/u,
+  "Save success must compare the persisted score tuple with the trusted calculation.");
 const first = helper.buildProjectDuplicateSeoProof(snapshot, 1);
 const second = helper.buildProjectDuplicateSeoProof(snapshot, 2);
 assert.equal(first.expected_result.slug, "venisia-copy");
@@ -72,25 +76,58 @@ assert.equal(JSON.stringify(snapshot), original, "planning must not mutate sourc
 assert.throws(() => helper.projectDuplicateSlug("venisia", 0));
 assert.throws(() => helper.projectDuplicateSlug("venisia", 10_001));
 
-for (const path of [
-  "src/lib/admin/audit/cms-audit-actions.ts", "src/lib/admin/audit-log.ts",
-  "src/lib/admin/media-catalog/reference-sync-contract.ts", "src/lib/admin/media-catalog/synchronization.ts",
-  "src/app/admin/projects/project-actions/helpers.ts", "src/app/admin/projects/project-actions/revalidate.ts",
-  "src/lib/cache/revalidate-public-cache-tags.ts",
-]) ports.set(resolve(ROOT, path), {});
+ports.set(resolve(ROOT, "src/lib/admin/audit/cms-audit-actions.ts"), {
+  buildCmsAuditAction: () => "project.duplicate",
+});
+ports.set(resolve(ROOT, "src/lib/admin/audit-log.ts"), {
+  recordCmsAdminAudit: async () => undefined,
+});
+ports.set(resolve(ROOT, "src/lib/admin/media-catalog/reference-sync-contract.ts"), {
+  buildMediaReferenceSynchronizationWarning: () => ({ status: "saved_with_media_sync_warning" }),
+});
+ports.set(resolve(ROOT, "src/lib/admin/media-catalog/synchronization.ts"), {
+  synchronizeMediaReferenceWriteScopesAfterDomainMutation: async () => ({ status: "synchronized" }),
+});
+ports.set(resolve(ROOT, "src/app/admin/projects/project-actions/helpers.ts"), {
+  withProjectMediaSynchronization: (result: Record<string, unknown>) => result,
+});
+ports.set(resolve(ROOT, "src/app/admin/projects/project-actions/revalidate.ts"), {
+  revalidateProjectPaths: () => undefined,
+});
+ports.set(resolve(ROOT, "src/lib/cache/revalidate-public-cache-tags.ts"), {
+  runBoundedPublicCacheRevalidation: async (operation: () => void) => {
+    operation();
+    return { ok: true };
+  },
+});
 ports.set(resolve(ROOT, "src/lib/admin/auth/require-admin-session.ts"), {
   requireAdminSession: async () => ({ id: 1 }),
 });
 
-async function runScenario(errors: Array<string | null>, options: { occupied?: string[]; readFailure?: boolean } = {}) {
+async function runScenario(errors: Array<string | null>, options: {
+  occupied?: string[];
+  readFailure?: boolean;
+  committedResult?: boolean;
+  scoreMismatch?: boolean;
+} = {}) {
   const proofs: Array<ReturnType<typeof helper.buildProjectDuplicateSeoProof>> = [];
   let snapshotsRead = 0;
+  ports.set(resolve(ROOT, "src/lib/admin/projects/project-entry-data.ts"), {
+    loadProjectPostMutationReadback: async () => ({
+      publication_status: "unpublished",
+      published_at: null,
+      published_by: null,
+      featured: false,
+      ...proofs.at(-1)?.score,
+      ...(options.scoreMismatch ? { seo_score_input_hash: "0".repeat(64) } : {}),
+    }),
+  });
   const database = {
     from(table: string) {
-      assert.equal(table, "projects");
+      assert.ok(["projects", "project_floor_plans", "project_media", "project_videos"].includes(table));
       const query = {
         select(columns: string) {
-          assert.ok(columns === "slug" || columns === expectedDuplicateProjection,
+          assert.ok(columns === "id" || columns === "slug" || columns === expectedDuplicateProjection,
             "Duplicate projection must preserve the exact source fields and order without select-star.");
           return query;
         }, eq() { return query; },
@@ -114,7 +151,21 @@ async function runScenario(errors: Array<string | null>, options: { occupied?: s
       const error = errors[proofs.length - 1];
       // Empty committed result exercises the action's existing warning path,
       // without running unrelated media/audit/cache services.
-      return { data: error ? null : [], error: error ? { code: error } : null };
+      return {
+        data: error
+          ? null
+          : options.committedResult
+            ? [{
+                project_id: 17,
+                project_type: "residential",
+                project_slug: input.p_seo_proof.expected_result.slug,
+                featured: false,
+                created_at: "2026-09-14T10:00:10.000Z",
+                updated_at: "2026-09-14T10:00:10.000Z",
+              }]
+            : [],
+        error: error ? { code: error } : null,
+      };
     },
   };
   ports.set(resolve(ROOT, "src/lib/supabase-admin.ts"), { getSupabaseAdmin: () => database });
@@ -138,7 +189,12 @@ const transport = await runScenario(["FETCH_ERROR"]);
 assert.equal(transport.proofs.length, 1, "unknown commit state must never repeat duplication");
 const readFailure = await runScenario([], { readFailure: true });
 assert.equal(readFailure.proofs.length, 0, "failed source read must not mutate");
-console.log("PASS Project duplicate score inputs, allocation conflicts, bounded retries, and ambiguous result safety");
+const committed = await runScenario([null], { committedResult: true });
+assert.equal(committed.result.ok, true);
+assert.equal(committed.result.code, undefined, "matching score readback keeps the successful result");
+const mismatched = await runScenario([null], { committedResult: true, scoreMismatch: true });
+assert.equal(mismatched.result.code, "project_duplicate_seo_result_invalid");
+console.log("PASS Project save readback source contract; duplicate score inputs, persisted tuple readback, allocation conflicts, bounded retries, and ambiguous result safety");
 
 if (process.argv.includes("--postgres")) {
   const args = process.argv.slice(2);
