@@ -311,7 +311,7 @@ export async function pushApplicationMigrations(context: ApplicationMigrationCli
 /** Use the existing backfill owner; the handle never receives connection secrets. */
 export async function runOwnedEntitySeoBackfill(
   context: ApplicationMigrationCliContext,
-  request: { mode: "dry-run" | "apply" | "verify" },
+  request: { mode: "dry-run" | "apply" | "verify"; entities?: readonly ("topics" | "projects" | "pages")[] },
 ): Promise<EntitySeoBackfillReport> {
   await context.assertOwned();
   check(request && ["dry-run", "apply", "verify"].includes(request.mode), "INVALID_SEO_BACKFILL_MODE");
@@ -328,6 +328,7 @@ export async function runOwnedEntitySeoBackfill(
     const report = await runEntitySeoBackfill({
       connectionString: `postgresql://postgres:${context.password}@127.0.0.1:${context.port}/postgres`,
       expectedDatabase: "postgres", apply: mode === "apply", verify: mode === "verify",
+      entities: request.entities,
     });
     await context.assertOwned();
     return report;

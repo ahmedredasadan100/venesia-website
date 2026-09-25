@@ -232,6 +232,19 @@ await runIsolatedSupabase({
       seo_score: null, seo_score_version: null, seo_score_input_hash: null,
     });
     await rejectsSqlState(handle.query("update public.pages set seo_score=50 where id=$1", [managedPageId]), "23514");
+    const pageDryRun = await handle.runEntitySeoBackfill({ mode: "dry-run", entities: ["pages"] });
+    assert.equal(pageDryRun.counts.targeted > 0, true);
+    assert.equal(pageDryRun.counts.wouldWrite > 0, true);
+    assert.equal(pageDryRun.counts.written, 0);
+    const pageApplied = await handle.runEntitySeoBackfill({ mode: "apply", entities: ["pages"] });
+    assert.equal(pageApplied.counts.written, pageDryRun.counts.wouldWrite);
+    assert.equal(pageApplied.counts.unresolved, 0);
+    const pageVerified = await handle.runEntitySeoBackfill({ mode: "verify", entities: ["pages"] });
+    assert.equal(pageVerified.readyForEnforcement, true);
+    assert.equal(pageVerified.counts.unchanged, pageVerified.counts.targeted);
+    const pageIdempotent = await handle.runEntitySeoBackfill({ mode: "apply", entities: ["pages"] });
+    assert.equal(pageIdempotent.counts.written, 0);
+    assert.equal(pageIdempotent.counts.unchanged, pageIdempotent.counts.targeted);
     const listReadback = await handle.query(`select public.admin_list_pages(1,10,'seo','desc','f03-f07-isolated') result`);
     const listResult = listReadback.rows[0].result as { contract_version: number; rows: Array<{ id: number }> };
     assert.equal(listResult.contract_version, 3);
@@ -242,6 +255,7 @@ await runIsolatedSupabase({
       usedRegionRemovalRolledBack: true, legacyProtected: true,
       pageScorePersistedAndReadBack: true, inputChangeInvalidated: true,
       layoutChangeInvalidated: true, compositionChangeInvalidated: true, listContractVersion: 3,
+      pageBackfillDryRunApplyVerifyAndIdempotency: true,
     });
 
     const locations = await handle.query(`select governorate.id::int governorate_id,city.id::int city_id,

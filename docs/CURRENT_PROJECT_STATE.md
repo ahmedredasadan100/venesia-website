@@ -12,37 +12,41 @@ This file records the minimum current facts needed to begin work safely. Archite
 The official baseline is the commit currently referenced by GitHub `main`; it must be resolved live before every phase. The current verified GitHub `main` baseline is:
 
 ```text
-28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e
+368832b848b1548a1fe7e6cdf1684f964155c61e
 ```
 
-Verified after PR #182 merged and the automatic Production deployment reached READY on the exact merge commit:
+Verified after PR #183 merged and the automatic Production deployment reached READY on the exact merge commit:
 
 | Surface                       | SHA / state |
 | ----------------------------- | ----------- |
 | Verified cutover baseline     | `672cf81dff4e39c300adb68e5f41750ef980e9c1` |
-| Verified canonical baseline   | `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e` |
-| Local `main` / `origin/main` / GitHub `main` | `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e` |
-| Vercel Production             | Automatic Production deployment is READY on `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e`. |
-| Migration registry            | `110` migrations; head `20260920011000`; `pending=[]`; provenance `1→110` reconciled by the canonical verifier. |
-| Delivery state                | PR #182 normalized migration-source line endings. It did not implement or close F09. |
+| Verified canonical baseline   | `368832b848b1548a1fe7e6cdf1684f964155c61e` |
+| Local baseline / `origin/main` / GitHub `main` | `368832b848b1548a1fe7e6cdf1684f964155c61e` before the current closure delta. |
+| Vercel Production             | Automatic Production deployment is READY on `368832b848b1548a1fe7e6cdf1684f964155c61e`. |
+| Migration registry            | `111` migrations; head `20260925001602`; `pending=[]`; canonical provenance is reconciled through migration 111. |
+| Delivery state                | PR #183 standard-merged F01–F04/F07 schema and runtime owners. The current `codex/post-183-f07-f08-closure` branch carries the unified F07/F08/F09 closure delta. |
 
 Live Git, GitHub, and deployment evidence supersede this snapshot when they change.
 
 ## Current delivery state
 
-Migration provenance `1→110` remains reconciled on the canonical verifier. Local `main`, `origin/main`, GitHub `main`, and the READY Vercel Production deployment all identify `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e`. PR #182 changed only the canonical line-ending policy for migration sources; it is not evidence for F09 behavior or closure.
+Migration provenance through `1→111` remains reconciled on the canonical verifier. `origin/main`, GitHub `main`, and the READY Vercel Production deployment identify `368832b848b1548a1fe7e6cdf1684f964155c61e`, the standard merge of PR #183. The PR head and merge commit have an identical repository tree, so its source, Browser geometry, isolated-database, build, and contract evidence applies exactly to the published baseline.
 
-The F01–F08 closure work is currently local and unpublished in the isolated `codex/f01-f08-closure` worktree. It is not part of `main` or Production. F01–F04 have local implementation and targeted source, browser, and isolated-database evidence. F07 has local Page and Project `score/version/input fingerprint` implementation and isolated `calculate → persist → readback` evidence, including invalidation when Page fields, Layout/Regions, or Assignments change. Its global persisted-score closure remains false because applying the Page schema to Production and backfilling existing Page rows were not authorized. F05 and F06 retain their existing open global closure claims: scoped shared-owner behavior is proven, but full authenticated consumer/domain parity is not. The new migration was applied only to disposable local Supabase environments. No Production migration/write, Auth/Permissions change, commit, push, PR, merge, or deployment was performed in this phase.
+F07 Production closure is complete. The official persisted-score owner performed a bounded Page-only dry-run (`targeted=14`, `wouldWrite=14`, zero failures/conflicts), wrote the three derived tuple fields to those 14 rows, passed an independent full recalculation (`unchanged=14`, `readyForEnforcement=true`), and passed an idempotent apply rerun (`written=0`, `unchanged=14`). Independent before/after hashes for all non-SEO Page data, all Page assignments, and Layout/Region state remained identical. Production now has 14/14 complete Page tuples at score version 1 with no invalid tuple. No migration, schema, content, assignment, Layout, Auth, Permission, or Cron mutation occurred in this closure.
+
+F09 is closed as an evidence/verification finding, not a Product modification. Exact-tree PR #183 Browser evidence measured the alternate ordered stack at 1232px on Desktop and approximately 342px usable width on Mobile RTL, with correct Region order and no overlap. It also measured the preserved `venisia-legacy` Desktop main/sidebar geometry at 860px/340px on one row and the Mobile single-column, equal-width stack without overlap. Executable source proof confirms both layouts resolve through `VENISIA_THEME_CONTRACT.resolveLayout`; there is no second Theme renderer, Layout runtime, Region registry, or Source of Truth.
+
+F05 and F06 remain evidence gaps: their scoped shared-owner behavior is proven, but the requested full authenticated consumer/domain parity is not. They are intentionally deferred to the separate Deep Audit. F01–F04, F07, F08, and F09 are closed; F10 remains out of scope.
 
 ## Active phase
 
-- **Title:** Venesia F01–F08 Discover → Execute → Verify → Deliver.
-- **Published baseline:** `28353ed4b00c3f2bd5d7c1400bef6c9bf148a98e` on `main` and READY in Production.
-- **Local implementation:** isolated worktree branch `codex/f01-f08-closure`; uncommitted and unpublished.
-- **Scope:** extensible Theme/Layout and branded module-presentation contracts, atomic Admin Layout/Region management, Region label recovery, evidence-only Form/Interaction verification, Page and Project persisted-score paths, and this state record.
-- **Local schema state:** `20260925001602_f03_page_layout_admin_f07_page_seo_persistence.sql` is uncommitted and was executed only in disposable local Supabase. It is not present in the Production registry.
-- **Authorization boundary:** Production migrations/writes, Auth/Permissions changes, commit, push, PR, merge, and deployment remain prohibited without explicit authorization.
-- **F09:** independent workstream only. PR #182 is migration-source line-ending normalization and must not be counted as an F09 fix.
+- **Title:** Unified F07 Production Closure → F08 Current-State Reconciliation → F09 Evidence Closure.
+- **Published baseline:** `368832b848b1548a1fe7e6cdf1684f964155c61e` on GitHub `main` and READY in Production.
+- **Delivery branch:** `codex/post-183-f07-f08-closure`; one F07/F08/F09 repository delta, pending PR delivery.
+- **Scope:** official Page SEO backfill ownership and proof, final current-state reconciliation, and exact-tree F09 geometry/contract closure.
+- **Production schema state:** migration `20260925001602_f03_page_layout_admin_f07_page_seo_persistence.sql` is registry head 111. The authorized 14-row Page tuple backfill is complete and independently verified.
+- **Authorization boundary:** the bounded F07 backfill authorization has been consumed. No further Production write, migration, Auth/Permissions/Cron change, Ready, merge, or deployment is authorized by this record.
+- **F09:** closed at the verification/current-state owner using PR #183 exact-tree geometry and executable contract evidence; no Product change was needed.
 
 ## Current architecture truth
 
@@ -58,7 +62,7 @@ The F01–F08 closure work is currently local and unpublished in the isolated `c
 - Page Composition owns Layout identity, Regions, ordering, Page selection, and Assignment compatibility through the existing `mutate_page_composition` mutation owner. The Venisia Theme owns only the projection of those semantic Regions into legacy main/sidebar geometry or an ordered stack; it does not add a second renderer or Region registry.
 - Page deletion remains a hard delete in `mutate_page_composition`; its `delete_page` branch removes only page-target Hero assignments before deleting the Page and never deletes Hero templates.
 - The official Pages Collection read model is the only Pages list path and exposes its existing assignment aggregate as `moduleCount` through the shared output contract.
-- Page Entity SEO uses Page identity/metadata plus visible, published, authored Page Composition config copy in Layout/Assignment order as its canonical semantic input. Dynamic child entities retain their own SEO ownership. Page list/card reads consume only a current persisted tuple and never run the SEO calculator or issue per-row queries; local Page persistence is not a claim that the unapplied Production schema/backfill exists.
+- Page Entity SEO uses Page identity/metadata plus visible, published, authored Page Composition config copy in Layout/Assignment order as its canonical semantic input. Dynamic child entities retain their own SEO ownership. Page list/card reads consume only a current persisted tuple and never run the SEO calculator or issue per-row queries. Production has 14/14 complete, independently verified Page tuples at score version 1.
 - Global SEO, Dashboard Truth, and Reports & Analytics have one read-model owner each. Reports consume the Analytics adapter registry and do not integrate directly with external providers.
 - Admin Form, Collection, Data, Feedback, and Confirmation remain separate lifecycle owners under the Admin Interaction governance umbrella; the umbrella is not a super-runtime.
 - Product Identity, Runtime, Capability, and Adoption are four independent governance axes. The existing interaction adoption manifest contains the typed Product Surface Identity ledger; its records contain no Adoption or Capability registration ids, and Product Kind is never inferred from Runtime ownership, `workflowClassification`, Collection/Form adoption, or capability applicability.

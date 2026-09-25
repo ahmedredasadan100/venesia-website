@@ -197,7 +197,7 @@ export type OwnedLocalHandle = {
   };
   query(sql: string, params?: unknown[]): Promise<QueryResult>;
   pushApplicationMigrations(request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }): Promise<ApplicationMigrationCliResult>;
-  runEntitySeoBackfill(request: { mode: "dry-run" | "apply" | "verify" }): Promise<EntitySeoBackfillReport>;
+  runEntitySeoBackfill(request: { mode: "dry-run" | "apply" | "verify"; entities?: readonly ("topics" | "projects" | "pages")[] }): Promise<EntitySeoBackfillReport>;
   preparePublicVerification(): Promise<PublicFixtureReadiness>;
   prepareAdminInteractions(request?: { study: "heavy-editor-performance" }): Promise<Record<string, unknown>>;
   runPublicVerification(request: PublicGateRequest): ReturnType<typeof runOwnedPublicVerification>;
@@ -1080,7 +1080,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           assertOwnedLocalHandle(handle);
           return pushApplicationMigrations(cliContext, request);
         },
-        runEntitySeoBackfill: async (request: { mode: "dry-run" | "apply" | "verify" }) => {
+        runEntitySeoBackfill: async (request: { mode: "dry-run" | "apply" | "verify"; entities?: readonly ("topics" | "projects" | "pages")[] }) => {
           assertOwnedLocalHandle(handle);
           return runOwnedEntitySeoBackfill(cliContext, request);
         },
