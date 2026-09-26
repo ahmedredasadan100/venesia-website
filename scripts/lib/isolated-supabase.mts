@@ -6,7 +6,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 // @ts-expect-error The repository uses pg without separate declarations.
 import pg from "pg";
-import { assertApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicationMigrations, runOwnedEntitySeoBackfill, generateOwnedDatabaseTypes,
+import { assertApplicationMigrationTool, selectApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicationMigrations, runOwnedEntitySeoBackfill, generateOwnedDatabaseTypes,
   type ApplicationMigrationCliContext, type ApplicationMigrationCliResult,
   type ApplicationMigrationStage, type ApplicationMigrationTool, type EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 export type { ApplicationMigrationCliResult, ApplicationMigrationStage, EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
@@ -185,6 +185,7 @@ export type ReleaseLock = {
   images: Record<ImageService, { reference: string; manifestDigest: string; configDigest: string }>;
   transport: { path: string; sha256: string };
   applicationMigrationTool: ApplicationMigrationTool;
+  applicationMigrationToolLinuxX64: ApplicationMigrationTool;
 };
 
 export type OwnedDatabaseConnection = {
@@ -296,6 +297,8 @@ export function readReleaseLock(lockPath: string): ReleaseLock {
   requireThat(value.schemaVersion === 1 && object(value.release).commit === RELEASE_COMMIT, "UNAPPROVED_RELEASE", "provenance");
   const lock = value as unknown as ReleaseLock;
   assertApplicationMigrationTool(lock.applicationMigrationTool);
+  selectApplicationMigrationTool(lock, "win32", "x64");
+  selectApplicationMigrationTool(lock, "linux", "x64");
   requireThat(Array.isArray(lock.files) && lock.files.length > 0
     && lock.release.sourceBaseUrl === `https://raw.githubusercontent.com/supabase/supabase/${RELEASE_COMMIT}/`, "INCOMPLETE_RELEASE_LOCK", "provenance");
   requireThat(Object.keys(lock.images).sort().join(",") === [...IMAGE_SERVICES].sort().join(","), "INVALID_IMAGE_SET", "provenance");
@@ -456,11 +459,12 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const lockPath = resolve(options.lockPath);
   requireThat(relative(ROOT, lockPath).startsWith(`scripts${sep}fixtures${sep}`), "LOCK_OUTSIDE_FIXTURES", "preflight");
   const lock = readReleaseLock(lockPath);
+  const applicationTool = options.handoff ? selectApplicationMigrationTool(lock) : lock.applicationMigrationTool;
   if (options.handoff) {
     requireThat(options.cliBinary && isAbsolute(options.cliBinary), "CLI_BINARY_REQUIRED_FOR_HANDOFF", "preflight");
     const binary = resolve(options.cliBinary);
     requireThat(existsSync(binary) && lstatSync(binary).isFile() && !lstatSync(binary).isSymbolicLink()
-      && realpathSync(binary) === binary && sha256(readFileSync(binary)) === lock.applicationMigrationTool.executableSha256,
+      && realpathSync(binary) === binary && sha256(readFileSync(binary)) === applicationTool.executableSha256,
     "CLI_BINARY_DIGEST_MISMATCH", "preflight");
   }
   const artifactDir = resolve(options.artifactDir);
@@ -1059,7 +1063,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       // and dry-run/apply sequencing. Neither it nor its credential is exposed.
       const cliContext: ApplicationMigrationCliContext = Object.freeze({ runDirectory: artifactDir,
         host: "127.0.0.1", port: run.pgPort, database: "postgres", password,
-        tool: Object.freeze({ ...lock.applicationMigrationTool }), sourceBinary: resolve(options.cliBinary),
+        tool: Object.freeze({ ...applicationTool }), sourceBinary: resolve(options.cliBinary),
         generatorDocker: Object.freeze({ binary: dockerBinary, host: dockerHost, databaseContainerId: serviceResource("db").identity.id }),
         assertOwned: async () => {
           assertOwnedLocalHandle(handle);

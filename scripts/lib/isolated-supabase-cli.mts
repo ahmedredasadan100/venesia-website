@@ -109,12 +109,26 @@ export function assertApplicationMigrationStage(stage: ApplicationMigrationStage
 }
 
 export function assertApplicationMigrationTool(tool: ApplicationMigrationTool): void {
+  const linux = tool?.platform === "linux-x64";
+  const packageName = linux ? "cli-linux-x64" : "cli-windows-x64";
   check(tool && tool.name === "Supabase CLI" && /^\d+\.\d+\.\d+$/u.test(tool.version)
-    && tool.platform === "win32-x64" && tool.package === "@supabase/cli-windows-x64"
-    && tool.metadataUrl === `https://registry.npmjs.org/@supabase%2fcli-windows-x64/${tool.version}`
+    && (linux || tool.platform === "win32-x64") && tool.package === `@supabase/${packageName}`
+    && tool.metadataUrl === `https://registry.npmjs.org/@supabase%2f${packageName}/${tool.version}`
     && /^sha512-[A-Za-z0-9+/]{86}==$/u.test(tool.packageIntegrity)
-    && tool.executablePathInPackage === "package/bin/supabase.exe" && HASH.test(tool.executableSha256)
+    && tool.executablePathInPackage === (linux ? "package/bin/supabase" : "package/bin/supabase.exe") && HASH.test(tool.executableSha256)
     && tool.sourceTag === `https://github.com/supabase/cli/tree/v${tool.version}`, "INVALID_MIGRATION_TOOL_LOCK");
+}
+
+/** Select only an explicitly reviewed host tuple; never fall back to another binary. */
+export function selectApplicationMigrationTool(lock: {
+  applicationMigrationTool: ApplicationMigrationTool;
+  applicationMigrationToolLinuxX64: ApplicationMigrationTool;
+}, platform: NodeJS.Platform = process.platform, architecture: string = process.arch): ApplicationMigrationTool {
+  check(architecture === "x64" && (platform === "win32" || platform === "linux"), "UNSUPPORTED_CLI_PLATFORM");
+  const tool = platform === "linux" ? lock.applicationMigrationToolLinuxX64 : lock.applicationMigrationTool;
+  assertApplicationMigrationTool(tool);
+  check(tool.platform === (platform === "linux" ? "linux-x64" : "win32-x64"), "CLI_PLATFORM_LOCK_MISMATCH");
+  return tool;
 }
 
 export function applicationMigrationChildEnvironment(home: string, workdir: string, password: string, source: Readonly<Record<string, string | undefined>> = process.env): NodeJS.ProcessEnv {
@@ -216,7 +230,7 @@ function prepare(context: ApplicationMigrationCliContext): Prepared {
   const directory = mkdtempSync(join(context.runDirectory, "application-cli-"));
   const toolsDirectory = join(directory, "tools");
   mkdirSync(toolsDirectory, { mode: 0o700 });
-  const binary = join(toolsDirectory, "supabase.exe");
+  const binary = join(toolsDirectory, context.tool.platform === "linux-x64" ? "supabase" : "supabase.exe");
   writeFileSync(binary, bytes, { flag: "wx", mode: 0o700 });
   check(sha256(sourceBytes(binary)) === context.tool.executableSha256, "COPIED_CLI_DIGEST_MISMATCH");
   state = { directory, binary, busy: false, dryRunStage: null };
@@ -260,7 +274,8 @@ export async function pushApplicationMigrations(context: ApplicationMigrationCli
     corpusSha256: input.stage.corpusSha256,
     files: input.stage.files.map(entry => ({ file: entry.file, sourceSha256: entry.sourceSha256 })),
   } };
-  check(process.platform === "win32" && process.arch === "x64", "UNSUPPORTED_CLI_PLATFORM");
+  check(process.arch === "x64" && (process.platform === "win32" || process.platform === "linux")
+    && context.tool.platform === `${process.platform}-x64`, "UNSUPPORTED_CLI_PLATFORM");
   check(context.host === "127.0.0.1" && context.database === "postgres"
     && Number.isInteger(context.port) && context.port > 1024 && context.port <= 65535
     && /^[a-f0-9]{64}$/u.test(context.password), "INVALID_OWNED_CLI_TARGET");

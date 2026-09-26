@@ -351,12 +351,18 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Setup pinned Supabase CLI
-        uses: supabase/setup-cli@v1
-        with:
-          version: 2.116.0
+      - name: Pull the five digest-pinned isolated platform images
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          const lock = JSON.parse(readFileSync('scripts/fixtures/isolated-supabase/stack.lock.json', 'utf8'));
+          for (const image of Object.values(lock.images)) {
+            execFileSync('docker', ['pull', '--platform', image.platform, image.reference], { stdio: 'inherit' });
+          }
+          NODE
       - name: Verify fresh schema, native races, command recovery, enumeration, and restore
-        run: node --experimental-strip-types scripts/verify-audit2-root-cause-isolated.mts --cli-binary "$(command -v supabase)"
+        run: node --experimental-strip-types scripts/verify-audit2-root-cause-isolated.mts --cli-binary "$PWD/node_modules/@supabase/cli-linux-x64/bin/supabase"
       - name: Preserve sanitized native proof
         if: always()
         uses: actions/upload-artifact@v4

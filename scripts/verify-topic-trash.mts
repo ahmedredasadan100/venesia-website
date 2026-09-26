@@ -16,7 +16,7 @@ function check(label: string, condition: unknown) {
   console.log(`PASS ${label}`);
 }
 
-function exportedFunction(source: string, name: string, _nextName?: string) {
+function exportedFunction(source: string, name: string) {
   const ast = ts.createSourceFile("actions.ts", source, ts.ScriptTarget.Latest, true);
   const declaration = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name + "Impl")
     ?? ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);
@@ -62,22 +62,18 @@ const softDelete = exportedFunction(actions, "softDeleteUnifiedContent");
 const restoreAction = exportedFunction(
   actions,
   "restoreUnifiedContent",
-  "permanentlyDeleteUnifiedContent",
 );
 const purgeAction = exportedFunction(
   actions,
   "permanentlyDeleteUnifiedContent",
-  "emptyUnifiedContentTrash",
 );
 const emptyTrashAction = exportedFunction(
   actions,
   "emptyUnifiedContentTrash",
-  "bulkUpdateUnifiedContent",
 );
 const bulkAction = exportedFunction(
   actions,
   "bulkUpdateUnifiedContent",
-  "saveContentTablePreferences",
 );
 const restoreOwner = functionSection(
   actions,

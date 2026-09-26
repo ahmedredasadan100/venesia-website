@@ -61,6 +61,19 @@
     "executableSha256": "5ccda93866ff48a3ec4a580679d71a44b9ee41150fb6143bdd4a6a57d3ecef1a",
     "sourceTag": "https://github.com/supabase/cli/tree/v2.116.0"
   },
+  "applicationMigrationToolLinuxX64": {
+    "name": "Supabase CLI",
+    "version": "2.116.0",
+    "role": "Official application migration handoff; not a Supabase platform service",
+    "repositoryVersionSource": ".github/workflows/quality-gate.yml",
+    "platform": "linux-x64",
+    "package": "@supabase/cli-linux-x64",
+    "metadataUrl": "https://registry.npmjs.org/@supabase%2fcli-linux-x64/2.116.0",
+    "packageIntegrity": "sha512-o0PvHKyQSKEuC3jJqeV2qorgyMIFGDWQ1Bj+OXf0p80ddgktnJFlDElCU+VDKZkuwLC6vO/LMoBql34zFHzXhw==",
+    "executablePathInPackage": "package/bin/supabase",
+    "executableSha256": "3cfb10e8cb7b8cb4d6807117865a2a39891178ec83f4d0c86ac49f633d2c43f4",
+    "sourceTag": "https://github.com/supabase/cli/tree/v2.116.0"
+  },
   "files": [
     {
       "path": "docker/docker-compose.yml",

@@ -112,6 +112,7 @@ type StackLock = {
   compose: { path: string; sha256: string };
   transport: { path: string; sha256: string };
   applicationMigrationTool: import("./lib/isolated-supabase-cli.mts").ApplicationMigrationTool;
+  applicationMigrationToolLinuxX64: import("./lib/isolated-supabase-cli.mts").ApplicationMigrationTool;
 };
 
 function verifyReleaseLock(): { lock: StackLock; hash: string } {
@@ -541,6 +542,36 @@ function verifyFinalQualityGatePlan() {
   cases.push("Final Quality Gate derives every non-build step from ci:check and rejects skipped, duplicated, shell-injected or changed Public tails");
 }
 
+async function verifyMigrationToolPlatforms(lock: StackLock) {
+  const cli = await import("./lib/isolated-supabase-cli.mts");
+  check("migration tool selection preserves the exact existing Windows lock", () => {
+    assert.equal(cli.selectApplicationMigrationTool(lock, "win32", "x64"), lock.applicationMigrationTool);
+    assert.equal(lock.applicationMigrationTool.executableSha256, "5ccda93866ff48a3ec4a580679d71a44b9ee41150fb6143bdd4a6a57d3ecef1a");
+  });
+  check("Linux migration tool matches the independently verified npm package pin", () => {
+    const tool = cli.selectApplicationMigrationTool(lock, "linux", "x64");
+    const packageLock = JSON.parse(readSource("package-lock.json"));
+    const npm = packageLock.packages["node_modules/@supabase/cli-linux-x64"];
+    assert.equal(tool.packageIntegrity, npm.integrity);
+    assert.equal(tool.version, npm.version);
+    assert.equal(tool.executableSha256, "3cfb10e8cb7b8cb4d6807117865a2a39891178ec83f4d0c86ac49f633d2c43f4");
+    assert.equal(tool.executablePathInPackage, "package/bin/supabase");
+  });
+  for (const [platform, architecture] of [["darwin", "x64"], ["linux", "arm64"], ["win32", "arm64"]] as const) {
+    check("migration tool rejects unsupported host " + platform + "-" + architecture, () => {
+      assert.throws(() => cli.selectApplicationMigrationTool(lock, platform, architecture), { code: "UNSUPPORTED_CLI_PLATFORM" });
+    });
+  }
+  check("Linux selection cannot fall back to a Windows pin", () => {
+    assert.throws(() => cli.selectApplicationMigrationTool({ ...lock, applicationMigrationToolLinuxX64: lock.applicationMigrationTool }, "linux", "x64"), { code: "CLI_PLATFORM_LOCK_MISMATCH" });
+  });
+  check("Linux tool rejects a cross-platform package or executable path", () => {
+    for (const bad of [{ package: "@supabase/cli-windows-x64" }, { executablePathInPackage: "package/bin/supabase.exe" }]) {
+      assert.throws(() => cli.assertApplicationMigrationTool({ ...lock.applicationMigrationToolLinuxX64, ...bad }), { code: "INVALID_MIGRATION_TOOL_LOCK" });
+    }
+  });
+}
+
 async function main() {
   verifyFinalQualityGatePlan();
   verifyScanner();
@@ -556,6 +587,7 @@ async function main() {
   // Importing the lifecycle owner must be passive. Only pure exported guards are
   // invoked below; run/start/cleanup, Docker, SQL and environment loaders are not.
   const owner = await import("./lib/isolated-supabase.mts");
+  await verifyMigrationToolPlatforms(provenance.lock);
   await verifyAdminMeasurementControlLease(owner);
   verifyAdminMeasurementRestartPolicy();
   verifyImageIdentity(owner, provenance.lock.images.db);
