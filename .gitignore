@@ -66,3 +66,7 @@ dead-code-scan*.json
 /docs/archive/
 /docs/*.docx
 /responsive-layout-audit.md
+
+# Generated only by the exact unexpired PR Preview verification owner
+/src/app/verification-cache-probe/
+/src/app/api/verification-cache-probe/

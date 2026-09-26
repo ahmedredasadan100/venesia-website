@@ -1,0 +1,6 @@
+import { executeRead } from "../../verification-cache-probe/runtime";
+export async function GET(request: Request) {
+  const ticket = request.headers.get("authorization")?.replace(/^Bearer /u, "") ?? "";
+  try { return Response.json(await executeRead(ticket), { headers: { "Cache-Control": "private, no-store" } }); }
+  catch { return Response.json({ status: "denied" }, { status: 403, headers: { "Cache-Control": "private, no-store" } }); }
+}

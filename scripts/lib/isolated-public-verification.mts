@@ -625,3 +625,6 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   }
   receipt(context, "public-four-gates.json", result); return result;
 }
+
+/** Fixed synthetic Preview preparation stays under this verification boundary. */
+export { prepareVercelCacheProbe } from "./vercel-cache-probe.mts";

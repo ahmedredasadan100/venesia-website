@@ -1,0 +1,12 @@
+"use client";
+import { useActionState } from "react";
+import { runCacheProbeAction } from "./actions";
+
+export default function CacheProbePage() {
+  const [result, action, pending] = useActionState(runCacheProbeAction, null);
+  return <main><h1>Isolated cache verification</h1>
+    <form action={action}><label>Signed verification ticket<input name="ticket" type="password" autoComplete="off" /></label>
+      <button type="submit" disabled={pending}>Execute fixed phase</button></form>
+    <output data-cache-probe-result>{JSON.stringify(result)}</output>
+  </main>;
+}

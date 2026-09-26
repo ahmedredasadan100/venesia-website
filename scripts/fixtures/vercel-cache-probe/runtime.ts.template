@@ -1,0 +1,211 @@
+import "server-only";
+import assert from "node:assert/strict";
+import { createHash, randomUUID, verify } from "node:crypto";
+import { PGlite } from "@electric-sql/pglite";
+import { unstable_cache, updateTag } from "next/cache";
+import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
+
+const manifest = __PROBE_MANIFEST__;
+const phases = ["init", "read-old", "status", "mutate", "release", "invalidate-again", "cleanup", "read-after"] as const;
+const scenarios = ["serial", "reordered", "no-invalidation", "repeated", "reader-failure"] as const;
+type Phase = typeof phases[number];
+type Scenario = typeof scenarios[number];
+type Ticket = { requestId: string; run: string; phase: Phase; scenario: Scenario; expiresAt: number; sourceHead: string; worker?: string };
+type Value = { revision: string };
+type Invalidation = { calls: number; startedAt: number | null; completedAt: number | null; failed: boolean };
+type AmbientCache = {
+  cacheHandler?: { constructor: { name: string; toString(): string } };
+  generateSimpleCacheKey(key: string): Promise<string>;
+  revalidateTag(tags: string[], durations?: unknown): Promise<void>;
+};
+type Store = { incrementalCache?: AmbientCache; pendingRevalidates?: Record<string, Promise<unknown>> };
+type State = {
+  ticket: Ticket; db: PGlite; createdAt: number; callbackCount: number; captured: Value | null;
+  captureAt: number | null; commitAt: number | null; releaseAt: number | null; writeCompleteAt: number | null;
+  hold: Promise<void> | null; release: (() => void) | null; reject: ((error: Error) => void) | null;
+  failedRead: boolean; reading: boolean; invalidations: Invalidation[]; restores: Array<() => void>; key: string | null;
+};
+type Coordination = { worker: string; runs: Map<string, State> };
+const scope = globalThis as typeof globalThis & { __venesiaR08Verification?: Coordination };
+const coordination: Coordination = scope.__venesiaR08Verification ??= { worker: randomUUID(), runs: new Map<string, State>() };
+const hash = (value: string) => createHash("sha256").update(value).digest("hex");
+const tag = (ticket: Ticket) => "qa-r08-" + ticket.run;
+const keyParts = (ticket: Ticket) => ["venesia-r08-verification-v1", ticket.run];
+
+function ticketFor(raw: string, allowed: readonly Phase[]) {
+  assert.ok(process.env.VERCEL === "1" && process.env.VERCEL_ENV === "preview" && process.env.VERCEL_TARGET_ENV === "preview");
+  assert.equal(process.env.VERCEL_GIT_COMMIT_REF, manifest.branch);
+  assert.ok(Date.now() < manifest.expiresAt && raw.length < 4096);
+  const parts = raw.split(".");
+  assert.equal(parts.length, 2);
+  assert.ok(verify(null, Buffer.from(parts[0]), manifest.publicKey, Buffer.from(parts[1], "base64url")), "Invalid verification signature.");
+  const ticket = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as Ticket;
+  assert.match(ticket.requestId, /^[a-f0-9-]{36}$/u);
+  assert.match(ticket.run, /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u);
+  assert.ok(allowed.includes(ticket.phase) && scenarios.includes(ticket.scenario));
+  assert.match(ticket.sourceHead, /^[a-f0-9]{40}$/u);
+  assert.equal(ticket.sourceHead, process.env.VERCEL_GIT_COMMIT_SHA);
+  assert.ok(Number.isSafeInteger(ticket.expiresAt) && ticket.expiresAt > Date.now() &&
+    ticket.expiresAt <= manifest.expiresAt && ticket.expiresAt <= Date.now() + 600_000);
+  return ticket;
+}
+
+class AdapterIdentityError extends Error {
+  constructor(message: string, readonly diagnostic: Record<string, string | boolean | null>) { super(message); }
+}
+
+function ambient() {
+  const store = workAsyncStorage.getStore() as Store | undefined;
+  if (!store?.incrementalCache) throw new AdapterIdentityError("Inconclusive: no real ambient incremental cache.", { ambientCachePresent: false });
+  const cache = store.incrementalCache, handler = cache.cacheHandler;
+  const registry = (globalThis as unknown as Record<symbol, { FetchCache?: unknown }>)[Symbol.for("@next/cache-handlers")];
+  if (!handler || typeof registry?.FetchCache !== "function" || handler.constructor !== registry.FetchCache) {
+    throw new AdapterIdentityError("Inconclusive: ambient deployed FetchCache binding is not positively identified.", {
+      ambientCachePresent: true, globalFetchCachePresent: typeof registry?.FetchCache === "function",
+      handlerName: handler?.constructor.name ?? null, handlerSha256: handler ? hash(handler.constructor.toString()) : null,
+    });
+  }
+  assert.ok(!/FileSystemCache/iu.test(handler.constructor.name), "Local FileSystemCache is not deployed-adapter proof.");
+  return { store, cache, adapter: { binding: "ambient-global-FetchCache", constructor: handler.constructor.name,
+    constructorSha256: hash(handler.constructor.toString()), nextVersion: "16.3.0", region: process.env.VERCEL_REGION ?? null } };
+}
+
+function snapshot(state: State) {
+  return { run: state.ticket.run, scenario: state.ticket.scenario, worker: coordination.worker,
+    callbackCount: state.callbackCount, captured: state.captured, captureAt: state.captureAt, commitAt: state.commitAt,
+    releaseAt: state.releaseAt, writeCompleteAt: state.writeCompleteAt, failedRead: state.failedRead,
+    invalidations: state.invalidations, key: state.key };
+}
+
+function existing(ticket: Ticket) {
+  assert.equal(ticket.worker, coordination.worker, "Inconclusive: requests reached different workers.");
+  const state = coordination.runs.get(ticket.run);
+  assert.ok(state && state.ticket.scenario === ticket.scenario && state.ticket.sourceHead === ticket.sourceHead,
+    "Inconclusive: fixture run is not owned by this worker.");
+  return state;
+}
+
+async function database(revision: "Old" | "New") {
+  const db = new PGlite();
+  await db.exec("create table synthetic_cache_source (id integer primary key, revision text not null)");
+  await db.query("insert into synthetic_cache_source values (1,$1)", [revision]);
+  return db;
+}
+
+async function reader(state: State, cache: AmbientCache) {
+  // This exact callback and key are shared by the two real HTTP entry points.
+  const callback = async () => {
+    state.callbackCount++;
+    const result = await state.db.query<Value>("select revision from synthetic_cache_source where id=1");
+    const captured = result.rows[0];
+    assert.ok(captured);
+    state.captured = captured; state.captureAt = Date.now();
+    if (state.hold) await state.hold;
+    if (state.ticket.scenario === "reader-failure" && captured.revision === "Old") throw Error("Injected synthetic reader failure.");
+    return captured;
+  };
+  const parts = keyParts(state.ticket);
+  const key = await cache.generateSimpleCacheKey(callback.toString() + "-" + parts.join(",") + "-[]");
+  state.key = key;
+  return { read: unstable_cache(callback, parts, { revalidate: 300, tags: [tag(state.ticket)] }), key,
+    callbackSha256: hash(callback.toString()) };
+}
+
+function observeInvalidation(state: State, cache: AmbientCache) {
+  const original = cache.revalidateTag;
+  const receipt: Invalidation = { calls: 0, startedAt: null, completedAt: null, failed: false };
+  state.invalidations.push(receipt);
+  const restore = () => { if (cache.revalidateTag === observed) cache.revalidateTag = original; };
+  async function observed(this: AmbientCache, tags: string[], durations?: unknown) {
+    if (!tags.includes(tag(state.ticket))) return original.call(this, tags, durations);
+    receipt.calls++; receipt.startedAt = Date.now();
+    try { const result = await original.call(this, tags, durations); receipt.completedAt = Date.now(); return result; }
+    catch (error) { receipt.failed = true; throw error; }
+    finally { restore(); }
+  }
+  cache.revalidateTag = observed; state.restores.push(restore);
+  try { updateTag(tag(state.ticket)); }
+  catch (error) { restore(); throw error; }
+}
+
+export async function executeAction(raw: string) {
+  let ticket: Ticket;
+  try { ticket = ticketFor(raw, phases.filter(phase => phase !== "read-after")); }
+  catch { return { status: "denied" }; }
+  try {
+    const { store, cache, adapter } = ambient();
+    if (ticket.phase === "init") {
+      assert.equal(coordination.runs.has(ticket.run), false, "A nonce cannot reset an existing run.");
+      for (const [id, old] of coordination.runs) if (Date.now() - old.createdAt > 180_000 && !old.reading) {
+        old.restores.forEach(restore => restore()); await old.db.close(); coordination.runs.delete(id);
+      }
+      assert.ok(coordination.runs.size < 5, "Bounded verification capacity exhausted.");
+      const state: State = { ticket, db: await database("Old"), createdAt: Date.now(), callbackCount: 0, captured: null,
+        captureAt: null, commitAt: null, releaseAt: null, writeCompleteAt: null, hold: null, release: null, reject: null,
+        failedRead: false, reading: false, invalidations: [], restores: [], key: null };
+      coordination.runs.set(ticket.run, state);
+      return { status: "ok", requestId: ticket.requestId, phase: ticket.phase, ...snapshot(state), adapter };
+    }
+    const state = existing(ticket);
+    if (ticket.phase === "read-old") {
+      assert.equal(state.callbackCount, 0); assert.equal(state.reading, false);
+      const gated = ["reordered", "repeated", "reader-failure"].includes(ticket.scenario);
+      if (gated) state.hold = new Promise<void>((resolve, reject) => { state.release = resolve; state.reject = reject; });
+      const timer = gated ? setTimeout(() => state.reject?.(Error("Synthetic read release deadline exceeded.")), 45_000) : null;
+      state.reading = true;
+      try {
+        const current = await reader(state, cache);
+        const value = await current.read();
+        await Promise.all(Object.values(store.pendingRevalidates ?? {}));
+        state.writeCompleteAt = Date.now();
+        return { status: "ok", requestId: ticket.requestId, phase: ticket.phase, value, ...snapshot(state), callbackSha256: current.callbackSha256, adapter };
+      } catch (error) {
+        state.failedRead = true;
+        if (ticket.scenario !== "reader-failure" || !String(error).includes("Injected synthetic reader failure")) throw error;
+        return { status: "expected-reader-failure", requestId: ticket.requestId, phase: ticket.phase, ...snapshot(state), adapter };
+      } finally { if (timer) clearTimeout(timer); state.reading = false; }
+    }
+    if (ticket.phase === "mutate") {
+      assert.equal(state.captured?.revision, "Old"); assert.equal(state.commitAt, null);
+      await state.db.exec("begin; update synthetic_cache_source set revision='New' where id=1; commit;");
+      assert.equal((await state.db.query<Value>("select revision from synthetic_cache_source where id=1")).rows[0].revision, "New");
+      state.commitAt = Date.now();
+      if (ticket.scenario !== "no-invalidation") observeInvalidation(state, cache);
+    } else if (ticket.phase === "release") {
+      assert.ok(state.commitAt && state.reading && state.release);
+      assert.equal(state.invalidations.length, 1);
+      assert.ok(state.invalidations.every(item => item.calls === 1 && item.completedAt && !item.failed));
+      state.releaseAt = Date.now(); state.release();
+    } else if (ticket.phase === "invalidate-again") {
+      assert.equal(ticket.scenario, "repeated"); assert.ok(state.writeCompleteAt && !state.reading);
+      assert.equal(state.invalidations.length, 1); observeInvalidation(state, cache);
+    } else if (ticket.phase === "cleanup") {
+      assert.equal(state.reading, false); state.restores.forEach(restore => restore());
+      await state.db.close(); coordination.runs.delete(ticket.run);
+    } else assert.equal(ticket.phase, "status");
+    return { status: "ok", requestId: ticket.requestId, phase: ticket.phase, ...snapshot(state), adapter };
+  } catch (error) {
+    return { status: "inconclusive", requestId: ticket.requestId, phase: ticket.phase, reason: String(error instanceof Error ? error.message : error).slice(0, 300),
+      diagnostic: error instanceof AdapterIdentityError ? error.diagnostic : null, worker: coordination.worker };
+  }
+}
+
+export async function executeRead(raw: string) {
+  const ticket = ticketFor(raw, ["read-after"]);
+  let environment: ReturnType<typeof ambient>;
+  try { environment = ambient(); }
+  catch (error) {
+    return { status: "inconclusive", reason: String(error instanceof Error ? error.message : error).slice(0, 300),
+      diagnostic: error instanceof AdapterIdentityError ? error.diagnostic : null };
+  }
+  const { cache, store, adapter } = environment;
+  const state: State = { ticket, db: await database("New"), createdAt: Date.now(), callbackCount: 0, captured: null,
+    captureAt: null, commitAt: null, releaseAt: null, writeCompleteAt: null, hold: null, release: null, reject: null,
+    failedRead: false, reading: false, invalidations: [], restores: [], key: null };
+  try {
+    const current = await reader(state, cache), value = await current.read();
+    await Promise.all(Object.values(store.pendingRevalidates ?? {}));
+    return { status: "ok", requestId: ticket.requestId, phase: ticket.phase, value, callbackCount: state.callbackCount, key: current.key, callbackSha256: current.callbackSha256,
+      sourceRevision: "New", worker: coordination.worker, adapter, sourceHead: ticket.sourceHead };
+  } finally { await state.db.close(); }
+}
