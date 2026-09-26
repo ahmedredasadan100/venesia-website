@@ -9,12 +9,22 @@ import type { OwnedLocalHandle, OwnedDatabaseConnection } from './lib/isolated-s
 type Readback = typeof import('./verify-admin-core-domain-readback-isolated.mts');
 const require = createRequire(import.meta.url);
 const db = new PGlite();
-let active = true, sqlReads = 0, openScopes = 0;
+let active = true, sqlReads = 0, openScopes = 0, activeBrowser = false, renewalAttempts = 0;
 let virtualNow: number | null = null, queryAdvance = 0, failRenewal = false;
 const renewals: number[] = [], statements: string[] = [];
 class ReadbackClock extends Date { static now() { return virtualNow ?? Date.now(); } }
+// Execute the unchanged canonical renewal implementation through its actual
+// publicJob refusal branch, before any database-control operation is reachable.
+const lifecycleFile=ts.createSourceFile('isolated-supabase.mts',readFileSync(resolve(import.meta.dirname,'lib/isolated-supabase.mts'),'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+const renewalNodes: ts.ArrowFunction[]=[];
+const visitRenewal=(node: ts.Node)=>{if(ts.isPropertyAssignment(node)&&node.name.getText(lifecycleFile)==='renewDatabaseControlConnection'&&ts.isArrowFunction(node.initializer))renewalNodes.push(node.initializer);ts.forEachChild(node,visitRenewal);};
+visitRenewal(lifecycleFile);assert.equal(renewalNodes.length,1);
+const renewalCode=ts.transpileModule('const renewal='+renewalNodes[0].getText(lifecycleFile)+';',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const actualPublicJobRefusal=new Function('cliContext','requireThat','controlMaintenance','scopedConnections','publicJob',renewalCode+'return renewal;')(
+ {assertOwned:async()=>assert.ok(active)},(condition:unknown,code:string)=>assert.ok(condition,code),false,new Set(),Promise.resolve());
 const handle = {
   renewDatabaseControlConnection: async () => {
+    renewalAttempts++;if(activeBrowser)await actualPublicJobRefusal();
     assert.ok(active); assert.equal(openScopes, 0, 'Control maintenance requires a closed scoped connection.');
     if (failRenewal) throw new Error('controlled renewal failure');
     renewals.push(ReadbackClock.now());
@@ -247,6 +257,40 @@ try {
       finally { await db.query('update public.admin_audit_logs set metadata=$1 where id=26', [JSON.stringify(bulkMetadata)]); }
     });
   }
+  await test('The actual lifecycle renewal implementation refuses an active publicJob before any control query', async () => {
+    const before=sqlReads;await assert.rejects(actualPublicJobRefusal(),/CONTROL_CONNECTION_NOT_IDLE/);assert.equal(sqlReads,before);
+  });
+  await test('Both post-gate readers still reject an active Browser job before reading', async () => {
+    activeBrowser=true;const before=sqlReads;
+    try {await assert.rejects(owner.verifyCoreDomainWrites(handle,browser([base()])),/CONTROL_CONNECTION_NOT_IDLE/);await assert.rejects(owner.verifyCoreExecutedWriteProjections(handle,browser([base()],'failed')),/CONTROL_CONNECTION_NOT_IDLE/);}
+    finally {activeBrowser=false;}assert.equal(sqlReads,before);assert.equal(openScopes,0);
+  });
+  await test('Fixed live checkpoint uses only scoped reads and retains exact native fields, actor, receipt and partial status', async () => {
+    activeBrowser=true;const before=renewalAttempts;
+    try {const result=await owner.readCoreDomainWriteCheckpoint(handle,browser([base(),base()],'in-progress-form-native-checkpoint'));assert.equal(result.status,'partial-not-global-pass');assert.equal(result.browserStatus,'in-progress-form-native-checkpoint');assert.equal(result.globalClosed,false);assert.equal(result.writes.length,2);assert.ok(result.writes.every(row=>row.actual?.title==='Owned topic'&&row.expectedActorId===7&&row.commandReceiptCount===1));}
+    finally {activeBrowser=false;}assert.equal(renewalAttempts,before);assert.equal(openScopes,0);
+  });
+  await test('Live checkpoint rejects missing rows, foreign positive actor and missing audit without control renewal', async () => {
+    activeBrowser=true;const before=renewalAttempts;
+    try {
+      await assert.rejects(owner.readCoreDomainWriteCheckpoint(handle,browser([{...base(),id:999}],'in-progress-form-native-checkpoint')),/Native existence/);
+      await db.exec('update public.admin_audit_logs set actor_admin_user_id=8 where id=1');
+      try {await assert.rejects(owner.readCoreDomainWriteCheckpoint(handle,browser([base()],'in-progress-form-native-checkpoint')),/fixed owned QA identity/);}finally {await db.exec('update public.admin_audit_logs set actor_admin_user_id=7 where id=1');}
+      await db.exec("update public.admin_audit_logs set entity_type='other' where id=1");
+      try {await assert.rejects(owner.readCoreDomainWriteCheckpoint(handle,browser([base()],'in-progress-form-native-checkpoint')),/actor-bound audit/);}finally {await db.exec("update public.admin_audit_logs set entity_type='topic' where id=1");}
+      assert.equal(statements.at(-1),'rollback');
+    }finally {activeBrowser=false;}assert.equal(renewalAttempts,before);assert.equal(openScopes,0);
+  });
+  await test('Live checkpoint denies caller pass status, empty or oversized descriptors and invalid fields before SQL', async () => {
+    const before=sqlReads;
+    for(const input of [browser([base()]),browser([],'in-progress-form-native-checkpoint'),browser(Array.from({length:5},base),'in-progress-form-native-checkpoint'),browser([{...base(),expected:{secret:'x'}}],'in-progress-form-native-checkpoint')])await assert.rejects(owner.readCoreDomainWriteCheckpoint(handle,input));
+    assert.equal(sqlReads,before);
+  });
+  await test('Live checkpoint cannot use an unowned or ended handle', async () => {
+    const input=browser([base()],'in-progress-form-native-checkpoint'),before=sqlReads;
+    await assert.rejects(owner.readCoreDomainWriteCheckpoint({} as OwnedLocalHandle,input));active=false;
+    try{await assert.rejects(owner.readCoreDomainWriteCheckpoint(handle,input));}finally{active=true;}assert.equal(sqlReads,before);
+  });
   await test('A long sequence renews only healthy closed scopes before the unchanged idle deadline', async () => {
     virtualNow = 1_000_000; queryAdvance = 3_000; renewals.length = 0;
     try {

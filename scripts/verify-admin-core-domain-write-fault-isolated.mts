@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 
 import { TOPIC_CONTROL_KINDS } from "./fixtures/admin-core-topic-controls-contract.mjs";
+import { PROJECT_CONTROL_KINDS, projectControlSlug } from "./fixtures/admin-core-project-controls-contract.mjs";
 import { TEMPLATE_CONTROL_RECIPES } from "./fixtures/admin-core-template-controls-contract.mjs";
 
 type Row = Record<string, unknown>;
@@ -54,6 +55,20 @@ function fixedTargets(input: unknown): Record<string, Target> {
       assert.equal(rows.length, 1); const slug = 'qa-core-topic-controls-' + kind;
       assert.equal(rows[0].slug, slug);
       targets['topic_control_' + kind] = { table: 'topics', id: getId(rows[0]), slug, signature: update('topics') };
+    }
+  }
+  if (fixtures.projectControls !== undefined) {
+    const controls=object(fixtures.projectControls);assert.ok(Array.isArray(controls.projects));assert.equal(controls.projects.length,PROJECT_CONTROL_KINDS.length);
+    for(const kind of PROJECT_CONTROL_KINDS){
+      const rows:Row[]=controls.projects.map(object).filter((row:Row)=>row.kind===kind);assert.equal(rows.length,1);const slug=projectControlSlug(kind);assert.equal(rows[0].slug,slug);
+      const id=getId(rows[0]);
+      if(kind==='residential'){
+        assert.equal(id,targets.projects.id,'The optional residential form must reuse the same existing owned Project identity.');
+        targets.projects={...targets.projects,slug,signature:rpc('set_project_publication_admin_entry','save_project_admin_entry')};
+      }else{
+        assert.equal(id,getId(fixtures.commercialProject));
+        targets.project_control_commercial={table:'projects',id,slug,signature:rpc('save_project_admin_entry')};
+      }
     }
   }
   const identities = Object.values(targets).map(row => row.table + ':' + row.id);

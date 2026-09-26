@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { resolveTopicControlOptionIndex } from "./fixtures/admin-core-topic-controls-journeys.mjs";
 import ts from "typescript";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -63,5 +64,14 @@ function assertTopicPendingOwner(candidate:string){
 }
 test("Topic pending selector adopts the actual current owner",()=>assertTopicPendingOwner(source));
 test("Regression: substituting specialized wrapper or an invented inert requirement fails",()=>{assert.throws(()=>assertTopicPendingOwner(source.replace('[data-admin-form-fields]','[data-admin-form-pending-fields]')));assert.throws(()=>assertTopicPendingOwner(source.replace('await expect(pending).toBeDisabled();','await expect(pending).toHaveAttribute("inert", "");')));});
+
+
+const option=(value:string,disabled=false)=>({id:"qa-series-option-"+value,disabled});
+test("Actual selectable empty Series option contributes to Home/ArrowDown indexing",()=>assert.deepEqual(resolveTopicControlOptionIndex("qa-series-listbox",[option(""),option("51")],"51"),{index:1,target:"qa-series-option-51",first:"qa-series-option-"}));
+test("Category without a rendered selectable placeholder starts directly at its first real option",()=>assert.equal(resolveTopicControlOptionIndex("qa-series-listbox",[option("41"),option("42")],"41").index,0));
+test("Disabled options never consume a keyboard selection step",()=>assert.equal(resolveTopicControlOptionIndex("qa-series-listbox",[option("",true),option("40",true),option("41"),option("42")],"42").index,1));
+test("Explicit empty selection remains a real rendered choice",()=>assert.equal(resolveTopicControlOptionIndex("qa-series-listbox",[option(""),option("51")],"").index,0));
+for(const [label,options,value]of[["missing",[option("51")],"52"],["disabled",[option("51",true)],"51"],["duplicate",[option("51"),option("51")],"51"],["foreign-menu",[{id:"other-option-51",disabled:false}],"51"],["no-options",[],"51"]] as const)test("Rendered listbox control rejects "+label,()=>assert.throws(()=>resolveTopicControlOptionIndex("qa-series-listbox",options,value)));
+test("Regression empty-value filtering reproduces wrong index and fails intended active-descendant contract",()=>{const rendered=[option(""),option("51")],oldIndex=rendered.filter(row=>!row.id.endsWith("option-")).findIndex(row=>row.id.endsWith("51"));assert.notEqual(rendered[oldIndex].id,resolveTopicControlOptionIndex("qa-series-listbox",rendered,"51").target);});
 
 console.log(JSON.stringify({status:"pass",controls:cases.length,cases,runtimeExecuted:false,globalClosed:false}));

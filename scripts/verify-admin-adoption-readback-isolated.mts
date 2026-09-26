@@ -1,3 +1,5 @@
+import { assertCoreProjectControlsCompleted } from "./verify-admin-core-project-controls-isolated.mts";
+import { PROJECT_CONTROL_PHASES } from "./fixtures/admin-core-project-controls-contract.mjs";
 import { assertCoreTopicControlsCompleted } from "./verify-admin-core-topic-controls-isolated.mts";
 import { verifyCoreDomainBulkCompletion } from "./verify-admin-core-domain-bulk-isolated.mts";
 import { assertCoreTemplateControlsCompleted } from "./verify-admin-core-template-controls-isolated.mts";
@@ -145,14 +147,14 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
   assertOwnedLocalHandle(handle);
   const browser = JSON.parse(readFileSync(join(artifactDir, "admin-adoption-browser.json"), "utf8")) as {
     status: string; scope?: string; cohort?: string; startedAt: string; databaseReadback: ExpectedRead[]; readOnlyReadback: unknown[];
-    previewMatrix: Array<{ status: string }>; topicControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; templateControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; specializedSettings?: { status: string }; media?: MediaJoinResult; mediaRecovery?: MediaJoinResult;
+    previewMatrix: Array<{ status: string }>; projectControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; topicControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; templateControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; specializedSettings?: { status: string }; media?: MediaJoinResult; mediaRecovery?: MediaJoinResult;
     menuIntegrityReadback: Array<{ topicId: number; menuId: number; expectedItems: number }>;
     evidence: Array<{ id: string; status: string }>; globalClosed: boolean;
   };
   assert.equal(browser.status, "pass", "Failed selected browser journeys cannot receive a passing database receipt.");
   assert.ok(Number.isFinite(Date.parse(browser.startedAt)));
   if (browser.scope === "core-closure") {
-    assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls"].includes(browser.cohort ?? ""));
+    assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls"].includes(browser.cohort ?? ""));
     const previewStates = browser.cohort === "preview-recovery-templates" ? await verifyCorePreviewStateReadback(handle, artifactDir, "after") : null;
     if (previewStates) {
       assert.equal(browser.previewMatrix.length, previewStates.reads.length * 2);
@@ -208,6 +210,29 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       }
       topicControls={...result,completion,cleanup};
     }
+    let projectControls=null;
+    if(browser.cohort==="project-controls") {
+      const completion=assertCoreProjectControlsCompleted(handle),result=browser.projectControls;assert.ok(result);
+      assert.equal(completion.exactWrites,4);assert.equal(completion.allRemainUnpublished,true);assert.equal(completion.optionalGraphsEmpty,true);
+      assert.equal(result.planned,completion.recipes);assert.equal(result.completed,completion.recipes);assert.equal(result.outcomes.length,completion.recipes);
+      assert.equal(new Set(result.outcomes.map(row=>row.kind)).size,completion.recipes);
+      const native=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));assert.equal(native.status,"pass");assert.equal(native.ownedRunId,handle.identity.runId);
+      const cleanup=JSON.parse(readFileSync(join(artifactDir,"core-native-write-faults.json"),"utf8"));assert.equal(cleanup.status,"closed");assert.equal(cleanup.activeLocks,0);
+      const faults=native.records.filter((r:Record<string,unknown>)=>String(r.kind).startsWith("domain-write-fault-"));assert.deepEqual(faults,cleanup.records);
+      assert.ok(native.records.every((r:Record<string,unknown>)=>r.kind==="project-controls-state"||faults.includes(r)));assert.equal(native.records.filter((r:Record<string,unknown>)=>r.kind==="project-controls-state").length,completion.nativeCheckpoints);
+      for(const row of result.outcomes){
+        assert.equal(row.exactWrites,2);assert.equal(row.optionalGraphsEmpty,true);assert.deepEqual(row.nativePhases,PROJECT_CONTROL_PHASES);
+        const states=native.records.filter((r:Record<string,unknown>)=>r.kind==="project-controls-state"&&r.recipe===row.kind);assert.deepEqual(states.map((r:Record<string,unknown>)=>r.phase),PROJECT_CONTROL_PHASES);assert.ok(states.every((r:Record<string,unknown>)=>r.status==="pass"));
+        const evidence=browser.evidence.filter(item=>item.id==="core-project-controls-"+row.kind);assert.equal(evidence.length,1);assert.equal(evidence[0].status,"pass");
+        const actual=faults.filter((r:Record<string,unknown>)=>r.entity===(row.kind==="residential"?"projects":"project_control_commercial"));const tokens=[...new Set(actual.map((r:Record<string,unknown>)=>r.token))];assert.equal(tokens.length,2);
+        for(const [index,key]of ["rejectedPending","successfulPending"].entries()){
+          const proof=row[key] as Record<string,unknown>;for(const name of ["sameNativeStatementObservedTwice","normalKeyboardDedup","fieldsAndCloseDisabled","ownedLockReleased"])assert.equal(proof[name],true);assert.equal(proof.actionRequests,1);assert.equal(proof.actualStatementCancelled,index===0);
+          const sequence=actual.filter((r:Record<string,unknown>)=>r.token===tokens[index]);assert.deepEqual(sequence.map((r:Record<string,unknown>)=>r.kind),["arm","observe-blocked","observe-blocked",...(index===0?["cancel"]:[]),"release"].map(kind=>"domain-write-fault-"+kind));
+          assert.equal(sequence.at(-1).ownedLockRolledBack,true);assert.equal(sequence.at(-1).cancellationObserved,index===0);
+        }
+      }
+      projectControls={...result,completion,cleanup};
+    }
     const domainBulk=browser.cohort==="domain-bulk"?await verifyCoreDomainBulkCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"))):null;
     const queryPresentation = browser.cohort === "query-presentation" ? verifyCoreQueryPresentationCompletion(handle,browser) : null;
     const authEntry = browser.cohort === "auth-entry" ? assertCoreAuthEntryCompleted(handle) : null;
@@ -216,7 +241,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     if (specializedSettings) assert.equal(browser.specializedSettings?.status,"pass");
     const writes = await verifyCoreDomainWrites(handle, browser);
     const readOnly = browser.cohort === "domain-commands" ? await verifyCoreReadonlyReadback(handle, browser) : null;
-    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", previewStates, writes, readOnly, nativeCheckpoints, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, queryPresentation, templateControls, topicControls, domainBulk, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", previewStates, writes, readOnly, nativeCheckpoints, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, queryPresentation, templateControls, topicControls, projectControls, domainBulk, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }

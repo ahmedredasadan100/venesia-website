@@ -1,3 +1,4 @@
+import { readCoreProjectControlsCheckpoint } from "./verify-admin-core-project-controls-isolated.mts";
 import { readCoreTopicControlsCheckpoint } from "./verify-admin-core-topic-controls-isolated.mts";
 import { readCoreTemplateControlsCheckpoint } from "./verify-admin-core-template-controls-isolated.mts";
 import { readCoreQueryPresentationCheckpoint } from "./verify-admin-core-query-presentation-isolated.mts";
@@ -15,7 +16,7 @@ import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-su
 
 import { readCoreFormPermissionFingerprint } from "./verify-admin-core-form-permission-isolated.mts";
 
-import { assertCoreAuditActor, readCoreFixedQaActor, readCoreDomainCheckpoint, verifyCoreExecutedWriteProjections } from "./verify-admin-core-domain-readback-isolated.mts";
+import { assertCoreAuditActor, readCoreFixedQaActor, readCoreDomainCheckpoint, readCoreDomainWriteCheckpoint } from "./verify-admin-core-domain-readback-isolated.mts";
 
 import { createOwnedCoreDomainWriteFaults } from "./verify-admin-core-domain-write-fault-isolated.mts";
 
@@ -37,14 +38,16 @@ export async function runOwnedAdminCoreNativeControl<T>(handle: OwnedLocalHandle
       for (const file of requests) {
         const request = JSON.parse(readFileSync(join(artifactDir, file), "utf8"));
         assert.equal(file, `core-native-request-${request.id}.json`);
-        assert.ok(["category-create-durable", "topic-command-durable", "terminal-domain-state", "terminal-trash-set", "form-permission-fingerprint", "form-save-native", "page-composition-state", "readonly-hub-state", "specialized-settings-state", "media-library-state", "navigation-settings-state", "auth-entry-state", "query-presentation-state", "template-controls-state", "topic-controls-state", ...recoveryKinds, ...faultKinds].includes(request.kind), "Only fixed native proofs may request state.");
-        if (request.kind !== "terminal-trash-set" && request.kind !== "form-permission-fingerprint" && request.kind !== "readonly-hub-state" && request.kind !== "specialized-settings-state" && request.kind !== "media-library-state" && request.kind !== "navigation-settings-state" && request.kind !== "auth-entry-state" && request.kind !== "query-presentation-state" && request.kind !== "template-controls-state" && request.kind !== "topic-controls-state" && !recoveryKinds.includes(request.kind) && !faultKinds.includes(request.kind)) assert.ok(Number.isFinite(Date.parse(request.startedAt)));
+        assert.ok(["category-create-durable", "topic-command-durable", "terminal-domain-state", "terminal-trash-set", "form-permission-fingerprint", "form-save-native", "page-composition-state", "readonly-hub-state", "specialized-settings-state", "media-library-state", "navigation-settings-state", "auth-entry-state", "query-presentation-state", "template-controls-state", "topic-controls-state", "project-controls-state", ...recoveryKinds, ...faultKinds].includes(request.kind), "Only fixed native proofs may request state.");
+        if (request.kind !== "terminal-trash-set" && request.kind !== "form-permission-fingerprint" && request.kind !== "readonly-hub-state" && request.kind !== "specialized-settings-state" && request.kind !== "media-library-state" && request.kind !== "navigation-settings-state" && request.kind !== "auth-entry-state" && request.kind !== "query-presentation-state" && request.kind !== "template-controls-state" && request.kind !== "topic-controls-state" && request.kind !== "project-controls-state" && !recoveryKinds.includes(request.kind) && !faultKinds.includes(request.kind)) assert.ok(Number.isFinite(Date.parse(request.startedAt)));
         const deadline = Date.now() + 20_000;
         let response: Record<string, unknown>;
         try {
           if (recoveryKinds.includes(request.kind)) {
             assert.ok(mediaRecovery,"Recovery fault requests require its opted-in fixed owned Media fixture.");
             response = await mediaRecovery.handleRequest(request);
+          } else if (request.kind === "project-controls-state") {
+            response = await readCoreProjectControlsCheckpoint(handle,request);
           } else if (request.kind === "topic-controls-state") {
             response = await readCoreTopicControlsCheckpoint(handle,request);
           } else if (request.kind === "template-controls-state") {
@@ -69,7 +72,7 @@ export async function runOwnedAdminCoreNativeControl<T>(handle: OwnedLocalHandle
             assert.deepEqual(Object.keys(request).sort(), ["caseId", "descriptors", "formConsumer", "id", "kind", "startedAt", "surface"]);
             for (const key of ["caseId", "formConsumer", "surface"]) assert.ok(typeof request[key] === "string" && /^[a-z0-9][a-z0-9:_-]{0,179}$/.test(request[key]));
             assert.ok(Array.isArray(request.descriptors) && request.descriptors.length > 0 && request.descriptors.length <= 4);
-            const result = await verifyCoreExecutedWriteProjections(handle, {status: "in-progress-form-native-checkpoint", startedAt: request.startedAt, databaseReadback: request.descriptors});
+            const result = await readCoreDomainWriteCheckpoint(handle, {status: "in-progress-form-native-checkpoint", startedAt: request.startedAt, databaseReadback: request.descriptors});
             response = {id: request.id, kind: request.kind, caseId: request.caseId, formConsumer: request.formConsumer, surface: request.surface, ...result};
           } else if (faultKinds.includes(request.kind)) {
             assert.ok(faults, "Write-fault control requires the full owned domain fixture set.");

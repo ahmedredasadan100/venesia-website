@@ -29,7 +29,7 @@ const evidence = [], databaseReadback = [], readOnlyReadback = [], menuIntegrity
 const inventoryOnly = process.argv.includes("--inventory-only");
 const coreClosure = process.argv.includes("--core-closure");
 const coreCohort = process.argv.find(arg => arg.startsWith("--core-cohort="))?.slice("--core-cohort=".length) ?? "preview-recovery-templates";
-assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls"].includes(coreCohort));
+assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls"].includes(coreCohort));
 let driverCompleted = false, activeCase = "bootstrap";
 let specializedSettingsResult = null;
 let mediaResult = null;
@@ -38,6 +38,7 @@ let authEntryResult = null;
 let mediaRecoveryResult = null;
 let queryPresentationResult = null;
 let templateControlsResult = null;
+let projectControlsResult = null;
 let topicControlsResult = null;
 let domainBulkResult = null;
 const progress = [];
@@ -83,7 +84,7 @@ function receipt() {
     inventoryOnly, driverCompleted, scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreClosure ? coreCohort : null, proofBoundary: inventoryOnly ? "applicability inventory only; no browser execution" : "owned local production Next and real authenticated application persistence",
     globalClosed: driverCompleted && errors.length === 0 && cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete) && settledPreviewMatrix.every(row => row.status === "behavior_verified"),
     inventorySource: sourceHashes, sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256 ?? null,
-    startedAt, specializedSettings: specializedSettingsResult, media: mediaResult, navigationSettings: navigationSettingsResult, authEntry: authEntryResult, mediaRecovery: mediaRecoveryResult, queryPresentation: queryPresentationResult, templateControls: templateControlsResult, topicControls: topicControlsResult, domainBulk: domainBulkResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
+    startedAt, specializedSettings: specializedSettingsResult, media: mediaResult, navigationSettings: navigationSettingsResult, authEntry: authEntryResult, mediaRecovery: mediaRecoveryResult, queryPresentation: queryPresentationResult, templateControls: templateControlsResult, topicControls: topicControlsResult, projectControls: projectControlsResult, domainBulk: domainBulkResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
     limitations: ["Unexecuted applicability cells remain open; successful representative journeys do not close the full inventory.",
       "Database readback expectations require the owning parent to verify through its opaque owned handle.",
       "This verifier does not claim production, Vercel delivery, or every permission and failure state."],
@@ -337,6 +338,10 @@ try {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreDomainBulkJourneys}=await import("./fixtures/admin-core-domain-bulk-journeys.mjs");
     domainBulkResult=await runCoreDomainBulkJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output}),databaseReadback});
+   } else if (coreCohort === "project-controls") {
+    const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
+    const {runCoreProjectControlsJourneys}=await import("./fixtures/admin-core-project-controls-journeys.mjs");
+    projectControlsResult=await runCoreProjectControlsJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "topic-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreTopicControlsJourneys}=await import("./fixtures/admin-core-topic-controls-journeys.mjs");

@@ -6,6 +6,23 @@ import { spawnSync } from 'node:child_process';
 import { createJiti } from 'jiti';
 import ts from 'typescript';
 
+
+/** Exact current producer protocol; incomplete, duplicate or failed output is never applicability evidence. */
+export function parseCoreCanonicalApplicability(result) {
+  assert.ifError(result.error);assert.equal(result.signal ?? null,null,'Canonical applicability child was terminated.');
+  assert.equal(result.status,0,'Current canonical applicability preflight failed.');
+  assert.equal(typeof result.stdout,'string');const lines=result.stdout.split(/\r?\n/).map(line=>line.trim());
+  const payloads=lines.filter(line=>line.startsWith('{'));assert.equal(payloads.length,1,'Expected one complete canonical applicability JSON payload.');
+  let value;try{value=JSON.parse(payloads[0]);}catch{throw new Error('Canonical applicability JSON was truncated or malformed.');}
+  assert.ok(value&&typeof value==='object'&&!Array.isArray(value));assert.deepEqual(Object.keys(value).sort(),['capabilities','consumers','phase']);
+  assert.equal(value.phase,'applicability');assert.ok(Array.isArray(value.capabilities)&&value.capabilities.length>0&&value.capabilities.every(key=>typeof key==='string'&&key.length>0));
+  assert.equal(new Set(value.capabilities).size,value.capabilities.length);assert.ok(Array.isArray(value.consumers)&&value.consumers.length>0);
+  const identities=new Set();for(const row of value.consumers){assert.ok(row&&typeof row.id==='string'&&row.id.length>0&&['form','collection'].includes(row.boundary));const key=row.boundary+':'+row.id;assert.equal(identities.has(key),false);identities.add(key);assert.ok(row.decisions&&typeof row.decisions==='object'&&!Array.isArray(row.decisions));assert.deepEqual(Object.keys(row.decisions).sort(),[...value.capabilities].sort());}
+  assert.equal(lines.filter(line=>line==='Phase: applicability').length,1);assert.equal(lines.filter(line=>line==='Consumer Capability Adoption Audit passed.').length,1);
+  assert.equal(lines.filter(Boolean).at(-1),'Consumer Capability Adoption Audit passed.','Canonical applicability completion marker is missing.');
+  return value;
+}
+
 // Execute current source contracts with controlled ports; this never promotes Browser coverage.
 const root=path.resolve(import.meta.dirname,'..');process.chdir(root);
 const dir=path.join(root,'.tmp-qa/core-final-closure');fs.mkdirSync(dir,{recursive:true});
@@ -30,8 +47,42 @@ const driverFile='scripts/qa-admin-adoption-journeys.mjs',driverText=fs.readFile
 const inventoryNode=driverAst.statements.filter(node=>ts.isVariableStatement(node)&&node.declarationList.declarations.some(row=>row.name.getText(driverAst)==='inventory'));assert.equal(inventoryNode.length,1);
 const inventoryLoops=driverAst.statements.filter(node=>ts.isForOfStatement(node)&&['inventory','collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION'].includes(node.expression.getText(driverAst))&&node.getText(driverAst).includes('requiredCases.push'));assert.equal(inventoryLoops.length,2);
 const preflight=spawnSync(process.execPath,['--experimental-strip-types','scripts/verify-admin-row-actions-capability.mts','--consumer-capability-audit','--all','--phase','applicability','--json'],{cwd:root,encoding:'utf8',timeout:120000,maxBuffer:4000000,windowsHide:true,env:{...process.env,QA_ADMIN_USERNAME:'',QA_ADMIN_PASSWORD:''}});
-assert.equal(preflight.status,0,'Current canonical applicability preflight failed.');
-const applicability=JSON.parse(preflight.stdout.split(/\r?\n/).find(line=>line.startsWith('{"phase":')));
+const applicability=parseCoreCanonicalApplicability(preflight);
+
+// The current payload is the positive fixture; controlled corruptions must never become applicability evidence.
+const protocolOutput=value=>({status:0,signal:null,stdout:'Phase: applicability\n'+JSON.stringify(value)+'\nConsumer Capability Adoption Audit passed.\n'});
+check('canonical-applicability-complete-lf',()=>assert.deepEqual(parseCoreCanonicalApplicability(protocolOutput(applicability)),applicability));
+check('canonical-applicability-complete-crlf',()=>{const output=protocolOutput(applicability);output.stdout=output.stdout.replaceAll('\n','\r\n');assert.deepEqual(parseCoreCanonicalApplicability(output),applicability);});
+const protocolCorruptions={
+  'child-error':output=>{output.error=new Error('controlled spawn failure');},
+  'child-signal':output=>{output.signal='SIGTERM';},
+  'nonzero-exit':output=>{output.status=1;},
+  'missing-output':output=>{delete output.stdout;},
+  'missing-json':output=>{output.stdout='Phase: applicability\nConsumer Capability Adoption Audit passed.\n';},
+  'duplicate-json':output=>{output.stdout=output.stdout.replace('Phase: applicability\n','Phase: applicability\n'+JSON.stringify(applicability)+'\n');},
+  'truncated-json':output=>{output.stdout='Phase: applicability\n'+JSON.stringify(applicability).slice(0,-1);},
+  'missing-footer':output=>{output.stdout=output.stdout.replace('Consumer Capability Adoption Audit passed.\n','');},
+  'duplicate-footer':output=>{output.stdout+='Consumer Capability Adoption Audit passed.\n';},
+  'nonfinal-footer':output=>{output.stdout+='Unfinished diagnostic\n';},
+  'missing-phase-marker':output=>{output.stdout=output.stdout.replace('Phase: applicability\n','');},
+  'duplicate-phase-marker':output=>{output.stdout='Phase: applicability\n'+output.stdout;},
+};
+for(const[name,mutate]of Object.entries(protocolCorruptions))check('reject-applicability-'+name,()=>{const output=protocolOutput(applicability);mutate(output);assert.throws(()=>parseCoreCanonicalApplicability(output));});
+const payloadCorruptions={
+  'wrong-phase':value=>{value.phase='source_proof';},
+  'extra-root-key':value=>{value.extra=true;},
+  'empty-capabilities':value=>{value.capabilities=[];},
+  'duplicate-capability':value=>{value.capabilities.push(value.capabilities[0]);},
+  'empty-consumers':value=>{value.consumers=[];},
+  'duplicate-consumer':value=>{value.consumers.push(value.consumers[0]);},
+  'unknown-boundary':value=>{value.consumers[0].boundary='unclassified';},
+  'missing-identity':value=>{delete value.consumers[0].id;},
+  'missing-decision-axis':value=>{delete value.consumers[0].decisions[value.capabilities[0]];},
+  'extra-decision-axis':value=>{value.consumers[0].decisions.unclassified={state:'applicable'};},
+};
+for(const[name,mutate]of Object.entries(payloadCorruptions))check('reject-applicability-'+name,()=>{const value=structuredClone(applicability);mutate(value);assert.throws(()=>parseCoreCanonicalApplicability(protocolOutput(value)));});
+check('truncated-applicability-has-bounded-diagnostic',()=>{const output=protocolOutput(applicability);protocolCorruptions['truncated-json'](output);assert.throws(()=>parseCoreCanonicalApplicability(output),{message:'Canonical applicability JSON was truncated or malformed.'});});
+
 assert.deepEqual(applicability.capabilities,Object.keys(collections.ADMIN_CURRENT_SHARED_CAPABILITY_SET));
 const currentInventory=new Function('forms','collections','canonical','assert',inventoryNode[0].getText(driverAst)+';const requiredCases=[];'+inventoryLoops.map(node=>node.getText(driverAst)).join('\n')+';return {inventory,requiredCases};')(forms,collections,applicability,assert);
 assert.equal(applicability.consumers.length,currentInventory.inventory.length);const requiredCases=currentInventory.requiredCases;

@@ -1112,7 +1112,7 @@ function readCliOption(option: string) {
   return optionIndex >= 0 ? process.argv[optionIndex + 1] : undefined;
 }
 
-function runConsumerCapabilityAuditPreflight() {
+async function runConsumerCapabilityAuditPreflight() {
   if (!process.argv.includes("--consumer-capability-audit")) return;
 
   const consumerId = readCliOption("--consumer");
@@ -1163,8 +1163,8 @@ function runConsumerCapabilityAuditPreflight() {
       [],
       `Consumer Capability Adoption Audit failed: ${failures.join(", ")}`,
     );
-    if (process.argv.includes("--json")) {
-      console.log(JSON.stringify({
+    const auditJson = process.argv.includes("--json")
+      ? JSON.stringify({
         phase: requestedPhase,
         capabilities: currentSharedCapabilityKeys,
         consumers: consumerCapabilityAuditRecords.map(consumer => ({
@@ -1172,9 +1172,15 @@ function runConsumerCapabilityAuditPreflight() {
           boundary: consumer.boundary,
           decisions: resolveConsumerCapabilityAudit(consumer),
         })),
-      }));
-    }
-    console.log("Consumer Capability Adoption Audit passed.");
+      }) + "\n"
+      : "";
+    // POSIX pipes are asynchronous; finish the canonical payload before exit.
+    await new Promise<void>((resolve, reject) => {
+      process.stdout.write(`${auditJson}Consumer Capability Adoption Audit passed.\n`, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
     process.exit(0);
   }
 
@@ -1215,7 +1221,7 @@ function runConsumerCapabilityAuditPreflight() {
   process.exit(0);
 }
 
-runConsumerCapabilityAuditPreflight();
+await runConsumerCapabilityAuditPreflight();
 
 type CollectionSourceOverrides = ReadonlyMap<string, string>;
 

@@ -61,7 +61,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    assert.deepEqual(cohort.ids,[...fixture.ids].sort((a,b)=>a-b),'Native complete search set must equal the pre-registered fixture IDs.');
    const fingerprint=String(cohort.fingerprint),previous=current.fingerprints.get(spec.key);
    if(previous)assert.equal(fingerprint,previous,'Read-only query/row information journeys must not mutate their domain rows.');
-   const rows=(await connection.query(`select id,${label} label${spec.entity==='projects'?',slug':spec.entity==='pages'?',path':''} from public.${table} where ${filtered.join(' and ')} order by ${sort} ${direction} nulls last,id ${idDirection}`,values)).rows;
+   const rows=(await connection.query(`select id,${label} label${spec.entity==='projects'?',slug':spec.entity==='pages'?',path':spec.entity==='topics'?',view_count':''} from public.${table} where ${filtered.join(' and ')} order by ${sort} ${direction} nulls last,id ${idDirection}`,values)).rows;
    assert.ok(rows.length<=spec.rowCount);const ids=rows.map(row=>Number(row.id));
    const totalPages=Math.max(1,Math.ceil(rows.length/query.pageSize)),page=Math.min(query.page,totalPages),start=(page-1)*query.pageSize;
    const preferences=(await connection.query('select preferences from public.admin_user_preferences where admin_user_id=$1 and view_key=$2',[actorId,spec.viewKey])).rows;
@@ -69,7 +69,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    await connection.query('commit');current.fingerprints.set(spec.key,fingerprint);
    current.proofs.set(request.id,{id:request.id,routeKey:spec.key,scenario:request.scenario,actorId,ownedRunId:handle.identity.runId,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null});
    return {status:"pass" as const,ownedRunId:handle.identity.runId,id:request.id,kind:request.kind,routeKey:spec.key,scenario:request.scenario,entity:spec.entity,consumerId:spec.consumerId,actorId,route:spec.routeFor(fixture),query:params.toString(),
-    expectedIds:ids.slice(start,start+query.pageSize),completeIds:ids,rows:rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),label:String(row.label),publicPath:spec.publicPathFor(row)})),
+    expectedIds:ids.slice(start,start+query.pageSize),completeIds:ids,rows:rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),label:String(row.label),publicPath:spec.publicPathFor(row),...(spec.entity==='topics'?{information:{viewCount:Number(row.view_count??0)}}:{})})),
     pagination:{page,pageSize:query.pageSize,totalRows:rows.length,totalPages},fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,
     proofBoundary:'Native table order, complete isolated search set and same-run QA preference projection; no domain audit or unrelated capability proof is inferred.'};
   }catch(error){await connection.query('rollback');throw error;}

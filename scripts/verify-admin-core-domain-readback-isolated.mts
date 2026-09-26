@@ -179,16 +179,17 @@ function validateWrite(raw: unknown, browserSince: string) {
 
 /** Persisted field/configuration truth and exact current-domain actor audit. */
 type BrowserWrites = { status: string; startedAt: string; databaseReadback: unknown[] };
-async function readExecutedWrites(handle: OwnedLocalHandle, browser: BrowserWrites) {
+async function readExecutedWrites(handle: OwnedLocalHandle, browser: BrowserWrites, phase: 'post-gate' | 'during-browser') {
   assertOwnedLocalHandle(handle); const browserSince = date(browser.startedAt); assert.ok(Array.isArray(browser.databaseReadback));
   // Validate all expectations before any database access; a bad table/field
   // cannot borrow an earlier valid read as apparent partial success.
   const planned = browser.databaseReadback.map(value => validateWrite(value, browserSince)), result = [];
   // Scoped read connections do not keep the opaque main control socket active.
-  // Renew only at verified closed-scope boundaries; never recover a failed handle.
+  // Post-gate renewal requires a closed scope and no running public job.
+  // During the Browser job its existing heartbeat owns control maintenance.
   let renewedAt = 0;
   for (const plan of planned) {
-    if (renewedAt === 0 || Date.now() - renewedAt >= 20_000) {
+    if (phase === 'post-gate' && (renewedAt === 0 || Date.now() - renewedAt >= 20_000)) {
       await handle.renewDatabaseControlConnection();
       renewedAt = Date.now();
     }
@@ -243,13 +244,23 @@ async function readExecutedWrites(handle: OwnedLocalHandle, browser: BrowserWrit
 export async function verifyCoreDomainWrites(handle: OwnedLocalHandle, browser: BrowserWrites) {
   assertOwnedLocalHandle(handle);
   assert.equal(browser.status, 'pass', 'Failed Browser cohorts cannot receive a passing native write receipt.');
-  return readExecutedWrites(handle, browser);
+  return readExecutedWrites(handle, browser, 'post-gate');
+}
+
+/** Fixed live-Browser checkpoint: the running job owns control-lease maintenance. */
+export async function readCoreDomainWriteCheckpoint(handle: OwnedLocalHandle, browser: BrowserWrites) {
+  assertOwnedLocalHandle(handle);
+  assert.equal(browser.status, 'in-progress-form-native-checkpoint');
+  assert.ok(Array.isArray(browser.databaseReadback) && browser.databaseReadback.length > 0 && browser.databaseReadback.length <= 4);
+  const writes = await readExecutedWrites(handle, browser, 'during-browser');
+  return { status: 'partial-not-global-pass' as const, browserStatus: browser.status, writes, globalClosed: false as const,
+    scope: 'Only the listed completed writes were checked during the running Browser job; no completed cohort or global pass is asserted.' };
 }
 
 /** Preserve completed writes after a failed cohort without promoting the cohort. */
 export async function verifyCoreExecutedWriteProjections(handle: OwnedLocalHandle, browser: BrowserWrites) {
   assertOwnedLocalHandle(handle); assert.ok(typeof browser.status === 'string' && browser.status.length > 0);
-  const writes = await readExecutedWrites(handle, browser);
+  const writes = await readExecutedWrites(handle, browser, 'post-gate');
   return { status: 'partial-not-global-pass' as const, browserStatus: browser.status, writes, globalClosed: false as const,
     scope: 'Only the listed completed writes were checked against native fields and actor-bound audits; the Browser cohort retains its original status.' };
 }

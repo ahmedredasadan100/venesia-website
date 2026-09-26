@@ -15,6 +15,17 @@ export function assertCoreQueryLocation(spec,fixture,receipt,actualUrl,origin){
  actual.page=Math.min(actual.page,receipt.pagination.totalPages);expected.page=receipt.pagination.page;
  assert.deepEqual(actual,expected,'Browser URL semantics must match the native page, sort, filters, query and size.');
 }
+export async function assertCoreQueryInformation(spec,row,info){
+ await expect(info).toBeVisible();await expect(info).toHaveAttribute('data-admin-entity-id',String(row.id));
+ if(spec.entity==='topics'){
+  assert.ok(Number.isSafeInteger(row.information?.viewCount)&&row.information.viewCount>=0,'Native Topic view count is required.');
+  await expect(info.locator('[data-admin-row-actions-information-title]')).toHaveText('معلومات نشاط المحتوى');
+  await expect(info).toContainText('عدد المشاهدات:');
+  await expect(info.getByText(row.information.viewCount.toLocaleString('en-US')+' مشاهدة',{exact:true})).toHaveCount(1);
+  return {kind:'information',nativeEntityId:row.id,nativeViewCount:row.information.viewCount,actualActivityPanel:true};
+ }
+ await expect(info).toContainText(row.label);return {kind:'information',nativeEntityId:row.id,nativeLabel:row.label};
+}
 export async function runCoreQueryPresentationJourneys(ctx){
  const {page,origin,fixtures,run,observe,nativeCheckpoint,actionResponse,assertActionAcknowledged}=ctx;
  const context=ctx.context??page.context();
@@ -83,7 +94,7 @@ export async function runCoreQueryPresentationJourneys(ctx){
   const row=first.rows[0],rowRoot=page.locator('tr[data-entity-row-id="'+row.id+'"]'),rowEvidence=[];
   if(spec.rowActions?.information==='adopted'){
    const more=rowRoot.locator('[data-admin-row-action="more"] button');await more.click();await page.locator('[data-admin-row-actions-menu][data-admin-entity-id="'+row.id+'"]').locator('[data-admin-row-action-menu-item="information"]').click();
-   const info=page.locator('[data-admin-row-actions-information][data-admin-entity-id="'+row.id+'"]');await expect(info).toBeVisible();await expect(info).toContainText(row.label);await page.keyboard.press('Escape');await expect(more).toBeFocused();rowEvidence.push({kind:'information',nativeLabel:row.label,focusReturned:true});
+   const info=page.locator('[data-admin-row-actions-information][data-admin-entity-id="'+row.id+'"]');const informationEvidence=await assertCoreQueryInformation(spec,row,info);await page.keyboard.press('Escape');await expect(more).toBeFocused();rowEvidence.push({...informationEvidence,focusReturned:true});
   }
   if(spec.rowActions?.copyPublicLink==='adopted'){
    assert.ok(typeof row.publicPath==='string'&&row.publicPath.startsWith('/'));

@@ -271,7 +271,7 @@ export async function runCoreMediaJourneys(ctx) {
       const selectBeforeQuery = assetButton(main(), first.assets[0].displayName);
       await selectBeforeQuery.click(); await expect(selectBeforeQuery).toHaveAttribute("aria-pressed", "true");
       const empty = await api("GET", () => search(main()).fill(plan.namespace + "-absent"), { queryMatch: { q: plan.namespace + "-absent" } }); assert.equal(empty.total, 0);
-      await expect(main()).toContainText("لا توجد ملفات مطابقة داخل هذا العرض.");
+      await expect(main().locator('[data-media-library-mode="manage"]')).toContainText("لا توجد ملفات مطابقة داخل هذا العرض.");
       await expect(main().locator('button[aria-pressed="true"]').filter({ hasNotText: /^(?:شبكة|قائمة)$/u })).toHaveCount(0);
       assertCoreMediaUnchanged(state, await snapshot("query-after"), true);
       return details("catalog-query", ["query_reload", "kind_filter", "selection_clear", "page_query_selection_reset", "grid_list", "pagination_disjoint_union", "page_size", "empty_result"]);
@@ -337,7 +337,7 @@ export async function runCoreMediaJourneys(ctx) {
       const usage = page.waitForResponse(response => new URL(response.url()).pathname === "/api/admin/media-usage" && response.status() === 200);
       await selectAsset(asset); const usageResponse = await usage; remember(usageResponse);
       await expect(main().getByRole("link", { name: "فتح التحرير", exact: true })).toHaveAttribute("href", plan.article.editPath);
-      await expect(main()).toContainText(plan.article.title);
+      await expect(main().locator('[data-media-library-mode="manage"]')).toContainText(plan.article.title);
       return details("picker-use", ["cancel_no_write", "actual_picker", "article_save_reload", "native_reference", "usage_edit_link"]);
     });
     await group("in-use-delete", async () => {
@@ -403,7 +403,7 @@ export async function runCoreMediaJourneys(ctx) {
       await imageField().getByRole("button", { name: "إزالة", exact: true }).click(); await articleSave("");
       await reconcile(); let before = await snapshot("detached"); assert.ok(!before.article.image); assert.equal(before.references.length, 0);
       for (const asset of before.assets.filter(row => row.status === "active")) {
-        await selectAsset(asset); await expect(main()).toContainText("لا توجد استخدامات حالية لهذا الملف.");
+        await selectAsset(asset); await expect(main().locator('[data-media-library-mode="manage"]')).toContainText("لا توجد استخدامات حالية لهذا الملف.");
         let dialog = await openDelete(); await dialog.locator("[data-admin-confirm-cancel]").click();
         assertCoreMediaUnchanged(before, await snapshot("delete-cancel"), true);
         dialog = await openDelete(); await api("DELETE", () => dialog.locator("[data-admin-confirm-submit]").click()); await expect(dialog).toHaveCount(0);

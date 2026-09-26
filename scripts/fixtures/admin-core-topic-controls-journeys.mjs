@@ -5,6 +5,19 @@ import { expect } from "playwright/test";
 import { buildCoreTopicControlsPlan, TOPIC_CONTROL_VALUES as v, expectedTopicControlPayload } from "./admin-core-topic-controls-contract.mjs";
 
 /** Concrete current controls only. No library upload, public navigation or global-axis promotion. */
+
+/** Count the actual rendered selectable options, including a selectable empty value. */
+export function resolveTopicControlOptionIndex(listboxId, options, value) {
+  assert.equal(typeof listboxId, "string"); assert.ok(listboxId.endsWith("-listbox"));
+  assert.ok(Array.isArray(options) && options.length > 0);
+  const prefix = listboxId.slice(0, -"-listbox".length) + "-option-";
+  assert.ok(options.every(option => typeof option.id === "string" && option.id.startsWith(prefix) && typeof option.disabled === "boolean"));
+  assert.equal(new Set(options.map(option => option.id)).size, options.length);
+  const selectable = options.filter(option => !option.disabled), target = prefix + String(value), index = selectable.findIndex(option => option.id === target);
+  assert.ok(index >= 0, "The current rendered listbox must expose the requested selectable value.");
+  return { index, target, first: selectable[0].id };
+}
+
 export async function runCoreTopicControlsJourneys(ctx) {
   const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, nativeCheckpoint } = ctx;
   assert.equal(new URL(origin).hostname, "127.0.0.1"); const f = fixtures.topicControls; assert.ok(f);
@@ -27,9 +40,15 @@ export async function runCoreTopicControlsJourneys(ctx) {
   async function select(name, value) {
     const owner = form().locator('[data-admin-form-listbox]').filter({ has: page.locator('select[name="' + name + '"]') });
     const source = owner.locator("select"), combo = owner.getByRole("combobox");
-    const choices = await source.locator("option").evaluateAll(options => options.filter(option => option.value && !option.disabled).map(option => option.value));
-    const index = choices.indexOf(String(value)); assert.ok(index >= 0);
-    await combo.press("Home"); for (let n = 0; n < index; n++) await combo.press("ArrowDown"); await combo.press("Enter");
+    await combo.press("Home");
+    const listboxId = await combo.getAttribute("aria-controls"); assert.ok(listboxId);
+    const menu = page.getByRole("listbox").filter({ has: page.getByRole("option") }).and(page.locator('[id="' + listboxId + '"]'));
+    await expect(menu).toBeVisible();
+    const options = await menu.getByRole("option").evaluateAll(rows => rows.map(option => ({ id: option.id, disabled: option.hasAttribute("disabled") || option.getAttribute("aria-disabled") === "true" })));
+    const { index, target, first } = resolveTopicControlOptionIndex(listboxId, options, value);
+    await expect(combo).toHaveAttribute("aria-activedescendant", first);
+    for (let n = 0; n < index; n++) await combo.press("ArrowDown");
+    await expect(combo).toHaveAttribute("aria-activedescendant", target); await combo.press("Enter");
     await expect(source).toHaveValue(String(value)); await expect(combo).toBeFocused();
   }
   async function acknowledge() {

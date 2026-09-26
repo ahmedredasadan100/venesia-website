@@ -338,3 +338,12 @@ export async function seedOwnedCoreTopicControlsFixtures(handle: OwnedLocalHandl
   const { prepareCoreTopicControlsFixtures } = await import("../verify-admin-core-topic-controls-isolated.mts");
   return prepareCoreTopicControlsFixtures(handle, credentials);
 }
+
+/** B4 Project optional graphs: read-only opt-in under the existing credential owner. */
+export async function seedOwnedCoreProjectControlsFixtures(handle: OwnedLocalHandle) {
+  assertOwnedLocalHandle(handle);
+  const credentials = credentialsByHandle.get(handle);
+  assert.ok(credentials, "Prepare the canonical owned Admin account before Project controls.");
+  const { prepareCoreProjectControlsFixtures } = await import("../verify-admin-core-project-controls-isolated.mts");
+  return prepareCoreProjectControlsFixtures(handle, credentials);
+}
