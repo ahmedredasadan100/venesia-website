@@ -9,7 +9,7 @@ import { prepareVercelCacheProbe } from "./lib/vercel-cache-probe.mts";
 const root = realpathSync(resolve(".")), out = resolve(root, ".tmp-qa/core-final-closure/probe-guard-tests-" + Date.now());
 assert.ok(out.startsWith(resolve(root, ".tmp-qa/core-final-closure") + sep)); mkdirSync(out, { recursive: true });
 const source = resolve(root, "scripts/fixtures/vercel-cache-probe");
-const baseEnv = { VERCEL: "1", VERCEL_ENV: "preview", VERCEL_TARGET_ENV: "preview",
+const baseEnv = { NODE_ENV: "production" as const, VERCEL: "1", VERCEL_ENV: "preview", VERCEL_TARGET_ENV: "preview",
   VERCEL_GIT_COMMIT_REF: "codex/audit2-root-cause-closure", VERCEL_GIT_COMMIT_SHA: "a".repeat(40) };
 const manifest = JSON.parse(readFileSync(resolve(source, "manifest.json"), "utf8"));
 const cases: string[] = [];
