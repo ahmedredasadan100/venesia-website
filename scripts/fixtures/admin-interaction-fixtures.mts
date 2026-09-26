@@ -356,3 +356,11 @@ export async function seedOwnedCorePresentationControlsFixtures(handle: OwnedLoc
   const { prepareCorePresentationControlsFixtures } = await import("../verify-admin-core-presentation-controls-isolated.mts");
   return prepareCorePresentationControlsFixtures(handle, credentials);
 }
+
+/** Nine-library presentation data, strictly under the existing private account owner. */
+export async function seedOwnedCoreTemplateLibraryPresentationFixtures(handle: OwnedLocalHandle, fixtures: Record<string, unknown>) {
+  assertOwnedLocalHandle(handle);
+  assert.ok(credentialsByHandle.has(handle), "Prepare the canonical owned Admin account first.");
+  const { seedOwnedCoreTemplatePresentationFixture } = await import("../verify-admin-core-template-library-presentation-isolated.mts");
+  return seedOwnedCoreTemplatePresentationFixture(handle, fixtures);
+}

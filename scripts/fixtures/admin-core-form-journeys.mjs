@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { observeCoreScrollbarAdoption, observeCoreModalFocusAdoption, observeCoreModalPendingDismissal, observeCoreModalCleanReturn } from "./admin-core-rendered-adoption.mjs";
 import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
@@ -210,6 +211,13 @@ export async function runCoreTemplateFormJourneys(ctx) {
       await page.getByRole("button", { name: recipe.kind === "hero" ? "إضافة هيرو" : "إضافة بلوك", exact: true }).click();
       const form = page.locator(recipe.kind === "hero" ? "#create-hero-template-form" : `#create-${recipe.kind}-block-form`);
       await expect(form).toBeVisible();
+      const renderedAdoption=[], modal=page.locator('[data-venesia-modal]').filter({has:form});
+      const bindings=[{boundary:'form',consumer:recipe.entry.id,surface:recipe.surface},{boundary:'collection',consumer:recipe.kind+'-template-library',surface:pathFor(recipe.kind)}];
+      const observationBase={page,origin,requiredCases,bindings};
+      renderedAdoption.push(await observeCoreModalCleanReturn({...observationBase,id:'template-'+recipe.kind+'-clean-return',dialog:modal,form,trigger:page.getByRole('button',{name:recipe.kind==='hero'?'إضافة هيرو':'إضافة بلوك',exact:true}),cancel:form.getByRole('button',{name:'إلغاء',exact:true})}));
+      renderedAdoption.push(await observeCoreModalFocusAdoption({...observationBase,id:'template-'+recipe.kind+'-create-focus',dialog:modal}));
+      const modalBody=modal.locator(':scope > div').filter({has:form});
+      renderedAdoption.push(await observeCoreScrollbarAdoption({...observationBase,bindings:[bindings[0]],id:'template-'+recipe.kind+'-create-scroll',container:modalBody,target:submit(form),axis:'y',containment:'modal-lock'}));
       const name = `QA Core ${recipe.kind} created ${suffix}`, slug = `qa-core-${recipe.kind}-${suffix}`;
       await field(form, "name").fill(name);
       if (recipe.kind !== "breadcrumb") await field(form, "slug").fill(slug);
@@ -224,6 +232,7 @@ export async function runCoreTemplateFormJourneys(ctx) {
         await form.getByRole("button", { name: "إلغاء", exact: true }).click();
         const dialog = page.getByRole("dialog", { name: "إغلاق دون حفظ؟", exact: true });
         await expect(dialog).toBeVisible();
+        renderedAdoption.push(await observeCoreModalFocusAdoption({...observationBase,id:'template-'+recipe.kind+'-dirty-confirmation-focus',dialog,state:'dirty-confirmation',escape:'not-exercised'}));
         await dialog.locator("[data-admin-confirm-cancel]").click();
         await expect(dialog).toHaveCount(0);
         await expect(form.getByRole("button", { name: "إلغاء", exact: true })).toBeFocused();
@@ -245,6 +254,7 @@ export async function runCoreTemplateFormJourneys(ctx) {
       const caseId = `core-template-${recipe.kind}-create-reject-retry`;
       await ctx.permissionReplay.restoreDraft({
         mapping:{caseId,journeyId:caseId,formConsumer:recipe.entry.id,surface:recipe.surface},form,submit:submit(form),dirtyNavigation:"close",
+        observePending:async()=>{renderedAdoption.push(await observeCoreModalPendingDismissal({...observationBase,id:'template-'+recipe.kind+'-pending-dismissal',dialog:modal,form}));},
         assertDraft:async()=>{await expect(field(form,"name")).toHaveValue(name);if(recipe.kind!=="breadcrumb")await expect(field(form,"slug")).toHaveValue(slug);await assertFields(form,createAuthored);},
         cancelDirty:async()=>{const original=page.url(),trigger=form.getByRole("button",{name:"إلغاء",exact:true});await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form).toBeVisible();},
       });
@@ -276,7 +286,7 @@ export async function runCoreTemplateFormJourneys(ctx) {
       }});
       const details = await editAndRead(recipe, id, `${name} saved`);
       outcomes.push(details);
-      return { ...details, createServerValidation: "trimmed_required_name", createInputPreserved: true, createRetryHandoff: true, createDirtyCloseCancel: true, permissionEvidence: permissionEvidence.filter(row=>row.caseId===caseId) };
+      return { ...details, renderedAdoption, createServerValidation: "trimmed_required_name", createInputPreserved: true, createRetryHandoff: true, createDirtyCloseCancel: true, permissionEvidence: permissionEvidence.filter(row=>row.caseId===caseId) };
     });
   }
   return { planned: plan.editors.length + plan.creates.length, completed: outcomes.length, outcomes, boundary: "Selected template-domain lifecycle; no template-command or complete capability-axis promotion." };

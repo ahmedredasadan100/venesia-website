@@ -124,7 +124,10 @@ export function assertCorePreviewPublicImpactReceipt(browser,{fixtures,previewMa
       assert.equal(receipt.reads.length,fixtures.previewClosure.length);
       for(const [index,fixture]of fixtures.previewClosure.entries()){
         const row=receipt.reads[index];assert.deepEqual(Object.keys(row).sort(),["consumer","publication","table","id","slug","status","deleted",...(fixture.table==="topic_categories"?["is_active"]:[])].sort());
-        for(const key of ["consumer","publication","table","id","slug"])assert.equal(row[key],fixture[key]);
+        for(const key of ["consumer","publication","table","slug"])assert.equal(row[key],fixture[key]);
+        assert.ok(typeof row.id==="number"||(typeof row.id==="string"&&/^[1-9][0-9]*$/u.test(row.id)),"Native bigint identity must be a canonical positive decimal string or a number.");
+        assert.ok(Number.isSafeInteger(Number(row.id))&&Number(row.id)>0,"Native bigint identity must fit the canonical safe numeric fixture range.");
+        assert.equal(Number(row.id),Number(fixture.id),"Native identity belongs to another physical fixture.");
         assert.equal(row.status,fixture.expectedStatus);assert.equal(row.deleted,fixture.expectedDeleted);
         if(fixture.expectedActive!==null)assert.equal(row.is_active,fixture.expectedActive);
       }

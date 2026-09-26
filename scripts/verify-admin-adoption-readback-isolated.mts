@@ -1,3 +1,5 @@
+import { assertCoreTrackingDateReceipts } from "./fixtures/admin-core-operational-form-journeys.mjs";
+import { verifyCoreTemplatePresentationCompletion } from './verify-admin-core-template-library-presentation-isolated.mts';
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
@@ -322,6 +324,13 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       presentationControls={...result,completion,cleanup};
     }
     const domainBulk=browser.cohort==="domain-bulk"?await verifyCoreDomainBulkCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"))):null;
+    let trackingDates=null;
+    if(browser.cohort==='domain-forms'&&!browser.journeySelection){
+      const {ADMIN_COLLECTION_SURFACE_ADOPTION}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import('../src/lib/admin/interaction-system/adoption-manifest.ts')>('../src/lib/admin/interaction-system/adoption-manifest.ts');
+      const source=JSON.parse(readFileSync(join(artifactDir,'public-source-manifest.json'),'utf8'));
+      trackingDates=assertCoreTrackingDateReceipts({browser,native:JSON.parse(readFileSync(join(artifactDir,'core-native-control-readback.json'),'utf8')),ownedRunId:handle.identity.runId,sourceSha256:source.sourceSha256,actorId:await readCoreFixedQaActor(handle),fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION});
+    }
+    const templateLibraryPresentation = browser.cohort === "template-libraries" ? verifyCoreTemplatePresentationCompletion(handle,browser) : null;
     const queryPresentation = browser.cohort === "query-presentation" ? verifyCoreQueryPresentationCompletion(handle,browser) : null;
     const authEntry = browser.cohort === "auth-entry" ? assertCoreAuthEntryCompleted(handle) : null;
     const navigationSettings = browser.cohort === "navigation-settings" ? { ...assertCoreNavigationSettingsCompleted(handle), permission: navigationPermission } : null;
@@ -329,7 +338,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     if (specializedSettings) assert.equal(browser.specializedSettings?.status,"pass");
     const writes = await verifyCoreDomainWrites(handle, browser);
     const readOnly = browser.cohort === "domain-commands" ? await verifyCoreReadonlyReadback(handle, browser) : null;
-    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, trackingDates, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }

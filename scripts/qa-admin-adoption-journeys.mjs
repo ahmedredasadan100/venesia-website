@@ -382,7 +382,7 @@ try {
    } else if (coreCohort === "query-presentation") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreQueryPresentationJourneys } = await import("./fixtures/admin-core-query-presentation-journeys.mjs");
-    queryPresentationResult = await runCoreQueryPresentationJourneys({page,context,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    queryPresentationResult = await runCoreQueryPresentationJourneys({page,context,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,requiredCases,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "media-recovery") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreMediaRecoveryJourneys } = await import("./fixtures/admin-core-media-recovery-journeys.mjs");
@@ -412,7 +412,7 @@ try {
     } finally { coreLogin.username="";coreLogin.password=""; }
    } else if (coreCohort === "template-libraries" || coreCohort === "readonly-hubs" || coreCohort === "template-bulk") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
-    const ctx = {page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,databaseReadback,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})};
+    const ctx = {page,origin,fixtures,run,observe,requiredCases,actionResponse,assertActionAcknowledged,databaseReadback,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})};
     if (coreCohort === "template-bulk") {
       const { runCoreTemplateBulkJourneys } = await import("./fixtures/admin-core-template-bulk-journeys.mjs");
       await runCoreTemplateBulkJourneys(ctx);

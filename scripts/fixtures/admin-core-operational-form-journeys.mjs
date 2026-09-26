@@ -44,7 +44,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const plan = buildCoreOperationalFormPlan({ manifest, requiredCases, fixtures });
-  const suffix = Date.now().toString(36), results = [], permissionEvidence = [];
+  const suffix = Date.now().toString(36), results = [], permissionEvidence = [], dateEvidence = [];
   const permissionIntent = (recipe, surface, perform) => runCoreFormPermissionIntent({ permissionReplay: ctx.permissionReplay, mapping: { caseId: "core-operational-" + recipe.kind + "-" + surface, formConsumer: recipe.consumer, surface }, perform, permissionEvidence });
   const form = () => page.locator("form[data-admin-form-runtime]");
   const input = name => form().locator(`[name="${name}"]`);
@@ -64,6 +64,32 @@ export async function runCoreOperationalFormJourneys(ctx) {
   }
   async function equal(values) {
     for (const [name, value] of Object.entries(values)) await expect(input(name)).toHaveValue(String(value));
+  }
+  async function trackingDates(recipe, surface, values) {
+    const fields = coreTrackingDateFields(recipe.kind), observations = [];
+    const unrelated = Object.fromEntries(Object.entries(values).filter(([name]) => !fields.includes(name)));
+    const privateUnrelated = () => form().evaluate((node, excluded) => [...new FormData(node).entries()].filter(([name]) => !excluded.includes(name)).map(([name,value]) => [name,typeof value === "string" ? value : {name:value.name,size:value.size,type:value.type}]), fields);
+    const beforeUnrelated = await privateUnrelated();
+    for (const name of fields) {
+      const date = input(name), seed = name === "completion_date" ? "2026-01-06" : "2026-01-04";
+      await expect(date).toHaveAttribute("data-admin-date-picker", ""); await expect(date).toHaveAttribute("type", "date"); await expect(date).toBeEnabled();
+      await date.fill(seed); await date.focus(); await expect(date).toBeFocused();
+      await date.press("ArrowUp"); await expect(date).not.toHaveValue(seed); const changed = await date.inputValue(); assert.match(changed, /^\d{4}-\d{2}-\d{2}$/u);
+      await date.press("ArrowDown"); await expect(date).toHaveValue(seed);
+      await date.press("ControlOrMeta+A"); await date.press("Backspace"); await expect(date).toHaveValue("");
+      const required = await date.evaluate(node => node.required), clearValidity = await date.evaluate(node => ({ valid: node.validity.valid, valueMissing: node.validity.valueMissing }));
+      assert.equal(required, name === "occurred_on"); assert.deepEqual(clearValidity, {valid: !required, valueMissing: required});
+      await equal(unrelated); assert.deepEqual(await privateUnrelated(), beforeUnrelated, "Date interaction changed unrelated draft fields.");
+      const value = values[name]; assert.equal(typeof value, "string"); if (value) await date.fill(value); await expect(date).toHaveValue(value);
+      observations.push({field:name,type:"date",focused:true,seed,keyboardChanged:changed,keyboardRestored:seed,clearedValue:"",clearValidity,required,finalValue:value,unrelatedFieldsPreserved:true});
+    }
+    await equal(values); assert.deepEqual(await privateUnrelated(), beforeUnrelated, "Date repair changed unrelated draft fields.");
+    const result = {caseId:"core-operational-"+recipe.kind+"-"+surface,surface,fields:observations,reloaded:false}; dateEvidence.push(result); return result;
+  }
+  function bindTrackingDates(proof) {
+    const matches = permissionEvidence.filter(row => row.caseId === proof.caseId); assert.equal(matches.length, 1);
+    proof.nativeSaveReceipt = matches[0].originalNativeSaveReceipt; proof.sourceSha256 = matches[0].sourceSha256; proof.ownedRunId = matches[0].ownedRunId;
+    assert.equal(proof.reloaded, true); return proof;
   }
   async function select(name, value) {
     const label = (await input(name).locator(`option[value="${value}"]`).textContent()).trim();
@@ -143,6 +169,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     const result = { consumer: recipe.consumer, surfaces: recipe.surfaces, ids, fields,
       verified: ["structured_validation_rejection", "field_preservation", "dirty_close_cancel", "retry", "save_reload"], proofBoundary, ...extra };
     result.permissionEvidence = permissionEvidence.filter(row => row.formConsumer === recipe.consumer && recipe.surfaces.includes(row.surface));
+    if (recipe.consumer === "project-tracking-create-edit") result.dateEvidence = dateEvidence.filter(row => recipe.surfaces.includes(row.surface)).map(bindTrackingDates);
     results.push(result); return result;
   }
 
@@ -173,15 +200,15 @@ export async function runCoreOperationalFormJourneys(ctx) {
     if (recipe.kind === "profile") {
       const projectId = plan.profileProjectId, path = `/admin/projects/${projectId}/tracking`;
       await openCreate(path, "تعديل بيانات الملف");
-      const values = { contractor_name: `QA Core Contractor ${suffix}`, project_receipt_date: "2026-01-02", license_receipt_date: "2026-01-03" };
-      await fill(values); await dirtyCancel(values);
+      const values = { contractor_name: `QA Core Contractor ${suffix}`, project_receipt_date: "2026-01-02", license_receipt_date: "" };
+      await fill(values); const dates = await trackingDates(recipe, "tracking-profile", values); await dirtyCancel(values);
       // A five-digit year is valid in the real native date control but is
       // rejected by this Domain's existing four-digit server date contract.
       await rejectField("project_receipt_date", "10000-01-01", values);
       await restoreDraft(recipe, "tracking-profile", values);
       await permissionIntent(recipe, "tracking-profile", async () => {
-        await accepted(); await openCreate(path, "تعديل بيانات الملف"); await equal(values); await closeUnchanged();
-        return { nativeWrites: [audit("project_tracking_profiles", projectId, "project_tracking_profile", "project_children.update", null, values)] };
+        await accepted(); await openCreate(path, "تعديل بيانات الملف"); await equal(values); dates.reloaded = true; await closeUnchanged();
+        return { nativeWrites: [audit("project_tracking_profiles", projectId, "project_tracking_profile", "project_children.update", null, { ...values, license_receipt_date: null })] };
       });
       return complete(recipe, [projectId], Object.keys(values), { rejection: "native_date_value_rejected_by_existing_server_contract" });
     }
@@ -195,28 +222,30 @@ export async function runCoreOperationalFormJourneys(ctx) {
       const createdLabel = `QA Core ${kind} ${suffix}`, editedLabel = `QA Core ${kind} edited ${suffix}`;
       await openCreate(config.path, config.trigger);
       let values = kind === "update" ? { title: createdLabel, body: `QA authored update body ${suffix}`, occurred_on: "2026-01-04" }
-        : { name: createdLabel, description: `QA authored ${kind} description ${suffix}` };
+        : { name: createdLabel, description: `QA authored ${kind} description ${suffix}`, start_date: "2026-01-02", ...(kind === "item" ? {completion_date:""} : {}) };
       await fill(values);
       if (kind === "stage") { await input("planned_duration_value").fill("3"); await select("planned_duration_unit", "week"); values = { ...values, planned_duration_value: "3", planned_duration_unit: "week" }; }
       if (kind === "item") { await select("status", "in_progress"); values.status = "in_progress"; }
-      const nativeValues = values => kind === "stage" ? { ...values, planned_duration_value: 3, project_id: parent.projectId, is_visible: true }
-        : kind === "item" ? { ...values, stage_id: parent.stage.id, is_visible: true }
+      const nativeValues = values => kind === "stage" ? { ...values, start_date: values.start_date || null, planned_duration_value: 3, project_id: parent.projectId, is_visible: true }
+        : kind === "item" ? { ...values, start_date: values.start_date || null, completion_date: values.completion_date || null, stage_id: parent.stage.id, is_visible: true }
           : { title: values.title, body: values.body, item_id: parent.item.id, occurred_at: values.occurred_on + "T12:00:00Z", publication_status: "draft" };
+      const createDates = await trackingDates(recipe, kind + "-create", values);
       await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
       await restoreDraft(recipe, kind + "-create", values);
       const id = await permissionIntent(recipe, kind + "-create", async () => {
-        await accepted(); const createdId = await openEdit(config.path, createdLabel); await equal(values);
+        await accepted(); const createdId = await openEdit(config.path, createdLabel); await equal(values); createDates.reloaded = true;
         const descriptor = audit(config.table, createdId, config.entity, "project_children.create", createdLabel, {});
         return { value: createdId, nativeWrites: [{ ...descriptor, expected: nativeValues(values) }] };
       });
       values = { ...values, [config.labelField]: editedLabel,
-        ...(kind === "update" ? { body: `QA edited update body ${suffix}` } : { description: `QA edited ${kind} description ${suffix}` }) };
+        ...(kind === "update" ? { body: `QA edited update body ${suffix}`, occurred_on: "2026-01-05" } : { description: `QA edited ${kind} description ${suffix}`, start_date: "" }) };
       await fill(kind === "update" ? { title: values.title, body: values.body } : { name: values.name, description: values.description });
+      const editDates = await trackingDates(recipe, kind + "-edit", values);
       await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
       const expected = nativeValues(values);
       await restoreDraft(recipe, kind + "-edit", values);
       await permissionIntent(recipe, kind + "-edit", async () => {
-        await accepted(); assert.equal(await openEdit(config.path, editedLabel), id); await equal(values); await closeUnchanged();
+        await accepted(); assert.equal(await openEdit(config.path, editedLabel), id); await equal(values); editDates.reloaded = true; await closeUnchanged();
         return { nativeWrites: [audit(config.table, id, config.entity, "project_children.update", editedLabel, expected)] };
       });
       return complete(recipe, [id], Object.keys(expected), { mediaBoundary: kind === "update" ? "Text-only draft; gallery/video selectors remain separate applicable work." : null });
@@ -280,4 +309,51 @@ export async function runCoreOperationalFormJourneys(ctx) {
     return { consumer: "users-and-roles", surface: "identity-collection", verified: ["current_user_visibility_disabled", "current_user_delete_disabled", "current_user_edit_status_disabled", "self_password_controls_absent"], proofBoundary: "Read-only current authenticated synthetic identity UI restrictions; no denied server-command or complete Auth capability claim." };
   });
   return { planned: plan.recipes.length, completed: results.length, results, permissionEvidence, permissionCandidateKeys: permissionEvidence.map(row => row.candidateRequiredCase) };
+}
+
+/** Fixed test field inventory, source-checked against the canonical TrackingForms owner. */
+export function coreTrackingDateFields(kind) {
+  const fields = {profile:["project_receipt_date","license_receipt_date"],stage:["start_date"],item:["start_date","completion_date"],update:["occurred_on"]}[kind];
+  assert.ok(fields, "Unknown Tracking date recipe."); return [...fields];
+}
+
+/** Pure receipt join: actual seven accepted saves plus exact child observations; no new runtime or inferred axis credit. */
+export function assertCoreTrackingDateReceipts({browser,native,ownedRunId,sourceSha256,actorId,fixtures,formManifest,collectionManifest}) {
+  assert.equal(browser.status,"pass"); assert.equal(browser.driverCompleted,true); assert.equal(browser.inventoryOnly,false); assert.equal(browser.scope,"core-closure"); assert.equal(browser.cohort,"domain-forms"); assert.ok(browser.journeySelection==null); assert.deepEqual(browser.errors,[]);
+  assert.match(sourceSha256,/^[a-f0-9]{64}$/u); assert.equal(browser.sourceSha256,sourceSha256); assert.equal(native.status,"pass"); assert.equal(native.ownedRunId,ownedRunId); assert.ok(Number.isSafeInteger(actorId)&&actorId>0);
+  const consumer="project-tracking-create-edit", entries=formManifest.filter(row=>row.id===consumer); assert.equal(entries.length,1);
+  assert.deepEqual(entries[0].surfaces,families[consumer]); assert.ok(entries[0].sourceFiles.includes("src/components/admin/projects/tracking/TrackingForms.tsx"));
+  const declarations=collectionManifest.surfaces.flatMap(row=>row.consumerAdoptionEvidence?.length?row.consumerAdoptionEvidence:[row]);
+  const allRecords=native.records; assert.ok(Array.isArray(allRecords)); assert.equal(new Set(allRecords.map(row=>row.id)).size,allRecords.length);
+  const claim=(id)=>{const matches=allRecords.filter(row=>row.id===id);assert.equal(matches.length,1);return matches[0];};
+  const qualified=[],used=[];
+  for(const kind of ["profile","stage","item","update"]){
+    const expectedSurfaces=kind==="profile"?["tracking-profile"]:[kind+"-create",kind+"-edit"],journeyId="core-operational-"+kind+"-form-roundtrip";
+    const matches=browser.evidence.filter(row=>row.id===journeyId);assert.equal(matches.length,1);const result=matches[0];assert.equal(result.status,"pass");assert.equal(result.consumer,consumer);assert.deepEqual(result.surfaces,expectedSurfaces);assert.equal(result.ids.length,1);const id=result.ids[0];assert.ok(Number.isSafeInteger(id)&&id>0);if(kind==="profile")assert.equal(id,fixtures.project.id);
+    assert.deepEqual(result.dateEvidence.map(row=>row.surface),expectedSurfaces);assert.deepEqual(result.permissionEvidence.map(row=>row.surface),expectedSurfaces);
+    for(const proof of result.dateEvidence){
+      const caseId="core-operational-"+kind+"-"+proof.surface;assert.equal(proof.caseId,caseId);assert.equal(proof.sourceSha256,sourceSha256);assert.equal(proof.ownedRunId,ownedRunId);assert.equal(proof.reloaded,true);
+      const permissions=result.permissionEvidence.filter(row=>row.caseId===caseId);assert.equal(permissions.length,1);const permission=permissions[0];
+      for(const[key,value]of Object.entries({status:"pass",caseId,formConsumer:consumer,surface:proof.surface,sourceSha256,ownedRunId,originalUiSuccessVerified:true,originalNativeSaveVerified:true,originalProjectionCount:1}))assert.equal(permission[key],value);
+      assert.equal(permission.originalNativeSaveReceipt,proof.nativeSaveReceipt);const saved=claim(proof.nativeSaveReceipt);used.push(saved.id);
+      for(const[key,value]of Object.entries({kind:"form-save-native",caseId,formConsumer:consumer,surface:proof.surface,status:"partial-not-global-pass",globalClosed:false}))assert.equal(saved[key],value);
+      assert.equal(saved.writes.length,1);const write=saved.writes[0],table="project_tracking_"+({profile:"profiles",stage:"stages",item:"items",update:"updates"}[kind]);assert.equal(write.table,table);assert.equal(write.id,id);assert.equal(write.deleted,false);assert.equal(write.expectedActorId,actorId);assert.deepEqual(write.json,[]);
+      const action=proof.surface.endsWith("-create")?"project_children.create":"project_children.update";assert.equal(write.audit.length,1);const audit=write.audit[0];assert.equal(audit.action,action);assert.equal(audit.entity_type,"project_tracking_"+kind);assert.equal(Number(audit.entity_id),id);assert.equal(Number(audit.actor_admin_user_id),actorId);
+      if(kind!=="profile")assert.equal(audit.entity_label,write.actual[kind==="update"?"title":"name"]);
+      assert.deepEqual(proof.fields.map(row=>row.field),coreTrackingDateFields(kind));
+      for(const field of proof.fields){
+        assert.equal(field.type,"date");assert.equal(field.focused,true);assert.equal(field.seed,field.field==="completion_date"?"2026-01-06":"2026-01-04");assert.match(field.keyboardChanged,/^\d{4}-\d{2}-\d{2}$/u);assert.notEqual(field.keyboardChanged,field.seed);assert.equal(field.keyboardRestored,field.seed);assert.equal(field.clearedValue,"");assert.equal(field.unrelatedFieldsPreserved,true);
+        const required=field.field==="occurred_on";assert.equal(field.required,required);assert.deepEqual(field.clearValidity,{valid:!required,valueMissing:required});
+        const expected=kind==="profile"?(field.field==="project_receipt_date"?"2026-01-02":""):kind==="update"?(proof.surface==="update-create"?"2026-01-04":"2026-01-05"):field.field==="completion_date"||proof.surface.endsWith("-edit")?"":"2026-01-02";
+        assert.equal(field.finalValue,expected);const key=required?"occurred_at":field.field;assert.ok(Object.hasOwn(write.actual,key));
+        if(required){assert.equal(typeof write.actual[key],"string");assert.ok(Number.isFinite(Date.parse(write.actual[key])));assert.equal(Date.parse(write.actual[key]),Date.parse(expected+"T12:00:00Z"));}else assert.equal(write.actual[key],expected||null);
+      }
+      if(kind==="item")assert.equal(write.actual.status,"in_progress");
+      qualified.push({journeyId,caseId,surface:proof.surface,nativeId:saved.id,actorId,ownedRunId,sourceSha256,fields:proof.fields.map(row=>row.field),automaticCoverage:[]});
+    }
+  }
+  assert.equal(new Set(used).size,used.length);const nativeTracking=allRecords.filter(row=>row.kind==="form-save-native"&&row.formConsumer===consumer);assert.deepEqual(nativeTracking.map(row=>row.id),used,"No missing, duplicate, foreign or orphan Tracking save receipt.");
+  const formCells=browser.requiredCases.filter(row=>row.key===`form:${consumer}:capability:date_picker`);assert.equal(formCells.length,1);
+  const aliases=["stage","item","update"].map(kind=>{const id="project-tracking-"+({stage:"stages",item:"items",update:"updates"}[kind]),matches=declarations.filter(row=>row.id===id);assert.equal(matches.length,1);assert.ok(matches[0].executableBindings.some(row=>row.sourceFile==="src/components/admin/projects/tracking/TrackingCollections.tsx"&&row.exportNames.includes("Tracking"+({stage:"Stages",item:"Items",update:"Updates"}[kind])+"Collection")));const cells=browser.requiredCases.filter(row=>row.key===`collection:${id}:capability:date_picker`);assert.equal(cells.length,1);return {candidateRequiredCase:cells[0].key,childFormConsumer:consumer,childSurfaces:[kind+"-create",kind+"-edit"],nativeIds:qualified.filter(row=>row.surface.startsWith(kind+"-")).map(row=>row.nativeId)};});
+  return {status:"pass",qualified,aliases,candidateRequiredCases:[formCells[0].key,...aliases.map(row=>row.candidateRequiredCase)],automaticCoverage:[],globalClosed:false,boundary:"Focused native date keyboard/change/clear and exact saved scalar or Tracking instant only; aliases bind their actual child Form, no full capability-axis or calendar-popup claim."};
 }

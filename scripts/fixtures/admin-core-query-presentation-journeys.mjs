@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,validateCoreRenderedAdoptionBindings} from './admin-core-rendered-adoption.mjs';
 import { randomUUID } from 'node:crypto';
 import { expect } from 'playwright/test';
 import { loadCoreQueryPresentationPlan } from './admin-core-query-presentation-plan.mjs';
@@ -26,8 +27,17 @@ export async function assertCoreQueryInformation(spec,row,info){
  }
  await expect(info).toContainText(row.label);return {kind:'information',nativeEntityId:row.id,nativeLabel:row.label};
 }
+/** Current B1 context bindings come from its source-derived plan and canonical cells. */
+export function buildCoreQueryRenderedPlan(spec,route,requiredCases){
+ assert.ok(typeof spec.key==='string'&&typeof spec.consumerId==='string');assert.ok(route.startsWith('/admin/'));
+ const bindings=[{boundary:'collection',consumer:spec.consumerId,surface:route}];
+ validateCoreRenderedAdoptionBindings({requiredCases,bindings,axis:'scrollbar',pathname:route});
+ const modal=requiredCases.some(row=>row.boundary==='collection'&&row.consumer===spec.consumerId&&row.axis==='modal'&&row.scenario==='complete_applicable_capability_behavior');
+ if(modal)validateCoreRenderedAdoptionBindings({requiredCases,bindings,axis:'modal',pathname:route});
+ return{bindings,modal,gridId:'query-'+spec.key+'-grid-scroll',modalFocusId:'query-'+spec.key+'-edit-focus',modalReturnId:'query-'+spec.key+'-edit-return',modalScrollId:'query-'+spec.key+'-edit-scroll'};
+}
 export async function runCoreQueryPresentationJourneys(ctx){
- const {page,origin,fixtures,run,observe,nativeCheckpoint,actionResponse,assertActionAcknowledged}=ctx;
+ const {page,origin,fixtures,run,observe,nativeCheckpoint,actionResponse,assertActionAcknowledged,requiredCases}=ctx;
  const context=ctx.context??page.context();
  assert.equal(new URL(origin).hostname,'127.0.0.1');assert.equal(typeof nativeCheckpoint,'function');
  const plan=await loadCoreQueryPresentationPlan();assert.deepEqual(Object.keys(fixtures.queryClosure.contexts).sort(),plan.map(row=>row.key).sort());
@@ -46,10 +56,14 @@ export async function runCoreQueryPresentationJourneys(ctx){
  }
  async function open(receipt){await observe('b1-owned-route',()=>page.goto(origin+receipt.route+'?'+receipt.query,{waitUntil:'domcontentloaded'}));}
  for(const spec of plan)await run('core-query-presentation-'+spec.key,[],async()=>{
+  const renderedAdoption=[];
   const first=await checkpoint(spec,'first'),empty=await checkpoint(spec,'empty');assert.equal(first.completeIds.length,spec.rowCount);assert.equal(empty.pagination.totalRows,0);
   await open(empty);await assertPage(spec,empty);
   const toolbar=page.locator('[data-admin-collection-toolbar-owner]'),search=toolbar.locator('input').first();
   await expect(search).toBeVisible();await search.fill(fixtures.queryClosure.contexts[spec.key].search);await assertPage(spec,first);
+  const renderedPlan=buildCoreQueryRenderedPlan(spec,first.route,requiredCases),renderedBase={page,origin,requiredCases,bindings:renderedPlan.bindings};
+  const grid=page.locator('[data-admin-data-grid-scroll]'),farCell=page.locator('tbody tr[data-entity-row-id="'+first.expectedIds[0]+'"]').locator('td[data-admin-column-key]:not([data-admin-grid-sticky])').last();
+  renderedAdoption.push(await observeCoreScrollbarAdoption({...renderedBase,id:renderedPlan.gridId,container:grid,target:farCell,axis:'x',containment:'overscroll-contain'}));
   const pages=[first];
   for(const [scenario,text]of [['second','2'],['third','3']]){
    const receipt=await checkpoint(spec,scenario);await page.locator('[data-admin-pagination-slot="page"]').filter({hasText:new RegExp('^'+text+'$')}).click();await assertPage(spec,receipt);pages.push(receipt);
@@ -66,12 +80,28 @@ export async function runCoreQueryPresentationJourneys(ctx){
   if(await activeSort.count()===1){await activeSort.click();await assertPage(spec,descending);sortBoundary='actual-visible-header-and-native-descending-page';}
   else {assert.equal(await activeSort.count(),0);await open(descending);await assertPage(spec,descending);sortBoundary='API-and-URL-sort-only-no-active-sort-header-exposed';}
   await open(first);await assertPage(spec,first);
-  let filterBoundary='source-contract-has-no-filter-recipe';
+  let filterBoundary='source-contract-has-no-filter-recipe',dateFilterEvidence=null;
   if(spec.filter){
    const filtered=await checkpoint(spec,'filtered');assert.ok(filtered.pagination.totalRows>0&&filtered.pagination.totalRows<first.pagination.totalRows,'Filter fixture must split the real complete set.');
    await page.locator('[data-admin-filter-trigger]').click();const field=page.locator('[data-admin-filter-modal-fields]').getByRole('group',{name:spec.filter.label,exact:true});
    await field.getByRole('option',{name:spec.filter.optionLabel,exact:true}).click();await page.getByRole('button',{name:'تطبيق الفلاتر',exact:true}).click();await assertPage(spec,filtered);
-   await page.getByRole('button',{name:'مسح كل الفلاتر',exact:true}).click();await assertPage(spec,first);filterBoundary={key:spec.filter.key,actualFilterAndClear:true,filteredRows:filtered.pagination.totalRows,otherDeclaredFilterKeysRemainUnproven:Object.keys(spec.contract.rawFilterSchemas).filter(key=>key!==spec.filter.key)};
+   if(spec.entity==='activity_log'){
+    const observations=[];
+    for(const [key,id,emptyValue]of [['dateFrom','activity-date-from','2026-01-04'],['dateTo','activity-date-to','2026-01-02']]){
+     const prefix=key==='dateFrom'?'date-from':'date-to',seed='2026-01-03';
+     await page.locator('[data-admin-filter-trigger]').click();const owner=page.locator('[data-admin-filter-modal-fields]'),date=owner.locator('[data-admin-filter-field="'+id+'"] input[data-admin-date-picker]');
+     await expect(date).toHaveAttribute('type','date');await expect(date).toBeEnabled();await date.fill(seed);await date.focus();await expect(date).toBeFocused();
+     await date.press('ArrowUp');await expect(date).not.toHaveValue(seed);const keyboardChanged=await date.inputValue();assert.match(keyboardChanged,/^\d{4}-\d{2}-\d{2}$/u);
+     await date.press('ArrowDown');await expect(date).toHaveValue(seed);await date.press('ControlOrMeta+A');await date.press('Backspace');await expect(date).toHaveValue('');
+     await date.fill(seed);await page.getByRole('button',{name:'تطبيق الفلاتر',exact:true}).click();const included=await checkpoint(spec,prefix+'-included');await assertPage(spec,included);assert.deepEqual(included.completeIds,filtered.completeIds);
+     await page.locator('[data-admin-filter-trigger]').click();await expect(date).toHaveValue(seed);await date.fill(emptyValue);await page.getByRole('button',{name:'تطبيق الفلاتر',exact:true}).click();const excluded=await checkpoint(spec,prefix+'-empty');await assertPage(spec,excluded);assert.equal(excluded.pagination.totalRows,0);
+     await page.locator('[data-admin-filter-trigger]').click();await expect(date).toHaveValue(emptyValue);await date.focus();await date.press('ControlOrMeta+A');await date.press('Backspace');await expect(date).toHaveValue('');await page.getByRole('button',{name:'تطبيق الفلاتر',exact:true}).click();const cleared=await checkpoint(spec,prefix+'-cleared');await assertPage(spec,cleared);assert.deepEqual(cleared.completeIds,filtered.completeIds);
+     assert.equal(new URL(page.url()).searchParams.has(key),false);assert.equal(new URL(page.url()).searchParams.get('entityType'),spec.filter.value);
+     observations.push({field:key,sourceControlId:id,type:'date',focused:true,seed,keyboardChanged,keyboardRestored:seed,clearedValue:'',emptyValue,appliedValues:[seed,emptyValue,''],nativeCheckpointIds:[included.id,excluded.id,cleared.id],unrelatedQuerySortEntityTypePreserved:true,appliedClearRemovedParam:true});
+    }
+    dateFilterEvidence={observations,automaticCoverage:[],globalClosed:false,boundary:'Native keyboard/change/clear and existing UTC date filters against labelled synthetic read fixtures only; no audited Product-write or popup-calendar proof.'};
+   }
+   await page.getByRole('button',{name:'مسح كل الفلاتر',exact:true}).click();await assertPage(spec,first);filterBoundary={key:spec.filter.key,actualFilterAndClear:true,filteredRows:filtered.pagination.totalRows,otherDeclaredFilterKeysRemainUnproven:Object.keys(spec.contract.rawFilterSchemas).filter(key=>key!==spec.filter.key&&!(dateFilterEvidence&&['dateFrom','dateTo'].includes(key)))};
   }
   assert.equal(spec.columnVisibility,'shared_optional_columns');
   const beforeColumns=await page.locator('thead th[data-admin-column-key]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-admin-column-key')));
@@ -118,12 +148,21 @@ export async function runCoreQueryPresentationJourneys(ctx){
    }else{
     const button=target.locator('button');await expect(button).toHaveCount(1);
     if(await button.isDisabled()){assert.ok(await button.getAttribute('title')||await target.getAttribute('title'));rowEvidence.push({kind,mode:'disabled-current-state'});continue;}
-    if(kind==='edit'){await button.click();const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);rowEvidence.push({kind,mode:'actual-existing-edit-modal-open-close'});}
+    if(kind==='edit'){
+     await button.click();const dialog=page.locator('[data-venesia-modal]');await expect(dialog).toBeVisible();assert.equal(renderedPlan.modal,true,'Actual modal requires its existing applicable consumer binding.');
+     const form=dialog.locator('form[data-admin-form-runtime]'),cancel=form.getByRole('button',{name:'إلغاء',exact:true});await expect(form).toHaveCount(1);await expect(form).toHaveAttribute('data-admin-form-dirty','false');
+     renderedAdoption.push(await observeCoreModalFocusAdoption({...renderedBase,id:renderedPlan.modalFocusId,dialog}));
+     renderedAdoption.push(await observeCoreModalCleanReturn({...renderedBase,id:renderedPlan.modalReturnId,dialog,form,trigger:button,cancel}));
+     const modalBody=dialog.locator(':scope > div').filter({has:page.locator('form[data-admin-form-runtime]')});
+     renderedAdoption.push(await observeCoreScrollbarAdoption({...renderedBase,id:renderedPlan.modalScrollId,container:modalBody,target:cancel,axis:'y',containment:'modal-lock'}));
+     await cancel.click();await expect(dialog).toHaveCount(0);await expect(button).toBeFocused();await assertPage(spec,first);
+     rowEvidence.push({kind,mode:'actual-existing-edit-modal-clean-cancel',exactRowTriggerFocusRestored:true,sourceEscapePolicy:'retained'});
+    }
     else throw new Error('New non-link Preview requires a reviewed bounded destination recipe.');
    }
   }
   const after=await checkpoint(spec,'first');assert.equal(after.fixtureFingerprint,first.fixtureFingerprint);assert.equal(after.actorId,first.actorId);
-  const outcome={nativeCheckpointIds:[...nativeIds.get(spec.key)],routeKey:spec.key,consumerId:spec.consumerId,entity:spec.entity,nativeActorId:first.actorId,querySearchEmptyNonempty:true,pageUnion:union.length,backAndReload:true,outOfRangeClamped:true,pageSizeChanged:true,sortBoundary,filterBoundary,optionalColumn:{key:removed[0],persistedAndReloaded:true,semanticBaselineRestored:true,physicalInitialAbsenceRestored:first.preference!==null},rowEvidence,domainFingerprintUnchanged:true,remaining:['Other registered filters not listed above','No full capability-axis promotion from this receipt alone']};outcomes.push(outcome);return outcome;
+  const outcome={renderedAdoption,nativeCheckpointIds:[...nativeIds.get(spec.key)],routeKey:spec.key,consumerId:spec.consumerId,entity:spec.entity,nativeActorId:first.actorId,querySearchEmptyNonempty:true,pageUnion:union.length,backAndReload:true,outOfRangeClamped:true,pageSizeChanged:true,sortBoundary,filterBoundary,dateFilterEvidence,optionalColumn:{key:removed[0],persistedAndReloaded:true,semanticBaselineRestored:true,physicalInitialAbsenceRestored:first.preference!==null},rowEvidence,domainFingerprintUnchanged:true,remaining:['Other registered filters not listed above','No full capability-axis promotion from this receipt alone']};outcomes.push(outcome);return outcome;
  });
  return {status:outcomes.length===plan.length?'pass':'fail',outcomes,scope:'Actual registered query/presentation and bounded nonmutating row information, joined to same-run native fixture projections. Each missing sub-invariant remains explicit.'};
 }

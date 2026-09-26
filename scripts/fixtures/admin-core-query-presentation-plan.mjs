@@ -53,12 +53,40 @@ export async function loadCoreQueryPresentationPlan(){
 }
 export const CORE_QUERY_SCENARIOS=['first','second','third','descending','filtered','empty','clamp','wide','preferences'];
 export function coreQueryScenario(spec,fixture,scenario){
- assert.ok(CORE_QUERY_SCENARIOS.includes(scenario));assert.ok(/^qa-b1-[a-z0-9-]+$/.test(fixture.search));
+ assert.ok(CORE_QUERY_SCENARIOS.includes(scenario)||(spec.entity==='activity_log'&&Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,scenario)));assert.ok(/^qa-b1-[a-z0-9-]+$/.test(fixture.search));
  const size=Math.min(...spec.contract.pageSizeOptions),params=new URLSearchParams({q:scenario==='empty'?fixture.search+'-absent':fixture.search,sort:spec.sortField+'_'+(scenario==='descending'?'desc':'asc'),limit:String(size)});
  if(spec.type)params.set('type',spec.type);
  if(spec.kind){params.set('project_id',String(fixture.projectId));if(spec.kind==='items')params.set('stage_id',String(fixture.stageId));if(spec.kind==='updates')params.set('item_id',String(fixture.itemId));}
- if(scenario==='filtered'){assert.ok(spec.filter,'Consumer has no filter recipe.');params.set(spec.filter.key,spec.filter.value);}
+ if(scenario==='filtered'||Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,scenario)){assert.ok(spec.filter,'Consumer has no filter recipe.');params.set(spec.filter.key,spec.filter.value);}
+ if(Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,scenario)){assert.equal(spec.entity,'activity_log');for(const [key,value]of Object.entries(CORE_ACTIVITY_DATE_SCENARIOS[scenario]))params.set(key,value);}
  if(['second','third','clamp'].includes(scenario))params.set('page',scenario==='second'?'2':scenario==='third'?'3':'999999');
  if(scenario==='wide'){const next=spec.contract.pageSizeOptions.find(v=>v>size);assert.ok(next);params.set('limit',String(next));}return params;
 }
 
+
+/** Activity-only fixed date boundaries over the existing Jan-03 read fixtures. */
+export const CORE_ACTIVITY_DATE_SCENARIOS={
+ 'date-from-included':{dateFrom:'2026-01-03'},'date-from-empty':{dateFrom:'2026-01-04'},'date-from-cleared':{},
+ 'date-to-included':{dateTo:'2026-01-03'},'date-to-empty':{dateTo:'2026-01-02'},'date-to-cleared':{},
+};
+export function assertCoreActivityDateReceipts(outcome,proofs,spec,fixture){
+ if(spec.entity!=='activity_log'){assert.equal(outcome.dateFilterEvidence,null);assert.ok(proofs.every(row=>!Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,row.scenario)));return null;}
+ assert.equal(spec.consumerId,'activity-log');assert.equal(outcome.consumerId,spec.consumerId);assert.equal(outcome.routeKey,spec.key);
+ const result=outcome.dateFilterEvidence;assert.ok(result);assert.deepEqual(result.automaticCoverage,[]);assert.equal(result.globalClosed,false);assert.deepEqual(result.observations.map(row=>row.field),['dateFrom','dateTo']);
+ const base=proofs.filter(row=>row.scenario==='filtered');assert.equal(base.length,1);assert.ok(base[0].completeIds.length>0);
+ const dates=proofs.filter(row=>Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,row.scenario));assert.deepEqual(dates.map(row=>row.scenario),Object.keys(CORE_ACTIVITY_DATE_SCENARIOS));assert.equal(new Set(dates.map(row=>row.id)).size,dates.length);
+ const used=[];
+ for(const observation of result.observations){
+  const from=observation.field==='dateFrom',prefix=from?'date-from':'date-to',seed='2026-01-03',empty=from?'2026-01-04':'2026-01-02';
+  assert.equal(observation.sourceControlId,from?'activity-date-from':'activity-date-to');assert.equal(observation.type,'date');assert.equal(observation.focused,true);assert.equal(observation.seed,seed);assert.match(observation.keyboardChanged,/^\d{4}-\d{2}-\d{2}$/u);assert.notEqual(observation.keyboardChanged,seed);assert.equal(observation.keyboardRestored,seed);assert.equal(observation.clearedValue,'');assert.equal(observation.emptyValue,empty);assert.deepEqual(observation.appliedValues,[seed,empty,'']);assert.equal(observation.unrelatedQuerySortEntityTypePreserved,true);assert.equal(observation.appliedClearRemovedParam,true);
+  assert.equal(observation.nativeCheckpointIds.length,3);
+  for(const [index,suffix]of ['included','empty','cleared'].entries()){
+   const matches=dates.filter(row=>row.id===observation.nativeCheckpointIds[index]);assert.equal(matches.length,1);const proof=matches[0],scenario=prefix+'-'+suffix;assert.equal(proof.scenario,scenario);assert.equal(proof.actorId,outcome.nativeActorId);assert.equal(proof.ownedRunId,base[0].ownedRunId);assert.equal(proof.fixtureFingerprint,base[0].fixtureFingerprint);used.push(proof.id);
+   const params=coreQueryScenario(spec,fixture,scenario);assert.equal(proof.query,params.toString());assert.equal(params.get('entityType'),spec.filter.value);assert.equal(params.get('q'),fixture.search);
+   const p=proof.dateFilterProjection;assert.ok(p);assert.equal(p.dateFrom,params.get('dateFrom')??'');assert.equal(p.dateTo,params.get('dateTo')??'');assert.equal(p.lower,p.dateFrom?p.dateFrom+'T00:00:00.000Z':null);assert.equal(p.upper,p.dateTo?p.dateTo+'T23:59:59.999Z':null);
+   assert.deepEqual(proof.completeIds,suffix==='empty'?[]:base[0].completeIds);assert.deepEqual(p.timestamps.map(row=>row.id),proof.completeIds);
+   for(const row of p.timestamps){assert.equal(typeof row.createdAt,'string');const stamp=Date.parse(row.createdAt);assert.ok(Number.isFinite(stamp));if(p.lower)assert.ok(stamp>=Date.parse(p.lower));if(p.upper)assert.ok(stamp<=Date.parse(p.upper));}
+  }
+ }
+ assert.deepEqual(used,dates.map(row=>row.id));return {candidateRequiredCase:'collection:'+spec.consumerId+':capability:date_picker',nativeIds:used,actorId:outcome.nativeActorId,automaticCoverage:[],globalClosed:false,boundary:result.boundary};
+}

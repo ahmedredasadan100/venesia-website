@@ -3,11 +3,43 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { createRequire } from "node:module";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 const require = createRequire(import.meta.url);
 const sourceDirectory=path.resolve("scripts"),hash=s=>crypto.createHash('sha256').update(s).digest('hex'),checks=[];
 const active=new WeakSet(),own=handle=>assert.ok(active.has(handle),'Unowned control handle');
-function compile(file,dependencies={},bridge='') {const source=fs.readFileSync(path.join(sourceDirectory,file),'utf8');const js=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;const compiledModule={exports:{}};new Function('require','module','exports',js+'\n'+bridge)(id=>dependencies[id]??(id.startsWith('node:')?require(id):{}),compiledModule,compiledModule.exports);return compiledModule.exports;}
+// Preserve native ESM metadata when executing actual source through the controlled CommonJS ports.
+function compileSource(source, filename, dependencies = {}, bridge = '') {
+ const metadata = Object.freeze({ url: pathToFileURL(filename).href, dirname: path.dirname(filename), filename });
+ const js = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  transformers: { before: [context => {
+   const visit = node => ts.isMetaProperty(node) && node.keywordToken === ts.SyntaxKind.ImportKeyword
+    ? context.factory.createIdentifier('__controlledImportMeta')
+    : ts.visitEachChild(node, visit, context);
+   return node => ts.visitNode(node, visit);
+  }] },
+ }).outputText;
+ const compiledModule = { exports: {} };
+ new Function('require', 'module', 'exports', '__controlledImportMeta', js + '\n' + bridge)(
+  id => dependencies[id] ?? (id.startsWith('node:') ? require(id) : {}),
+  compiledModule, compiledModule.exports, metadata,
+ );
+ return compiledModule.exports;
+}
+function compile(file, dependencies = {}, bridge = '') {
+ const filename = path.join(sourceDirectory, file);
+ return compileSource(fs.readFileSync(filename, 'utf8'), filename, dependencies, bridge);
+}
+const metadataFixture = 'export const location = { url: import.meta.url, dirname: import.meta.dirname, filename: import.meta.filename }; export const literal = "import.meta.url";';
+const metadataFilename = path.join(sourceDirectory, 'controlled-esm-metadata.mts');
+assert.deepEqual(compileSource(metadataFixture, metadataFilename), {
+ location: { url: pathToFileURL(metadataFilename).href, dirname: sourceDirectory, filename: metadataFilename }, literal: 'import.meta.url',
+});
+checks.push('controlled-ESM-metadata-resolves-to-the-actual-source-file-and-preserves-literals');
+const legacyMetadata = ts.transpileModule(metadataFixture, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+assert.throws(() => new Function(legacyMetadata), SyntaxError);
+checks.push('legacy-CommonJS-loader-rejects-the-same-valid-ESM-metadata');
 const media=compile('verify-admin-core-media-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own}},'exports.__seed=(h,r)=>checkpointReceipts.set(h,new Map(r.map(x=>[String(x.id),hash(JSON.stringify(x))])));');
 const recovery=compile('verify-admin-core-media-recovery-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own}},'exports.__seed=(h,r,c)=>completionReceipts.set(h,{records:new Map(r.map(x=>[String(x.id),receiptHash(x)])),cleanup:receiptHash(c)});');
 const aggregate=compile('verify-admin-adoption-readback-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery});

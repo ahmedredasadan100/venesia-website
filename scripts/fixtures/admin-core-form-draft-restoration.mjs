@@ -34,7 +34,7 @@ async function privateDraft(form){
 }
 
 /** One known pre-delivery rejection, native no-write and submitted-draft proof; never SQL rollback. */
-export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,requiredCases,nativeCheckpoint,registerPageRoute,mapping,form,submit,assertDraft,cancelDirty,dirtyNavigation,dirtyNavigationLimit}){
+export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,requiredCases,nativeCheckpoint,registerPageRoute,mapping,form,submit,assertDraft,cancelDirty,dirtyNavigation,dirtyNavigationLimit,observePending}){
  let phase='input-validation',release,removeRoute,timer,requestFailure,clicking;let attempted=false,aborted=0,matching=0,observed=0,routeFailure;
  let snapshot=null;const requests=[];
  const inputKeys=['caseId','journeyId','formConsumer','surface'];
@@ -45,7 +45,7 @@ export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,r
   assert.ok(['close','navigation','not-declared'].includes(dirtyNavigation));
   if(dirtyNavigation==='not-declared'){assert.equal(cancelDirty,undefined);assert.ok(typeof dirtyNavigationLimit==='string'&&dirtyNavigationLimit.length>0&&dirtyNavigationLimit.length<=300);}
   else{assert.equal(typeof cancelDirty,'function');assert.equal(dirtyNavigationLimit,undefined);}
-  assert.equal(typeof nativeCheckpoint,'function');assert.equal(typeof registerPageRoute,'function');assert.ok(assertDraft===undefined||typeof assertDraft==='function');
+  assert.equal(typeof nativeCheckpoint,'function');assert.equal(typeof registerPageRoute,'function');assert.ok(assertDraft===undefined||typeof assertDraft==='function');assert.ok(observePending===undefined||typeof observePending==='function');
   const originalUrl=page.url(),url=new URL(originalUrl);assert.equal(url.origin,origin);assert.ok(url.pathname.startsWith('/admin/')&&!['/admin/login','/admin/forgot-password'].includes(url.pathname));
   await expect(form).toHaveCount(1);await expect(form).toHaveAttribute('data-admin-form-runtime','');await expect(form).toHaveAttribute('data-admin-form-dirty','true');await expect(submit).toBeEnabled();
   const entity=await form.getAttribute('data-admin-form-entity');assert.ok(entity&&/^[a-zA-Z0-9:_-]+$/u.test(entity));
@@ -67,6 +67,7 @@ export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,r
    phase='dispatch';attempted=true;clicking=submit.click();void clicking.catch(()=>{});
    await Promise.race([seen,new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('No exact submitted Action reached the owned interceptor.')),25_000);})]);
    phase='pending';await expect(form).toHaveAttribute('aria-busy','true');await expect(form.locator('fieldset[data-admin-form-fields]')).toHaveJSProperty('disabled',true);await expect(submit).toBeDisabled();assert.equal(matching,1);assert.equal(observed,1);
+   if(observePending)await observePending();
    release();phase='actual-transport-failure';const failed=await requestFailure;assert.ok(failed.failure()?.errorText);await clicking;assert.equal(routeFailure,undefined);assert.equal(aborted,1);assert.equal(matching,1);assert.equal(observed,1);
    phase='settled-error';await expect(submit).toBeEnabled();await expect(form).not.toHaveAttribute('aria-busy','true');await expect(form.locator('fieldset[data-admin-form-fields]')).toHaveJSProperty('disabled',false);await expect(feedback).toHaveCount(1);await expect(feedback).toBeVisible();await expect(form).toHaveAttribute('data-admin-form-dirty','true');assert.equal(page.url(),originalUrl);
    phase='restored-draft';same(await privateDraft(form),snapshot,'Submitted private controls changed after rejection.');if(assertDraft)await assertDraft();
