@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 import {
   slugifyFromTitle,
@@ -44,6 +45,48 @@ function exportedFunctionSlice(source: string, name: string) {
   if (start < 0) return "";
   const next = source.indexOf("\nexport ", start + 1);
   return source.slice(start, next < 0 ? source.length : next);
+}
+
+// Bind the published timestamp to the actual status action result, not its
+// local variable spelling, and only inside the live visibility adapter.
+function categoryMutationCarriesPublishedAt(source: string): boolean {
+  const file = ts.createSourceFile("CategoriesListClient.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const matches = <T extends ts.Node>(root: ts.Node, predicate: (node: ts.Node) => node is T): T[] => {
+    const found: T[] = [];
+    const visit = (node: ts.Node) => { if (predicate(node)) found.push(node); ts.forEachChild(node, visit); };
+    visit(root);
+    return found;
+  };
+  const property = (object: ts.ObjectLiteralExpression, name: string) => object.properties.find(
+    (node): node is ts.PropertyAssignment => ts.isPropertyAssignment(node) &&
+      (ts.isIdentifier(node.name) || ts.isStringLiteral(node.name)) && node.name.text === name,
+  );
+  const adapters = matches(file, ts.isVariableDeclaration).filter(node => ts.isIdentifier(node.name) && node.name.text === "toggleStatus");
+  const initializer = adapters.length === 1 ? adapters[0].initializer : undefined;
+  if (!initializer || !ts.isCallExpression(initializer) || !ts.isIdentifier(initializer.expression) ||
+      initializer.expression.text !== "useCallback" || !initializer.arguments[0] || !ts.isArrowFunction(initializer.arguments[0])) return false;
+  const mutations = matches(initializer.arguments[0], ts.isCallExpression).filter(node => ts.isPropertyAccessExpression(node.expression) &&
+    ts.isIdentifier(node.expression.expression) && node.expression.expression.text === "instant" && node.expression.name.text === "mutateAsync");
+  const options = mutations.length === 1 ? mutations[0].arguments[0] : undefined;
+  if (!options || !ts.isObjectLiteralExpression(options)) return false;
+  const execute = property(options, "execute")?.initializer;
+  if (!execute || !ts.isArrowFunction(execute) || !ts.isBlock(execute.body)) return false;
+  const bindings = execute.body.statements.flatMap(statement => ts.isVariableStatement(statement) &&
+    (statement.declarationList.flags & ts.NodeFlags.Const) !== 0 ? [...statement.declarationList.declarations] : []).filter(node =>
+    ts.isIdentifier(node.name) && node.initializer && ts.isAwaitExpression(node.initializer) &&
+    ts.isCallExpression(node.initializer.expression) && ts.isIdentifier(node.initializer.expression.expression) &&
+    node.initializer.expression.expression.text === "toggleCategoryStatusAjax");
+  if (bindings.length !== 1 || !ts.isIdentifier(bindings[0].name)) return false;
+  const binding = bindings[0].name.text;
+  return execute.body.statements.some(statement => {
+    if (!ts.isReturnStatement(statement) || !statement.expression || !ts.isObjectLiteralExpression(statement.expression) ||
+        statement.getStart(file) <= bindings[0].getStart(file)) return false;
+    let ok = property(statement.expression, "ok")?.initializer;
+    while (ok && ts.isAsExpression(ok)) ok = ok.expression;
+    const timestamp = property(statement.expression, "publishedAt")?.initializer;
+    return ok?.kind === ts.SyntaxKind.TrueKeyword && Boolean(timestamp && ts.isPropertyAccessExpression(timestamp) &&
+      ts.isIdentifier(timestamp.expression) && timestamp.expression.text === binding && timestamp.name.text === "publishedAt");
+  });
 }
 
 const paths = {
@@ -170,11 +213,30 @@ check(
     taxonomyFormActions.includes('.select("id, published_at, updated_at")') &&
     taxonomyFormActions.includes("mutation.category.published_at") &&
     categoryActions.includes('.select("id, is_active, status, published_at, updated_at")') &&
-    categoryClient.includes("publishedAt: actionResult.publishedAt") &&
+    categoryMutationCarriesPublishedAt(categoryClient) &&
     categoryColumns.includes("formatAdminDateTime(row.published_at)") &&
     !categoryColumns.includes("formatAdminDateTime(row.created_at ??") &&
     firstPublishMigration.includes("filtered.published_at"),
 );
+
+const publicationAdapterFixture = `
+const toggleStatus = useCallback(async (category) => {
+  return instant.mutateAsync({ execute: async () => {
+    const saved = await toggleCategoryStatusAjax(category.id);
+    return { ok: true as const, publishedAt: saved.publishedAt };
+  } });
+}, []);`;
+check("category-first-publish", "a harmless action-result binding rename preserves publication provenance",
+  categoryMutationCarriesPublishedAt(publicationAdapterFixture) &&
+    categoryMutationCarriesPublishedAt(publicationAdapterFixture.replaceAll("saved", "renamedSaved")));
+for (const [label, changed] of [
+  ["fabricated fallback", publicationAdapterFixture.replace("publishedAt: saved.publishedAt", "publishedAt: saved.createdAt")],
+  ["missing timestamp", publicationAdapterFixture.replace(", publishedAt: saved.publishedAt", "")],
+  ["unrelated action result", publicationAdapterFixture.replace("await toggleCategoryStatusAjax(category.id)", "await unrelatedStatusAction(category.id)")],
+] as const) {
+  check("category-first-publish", label + " cannot satisfy the category action-to-publication contract",
+    changed !== publicationAdapterFixture && !categoryMutationCarriesPublishedAt(changed));
+}
 
 // 1. Targeted shared Form Runtime contracts.
 check(

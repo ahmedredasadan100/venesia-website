@@ -306,7 +306,45 @@ try {
   payload.project.id = null;
 
   const consumer = read("src/app/admin/projects/locations/ProjectLocationsManagementClient.tsx");
-  check("Location visibility and deletion adapters preserve warning feedback", (consumer.match(/result\.feedbackStatus === "warning" \? adminActionWarning : adminActionSuccess/g) ?? []).length, 2);
+  const consumerAst = ts.createSourceFile("ProjectLocationsManagementClient.tsx", consumer, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const resultOwner = loader({})("src/lib/admin/admin-action-result.ts");
+  for (const name of ["toggleActive", "deleteLocation"]) {
+    let callback;
+    function findAdapter(node) {
+      if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === name &&
+          node.initializer && ts.isCallExpression(node.initializer) && ts.isIdentifier(node.initializer.expression) &&
+          node.initializer.expression.text === "useCallback") callback = node.initializer.arguments[0];
+      ts.forEachChild(node, findAdapter);
+    }
+    findAdapter(consumerAst);
+    assert.ok(callback && ts.isArrowFunction(callback), name + " must be an actual shared mutation adapter");
+    const compiled = ts.transpileModule("const adapter = " + callback.getText(consumerAst) + ";",
+      { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+    for (const [domainWarning, readWarning, rejected] of [[true, false, false], [false, true, false], [true, true, false], [false, false, true]]) {
+      let actionCalls = 0;
+      const confirmed = { ok: !rejected, feedbackStatus: rejected ? "error" : domainWarning ? "warning" : "success",
+        message: "domain result", title: "domain title", code: domainWarning ? "saved_with_media_sync_warning" : "saved",
+        entityId: 73, correlationId: "location-adapter-proof" };
+      const action = async () => { actionCalls++; return confirmed; };
+      const bindings = { ...resultOwner, level: "governorate", controller: { query: { filters: { status: "all" } } },
+        setProjectLocationActiveAction: action, deleteProjectLocationAction: action,
+        instant: { mutateAsync: async options => {
+          const result = await options.execute();
+          if (!result.ok) throw new Error(result.message);
+          return readWarning ? { ...result, feedbackStatus: "warning", message: "settled read warning" } : result;
+        } },
+      };
+      const adapter = new Function(...Object.keys(bindings), compiled + "; return adapter;")(...Object.values(bindings));
+      const result = await adapter({ id: 73, is_active: false });
+      check(name + " preserves settled truth and one action call (" + [domainWarning, readWarning, rejected].join(",") + ")",
+        [result.ok, result.feedbackStatus, result.message, result.entityId, actionCalls],
+        rejected ? [false, "error", "domain result", 73, 1] :
+          [true, "warning", readWarning ? "settled read warning" : "domain result", 73, 1]);
+      if (!rejected) check(name + " preserves warning code and correlation identity",
+        [result.code, result.correlationId],
+        [domainWarning ? "saved_with_media_sync_warning" : "committed_reconciliation_pending", "location-adapter-proof"]);
+    }
+  }
   const modal = read("src/app/admin/projects/locations/ProjectLocationFormModal.tsx");
   check("Location saved-without-readback still closes and invalidates through existing callback", modal.includes("onSaved(state.result);") && !modal.includes("if (!state.result) return;"));
 } finally {

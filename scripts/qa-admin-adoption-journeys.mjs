@@ -164,7 +164,7 @@ try {
   await page.locator('input[name="password"]').fill(process.env.QA_ADMIN_PASSWORD);
   await Promise.all([page.waitForURL(url => url.pathname === "/admin", { timeout: 60_000 }), page.locator('button[type="submit"]').click()]);
   delete process.env.QA_ADMIN_USERNAME; delete process.env.QA_ADMIN_PASSWORD;
-  await expect(page.locator("main h1")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "الرئيسية", exact: true, level: 1 })).toBeVisible();
   evidence.push({ id: "existing-auth-login", status: "pass", coverage: [], authenticated: true, sessionArtifactWritten: false });
 
   const suffix = Date.now().toString(36);
@@ -176,7 +176,7 @@ try {
       const name = "QA Audit " + kind + " " + suffix;
       const slug = "qa-audit-" + kind + "-" + suffix;
       await page.locator('input[name="name"]').fill(name);
-      if (kind === "series") await selectListbox("التصنيف", fixtures.category.name);
+      if (kind === "series") await selectListbox("التصنيف *", fixtures.category.name);
       await page.locator('input[name="slug"]').fill(fixtures[kind].slug);
       await saveForm({ rejected: true });
       await expect(page.locator('input[name="name"]')).toHaveValue(name);
