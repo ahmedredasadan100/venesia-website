@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve, sep } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { assertOwnedLocalHandle, cleanChildEnvironment, type OwnedLocalHandle } from "./isolated-supabase.mts";
 
 const ROOT = resolve(import.meta.dirname, "../..");
@@ -41,6 +42,58 @@ select kind,name,md5(jsonb_build_object('owner',pg_get_userbyid(owner),'acl',(
 ))::text) fingerprint from objects order by kind,name;
 `;
 const digest = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
+
+export type RestoreSecurityFingerprint = { kind: string; name: string; fingerprint: string };
+export type PublicSchemaAcl = {
+  owner: string;
+  acl: Array<{ grantor: string; grantee: string; privilege_type: string; is_grantable: boolean }>;
+};
+
+/** Only replay the captured built-in grant pg_dump assumes for public. */
+export function planPublicSchemaUsageRestore(
+  beforeSecurity: RestoreSecurityFingerprint[], afterSecurity: RestoreSecurityFingerprint[],
+  before: PublicSchemaAcl, after: PublicSchemaAcl,
+) {
+  const sorted = (rows: RestoreSecurityFingerprint[]) => {
+    assert.ok(rows.every(row => /^[a-f0-9]{32}$/u.test(row.fingerprint)));
+    const keys = rows.map(row => row.kind + ":" + row.name);
+    assert.equal(new Set(keys).size, rows.length);
+    assert.equal(rows.filter(row => row.kind === "schema" && row.name === "public").length, 1);
+    return [...rows].sort((left, right) => (left.kind + ":" + left.name).localeCompare(right.kind + ":" + right.name));
+  };
+  const earlier = sorted(beforeSecurity), later = sorted(afterSecurity);
+  const acl = (value: PublicSchemaAcl) => {
+    const rows = value.acl.map(row => ({ grantor: row.grantor, grantee: row.grantee, privilege_type: row.privilege_type, is_grantable: row.is_grantable }));
+    assert.equal(new Set(rows.map(row => JSON.stringify(row))).size, rows.length);
+    return rows.sort((left, right) => JSON.stringify(left).localeCompare(JSON.stringify(right)));
+  };
+  const beforeAcl = acl(before), afterAcl = acl(after);
+  if (isDeepStrictEqual(earlier, later)) {
+    assert.equal(after.owner, before.owner);
+    assert.deepEqual(afterAcl, beforeAcl, "Equal fingerprints must agree with expanded schema ACLs.");
+    return { restorePublicUsage: false as const };
+  }
+  const isPublic = (row: RestoreSecurityFingerprint) => row.kind === "schema" && row.name === "public";
+  assert.deepEqual(later.filter(row => !isPublic(row)), earlier.filter(row => !isPublic(row)), "Restore must not repair any other object owner, ACL or default ACL.");
+  assert.equal(before.owner, "pg_database_owner");
+  assert.equal(after.owner, before.owner);
+  const recordedGrant = { grantor: before.owner, grantee: "PUBLIC", privilege_type: "USAGE", is_grantable: false };
+  assert.equal(beforeAcl.filter(row => isDeepStrictEqual(row, recordedGrant)).length, 1, "Original schema must contain exactly the expected non-grantable PUBLIC USAGE.");
+  assert.deepEqual(afterAcl, beforeAcl.filter(row => !isDeepStrictEqual(row, recordedGrant)), "The only allowed raw restore delta is loss of that captured grant.");
+  return { restorePublicUsage: true as const, recordedGrant };
+}
+
+const PUBLIC_SCHEMA_ACL_SQL = `select pg_get_userbyid(n.nspowner) owner,
+  (select jsonb_agg(jsonb_build_object('grantor',pg_get_userbyid(a.grantor),
+    'grantee',case when a.grantee=0 then 'PUBLIC' else pg_get_userbyid(a.grantee) end,
+    'privilege_type',a.privilege_type,'is_grantable',a.is_grantable)
+    order by pg_get_userbyid(a.grantor),a.grantee,a.privilege_type,a.is_grantable)
+   from aclexplode(coalesce(n.nspacl,acldefault('n',n.nspowner))) a) acl,
+  n.nspacl::text namespaceAcl,
+  (select jsonb_agg(jsonb_build_object('privtype',i.privtype,'objsubid',i.objsubid,'initprivs',i.initprivs::text)
+    order by i.privtype,i.objsubid) from pg_init_privs i
+    where i.classoid='pg_namespace'::regclass and i.objoid=n.oid) initialPrivileges
+  from pg_namespace n where n.nspname='public'`;
 
 /** Destructive recovery proof confined to the current disposable application. */
 export async function verifyOwnedApplicationRestore(handle: OwnedLocalHandle, outputDirectory: string) {
@@ -100,7 +153,10 @@ export async function verifyOwnedApplicationRestore(handle: OwnedLocalHandle, ou
       schemaSha256: digest(schemaText), normalizedSchemaSha256: digest(normalizeSchema(schemaText, identity)) };
   };
   const before = await snapshot(); save("restore-before.json", before);
-  save("native-security-fingerprints.json", (await handle.query(SECURITY_FINGERPRINT_SQL)).rows);
+  const beforeSecurity = (await handle.query(SECURITY_FINGERPRINT_SQL)).rows as RestoreSecurityFingerprint[];
+  const beforePublicAcl = (await handle.query(PUBLIC_SCHEMA_ACL_SQL)).rows[0] as PublicSchemaAcl;
+  save("native-security-fingerprints.json", beforeSecurity);
+  save("public-schema-privileges-before.json", beforePublicAcl);
   save("native-schema-fingerprints.json", before.fingerprints);
   const schemaBefore = schema(); writeFileSync(resolve(output, "schema-before.sql"), schemaBefore);
   const dump = command(["pg_dump", "-U", "supabase_admin", "-d", "postgres", "-Fc", "-n", "public", "-n", "supabase_migrations"]);
@@ -110,8 +166,61 @@ export async function verifyOwnedApplicationRestore(handle: OwnedLocalHandle, ou
   // The upstream baseline owns DEFAULT PRIVILEGES under supabase_admin. Restore
   // with that existing owner; never remove ACLs or grant permissions to postgres.
   command(["pg_restore", "-U", "supabase_admin", "-d", "postgres", "--exit-on-error"], dump);
+  const rawAfterSecurity = (await handle.query(SECURITY_FINGERPRINT_SQL)).rows as RestoreSecurityFingerprint[];
+  const rawAfterPublicAcl = (await handle.query(PUBLIC_SCHEMA_ACL_SQL)).rows[0] as PublicSchemaAcl;
+  save("native-security-fingerprints-raw-after.json", rawAfterSecurity);
+  save("public-schema-privileges-raw-after.json", rawAfterPublicAcl);
+  let aclRestoreError: unknown;
+  let restoredPublicUsage = false;
+  try {
+    const plan = planPublicSchemaUsageRestore(beforeSecurity, rawAfterSecurity, beforePublicAcl, rawAfterPublicAcl);
+    if (plan.restorePublicUsage) {
+      // pg_dump17 assumes initdb's PUBLIC USAGE even when the public schema is
+      // recreated. Restore only that observed grant, with its original grantor.
+      try {
+        await handle.query("begin; set local role pg_database_owner; grant usage on schema public to public");
+        const transactionSecurity = (await handle.query(SECURITY_FINGERPRINT_SQL)).rows as RestoreSecurityFingerprint[];
+        assert.deepEqual(transactionSecurity, beforeSecurity, "Captured grant replay must restore every security fingerprint before commit.");
+        const transactionAcl = (await handle.query(PUBLIC_SCHEMA_ACL_SQL)).rows[0] as PublicSchemaAcl;
+        assert.equal(transactionAcl.owner, beforePublicAcl.owner);
+        assert.deepEqual(transactionAcl.acl, beforePublicAcl.acl, "Original expanded schema ACL must match before commit.");
+        await handle.query("commit");
+      } catch (error) { await handle.query("rollback"); throw error; }
+      restoredPublicUsage = true;
+    }
+    save("public-schema-acl-restoration.json", { status: restoredPublicUsage ? "restored" : "unchanged", ...plan, restoredPublicUsage,
+      scope: "captured owned-fixture grant only", productionAccess: false });
+  } catch (error) {
+    aclRestoreError = error;
+    save("public-schema-acl-restoration.json", { status: "rejected", restoredPublicUsage,
+      errorClass: error instanceof Error ? error.name : "unknown", productionAccess: false });
+  }
+  const afterSecurity = (await handle.query(SECURITY_FINGERPRINT_SQL)).rows as RestoreSecurityFingerprint[];
+  const afterPublicAcl = (await handle.query(PUBLIC_SCHEMA_ACL_SQL)).rows[0] as PublicSchemaAcl;
+  save("native-security-fingerprints-after.json", afterSecurity);
+  save("public-schema-privileges-after.json", afterPublicAcl);
   const after = await snapshot(); save("restore-after.json", after);
   const schemaAfter = schema(); writeFileSync(resolve(output, "schema-after.sql"), schemaAfter);
+  const comparison = {
+    publicTables: before.data.length, registryEntries: before.registry.length,
+    securityObjects: beforeSecurity.length, structureObjects: before.normalizedFingerprints.length,
+    allTableDataEqual: isDeepStrictEqual(after.data, before.data), registryEqual: isDeepStrictEqual(after.registry, before.registry),
+    normalizedStructureEqual: isDeepStrictEqual(after.normalizedFingerprints, before.normalizedFingerprints),
+    rawSecurityEqual: isDeepStrictEqual(rawAfterSecurity, beforeSecurity), securityEqual: isDeepStrictEqual(afterSecurity, beforeSecurity),
+    finalRawDdlEqual: schemaAfter === schemaBefore,
+    checkNormalizedDdlEqual: normalizeSchema(schemaAfter, after.identity) === normalizeSchema(schemaBefore, before.identity),
+    fullyNormalizedDdlEqual: normalizeSchema(schemaAfter, after.identity) === normalizeSchema(schemaBefore, before.identity),
+    hashes: { rawBefore: digest(schemaBefore), rawAfter: digest(schemaAfter),
+      checkNormalizedBefore: before.normalizedSchemaSha256, checkNormalizedAfter: after.normalizedSchemaSha256,
+      securityBefore: digest(JSON.stringify(beforeSecurity)), securityRawAfter: digest(JSON.stringify(rawAfterSecurity)), securityAfter: digest(JSON.stringify(afterSecurity)) },
+    aclRestoreRejected: aclRestoreError !== undefined, restoredPublicUsage,
+    scope: "local diagnostic counts, booleans and hashes only; no ACL text waiver", productionAccess: false,
+  };
+  save("restore-comparison.json", comparison);
+  if (aclRestoreError) throw aclRestoreError;
+  assert.deepEqual(afterSecurity, beforeSecurity, "All object owners, ACLs and default ACLs must match after restore.");
+  assert.equal(afterPublicAcl.owner, beforePublicAcl.owner);
+  assert.deepEqual(afterPublicAcl.acl, beforePublicAcl.acl);
   assert.deepEqual(after.data, before.data, "Every public table must survive restore exactly.");
   assert.deepEqual(after.registry, before.registry, "Migration registry must survive restore exactly.");
   assert.deepEqual(after.normalizedFingerprints, before.normalizedFingerprints);
@@ -139,7 +248,7 @@ export async function verifyOwnedApplicationRestore(handle: OwnedLocalHandle, ou
   assert.deepEqual(restoredTopic, topic);
   const report = { status: "pass", publicTables: before.data.length, registered: before.registry.length,
     head: before.registry.at(-1)?.version, dumpBytes: dump.length, dumpSha256: digest(dump),
-    schemaSha256: before.schemaSha256, isolatedLossConfirmed: true, schemaAclRegistryAllPublicDataVerified: true, oneCheckNativeParserNormalized: identityName,
+    schemaSha256: before.schemaSha256, securityObjectsVerified: beforeSecurity.length, publicUsageOriginalGrantRestored: restoredPublicUsage, isolatedLossConfirmed: true, schemaAclRegistryAllPublicDataVerified: true, oneCheckNativeParserNormalized: identityName,
     criticalUnauthorizedActorRejection: true, criticalFeaturedRoundTrip: true, criticalSeoTuplePreserved: true,
     scope: "public and supabase_migrations only; platform schemas, Storage bytes, Auth data, hosted recovery configuration remain outside this proof",
     productionAccess: false };

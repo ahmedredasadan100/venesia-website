@@ -483,6 +483,7 @@ async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/is
 }
 
 async function adminControlLeaseOnly() {
+  await verifyRestoreAclPolicy();
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-public-verification.mts", "scripts/verify-isolated-supabase.mts"];
   const sourceHashes = Object.fromEntries(sources.map(file => [file, sha256(readSource(file))]));
   await verifyAdminMeasurementControlLease(await import("./lib/isolated-supabase.mts"));
@@ -572,7 +573,57 @@ async function verifyMigrationToolPlatforms(lock: StackLock) {
   });
 }
 
+async function verifyRestoreAclPolicy() {
+  const { planPublicSchemaUsageRestore } = await import("./lib/isolated-application-restore-verification.mts");
+  type Acl = import("./lib/isolated-application-restore-verification.mts").PublicSchemaAcl;
+  const publicGrant = { grantor: "pg_database_owner", grantee: "PUBLIC", privilege_type: "USAGE", is_grantable: false };
+  const before: Acl = { owner: "pg_database_owner", acl: [publicGrant,
+    { ...publicGrant, grantee: "pg_database_owner", privilege_type: "CREATE" },
+    { ...publicGrant, grantee: "pg_database_owner" }, { ...publicGrant, grantee: "anon" }] };
+  const after: Acl = { ...before, acl: before.acl.filter(row => row.grantee !== "PUBLIC") };
+  const security = [{ kind: "schema", name: "public", fingerprint: "a".repeat(32) },
+    { kind: "relation", name: "topics", fingerprint: "b".repeat(32) },
+    { kind: "default-acl", name: "postgres.public.r", fingerprint: "c".repeat(32) }];
+  const rawSecurity = security.map(row => row.kind === "schema" ? { ...row, fingerprint: "d".repeat(32) } : row);
+  check("restore ACL skips unchanged captured security", () => assert.deepEqual(planPublicSchemaUsageRestore(security, security, before, before), { restorePublicUsage: false }));
+  check("restore ACL permits only captured original PUBLIC USAGE", () => assert.deepEqual(planPublicSchemaUsageRestore(security, rawSecurity, before, after), { restorePublicUsage: true, recordedGrant: publicGrant }));
+  const reject = (name: string, first: Acl, second: Acl, earlier = security, later = rawSecurity) =>
+    check("restore ACL rejects " + name, () => assert.throws(() => planPublicSchemaUsageRestore(earlier, later, first, second)));
+  reject("different original owner", { ...before, owner: "postgres" }, after);
+  reject("changed restored owner", before, { ...after, owner: "postgres" });
+  reject("missing unrelated role", before, { ...before, acl: before.acl.filter(row => row.grantee !== "anon") });
+  reject("PUBLIC CREATE instead of captured USAGE", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, privilege_type: "CREATE" } : row) }, after);
+  reject("different original grantor", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, grantor: "postgres" } : row) }, after);
+  reject("original grant option", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, is_grantable: true } : row) }, after);
+  reject("no original PUBLIC grant", after, after);
+  reject("an extra missing grant", before, { ...after, acl: after.acl.filter(row => row.grantee !== "anon") });
+  reject("an added privilege", before, { ...after, acl: [...after.acl, { ...publicGrant, privilege_type: "CREATE" }] });
+  reject("another object's owner or ACL", before, after, security, rawSecurity.map(row => row.kind === "relation" ? { ...row, fingerprint: "e".repeat(32) } : row));
+  reject("default privilege drift", before, after, security, rawSecurity.map(row => row.kind === "default-acl" ? { ...row, fingerprint: "e".repeat(32) } : row));
+  reject("object membership loss", before, after, security, rawSecurity.filter(row => row.kind !== "relation"));
+  reject("duplicate ACL tuple", { ...before, acl: [...before.acl, publicGrant] }, after);
+  reject("expanded ACL disagrees with equal fingerprints", before, after, security, security);
+  reject("duplicate security object", before, after, security, [...rawSecurity, rawSecurity[0]]);
+  check("restore keeps exact other DDL and transactional ACL guards", () => {
+    const source = readSource("scripts/lib/isolated-application-restore-verification.mts");
+    const securityCheck = source.indexOf("assert.deepEqual(transactionSecurity, beforeSecurity");
+    const expandedCheck = source.indexOf("assert.deepEqual(transactionAcl.acl, beforePublicAcl.acl");
+    const commit = source.indexOf('await handle.query("commit")');
+    assert.ok(securityCheck >= 0 && expandedCheck >= 0 && commit >= 0);
+    assert.ok(securityCheck < commit && expandedCheck < commit);
+    assert.ok(source.includes('await handle.query("rollback")'));
+    assert.ok(source.includes('assert.equal(normalizeSchema(schemaAfter, after.identity), normalizeSchema(schemaBefore, before.identity)'));
+    assert.equal(source.includes('replace("REVOKE USAGE'), false);
+  });
+}
+
+async function restoreAclOnly() {
+  await verifyRestoreAclPolicy();
+  console.log(JSON.stringify({ status: "PASS", scope: "strict captured restore ACL policy", checks: cases.length, cases, dockerExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
+}
+
 async function main() {
+  await verifyRestoreAclPolicy();
   verifyFinalQualityGatePlan();
   verifyScanner();
   const provenance = verifyReleaseLock();
@@ -749,5 +800,5 @@ async function cliDiagnosticsOnly() {
     cliExecuted: false, databaseCalls: 0, networkRequests: 0, retainedNavigationGatesReexecuted: false }, null, 2));
 }
 
-const verification = process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+const verification = process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
