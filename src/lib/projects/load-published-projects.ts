@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import type { QueryData } from "@supabase/supabase-js";
-import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import type { ProjectPublicationStatus } from "../admin/projects/project-publishing-capability";
@@ -136,7 +137,7 @@ async function queryPublicProjects() {
 }
 
 async function queryPublicProjectsCached() {
-  return unstable_cache(
+  return cachePublicRead(
     () => queryPublicProjects(),
     ["public-projects-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION],
     { revalidate: 300, tags: ["projects"] },
@@ -157,7 +158,7 @@ export type PublishedProjectSitemapRow = {
 export async function loadPublishedProjectSitemapRows(): Promise<
   PublishedProjectSitemapRow[]
 > {
-  return unstable_cache(
+  return cachePublicRead(
     async () => {
       const rows = [];
       let afterId: number | undefined;
@@ -275,7 +276,7 @@ async function queryProjectBySlug(
 export const loadProjectBySlugResult = cache(async function loadProjectBySlugResult(
   slug: string,
 ): Promise<LoadProjectBySlugResult> {
-  return unstable_cache(
+  return cachePublicRead(
     () => queryProjectBySlug(slug, "marketing"),
     ["public-project-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION, slug],
     { revalidate: 300, tags: ["projects", "project"] },

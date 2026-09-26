@@ -43,7 +43,7 @@ type UsePageBlocksAssignModalOptions = {
   assignments: PageBlockAssignmentRow[];
   regionKeys: readonly string[];
   initialContentTemplates?: InitialContentTemplateOptions | null;
-  setActionMessage: (message: string | null) => void;
+  setActionMessage: (message: string | null, feedbackStatus?: "success" | "warning") => void;
 };
 
 export function usePageBlocksAssignModal({
@@ -117,7 +117,7 @@ export function usePageBlocksAssignModal({
       if (activeAssignState.ok) {
         setAssignDismissSession(assignModalSession);
         setAssignVisible(true);
-        setActionMessage(null);
+        setActionMessage(activeAssignState.feedbackStatus === "warning" ? activeAssignState.message : null, activeAssignState.feedbackStatus);
       } else if (assignSubmitSession === assignModalSession) {
         setActionMessage(activeAssignState.message);
       }

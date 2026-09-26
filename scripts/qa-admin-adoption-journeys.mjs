@@ -24,9 +24,13 @@ const inventory = [
       : [{ boundary: "collection", id: surface.id, surfaces: surface.routes }]),
 ];
 const startedAt = new Date().toISOString();
-const evidence = [], databaseReadback = [], menuIntegrityReadback = [], requiredCases = [];
+const evidence = [], databaseReadback = [], readOnlyReadback = [], menuIntegrityReadback = [], requiredCases = [], expectedBlockedRequests = [];
 const inventoryOnly = process.argv.includes("--inventory-only");
+const coreClosure = process.argv.includes("--core-closure");
+const coreCohort = process.argv.find(arg => arg.startsWith("--core-cohort="))?.slice("--core-cohort=".length) ?? "preview-recovery-templates";
+assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings"].includes(coreCohort));
 let driverCompleted = false, activeCase = "bootstrap";
+let specializedSettingsResult = null;
 const progress = [];
 const previewMatrix = collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.flatMap(consumer =>
   ["published", "unpublished", "deleted"].flatMap(publication => ["authorized", "revoked"].map(session => ({
@@ -56,14 +60,21 @@ async function observe(step, task) {
   }
 }
 function receipt() {
-  const covered = new Map(evidence.filter(row => row.status === "pass").flatMap(row => row.coverage.map(key => [key, row.id])));
+  const evidenceIdCounts = new Map();
+  for (const row of evidence) evidenceIdCounts.set(row.id, (evidenceIdCounts.get(row.id) ?? 0) + 1);
+  const failedIds = new Set(errors.map(row => row.id));
+  const eligibleEvidence = evidence.filter(row => row.status === "pass" && evidenceIdCounts.get(row.id) === 1 && !failedIds.has(row.id));
+  const eligibleIds = new Set(eligibleEvidence.map(row => row.id));
+  const covered = new Map(eligibleEvidence.flatMap(row => row.coverage.map(key => [key, row.id])));
+  const settledPreviewMatrix = previewMatrix.map(row => row.status === "behavior_verified" && eligibleIds.has(row.evidence)
+    ? row : { ...row, status: "open", evidence: null });
   const cases = requiredCases.map(row => ({ ...row, status: covered.has(row.key) ? "behavior_verified" : "open", evidence: covered.get(row.key) ?? null }));
   return {
     status: errors.length ? "fail" : inventoryOnly || driverCompleted ? "pass" : "running",
-    inventoryOnly, driverCompleted, proofBoundary: inventoryOnly ? "applicability inventory only; no browser execution" : "owned local production Next and real authenticated application persistence",
-    globalClosed: cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete),
+    inventoryOnly, driverCompleted, scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreClosure ? coreCohort : null, proofBoundary: inventoryOnly ? "applicability inventory only; no browser execution" : "owned local production Next and real authenticated application persistence",
+    globalClosed: driverCompleted && errors.length === 0 && cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete) && settledPreviewMatrix.every(row => row.status === "behavior_verified"),
     inventorySource: sourceHashes, sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256 ?? null,
-    startedAt, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, menuIntegrityReadback, previewMatrix, previewNonApplicability, errors,
+    startedAt, specializedSettings: specializedSettingsResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
     limitations: ["Unexecuted applicability cells remain open; successful representative journeys do not close the full inventory.",
       "Database readback expectations require the owning parent to verify through its opaque owned handle.",
       "This verifier does not claim production, Vercel delivery, or every permission and failure state."],
@@ -111,11 +122,21 @@ const browser = await observe("browser-launch", () => chromium.launch({ headless
 const context = await observe("context-create", () => browser.newContext({ viewport: { width: 1440, height: 1000 } }));
 const page = await observe("page-create", () => context.newPage());
 page.setDefaultTimeout(25_000);
+let coreFormPermission = null;
 const externalRequests = [];
+let expectedLogoutDestination = null;
 const ownedNetworkOnly = async route => {
   const url = route.request().url();
   if (url.startsWith(origin + "/") || allowedStorage.some(prefix => url.startsWith(prefix)) || /^(?:data|blob):/.test(url)) await route.continue();
-  else { externalRequests.push(new URL(url).origin); await route.abort("blockedbyclient"); }
+  else {
+    const parsed = new URL(url), request = route.request();
+    const logout = expectedLogoutDestination === url && request.isNavigationRequest();
+    const projectMap = coreClosure && activeCase.startsWith("core-project-") && parsed.origin === "https://maps.google.com" && parsed.pathname === "/maps"
+      && request.resourceType() === "document" && request.frame().parentFrame() !== null;
+    if (logout || projectMap) expectedBlockedRequests.push({ case: activeCase, reason: logout ? "configured-logout-navigation" : "existing-project-map-iframe", origin: parsed.origin, pathname: parsed.pathname, networkAllowed: false });
+    else externalRequests.push(parsed.origin);
+    await route.abort("blockedbyclient");
+  }
 };
 await observe("owned-network-guard", () => context.route("**/*", ownedNetworkOnly));
 const formKey = (id, surface, scenario) => ["form", id, surface, scenario].join(":");
@@ -165,11 +186,17 @@ async function run(id, coverage, task) {
   const startedAt = new Date().toISOString();
   try {
     const details = await task();
-    evidence.push({ id, status: "pass", coverage, startedAt, finishedAt: new Date().toISOString(), ...details });
-    for (const cell of details?.previewCells ?? []) {
+    const domainIdentity = details?.id === undefined ? {} : { entityId: details.entityId ?? details.id };
+    const previewTargets = new Set();
+    const previewUpdates = (details?.previewCells ?? []).map(cell => {
       const target = previewMatrix.find(row => row.consumer === cell.consumer && row.publication === cell.publication && row.session === cell.session);
-      assert.ok(target); Object.assign(target, { status: "behavior_verified", evidence: id, ...cell });
-    }
+      assert.ok(target, "Preview evidence must name a current canonical cell.");
+      assert.ok(!previewTargets.has(target), "One journey cannot report the same Preview cell twice.");
+      previewTargets.add(target);
+      return { target, cell };
+    });
+    evidence.push({ ...details, ...domainIdentity, id, status: "pass", coverage, startedAt, finishedAt: new Date().toISOString() });
+    for (const { target, cell } of previewUpdates) Object.assign(target, { ...cell, status: "behavior_verified", evidence: id });
   } catch (error) {
     errors.push({ id, message: String(error?.message ?? error) });
     evidence.push({ id, status: "fail", coverage: [], startedAt, finishedAt: new Date().toISOString() });
@@ -208,6 +235,36 @@ async function popupProof(link, expected, expectedText) {
     return { destination: expected, trustedClick: true, authenticatedDestination: expected.startsWith("/admin/"), usableDocument: true };
   } finally { await observe("popup-close", () => popup.close()); await page.bringToFront(); assert.equal(page.url(), caller); }
 }
+async function revokeSession() {
+  const retainedSession = await context.storageState();
+  assert.ok(retainedSession.cookies.some(cookie => cookie.httpOnly), "Revocation proof requires a previously valid signed cookie.");
+  await observe("logout-dashboard", () => page.goto(origin + "/admin", { waitUntil: "domcontentloaded" }));
+  const destination = await page.locator('a[title="الانتقال للموقع"]').first().getAttribute("href");
+  assert.ok(destination);
+  expectedLogoutDestination = new URL(destination, origin).href;
+  const endpoint = origin + "/api/admin/auth/logout";
+  let matchedRequests = 0;
+  const countOriginalLogout = request => {
+    if (request.url() === endpoint && request.method() === "POST") matchedRequests++;
+  };
+  page.on("request", countOriginalLogout);
+  try {
+    const [response] = await observe("existing-logout-acknowledgement", () => Promise.all([
+      page.waitForResponse(response => response.request().url() === endpoint && response.request().method() === "POST", { timeout: 25_000 }),
+      page.getByRole("button", { name: "خروج", exact: true }).click(),
+    ]));
+    assert.equal(matchedRequests, 1, "Revocation must execute exactly one original logout request.");
+    assert.equal(response.status(), 200, "The real logout request must be acknowledged successfully.");
+  } finally {
+    page.off("request", countOriginalLogout);
+  }
+  // AdminShell consumes fetch acknowledgement, then navigates without reading
+  // JSON. Body/EOF is not this consumer's settlement contract. HTTP200 alone
+  // is not revocation proof: the caller must reject this retained signed cookie
+  // at every declared protected Preview target before promoting a cell.
+  return retainedSession;
+}
+
 try {
   activeCase = "login";
   await observe("page-page-navigation", () => page.goto(origin + "/admin/login", { waitUntil: "domcontentloaded" }));
@@ -216,6 +273,7 @@ try {
     await page.locator('input[name="password"]').fill(process.env.QA_ADMIN_PASSWORD);
   });
   await observe("login-submit-redirect", () => Promise.all([page.waitForURL(url => url.pathname === "/admin", { timeout: 60_000 }), page.locator('button[type="submit"]').click()]));
+  const coreLogin = coreClosure ? { username: process.env.QA_ADMIN_USERNAME, password: process.env.QA_ADMIN_PASSWORD } : null;
   delete process.env.QA_ADMIN_USERNAME; delete process.env.QA_ADMIN_PASSWORD;
   const dashboardHeading = page.getByRole("heading", { name: /^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u, level: 1 });
   await observe("dashboard-ready", () => expect(dashboardHeading).toBeVisible({ timeout: 60_000 }));
@@ -224,6 +282,81 @@ try {
   write("admin-adoption-browser.json", receipt());
   checkpoint("login", "complete");
 
+  if (coreClosure) {
+   if (coreCohort === "preview-recovery-templates" || coreCohort === "recovery-templates") {
+    if (coreCohort === "preview-recovery-templates") {
+    const { runCorePreviewJourneys } = await import("./fixtures/admin-core-preview-journeys.mjs");
+    try {
+      await runCorePreviewJourneys({ browser, context, page, origin, fixtures, run, observe, popupProof, ownedNetworkOnly, revokeSession, previewMatrix });
+    } catch (error) {
+      if (!errors.some(row => row.id.startsWith("core-preview-"))) throw error;
+      checkpoint("preview-cohort-incomplete", "failed", { independentJourneysContinue: true });
+    }
+    await observe("core-new-session-after-preview-revocation", async () => {
+      await page.goto(origin + "/admin/login", { waitUntil: "domcontentloaded" });
+      if (new URL(page.url()).pathname === "/admin/login") {
+        await page.locator('input[name="username"]').fill(coreLogin.username);
+        await page.locator('input[name="password"]').fill(coreLogin.password);
+        await Promise.all([page.waitForURL(url => url.pathname === "/admin", { timeout: 60_000 }), page.locator('button[type="submit"]').click()]);
+      }
+      coreLogin.username = ""; coreLogin.password = "";
+      await expect(dashboardHeading).toBeVisible({ timeout: 60_000 });
+    });
+    }
+    const { runCoreCreateRecoveryJourney } = await import("./fixtures/admin-core-create-recovery-journeys.mjs");
+    await runCoreCreateRecoveryJourney({ page, context, origin, output, run, observe, saveForm, saveButton, feedback, databaseReadback });
+    const { runCoreCommandRecoveryJourney } = await import("./fixtures/admin-core-command-recovery-journeys.mjs");
+    await runCoreCommandRecoveryJourney({ page, origin, output, fixtures, run, observe, feedback, databaseReadback });
+    const { runCoreTemplateFormJourneys } = await import("./fixtures/admin-core-form-journeys.mjs");
+    await runCoreTemplateFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
+   } else if (coreCohort === "domain-forms") {
+    const { runCoreProjectCreateJourneys } = await import("./fixtures/admin-core-project-create-journeys.mjs");
+    await runCoreProjectCreateJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
+    const { createCoreFormPermissionContext } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    coreFormPermission = createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
+    const { runCoreDomainFormJourneys } = await import("./fixtures/admin-core-domain-form-journeys.mjs");
+    await runCoreDomainFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
+    coreFormPermission.close();coreFormPermission=null;
+    const { runCoreOperationalFormJourneys } = await import("./fixtures/admin-core-operational-form-journeys.mjs");
+    await runCoreOperationalFormJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
+    const { runCoreSettingsAndMenuJourneys } = await import("./fixtures/admin-core-settings-journeys.mjs");
+    await runCoreSettingsAndMenuJourneys({ page, origin, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
+   } else if (coreCohort === "specialized-settings") {
+    const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    const { runCoreSpecializedSettingsJourneys } = await import("./fixtures/admin-core-specialized-settings-journeys.mjs");
+    try {
+      specializedSettingsResult = await runCoreSpecializedSettingsJourneys({page,browser,origin,fixtures,run,observe,ownedNetworkOnly,login:coreLogin,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+      assert.equal(specializedSettingsResult.status,"pass","Every selected specialized journey must complete.");
+    } finally { coreLogin.username="";coreLogin.password=""; }
+   } else if (coreCohort === "template-libraries" || coreCohort === "readonly-hubs") {
+    const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    const ctx = {page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,databaseReadback,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})};
+    if (coreCohort === "template-libraries") {
+      const { runCoreTemplateLibraryJourneys } = await import("./fixtures/admin-core-template-library-journeys.mjs");
+      await runCoreTemplateLibraryJourneys(ctx);
+    } else {
+      const { runCoreReadonlyHubJourneys } = await import("./fixtures/admin-core-readonly-hubs-journeys.mjs");
+      await runCoreReadonlyHubJourneys(ctx);
+    }
+   } else if (coreCohort === "page-composition") {
+    const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    const { runCorePageCompositionJourneys } = await import("./fixtures/admin-core-page-composition-journeys.mjs");
+    await runCorePageCompositionJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,requiredCases,compositionCheckpoint:createCoreNativeCheckpoint({origin,output})});
+   } else {
+    const { runCoreDomainPersistenceFailureJourneys } = await import("./fixtures/admin-core-domain-persistence-failure-journeys.mjs");
+    await runCoreDomainPersistenceFailureJourneys({ page, origin, output, fixtures, run, observe, actionResponse, assertActionAcknowledged });
+    const { runCoreDomainCommandJourneys } = await import("./fixtures/admin-core-domain-command-journeys.mjs");
+    await runCoreDomainCommandJourneys({ page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback });
+    const { runCoreReadonlyJourneys } = await import("./fixtures/admin-core-readonly-journeys.mjs");
+    await runCoreReadonlyJourneys({ page, context, origin, fixtures, run, observe, readOnlyReadback });
+    const { runCoreDomainTerminalJourneys, runCoreEmptyTrashSuccessJourneys } = await import("./fixtures/admin-core-domain-terminal-journeys.mjs");
+    const terminalContext = { page, context, origin, output, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback };
+    await runCoreDomainTerminalJourneys(terminalContext);
+    await runCoreEmptyTrashSuccessJourneys(terminalContext);
+    const { runCoreDomainPermissionJourneys } = await import("./fixtures/admin-core-domain-permission-journeys.mjs");
+    await runCoreDomainPermissionJourneys({ browser, context, origin, output, fixtures, run, observe, ownedNetworkOnly, revokeSession });
+   }
+  } else {
   const suffix = Date.now().toString(36);
   for (const kind of ["category", "series"]) {
     const plural = kind === "category" ? "categories" : "series";
@@ -475,44 +608,7 @@ try {
     return { outcomes, previewCells };
   });
   await run("preview-revoked-real-session", [], async () => {
-    // The existing logout API increments session_version server-side. Keep the
-    // pre-logout signed cookie only in memory to prove revocation, not absence.
-    const retainedSession = await context.storageState(); assert.ok(retainedSession.cookies.some(cookie => cookie.httpOnly));
-    await observe("page-page-navigation", () => page.goto(origin + "/admin", { waitUntil: "domcontentloaded" }));
-    // The existing button returns to the configured public website after the
-    // real logout response. Block that navigation within this isolated proof.
-    let sawLogoutNavigation, rejectLogoutNavigation;
-    let navigationTimer;
-    const navigationObserved = new Promise((resolve, reject) => {
-      sawLogoutNavigation = resolve;
-      rejectLogoutNavigation = reject;
-    });
-    const containLogoutNavigation = async route => {
-      if (route.request().isNavigationRequest() && route.request().frame() === page.mainFrame()) {
-        // Signal only after abort completes; removing an active handler can race
-        // the context guard. Forward abort failure to the awaited proof promise.
-        try { await route.abort("blockedbyclient"); sawLogoutNavigation(); }
-        catch (error) { rejectLogoutNavigation(error); }
-      } else await route.fallback();
-    };
-    try {
-      await page.route("**/*", containLogoutNavigation);
-      const [logout] = await observe("logout-response-and-navigation", () => {
-        navigationTimer = setTimeout(() => rejectLogoutNavigation(new Error("Existing logout public navigation was not observed.")), 25_000);
-        // Observe all branches immediately so a click/response failure cannot
-        // leave the navigation timeout as an unhandled rejection.
-        return Promise.all([
-          page.waitForResponse(response => new URL(response.url()).pathname === "/api/admin/auth/logout" && response.request().method() === "POST", { timeout: 25_000 }),
-          navigationObserved,
-          page.getByRole("button", { name: "خروج", exact: true }).click(),
-        ]);
-      });
-      assert.equal(logout.status(), 200);
-    } finally {
-      clearTimeout(navigationTimer);
-      // Only page handlers are removed; the context network guard stays active.
-      await observe("logout-route-drain", () => page.unrouteAll({ behavior: "wait" }));
-    }
+    const retainedSession = await revokeSession();
     const stale = await observe("browser-context-create", () => browser.newContext({ storageState: retainedSession }));
     await stale.route("**/*", ownedNetworkOnly);
     const tab = await observe("stale-page-create", () => stale.newPage());
@@ -542,6 +638,7 @@ try {
     return { outcomes, existingLogoutRevokedRetainedSignedCookie: true, cookieArtifactsWritten: false,
       previewCells: checks.map(check => ({ consumer: check.consumer, publication: check.publication, session: "revoked", protectedConsumerAndDestination: "redirect to login" })) };
   });
+  }
   assert.deepEqual(externalRequests, [], "The browser attempted an unowned network destination.");
   driverCompleted = true; checkpoint("driver", "complete");
 } catch (error) {
@@ -553,6 +650,7 @@ try {
   if (visibleHeadings !== null) { failure.visibleHeadings = visibleHeadings; write("admin-adoption-browser.json", receipt()); }
   await failureScreenshot("driver");
 } finally {
+  coreFormPermission?.close();
   delete process.env.QA_ADMIN_USERNAME; delete process.env.QA_ADMIN_PASSWORD;
   write("admin-adoption-browser.json", receipt());
   await observe("context-close", () => context.close()); await observe("browser-close", () => browser.close());

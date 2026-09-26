@@ -82,7 +82,7 @@ export async function updateAdminCompanyAction(
 
     const postCommitWarnings: string[] = [];
     try {
-      revalidateAdminCompanyConfig();
+      await revalidateAdminCompanyConfig();
     } catch (error) {
       console.error("Admin company cache-tag revalidation failed after commit", error);
       postCommitWarnings.push("تعذر تحديث كاش الهوية فورًا");

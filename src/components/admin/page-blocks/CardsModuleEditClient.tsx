@@ -2,7 +2,7 @@
 
 import { AdminFormPendingFields } from "../ui/AdminFormRuntime";
 
-import { AdminFormListboxSelect } from "../ui";
+import { AdminFormListboxSelect, AdminLinkField } from "../ui";
 import {
   ModuleEditorFeedback,
   ModuleEditorField,
@@ -17,9 +17,11 @@ import {
 } from "./ModuleEditorPresentation";
 import AdminCardsItemsField from "./editors/AdminCardsItemsField";
 import { fieldClassName } from "../../../lib/page-blocks/admin-utils";
+import { linkDefaultFromContainer } from "../../../lib/admin/links/link-defaults";
 import {
   resolvePageBlockTextFormat,
   type CardsBlockConfig,
+  type CardsBlockItem,
 } from "../../../lib/page-blocks/configs";
 import type { ModuleAssignmentContext } from "../../../lib/page-blocks/module-assignments-query";
 import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
@@ -38,6 +40,17 @@ type CardsModuleEditClientProps = {
   saved?: boolean;
   updateAction: (formData: FormData) => void | Promise<void>;
 };
+
+function renderCardHref(item: CardsBlockItem, index: number) {
+  return (
+    <AdminLinkField
+      prefix={`item_${index}`}
+      label="الرابط (اختياري)"
+      defaultValue={linkDefaultFromContainer(item as Record<string, unknown>)}
+      showAnchor
+    />
+  );
+}
 
 export default function CardsModuleEditClient({
   block,
@@ -139,7 +152,7 @@ export default function CardsModuleEditClient({
                         </ModuleEditorVisibilityAlignRow>
                       </ModuleEditorField>
                     </ModuleEditorFieldGrid>
-                    <AdminCardsItemsField items={config.items ?? []} minItems={1} showIcon showHref />
+                    <AdminCardsItemsField items={config.items ?? []} minItems={1} showIcon renderHref={renderCardHref} />
                   </ModuleEditorSection>
                 ),
               },

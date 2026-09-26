@@ -13,6 +13,7 @@ const stubs = new Map<string, unknown>([
   ["server-only", {}],
   ["react", { cache: (fn: unknown) => fn }],
   ["next/cache", { unstable_cache: (fn: unknown) => fn, unstable_noStore: () => undefined }],
+  [path.resolve(root, "src/lib/cache/public-cache-generation.ts"), { cachePublicRead: (fn: unknown) => fn }],
 ]);
 function load<T>(file: string): T {
   const filename = path.resolve(root, file);

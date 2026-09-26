@@ -5,7 +5,7 @@ import { resolve, sep } from "node:path";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import ts from "typescript";
-import { prepareVercelCacheProbe } from "./lib/vercel-cache-probe.mts";
+import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode, prepareVercelCacheProbe } from "./lib/vercel-cache-probe.mts";
 const root = realpathSync(resolve(".")), out = resolve(root, ".tmp-qa/core-final-closure/probe-guard-tests-" + Date.now());
 assert.ok(out.startsWith(resolve(root, ".tmp-qa/core-final-closure") + sep)); mkdirSync(out, { recursive: true });
 const source = resolve(root, "scripts/fixtures/vercel-cache-probe");
@@ -15,6 +15,29 @@ const manifest = JSON.parse(readFileSync(resolve(source, "manifest.json"), "utf8
 const cases: string[] = [];
 const fresh = (name: string) => { const path = resolve(out, name); mkdirSync(resolve(path, "scripts/fixtures"), { recursive: true }); cpSync(source, resolve(path, "scripts/fixtures/vercel-cache-probe"), { recursive: true }); return path; };
 try {
+  assert.equal(parseVercelCacheProbeFenceMode(["run", "--head", "a".repeat(40)]),false); cases.push("omitted-mode-retains-positive-old-race-baseline");
+  assert.equal(parseVercelCacheProbeFenceMode(["run", "--expect-fenced", "--head", "a".repeat(40)]),true); cases.push("explicit-flag-selects-fixed-fence-proof");
+  for (const [name,args] of [
+    ["duplicate-mode",["--expect-fenced","--expect-fenced"]],
+    ["assigned-mode",["--expect-fenced=true"]],
+    ["value-mode",["--expect-fenced","false"]],
+  ] as const) { assert.throws(() => parseVercelCacheProbeFenceMode(args)); cases.push(name+"-rejected"); }
+  const classify = (url: string, method = "GET", resourceType = "script") => classifyVercelCacheProbeRequest({url,method,resourceType},"https://owned.vercel.app");
+  assert.equal(classify("https://owned.vercel.app/verification-cache-probe"),"allowed-owned-or-inline"); cases.push("same-deployment-request-allowed");
+  assert.equal(classify("https://vercel.live/_next-live/feedback/feedback.js"),"expected-denied-preview-feedback"); cases.push("exact-preview-feedback-script-remains-denied");
+  assert.equal(classify("https://vercel.live/_next-live/feedback/feedback.js","GET","fetch"),"expected-denied-preview-feedback"); cases.push("measured-preview-feedback-fetch-remains-denied");
+  for (const [name,url,method,type] of [
+    ["unexpected-origin","https://example.com/script.js","GET","script"],
+    ["feedback-query","https://vercel.live/_next-live/feedback/feedback.js?token=untrusted","GET","script"],
+    ["feedback-path","https://vercel.live/_next-live/feedback/other.js","GET","script"],
+    ["feedback-post","https://vercel.live/_next-live/feedback/feedback.js","POST","script"],
+    ["feedback-xhr","https://vercel.live/_next-live/feedback/feedback.js","GET","xhr"],
+    ["feedback-subdomain","https://vercel.live.evil.invalid/_next-live/feedback/feedback.js","GET","script"],
+    ["malformed-url","not-a-url","GET","script"],
+  ]) { assert.equal(classify(url,method,type),"unexpected-denied-foreign"); cases.push(name+"-denied-and-fails-policy"); }
+  const driver = readFileSync(resolve(root,"scripts/qa-vercel-cache-probe.mts"),"utf8");
+  assert.match(driver,/timeout: 30_000, maxRedirects: 0/); cases.push("signed-api-get-never-follows-redirects");
+  assert.ok(driver.indexOf("await context.close()") >= 0 && driver.indexOf("assert.equal(proof.network.blockedUnexpectedForeignRequests") > driver.indexOf("await context.close()")); cases.push("network-completeness-checked-after-context-closed");
   const preview = fresh("preview");
   assert.equal(prepareVercelCacheProbe({ root: preview, env: baseEnv }).generated, true);
   for (const file of ["src/app/verification-cache-probe/page.tsx", "src/app/verification-cache-probe/actions.ts", "src/app/verification-cache-probe/runtime.ts", "src/app/api/verification-cache-probe/route.ts"]) assert.ok(existsSync(resolve(preview,file)));
@@ -46,12 +69,24 @@ try {
   const compiled = ts.transpileModule(template,{ compilerOptions: { module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true },reportDiagnostics:true});
   assert.equal(compiled.diagnostics?.filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);
   const required = createRequire(import.meta.url), exports: Record<string, unknown> = {};
+  const fenceExports: Record<string, unknown> = {};
+  const fenceSource = readFileSync(resolve(source,"../../../src/lib/cache/public-cache-generation.ts"),"utf8");
+  const fenceCompiled = ts.transpileModule(fenceSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+  vm.runInNewContext(fenceCompiled,{exports:fenceExports,process:{env:{}},URL,BigInt,
+    require:(name:string)=>{
+      if(name==="server-only")return {};
+      if(name==="next/cache")return {unstable_cache:(callback:()=>unknown)=>callback};
+      if(name==="next/navigation" || name==="react")return required(name);
+      if(name==="../supabase-admin")return {getSupabaseAdmin:()=>{throw Error("Synthetic adapter probe must never access configured Supabase.");}};
+      assert.equal(name,"node:crypto");return required(name);
+    }});
   let ambientCalls = 0, builtinCalls = 0;
   const context = { exports, process:{env:{...baseEnv}, versions: process.versions,
     getBuiltinModule: (name: string): object | undefined => { builtinCalls++; assert.equal(name, "node:sqlite"); return process.getBuiltinModule(name); } }, Buffer, console, setTimeout, clearTimeout,
     require: (name:string) => {
       if(name==="server-only")return {};
       if(name==="next/cache")return { unstable_cache: (callback: () => unknown) => callback };
+      if(name==="../../lib/cache/public-cache-generation")return fenceExports;
       if(name==="next/dist/server/app-render/work-async-storage.external")return {workAsyncStorage:{getStore:()=>{ambientCalls++;return undefined;}}};
       assert.ok(["node:assert/strict","node:crypto"].includes(name));return required(name);
     } };
@@ -121,6 +156,12 @@ try {
     assert.notEqual(changedReader.key,originalReader.key); cases.push("different-canonical-source-hash-changes-key");
     const differentRun = await reader({...state,ticket:{...state.ticket,run:"another-isolated-control"}},keyPort);
     assert.notEqual(differentRun.key,originalReader.key); cases.push("different-run-nonce-changes-key");
+    old.exec("update synthetic_cache_generation set generation=generation+1 where id=1");
+    const advancedReader = await reader(state,keyPort);
+    assert.notEqual(advancedReader.key,originalReader.key); cases.push("shared-production-fence-changes-key-after-sql-generation");
+    assert.equal(advancedReader.callbackSha256,originalReader.callbackSha256); cases.push("generation-preserves-reader-callback-identity");
+    const stableReader = await reader(state,keyPort);
+    assert.equal(stableReader.key,advancedReader.key); cases.push("same-sql-generation-preserves-exact-key");
     const accepted = await serialize({value:projected,captured:state.captured});
     assert.equal(projected.revision,"New"); assert.equal(accepted.errors.length,0); assert.ok(accepted.body.includes("New"));
     cases.push("installed-flight-accepts-actual-reader-projection");

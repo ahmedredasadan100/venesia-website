@@ -184,8 +184,80 @@ export async function seedOwnedAdminInteractionFixtures(handle: OwnedLocalHandle
       if(previousServiceKey===undefined)delete process.env.SUPABASE_SERVICE_ROLE_KEY;else process.env.SUPABASE_SERVICE_ROLE_KEY=previousServiceKey;
     }
   }
-  return { credentials, fixtures: { category: categories[0], categories,series,topic,
+  const browserIdentity = <T extends Record<string, unknown>>(row: T) => {
+    assert.ok(typeof row.id === "number" || typeof row.id === "string" && /^[1-9][0-9]*$/.test(row.id));
+    const id = Number(row.id); assert.ok(Number.isSafeInteger(id) && id > 0, "Owned Browser fixture identity must be a positive safe integer.");
+    return { ...row, id };
+  };
+  const browserCategories=categories.map(browserIdentity);
+  return { credentials, fixtures: { category: browserCategories[0], categories:browserCategories,series:browserIdentity(series),topic:browserIdentity(topic),
     project:projectMetadata(saved.project_id,project),commercialProject:projectMetadata(commercialSaved.project_id,commercial.project),pages,
     ...(heavy&&heavySaved?{heavyProject:projectMetadata(heavySaved.project_id,heavy.project),heavyShape:{plans:12,detailsPerPlan:4,features:4,delivery:2,gallery:3,locationDepth:4}}:{}),
     baselineShape: { plans:2,detailsPerPlan:2,features:3,delivery:2,gallery:3,locationDepth:4 } } };
+}
+
+/** Twelve isolated records whose state is read back before and after Preview proof. */
+export async function seedOwnedCorePreviewFixtures(handle: OwnedLocalHandle) {
+  assertOwnedLocalHandle(handle);
+  const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false,
+    alias: { "server-only": resolve(root, "node_modules/next/dist/compiled/server-only/empty.js") } });
+  const publication = await jiti.import<typeof import("../../src/lib/admin/content-workflow/content-review-capability.ts")>(resolve(root, "src/lib/admin/content-workflow/content-review-capability.ts"));
+  const articleInput = await jiti.import<typeof import("../../src/lib/admin/content-workflow/topic-publish-validation.ts")>(resolve(root, "src/lib/admin/content-workflow/topic-publish-validation.ts"));
+  const manifest = await jiti.import<typeof import("../../src/lib/admin/interaction-system/adoption-manifest.ts")>(resolve(root, "src/lib/admin/interaction-system/adoption-manifest.ts"));
+  const contracts = [
+    { consumer: "topic-article-edit-preview-public", kind: "article", table: "topics" },
+    { consumer: "topic-media-edit-preview", kind: "news", table: "topics" },
+    { consumer: "topic-category-collection-preview", kind: "category", table: "topic_categories" },
+    { consumer: "topic-series-collection-preview", kind: "series", table: "topic_series" },
+  ] as const;
+  assert.deepEqual(contracts.map(row => row.consumer).sort(), manifest.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.map(row => row.id).sort(), "Every current Preview consumer needs a concrete fixture contract.");
+  const template = (await handle.query("select * from public.topics where slug='isolated-public-property-ownership' and status='published' and deleted_at is null")).rows[0];
+  assert.ok(template, "Use the existing fully authored Public fixture.");
+  const category = (await handle.query("select id,name,slug from public.topic_categories where slug='qa-admin-category-1' and deleted_at is null")).rows[0];
+  assert.ok(category);
+  const topicColumns = (await handle.query("select attname from pg_catalog.pg_attribute where attrelid='public.topics'::regclass and attnum>0 and not attisdropped and attgenerated='' and attidentity='' and attname<>'id' order by attnum")).rows.map(row => String(row.attname));
+  assert.ok(topicColumns.length > 10 && topicColumns.every(name => /^[a-z_][a-z0-9_]*$/.test(name)));
+  const seo = loadEntitySeoPersistenceOwner();
+  const records: Array<{ consumer: string; publication: string; kind: string; table: string; id: number; name: string; title: string; slug: string; expectedStatus: string; expectedDeleted: boolean; expectedActive: boolean | null }> = [];
+  await handle.query("begin");
+  try {
+    for (const contract of contracts) for (const state of ["published", "unpublished", "deleted"] as const) {
+      const slug = `qa-core-preview-${contract.kind}-${state}`;
+      const name = `معاينة الإغلاق ${contract.kind} ${state}`;
+      const status = state === "published" ? "published" : "unpublished";
+      const deletedAt = state === "deleted" ? "2026-01-02T00:00:00.000Z" : null;
+      assert.equal((await handle.query(`select id from public.${contract.table} where slug=$1`, [slug])).rows.length, 0, "Never overwrite an existing fixture identity.");
+      let id: number;
+      if (contract.table === "topics") {
+        const row: Record<string, unknown> = { ...template, slug, title: name, content_type: contract.kind,
+          status, deleted_at: deletedAt, published_at: state === "published" ? "2026-01-01T00:00:00.000Z" : null,
+          is_featured: false, media_payload: null, series_id: null, series: null, series_slug: null,
+          category_id: category.id, category: category.name, category_slug: category.slug,
+          created_at: "2026-01-01T00:00:00.000Z", updated_at: "2026-01-01T00:00:00.000Z" };
+        const input = { ...articleInput.topicRowToPublishInput(row), contentType: contract.kind, mediaPayload: null,
+          canonicalUrl: "", ogImage: "", ogImageAlt: "" };
+        assert.equal(publication.getContentPublishValidationError(input), null, "All synthetic publication states retain valid content; visibility alone varies.");
+        Object.assign(row, seo.deriveEntitySeoScore(seo.toTopicSeoScoreInput(row as TopicSeoSource)));
+        const selected = topicColumns.map(name => `"${name}"`).join(",");
+        id = Number((await handle.query(`insert into public.topics(${selected}) select ${selected} from jsonb_populate_record(null::public.topics,$1::jsonb) returning id`, [JSON.stringify(row)])).rows[0].id);
+      } else if (contract.table === "topic_categories") {
+        id = Number((await handle.query("insert into public.topic_categories(name,slug,status,is_active,show_in_menu,deleted_at) values($1,$2,$3,$4,false,$5) returning id", [name, slug, status, state === "published", deletedAt])).rows[0].id);
+      } else {
+        id = Number((await handle.query("insert into public.topic_series(name,slug,status,category_id,deleted_at) values($1,$2,$3,$4,$5) returning id", [name, slug, status, category.id, deletedAt])).rows[0].id);
+      }
+      records.push({ ...contract, publication: state, id, name, title: name, slug, expectedStatus: status,
+        expectedDeleted: state === "deleted", expectedActive: contract.kind === "category" ? state === "published" : null });
+    }
+    await handle.query("commit");
+  } catch (error) { await handle.query("rollback"); throw error; }
+  assert.equal(records.length, manifest.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.length * 3);
+  return records;
+}
+/** Explicit specialized-settings opt-in after the existing primary account is prepared. */
+export async function seedOwnedCoreSpecializedSettingsFixtures(handle: OwnedLocalHandle) {
+  assertOwnedLocalHandle(handle);
+  const credentials = credentialsByHandle.get(handle);
+  assert.ok(credentials, "Prepare the canonical owned Admin account before specialized fixtures.");
+  const { prepareCoreSpecializedSettingsFixtures } = await import("../verify-admin-core-specialized-settings-isolated.mts");
+  return prepareCoreSpecializedSettingsFixtures(handle, credentials);
 }

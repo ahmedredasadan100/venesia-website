@@ -16,11 +16,12 @@ const originalExtensions = new Map([".ts", ".tsx"].map(extension => [extension, 
 let currentClient: SupabaseClient<Database>;
 const read = (path: string) => readFileSync(resolve(ROOT, path), "utf8");
 
-// Execute complete application modules. Only Next cache and environment providers are
+// Execute complete application modules. Only shared cache and environment providers are
 // replaced: this test proves reads/mapping/SSR, not the persistent cache adapter.
 modules._load = (request, parent, main) => {
   if (request === "server-only") return {};
   if (request === "next/cache") return { unstable_cache: (callback: unknown) => callback };
+  if (request.endsWith("/cache/public-cache-generation")) return { cachePublicRead: (callback: unknown) => callback };
   if (request.endsWith("/supabase-admin")) return { getSupabaseAdmin: () => currentClient };
   if (request.endsWith("/load-global-seo-settings")) return { loadGlobalSeoSettings: async () => ({ canonicalBaseUrl: "https://verification.invalid" }) };
   if (request.endsWith("/PublicMediaImage")) return { __esModule: true, default: () => null };

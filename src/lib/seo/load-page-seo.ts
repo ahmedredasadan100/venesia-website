@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
@@ -37,7 +38,7 @@ export const loadPageSeoByPath = cache(async function loadPageSeoByPath(
   const normalizedPath = normalizePath(path);
 
   try {
-    return await unstable_cache(
+    return await cachePublicRead(
       async () => queryPageSeoByPath(normalizedPath),
       ["page-seo", normalizedPath],
       { revalidate: 300, tags: ["page-seo", "pages", `page-seo:${normalizedPath}`] },

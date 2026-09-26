@@ -623,7 +623,7 @@ export default function TopicsListClient({
     }
     publishFeedback(mapTopicsActionResultToFeedback(result, { currentListPath }), {
       channel: `entity-list:${UNIFIED_CONTENT_LIST_ID}`,
-      placement: "inline",
+      placement: "global",
       critical: !result.ok,
       reveal: true,
     });

@@ -1,9 +1,11 @@
 "use server";
 
+import { adminActionSuccess } from "../../../../../lib/admin/admin-action-result";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
-import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidatePageBlocksPath, revalidateCommittedPageBlockAction } from "../../../../../lib/page-blocks/admin-revalidate";
 import { verifyPublicPagePublicationDependencies } from "../../../../../lib/pages/public-page-publication-dependencies";
 import { getSupabaseAdmin } from "../../../../../lib/supabase-admin";
 import type { PageMutationResult } from "./types";
@@ -63,6 +65,9 @@ export async function togglePageStatus(
       public_dependency: dependency.dependency,
     },
   });
-  await revalidatePageBlocksPath(pageId);
-  return { ok: true, status: nextStatus, message: nextStatus === "published" ? "تم نشر الصفحة." : "أصبحت الصفحة غير منشورة." };
+  const settled = await revalidateCommittedPageBlockAction(
+    adminActionSuccess("تم حفظ حالة الصفحة", nextStatus === "published" ? "تم نشر الصفحة." : "أصبحت الصفحة غير منشورة.", { entityId: pageId, completion: "committed", code: nextStatus === "published" ? "published" : "unpublished" }),
+    () => revalidatePageBlocksPath(pageId),
+  );
+  return { ok: true, status: nextStatus, message: settled.message, feedbackStatus: settled.feedbackStatus === "warning" ? "warning" : "success" };
 }

@@ -61,6 +61,10 @@ export type PublicGateRequest = {
   finalQualityGate?: true;
   /** Fixed affected-build subset; omission retains the complete Public gate contract. */
   selection?: "build-contracts" | "admin-interactions" | "admin-adoption";
+  /** Fixed follow-up journeys; retained Audit2 outcomes are not replayed. */
+  adoptionScope?: "core-closure";
+  /** Bounded independent Core families; the final gate still runs the Public suite. */
+  adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";
@@ -348,6 +352,8 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const measurement = request.selection === "admin-interactions" ? request.adminMeasurement : undefined;
   assert.equal(Boolean(request.adminMeasurement), Boolean(measurement));
   const adoption = request.selection === "admin-adoption";
+  assert.ok(request.adoptionScope === undefined || (adoption && request.adoptionScope === "core-closure"), "Unknown fixed adoption scope.");
+  assert.ok(request.adoptionCohort === undefined || (request.adoptionScope === "core-closure" && ["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings"].includes(request.adoptionCohort)), "Unknown Core cohort.");
   assert.ok(request.finalQualityGate === undefined || (request.finalQualityGate === true && adoption), "Final Quality Gate requires the complete Admin adoption selection.");
   const credentials = measurement || adoption ? adminCredentials.get(context) : undefined;
   if (adoption) assert.ok(credentials, "Owned Admin fixture preparation is required for adoption journeys.");
@@ -424,9 +430,9 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     context = { ...context, sanitize: value => [credentials.username, credentials.password, credentials.secret]
       .reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_ADMIN]"), baseSanitize(value)) };
   }
-  const gates = adoption ? [...GATES, { name: "admin-adoption", script: "scripts/qa-admin-adoption-journeys.mjs", args: [], limitMs: 900_000 }] : measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
+  const gates = adoption ? [...(request.adoptionCohort && !request.finalQualityGate ? GATES.filter(gate => gate.name !== "public-e2e") : GATES), { name: "admin-adoption", script: "scripts/qa-admin-adoption-journeys.mjs", args: request.adoptionScope === "core-closure" ? ["--core-closure", ...(request.adoptionCohort ? ["--core-cohort=" + request.adoptionCohort] : [])] : [], limitMs: 900_000 }] : measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
     ? GATES.filter(gate => gate.name !== "public-e2e") : GATES;
-  assert.equal(gates.length, adoption ? 5 : measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
+  assert.equal(gates.length, adoption ? (request.adoptionCohort && !request.finalQualityGate ? 4 : 5) : measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
   assert.equal(completed.has(originalContext), false, "Successful selected gates cannot be rerun in this fixture.");
   const sourceDirectory = ownedPath(context, "public-build-source");
   assert.equal(existsSync(sourceDirectory), false, "Preserve any prior build workspace.");
@@ -531,10 +537,13 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         if(measurementHarness) receipt(context,"admin-measurement-harness.json",{manifest:measurementHarness,diagnosticInstrumentation:true,productSourceUnchanged:true});
         appPort = await new Promise<number>((done, reject) => { const reservation = net.createServer(); reservation.once("error", reject);
           reservation.listen(0, "127.0.0.1", () => { const port = (reservation.address() as net.AddressInfo).port; reservation.close(error => error ? reject(error) : done(port)); }); });
-        const app = spawn(process.execPath, [...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
+        const coreFault = gate.name === "admin-adoption" && request.adoptionScope === "core-closure";
+        const coreControl = coreFault ? ownedPath(context, "admin-core-cache-control.json") : null;
+        if (coreControl) writeFileSync(coreControl, JSON.stringify({ schemaVersion: 1, mode: "off" }), { flag: "wx", mode: 0o600 });
+        const app = spawn(process.execPath, [...(coreFault ? ["--require", join(sourceDirectory, "scripts/fixtures/admin-core-command-cache-fault.cjs")] : []), ...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
           { cwd: sourceDirectory, env: measurement ? {...childEnvironment,
             QA_ADMIN_SERVER_TRACE_PATH:ownedPath(context,"admin-server-trace.jsonl"),
-            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : coreControl ? { ...childEnvironment, QA_ADMIN_CORE_CACHE_CONTROL: coreControl } : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
         gateApp = app;
         children.add(app); let appOutput = "";
         const captureAppOutput = (value: Buffer) => {

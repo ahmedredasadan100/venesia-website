@@ -17,6 +17,13 @@ export type Database = {
   }
   public: {
     Tables: {
+      public_cache_generation: {
+        Row: { singleton: boolean; generation: number }
+        Insert: { singleton?: boolean; generation?: number }
+        Update: { singleton?: boolean; generation?: number }
+        Relationships: []
+      }
+
       admin_audit_logs: {
         Row: {
           action: string
@@ -3602,6 +3609,8 @@ export type Database = {
       }
     }
     Functions: {
+      read_public_cache_generation: { Args: Record<PropertyKey, never>; Returns: string }
+      advance_public_cache_generation: { Args: Record<PropertyKey, never>; Returns: string }
       entity_seo_score_source: {
         Args: { p_entity: string; p_row: Json }
         Returns: Json

@@ -161,8 +161,8 @@ export default function PageBlocksClient({
   const regionLabels = useMemo(() => Object.fromEntries(
     regions.map((region) => [region.key, region.adminLabel]),
   ) as Record<string, string>, [regions]);
-  const setActionMessage = (message: string | null) =>
-    setActionFeedback(message ? { message, ok: false } : null);
+  const setActionMessage = (message: string | null, feedbackStatus?: "success" | "warning") =>
+    setActionFeedback(message ? { message, ok: Boolean(feedbackStatus), feedbackStatus } : null);
 
   const {
     assignModalOpen,
@@ -366,6 +366,7 @@ export default function PageBlocksClient({
           return response.ok
             ? {
                 ok: true as const,
+                feedbackStatus: response.feedbackStatus,
                 message: response.message ?? "تم تحديث حالة الموديول.",
               }
             : {
@@ -414,6 +415,7 @@ export default function PageBlocksClient({
           redirectTo = response.redirectTo ?? null;
           return {
             ok: true as const,
+            feedbackStatus: response.feedbackStatus,
             message: response.message ?? "تم تكرار الموديول.",
           };
         },
@@ -445,7 +447,7 @@ export default function PageBlocksClient({
         execute: async () => {
           const response = await detachPageBlockAssignment(formData);
           return response.ok
-            ? { ok: true as const, message: response.message ?? "تمت إزالة الموديول من الصفحة." }
+            ? { ok: true as const, feedbackStatus: response.feedbackStatus, message: response.message ?? "تمت إزالة الموديول من الصفحة." }
             : { ok: false as const, code: "assignment_detach_failed", message: response.message ?? "تعذرت إزالة الموديول من الصفحة." };
         },
       });
@@ -562,6 +564,7 @@ export default function PageBlocksClient({
           return response.ok
             ? {
                 ok: true as const,
+                feedbackStatus: response.feedbackStatus,
                 message: response.message ?? "تم تحديث موضع العرض.",
                 updatedAt: response.updatedAt,
               }
@@ -664,6 +667,7 @@ export default function PageBlocksClient({
             return response.ok
               ? {
                   ok: true as const,
+                  feedbackStatus: response.feedbackStatus,
                   message: response.message ?? "تم حفظ ترتيب الموديولات ذريًا.",
                   updatedAt: response.updatedAt,
                 }
@@ -738,10 +742,11 @@ export default function PageBlocksClient({
           );
         },
         execute: async () => {
-          await bulkPageBlockAssignments(formData);
+          const response = await bulkPageBlockAssignments(formData);
           return {
             ok: true as const,
-            message: action === "detach" ? "تمت إزالة الروابط المحددة من الصفحة." : "تم تحديث الروابط المحددة.",
+            message: response.message ?? (action === "detach" ? "تمت إزالة الروابط المحددة من الصفحة." : "تم تحديث الروابط المحددة."),
+            feedbackStatus: response.feedbackStatus,
           };
         },
       });

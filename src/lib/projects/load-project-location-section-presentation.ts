@@ -1,6 +1,7 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import { cache } from "react";
 
 import { logError } from "../logging";
@@ -37,7 +38,7 @@ export const loadProjectLocationSectionPresentation = cache(
       return DEFAULT_PROJECT_LOCATION_SECTION_PRESENTATION;
     }
     try {
-      return await unstable_cache(
+      return await cachePublicRead(
         () => queryProjectLocationSectionPresentation(projectId),
         ["project-location-section-presentation-v2", String(projectId)],
         {

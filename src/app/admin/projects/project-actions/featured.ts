@@ -77,7 +77,7 @@ export async function setProjectFeaturedAjax(
   );
 
   try {
-    revalidateProjectPaths(
+    await revalidateProjectPaths(
       parsed.data.project_type,
       parsed.data.project_id,
       parsed.data.project_slug,

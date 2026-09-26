@@ -1,5 +1,5 @@
 export type PageMutationResult =
-  | { ok: true; message: string }
+  | { ok: true; message: string; feedbackStatus?: "success" | "warning" }
   | { ok: false; code: string; message: string };
 
 export type PageDeleteResult =

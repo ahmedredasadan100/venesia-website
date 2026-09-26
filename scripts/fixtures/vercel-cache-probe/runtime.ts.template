@@ -2,6 +2,7 @@ import "server-only";
 import assert from "node:assert/strict";
 import { createHash, randomUUID, verify } from "node:crypto";
 import { unstable_cache, updateTag } from "next/cache";
+import { createGenerationFencedCache, publicCacheGenerationKeyParts } from "../../lib/cache/public-cache-generation";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
 
 const manifest = __PROBE_MANIFEST__;
@@ -16,7 +17,7 @@ type SyntheticDatabase = {
   exec(sql: string): void; close(): void;
   prepare(sql: string): { get(...values: string[]): unknown; run(...values: string[]): unknown };
 };
-type Invalidation = { calls: number; startedAt: number | null; completedAt: number | null; failed: boolean };
+type Invalidation = { generation: string; generationCommittedAt: number; calls: number; startedAt: number | null; completedAt: number | null; failed: boolean };
 type AmbientCache = {
   cacheHandler?: { constructor: { name: string; toString(): string } };
   generateSimpleCacheKey(key: string): Promise<string>;
@@ -27,7 +28,7 @@ type State = {
   ticket: Ticket; db: SyntheticDatabase; createdAt: number; callbackCount: number; captured: Value | null;
   captureAt: number | null; commitAt: number | null; releaseAt: number | null; writeCompleteAt: number | null;
   hold: Promise<void> | null; release: (() => void) | null; reject: ((error: Error) => void) | null;
-  failedRead: boolean; reading: boolean; invalidations: Invalidation[]; restores: Array<() => void>; key: string | null;
+  failedRead: boolean; reading: boolean; generationValue: string; invalidations: Invalidation[]; restores: Array<() => void>; key: string | null;
 };
 type Coordination = { worker: string; runs: Map<string, State> };
 const scope = globalThis as typeof globalThis & { __venesiaR08Verification?: Coordination };
@@ -75,7 +76,7 @@ function ambient() {
 }
 
 function snapshot(state: State) {
-  return { run: state.ticket.run, scenario: state.ticket.scenario, readerSourceSha256, worker: coordination.worker,
+  return { generationFenced: true, generation: state.generationValue, run: state.ticket.run, scenario: state.ticket.scenario, readerSourceSha256, worker: coordination.worker,
     callbackCount: state.callbackCount, captured: state.captured, captureAt: state.captureAt, commitAt: state.commitAt,
     releaseAt: state.releaseAt, writeCompleteAt: state.writeCompleteAt, failedRead: state.failedRead,
     invalidations: state.invalidations, key: state.key };
@@ -96,6 +97,7 @@ async function database(revision: "Old" | "New") {
   const db = new sqlite.DatabaseSync(":memory:");
   db.exec("create table synthetic_cache_source (id integer primary key, revision text not null)");
   db.prepare("insert into synthetic_cache_source values (1,?)").run(revision);
+  db.exec("create table synthetic_cache_generation(id integer primary key,generation integer not null); insert into synthetic_cache_generation values(1,0)");
   return db;
 }
 
@@ -111,21 +113,35 @@ async function readRevision(state: State) {
     return captured;
 }
 
+function generation(state: State) {
+  const row = state.db.prepare("select cast(generation as text) value from synthetic_cache_generation where id=1").get() as { value: string };
+  assert.match(row.value, /^(0|[1-9][0-9]*)$/u);
+  return row.value;
+}
+
 async function reader(state: State, cache: AmbientCache) {
   // Binding avoids SSR/API minification changing Next's function-string key.
   // The complete canonical source hash and run nonce identify the bound closure.
   assert.match(readerSourceSha256, /^[a-f0-9]{64}$/u);
   const callback = readRevision.bind(null, state);
-  const parts = keyParts(state.ticket);
+  const capturedGeneration = generation(state);
+  state.generationValue = capturedGeneration;
+  const parts = publicCacheGenerationKeyParts(keyParts(state.ticket), capturedGeneration);
   const key = await cache.generateSimpleCacheKey(callback.toString() + "-" + parts.join(",") + "-[]");
   state.key = key;
-  return { read: unstable_cache(callback, parts, { revalidate: 300, tags: [tag(state.ticket)] }), key,
+  return { read: createGenerationFencedCache(async () => {
+    const fresh = generation(state); assert.equal(fresh, capturedGeneration, "Fixture fence changed before the read started."); return fresh;
+  }, unstable_cache)(callback, keyParts(state.ticket), { revalidate: 300, tags: [tag(state.ticket)] }), key,
     callbackSha256: hash(callback.toString()), readerSourceSha256 };
 }
 
 function observeInvalidation(state: State, cache: AmbientCache) {
+  // Native PostgreSQL verifies the production RPC separately. This fixture owns
+  // only synthetic SQL metadata and uses the exact production key-fencing helper.
+  state.db.exec("begin; update synthetic_cache_generation set generation=generation+1 where id=1; commit;");
+  state.generationValue = generation(state);
   const original = cache.revalidateTag;
-  const receipt: Invalidation = { calls: 0, startedAt: null, completedAt: null, failed: false };
+  const receipt: Invalidation = { generation: state.generationValue, generationCommittedAt: Date.now(), calls: 0, startedAt: null, completedAt: null, failed: false };
   state.invalidations.push(receipt);
   const restore = () => { if (cache.revalidateTag === observed) cache.revalidateTag = original; };
   async function observed(this: AmbientCache, tags: string[], durations?: unknown) {
@@ -154,7 +170,7 @@ export async function executeAction(raw: string) {
       assert.ok(coordination.runs.size < 5, "Bounded verification capacity exhausted.");
       const state: State = { ticket, db: await database("Old"), createdAt: Date.now(), callbackCount: 0, captured: null,
         captureAt: null, commitAt: null, releaseAt: null, writeCompleteAt: null, hold: null, release: null, reject: null,
-        failedRead: false, reading: false, invalidations: [], restores: [], key: null };
+        failedRead: false, reading: false, generationValue: "0", invalidations: [], restores: [], key: null };
       coordination.runs.set(ticket.run, state);
       return { status: "ok", requestId: ticket.requestId, phase: ticket.phase, ...snapshot(state), adapter };
     }
@@ -211,13 +227,15 @@ export async function executeRead(raw: string) {
       diagnostic: error instanceof AdapterIdentityError ? error.diagnostic : null };
   }
   const { cache, store, adapter } = environment;
-  const state: State = { ticket, db: await database("New"), createdAt: Date.now(), callbackCount: 0, captured: null,
+  const shared = existing(ticket);
+  assert.ok(shared.commitAt && !shared.reading, "GET requires committed source and a completed old read.");
+  const state: State = { ticket, db: shared.db, createdAt: Date.now(), callbackCount: 0, captured: null,
     captureAt: null, commitAt: null, releaseAt: null, writeCompleteAt: null, hold: null, release: null, reject: null,
-    failedRead: false, reading: false, invalidations: [], restores: [], key: null };
+    failedRead: false, reading: false, generationValue: "0", invalidations: [], restores: [], key: null };
   try {
     const current = await reader(state, cache), value = await current.read();
     await Promise.all(Object.values(store.pendingRevalidates ?? {}));
     return { status: "ok", requestId: ticket.requestId, phase: ticket.phase, value, callbackCount: state.callbackCount, key: current.key, callbackSha256: current.callbackSha256, readerSourceSha256: current.readerSourceSha256,
-      sourceRevision: "New", worker: coordination.worker, adapter, sourceHead: ticket.sourceHead };
-  } finally { await state.db.close(); }
+      generationFenced: true, generation: generation(state), sourceRevision: "New", worker: coordination.worker, adapter, sourceHead: ticket.sourceHead };
+  } finally { /* Only the owning cleanup Action closes the shared synthetic DB. */ }
 }

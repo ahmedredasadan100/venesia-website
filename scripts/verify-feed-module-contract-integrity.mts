@@ -1373,8 +1373,8 @@ for (const field of ["id: number", "imageAlt: string", "category: string", "seri
 }
 assert.ok(
   loader.includes("throw new FeedModuleLoadFailure") &&
-    loader.includes("return await unstable_cache(") &&
-    loader.indexOf("return await unstable_cache(") < loader.indexOf("} catch (error)") &&
+    loader.includes("return await cachePublicRead(") &&
+    loader.indexOf("return await cachePublicRead(") < loader.indexOf("} catch (error)") &&
     loader.includes("hasCompositionError: true"),
   "Feed source failure is shaped only outside the cache and cannot be cached as Empty",
 );

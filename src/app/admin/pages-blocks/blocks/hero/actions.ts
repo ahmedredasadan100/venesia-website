@@ -1,5 +1,11 @@
 "use server";
 
+import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
+
+import { revalidateCommittedPageBlockAction } from "../../../../../lib/page-blocks/admin-revalidate";
+
+import { adminActionSuccess, adminActionWarning } from "../../../../../lib/admin/admin-action-result";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
@@ -151,7 +157,7 @@ function buildHeroConfig(formData: FormData, variant: HeroTemplateVariant) {
 }
 
 async function revalidateHeroAdmin() {
-  revalidateHeroCache();
+  await revalidateHeroCache();
   revalidatePath("/admin/pages-blocks/blocks/hero");
   revalidatePath("/");
   revalidatePath("/about");
@@ -377,7 +383,8 @@ export async function toggleHeroTemplate(formData: FormData) {
     },
     actor,
   );
-  await revalidateHeroAdmin();
+  const result = adminActionSuccess("تم الحفظ", "تم حفظ حالة القالب.", { code: "saved", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateHeroAdmin());
 }
 
 export async function deleteHeroTemplate(formData: FormData) {
@@ -417,20 +424,10 @@ export async function deleteHeroTemplate(formData: FormData) {
     await synchronizeMediaReferenceWriteScopesAfterDomainMutation([], null, [
       { domainKey: "hero_templates", entityIdentity: cleanupIdentity },
     ]);
-  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateHeroAdmin();
-    } catch (revalidationError) {
-      console.error(
-        "Hero delete committed with a Media synchronization warning; cache revalidation also failed.",
-        revalidationError,
-      );
-    }
-    redirect(
-      "/admin/pages-blocks/blocks/hero?notice=saved_with_media_sync_warning",
-    );
-  }
-  await revalidateHeroAdmin();
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حذف القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: id })
+    : adminActionSuccess("تم الحفظ", "تم حذف القالب.", { code: "deleted", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateHeroAdmin());
 }
 
 export async function duplicateHeroTemplate(formData: FormData) {
@@ -505,9 +502,10 @@ export async function duplicateHeroTemplate(formData: FormData) {
     },
     actor,
   );
-  await revalidateHeroAdmin();
-  const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);
-  if (notice) redirect(`/admin/pages-blocks/blocks/hero?notice=${notice}`);
+  const result = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم نسخ القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: coordinated.value.id })
+    : adminActionSuccess("تم الحفظ", "تم نسخ القالب.", { code: "created", completion: "committed", entityId: coordinated.value.id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateHeroAdmin());
 }
 
 export async function bulkHeroTemplates(formData: FormData) {
@@ -593,20 +591,10 @@ export async function bulkHeroTemplates(formData: FormData) {
     },
     actor,
   );
-  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateHeroAdmin();
-    } catch (revalidationError) {
-      console.error(
-        "Hero bulk delete committed with a Media synchronization warning; cache revalidation also failed.",
-        revalidationError,
-      );
-    }
-    redirect(
-      "/admin/pages-blocks/blocks/hero?notice=saved_with_media_sync_warning",
-    );
-  }
-  await revalidateHeroAdmin();
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حفظ التغييرات المحددة. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed" })
+    : adminActionSuccess("تم الحفظ", "تم حفظ التغييرات المحددة.", { code: "saved", completion: "committed" });
+  return revalidateCommittedPageBlockAction(result, () => revalidateHeroAdmin());
 }
 
 export async function updateHeroTemplateDetails(formData: FormData) {
@@ -714,12 +702,15 @@ export async function updateHeroTemplateDetails(formData: FormData) {
     },
     actor,
   );
-  await revalidateHeroAdmin();
-  revalidatePath(`/admin/pages-blocks/blocks/hero/${id}`);
+  const cache = await runBoundedPublicCacheRevalidation(async () => {
+    await revalidateHeroAdmin();
+    revalidatePath(`/admin/pages-blocks/blocks/hero/${id}`);
+  });
+  if (!cache.ok) console.error("Hero template save committed; cache revalidation failed", cache.error);
   const notice = mediaSynchronizationNotice(coordinated.mediaSynchronization);
   redirect(
     withModuleEditorReturnContextFromForm(
-      `/admin/pages-blocks/blocks/hero/${id}?saved=1${notice ? `&notice=${notice}` : ""}`,
+      `/admin/pages-blocks/blocks/hero/${id}?saved=1${cache.ok ? "" : "&cache_warning=1"}${notice ? `&notice=${notice}` : ""}`,
       formData,
     ),
   );

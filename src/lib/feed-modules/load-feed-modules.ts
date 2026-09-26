@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 
 import type { Json } from "../database.types";
 import { getSupabaseAdmin } from "../supabase-admin";
@@ -71,7 +72,7 @@ export const loadFeedModuleStateForPageSlug = cache(async function loadFeedModul
 ): Promise<FeedModuleLoadResult> {
   const normalizedExcludeIds = normalizeExcludeContentIds(excludeContentIds);
   try {
-    return await unstable_cache(
+    return await cachePublicRead(
       async () => queryFeedModuleStateForPageSlug(pageSlug, normalizedExcludeIds),
       ["feed-module-state-v2", pageSlug, JSON.stringify(normalizedExcludeIds)],
       { revalidate: 300, tags: ["page-composition", "feed-modules"] },

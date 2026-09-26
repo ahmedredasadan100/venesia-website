@@ -1,7 +1,9 @@
 import "server-only";
 
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import { cache } from "react";
-import { unstable_cache, unstable_noStore as noStore } from "next/cache";
+import { unstable_noStore as noStore } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
@@ -36,7 +38,7 @@ async function queryGlobalSeoEffectiveContract(): Promise<GlobalSeoEffectiveCont
 
 export const loadGlobalSeoEffectiveContract = cache(async function loadGlobalSeoEffectiveContract(): Promise<GlobalSeoEffectiveContract> {
   try {
-    return await unstable_cache(
+    return await cachePublicRead(
       async () => queryGlobalSeoEffectiveContract(),
       ["global-seo-settings"],
       { revalidate: 300, tags: ["seo-global", "site-settings"] },

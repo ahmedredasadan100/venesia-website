@@ -68,8 +68,8 @@ function parseActive(formData: FormData) {
 }
 
 function revalidateLocationDomain() {
-  return runBoundedPublicCacheRevalidation(() => {
-    revalidateProjectsCache();
+  return runBoundedPublicCacheRevalidation(async () => {
+    await revalidateProjectsCache();
     revalidatePath("/admin/projects/locations", "layout");
     revalidatePath("/admin/projects/new", "page");
     revalidatePath("/admin/projects/[id]", "page");

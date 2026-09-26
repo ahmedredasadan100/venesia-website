@@ -117,6 +117,7 @@ class NotFoundSignal extends Error {}
 const terminalClient = () => null;
 const emptyComponent = () => null;
 const cacheCall = (kind: string, ...args: unknown[]) => state.cache.push({ kind, args });
+port("src/lib/cache/public-cache-generation", { cachePublicRead: (fn: unknown) => fn });
 ports.set("next/navigation", {
   redirect(href: string): never { throw new RedirectSignal(href); },
   notFound(): never { throw new NotFoundSignal(); },
@@ -136,7 +137,9 @@ port("src/lib/admin/auth/require-admin-session", {
   },
 });
 port("src/lib/admin/audit-log", { async recordCmsAdminAudit(value: Row) { state.audits.push(structuredClone(value)); } });
+const boundedCacheOwner = load<typeof import("../src/lib/cache/revalidate-public-cache-tags.ts")>("src/lib/cache/revalidate-public-cache-tags.ts");
 port("src/lib/cache/revalidate-public-cache-tags", {
+  runBoundedPublicCacheRevalidation: boundedCacheOwner.runBoundedPublicCacheRevalidation,
   revalidatePublicCacheTags: (...args: unknown[]) => cacheCall("public", ...args),
   revalidatePageCompositionCache: (...args: unknown[]) => cacheCall("composition", ...args),
   revalidateBlockModuleCache: (...args: unknown[]) => cacheCall("module", ...args),

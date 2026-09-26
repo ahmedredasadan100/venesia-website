@@ -1,5 +1,7 @@
 "use server";
 
+import { adminActionSuccess, adminActionWarning } from "../../../../../lib/admin/admin-action-result";
+
 import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
@@ -25,7 +27,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidateCommittedPageBlockAction } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -296,7 +298,8 @@ export async function toggleCardsBlockStatus(formData: FormData) {
     entityId: id,
     metadata: { blockType: "cards", status: nextStatus },
   }, actor);
-  await revalidateBlockModulePaths("cards");
+  const result = adminActionSuccess("تم الحفظ", "تم حفظ حالة القالب.", { code: "saved", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("cards"));
 }
 
 export async function deleteCardsBlock(formData: FormData) {
@@ -329,15 +332,10 @@ export async function deleteCardsBlock(formData: FormData) {
     null,
     [{ domainKey: "cards_block_templates", entityIdentity: cleanupIdentity }],
   );
-  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateBlockModulePaths("cards");
-    } catch (revalidationError) {
-      console.error("Cards block delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
-    }
-    redirect("/admin/pages-blocks/blocks/cards?notice=saved_with_media_sync_warning");
-  }
-  await revalidateBlockModulePaths("cards");
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حذف القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: id })
+    : adminActionSuccess("تم الحفظ", "تم حذف القالب.", { code: "deleted", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("cards"));
 }
 
 export async function duplicateCardsBlock(formData: FormData) {
@@ -383,10 +381,10 @@ export async function duplicateCardsBlock(formData: FormData) {
     entityLabel: nextRow.name,
     metadata: { blockType: "cards", sourceId: id },
   }, actor);
-  await revalidateBlockModulePaths("cards");
-  if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
-    redirect("/admin/pages-blocks/blocks/cards?notice=saved_with_media_sync_warning");
-  }
+  const result = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم نسخ القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: coordinated.value.id })
+    : adminActionSuccess("تم الحفظ", "تم نسخ القالب.", { code: "created", completion: "committed", entityId: coordinated.value.id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("cards"));
 }
 
 export async function bulkCardsBlocks(formData: FormData) {
@@ -440,13 +438,8 @@ export async function bulkCardsBlocks(formData: FormData) {
     entityLabel: "cards_block_templates",
     metadata: { blockType: "cards", action, ids, count: ids.length },
   }, actor);
-  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateBlockModulePaths("cards");
-    } catch (revalidationError) {
-      console.error("Cards block bulk delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
-    }
-    redirect("/admin/pages-blocks/blocks/cards?notice=saved_with_media_sync_warning");
-  }
-  await revalidateBlockModulePaths("cards");
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حفظ التغييرات المحددة. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed" })
+    : adminActionSuccess("تم الحفظ", "تم حفظ التغييرات المحددة.", { code: "saved", completion: "committed" });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("cards"));
 }

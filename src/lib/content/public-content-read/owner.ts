@@ -1,6 +1,7 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
+import { cachePublicRead } from "../../cache/public-cache-generation";
+
 import { cache } from "react";
 
 import {
@@ -179,7 +180,7 @@ export type PublicContentFilterOptions = {
 };
 
 export async function loadPublicContentFilterOptions(): Promise<PublicContentFilterOptions> {
-  return unstable_cache(async () => {
+  return cachePublicRead(async () => {
     const supabase = getSupabaseAdmin();
     const [categoriesResult, seriesResult] = await Promise.all([
       supabase
@@ -448,7 +449,7 @@ async function queryPublishedPublicCategories() {
 
 const loadPublishedPublicCategories = cache(
   async function loadPublishedPublicCategories() {
-    return unstable_cache(
+    return cachePublicRead(
       queryPublishedPublicCategories,
       ["public-content-category-hierarchy"],
       { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
@@ -589,7 +590,7 @@ export async function loadPublicContentFeedCategories(
   rawInput: PublicContentFeedTaxonomyInput,
 ): Promise<PublicContentFeedCategory[]> {
   const input = normalizeFeedTaxonomyInput(rawInput);
-  return unstable_cache(
+  return cachePublicRead(
     () => queryPublicContentFeedCategories(input),
     ["public-content-feed-categories", JSON.stringify(input)],
     { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
@@ -694,7 +695,7 @@ export async function loadPublicContentFeedSeries(
   rawInput: PublicContentFeedTaxonomyInput,
 ): Promise<PublicContentFeedSeries[]> {
   const input = normalizeFeedTaxonomyInput(rawInput);
-  return unstable_cache(
+  return cachePublicRead(
     () => queryPublicContentFeedSeries(input),
     ["public-content-feed-series", JSON.stringify(input)],
     { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
@@ -883,7 +884,7 @@ export async function loadPublicContentCollection(
   const normalized = normalizePublicContentCollectionInput(input);
   if (normalized.search) return queryPublicContentCollection(normalized);
 
-  return unstable_cache(
+  return cachePublicRead(
     () => queryPublicContentCollection(normalized),
     ["public-content-collection", collectionCacheKey(normalized)],
     { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
@@ -984,7 +985,7 @@ export const loadPublicContentDetail = cache(async function loadPublicContentDet
   slug: string,
 ) {
   const normalizedSlug = slug.trim();
-  return unstable_cache(
+  return cachePublicRead(
     () => queryPublicContentDetail(contentType, normalizedSlug),
     ["public-content-detail", contentType, normalizedSlug],
     { revalidate: 300, tags: [PUBLIC_CONTENT_CACHE_TAG] },
@@ -992,7 +993,7 @@ export const loadPublicContentDetail = cache(async function loadPublicContentDet
 });
 
 export async function loadPublicContentSitemapRows(): Promise<PublicContentSitemapRow[]> {
-  return unstable_cache(async () => {
+  return cachePublicRead(async () => {
     const data = [];
     let afterId: number | undefined;
     for (;;) {

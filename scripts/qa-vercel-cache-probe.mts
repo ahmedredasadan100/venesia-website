@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium, expect, type Page } from "playwright/test";
 import { prepareVercelCacheProbe } from "./lib/isolated-public-verification.mts";
+import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode } from "./lib/vercel-cache-probe.mts";
 
 const args = process.argv.slice(2);
 if (args[0] === "prepare") {
@@ -15,6 +16,7 @@ if (args[0] === "prepare") {
   assert.equal(deployment.protocol, "https:"); assert.ok(/^[a-z0-9-]+\.vercel\.app$/u.test(deployment.hostname));
   assert.equal(deployment.pathname, "/"); assert.equal(deployment.search, ""); assert.equal(deployment.username, ""); assert.equal(deployment.password, "");
   assert.match(head, /^[a-f0-9]{40}$/u);
+  const expectFenced = parseVercelCacheProbeFenceMode(args);
   const privateKey = readFileSync(resolve(option("--private-key")), "utf8");
   const privateValues = [privateKey];
   const sanitize = (error: unknown) => {
@@ -26,18 +28,28 @@ if (args[0] === "prepare") {
   assert.ok(Date.now() < manifest.expiresAt);
   mkdirSync(output, { recursive: true });
   const results: unknown[] = [], proof = { status: "running", sourceHead: head, deployment: deployment.origin,
-    adapter: "pending ambient verification", scenarios: results, productionWrites: false,
+    generationFenced: expectFenced, adapter: "pending ambient verification", scenarios: results, productionWrites: false,
+    network: { allowedForeignRequests: 0, blockedExpectedPreviewFeedbackRequests: 0, blockedUnexpectedForeignRequests: 0, deniedRequests: [] as Array<{ classification: string; origin: string | null; pathname: string | null; method: string; resourceType: string }> },
     scope: "Actual Preview ambient cache adapter; per-worker synthetic in-memory SQLite and two real Server Action HTTP contexts; independent GET cache-read. Not hosted Supabase, multi-region consistency, or Production mutation." };
   const flush = () => writeFileSync(resolve(output, "vercel-cache-probe.json"), JSON.stringify(proof, null, 2) + "\n");
   flush();
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   context.setDefaultTimeout(30_000);
-  let foreignRequests = 0;
+  let scenariosCompleted = false;
   await context.route("**/*", async route => {
-    const url = new URL(route.request().url());
-    if (url.origin === deployment.origin || url.protocol === "data:" || url.protocol === "blob:") await route.continue();
-    else { foreignRequests++; await route.abort("blockedbyclient"); }
+    const request = route.request();
+    const classification = classifyVercelCacheProbeRequest({ url: request.url(), method: request.method(), resourceType: request.resourceType() }, deployment.origin);
+    if (classification === "allowed-owned-or-inline") await route.continue();
+    else {
+      let deniedOrigin: string | null = null, deniedPathname: string | null = null;
+      try { const denied = new URL(request.url()); deniedOrigin = denied.origin; deniedPathname = denied.pathname; } catch { /* No raw malformed URL is persisted. */ }
+      proof.network.deniedRequests.push({ classification, origin: deniedOrigin, pathname: deniedPathname,
+        method: request.method(), resourceType: request.resourceType() });
+      if (classification === "expected-denied-preview-feedback") proof.network.blockedExpectedPreviewFeedbackRequests++;
+      else proof.network.blockedUnexpectedForeignRequests++;
+      await route.abort("blockedbyclient");
+    }
   });
   const pageA = await context.newPage(), pageB = await context.newPage();
   const ticket = (run: string, scenario: string, phase: string, worker?: string) => {
@@ -60,10 +72,10 @@ if (args[0] === "prepare") {
     assert.ok(["ok", "expected-reader-failure"].includes(result.status), JSON.stringify({status:result.status,reason:result.reason,diagnostic:result.diagnostic}));
     return result;
   };
-  const read = async (run: string, scenario: string) => {
-    const signed = ticket(run, scenario, "read-after");
+  const read = async (run: string, scenario: string, worker: string) => {
+    const signed = ticket(run, scenario, "read-after", worker);
     const response = await context.request.get(new URL("/api/verification-cache-probe", deployment).href,
-      { headers: { authorization: "Bearer " + signed.raw }, timeout: 30_000 });
+      { headers: { authorization: "Bearer " + signed.raw }, timeout: 30_000, maxRedirects: 0 });
     assert.equal(response.status(), 200);
     const result = await response.json(); assert.equal(result.status, "ok", JSON.stringify({status:result.status,reason:result.reason,diagnostic:result.diagnostic})); return result;
   };
@@ -91,6 +103,7 @@ if (args[0] === "prepare") {
     await expect(pageB.locator("[data-cache-probe-result]")).toHaveText('{"status":"denied"}');
     for (const scenario of ["no-invalidation", "serial", "reordered", "repeated", "reader-failure"]) {
       const run = randomUUID(), initial = await action(pageA, run, scenario, "init"), worker = initial.worker;
+      assert.equal(initial.generationFenced === true, expectFenced, "Deployment fence mode must match the explicitly requested proof.");
       proof.adapter = initial.adapter.binding;
       const row: Record<string, unknown> = { scenario, run, status: "running", adapter: initial.adapter, initial };
       results.push(row); flush();
@@ -111,7 +124,12 @@ if (args[0] === "prepare") {
           if (completed.error) throw completed.error;
           row.oldRead = completed.result;
         }
-        const old = row.oldRead as { key: string; callbackSha256?: string; readerSourceSha256?: string; captureAt: number; commitAt: number; releaseAt: number; writeCompleteAt: number; status: string; invalidations: Array<{startedAt:number;completedAt:number;calls:number}> };
+        const old = row.oldRead as { key: string; callbackSha256?: string; readerSourceSha256?: string; captureAt: number; commitAt: number; releaseAt: number; writeCompleteAt: number; status: string; invalidations: Array<{generation:string;generationCommittedAt:number;startedAt:number;completedAt:number;calls:number}> };
+        if (expectFenced && scenario !== "no-invalidation") {
+          assert.equal(old.invalidations[0].generation, "1");
+          assert.ok(old.commitAt <= old.invalidations[0].generationCommittedAt);
+          assert.ok(old.invalidations[0].generationCommittedAt <= old.invalidations[0].startedAt);
+        }
         if (gated) {
           assert.ok(old.captureAt <= old.commitAt && old.commitAt <= old.invalidations[0].startedAt);
           assert.ok(old.invalidations[0].startedAt <= old.invalidations[0].completedAt && old.invalidations[0].completedAt <= old.releaseAt);
@@ -124,23 +142,35 @@ if (args[0] === "prepare") {
             Array.isArray(item.invalidations) && item.invalidations.length === 2 &&
             item.invalidations.every(value => value.calls === 1 && value.completedAt && !value.failed));
         }
-        const subsequent = await read(run, scenario); row.subsequent = subsequent;
+        if (expectFenced && scenario === "repeated") {
+          const second = row.secondInvalidationCompleted as { invalidations: Array<{generation:string;generationCommittedAt:number;startedAt:number}> };
+          assert.equal(second.invalidations[1].generation, "2");
+          assert.ok(second.invalidations[1].generationCommittedAt <= second.invalidations[1].startedAt);
+        }
+        const subsequent = await read(run, scenario, worker); row.subsequent = subsequent;
         assert.equal(subsequent.adapter.constructorSha256, initial.adapter.constructorSha256);
-        assert.equal(subsequent.key, old.key, "Separate HTTP request did not use the exact same cache key.");
+        if (expectFenced) {
+          assert.equal(subsequent.worker, worker, "Synthetic SQL generation requires this same owned worker.");
+          assert.equal(subsequent.generationFenced, true);
+          if (scenario === "no-invalidation") assert.equal(subsequent.key, old.key);
+          else assert.notEqual(subsequent.key, old.key, "Committed generation must select a different cache key.");
+          assert.equal(subsequent.generation, scenario === "no-invalidation" ? "0" : scenario === "repeated" ? "2" : "1");
+        } else assert.equal(subsequent.key, old.key, "Separate HTTP request did not use the exact same cache key.");
         if (old.callbackSha256) assert.equal(subsequent.callbackSha256, old.callbackSha256);
         assert.match(subsequent.readerSourceSha256, /^[a-f0-9]{64}$/u);
         if (old.readerSourceSha256) assert.equal(subsequent.readerSourceSha256, old.readerSourceSha256);
         assert.equal(subsequent.sourceRevision, "New");
         if (scenario === "no-invalidation") {
           assert.equal(subsequent.value.revision, "Old"); assert.equal(subsequent.callbackCount, 0);
-        } else if (scenario === "reordered") {
+        } else if (scenario === "reordered" && !expectFenced) {
           assert.ok(["Old", "New"].includes(subsequent.value.revision));
           row.classification = subsequent.value.revision === "Old" && subsequent.callbackCount === 0
             ? "stale-refill-reproduced-on-actual-preview-adapter" : "stale-refill-not-observed";
           if (subsequent.value.revision === "Old") assert.equal(subsequent.callbackCount, 0);
           else assert.equal(subsequent.callbackCount, 1);
         } else { assert.equal(subsequent.value.revision, "New"); assert.equal(subsequent.callbackCount, 1); }
-        const hit = await read(run, scenario);
+        if (expectFenced && scenario === "reordered") row.classification = "late-old-fill-isolated-by-production-generation-helper";
+        const hit = await read(run, scenario, worker);
         assert.deepEqual(hit.value, subsequent.value); assert.equal(hit.callbackCount, 0);
         assert.equal(hit.key, subsequent.key); assert.equal(hit.callbackSha256, subsequent.callbackSha256);
         assert.equal(hit.readerSourceSha256, subsequent.readerSourceSha256); row.followupHit = hit;
@@ -154,14 +184,26 @@ if (args[0] === "prepare") {
         flush(); throw error;
       }
     }
-    assert.equal(foreignRequests, 0);
-    proof.status = "complete";
+    scenariosCompleted = true;
   } catch (error) {
     proof.status = "inconclusive";
     results.push({ phase: "driver", status: "inconclusive", reason: sanitize(error) });
     process.exitCode = 1;
   } finally {
-    await context.close(); await browser.close(); flush();
+    await context.close(); await browser.close();
+    // Check after the guarded context closes, so late foreign traffic cannot follow a premature complete receipt.
+    if (scenariosCompleted) {
+      try {
+        assert.equal(proof.network.allowedForeignRequests, 0);
+        assert.equal(proof.network.blockedUnexpectedForeignRequests, 0, "Unexpected foreign request was denied.");
+        proof.status = "complete";
+      } catch (error) {
+        proof.status = "inconclusive";
+        results.push({ phase: "network-policy", status: "inconclusive", reason: sanitize(error) });
+        process.exitCode = 1;
+      }
+    }
+    flush();
   }
   console.log(JSON.stringify({ status: proof.status, sourceHead: head, receiptSha256: createHash("sha256").update(readFileSync(resolve(output, "vercel-cache-probe.json"))).digest("hex") }));
 } else {
