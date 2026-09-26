@@ -116,6 +116,7 @@ function harness(kind, options = {}) {
   };
   const cacheOwner = load("src/lib/cache/revalidate-public-cache-tags.ts", {
     "server-only": {}, "next/cache": { revalidatePath() {}, revalidateTag() {}, updateTag() {} },
+    "./public-cache-generation": { advancePublicCacheGeneration: async () => { throw new Error("These Topics SWR callbacks must not advance the public cache generation"); } },
   });
   const cache = { ...cacheOwner, revalidateTopicsCache: failCache, revalidateMediaCenterCache() {},
     ...(options.cacheBoundaryThrows ? { runBoundedPublicCacheRevalidation: async () => { throw new Error("Injected unexpected reconciliation boundary rejection"); } } : {}) };

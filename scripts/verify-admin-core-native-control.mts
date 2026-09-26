@@ -1,3 +1,8 @@
+import { readCoreQueryPresentationCheckpoint } from "./verify-admin-core-query-presentation-isolated.mts";
+import { createOwnedCoreMediaRecoveryProof } from "./verify-admin-core-media-recovery-isolated.mts";
+import { readCoreAuthEntryCheckpoint } from "./verify-admin-core-auth-entry-isolated.mts";
+import { readCoreNavigationSettingsCheckpoint } from "./verify-admin-core-navigation-settings-isolated.mts";
+import { readCoreMediaCheckpoint } from "./verify-admin-core-media-isolated.mts";
 import { readCoreSpecializedSettingsCheckpoint } from "./verify-admin-core-specialized-settings-isolated.mts";
 import { readCoreReadonlyHubCheckpoint } from "./verify-admin-core-readonly-hubs-isolated.mts";
 import { readCorePageCompositionCheckpoint } from "./verify-admin-core-page-composition-isolated.mts";
@@ -17,6 +22,8 @@ export async function runOwnedAdminCoreNativeControl<T>(handle: OwnedLocalHandle
   assertOwnedLocalHandle(handle);
   const fixtures = JSON.parse(readFileSync(join(artifactDir, "admin-adoption-fixtures.json"), "utf8"));
   const faults = fixtures.commandClosure ? createOwnedCoreDomainWriteFaults(handle, fixtures) : null;
+  const mediaRecovery=fixtures.mediaRecovery===true?createOwnedCoreMediaRecoveryProof(handle):null;
+  const recoveryKinds=["media-recovery-state","media-recovery-fault-arm","media-recovery-fault-switch","media-recovery-fault-cancel","media-recovery-fault-release"];
   const faultKinds = ["domain-write-fault-arm", "domain-write-fault-cancel", "domain-write-fault-release"];
   const processed = new Set<string>();
   const records: Array<Record<string, unknown>> = [];
@@ -28,12 +35,23 @@ export async function runOwnedAdminCoreNativeControl<T>(handle: OwnedLocalHandle
       for (const file of requests) {
         const request = JSON.parse(readFileSync(join(artifactDir, file), "utf8"));
         assert.equal(file, `core-native-request-${request.id}.json`);
-        assert.ok(["category-create-durable", "topic-command-durable", "terminal-domain-state", "terminal-trash-set", "form-permission-fingerprint", "form-save-native", "page-composition-state", "readonly-hub-state", "specialized-settings-state", ...faultKinds].includes(request.kind), "Only fixed native proofs may request state.");
-        if (request.kind !== "terminal-trash-set" && request.kind !== "form-permission-fingerprint" && request.kind !== "readonly-hub-state" && request.kind !== "specialized-settings-state" && !faultKinds.includes(request.kind)) assert.ok(Number.isFinite(Date.parse(request.startedAt)));
+        assert.ok(["category-create-durable", "topic-command-durable", "terminal-domain-state", "terminal-trash-set", "form-permission-fingerprint", "form-save-native", "page-composition-state", "readonly-hub-state", "specialized-settings-state", "media-library-state", "navigation-settings-state", "auth-entry-state", "query-presentation-state", ...recoveryKinds, ...faultKinds].includes(request.kind), "Only fixed native proofs may request state.");
+        if (request.kind !== "terminal-trash-set" && request.kind !== "form-permission-fingerprint" && request.kind !== "readonly-hub-state" && request.kind !== "specialized-settings-state" && request.kind !== "media-library-state" && request.kind !== "navigation-settings-state" && request.kind !== "auth-entry-state" && request.kind !== "query-presentation-state" && !recoveryKinds.includes(request.kind) && !faultKinds.includes(request.kind)) assert.ok(Number.isFinite(Date.parse(request.startedAt)));
         const deadline = Date.now() + 20_000;
         let response: Record<string, unknown>;
         try {
-          if (request.kind === "specialized-settings-state") {
+          if (recoveryKinds.includes(request.kind)) {
+            assert.ok(mediaRecovery,"Recovery fault requests require its opted-in fixed owned Media fixture.");
+            response = await mediaRecovery.handleRequest(request);
+          } else if (request.kind === "query-presentation-state") {
+            response = await readCoreQueryPresentationCheckpoint(handle,request,fixtures);
+          } else if (request.kind === "auth-entry-state") {
+            response = await readCoreAuthEntryCheckpoint(handle,request);
+          } else if (request.kind === "navigation-settings-state") {
+            response = await readCoreNavigationSettingsCheckpoint(handle,request);
+          } else if (request.kind === "media-library-state") {
+            response = await readCoreMediaCheckpoint(handle,request);
+          } else if (request.kind === "specialized-settings-state") {
             response = await readCoreSpecializedSettingsCheckpoint(handle,request);
           } else if (request.kind === "readonly-hub-state") {
             response = await readCoreReadonlyHubCheckpoint(handle,request);
@@ -103,11 +121,15 @@ export async function runOwnedAdminCoreNativeControl<T>(handle: OwnedLocalHandle
     // Wait for the owning gate to stop before its database may be cleaned.
   } finally {
     await running;
+    if (mediaRecovery) {
+      try { writeFileSync(join(artifactDir,"core-native-media-recovery.json"),JSON.stringify(await mediaRecovery.close(),null,2)+"\n"); }
+      catch(error) { failure ??= error; }
+    }
     if (faults) {
       try { writeFileSync(join(artifactDir, "core-native-write-faults.json"), JSON.stringify(await faults.close(), null, 2) + "\n"); }
       catch (error) { failure ??= error; }
     }
-    writeFileSync(join(artifactDir, "core-native-control-readback.json"), JSON.stringify({ status: failure ? "fail" : "pass", records, boundary: "Native read-only checkpoints during real authenticated HTTP commands." }, null, 2) + "\n");
+    writeFileSync(join(artifactDir, "core-native-control-readback.json"), JSON.stringify({ status: failure ? "fail" : "pass", records, boundary: "Native checkpoints and bounded owned fault schedules during real authenticated HTTP commands." }, null, 2) + "\n");
   }
   if (failure) throw failure;
   return value as T;

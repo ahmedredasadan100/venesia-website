@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium, expect, type Page } from "playwright/test";
 import { prepareVercelCacheProbe } from "./lib/isolated-public-verification.mts";
-import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode } from "./lib/vercel-cache-probe.mts";
+import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode, parseVercelCacheProbeReadTransport } from "./lib/vercel-cache-probe.mts";
 
 const args = process.argv.slice(2);
 if (args[0] === "prepare") {
@@ -17,6 +17,7 @@ if (args[0] === "prepare") {
   assert.equal(deployment.pathname, "/"); assert.equal(deployment.search, ""); assert.equal(deployment.username, ""); assert.equal(deployment.password, "");
   assert.match(head, /^[a-f0-9]{40}$/u);
   const expectFenced = parseVercelCacheProbeFenceMode(args);
+  const readTransport = parseVercelCacheProbeReadTransport(args);
   const privateKey = readFileSync(resolve(option("--private-key")), "utf8");
   const privateValues = [privateKey];
   const sanitize = (error: unknown) => {
@@ -28,9 +29,9 @@ if (args[0] === "prepare") {
   assert.ok(Date.now() < manifest.expiresAt);
   mkdirSync(output, { recursive: true });
   const results: unknown[] = [], proof = { status: "running", sourceHead: head, deployment: deployment.origin,
-    generationFenced: expectFenced, adapter: "pending ambient verification", scenarios: results, productionWrites: false,
+    generationFenced: expectFenced, readTransport, adapter: "pending ambient verification", scenarios: results, productionWrites: false,
     network: { allowedForeignRequests: 0, blockedExpectedPreviewFeedbackRequests: 0, blockedUnexpectedForeignRequests: 0, deniedRequests: [] as Array<{ classification: string; origin: string | null; pathname: string | null; method: string; resourceType: string }> },
-    scope: "Actual Preview ambient cache adapter; per-worker synthetic in-memory SQLite and two real Server Action HTTP contexts; independent GET cache-read. Not hosted Supabase, multi-region consistency, or Production mutation." };
+    scope: "Actual Preview ambient cache adapter; per-worker synthetic in-memory SQLite and two real Server Action HTTP contexts; independent HTTP cache-read (transport recorded separately). Not hosted Supabase, multi-region consistency, or Production mutation." };
   const flush = () => writeFileSync(resolve(output, "vercel-cache-probe.json"), JSON.stringify(proof, null, 2) + "\n");
   flush();
   const browser = await chromium.launch({ headless: true });
@@ -73,6 +74,7 @@ if (args[0] === "prepare") {
     return result;
   };
   const read = async (run: string, scenario: string, worker: string) => {
+    if (readTransport === "action") return action(pageB, run, scenario, "read-after", worker);
     const signed = ticket(run, scenario, "read-after", worker);
     const response = await context.request.get(new URL("/api/verification-cache-probe", deployment).href,
       { headers: { authorization: "Bearer " + signed.raw }, timeout: 30_000, maxRedirects: 0 });

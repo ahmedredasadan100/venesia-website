@@ -207,6 +207,7 @@ function fixture(options: FixtureOptions = {}) {
   const cache = loadSource("src/lib/cache/revalidate-public-cache-tags.ts", {
     "server-only": {},
     "next/cache": { revalidatePath: () => undefined, revalidateTag: () => undefined, updateTag: () => undefined },
+    "./public-cache-generation": { advancePublicCacheGeneration: async () => { throw new Error("Topics SWR deletion must not advance the public cache generation"); } },
   });
   const dependencies: Record<string, unknown> = {
     "node:async_hooks": { AsyncLocalStorage },

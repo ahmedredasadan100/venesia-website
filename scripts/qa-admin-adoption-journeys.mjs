@@ -1,3 +1,4 @@
+import { registerCorePageRoute } from "./fixtures/admin-core-form-permission-context.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -28,9 +29,14 @@ const evidence = [], databaseReadback = [], readOnlyReadback = [], menuIntegrity
 const inventoryOnly = process.argv.includes("--inventory-only");
 const coreClosure = process.argv.includes("--core-closure");
 const coreCohort = process.argv.find(arg => arg.startsWith("--core-cohort="))?.slice("--core-cohort=".length) ?? "preview-recovery-templates";
-assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings"].includes(coreCohort));
+assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation"].includes(coreCohort));
 let driverCompleted = false, activeCase = "bootstrap";
 let specializedSettingsResult = null;
+let mediaResult = null;
+let navigationSettingsResult = null;
+let authEntryResult = null;
+let mediaRecoveryResult = null;
+let queryPresentationResult = null;
 const progress = [];
 const previewMatrix = collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.flatMap(consumer =>
   ["published", "unpublished", "deleted"].flatMap(publication => ["authorized", "revoked"].map(session => ({
@@ -74,7 +80,7 @@ function receipt() {
     inventoryOnly, driverCompleted, scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreClosure ? coreCohort : null, proofBoundary: inventoryOnly ? "applicability inventory only; no browser execution" : "owned local production Next and real authenticated application persistence",
     globalClosed: driverCompleted && errors.length === 0 && cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete) && settledPreviewMatrix.every(row => row.status === "behavior_verified"),
     inventorySource: sourceHashes, sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256 ?? null,
-    startedAt, specializedSettings: specializedSettingsResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
+    startedAt, specializedSettings: specializedSettingsResult, media: mediaResult, navigationSettings: navigationSettingsResult, authEntry: authEntryResult, mediaRecovery: mediaRecoveryResult, queryPresentation: queryPresentationResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
     limitations: ["Unexecuted applicability cells remain open; successful representative journeys do not close the full inventory.",
       "Database readback expectations require the owning parent to verify through its opaque owned handle.",
       "This verifier does not claim production, Vercel delivery, or every permission and failure state."],
@@ -321,6 +327,27 @@ try {
     await runCoreOperationalFormJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
     const { runCoreSettingsAndMenuJourneys } = await import("./fixtures/admin-core-settings-journeys.mjs");
     await runCoreSettingsAndMenuJourneys({ page, origin, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
+   } else if (coreCohort === "query-presentation") {
+    const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    const { runCoreQueryPresentationJourneys } = await import("./fixtures/admin-core-query-presentation-journeys.mjs");
+    queryPresentationResult = await runCoreQueryPresentationJourneys({page,context,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+   } else if (coreCohort === "media-recovery") {
+    const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    const { runCoreMediaRecoveryJourneys } = await import("./fixtures/admin-core-media-recovery-journeys.mjs");
+    mediaRecoveryResult = await runCoreMediaRecoveryJourneys({page,origin,fixtures,run,observe,requiredCases,actionResponse,assertActionAcknowledged,recoveryCheckpoint:createCoreNativeCheckpoint({origin,output})});
+   } else if (coreCohort === "auth-entry") {
+    const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    const { runCoreAuthEntryJourneys } = await import("./fixtures/admin-core-auth-entry-journeys.mjs");
+    try { authEntryResult = await runCoreAuthEntryJourneys({browser,origin,login:coreLogin,run,observe,ownedNetworkOnly,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})}); }
+    finally { coreLogin.username="";coreLogin.password=""; }
+   } else if (coreCohort === "navigation-settings") {
+    const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    const { runCoreNavigationSettingsJourneys } = await import("./fixtures/admin-core-navigation-settings-journeys.mjs");
+    navigationSettingsResult = await runCoreNavigationSettingsJourneys({page,origin,fixtures,run,observe,requiredCases,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+   } else if (coreCohort === "media-library") {
+    const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    const { runCoreMediaJourneys } = await import("./fixtures/admin-core-media-journeys.mjs");
+    mediaResult = await runCoreMediaJourneys({page,origin,fixtures,run,observe,requiredCases,actionResponse,assertActionAcknowledged,mediaCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "specialized-settings") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreSpecializedSettingsJourneys } = await import("./fixtures/admin-core-specialized-settings-journeys.mjs");
@@ -328,10 +355,13 @@ try {
       specializedSettingsResult = await runCoreSpecializedSettingsJourneys({page,browser,origin,fixtures,run,observe,ownedNetworkOnly,login:coreLogin,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
       assert.equal(specializedSettingsResult.status,"pass","Every selected specialized journey must complete.");
     } finally { coreLogin.username="";coreLogin.password=""; }
-   } else if (coreCohort === "template-libraries" || coreCohort === "readonly-hubs") {
+   } else if (coreCohort === "template-libraries" || coreCohort === "readonly-hubs" || coreCohort === "template-bulk") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const ctx = {page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,databaseReadback,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})};
-    if (coreCohort === "template-libraries") {
+    if (coreCohort === "template-bulk") {
+      const { runCoreTemplateBulkJourneys } = await import("./fixtures/admin-core-template-bulk-journeys.mjs");
+      await runCoreTemplateBulkJourneys(ctx);
+    } else if (coreCohort === "template-libraries") {
       const { runCoreTemplateLibraryJourneys } = await import("./fixtures/admin-core-template-library-journeys.mjs");
       await runCoreTemplateLibraryJourneys(ctx);
     } else {
@@ -396,12 +426,12 @@ try {
       if (!blocked && route.request().method() === "POST" && route.request().headers()["next-action"]) { blocked++; await route.abort("failed"); }
       else await route.fallback();
     };
-    await page.route("**/*", failBeforeSend);
+    const removeFailBeforeSend = await registerCorePageRoute(page, "**/*", failBeforeSend);
     await saveButton().click();
     await expect(feedback("danger").first()).toBeVisible();
     await expect(page.locator('input[name="name"]')).toHaveValue(desired);
     assert.equal(blocked, 1);
-    await page.unroute("**/*", failBeforeSend);
+    await removeFailBeforeSend();
     const observer = await observe("context-page-create", () => context.newPage());
     await observe("observer-page-navigation", () => observer.goto(origin + path, { waitUntil: "domcontentloaded" }));
     await expect(observer.locator('input[name="name"]')).toHaveValue(original);

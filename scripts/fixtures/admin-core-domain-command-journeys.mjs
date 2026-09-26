@@ -1,3 +1,4 @@
+import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
 import { createJiti } from 'jiti';
 import { expect } from 'playwright/test';
@@ -105,13 +106,13 @@ export async function runCoreDomainCommandJourneys(ctx) {
             aborted++; await route.abort('failed');
           } else await route.fallback();
         };
-        await page.route('**/*', rejectBeforeDispatch);
+        const removeRejectedRoute = await registerCorePageRoute(page, '**/*', rejectBeforeDispatch);
         try {
           await observe('domain-real-client-pre-dispatch-failure', () => visibility.click());
           await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible({ timeout: 60_000 });
           await expect(visibility).toHaveAttribute('aria-pressed', original); await expect(visibility).toBeEnabled();
           assert.equal(aborted, 1, 'Exactly one actual request must be rejected before it reaches the server.');
-        } finally { await page.unrouteAll({ behavior: 'wait' }); }
+        } finally { await removeRejectedRoute(); }
         rollbackRetried = true;
       }
       for (const [index, expected] of [[0, original === 'true' ? 'false' : 'true'], [1, original]]) {
@@ -128,7 +129,7 @@ export async function runCoreDomainCommandJourneys(ctx) {
           intercepted++; signalHeld(); await gate;
           try { await route.fallback(); } catch (error) { routeFailure = error; } finally { signalContinued(); }
         };
-        if (index === 0) await page.route('**/*', holdRequest);
+        const removeHeldRoute = index === 0 ? await registerCorePageRoute(page, '**/*', holdRequest) : null;
         let timer;
         try {
           const response = actionResponse();
@@ -150,7 +151,7 @@ export async function runCoreDomainCommandJourneys(ctx) {
           if (index === 0) assert.equal(intercepted, 1);
         } finally {
           clearTimeout(timer); release();
-          if (index === 0) await page.unrouteAll({ behavior: 'wait' });
+          if (removeHeldRoute) await removeHeldRoute();
         }
         await observe('domain-reload-' + recipe.entity + '-' + index, () => page.reload({ waitUntil: 'domcontentloaded' }));
         await expect(visibility).toHaveAttribute('aria-pressed', expected, { timeout: 60_000 });

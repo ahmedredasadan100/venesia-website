@@ -158,9 +158,10 @@ function observeInvalidation(state: State, cache: AmbientCache) {
 
 export async function executeAction(raw: string) {
   let ticket: Ticket;
-  try { ticket = ticketFor(raw, phases.filter(phase => phase !== "read-after")); }
+  try { ticket = ticketFor(raw, phases); }
   catch { return { status: "denied" }; }
   try {
+    if (ticket.phase === "read-after") return await executeRead(raw);
     const { store, cache, adapter } = ambient();
     if (ticket.phase === "init") {
       assert.equal(coordination.runs.has(ticket.run), false, "A nonce cannot reset an existing run.");
@@ -227,6 +228,7 @@ export async function executeRead(raw: string) {
       diagnostic: error instanceof AdapterIdentityError ? error.diagnostic : null };
   }
   const { cache, store, adapter } = environment;
+  try {
   const shared = existing(ticket);
   assert.ok(shared.commitAt && !shared.reading, "GET requires committed source and a completed old read.");
   const state: State = { ticket, db: shared.db, createdAt: Date.now(), callbackCount: 0, captured: null,
@@ -238,4 +240,8 @@ export async function executeRead(raw: string) {
     return { status: "ok", requestId: ticket.requestId, phase: ticket.phase, value, callbackCount: state.callbackCount, key: current.key, callbackSha256: current.callbackSha256, readerSourceSha256: current.readerSourceSha256,
       generationFenced: true, generation: generation(state), sourceRevision: "New", worker: coordination.worker, adapter, sourceHead: ticket.sourceHead };
   } finally { /* Only the owning cleanup Action closes the shared synthetic DB. */ }
+  } catch (error) {
+    return { status: "inconclusive", requestId: ticket.requestId, phase: ticket.phase, worker: coordination.worker,
+      reason: String(error instanceof Error ? error.message : error).slice(0, 300), adapter };
+  }
 }

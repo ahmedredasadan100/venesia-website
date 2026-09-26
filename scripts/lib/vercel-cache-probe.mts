@@ -80,3 +80,13 @@ export function prepareVercelCacheProbe(options: { root?: string; env?: NodeJS.P
   }
   return { generated: true, branch: BRANCH, expiresAt: manifest.expiresAt, sourceHead: env.VERCEL_GIT_COMMIT_SHA, generatedFiles: inputs.map(([, output]) => output) };
 }
+
+/** Explicit independent Action request keeps transient SQL within its owned Vercel function. */
+export function parseVercelCacheProbeReadTransport(args: readonly string[]) {
+  const matches=args.map((value,index)=>({value,index})).filter(item=>item.value.startsWith("--read-after-action"));
+  assert.ok(matches.length<=1,"Duplicate read transport flag.");
+  if(matches.length===0)return "get" as const;
+  assert.equal(matches[0].value,"--read-after-action","Read transport is a fixed boolean flag.");
+  assert.ok(args[matches[0].index+1]===undefined || args[matches[0].index+1].startsWith("--"),"Read transport does not accept a value.");
+  return "action" as const;
+}

@@ -261,3 +261,55 @@ export async function seedOwnedCoreSpecializedSettingsFixtures(handle: OwnedLoca
   const { prepareCoreSpecializedSettingsFixtures } = await import("../verify-admin-core-specialized-settings-isolated.mts");
   return prepareCoreSpecializedSettingsFixtures(handle, credentials);
 }
+
+
+/** Explicit Media verification opt-in; never invoked by unrelated cohorts. */
+export async function seedOwnedCoreMediaFixture(handle: OwnedLocalHandle) {
+  assertOwnedLocalHandle(handle);
+  assert.ok(credentialsByHandle.get(handle), "Prepare the canonical QA Admin account first.");
+  const slug = "qa-core-media-article";
+  const seo = loadEntitySeoPersistenceOwner();
+  await handle.withDatabaseConnection(async connection => {
+    await connection.query("begin");
+    let committed = false;
+    try {
+      assert.equal((await connection.query("select id from public.topics where slug=$1", [slug])).rows.length, 0, "Never overwrite an existing Article.");
+      const sources = (await connection.query("select * from public.topics where slug='isolated-public-property-ownership' and deleted_at is null")).rows;
+      assert.equal(sources.length, 1);
+      const categories = (await connection.query("select id,name,slug from public.topic_categories where slug='qa-admin-category-1' and deleted_at is null")).rows;
+      assert.equal(categories.length, 1); const category = categories[0];
+      const columns = (await connection.query("select attname from pg_catalog.pg_attribute where attrelid='public.topics'::regclass and attnum>0 and not attisdropped and attgenerated='' and attidentity='' and attname<>'id' order by attnum")).rows.map(row => String(row.attname));
+      assert.ok(columns.length > 10 && columns.every(name => /^[a-z_][a-z0-9_]*$/u.test(name)));
+      const row = { ...sources[0], title: "QA isolated Media Article", slug, content_type: "article", status: "unpublished",
+        image: "", image_alt: "", og_image: "", og_image_alt: "", canonical_url: null, published_at: null, deleted_at: null,
+        is_featured: false, media_payload: null, series_id: null, series: null, series_slug: null,
+        category_id: category.id, category: category.name, category_slug: category.slug,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      Object.assign(row, seo.deriveEntitySeoScore(seo.toTopicSeoScoreInput(row as TopicSeoSource)));
+      const projection = columns.map(name => '"' + name + '"').join(",");
+      await connection.query("insert into public.topics(" + projection + ") select " + projection + " from jsonb_populate_record(null::public.topics,$1::jsonb)", [JSON.stringify(row)]);
+      await connection.query("commit"); committed = true;
+    } finally { if (!committed) await connection.query("rollback"); }
+  });
+  const { registerOwnedCoreMediaFixture } = await import("../verify-admin-core-media-isolated.mts");
+  return registerOwnedCoreMediaFixture(handle);
+}
+
+
+/** Explicit navigation-settings opt-in; the existing owner retains all private credentials. */
+export async function seedOwnedCoreNavigationSettingsFixtures(handle: OwnedLocalHandle) {
+  assertOwnedLocalHandle(handle);
+  const credentials = credentialsByHandle.get(handle);
+  assert.ok(credentials, "Prepare the canonical owned Admin account before navigation fixtures.");
+  const { prepareCoreNavigationSettingsFixtures } = await import("../verify-admin-core-navigation-settings-isolated.mts");
+  return prepareCoreNavigationSettingsFixtures(handle, { username: credentials.username });
+}
+
+
+/** Explicit query/presentation fixture opt-in; excluded from unrelated cohorts. */
+export async function seedOwnedCoreQueryPresentationFixtures(handle: OwnedLocalHandle, fixtures: Parameters<typeof import('./admin-core-query-presentation-fixtures.mts').prepareCoreQueryPresentationFixtures>[1]) {
+  assertOwnedLocalHandle(handle);
+  assert.ok(credentialsByHandle.has(handle), "Prepare the canonical owned Admin account before query fixtures.");
+  const { prepareCoreQueryPresentationFixtures } = await import('./admin-core-query-presentation-fixtures.mts');
+  return prepareCoreQueryPresentationFixtures(handle, fixtures);
+}

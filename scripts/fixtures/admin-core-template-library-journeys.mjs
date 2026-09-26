@@ -1,3 +1,4 @@
+import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createJiti } from 'jiti';
@@ -89,14 +90,14 @@ export async function runCoreTemplateLibraryJourneys(ctx) {
       requests++; heldResolve(); await gate;
       try { await route.fallback(); } catch (error) { routeError = error; }
     };
-    await page.route('**/*', handler);
+    const removeRoute = await registerCorePageRoute(page, '**/*', handler);
     const response = actionResponse(); response.catch(() => {});
     const clicked = click(); clicked.catch(() => {});
     try {
       await Promise.race([held, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('Template command did not reach its real request hold.')), 30_000); })]);
       await pendingProof(); assert.equal(requests, 1, 'Pending control must not dispatch a second command.'); release();
       assertActionAcknowledged(await response); await clicked;
-    } finally { clearTimeout(timer); release(); await page.unrouteAll({ behavior: 'wait' }); }
+    } finally { clearTimeout(timer); release(); await removeRoute(); }
     if (routeError) throw routeError;
     assert.equal(requests, 1); return requests;
   }

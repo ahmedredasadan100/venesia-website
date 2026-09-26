@@ -14,7 +14,7 @@ assert.equal(declarations.length, 1, "The current collector must expose its exis
 const collector = declarations[0].getText(ast);
 const context = patch => ({ requiredCases: [{key:"current-applicable-cell"}], evidence:[{id:"actual-journey",status:"pass",coverage:["current-applicable-cell"]}],
   inventory:[{domainJourneyInventoryComplete:true}],previewMatrix:[{status:"behavior_verified",evidence:"actual-journey"}],errors:[],driverCompleted:true,inventoryOnly:false,coreClosure:true,coreCohort:"preview-recovery-templates",
-  specializedSettingsResult:null,sourceHashes:{},process:{env:{}},startedAt:"2026-09-26T00:00:00.000Z",databaseReadback:[],readOnlyReadback:[],menuIntegrityReadback:[],previewNonApplicability:[],...patch });
+  specializedSettingsResult:null,mediaResult:null,navigationSettingsResult:null,authEntryResult:null,mediaRecoveryResult:null,queryPresentationResult:null,sourceHashes:{},process:{env:{}},startedAt:"2026-09-26T00:00:00.000Z",databaseReadback:[],readOnlyReadback:[],menuIntegrityReadback:[],previewNonApplicability:[],...patch });
 const evaluate = patch => vm.runInNewContext(collector + "; receipt()",context(patch));
 const checks = [
  ["complete-real-inventories-and-preview",{},true],

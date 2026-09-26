@@ -64,7 +64,7 @@ export type PublicGateRequest = {
   /** Fixed follow-up journeys; retained Audit2 outcomes are not replayed. */
   adoptionScope?: "core-closure";
   /** Bounded independent Core families; the final gate still runs the Public suite. */
-  adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings";
+  adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings" | "media-library" | "template-bulk" | "navigation-settings" | "auth-entry" | "media-recovery" | "query-presentation";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";
@@ -353,7 +353,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   assert.equal(Boolean(request.adminMeasurement), Boolean(measurement));
   const adoption = request.selection === "admin-adoption";
   assert.ok(request.adoptionScope === undefined || (adoption && request.adoptionScope === "core-closure"), "Unknown fixed adoption scope.");
-  assert.ok(request.adoptionCohort === undefined || (request.adoptionScope === "core-closure" && ["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings"].includes(request.adoptionCohort)), "Unknown Core cohort.");
+  assert.ok(request.adoptionCohort === undefined || (request.adoptionScope === "core-closure" && ["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation"].includes(request.adoptionCohort)), "Unknown Core cohort.");
   assert.ok(request.finalQualityGate === undefined || (request.finalQualityGate === true && adoption), "Final Quality Gate requires the complete Admin adoption selection.");
   const credentials = measurement || adoption ? adminCredentials.get(context) : undefined;
   if (adoption) assert.ok(credentials, "Owned Admin fixture preparation is required for adoption journeys.");

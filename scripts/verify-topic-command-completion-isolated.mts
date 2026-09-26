@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, relative, resolve } from "node:path";
@@ -21,6 +22,11 @@ type Exports = Record<string, unknown>;
  * ports. This is not authenticated Browser or deployed-cache evidence. */
 export async function verifyTopicCommandCompletion(handle: OwnedLocalHandle) {
   assertOwnedLocalHandle(handle);
+  // Loading actual cache owners now imports next/navigation. Next captures its
+  // storage implementation at first import, so initialize the same native Node
+  // runtime port used by the deferred-settlement verifier before loading Actions.
+  const runtime = globalThis as typeof globalThis & { AsyncLocalStorage?: typeof AsyncLocalStorage };
+  runtime.AsyncLocalStorage ??= AsyncLocalStorage;
   const actor = (await handle.query("select id,username from public.admin_users where is_active order by id limit 1")).rows[0];
   assert.ok(actor);
   const seo = loadEntitySeoPersistenceOwner();

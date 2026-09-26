@@ -37,3 +37,29 @@ export function createCoreFormPermissionContext({ page, origin, output, sourceSh
     },
   };
 }
+
+/** Keep temporary page-scoped interceptors in the persistent owned guard's context chain. */
+export async function registerCorePageRoute(page, url, handler) {
+  assert.equal(typeof handler, "function");
+  const context = page.context(), active = new Set();
+  let failure, removal;
+  const scoped = async route => {
+    const request = route.request();
+    const work = (async () => {
+      if (request.serviceWorker() || request.frame().page() !== page) { await route.fallback(); return; }
+      await handler(route, request);
+    })();
+    active.add(work);
+    try { await work; }
+    catch (error) { failure ??= error; throw error; }
+    finally { active.delete(work); }
+  };
+  await context.route(url, scoped);
+  return () => removal ??= (async () => {
+    await context.unroute(url, scoped);
+    // The owner releases any held gate before removal; drain only this handler.
+    // Rejections are retained and propagated, never converted into a passing cleanup.
+    await Promise.allSettled([...active]);
+    if (failure) throw failure;
+  })();
+}

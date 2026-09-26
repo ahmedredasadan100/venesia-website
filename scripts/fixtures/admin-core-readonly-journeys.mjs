@@ -1,3 +1,4 @@
+import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from "node:assert/strict";
 import { request, expect } from "playwright/test";
 
@@ -21,12 +22,12 @@ export async function runCoreReadonlyJourneys(ctx) {
     await expect(page.getByRole("row").filter({hasText:spec.label}).first()).toBeVisible();
     const rows=payload.rows.map(row=>Object.fromEntries(spec.fields.map(field=>[field,row[field]])));
     let denied=0;const fail=async route=>{const url=new URL(route.request().url());if(url.origin===origin&&url.pathname===endpoint&&url.searchParams.get("q")===missing){denied++;await route.abort("failed");}else await route.fallback();};
-    await page.route("**/*",fail);
+    const removeFailedRoute=await registerCorePageRoute(page,"**/*",fail);
     try{
       await search.fill(missing);const error=page.locator("[data-admin-entity-list-query-error]");await expect(error).toBeVisible({timeout:60000});
       assert.ok(denied>0&&denied<=3,"Current shared query owner permits the first attempt plus two retries.");
       await expect(page.getByRole("row").filter({hasText:spec.label}).first()).toBeVisible();await expect(error).toContainText("النتائج السابقة");
-    }finally{await page.unroute("**/*",fail);}
+    }finally{await removeFailedRoute();}
     const retried=page.waitForResponse(value=>matches(value,missing));await page.locator("[data-admin-entity-list-query-error]").getByRole("button",{name:"إعادة المحاولة",exact:true}).click();
     const retry=await retried;assert.equal(retry.status(),200);const empty=await retry.json();assert.equal(empty.pagination.totalRows,0);assert.deepEqual(empty.rows,[]);
     await expect(page.locator("[data-admin-entity-list-query-error]")).toHaveCount(0);await expect(page.getByRole("row").filter({hasText:spec.label})).toHaveCount(0);

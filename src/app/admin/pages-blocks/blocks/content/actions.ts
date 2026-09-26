@@ -1270,7 +1270,7 @@ export async function updateContentBlock(formData: FormData) {
 }
 
 export async function toggleContentBlockStatus(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(
     cleanText(formData.get("next_status")) || "unpublished",
@@ -1283,12 +1283,18 @@ export async function toggleContentBlockStatus(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", nextStatus === "published" ? "publish" : "unpublish"),
+    entityType: "content_block_template",
+    entityId: id,
+    metadata: { blockType: "content", status: nextStatus },
+  }, actor);
   const result = adminActionSuccess("تم الحفظ", "تم حفظ حالة القالب.", { code: "saved", completion: "committed", entityId: id });
   return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("content"));
 }
 
 export async function deleteContentBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -1306,6 +1312,12 @@ export async function deleteContentBlock(formData: FormData) {
     .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "delete"),
+    entityType: "content_block_template",
+    entityId: cleanupIdentity,
+    metadata: { blockType: "content" },
+  }, actor);
   const mediaSynchronization =
     await synchronizeMediaReferenceWriteScopesAfterDomainMutation([], null, [
       { domainKey: "content_block_templates", entityIdentity: cleanupIdentity },
@@ -1361,6 +1373,13 @@ export async function duplicateContentBlock(formData: FormData) {
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "duplicate"),
+    entityType: "content_block_template",
+    entityId: coordinated.value.id,
+    entityLabel: nextRow.name,
+    metadata: { blockType: "content", sourceId: id },
+  }, actor);
   const result = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
     ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم نسخ القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: coordinated.value.id })
     : adminActionSuccess("تم الحفظ", "تم نسخ القالب.", { code: "created", completion: "committed", entityId: coordinated.value.id });
@@ -1368,7 +1387,7 @@ export async function duplicateContentBlock(formData: FormData) {
 }
 
 export async function bulkContentBlocks(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const action = parsePageBlockBulkAction(
     formData.get("bulk_action"),
     PAGE_BLOCK_BULK_ACTIONS,
@@ -1413,6 +1432,12 @@ export async function bulkContentBlocks(formData: FormData) {
       );
   }
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", action === "delete" ? "delete" : action === "publish" ? "publish" : "unpublish"),
+    entityType: "content_block_template",
+    entityLabel: "content_block_templates",
+    metadata: { blockType: "content", action, ids, count: ids.length },
+  }, actor);
   const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
     ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حفظ التغييرات المحددة. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed" })
     : adminActionSuccess("تم الحفظ", "تم حفظ التغييرات المحددة.", { code: "saved", completion: "committed" });

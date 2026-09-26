@@ -5,7 +5,7 @@ import { resolve, sep } from "node:path";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import ts from "typescript";
-import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode, prepareVercelCacheProbe } from "./lib/vercel-cache-probe.mts";
+import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode, parseVercelCacheProbeReadTransport, prepareVercelCacheProbe } from "./lib/vercel-cache-probe.mts";
 const root = realpathSync(resolve(".")), out = resolve(root, ".tmp-qa/core-final-closure/probe-guard-tests-" + Date.now());
 assert.ok(out.startsWith(resolve(root, ".tmp-qa/core-final-closure") + sep)); mkdirSync(out, { recursive: true });
 const source = resolve(root, "scripts/fixtures/vercel-cache-probe");
@@ -22,6 +22,9 @@ try {
     ["assigned-mode",["--expect-fenced=true"]],
     ["value-mode",["--expect-fenced","false"]],
   ] as const) { assert.throws(() => parseVercelCacheProbeFenceMode(args)); cases.push(name+"-rejected"); }
+  assert.equal(parseVercelCacheProbeReadTransport([]),"get"); cases.push("default-transport-preserves-independent-get");
+  assert.equal(parseVercelCacheProbeReadTransport(["--read-after-action"]),"action"); cases.push("explicit-independent-action-transport");
+  for(const args of [["--read-after-action","--read-after-action"],["--read-after-action=true"],["--read-after-action","get"]]) { assert.throws(()=>parseVercelCacheProbeReadTransport(args)); cases.push("invalid-read-transport-rejected"); }
   const classify = (url: string, method = "GET", resourceType = "script") => classifyVercelCacheProbeRequest({url,method,resourceType},"https://owned.vercel.app");
   assert.equal(classify("https://owned.vercel.app/verification-cache-probe"),"allowed-owned-or-inline"); cases.push("same-deployment-request-allowed");
   assert.equal(classify("https://vercel.live/_next-live/feedback/feedback.js"),"expected-denied-preview-feedback"); cases.push("exact-preview-feedback-script-remains-denied");
@@ -105,6 +108,13 @@ try {
   context.process.env.VERCEL_ENV="production";assert.equal((await action(signed(payload))).status,"denied");
   cases.push("runtime-production-denied-before-adapter");
   assert.equal(ambientCalls,0); assert.equal(builtinCalls,0);
+  context.process.env.VERCEL_ENV="preview";
+  const readAfter={...payload,phase:"read-after",worker:randomUUID()};
+  assert.equal((await action(signed(readAfter))).status,"inconclusive"); cases.push("valid-independent-action-read-reaches-actual-adapter-guard");
+  const executeRead=exports.executeRead as (raw:string)=>Promise<{status:string}>;
+  assert.equal((await executeRead(signed(readAfter))).status,"inconclusive"); cases.push("valid-independent-get-read-keeps-adapter-diagnostic");
+  await assert.rejects(executeRead("invalid.invalid")); cases.push("invalid-read-ticket-remains-denied-before-diagnostics");
+  context.process.env.VERCEL_ENV="production";
   const database = exports.database as (revision: "Old" | "New") => Promise<{
     exec(sql: string): void; close(): void; prepare(sql: string): { get(): { revision: string } };
   }>;

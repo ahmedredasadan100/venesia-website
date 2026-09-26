@@ -1,3 +1,4 @@
+import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -89,7 +90,7 @@ async function terminalTools(ctx) {
       count++; sawHeld(); await gate;
       try { await route.fallback(); } catch (error) { routeFailure = error; }
     };
-    await page.route('**/*', routeHandler);
+    const removeRoute = await registerCorePageRoute(page, '**/*', routeHandler);
     const response = actionResponse(); response.catch(() => {});
     const clicking = click(); clicking.catch(() => {});
     try {
@@ -98,7 +99,7 @@ async function terminalTools(ctx) {
       const actual = await response; assertActionAcknowledged(actual); await clicking;
       if (routeFailure) throw routeFailure;
       assert.equal(count, 1);
-    } finally { clearTimeout(timer); release(); await page.unrouteAll({ behavior: 'wait' }); }
+    } finally { clearTimeout(timer); release(); await removeRoute(); }
   }
   async function rowCommand(recipe, id, kind, options) {
     return confirmed(async () => { const item = await menu(recipe, id, kind); await expect(item).toBeEnabled(); await item.click(); }, options);

@@ -1,3 +1,4 @@
+import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { request as httpRequest } from "node:http";
@@ -63,7 +64,7 @@ export async function captureCommittedCreateReplyLoss({ page, origin, nativeProb
   const statistics = { matchedRequests: 0, forwardedRequests: 0, responseStatus: null, headersObserved: false,
     nativeCommitConfirmed: false, browserResponseAborted: false, originalSocketClosed: false, requestBodyWiped: false };
   const tasks = new Set();
-  let routeRegistered = false, activeRoute, abortingRoute, outgoing, incoming, socketClosed = Promise.resolve(), body, privateHeaders;
+  let routeRegistered = false, removeRoute, activeRoute, abortingRoute, outgoing, incoming, socketClosed = Promise.resolve(), body, privateHeaders;
   function stop(code) {
     if (failure === null) failure = new CreateReplyLossVerificationError(code);
     abort.abort(); stoppedReject(failure); capturedReject(failure);
@@ -139,9 +140,9 @@ export async function captureCommittedCreateReplyLoss({ page, origin, nativeProb
   };
   const deadline = setTimeout(() => stop("create-loss-bounded-wait-exceeded"), timeoutMs);
   try {
-    // A newly registered Page route owns this one URL ahead of the existing
-    // BrowserContext-wide network guard. Non-Action requests use fallback().
-    await page.route(origin + CREATE_PATH, routeHandler); routeRegistered = true;
+    // The page-scoped context route owns this URL ahead of the persistent guard.
+    // Non-Action requests still use fallback(); authenticated forwarding is unchanged.
+    removeRoute = await registerCorePageRoute(page, origin + CREATE_PATH, routeHandler); routeRegistered = true;
     const [native] = await Promise.all([bounded(captured), bounded(Promise.resolve().then(trigger))]);
     requireProof(statistics.matchedRequests === 1 && statistics.forwardedRequests === 1
       && statistics.nativeCommitConfirmed && statistics.browserResponseAborted && statistics.originalSocketClosed,
@@ -157,7 +158,7 @@ export async function captureCommittedCreateReplyLoss({ page, origin, nativeProb
     try { await abortRoute(); } catch { /* An already failed turn cannot become passing during cleanup. */ }
     await Promise.allSettled([...tasks]);
     await socketClosed;
-    if (routeRegistered) await page.unroute(origin + CREATE_PATH, routeHandler);
+    if (routeRegistered) await removeRoute();
     body?.fill(0); body = undefined; privateHeaders = undefined; statistics.requestBodyWiped = true;
   }
 }

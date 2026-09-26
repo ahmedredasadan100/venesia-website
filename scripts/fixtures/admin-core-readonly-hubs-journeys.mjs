@@ -1,3 +1,4 @@
+import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createJiti } from 'jiti';
@@ -89,7 +90,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
     }
     await route.fallback();
   };
-  await page.route('**/*', readonlyGuard);
+  const removeReadonlyRoute = await registerCorePageRoute(page, '**/*', readonlyGuard);
   try {
     await run('readonly-hub-project-types-native-count-navigation', [], async () => {
       const native = await checkpoint('projects'); await navigate(routes['projects-hub']);
@@ -240,7 +241,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
         boundary: 'Existing string/owned-DB diagnostics only, even when canonical origin is Production metadata; no endpoint request, diagnostic-health or public-route proof.' });
     });
     assert.deepEqual(blockedWrites, [], 'Read-only Hub controls attempted an unexpected write.');
-  } finally { await page.unrouteAll({ behavior: 'wait' }); }
+  } finally { await removeReadonlyRoute(); }
   return { outcomes, limits, sourceInventory: plan.selected, globalClosed: false,
     boundary: 'Selected read-only owner families joined to fixed native counts where claimed. Remaining secret/security/media and unexecuted states stay open.' };
 }
