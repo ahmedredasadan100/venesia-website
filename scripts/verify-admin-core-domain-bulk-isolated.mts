@@ -31,6 +31,10 @@ export async function verifyCoreDomainBulkCompletion(handle:OwnedLocalHandle,bro
   for(const [key,value]of Object.entries(outcome))assert.deepEqual(receipt[0][key],value,'Final evidence must match its complete successful journey.');
   for(const key of ['pendingDuplicateBlocked','selectionRetainedOnFailure','selectionClearedAfterSuccess'])assert.equal(outcome[key],true);
   const rejection=object(outcome.rejection);assert.equal(rejection.attempts,1);unchanged(rejection);
+  if(recipe.entity==='topics'){
+   assert.match(String(rejection.commandId),/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+   assert.equal(rejection.recoveryRequests,2);assert.equal(rejection.sameRecoveryAction,true);assert.equal(rejection.originalMutationReplayed,false);assert.equal(rejection.unresolvedAfterRead,true);assert.equal(rejection.nextCommandScope,'explicit-new-command-after-full-reload');
+  }
   const operations=rows(outcome.actualCommands);assert.deepEqual(operations.map(row=>row.action),recipe.steps);
   for(const [ordinal,operation]of operations.entries()){
    assert.equal(operation.ordinal,ordinal);assert.equal(operation.requests,1);const step=coreDomainBulkStep(recipe,operation.action,ordinal);
@@ -40,6 +44,13 @@ export async function verifyCoreDomainBulkCompletion(handle:OwnedLocalHandle,bro
    const descriptors=coreDomainBulkDescriptors(recipe,step,since,state);assertCoreDomainBulkNative(write,recipe,step);
    const saved=rows(write.writes);for(const descriptor of descriptors){const row=saved.find(value=>value.id===descriptor.id)!;if(!step.deleted)assert.deepEqual(row.actual,descriptor.expected);}
    const stateAudit=rows(state.audit),writeAudit=Array.from(new Set(saved.flatMap(row=>rows(row.audit).map(audit=>Number(audit.id)))));
+   if(recipe.entity==='topics'){
+    const receipts=stateAudit.filter(row=>object(row.metadata ?? {}).command);assert.equal(receipts.length,1);
+    const command=object(object(receipts[0].metadata).command),result=object(command.result);
+    assert.match(String(command.id),/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    assert.equal(operation.commandId,command.id);assert.equal(result.commandId,command.id);assert.equal(result.ok,true);assert.equal(Number(command.actorId),recipe.actorId);
+    if(ordinal===0)assert.notEqual(command.id,rejection.commandId,'Post-reload completion must prove a distinct native command identity.');
+   }
    const aggregateIds=stateAudit.filter(row=>recipe.entity==='pages'||row.entity_id===null).map(row=>Number(row.id));
    assert.deepEqual([...writeAudit].sort((a,b)=>a-b),aggregateIds.sort((a,b)=>a-b));
    for(const id of writeAudit){assert.ok(!allAuditIds.has(id),'Two commands cannot claim one audit event.');allAuditIds.add(id);}

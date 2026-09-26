@@ -1,3 +1,5 @@
+import { assertCorePresentationControlsCompleted } from "./verify-admin-core-presentation-controls-isolated.mts";
+import { PRESENTATION_CONTROL_PHASES } from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import { assertCoreProjectControlsCompleted } from "./verify-admin-core-project-controls-isolated.mts";
 import { PROJECT_CONTROL_PHASES } from "./fixtures/admin-core-project-controls-contract.mjs";
 import { assertCoreTopicControlsCompleted } from "./verify-admin-core-topic-controls-isolated.mts";
@@ -9,8 +11,11 @@ import { verifyCoreQueryPresentationCompletion } from "./verify-admin-core-query
 import { assertCoreAuthEntryCompleted } from "./verify-admin-core-auth-entry-isolated.mts";
 import { assertCoreNavigationSettingsCompleted, NAVIGATION_SETTINGS_PHASES, CORE_NAVIGATION_RECIPE } from "./verify-admin-core-navigation-settings-isolated.mts";
 import assert from "node:assert/strict";
+import { assertCorePageSeoCompleted } from "./verify-admin-core-page-seo-isolated.mts";
+import { assertPageSeoReceiptJoin } from "./fixtures/admin-core-page-seo-contract.mjs";
 import { assertCoreSpecializedSettingsCompleted } from "./verify-admin-core-specialized-settings-isolated.mts";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { assertCoreFormDraftRestorationJoin } from "./fixtures/admin-core-form-draft-restoration.mjs";
 import { join } from "node:path";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
 
@@ -77,7 +82,7 @@ export function assertCoreMediaCompletionReceipts(handle: OwnedLocalHandle, brow
 }
 
 /** Only the Page create's one accepted save and its cookie-free denial pair may extend Navigation's native checkpoints. */
-export function assertCoreNavigationPermissionReceipts(handle: OwnedLocalHandle, browserInput: unknown, nativeInput: unknown) {
+export function assertCoreNavigationPermissionReceipts(handle: OwnedLocalHandle, browserInput: unknown, nativeInput: unknown, draftRestorationInput?: unknown) {
   assertOwnedLocalHandle(handle);
   type Row = Record<string, unknown>;
   const object = (value: unknown): Row => { assert.ok(value && typeof value === "object" && !Array.isArray(value)); return value as Row; };
@@ -136,7 +141,15 @@ export function assertCoreNavigationPermissionReceipts(handle: OwnedLocalHandle,
   for (const key of ["publicTableCount", "publicTableInventorySha256", "publicDataSha256"]) assert.equal(after[key], before[key]);
   assert.equal(proof.publicTableCount, before.publicTableCount);
   const expectedIds = stateRecords.map(row => row.id), createIndex = stateRecords.indexOf(created);
-  expectedIds.splice(createIndex + 1, 0, saved.id, before.id, after.id);
+  if (draftRestorationInput !== undefined) {
+    const draft = object(draftRestorationInput);
+    const joined = assertCoreFormDraftRestorationJoin({artifact:draft,browser,native,ownedRunId:handle.identity.runId,sourceSha256:browser.sourceSha256});
+    assert.equal(joined.qualified.length,1);
+    const restoration=rows(draft.receipts)[0];
+    for (const [key,value] of Object.entries({caseId,formConsumer,surface,journeyId:"core-navigation-page-create-rejection-retry-reload",routePathname:"/admin/pages-blocks/pages",dirtyNavigation:"close"})) assert.equal(restoration[key],value);
+    expectedIds.splice(createIndex,0,restoration.nativeBefore,restoration.nativeAfter);
+  }
+  expectedIds.splice(expectedIds.indexOf(created.id) + 1, 0, saved.id, before.id, after.id);
   assert.deepEqual(records.map(row => row.id), expectedIds, "Only the exact Page save and ordered denial pair may extend Navigation; no orphan, foreign or extra native records.");
   return { status: "pass", ownedRunId: handle.identity.runId, navigationCheckpoints: stateRecords.length, pagePermissionIntents: 1, nativeCheckpoints: records.length, candidateRequiredCase: cells[0].key, automaticCoverage: [], globalClosed: false };
 }
@@ -147,27 +160,39 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
   assertOwnedLocalHandle(handle);
   const browser = JSON.parse(readFileSync(join(artifactDir, "admin-adoption-browser.json"), "utf8")) as {
     status: string; scope?: string; cohort?: string; startedAt: string; databaseReadback: ExpectedRead[]; readOnlyReadback: unknown[];
-    previewMatrix: Array<{ status: string }>; projectControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; topicControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; templateControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; specializedSettings?: { status: string }; media?: MediaJoinResult; mediaRecovery?: MediaJoinResult;
+    previewMatrix: Array<{ status: string }>; presentationControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; projectControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; topicControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; templateControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; specializedSettings?: { status: string }; media?: MediaJoinResult; mediaRecovery?: MediaJoinResult;
     menuIntegrityReadback: Array<{ topicId: number; menuId: number; expectedItems: number }>;
     evidence: Array<{ id: string; status: string }>; globalClosed: boolean;
   };
   assert.equal(browser.status, "pass", "Failed selected browser journeys cannot receive a passing database receipt.");
   assert.ok(Number.isFinite(Date.parse(browser.startedAt)));
   if (browser.scope === "core-closure") {
-    assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls"].includes(browser.cohort ?? ""));
+    assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls", "presentation-controls"].includes(browser.cohort ?? ""));
     const previewStates = browser.cohort === "preview-recovery-templates" ? await verifyCorePreviewStateReadback(handle, artifactDir, "after") : null;
     if (previewStates) {
       assert.equal(browser.previewMatrix.length, previewStates.reads.length * 2);
       assert.ok(browser.previewMatrix.every(row => row.status === "behavior_verified"));
     }
+    const draftFile=join(artifactDir,"admin-core-draft-restoration.json");
+    const draftRequired=["preview-recovery-templates","recovery-templates","domain-forms","navigation-settings"].includes(browser.cohort ?? "");
+    if(draftRequired)assert.equal(existsSync(draftFile),true,"Prepared Form restoration must retain its sanitized same-run receipt.");
+    const draftArtifact=existsSync(draftFile)?JSON.parse(readFileSync(draftFile,"utf8")):null;
+    let draftRestoration=null;
+    if(draftRequired || draftArtifact?.receipts?.length) {
+      const draftNative=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));
+      assert.equal(draftNative.status,"pass");
+      draftRestoration=assertCoreFormDraftRestorationJoin({artifact:draftArtifact,browser,native:draftNative,ownedRunId:handle.identity.runId,sourceSha256:(browser as unknown as {sourceSha256:string}).sourceSha256});
+    }
     let nativeCheckpoints = null;
+    let pageSeo = null;
     let navigationPermission: ReturnType<typeof assertCoreNavigationPermissionReceipts> | null = null;
     if (browser.cohort === "page-composition" || browser.cohort === "readonly-hubs" || browser.cohort === "specialized-settings" || browser.cohort === "media-library" || browser.cohort === "navigation-settings" || browser.cohort === "auth-entry") {
       nativeCheckpoints = JSON.parse(readFileSync(join(artifactDir, "core-native-control-readback.json"), "utf8"));
       assert.equal(nativeCheckpoints.status, "pass", "Every joined fixed checkpoint must complete.");
       const kind = browser.cohort === "page-composition" ? "page-composition-state" : browser.cohort === "readonly-hubs" ? "readonly-hub-state" : browser.cohort === "media-library" ? "media-library-state" : browser.cohort === "navigation-settings" ? "navigation-settings-state" : browser.cohort === "auth-entry" ? "auth-entry-state" : "specialized-settings-state";
       assert.ok(Array.isArray(nativeCheckpoints.records) && nativeCheckpoints.records.length > 0);
-      if (browser.cohort === "navigation-settings") navigationPermission = assertCoreNavigationPermissionReceipts(handle, browser, nativeCheckpoints);
+      if (browser.cohort === "navigation-settings") navigationPermission = assertCoreNavigationPermissionReceipts(handle, browser, nativeCheckpoints, draftArtifact);
+      else if (browser.cohort === "page-composition") pageSeo = assertPageSeoReceiptJoin(browser, nativeCheckpoints, JSON.parse(readFileSync(join(artifactDir, "core-native-write-faults.json"), "utf8")), assertCorePageSeoCompleted(handle));
       else assert.ok(nativeCheckpoints.records.every((row: {kind: string; status: string}) => row.kind === kind && row.status === "pass"));
     }
     const mediaCompletion = browser.cohort === "media-library" ? assertCoreMediaCompletionReceipts(handle, browser, nativeCheckpoints) : null;
@@ -233,6 +258,29 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       }
       projectControls={...result,completion,cleanup};
     }
+    let presentationControls=null;
+    if(browser.cohort==="presentation-controls") {
+      const completion=assertCorePresentationControlsCompleted(handle),result=browser.presentationControls;assert.ok(result);
+      assert.equal(completion.recipes,2);assert.equal(completion.exactWrites,2);assert.equal(completion.nativeCheckpoints,12);for(const key of ["actorBound","publicAssignmentsUnchanged","catalogUnchanged"] as const)assert.equal(completion[key],true);
+      assert.equal(result.planned,completion.recipes);assert.equal(result.completed,completion.recipes);assert.equal(result.outcomes.length,completion.recipes);
+      assert.deepEqual(result.outcomes.map(row=>row.kind).sort(),["content","hero"]);
+      const native=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));assert.equal(native.status,"pass");assert.equal(native.ownedRunId,handle.identity.runId);
+      const cleanup=JSON.parse(readFileSync(join(artifactDir,"core-native-write-faults.json"),"utf8"));assert.equal(cleanup.status,"closed");assert.equal(cleanup.activeLocks,0);
+      const faults=native.records.filter((r:Record<string,unknown>)=>String(r.kind).startsWith("domain-write-fault-"));assert.deepEqual(faults,cleanup.records);
+      assert.ok(native.records.every((r:Record<string,unknown>)=>r.kind==="presentation-controls-state"||faults.includes(r)));assert.equal(native.records.filter((r:Record<string,unknown>)=>r.kind==="presentation-controls-state").length,completion.nativeCheckpoints);
+      for(const row of result.outcomes){
+        assert.equal(row.postRejectionDirtyNavigationCancelled,true);assert.equal(row.exactWrites,1);assert.equal(row.nativeCheckpoints,6);assert.deepEqual(row.nativePhases,PRESENTATION_CONTROL_PHASES);
+        const states=native.records.filter((r:Record<string,unknown>)=>r.kind==="presentation-controls-state"&&r.recipe===row.kind);assert.deepEqual(states.map((r:Record<string,unknown>)=>r.phase),PRESENTATION_CONTROL_PHASES);assert.ok(states.every((r:Record<string,unknown>)=>r.status==="pass"));
+        const evidence=browser.evidence.filter(item=>item.id==="core-presentation-controls-"+row.kind);assert.equal(evidence.length,1);assert.equal(evidence[0].status,"pass");
+        const actual=faults.filter((r:Record<string,unknown>)=>r.entity==="presentation_control_"+row.kind);const tokens=[...new Set(actual.map((r:Record<string,unknown>)=>r.token))];assert.equal(tokens.length,2);
+        for(const [index,key]of ["pendingRejection","pendingSave"].entries()){
+          const proof=row[key] as Record<string,unknown>;for(const name of ["nativeStatementObservedTwice","sameStatementIdentity","normalKeyboardDedup","fieldsDisabled","ownedLockReleased"])assert.equal(proof[name],true);assert.equal(proof.closeControl,"not_declared");assert.equal(proof.actionRequests,1);assert.equal(proof.actualStatementCancelled,index===0);
+          const sequence=actual.filter((r:Record<string,unknown>)=>r.token===tokens[index]);assert.deepEqual(sequence.map((r:Record<string,unknown>)=>r.kind),["arm","observe-blocked","observe-blocked",...(index===0?["cancel"]:[]),"release"].map(kind=>"domain-write-fault-"+kind));
+          assert.equal(sequence.at(-1).ownedLockRolledBack,true);assert.equal(sequence.at(-1).cancellationObserved,index===0);
+        }
+      }
+      presentationControls={...result,completion,cleanup};
+    }
     const domainBulk=browser.cohort==="domain-bulk"?await verifyCoreDomainBulkCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"))):null;
     const queryPresentation = browser.cohort === "query-presentation" ? verifyCoreQueryPresentationCompletion(handle,browser) : null;
     const authEntry = browser.cohort === "auth-entry" ? assertCoreAuthEntryCompleted(handle) : null;
@@ -241,7 +289,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     if (specializedSettings) assert.equal(browser.specializedSettings?.status,"pass");
     const writes = await verifyCoreDomainWrites(handle, browser);
     const readOnly = browser.cohort === "domain-commands" ? await verifyCoreReadonlyReadback(handle, browser) : null;
-    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", previewStates, writes, readOnly, nativeCheckpoints, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, queryPresentation, templateControls, topicControls, projectControls, domainBulk, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }

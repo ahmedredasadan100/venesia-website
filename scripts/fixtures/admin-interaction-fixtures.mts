@@ -347,3 +347,12 @@ export async function seedOwnedCoreProjectControlsFixtures(handle: OwnedLocalHan
   const { prepareCoreProjectControlsFixtures } = await import("../verify-admin-core-project-controls-isolated.mts");
   return prepareCoreProjectControlsFixtures(handle, credentials);
 }
+
+/** B4 current Hero/generic Content controls: read-only opt-in under the existing credential owner. */
+export async function seedOwnedCorePresentationControlsFixtures(handle: OwnedLocalHandle) {
+  assertOwnedLocalHandle(handle);
+  const credentials = credentialsByHandle.get(handle);
+  assert.ok(credentials, "Prepare the canonical owned Admin account before presentation controls.");
+  const { prepareCorePresentationControlsFixtures } = await import("../verify-admin-core-presentation-controls-isolated.mts");
+  return prepareCorePresentationControlsFixtures(handle, credentials);
+}

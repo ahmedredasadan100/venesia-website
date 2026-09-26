@@ -72,6 +72,10 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await expect(form.locator('[name="title"]')).toHaveValue(r.page.title); await expect(form.locator('[name="path"]')).toHaveValue(f.duplicatePagePath);
     await checkpoint("page", "rejected");
     await form.locator('[name="path"]').fill(r.page.path);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-navigation-page-create-accepted-save",journeyId:"core-navigation-page-create-rejection-retry-reload",formConsumer:"pages-quick-create",surface:"create"},form,submit:form.getByRole("button",{name:"إنشاء وفتح المحرر",exact:true}),dirtyNavigation:"close",
+      assertDraft:async()=>{await expect(form.locator('[name="title"]')).toHaveValue(r.page.title);await expect(form.locator('[name="path"]')).toHaveValue(r.page.path);},
+      cancelDirty:async()=>{const original=page.url(),trigger=form.getByRole("button",{name:"إلغاء",exact:true});await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form).toBeVisible();},
+    });
     await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId:"core-navigation-page-create-accepted-save",formConsumer:"pages-quick-create",surface:"create"},permissionEvidence,perform:async()=>{
     await action(() => form.getByRole("button", { name: "إنشاء وفتح المحرر", exact: true }).click());
     await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/pages\/\d+$/u.test(url.pathname));

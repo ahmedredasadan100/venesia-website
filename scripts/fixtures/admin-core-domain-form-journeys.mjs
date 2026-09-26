@@ -2,6 +2,16 @@ import assert from "node:assert/strict";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
+/** A cursor paragraph is not authored content; the entire stored projection must still match. */
+export function assertCorePlainParagraphSnapshot(snapshot, expected, toMarkdown) {
+  assert.equal(typeof expected, "string"); assert.ok(expected.trim().length > 0);
+  assert.ok(Array.isArray(snapshot.paragraphs) && snapshot.paragraphs.every(value => typeof value === "string"));
+  assert.deepEqual(snapshot.paragraphs.filter(value => value.trim().length > 0), [expected], "Exactly one authored paragraph is required; extra nonempty paragraphs cannot be ignored.");
+  assert.equal(snapshot.headings, 0, "The paragraph toolbar must remove the seeded heading.");
+  assert.equal(toMarkdown(snapshot.html), expected, "The entire editor HTML must project to the exact canonical Markdown body.");
+  assert.equal(snapshot.markdown, expected, "The submitted Markdown must equal the whole-editor projection.");
+}
+
 const familyIds = ["topic-category-create-edit", "topic-series-create-edit", "topic-article-create-edit", "topic-media-create-edit", "projects-create-edit", "project-locations-create-edit"];
 const lifecycle = ["save_reload", "failure_preserves_input", "retry"];
 const locationSurface = { governorate: "governorate", city: "city", main_area: "district", sub_area: "sub-district" };
@@ -126,6 +136,7 @@ export async function runCoreDomainFormJourneys(ctx) {
   assert.equal(new URL(origin).hostname, "127.0.0.1");
   assert.ok(Array.isArray(databaseReadback));
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
+  const { richTextHtmlToMarkdown } = await jiti.import("../../src/lib/rich-text/html-utils.ts");
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const { PROJECT_LOCATION_LEVEL_CONFIG: locationConfig } = await jiti.import("../../src/lib/admin/projects/location-management-contract.ts");
   const plan = buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, locationConfig });
@@ -227,6 +238,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     const createFields = { name, slug, ...(recipe.kind === "series" ? { category_id: fixtures.category.id } : {}) };
     await dirtyCloseCancel(form, createFields);
     await rejectRequired(form, "name", createFields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-form-create",journeyId:"core-"+recipe.kind+"-form-create-edit",formConsumer:recipe.id,surface:"create"},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close'});
     const id = await permissionIntent(recipe, "create", "core-" + recipe.kind + "-form-create", async () => {
       await accepted(form);
       await expect(page).toHaveURL(url => new RegExp("^/admin/content/" + plural + "/[0-9]+$", "u").test(url.pathname));
@@ -241,6 +253,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     const editFields = { name: edited, ...(recipe.kind === "series" ? { category_id: fixtures.category.id } : {}) };
     await dirtyCloseCancel(form, editFields);
     await rejectRequired(form, "name", editFields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-form-edit",journeyId:"core-"+recipe.kind+"-form-create-edit",formConsumer:recipe.id,surface:"edit"},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields),dirtyNavigation:'close'});
     await permissionIntent(recipe, "edit", "core-" + recipe.kind + "-form-edit", async () => {
       await accepted(form);
       await reloadValues(editFields);
@@ -268,8 +281,16 @@ export async function runCoreDomainFormJourneys(ctx) {
       // The seeded create document starts with a heading; author a paragraph
       // explicitly through the current toolbar before testing plain Markdown.
       await form.getByRole("button", { name: "فقرة", exact: true }).click();
-      await expect(editor.locator("p")).toHaveText(body);
-      await expect(editor.locator("h1,h2,h3")).toHaveCount(0);
+      // StarterKit may retain an empty trailing cursor paragraph after converting a heading.
+      // Check every authored paragraph and the entire canonical projection, not the first node.
+      await expect(control(form, "content")).toHaveValue(body);
+      await expect.poll(async () => richTextHtmlToMarkdown(await editor.innerHTML())).toBe(body);
+      const snapshot = await editor.evaluate(element => ({
+        paragraphs: Array.from(element.querySelectorAll("p"), paragraph => paragraph.textContent ?? ""),
+        headings: element.querySelectorAll("h1,h2,h3,h4,h5,h6").length,
+        html: element.innerHTML,
+      }));
+      assertCorePlainParagraphSnapshot({ ...snapshot, markdown: await control(form, "content").inputValue() }, body, richTextHtmlToMarkdown);
     }
     if (recipe.kind === "video") await control(form, "video_duration").fill("2:34");
     const createFields = { title, slug, excerpt, category_id: fixtures.category.id, ...(markdown ? { content: body } : {}), ...(recipe.kind === "video" ? { video_duration: "2:34" } : {}) };
@@ -279,6 +300,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     const payloadAudit = recipe.kind === "video"
       ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "video" }, { column: "media_payload", path: ["duration"], value: "2:34" }] }
       : recipe.kind === "gallery" ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "gallery" }] } : {};
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-content-create",journeyId:"core-"+recipe.kind+"-content-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close'});
     const id = await permissionIntent(recipe, recipe.surfaces[0], "core-" + recipe.kind + "-content-create", async () => {
       await accepted(form);
       await expect(page).toHaveURL(url => /^\/admin\/content\/topics\/[0-9]+$/u.test(url.pathname));
@@ -340,6 +362,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     await dirtyCloseCancel(form, fields, true);
     await rejectRequired(form, "name_ar", fields);
     let row;
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-create",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,fields),cancelDirty:()=>dirtyCloseCancel(form,fields,true),dirtyNavigation:'close'});
     const id = await permissionIntent(recipe, recipe.surfaces[0], "core-location-" + recipe.level + "-form-create", async () => {
       await acknowledge(form);
       await expect(form).toHaveCount(0, { timeout: 60_000 });
@@ -359,6 +382,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     for (const key of ["name_ar", "name_en", "sort_order"]) await control(form, key).fill(String(editFields[key]));
     await dirtyCloseCancel(form, editFields, true);
     await rejectRequired(form, "name_ar", editFields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-edit",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[1]},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields,true),dirtyNavigation:'close'});
     await permissionIntent(recipe, recipe.surfaces[1], "core-location-" + recipe.level + "-form-edit", async () => {
       await acknowledge(form);
       await expect(form).toHaveCount(0, { timeout: 60_000 });

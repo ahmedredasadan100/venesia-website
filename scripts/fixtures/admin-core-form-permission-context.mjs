@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createCoreFormPermissionReplayCollector } from "./admin-core-form-permission-replay.mjs";
+import { verifyCoreFormDraftRestoration } from "./admin-core-form-draft-restoration.mjs";
 
 /** Existing local file broker only; request bodies and credentials stay in the collector's memory. */
 export function createCoreNativeCheckpoint({ origin, output }) {
@@ -27,9 +28,20 @@ export function createCoreNativeCheckpoint({ origin, output }) {
 export function createCoreFormPermissionContext({ page, origin, output, sourceSha256, requiredCases }) {
   const nativeCheckpoint=createCoreNativeCheckpoint({origin,output});
   const collector=createCoreFormPermissionReplayCollector({page,origin,sourceSha256,requiredCases,nativeCheckpoint});
+  const draftReceipts=[],draftAttempts=new Set();let draftActive=false,draftClosed=false;
+  const persistDraftReceipts=()=>writeFileSync(join(output,"admin-core-draft-restoration.json"),JSON.stringify({status:"partial-not-global-pass",sourceSha256,receipts:draftReceipts,automaticCoverage:[],globalClosed:false},null,2)+"\n");
   return {
     begin:collector.begin,
-    close:collector.close,
+    close:()=>{assert.equal(draftActive,false,"Cannot close an active restoration attempt.");draftClosed=true;collector.close();persistDraftReceipts();},
+    restoreDraft:async options=>{
+      assert.deepEqual(Object.keys(options).filter(key=>!["mapping","form","submit","assertDraft","cancelDirty","dirtyNavigation","dirtyNavigationLimit"].includes(key)),[]);
+      assert.equal(draftClosed,false,"Restoration context is closed.");assert.equal(draftActive,false,"Only one restoration attempt may be active.");
+      const cells=requiredCases.filter(row=>row.boundary==="form"&&row.consumer===options.mapping?.formConsumer&&row.surface===options.mapping?.surface&&row.scenario==="rollback");assert.equal(cells.length,1);
+      const key=cells[0].key;assert.equal(draftAttempts.has(key),false,"A direct Form restoration cell may be attempted only once in this cohort.");draftAttempts.add(key);draftActive=true;
+      try{const receipt=await verifyCoreFormDraftRestoration({...options,page,origin,sourceSha256,requiredCases,nativeCheckpoint,registerPageRoute:registerCorePageRoute});
+        assert.equal(receipt.candidateRequiredCase,key);draftReceipts.push(receipt);persistDraftReceipts();return receipt;
+      }finally{draftActive=false;}
+    },
     nativeSave:async(descriptors,metadata)=>{
       assert.deepEqual(Object.keys(metadata).sort(),["caseId","formConsumer","startedAt","surface"]);
       assert.ok(Array.isArray(descriptors)&&descriptors.length>0&&descriptors.length<=4);

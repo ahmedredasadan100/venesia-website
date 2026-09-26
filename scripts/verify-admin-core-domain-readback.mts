@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { PGlite } from '@electric-sql/pglite';
+import { createJiti } from 'jiti';
+import { buildCoreTemplateCreateReadback } from './fixtures/admin-core-form-journeys.mjs';
 import ts from 'typescript';
 import type { OwnedLocalHandle, OwnedDatabaseConnection } from './lib/isolated-supabase.mts';
 
@@ -316,6 +318,46 @@ try {
     await assert.rejects(owner.readCoreDomainCheckpoint(handle, { id: commandId, kind: 'terminal-trash-set', entity: 'topics' }));
     await assert.rejects(owner.verifyCoreExecutedWriteProjections(handle, browser([base()], 'failed')));
     active = true;
+  });
+  // Canonical create builders produce the controlled persisted documents; the
+  // real readback owner must independently project the Browser's authored paths.
+  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});
+  const formManifest=await jiti.import(resolve('src/lib/admin/form-system/adoption-manifest.ts')) as {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:Array<{id:string;surfaces:string[]}>};
+  const createEntry=formManifest.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST.find(row=>row.id==='block-template-create-modals');assert.ok(createEntry);
+  const feedModule=await jiti.import(resolve('src/lib/feed-modules/parse-feed-config.ts')) as {buildFeedModuleConfig:(form:FormData,kind:string)=>unknown};
+  const formatModule=await jiti.import(resolve('src/lib/page-blocks/configs.ts')) as {buildPageBlockTextFormattingPatch:unknown};
+  const utils=await jiti.import(resolve('src/lib/page-blocks/admin-utils.ts')) as {cleanText:unknown;parseNumber:unknown};
+  const links=await jiti.import(resolve('src/lib/admin/links/block-save.ts')) as {linkFieldFromFormData:unknown;hasSavedLinkField:unknown};
+  const cardsText=readFileSync(resolve('src/app/admin/pages-blocks/blocks/cards/actions.ts'),'utf8'),cardsAst=ts.createSourceFile('cards.ts',cardsText,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);
+  const cardsFunctions=['buildCardsItems','assertValidCardsItems','buildCardsConfig'].map(name=>{const entries=cardsAst.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text===name);assert.equal(entries.length,1);return entries[0].getText(cardsAst);}).join('\n');
+  const cardsCode=ts.transpileModule(cardsFunctions,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+  const buildCards=new Function('cleanText','parseNumber','linkFieldFromFormData','hasSavedLinkField','buildPageBlockTextFormattingPatch',cardsCode+';return buildCardsConfig;')(utils.cleanText,utils.parseNumber,links.linkFieldFromFormData,links.hasSavedLinkField,formatModule.buildPageBlockTextFormattingPatch) as (form:FormData)=>Record<string,unknown>;
+  const feedForm=new FormData();feedForm.set('widget_title','Authored create Feed');feedForm.set('limit','3');
+  const cardsForm=new FormData();cardsForm.set('item_0_title','Authored create Card');cardsForm.set('item_0_body','Authored create Card body');
+  const canonicalFeed=feedModule.buildFeedModuleConfig(feedForm,'latest'),canonicalCards=buildCards(cardsForm);
+  await db.exec('alter table public.hero_templates add column slug text;alter table public.content_block_templates add column slug text;alter table public.content_block_templates add column config jsonb;');
+  for(const [index,surface]of createEntry.surfaces.entries()){
+    const [kind,operation]=surface.split(':');assert.equal(operation,'create');const id=200+index,name='Authored '+kind,slug='authored-'+kind;
+    const authored=kind==='feed'?[{name:'widget_title',path:['presentation','title'],value:'Authored create Feed'}]:kind==='cards'?[{name:'item_0_title',path:['items','0','title'],value:'Authored create Card'},{name:'item_0_body',path:['items','0','body'],value:'Authored create Card body'}]:[];
+    const descriptor=buildCoreTemplateCreateReadback(kind,id,name,slug,authored),config=kind==='feed'?canonicalFeed:kind==='cards'?canonicalCards:{unclaimedDefault:'not authored'};
+    assert.match(descriptor.table,/^[a-z][a-z0-9_]*$/);
+    await db.exec('create table if not exists public.'+descriptor.table+'(id bigint primary key,name text,slug text,config jsonb)');
+    await db.query('insert into public.'+descriptor.table+'(id,name,slug,config) values($1,$2,$3,$4)',[id,name,kind==='breadcrumb'?'generated-by-domain':slug,JSON.stringify(config)]);
+    await audit(1000+index,'content_block_template',id,name,'content_block_template.create',descriptor.auditMetadata);
+    const read=()=>owner.readCoreDomainWriteCheckpoint(handle,browser([descriptor],'in-progress-form-native-checkpoint'));
+    await test('Template create '+kind+' actual native authored fields/config and actor-bound creation audit',async()=>{const result=await read();assert.equal(result.writes.length,1);assert.deepEqual(result.writes[0].actual,descriptor.expected);assert.deepEqual(result.writes[0].json,descriptor.expectedJson.map((row:{column:string;path:string[];value:string})=>({column:row.column,path:row.path,actual:row.value})));assert.equal(result.writes[0].expectedActorId,7);});
+    if(kind==='breadcrumb'){await test('Breadcrumb generated slug is not an authored identity claim',async()=>{assert.equal(Object.hasOwn(descriptor.expected,'slug'),false);assert.deepEqual(descriptor.expectedJson,[]);await read();});}
+    else await test('Template create '+kind+' rejects a different persisted authored slug',async()=>{await db.query('update public.'+descriptor.table+' set slug=$1 where id=$2',['different-authored-slug',id]);try{await assert.rejects(read());assert.equal(statements.at(-1),'rollback');}finally{await db.query('update public.'+descriptor.table+' set slug=$1 where id=$2',[slug,id]);}});
+    for(const projection of authored){
+      for(const missing of [false,true])await test('Template create '+kind+' rejects '+(missing?'missing ':'changed ')+projection.name,async()=>{const changed=JSON.parse(JSON.stringify(config)) as Record<string,unknown>;let cursor=changed;for(const key of projection.path.slice(0,-1))cursor=cursor[key] as Record<string,unknown>;const last=projection.path.at(-1)!;if(missing)delete cursor[last];else cursor[last]='Different persisted value';await db.query('update public.'+descriptor.table+' set config=$1 where id=$2',[JSON.stringify(changed),id]);try{await assert.rejects(read());assert.equal(statements.at(-1),'rollback');}finally{await db.query('update public.'+descriptor.table+' set config=$1 where id=$2',[JSON.stringify(config),id]);}});
+    }
+    await test('Template create '+kind+' still rejects a missing creation audit',async()=>{await db.query('update public.admin_audit_logs set entity_type=$1 where id=$2',['wrong-domain',1000+index]);try{await assert.rejects(read());}finally{await db.query('update public.admin_audit_logs set entity_type=$1 where id=$2',['content_block_template',1000+index]);}});
+  }
+  await test('Authored create descriptor rejects missing, reordered and invented config projections',async()=>{
+    assert.throws(()=>buildCoreTemplateCreateReadback('feed',999,'Authored','authored',[]));
+    assert.throws(()=>buildCoreTemplateCreateReadback('feed',999,'Authored','authored',[{name:'widget_title',path:['title'],value:'Authored'}]));
+    assert.throws(()=>buildCoreTemplateCreateReadback('cards',999,'Authored','authored',[{name:'item_0_body',path:['items','0','body'],value:'Body'},{name:'item_0_title',path:['items','0','title'],value:'Title'}]));
+    assert.throws(()=>buildCoreTemplateCreateReadback('breadcrumb',999,'Authored','unclaimed',[{name:'title',path:['title'],value:'Unrendered'}]));
   });
   assert.ok(statements.every(sql => /^(?:select |begin isolation level repeatable read read only$|commit$|rollback$)/i.test(sql)), 'The actual helper emitted a non-read-only statement.');
   console.log(JSON.stringify({ status: 'pass', cases: checks.length, checks, scope: 'Actual helper and PostgreSQL SQL through PGlite; owner-port identity is an offline fixture. No live owner, Browser or hosted database claim.' }, null, 2));

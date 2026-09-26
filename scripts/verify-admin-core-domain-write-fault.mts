@@ -16,7 +16,7 @@ const fixtures = { topic: { id: 1 }, category: { id: 2 }, series: { id: 3 }, pag
   locations: ['governorate', 'city', 'main_area', 'sub_area'].map((level, index) => ({ entity: 'project_locations_' + level, level, id: 11 + index })),
 } };
 const candidate = () => ({ pid: 200, backend_start: '2026-01-01T00:00:00Z', query_start: '2026-01-01T01:00:00Z', application_name: 'PostgREST', usename: 'authenticator', datname: 'postgres', state: 'active', backend_type: 'client backend', wait_event_type: 'Lock', blockers: [100], query_fingerprint: 'a'.repeat(32), signature_matches: true });
-function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug:string}>}, topicControls?: {topics:Array<{id:number;kind:string;slug:string}>}, projectControls?: {projects:Array<{id:number;kind:string;slug:string}>}) {
+function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug:string}>}, topicControls?: {topics:Array<{id:number;kind:string;slug:string}>}, projectControls?: {projects:Array<{id:number;kind:string;slug:string}>}, presentationControls?: {templates:Array<{id:number;kind:string;slug:string}>}) {
   let clock = Date.now(), nextTimer = 0, active = true, liveConnections = 0, rollbacks = 0, cancels = 0, connectionOrdinal = 0;
   let rejectHolder!: (error: Error) => void;
   const holderEnded = new Promise<never>((_resolve, reject) => { rejectHolder = reject; });
@@ -33,7 +33,7 @@ function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug
         if (sql === 'rollback') { rollbacks++; if (faults.rollbackFailure) throw new Error('Offline rollback failure'); return []; }
         if (sql.startsWith('begin') || sql.startsWith('set local') || sql.includes('pg_stat_clear_snapshot')) return [];
         if (sql.startsWith('select pg_backend_pid()')) return [{ pid: 100, database: 'postgres', role: faults.identityRole, backend_start: '2026-01-01T00:00:00Z' }];
-        if (sql.includes('for update')) return faults.targetMissing ? [] : [{ id: params[0], slug: templateControls?.templates.find(row=>row.id===Number(params[0]))?.slug ?? topicControls?.topics.find(row=>row.id===Number(params[0]))?.slug ?? projectControls?.projects.find(row=>row.id===Number(params[0]))?.slug, level: ['governorate', 'city', 'main_area', 'sub_area'][Number(params[0]) - 11] }];
+        if (sql.includes('for update')) return faults.targetMissing ? [] : [{ id: params[0], slug: templateControls?.templates.find(row=>row.id===Number(params[0]))?.slug ?? topicControls?.topics.find(row=>row.id===Number(params[0]))?.slug ?? projectControls?.projects.find(row=>row.id===Number(params[0]))?.slug ?? presentationControls?.templates.find(row=>row.id===Number(params[0]))?.slug, level: ['governorate', 'city', 'main_area', 'sub_area'][Number(params[0]) - 11] }];
         if (sql.startsWith('select pid,backend_start')) { signatures.push(String(params[1])); return faults.rows; }
         if (sql.startsWith('select a.pid observed_pid')) return faults.cancelRows.length ? [{ observed_pid: faults.rows[0]?.pid }] : [];
         if (sql.startsWith('select pg_cancel_backend')) {
@@ -53,6 +53,7 @@ function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug
   new Function('require', 'module', 'exports', 'Date', 'setTimeout', 'clearTimeout', compiled)((specifier: string) => {
     if (specifier === './lib/isolated-supabase.mts') return { assertOwnedLocalHandle: (input: unknown) => { assert.ok(active); assert.equal(input, handle); } };
     if (specifier === './fixtures/admin-core-topic-controls-contract.mjs') return require(resolve(process.cwd(),'scripts/fixtures/admin-core-topic-controls-contract.mjs'));
+    if (specifier === './fixtures/admin-core-presentation-controls-contract.mjs') return require(resolve(process.cwd(),'scripts/fixtures/admin-core-presentation-controls-contract.mjs'));
     if (specifier === './fixtures/admin-core-project-controls-contract.mjs') return require(resolve(process.cwd(),'scripts/fixtures/admin-core-project-controls-contract.mjs'));
     if (specifier === './fixtures/admin-core-template-controls-contract.mjs') return require(resolve(process.cwd(),'scripts/fixtures/admin-core-template-controls-contract.mjs'));
     assert.equal(specifier, 'node:assert/strict'); return require(specifier);
@@ -61,7 +62,7 @@ function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug
     if (delay === 100) { clock += delay; queueMicrotask(callback); } else timers.set(id, callback);
     return id;
   }, (id: number) => timers.delete(id));
-  const owner = loaded.exports as Owner, broker = owner.createOwnedCoreDomainWriteFaults(handle, {...fixtures,...(templateControls?{templateControls}:{}),...(topicControls?{topicControls}:{}),...(projectControls?{projectControls,commercialProject:{id:401}}:{})});
+  const owner = loaded.exports as Owner, broker = owner.createOwnedCoreDomainWriteFaults(handle, {...fixtures,...(templateControls?{templateControls}:{}),...(topicControls?{topicControls}:{}),...(projectControls?{projectControls,commercialProject:{id:401}}:{}),...(presentationControls?{presentationControls}:{})});
   const token = randomUUID();
   const request = (kind: string, entity = 'categories', override: Record<string, unknown> = {}) => broker.handleRequest({ id: randomUUID(), kind: 'domain-write-fault-' + kind, token, entity, ...override });
   return { owner, handle, broker, request, faults, signatures, statements, counts: () => ({ liveConnections, rollbacks, cancels }),
@@ -244,6 +245,21 @@ try {
       const f=fixture();assert.throws(()=>f.owner.createOwnedCoreDomainWriteFaults(f.handle,{...fixtures,commercialProject:{id:401},projectControls:{projects:rows}}));assert.equal(f.statements.length,0);await f.broker.close();
     }
   });
-  assert.equal(checks.length, 24);
+  await test('No presentation opt-in admits no additional native target',async()=>{const f=fixture();await assert.rejects(f.request('arm','presentation_control_hero'));assert.equal(f.statements.length,0);await f.broker.close();});
+  await test('Fixed Hero and generic Content targets accept only canonical composition RPC',async()=>{
+    const templates=[{kind:'hero',id:501,slug:'qa-admin-page-interaction-hero-8'},{kind:'content',id:502,slug:'qa-admin-page-interaction-content-8'}];
+    for(const kind of ['hero','content']){const f=fixture(undefined,undefined,undefined,{templates});const entity='presentation_control_'+kind;await f.request('arm',entity);await f.request('observe-blocked',entity);await f.request('cancel',entity);const pattern=f.signatures[0];
+      assert.equal((await db.query<{matches:boolean}>('select $1::text ~* $2::text as matches',['select * from "public"."mutate_page_composition"($1,$2,$3)',pattern])).rows[0].matches,true);
+      for(const sql of ['UPDATE public.hero_templates SET config=$1','select * from public.mutate_page_composition_other($1)','select * from public.save_project_admin_entry($1)'])assert.equal((await db.query<{matches:boolean}>('select $1::text ~* $2::text as matches',[sql,pattern])).rows[0].matches,false);
+      await f.request('release',entity);assert.equal(f.counts().liveConnections,0);await f.broker.close();
+    }
+  });
+  await test('Presentation target opt-in rejects foreign slugs, missing/duplicated kinds, invalid IDs and cross-kind injection',async()=>{
+    const templates=[{kind:'hero',id:501,slug:'qa-admin-page-interaction-hero-8'},{kind:'content',id:502,slug:'qa-admin-page-interaction-content-8'}];
+    for(const rows of [templates.slice(1),[...templates,templates[0]],templates.map((row,index)=>index?row:{...row,id:0}),templates.map((row,index)=>index?row:{...row,slug:'real-hero'}),templates.map((row,index)=>index?row:{...row,kind:'__proto__'}),templates.map((row,index)=>index?{...templates[0]}:row)]){const f=fixture();assert.throws(()=>f.owner.createOwnedCoreDomainWriteFaults(f.handle,{...fixtures,presentationControls:{templates:rows}}));assert.equal(f.statements.length,0);await f.broker.close();}
+    const f=fixture();const {TEMPLATE_CONTROL_RECIPES}=require(resolve(process.cwd(),'scripts/fixtures/admin-core-template-controls-contract.mjs'));const other=Object.keys(TEMPLATE_CONTROL_RECIPES).map((kind,index)=>({kind,id:600+index,slug:'qa-admin-page-interaction-'+kind+'-8'}));
+    assert.throws(()=>f.owner.createOwnedCoreDomainWriteFaults(f.handle,{...fixtures,presentationControls:{templates},templateControls:{templates:[...other,{kind:'hero',id:501,slug:templates[0].slug}]}}));assert.equal(f.statements.length,0);await f.broker.close();
+  });
+  assert.equal(checks.length, 27);
   console.log(JSON.stringify({ status: 'pass', cases: checks.length, checks, scope: 'Actual producer control flow with bounded connection ports, plus PostgreSQL signature matching. Live PostgreSQL locking/cancellation and Browser outcomes remain pending.' }, null, 2));
 } finally { await db.close(); }

@@ -17,6 +17,7 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
   for(const id of ["global-seo-settings","media-library-settings"])assert.ok(manifest.some(row=>row.id===id));
   const suffix=Date.now().toString(36), permissionEvidence=[];
   const permissionIntent=(formConsumer,surface,caseId,perform)=>runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{formConsumer,surface,caseId},perform,permissionEvidence});
+  const cancelDirty=async trigger=>{const original=page.url();await expect(trigger).toHaveCount(1);await expect(trigger).toBeVisible();await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);};
   const permissionFor=consumer=>permissionEvidence.filter(row=>row.formConsumer===consumer);
   const nativeSetting=descriptor=>Object.fromEntries(Object.entries(descriptor).filter(([key])=>key!=="auditSince"));
   const form=entity=>page.locator('form[data-admin-form-entity="'+entity+'"]');
@@ -35,6 +36,7 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     await expect(field(current,"name")).toHaveAttribute("aria-invalid","true");await expect(current.locator("#name-error")).toBeVisible();
     await expect(field(current,"name")).toHaveValue("   ");await expect(field(current,"adminLabel")).toHaveValue(originalLabel);
     await field(current,"name").fill(name);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-company-settings-accepted-save",journeyId:"core-company-settings-rejection-preservation-save-reload",formConsumer:"company-identity-settings",surface:"singleton-settings"},form:current,submit:submit(current),dirtyNavigation:"close",assertDraft:async()=>{await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"adminLabel")).toHaveValue(originalLabel);},cancelDirty:async()=>{await cancelDirty(current.locator('[data-admin-form-action="close"]'));}});
     await permissionIntent("company-identity-settings","singleton-settings","core-company-settings-accepted-save",async()=>{
       await acknowledge(current);await saved(current);
       await observe("company-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"adminLabel")).toHaveValue(originalLabel);
@@ -52,6 +54,7 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     await expect(canonical).toHaveValue("not-a-url");await expect(field(current,"default_title")).toHaveValue(title);
     const acceptedCanonical=old.trim()||"https://example.invalid/qa-core-permission";
     await canonical.fill(acceptedCanonical);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-global-seo-accepted-save",journeyId:"core-global-seo-settings-rejection-save-reload",formConsumer:"global-seo-settings",surface:"global-meta"},form:current,submit:submit(current),dirtyNavigation:"close",assertDraft:async()=>{await expect(field(current,"default_title")).toHaveValue(title);await expect(canonical).toHaveValue(acceptedCanonical);},cancelDirty:async()=>{await cancelDirty(current.locator('[data-admin-form-action="close"]'));}});
     await permissionIntent("global-seo-settings","global-meta","core-global-seo-accepted-save",async()=>{
       await acknowledge(current);await saved(current);
       await observe("global-seo-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(field(current,"default_title")).toHaveValue(title);
@@ -69,6 +72,7 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     await expect(limit).toHaveAttribute("aria-invalid","true");await expect(current.locator("#maxImageMb-error")).toBeVisible();
     await expect(limit).toHaveValue("0");await expect(field(current,"maxDocumentMb")).toHaveValue(document);
     await limit.fill(String(value));
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-media-policy-accepted-save",journeyId:"core-media-settings-range-rejection-save-reload",formConsumer:"media-library-settings",surface:"media-policy-settings"},form:current,submit:submit(current),dirtyNavigation:"navigation",assertDraft:async()=>{await expect(limit).toHaveValue(String(value));await expect(field(current,"maxDocumentMb")).toHaveValue(document);},cancelDirty:async()=>{await expect(current.locator('[data-admin-form-action="close"]')).toHaveCount(0);await cancelDirty(page.getByRole("navigation",{name:"الإدارة",exact:true}).locator('a[href="/admin"]'));}});
     await permissionIntent("media-library-settings","media-policy-settings","core-media-policy-accepted-save",async()=>{
       await acknowledge(current);await saved(current);await observe("media-settings-reload",()=>page.reload({waitUntil:"domcontentloaded"}));
       await expect(limit).toHaveValue(String(value));await expect(field(current,"maxDocumentMb")).toHaveValue(document);
@@ -85,6 +89,7 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     await expect(confirm).toBeVisible();await confirm.locator("[data-admin-confirm-cancel]").click();await expect(current.getByRole("button",{name:"إلغاء",exact:true})).toBeFocused();await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"slug")).toHaveValue(slug);
     await field(current,"name").fill("   ");await acknowledge(current);await expect(field(current,"name")).toHaveAttribute("aria-invalid","true");await expect(current.locator("#name-error")).toHaveText("اكتب اسم القائمة.");await expect(field(current,"slug")).toHaveValue(slug);
     await field(current,"name").fill(name);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-menu-quick-create-accepted-save",journeyId:"core-menu-quick-create-rejection-preservation-retry",formConsumer:"menu-quick-create",surface:"menu-create"},form:current,submit:submit(current),dirtyNavigation:"close",assertDraft:async()=>{await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"slug")).toHaveValue(slug);},cancelDirty:async()=>{await cancelDirty(current.getByRole("button",{name:"إلغاء",exact:true}));}});
     const id=await permissionIntent("menu-quick-create","menu-create","core-menu-quick-create-accepted-save",async()=>{
 await acknowledge(current);await expect(page).toHaveURL(url=>/^\/admin\/pages-blocks\/menus\/[0-9]+$/.test(url.pathname),{timeout:60000});
     const id=Number(new URL(page.url()).pathname.split("/").at(-1));assert.ok(Number.isSafeInteger(id)&&id>0);

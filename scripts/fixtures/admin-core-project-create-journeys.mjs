@@ -100,6 +100,18 @@ export async function runCoreProjectCreateJourneys(ctx) {
     assert.equal(projectedText, text);
     return submittedHtml;
   }
+  async function dirtyCancel(values) {
+    const retainedUrl = page.url(), close = form().locator('[data-admin-form-action="close"]');
+    await close.click();
+    const confirmation = page.getByRole("dialog", { name: "إغلاق دون حفظ؟", exact: true });
+    await expect(confirmation).toBeVisible();
+    await confirmation.locator("[data-admin-confirm-cancel]").click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(close).toBeFocused();
+    assert.equal(page.url(), retainedUrl, "Dirty-close cancellation must retain the current Project create URL.");
+    await assertValues(values);
+  }
+
   async function acknowledge() {
     const [response] = await observe("project-create-action", () => Promise.all([actionResponse(), save().click()]));
     assertActionAcknowledged(response);
@@ -152,12 +164,7 @@ export async function runCoreProjectCreateJourneys(ctx) {
     values.delivery_body = await writeRichText("delivery_body", `Authored ${recipe.kind} delivery specification ${suffix}.`);
     await tab("basic");
     await assertValues(values);
-    await form().locator('[data-admin-form-action="close"]').click();
-    const confirmation = page.getByRole("dialog", { name: "إغلاق دون حفظ؟", exact: true });
-    await expect(confirmation).toBeVisible();
-    await confirmation.locator("[data-admin-confirm-cancel]").click();
-    await expect(confirmation).toHaveCount(0);
-    await assertValues(values);
+    await dirtyCancel(values);
     await field("arabic_name").fill("");
     await acknowledge();
     await observe("project-create-real-validation-preservation", async () => {
@@ -168,6 +175,17 @@ export async function runCoreProjectCreateJourneys(ctx) {
     });
     await field("arabic_name").fill(title);
     const caseId = `core-project-${recipe.kind}-full-create`;
+    await ctx.permissionReplay.restoreDraft({
+      mapping: { caseId, journeyId: caseId, formConsumer: recipe.consumer, surface: recipe.surface },
+      form: form(), submit: save(),
+      assertDraft: async () => {
+        await assertValues(values);
+        await expect(form().locator('[id="overview_body-editor"][role="textbox"]')).toHaveText(`Authored ${recipe.kind} project overview ${suffix}.`);
+        await expect(form().locator('[id="delivery_body-editor"][role="textbox"]')).toHaveText(`Authored ${recipe.kind} delivery specification ${suffix}.`);
+      },
+      cancelDirty: async () => { await dirtyCancel(values); },
+      dirtyNavigation: "close",
+    });
     const result = await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId,formConsumer:recipe.consumer,surface:recipe.surface},permissionEvidence,perform:async()=>{
     await acknowledge();
     await expect(page).toHaveURL(url => /^\/admin\/projects\/[0-9]+$/u.test(url.pathname), { timeout: 60_000 });

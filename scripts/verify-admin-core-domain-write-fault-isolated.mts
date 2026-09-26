@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 
 import { TOPIC_CONTROL_KINDS } from "./fixtures/admin-core-topic-controls-contract.mjs";
+import { PRESENTATION_CONTROL_KINDS, PRESENTATION_CONTROL_TABLES } from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import { PROJECT_CONTROL_KINDS, projectControlSlug } from "./fixtures/admin-core-project-controls-contract.mjs";
 import { TEMPLATE_CONTROL_RECIPES } from "./fixtures/admin-core-template-controls-contract.mjs";
 
@@ -70,6 +71,10 @@ function fixedTargets(input: unknown): Record<string, Target> {
         targets.project_control_commercial={table:'projects',id,slug,signature:rpc('save_project_admin_entry')};
       }
     }
+  }
+  if(fixtures.presentationControls!==undefined){
+    const controls=object(fixtures.presentationControls);assert.ok(Array.isArray(controls.templates));assert.equal(controls.templates.length,PRESENTATION_CONTROL_KINDS.length);
+    for(const kind of PRESENTATION_CONTROL_KINDS as Array<keyof typeof PRESENTATION_CONTROL_TABLES>){const rows:Row[]=controls.templates.map(object).filter((row:Row)=>row.kind===kind);assert.equal(rows.length,1);const slug='qa-admin-page-interaction-'+kind+'-8';assert.equal(rows[0].slug,slug);targets['presentation_control_'+kind]={table:PRESENTATION_CONTROL_TABLES[kind],id:getId(rows[0]),slug,signature:rpc('mutate_page_composition')};}
   }
   const identities = Object.values(targets).map(row => row.table + ':' + row.id);
   assert.equal(new Set(identities).size, identities.length);

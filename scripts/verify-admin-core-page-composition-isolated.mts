@@ -1,20 +1,24 @@
 import assert from "node:assert/strict";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
 
+import { captureCorePageSeoState, acceptCorePageSeoCheckpoint } from "./verify-admin-core-page-seo-isolated.mts";
+import { PAGE_SEO_PHASES } from "./fixtures/admin-core-page-seo-contract.mjs";
+
 const templateTables: Record<string, string> = {
   content: "content_block_templates", cta: "cta_block_templates", cards: "cards_block_templates",
   breadcrumb: "breadcrumb_block_templates", feed: "feed_module_templates", featured: "featured_module_templates",
   hero: "hero_templates", "media-sidebar": "media_sidebar_module_templates", "media-hub": "media_hub_module_templates",
 };
 type Request = { id: string; kind: "page-composition-state"; pageId: number; startedAt: string;
-  layoutKeys: string[]; templateRefs: Array<{ kind: string; id: number }> };
+  seoPhase?: string; layoutKeys: string[]; templateRefs: Array<{ kind: string; id: number }> };
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
 
 /** Fixed read-only projection over the existing disposable QA page and requested QA templates. */
 export function validateCorePageCompositionRequest(input: unknown): Request {
   assert.ok(input && typeof input === "object" && !Array.isArray(input));
   const request = input as Request;
-  assert.deepEqual(Object.keys(request).sort(), ["id", "kind", "layoutKeys", "pageId", "startedAt", "templateRefs"]);
+  assert.deepEqual(Object.keys(request).sort(), ["id", "kind", "layoutKeys", "pageId", "startedAt", "templateRefs", ...(Object.hasOwn(request,"seoPhase") ? ["seoPhase"] : [])].sort());
+  if(Object.hasOwn(request,"seoPhase")) assert.ok(typeof request.seoPhase === "string" && PAGE_SEO_PHASES.includes(request.seoPhase));
   assert.match(request.id, uuid); assert.equal(request.kind, "page-composition-state");
   assert.ok(Number.isSafeInteger(request.pageId) && request.pageId > 0);
   assert.ok(typeof request.startedAt === "string" && Number.isFinite(Date.parse(request.startedAt)));
@@ -76,8 +80,10 @@ export async function readCorePageCompositionCheckpoint(handle: OwnedLocalHandle
         assert.equal(rows.length, 1, "The reserved QA template must remain in its existing library.");
         templates.push({ kind: reference.kind, ...rows[0] });
       }
+      const composition={assignments,layouts,regions,audit,templates};
+      const seoObservation=request.seoPhase ? await captureCorePageSeoState(connection,handle,request.pageId,qaActorId,composition) : undefined;
       await connection.query("commit"); committed = true;
-      return { qaActorId, page, assignments, layouts, regions, audit, templates };
+      return { qaActorId, page, ...composition, ...(seoObservation ? {seo:acceptCorePageSeoCheckpoint(handle,request.seoPhase!,request.startedAt,seoObservation)} : {}) };
     } finally { if (!committed) await connection.query("rollback"); }
   });
   assertOwnedLocalHandle(handle);

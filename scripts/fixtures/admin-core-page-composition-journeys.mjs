@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
+import { PAGE_SEO_PHASES, PAGE_SEO_RECIPE, PAGE_SEO_INVALID_CANONICAL, assertPageSeoScope, summarizePageSeoRejection } from "./admin-core-page-seo-contract.mjs";
 
 const consumer = "page-composition-and-seo";
 const collectionConsumers = ["page-block-assignments", "page-composition-shell"];
@@ -11,7 +12,7 @@ const number = value => { const n = Number(value); assert.ok(Number.isSafeIntege
 export function buildCorePageCompositionPlan({ fixtures, manifest, collections, kinds, positionCapabilities, getAssignablePositions, regions, requiredCases }) {
   const forms = manifest.filter(entry => entry.id === consumer);
   assert.equal(forms.length, 1);
-  for (const surface of ["assignment", "composition", "layout"]) assert.ok(forms[0].surfaces.includes(surface));
+  for (const surface of ["assignment", "composition", "layout", "seo"]) assert.ok(forms[0].surfaces.includes(surface));
   for (const id of collectionConsumers) assert.equal(collections.filter(entry => entry.id === id).length, 1);
   assert.equal(fixtures.pages.editorPath, "/admin/pages-blocks/pages/" + number(fixtures.pages.pageId));
   assert.ok(Array.isArray(kinds) && kinds.length > 0 && new Set(kinds).size === kinds.length);
@@ -71,14 +72,15 @@ export async function runCorePageCompositionJourneys(ctx) {
     assert.equal(rows.length, 1); return { kind, id: number(rows[0].id) };
   });
   const checkpoints = [], results = [];
-  async function snapshot(label) {
-    const request = { id: randomUUID(), kind: "page-composition-state", pageId, startedAt, layoutKeys: [layoutKey], templateRefs };
+  async function snapshot(label, seoPhase) {
+    const request = { id: randomUUID(), kind: "page-composition-state", pageId, startedAt, layoutKeys: [layoutKey], templateRefs, ...(seoPhase ? {seoPhase} : {}) };
     const value = await observe("composition-native-" + label, () => compositionCheckpoint(request));
     assert.equal(value?.id, request.id); assert.equal(value.kind, request.kind); assert.equal(value.status, "pass");
     assert.equal(value.pageId, pageId); assert.equal(value.startedAt, startedAt);
     assert.ok(typeof value.ownedRunId === "string" && value.ownedRunId.length > 0);
     for (const key of ["assignments", "layouts", "regions", "audit", "templates"]) assert.ok(Array.isArray(value[key]));
     assert.equal(number(value.page.id), pageId); number(value.qaActorId);
+    if(seoPhase){assert.equal(value.seo?.phase,seoPhase);assert.equal(value.seo?.status,"pass");}
     checkpoints.push({ label, receiptId: value.id });
     return value;
   }
@@ -143,7 +145,7 @@ export async function runCorePageCompositionJourneys(ctx) {
       { sortOrder: b.sort_order, moduleKind: b.kind.replaceAll("_", "-"), assignmentId: number(b.id) }));
   const result = (id, details) => {
     const value = { id, consumer, collectionConsumers, automaticCoverage: [], relatedRequiredCases: plan.relatedCases, ...details,
-      proofBoundary: "Only these concrete current Page Composition UI/native journeys. No complete capability axis or unchanged SEO claim." };
+      proofBoundary: "Only these concrete current Page Composition and SEO UI/native journeys. No complete capability axis or generic SEO rollback claim." };
     results.push(value); return value;
   };
 
@@ -272,5 +274,72 @@ export async function runCorePageCompositionJourneys(ctx) {
     return result("layout", { originalLayoutId, createdLayoutId: number(selectedLayout.id), layoutKey, auditIds,
       verified: ["incompatible_layout_reject_no_write", "draft_preserved", "compatible_retry_save_reload_native", "used_region_delete_reject_no_write", "original_layout_restored"] });
   });
+  await run("core-page-composition-seo-reject-retry-reload", [], async () => {
+    const scope = assertPageSeoScope(manifest);
+    const seoOwner = await jiti.import("../../src/lib/seo/entity-seo-types.ts");
+    await navigate("seo");
+    const form = () => page.locator("form").filter({has:page.locator('input[name="page_id"][value="'+pageId+'"]')});
+    const field = name => form().locator('[name="'+name+'"]');
+    const save = () => form().getByRole("button",{name:"حفظ إعدادات السيو",exact:true});
+    const seoFeedback = () => feedback("page-seo:"+pageId);
+    async function readUi() {
+      const entries=await form().evaluate(el=>Array.from(new FormData(el).entries()).map(([key,value])=>[key,String(value)]));
+      const data=new FormData();for(const[key,value]of entries)data.append(key,value);
+      return seoOwner.toEntitySeoPersistence(seoOwner.readEntitySeoFormData(data));
+    }
+    await expect(form()).toHaveCount(1);await expect(save()).toBeEnabled();
+    const beforeUi=await readUi(), before=await snapshot("seo-before","before");
+    async function author(canonical) {
+      for(const name of ["seo_title","seo_description","focus_keyword"])await field(name).fill(PAGE_SEO_RECIPE[name]);
+      const tags=form().locator('[data-admin-tags-field]').filter({has:field("seo_keywords")});
+      // Use the owner's visible chip controls, never hidden-field injection.
+      while(await tags.getByRole("button",{name:/^حذف /u}).count())await tags.getByRole("button",{name:/^حذف /u}).first().click();
+      const input=tags.locator('input[type="text"]');
+      for(const keyword of [...PAGE_SEO_RECIPE.seo_keywords,PAGE_SEO_RECIPE.seo_keywords[0],"كلمة محذوفة"]){await input.fill(keyword);await input.press("Enter");}
+      await expect(tags.getByRole("button",{name:PAGE_SEO_RECIPE.seo_keywords[0],exact:true})).toHaveCount(1);
+      await tags.getByRole("button",{name:"حذف كلمة محذوفة",exact:true}).click();
+      await field("canonical_url").fill(canonical);
+      for(const name of ["robots_index","robots_follow"])for(const value of ["true","false",""])await select(form(),name,value);
+      await select(form(),"robots_index","false");
+      const authored=await readUi();
+      for(const [key,value] of Object.entries(PAGE_SEO_RECIPE))assert.deepEqual(authored[key],key==="canonical_url"?canonical:value);
+      for(const key of ["og_image","og_image_alt"])assert.deepEqual(authored[key],beforeUi[key],"OG controls remain unchanged.");
+      return authored;
+    }
+    const authored=await author(PAGE_SEO_INVALID_CANONICAL);
+    await action("page-seo-canonical-rejection",()=>save().click());
+    await expect(page).toHaveURL(url=>url.pathname===fixtures.pages.editorPath&&url.searchParams.has("seo_error"),{timeout:60_000});
+    await expect(seoFeedback()).toHaveAttribute("data-admin-feedback-variant","danger");
+    await expect(seoFeedback()).toContainText("الرابط الأساسي يجب أن يبدأ بـ http أو https.");
+    await expect(save()).toBeEnabled();
+    const rejectionUi=summarizePageSeoRejection(beforeUi,authored,await readUi());
+    const rejected=await snapshot("seo-rejected","rejected");assertPageCompositionUnchanged(before,rejected);
+    // The specialized redirect form has no generic rollback contract. Reopening is explicit,
+    // and reauthoring cannot count as proof of retaining the rejected draft.
+    await navigate("seo");await author(PAGE_SEO_RECIPE.canonical_url);
+    const token=randomUUID(),faultReceipts=[];
+    const fault=async operation=>{const request={id:randomUUID(),kind:"domain-write-fault-"+operation,entity:"pages",token},value=await compositionCheckpoint(request);for(const key of Object.keys(request))assert.equal(value[key],request[key]);assert.equal(value.status,"pass");faultReceipts.push(value.id);return value;};
+    let armed=false,responsePromise;const posts=[],listener=request=>{if(request.method()==="POST"&&request.headers()["next-action"]&&new URL(request.url()).origin===origin)posts.push(request);};
+    try {
+      await fault("arm");armed=true;page.on("request",listener);responsePromise=actionResponse();void responsePromise.catch(()=>{});await save().click();
+      const first=await fault("observe-blocked");assert.equal(first.observedOneStatement,true);
+      const pending=form().locator("fieldset[data-admin-form-pending-fields]");await expect(pending).toBeDisabled();await expect(pending).toHaveAttribute("inert","");await expect(pending).toHaveAttribute("aria-busy","true");await expect(field("seo_title")).toBeDisabled();await expect(save()).toBeDisabled();
+      await page.keyboard.press("Enter");await page.keyboard.press("Enter");
+      const second=await fault("observe-blocked");for(const key of ["backendPid","backendStartedAt","queryStartedAt","queryFingerprint","holderPid"])assert.equal(second[key],first[key]);assert.equal(posts.length,1);
+      const released=await fault("release");armed=false;assert.equal(released.ownedLockRolledBack,true);assert.equal(released.cancellationObserved,false);
+      assertActionAcknowledged(await responsePromise);
+      await expect(page).toHaveURL(url=>url.pathname===fixtures.pages.editorPath&&url.searchParams.get("seo_notice")==="saved",{timeout:60_000});
+      await expect(seoFeedback()).toHaveAttribute("data-admin-feedback-variant","success");await expect(save()).toBeEnabled();assert.equal(posts.length,1);
+    } finally {page.off("request",listener);try{if(armed)await fault("release");}finally{if(responsePromise)await Promise.allSettled([responsePromise]);}}
+    async function assertSavedUi(){const value=await readUi();for(const[key,expected]of Object.entries(PAGE_SEO_RECIPE))assert.deepEqual(value[key],expected);for(const key of["og_image","og_image_alt"])assert.deepEqual(value[key],beforeUi[key]);}
+    await assertSavedUi();const saved=await snapshot("seo-saved","saved");
+    await reload("seo");await assertSavedUi();const reloaded=await snapshot("seo-reloaded","reloaded");
+    return result("seo",{...scope,nativePhases:[...PAGE_SEO_PHASES],nativeCheckpoints:4,exactWrites:1,rejectionUi,
+      checkpoints:[before.id,rejected.id,saved.id,reloaded.id],faultToken:token,faultReceipts,
+      pending:{nativeStatementObservedTwice:true,sameStatementIdentity:true,normalKeyboardDedup:true,actionRequests:1,fieldsDisabledAndInert:true,ownedLockReleased:true},
+      verified:["authored_text_metadata","keywords_add_remove_deduplicate","robots_true_false_inherit","canonical_rejection_no_write","explicit_reauthor_retry","pending_dedup","saved_reload_native_score_actor_audit"],
+      notClaimed:["generic_form_rollback","permission_replay","og_picker","full_capability_axes"]});
+  });
+
   return { results, checkpoints, relatedRequiredCases: plan.relatedCases, automaticCoverage: [], globalClosed: false };
 }

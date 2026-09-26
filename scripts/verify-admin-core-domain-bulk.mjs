@@ -19,6 +19,9 @@ await test('Current claims and real JSX options derive four exact recipes, inclu
  assert.equal(plan.length,4);assert.equal(plan.reduce((count,row)=>count+row.steps.length,0),18);assert.deepEqual(plan.find(row=>row.entity==='categories').active,[]);
  assert.deepEqual(plan.find(row=>row.entity==='topics').active,['publish','unpublish','move_to_trash','move_category','feature','unfeature']);
 });
+const identity=randomUUID();
+await test('Actual fixed Action bodies retain one command identity without exporting request text',()=>{assert.equal(helper.readCoreBulkCommandIdentity(JSON.stringify([identity])),identity);assert.equal(helper.readCoreBulkCommandIdentity('name="1_command_id"\r\n\r\n'+identity+'\r\n--end'),identity);});
+for(const body of ['',null,'bad-id',JSON.stringify([identity,randomUUID()])])await test('Absent/ambiguous command identity fails closed '+String(body).slice(0,12),()=>assert.throws(()=>helper.readCoreBulkCommandIdentity(body)));
 for(const [name,change]of [
  ['missing-claim',x=>x.claims.pop()&&x.claims.shift()],
  ['duplicate-claim',x=>x.claims.push(x.claims[0])],
@@ -35,6 +38,15 @@ for(const [name,change]of [
  ['unwired-trash',x=>x.sources['content-categories']=x.sources['content-categories'].replace('isTrashView ? TRASH_BULK_OPTIONS : []','isTrashView ? [] : []')],
 ])await test(name+' fails plan',()=>{const candidate=structuredClone(input);change(candidate);assert.throws(()=>helper.buildCoreDomainBulkPlan(candidate));});
 
+
+// Exercise the actual temporary route callback, not a copied identity predicate.
+const bulkSource=readFileSync('scripts/fixtures/admin-core-domain-bulk-journeys.mjs','utf8'),bulkAst=ts.createSourceFile('bulk.mjs',bulkSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);let rejectionFunction,routeCallback;
+function locate(node){if(ts.isFunctionDeclaration(node)&&node.name?.text==='rejectUnknownTopicDelivery')rejectionFunction=node;ts.forEachChild(node,locate);}locate(bulkAst);assert.ok(rejectionFunction);
+function routeVisit(node){if(ts.isCallExpression(node)&&node.expression.getText(bulkAst)==='registerCorePageRoute'){assert.equal(routeCallback,undefined);routeCallback=node.arguments[2];}ts.forEachChild(node,routeVisit);}routeVisit(rejectionFunction);assert.ok(routeCallback);
+function routeProbe(){let aborted=0,forwarded=0;const state=new Function('assert','readCoreBulkCommandIdentity','actionRequest','recipe','let commandId,mutationAction,recoveryAction,attempts=0,recoveryRequests=0;const handler='+routeCallback.getText(bulkAst)+';return{handler,state:()=>({commandId,mutationAction,recoveryAction,attempts,recoveryRequests})};')(assert,helper.readCoreBulkCommandIdentity,()=>true,{});return{...state,counts:()=>({aborted,forwarded}),send:(id,action)=>state.handler({request:()=>({postData:()=>JSON.stringify([id]),headers:()=>({'next-action':action})}),abort:async()=>{aborted++;},fallback:async()=>{forwarded++;}})};}
+await test('Actual route binds one original abort and two reads to the same UUID and same distinct recovery Action',async()=>{const p=routeProbe(),id=randomUUID();await p.send(id,'a'.repeat(40));await p.send(id,'b'.repeat(40));await p.send(id,'b'.repeat(40));assert.deepEqual(p.counts(),{aborted:1,forwarded:2});assert.equal(p.state().recoveryRequests,2);assert.equal(p.state().attempts,1);});
+for(const[name,change]of[['foreign-command',()=>[randomUUID(),'b'.repeat(40)]],['mutation-replay',id=>[id,'a'.repeat(40)]],['different-manual-action',id=>[id,'c'.repeat(40)]]])await test('Actual route rejects '+name+' before forwarding',async()=>{const p=routeProbe(),id=randomUUID();await p.send(id,'a'.repeat(40));await p.send(id,'b'.repeat(40));await assert.rejects(p.send(...change(id)));assert.deepEqual(p.counts(),{aborted:1,forwarded:1});});
+await test('Actual route denies a third recovery without forwarding it',async()=>{const p=routeProbe(),id=randomUUID();await p.send(id,'a'.repeat(40));await p.send(id,'b'.repeat(40));await p.send(id,'b'.repeat(40));await assert.rejects(p.send(id,'b'.repeat(40)));assert.deepEqual(p.counts(),{aborted:1,forwarded:2});});
 let active=true;const handle={identity:{runId:'owned-b2-controlled'},renewDatabaseControlConnection:async()=>assert.ok(active)};
 function compile(file,ports){const output=ts.transpileModule(readFileSync(file,'utf8'),{fileName:file.replace(/\.mts$/,'.ts'),compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true}}).outputText;
  const loaded={exports:{}};new Function('require','module','exports',output)(specifier=>{if(Object.hasOwn(ports,specifier))return ports[specifier];assert.ok(specifier.startsWith('node:'));return require(specifier);},loaded,loaded.exports);return loaded.exports;}
@@ -53,7 +65,7 @@ async function insertAudit({id,type,entity=null,label=null,action,metadata,actor
 try{
  await db.exec("create table admin_users(id bigint,username text,email text,role text,is_active boolean);insert into admin_users values(7,'qa_admin_interaction','qa-admin-interaction@example.invalid','admin',true);create table admin_audit_logs(id bigint,action text,entity_type text,entity_id bigint,entity_label text,actor_admin_user_id bigint,metadata jsonb,created_at timestamptz);create table topics(id bigint,title text,status text,deleted_at timestamptz,is_featured boolean,category_id bigint,updated_at timestamptz);create table topic_categories(id bigint,name text,status text,deleted_at timestamptz,is_active boolean,updated_at timestamptz);create table topic_series(id bigint,name text,status text,deleted_at timestamptz,updated_at timestamptz);create table pages(id bigint,title text,status text,updated_at timestamptz);");
  for(const recipe of plan){
-  const operations=[],preparations=[],rejection={...pair(),attempts:1};
+  const operations=[],preparations=[],rejection={...pair(),attempts:1,...(recipe.entity==='topics'?{commandId:randomUUID(),recoveryRequests:2,sameRecoveryAction:true,originalMutationReplayed:false,unresolvedAfterRead:true,nextCommandScope:'explicit-new-command-after-full-reload'}:{})};
   for(const [ordinal,action]of recipe.steps.entries()){
    const step=helper.coreDomainBulkStep(recipe,action,ordinal);await db.exec('delete from '+recipe.table+';delete from admin_audit_logs;');
    if(!step.deleted)for(const target of recipe.targets){
@@ -74,7 +86,7 @@ try{
     const writes=recipe.targets.map(row=>({table:'topics',id:row.id,expected:{title:row.label,status:'published'},auditEntityType:'topic',auditEntityLabel:row.label,auditActions:['topic.publish'],auditMetadata:{operation:'bulk_publish',atomic:true},auditSince:since,exactAuditCount:1,exactCommandReceiptCount:0}));
     publicationAudit=record({kind:'form-save-native',caseId:'domain-bulk-topics-publication',formConsumer:recipe.consumer,surface:'bulk-publication-audit',...await readback.verifyCoreExecutedWriteProjections(handle,{status:'in-progress',startedAt:since,databaseReadback:writes})}).id;
    }
-   operations.push({action,ordinal,requests:1,nativeState:state.id,nativeWrite:saved.id,publicationAudit,cancelled:step.confirmation?pair():null});
+   operations.push({action,ordinal,requests:1,nativeState:state.id,nativeWrite:saved.id,publicationAudit,cancelled:step.confirmation?pair():null,...(recipe.entity==='topics'?{commandId:state.audit.find(row=>row.metadata?.command).metadata.command.id}:{})});
    await test(recipe.entity+'/'+action+'/'+ordinal+' actual SQL projects current state and exact domain audit shape',()=>{assert.equal(saved.writes.length,2);});
   }
   if(recipe.entity==='categories')for(const target of recipe.targets){
@@ -97,6 +109,14 @@ try{
   ['rejection-mutated-data',(_b,n)=>n.records.find(r=>r.phase==='after').publicDataSha256='c'.repeat(64)],
   ['wrong-fingerprint-run',(_b,n)=>n.records.find(r=>r.kind==='form-permission-fingerprint').ownedRunId='another-run'],
   ['missing-audit',(_b,n)=>n.records.find(r=>r.kind==='form-save-native').writes[0].audit=[]],
+  ['topic-different-recovery-action',b=>b.domainBulk.outcomes.find(r=>r.entity==='topics').rejection.sameRecoveryAction=false],
+  ['topic-reused-unknown-UUID',(b,n)=>{const outcome=b.domainBulk.outcomes.find(r=>r.entity==='topics'),operation=outcome.actualCommands[0],event=n.records.find(r=>r.id===operation.nativeState).audit.find(r=>r.metadata?.command);event.metadata.command.id=outcome.rejection.commandId;event.metadata.command.result.commandId=outcome.rejection.commandId;operation.commandId=outcome.rejection.commandId;b.evidence.find(r=>r.entity==='topics').actualCommands=outcome.actualCommands;}],
+  ['topic-unbound-native-UUID',b=>{const outcome=b.domainBulk.outcomes.find(r=>r.entity==='topics');outcome.actualCommands[0].commandId=randomUUID();b.evidence.find(r=>r.entity==='topics').actualCommands=outcome.actualCommands;}],
+  ['topic-missing-native-receipt',(b,n)=>{const outcome=b.domainBulk.outcomes.find(r=>r.entity==='topics');n.records.find(r=>r.id===outcome.actualCommands[0].nativeState).audit.find(r=>r.metadata?.command).metadata.command=undefined;}],
+  ['topic-mutation-replayed',b=>b.domainBulk.outcomes.find(r=>r.entity==='topics').rejection.originalMutationReplayed=true],
+  ['topic-missing-manual-recovery',b=>b.domainBulk.outcomes.find(r=>r.entity==='topics').rejection.recoveryRequests=1],
+  ['topic-false-resolved-claim',b=>b.domainBulk.outcomes.find(r=>r.entity==='topics').rejection.unresolvedAfterRead=false],
+  ['topic-false-same-command-retry',b=>b.domainBulk.outcomes.find(r=>r.entity==='topics').rejection.nextCommandScope='retry'],
   ['unmatched-state-audit',(_b,n)=>n.records.find(r=>r.kind==='terminal-domain-state').audit[0].id=999999],
   ['unexpected-domain-event',(_b,n)=>n.records.find(r=>r.kind==='terminal-domain-state').audit.push({...n.records.find(r=>r.kind==='terminal-domain-state').audit[0],id:999999})],
  ])await test(name+' denied by final join',async()=>{const b=structuredClone(browser),n=structuredClone(broker);change(b,n);await assert.rejects(completion.verifyCoreDomainBulkCompletion(handle,b,fixture,n));});

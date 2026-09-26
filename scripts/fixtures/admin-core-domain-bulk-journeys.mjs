@@ -96,6 +96,12 @@ export function assertCoreDomainBulkNative(result,recipe,step){
 }
 
 
+/** Only ephemeral command UUIDs are returned; raw Action bodies are never persisted. */
+export function readCoreBulkCommandIdentity(body){
+ assert.equal(typeof body,'string');const ids=[...new Set(body.match(/\b[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}\b/gi)??[])];
+ assert.equal(ids.length,1,'A fixed Topics request must carry one unambiguous command UUID.');return ids[0].toLowerCase();
+}
+
 /** Actual bulk UI on independent targets. Global Empty Trash is never invoked. */
 export async function runCoreDomainBulkJourneys(ctx){
  const {page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint,databaseReadback}=ctx;
@@ -120,7 +126,34 @@ export async function runCoreDomainBulkJourneys(ctx){
   try{await openConfirm(step);await dialog.locator('[data-admin-confirm-cancel]').click();await expect(dialog).toHaveCount(0);await expect(bar.getByRole('button',{name:'تنفيذ',exact:true})).toBeFocused();assert.equal(posts,0);}finally{page.off('request',count);}
   const after=await fingerprint(correlation,'after');unchanged(before,after);for(const target of recipe.targets)await expect(selection(target)).toBeChecked();return {before:before.id,after:after.id};
  }
+ async function rejectUnknownTopicDelivery(recipe,step){
+  assert.equal(recipe.entity,'topics');assert.equal(step.confirmation,false);const correlation=randomUUID(),before=await fingerprint(correlation,'before');
+  let commandId,mutationAction,recoveryAction,attempts=0,recoveryRequests=0;
+  const remove=await registerCorePageRoute(page,'**/*',async route=>{
+   const request=route.request();if(!actionRequest(request,recipe)){await route.fallback();return;}
+   const identity=readCoreBulkCommandIdentity(request.postData()),action=request.headers()['next-action'];
+   if(!commandId){commandId=identity;mutationAction=action;attempts++;await route.abort('failed');return;}
+   assert.equal(identity,commandId,'Automatic and explicit receipt recovery must retain the authored command identity.');
+   assert.notEqual(action,mutationAction,'A lost reply must never replay the original mutation.');
+   if(recoveryAction===undefined)recoveryAction=action;else assert.equal(action,recoveryAction,'Automatic and manual recovery must use the same actual receipt Action.');recoveryRequests++;assert.ok(recoveryRequests<=2);await route.fallback();
+  });
+  const recovery=page.getByRole('button',{name:'استعادة نتيجة العملية',exact:true});
+  try{
+   await bar.getByRole('button',{name:'تنفيذ',exact:true}).click();await expect(recovery).toBeEnabled({timeout:30_000});
+   await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first()).toBeVisible();
+   assert.equal(attempts,1);assert.equal(recoveryRequests,1);for(const target of recipe.targets)await expect(selection(target)).toBeChecked();
+   const response=actionResponse();response.catch(()=>{});await recovery.click();assertActionAcknowledged(await response);await expect(recovery).toBeEnabled({timeout:30_000});
+   await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first()).toBeVisible();
+   assert.equal(attempts,1);assert.equal(recoveryRequests,2);for(const target of recipe.targets)await expect(selection(target)).toBeChecked();
+  }finally{await remove();}
+  const after=await fingerprint(correlation,'after');unchanged(before,after);
+  // With no durable receipt the existing contract stays unknown. A full reload
+  // ends that mounted scope; the ordinary schedule below authors a NEW command.
+  await page.reload({waitUntil:'domcontentloaded'});await expect(recovery).toHaveCount(0);await select(recipe,step);
+  return {before:before.id,after:after.id,attempts,commandId,recoveryRequests,sameRecoveryAction:true,originalMutationReplayed:false,unresolvedAfterRead:true,nextCommandScope:'explicit-new-command-after-full-reload',classification:'Pre-delivery abort plus same-identity receipt reads; no receipt exists. No rollback, resolved result or same-command retry claim.'};
+ }
  async function rejectBeforeDelivery(recipe,step){
+  if(recipe.entity==='topics')return rejectUnknownTopicDelivery(recipe,step);
   const correlation=randomUUID(),before=await fingerprint(correlation,'before');await openConfirm(step);let count=0;
   const remove=await registerCorePageRoute(page,'**/*',async route=>{if(actionRequest(route.request(),recipe)){count++;await route.abort('failed');}else await route.fallback();});
   try{await (step.confirmation?dialog.locator('[data-admin-confirm-submit]'):bar.getByRole('button',{name:'تنفيذ',exact:true})).click();
@@ -163,6 +196,12 @@ export async function runCoreDomainBulkJourneys(ctx){
    await page.reload({waitUntil:'domcontentloaded'});
    for(const target of recipe.targets)if(step.deleted||step.trash||step.trashed)await expect(selection(target)).toHaveCount(0);else await expect(selection(target)).toBeVisible({timeout:60_000});
    const state=await probe(recipe,startedAt),descriptors=coreDomainBulkDescriptors(recipe,step,startedAt,state);
+   let nativeCommandId;
+   if(recipe.entity==='topics'){
+    const receipts=state.audit.filter(row=>row.metadata?.command);assert.equal(receipts.length,1);
+    nativeCommandId=receipts[0].metadata.command.id;assert.match(nativeCommandId,/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/);
+    if(ordinal===0)assert.notEqual(nativeCommandId,rejection.commandId,'The explicit command after reload must use a new native receipt identity.');
+   }
    const saved=await nativeCheckpoint({id:randomUUID(),kind:'form-save-native',caseId:'domain-bulk-'+recipe.entity,formConsumer:recipe.consumer,surface:'bulk',startedAt,descriptors});assertCoreDomainBulkNative(saved,recipe,step);
    // Publication retains per-topic domain audits in addition to the aggregate
    // immutable receipt. Both kinds remain mandatory, separately attributed.
@@ -170,7 +209,7 @@ export async function runCoreDomainBulkJourneys(ctx){
     const rows=recipe.targets.map(row=>({table:'topics',id:row.id,expected:{title:row.label,status:'published'},auditEntityType:'topic',auditEntityLabel:row.label,auditActions:['topic.publish'],auditMetadata:{operation:'bulk_publish',atomic:true},auditSince:startedAt,exactAuditCount:1,exactCommandReceiptCount:0}));
     const result=await nativeCheckpoint({id:randomUUID(),kind:'form-save-native',caseId:'domain-bulk-topics-publication',formConsumer:recipe.consumer,surface:'bulk-publication-audit',startedAt,descriptors:rows});assert.equal(result.writes.length,2);for(const row of result.writes)assert.equal(row.expectedActorId,recipe.actorId);publicationAudit=result.id;
    }
-   actual.push({action,ordinal,requests,nativeState:state.id,nativeWrite:saved.id,publicationAudit,cancelled});if(ordinal===recipe.steps.length-1)databaseReadback.push(...descriptors);
+   actual.push({action,ordinal,requests,nativeState:state.id,nativeWrite:saved.id,publicationAudit,cancelled,...(nativeCommandId?{commandId:nativeCommandId}:{})});if(ordinal===recipe.steps.length-1)databaseReadback.push(...descriptors);
   }
   const result={entity:recipe.entity,consumer:recipe.consumer,targetIds:recipe.ids,actualCommands:actual,preparationNativeIds:preparations,rejection,pendingDuplicateBlocked:true,selectionRetainedOnFailure:true,selectionClearedAfterSuccess:true};outcomes.push(result);return result;
  });

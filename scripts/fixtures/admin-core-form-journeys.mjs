@@ -51,6 +51,16 @@ export function buildCoreTemplateFormPlan({ formManifest, fixtures, requiredCase
   return { editors, creates };
 }
 
+/** Exact authored create projection only; generated identity/default config are not claims. */
+export function buildCoreTemplateCreateReadback(kind, id, name, slug, authored) {
+  const recipe=recipes[kind];assert.ok(recipe&&!['media-sidebar','media-hub'].includes(kind));assert.ok(Number.isSafeInteger(id)&&id>0);assert.ok(typeof name==='string'&&name.trim());
+  if(kind!=='breadcrumb')assert.ok(typeof slug==='string'&&slug.trim());
+  const fields=recipe.fields.filter(([fieldName])=>kind==='feed'?fieldName==='widget_title':kind==='cards'?['item_0_title','item_0_body'].includes(fieldName):false);
+  assert.deepEqual(authored.map(row=>row.name),fields.map(row=>row[0]),'Every actually authored create config field must be accounted for exactly once.');
+  for(const [index,row]of authored.entries()){assert.deepEqual(row.path,fields[index][1]);assert.ok(typeof row.value==='string'&&row.value.trim());}
+  return {table:recipe.table,id,expected:{name,...(kind==='breadcrumb'?{}:{slug})},expectedJson:authored.map(({path,value})=>({column:'config',path,value})),auditEntityType:'content_block_template',auditActions:['content_block_template.create'],auditEntityLabel:name,auditMetadata:kind==='content'?{slug}:{blockType:kind}};
+}
+
 export async function runCoreTemplateFormJourneys(ctx) {
   const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases } = ctx;
   assert.equal(new URL(origin).hostname, "127.0.0.1", "Only the owned local application may be exercised.");
@@ -203,12 +213,12 @@ export async function runCoreTemplateFormJourneys(ctx) {
       const name = `QA Core ${recipe.kind} created ${suffix}`, slug = `qa-core-${recipe.kind}-${suffix}`;
       await field(form, "name").fill(name);
       if (recipe.kind !== "breadcrumb") await field(form, "slug").fill(slug);
-      if (recipe.kind === "feed") await field(form, "widget_title").fill(`QA Feed ${suffix}`);
-      // Only real rendered authored fields are allowed. The initial Cards modal
-      // has none; its minimum-item rejection must remain a genuine failure.
-      if (recipe.kind === "cards" && await field(form, "item_0_title").count()) {
-        await field(form, "item_0_title").fill(`QA Card ${suffix}`);
-        await field(form, "item_0_body").fill(`QA Card body ${suffix}`);
+      const createAuthored=[];
+      const createFields=recipe.fields.filter(([fieldName])=>recipe.kind==='feed'?fieldName==='widget_title':recipe.kind==='cards'?['item_0_title','item_0_body'].includes(fieldName):false);
+      for(const [fieldName,path]of createFields){
+        const value=fieldName==='widget_title'?`QA Feed ${suffix}`:fieldName==='item_0_title'?`QA Card ${suffix}`:`QA Card body ${suffix}`;
+        // Missing rendered fields remain a real failure; never fabricate default cards.
+        await expect(field(form,fieldName)).toHaveCount(1);await field(form,fieldName).fill(value);createAuthored.push({name:fieldName,path,value});
       }
       await observe("template-create-dirty-close-cancel", async () => {
         await form.getByRole("button", { name: "إلغاء", exact: true }).click();
@@ -228,11 +238,16 @@ export async function runCoreTemplateFormJourneys(ctx) {
         await expect(form.locator("#name-error")).toHaveText(recipe.kind === "hero" ? "اسم الهيرو مطلوب." : ["feed", "featured"].includes(recipe.kind) ? "اسم الموديول مطلوب." : "اسم البلوك مطلوب.");
         await expect(field(form, "name")).toHaveValue("   ");
         if (recipe.kind !== "breadcrumb") await expect(field(form, "slug")).toHaveValue(slug);
-        if (recipe.kind === "feed") await expect(field(form, "widget_title")).toHaveValue(`QA Feed ${suffix}`);
+        await assertFields(form,createAuthored);
         await expect(submit(form)).toBeEnabled();
       });
       await field(form, "name").fill(name);
       const caseId = `core-template-${recipe.kind}-create-reject-retry`;
+      await ctx.permissionReplay.restoreDraft({
+        mapping:{caseId,journeyId:caseId,formConsumer:recipe.entry.id,surface:recipe.surface},form,submit:submit(form),dirtyNavigation:"close",
+        assertDraft:async()=>{await expect(field(form,"name")).toHaveValue(name);if(recipe.kind!=="breadcrumb")await expect(field(form,"slug")).toHaveValue(slug);await assertFields(form,createAuthored);},
+        cancelDirty:async()=>{const original=page.url(),trigger=form.getByRole("button",{name:"إلغاء",exact:true});await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form).toBeVisible();},
+      });
       const id = await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId,formConsumer:recipe.entry.id,surface:recipe.surface},permissionEvidence,perform:async()=>{
       await acknowledge(form);
       await observe("template-create-to-edit-handoff", async () => {
@@ -248,10 +263,15 @@ export async function runCoreTemplateFormJourneys(ctx) {
       });
       const id = Number(new URL(page.url()).pathname.split("/").at(-1));
       await observe("template-created-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
-      await expect(field(editorForm(id), "name")).toHaveValue(name);
-      // The creation audit predates the authored edit and has its own label.
-      const descriptor = { table: recipe.table, id, expected: { name }, auditEntityType: "content_block_template", auditActions: ["content_block_template.create"], auditEntityLabel: name, auditMetadata: recipe.kind === "content" ? { slug } : { blockType: recipe.kind } };
-      databaseReadback.push({...descriptor,expected:{}});
+      const createdForm=editorForm(id);
+      await expect(field(createdForm,"name")).toHaveValue(name);
+      // The editor carries its persisted immutable slug in a hidden input.
+      if(recipe.kind!=='breadcrumb')await expect(createdForm.locator('input[name="slug"]')).toHaveValue(slug);
+      if(createAuthored.length){await contentTab(createdForm,recipe);await assertFields(createdForm,createAuthored);}
+      const descriptor=buildCoreTemplateCreateReadback(recipe.kind,id,name,slug,createAuthored);
+      // Immediate native save proves create values before editAndRead authors new
+      // config. The final read retains only this earlier creation audit contract.
+      databaseReadback.push({...descriptor,expected:{},expectedJson:[]});
       return {value:id,nativeWrites:[descriptor]};
       }});
       const details = await editAndRead(recipe, id, `${name} saved`);
