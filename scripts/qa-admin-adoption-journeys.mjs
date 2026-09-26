@@ -25,6 +25,9 @@ const inventory = [
 ];
 const startedAt = new Date().toISOString();
 const evidence = [], databaseReadback = [], menuIntegrityReadback = [], requiredCases = [];
+const inventoryOnly = process.argv.includes("--inventory-only");
+let driverCompleted = false, activeCase = "bootstrap";
+const progress = [];
 const previewMatrix = collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.flatMap(consumer =>
   ["published", "unpublished", "deleted"].flatMap(publication => ["authorized", "revoked"].map(session => ({
     consumer: consumer.id, publication, session, status: "open", evidence: null,
@@ -39,11 +42,25 @@ const sourceFiles = ["src/lib/admin/form-system/adoption-manifest.ts", "src/lib/
 const sourceHashes = Object.fromEntries(sourceFiles.map(file => [file, createHash("sha256").update(readFileSync(join(root, file))).digest("hex")]));
 const write = (file, value) => writeFileSync(join(output, file), JSON.stringify(value, null, 2) + "\n");
 const errors = [];
+function checkpoint(step, phase, details = {}) {
+  progress.push({ case: activeCase, step, phase, at: new Date().toISOString(), ...details });
+  write("admin-adoption-progress.json", { startedAt, sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256 ?? null, steps: progress });
+}
+async function observe(step, task) {
+  checkpoint(step, "begin");
+  try { const value = await task(); checkpoint(step, "complete"); return value; }
+  catch (error) {
+    checkpoint(step, "failed");
+    if (activeCase === "bootstrap") { errors.push({ id: "bootstrap", message: "Bootstrap stage failed: " + step }); write("admin-adoption-browser.json", receipt()); }
+    throw error;
+  }
+}
 function receipt() {
   const covered = new Map(evidence.filter(row => row.status === "pass").flatMap(row => row.coverage.map(key => [key, row.id])));
   const cases = requiredCases.map(row => ({ ...row, status: covered.has(row.key) ? "behavior_verified" : "open", evidence: covered.get(row.key) ?? null }));
   return {
-    status: errors.length ? "fail" : "pass", proofBoundary: "owned local production Next and real authenticated application persistence",
+    status: errors.length ? "fail" : inventoryOnly || driverCompleted ? "pass" : "running",
+    inventoryOnly, driverCompleted, proofBoundary: inventoryOnly ? "applicability inventory only; no browser execution" : "owned local production Next and real authenticated application persistence",
     globalClosed: cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete),
     inventorySource: sourceHashes, sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256 ?? null,
     startedAt, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, menuIntegrityReadback, previewMatrix, previewNonApplicability, errors,
@@ -79,7 +96,7 @@ for (const consumer of inventory) {
 }
 for (const preview of collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION) requiredCases.push({ key: "preview:" + preview.id, consumer: preview.id, boundary: "preview", scenario: "actual_destination" });
 write("admin-adoption-browser.json", receipt());
-if (process.argv.includes("--inventory-only")) {
+if (inventoryOnly) {
   console.log(JSON.stringify({ inventoryOnly: true, consumers: inventory.length, axes: axes.length, requiredCases: requiredCases.length, globalClosed: false }));
   process.exit(0);
 }
@@ -90,9 +107,9 @@ assert.ok(process.env.QA_ADMIN_USERNAME && process.env.QA_ADMIN_PASSWORD, "The o
 const fixtures = JSON.parse(readFileSync(process.env.QA_ADMIN_FIXTURES, "utf8"));
 const allowedStorage = JSON.parse(process.env.QA_ADMIN_STORAGE_PUBLIC_PREFIXES || "[]");
 assert.ok(allowedStorage.every(value => new URL(value).hostname === "127.0.0.1"));
-const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-const page = await context.newPage();
+const browser = await observe("browser-launch", () => chromium.launch({ headless: true }));
+const context = await observe("context-create", () => browser.newContext({ viewport: { width: 1440, height: 1000 } }));
+const page = await observe("page-create", () => context.newPage());
 page.setDefaultTimeout(25_000);
 const externalRequests = [];
 const ownedNetworkOnly = async route => {
@@ -100,22 +117,51 @@ const ownedNetworkOnly = async route => {
   if (url.startsWith(origin + "/") || allowedStorage.some(prefix => url.startsWith(prefix)) || /^(?:data|blob):/.test(url)) await route.continue();
   else { externalRequests.push(new URL(url).origin); await route.abort("blockedbyclient"); }
 };
-await context.route("**/*", ownedNetworkOnly);
+await observe("owned-network-guard", () => context.route("**/*", ownedNetworkOnly));
 const formKey = (id, surface, scenario) => ["form", id, surface, scenario].join(":");
 const saveButton = () => page.locator('[data-admin-form-action="save"]');
 const feedback = variant => page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="' + variant + '"]');
-const actionResponse = (target = page) => target.waitForResponse(response => response.request().method() === "POST" && Boolean(response.request().headers()["next-action"]), { timeout: 60_000 });
-async function saveForm({ rejected = false } = {}) {
+class UnacknowledgedActionError extends Error {}
+const actionResponse = (target = page) => observe("action-headers", async () => {
+  try { return await target.waitForResponse(response => response.request().method() === "POST" && Boolean(response.request().headers()["next-action"]), { timeout: 60_000 }); }
+  catch { throw new UnacknowledgedActionError("Action HTTP acknowledgement was not observed within 60000ms."); }
+});
+// Next Flight resolves the action model before stream EOF. This is only the
+// HTTP acknowledgement; canonical UI outcomes, reloads and native readback follow.
+function assertActionAcknowledged(response) {
+  if (response.status() >= 400) throw new UnacknowledgedActionError("Action HTTP acknowledgement failed.");
+  checkpoint("action-acknowledgement", "received", { httpStatus: response.status(), proofBoundary: "http_acknowledgement_only" });
+}
+
+async function diagnosticWithin(task, fallback) {
+  let timer;
+  try { return await Promise.race([task(), new Promise(resolve => { timer = setTimeout(() => resolve(fallback), 1_000); })]); }
+  catch { return fallback; }
+  finally { clearTimeout(timer); }
+}
+async function failureScreenshot(id) {
+  const safe = await diagnosticWithin(async () => new URL(page.url()).pathname !== "/admin/login" && await page.locator('input[type="password"]:visible').count() === 0, false);
+  if (safe) await observe("failure-screenshot", () => page.screenshot({ path: join(output, id + "-failure.png"), fullPage: true, timeout: 5_000 })).catch(() => {});
+}
+
+async function saveForm({ rejectedField = null } = {}) {
   const pending = actionResponse();
-  await saveButton().click();
+  await observe("save-click", () => saveButton().click());
   const response = await pending;
-  assert.ok(response.status() < 400, "Next action did not settle over the real transport.");
-  await response.finished();
-  await expect(saveButton()).toBeEnabled({ timeout: 60_000 });
-  if (rejected) await expect(feedback("danger").first()).toBeVisible();
-  else await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first()).toBeVisible();
+  assertActionAcknowledged(response);
+  await observe("save-enabled", () => expect(saveButton()).toBeEnabled({ timeout: 60_000 }));
+  await observe("save-feedback", async () => {
+    if (rejectedField !== null) {
+      assert.equal(rejectedField, "slug", "The selected rejection contract is the exact taxonomy slug field.");
+      await expect(page.locator('[name="slug"]')).toHaveAttribute("aria-invalid", "true");
+      await expect(page.locator('[name="slug"]')).toHaveAttribute("aria-describedby", "admin-slug-error");
+      await expect(page.locator("#admin-slug-error")).toBeVisible();
+      await expect(page.locator("#admin-slug-error")).toHaveText("اختر Slug مختلفًا.");
+    } else await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first()).toBeVisible();
+  });
 }
 async function run(id, coverage, task) {
+  activeCase = id; checkpoint("case", "begin");
   const startedAt = new Date().toISOString();
   try {
     const details = await task();
@@ -127,12 +173,16 @@ async function run(id, coverage, task) {
   } catch (error) {
     errors.push({ id, message: String(error?.message ?? error) });
     evidence.push({ id, status: "fail", coverage: [], startedAt, finishedAt: new Date().toISOString() });
-    await page.screenshot({ path: join(output, id + "-failure.png"), fullPage: true }).catch(() => {});
+    checkpoint("case", "failed");
+    write("admin-adoption-browser.json", receipt());
+    await failureScreenshot(id);
+    if (error instanceof UnacknowledgedActionError) throw error;
   }
+  checkpoint("case", "end");
   write("admin-adoption-browser.json", receipt());
 }
 async function reloadField(name, expected) {
-  await page.reload({ waitUntil: "domcontentloaded" });
+  await observe("page-page-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
   await expect(page.locator('[name="' + name + '"]').first()).toHaveValue(expected);
 }
 async function selectListbox(label, option) {
@@ -148,7 +198,7 @@ async function popupProof(link, expected, expectedText) {
   await link.click();
   const popup = await popupPromise;
   try {
-    await popup.waitForLoadState("domcontentloaded");
+    await observe("popup-document-ready", () => popup.waitForLoadState("domcontentloaded"));
     await expect(popup.locator("body")).not.toContainText("Internal Server Error");
     await expect(popup.locator("main").first()).toBeVisible();
     await expect(popup.locator("h1").first()).toBeVisible();
@@ -156,34 +206,41 @@ async function popupProof(link, expected, expectedText) {
     if (expectedText) await expect(popup.getByText(expectedText, { exact: false }).first()).toBeVisible();
     assert.notEqual(new URL(popup.url()).pathname, "/admin/login");
     return { destination: expected, trustedClick: true, authenticatedDestination: expected.startsWith("/admin/"), usableDocument: true };
-  } finally { await popup.close(); await page.bringToFront(); assert.equal(page.url(), caller); }
+  } finally { await observe("popup-close", () => popup.close()); await page.bringToFront(); assert.equal(page.url(), caller); }
 }
 try {
-  await page.goto(origin + "/admin/login", { waitUntil: "domcontentloaded" });
-  await page.locator('input[name="username"]').fill(process.env.QA_ADMIN_USERNAME);
-  await page.locator('input[name="password"]').fill(process.env.QA_ADMIN_PASSWORD);
-  await Promise.all([page.waitForURL(url => url.pathname === "/admin", { timeout: 60_000 }), page.locator('button[type="submit"]').click()]);
+  activeCase = "login";
+  await observe("page-page-navigation", () => page.goto(origin + "/admin/login", { waitUntil: "domcontentloaded" }));
+  await observe("login-fields", async () => {
+    await page.locator('input[name="username"]').fill(process.env.QA_ADMIN_USERNAME);
+    await page.locator('input[name="password"]').fill(process.env.QA_ADMIN_PASSWORD);
+  });
+  await observe("login-submit-redirect", () => Promise.all([page.waitForURL(url => url.pathname === "/admin", { timeout: 60_000 }), page.locator('button[type="submit"]').click()]));
   delete process.env.QA_ADMIN_USERNAME; delete process.env.QA_ADMIN_PASSWORD;
-  await expect(page.getByRole("heading", { name: "الرئيسية", exact: true, level: 1 })).toBeVisible();
-  evidence.push({ id: "existing-auth-login", status: "pass", coverage: [], authenticated: true, sessionArtifactWritten: false });
+  const dashboardHeading = page.getByRole("heading", { name: /^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u, level: 1 });
+  await observe("dashboard-ready", () => expect(dashboardHeading).toBeVisible({ timeout: 60_000 }));
+  evidence.push({ id: "existing-auth-login", status: "pass", coverage: [], authenticated: true,
+    dashboardState: (await dashboardHeading.textContent()).trim(), sessionArtifactWritten: false });
+  write("admin-adoption-browser.json", receipt());
+  checkpoint("login", "complete");
 
   const suffix = Date.now().toString(36);
   for (const kind of ["category", "series"]) {
     const plural = kind === "category" ? "categories" : "series";
     const id = "topic-" + kind + "-create-edit";
     await run(kind + "-create-reject-retry-edit-reload", [formKey(id, "create", "save_reload"), formKey(id, "create", "failure_preserves_input"), formKey(id, "create", "retry"), formKey(id, "edit", "save_reload")], async () => {
-      await page.goto(origin + "/admin/content/" + plural + "/new", { waitUntil: "domcontentloaded" });
+      await observe("page-page-navigation", () => page.goto(origin + "/admin/content/" + plural + "/new", { waitUntil: "domcontentloaded" }));
       const name = "QA Audit " + kind + " " + suffix;
       const slug = "qa-audit-" + kind + "-" + suffix;
       await page.locator('input[name="name"]').fill(name);
       if (kind === "series") await selectListbox("التصنيف *", fixtures.category.name);
       await page.locator('input[name="slug"]').fill(fixtures[kind].slug);
-      await saveForm({ rejected: true });
+      await saveForm({ rejectedField: "slug" });
       await expect(page.locator('input[name="name"]')).toHaveValue(name);
       await expect(page.locator('input[name="slug"]')).toHaveValue(fixtures[kind].slug);
       await page.locator('input[name="slug"]').fill(slug);
       await saveForm();
-      await page.waitForURL(url => new RegExp("^/admin/content/" + plural + "/[0-9]+$").test(url.pathname));
+      await observe("page-expected-route", () => page.waitForURL(url => new RegExp("^/admin/content/" + plural + "/[0-9]+$").test(url.pathname)));
       const createdId = Number(new URL(page.url()).pathname.split("/").at(-1));
       await reloadField("name", name);
       const edited = name + " saved";
@@ -197,7 +254,7 @@ try {
 
   await run("category-transport-failure-preserves-retries", [formKey("topic-category-create-edit", "edit", "failure_preserves_input"), formKey("topic-category-create-edit", "edit", "retry")], async () => {
     const path = "/admin/content/categories/" + fixtures.category.id;
-    await page.goto(origin + path, { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + path, { waitUntil: "domcontentloaded" }));
     const original = await page.locator('input[name="name"]').inputValue();
     const desired = original + " Audit saved";
     await page.locator('input[name="name"]').fill(desired);
@@ -212,10 +269,10 @@ try {
     await expect(page.locator('input[name="name"]')).toHaveValue(desired);
     assert.equal(blocked, 1);
     await page.unroute("**/*", failBeforeSend);
-    const observer = await context.newPage();
-    await observer.goto(origin + path, { waitUntil: "domcontentloaded" });
+    const observer = await observe("context-page-create", () => context.newPage());
+    await observe("observer-page-navigation", () => observer.goto(origin + path, { waitUntil: "domcontentloaded" }));
     await expect(observer.locator('input[name="name"]')).toHaveValue(original);
-    await observer.close();
+    await observe("observer-close", () => observer.close());
     await saveForm(); await reloadField("name", desired);
     await page.locator('input[name="name"]').fill(original);
     await saveForm(); await reloadField("name", original);
@@ -224,7 +281,7 @@ try {
   });
 
   await run("topic-editor-save-reload", [formKey("topic-article-create-edit", "edit", "save_reload")], async () => {
-    await page.goto(origin + "/admin/content/topics/" + fixtures.topic.id, { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/content/topics/" + fixtures.topic.id, { waitUntil: "domcontentloaded" }));
     const title = await page.locator('[name="title"]').inputValue();
     await page.locator('[name="title"]').fill(title + " Audit saved");
     await saveForm(); await reloadField("title", title + " Audit saved");
@@ -234,7 +291,7 @@ try {
     return { savedAndRestoredThroughActualEditor: true };
   });
   await run("article-preview-public-destinations", ["preview:topic-article-edit-preview-public"], async () => {
-    await page.goto(origin + "/admin/content/topics/" + fixtures.topic.id, { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/content/topics/" + fixtures.topic.id, { waitUntil: "domcontentloaded" }));
     const internal = await popupProof(page.locator('a[data-admin-entity-preview-action="internal-preview"]'), "/admin/content/topics/" + fixtures.topic.id + "/preview", fixtures.topic.title);
     const link = page.locator('a[data-admin-entity-preview-action="public-view"]');
     const href = await link.getAttribute("href");
@@ -243,13 +300,13 @@ try {
     return { destinations: [internal, published], previewCells: [{ consumer: "topic-article-edit-preview-public", publication: "published", session: "authorized" }] };
   });
   await run("media-draft-create-preview", [formKey("topic-media-create-edit", "news:create", "save_reload"), "preview:topic-media-edit-preview"], async () => {
-    await page.goto(origin + "/admin/content/topics/new?type=news", { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/content/topics/new?type=news", { waitUntil: "domcontentloaded" }));
     const title = "QA Audit media " + suffix;
     await page.locator('[name="title"]').fill(title);
     await page.locator('#content-category-listbox').click();
     await page.getByRole("option", { name: fixtures.category.name, exact: true }).click();
     await saveForm();
-    await page.waitForURL(url => /^\/admin\/content\/topics\/[0-9]+$/.test(url.pathname));
+    await observe("page-expected-route", () => page.waitForURL(url => /^\/admin\/content\/topics\/[0-9]+$/.test(url.pathname)));
     const id = Number(new URL(page.url()).pathname.split("/").at(-1));
     await reloadField("title", title);
     const destination = await popupProof(page.locator('a[data-admin-entity-preview-action="internal-preview"]'), "/admin/content/topics/" + id + "/preview", title);
@@ -257,30 +314,30 @@ try {
     return { createdId: id, destination, previewCells: [{ consumer: "topic-media-edit-preview", publication: "unpublished", session: "authorized" }] };
   });
   await run("category-preview-destination", ["preview:topic-category-collection-preview"], async () => {
-    await page.goto(origin + "/admin/content/categories", { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/content/categories", { waitUntil: "domcontentloaded" }));
     const expected = "/topics?category=" + encodeURIComponent(fixtures.category.slug);
     const destination = await popupProof(page.locator('a[href="' + expected + '"]').first(), expected, null);
     return { destination, previewCells: [{ consumer: "topic-category-collection-preview", publication: "published", session: "authorized" }] };
   });
   await run("series-preview-destination", ["preview:topic-series-collection-preview"], async () => {
-    await page.goto(origin + "/admin/content/series", { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/content/series", { waitUntil: "domcontentloaded" }));
     const expected = "/admin/content/topics?series=" + fixtures.series.id;
     const destination = await popupProof(page.locator('a[href="' + expected + '"]').first(), expected, fixtures.topic.title);
     return { destination, previewCells: [{ consumer: "topic-series-collection-preview", publication: "published", session: "authorized" }] };
   });
   await run("topic-feature-row-command-reload", [], async () => {
-    await page.goto(origin + "/admin/content/topics?q=" + encodeURIComponent(fixtures.topic.title), { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/content/topics?q=" + encodeURIComponent(fixtures.topic.title), { waitUntil: "domcontentloaded" }));
     const button = page.locator('[data-admin-row-action="featured"][data-admin-entity-id="' + fixtures.topic.id + '"] button');
     await expect(button).toBeEnabled();
     const original = await button.getAttribute("aria-label");
     assert.ok(original && /تمييز/.test(original));
-    const response = actionResponse(); await button.click(); await (await response).finished();
+    const response = actionResponse(); await button.click(); assertActionAcknowledged(await response);
     await expect(button).not.toHaveAttribute("aria-label", original);
-    await page.reload({ waitUntil: "domcontentloaded" });
+    await observe("page-page-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
     await expect(button).not.toHaveAttribute("aria-label", original);
     const changed = await button.getAttribute("aria-label");
-    const resetResponse = actionResponse(); await button.click(); await (await resetResponse).finished();
-    await page.reload({ waitUntil: "domcontentloaded" }); await expect(button).toHaveAttribute("aria-label", original);
+    const resetResponse = actionResponse(); await button.click(); assertActionAcknowledged(await resetResponse);
+    await observe("page-page-reload", () => page.reload({ waitUntil: "domcontentloaded" })); await expect(button).toHaveAttribute("aria-label", original);
     databaseReadback.push({ table: "topics", id: Number(fixtures.topic.id), expected: { is_featured: original.startsWith("إلغاء") } });
     return { original, changed, commandSettled: true, reloadedConfirmed: true, fixtureRestored: true };
   });
@@ -288,15 +345,15 @@ try {
     // The browser holds real stale UI state; native lock-order concurrency is
     // separately verified by verify-menu-resource-integrity-isolated.mts.
     const title = "QA Audit stale menu target " + suffix;
-    await page.goto(origin + "/admin/content/topics/new?type=news", { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/content/topics/new?type=news", { waitUntil: "domcontentloaded" }));
     await page.locator('[name="title"]').fill(title);
     await page.locator('#content-category-listbox').click();
     await page.getByRole("option", { name: fixtures.category.name, exact: true }).click();
     await saveForm();
-    await page.waitForURL(url => /^\/admin\/content\/topics\/[0-9]+$/.test(url.pathname));
+    await observe("page-expected-route", () => page.waitForURL(url => /^\/admin\/content\/topics\/[0-9]+$/.test(url.pathname)));
     const topicId = Number(new URL(page.url()).pathname.split("/").at(-1));
     await reloadField("title", title);
-    await page.goto(origin + "/admin/pages-blocks/menus", { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/pages-blocks/menus", { waitUntil: "domcontentloaded" }));
     await page.getByRole("button", { name: "إضافة منيو", exact: true }).click();
     const create = page.getByRole("dialog");
     await create.locator('input[name="name"]').fill("QA Audit stale menu " + suffix);
@@ -305,8 +362,8 @@ try {
     await page.getByRole("option", { name: "Custom", exact: true }).click();
     const menuCreateResponse = actionResponse();
     await create.getByRole("button", { name: "إنشاء وفتح القائمة", exact: true }).click();
-    await (await menuCreateResponse).finished();
-    await page.waitForURL(url => /^\/admin\/pages-blocks\/menus\/[0-9]+$/.test(url.pathname));
+    assertActionAcknowledged(await menuCreateResponse);
+    await observe("page-expected-route", () => page.waitForURL(url => /^\/admin\/pages-blocks\/menus\/[0-9]+$/.test(url.pathname)));
     const menuId = Number(new URL(page.url()).pathname.split("/").at(-1));
     await page.getByRole("tab", { name: "إضافة عنصر", exact: true }).click();
     await page.locator('input[name="label"]').fill("QA stale reference");
@@ -317,7 +374,7 @@ try {
     await picker.getByRole("button").filter({ hasText: title }).first().click();
     await picker.getByRole("button", { name: "اعتماد الرابط", exact: true }).click();
     await expect(page.locator('input[name="menu_link_linked_id"]')).toHaveValue(String(topicId));
-    const topics = await context.newPage();
+    const topics = await observe("context-page-create", () => context.newPage());
     try {
       const row = topics.locator('[data-admin-row-action="more"][data-admin-entity-id="' + topicId + '"] button');
       const command = async label => {
@@ -326,49 +383,49 @@ try {
         const confirmation = topics.getByRole("dialog");
         const response = actionResponse(topics);
         await confirmation.getByRole("button", { name: label, exact: true }).click();
-        const result = await response; assert.ok(result.status() < 400); await result.finished();
+        const result = await response; assertActionAcknowledged(result);
         await expect(row).toHaveCount(0, { timeout: 60_000 });
       };
-      await topics.goto(origin + "/admin/content/topics?q=" + encodeURIComponent(title), { waitUntil: "domcontentloaded" });
+      await observe("topics-page-navigation", () => topics.goto(origin + "/admin/content/topics?q=" + encodeURIComponent(title), { waitUntil: "domcontentloaded" }));
       await command("نقل إلى المحذوفات");
-      await topics.goto(origin + "/admin/content/topics?view=trash&q=" + encodeURIComponent(title), { waitUntil: "domcontentloaded" });
+      await observe("topics-page-navigation", () => topics.goto(origin + "/admin/content/topics?view=trash&q=" + encodeURIComponent(title), { waitUntil: "domcontentloaded" }));
       await command("حذف نهائي");
-      await topics.reload({ waitUntil: "domcontentloaded" }); await expect(row).toHaveCount(0);
+      await observe("topics-page-reload", () => topics.reload({ waitUntil: "domcontentloaded" })); await expect(row).toHaveCount(0);
       await expect(page.locator('input[name="menu_link_linked_id"]')).toHaveValue(String(topicId));
       const response = actionResponse();
       await page.getByRole("button", { name: "إضافة", exact: true }).click();
-      const result = await response; assert.ok(result.status() < 400); await result.finished();
+      const result = await response; assertActionAcknowledged(result);
       const message = "لم يعد هدف الرابط الداخلي موجودًا. حدّث الاختيار ثم احفظ القائمة.";
       await expect(page.getByText(message, { exact: true }).first()).toBeVisible();
       assert.equal(new URL(page.url()).searchParams.get("message"), message);
-      await page.reload({ waitUntil: "domcontentloaded" });
+      await observe("page-page-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
       await expect(page.getByRole("cell", { name: "QA stale reference", exact: true })).toHaveCount(0);
       menuIntegrityReadback.push({ topicId, menuId, expectedItems: 0 });
       return { topicId, menuId, staleSelectionRetainedAcrossPages: true, purgeConfirmedAfterReload: true,
         actualMenuActionRejected: true, noBrowserInjectedActionOrSql: true, nativeConcurrencyClaim: false };
-    } finally { await topics.close(); }
+    } finally { await observe("topics-close", () => topics.close()); }
   });
   const collectionPath = (plural, name, trash = false) => "/admin/content/" + plural + "?q=" + encodeURIComponent(name) + (trash ? "&view=trash" : "");
   const collectionCommand = async (plural, id, name, command, confirmLabel, trash = false) => {
-    await page.goto(origin + collectionPath(plural, name, trash), { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + collectionPath(plural, name, trash), { waitUntil: "domcontentloaded" }));
     const row = page.locator('[data-admin-row-action="more"][data-admin-entity-id="' + id + '"] button');
     await expect(row).toBeVisible(); await row.click();
     await page.locator('[data-admin-row-action-menu-item="' + command + '"]').click();
     const response = actionResponse();
     await page.getByRole("dialog").getByRole("button", { name: confirmLabel, exact: true }).click();
-    await (await response).finished(); await expect(row).toHaveCount(0, { timeout: 60_000 });
+    assertActionAcknowledged(await response); await expect(row).toHaveCount(0, { timeout: 60_000 });
   };
   const visibility = async (id, title, visible) => {
-    await page.goto(origin + collectionPath("topics", title), { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + collectionPath("topics", title), { waitUntil: "domcontentloaded" }));
     const button = page.locator('[data-admin-row-action="visibility"][data-admin-entity-id="' + id + '"] button');
     await expect(button).toHaveAttribute("aria-label", (visible ? "إظهار " : "إخفاء ") + title);
-    const response = actionResponse(); await button.click(); await (await response).finished();
+    const response = actionResponse(); await button.click(); assertActionAcknowledged(await response);
     await expect(button).toHaveAttribute("aria-label", (visible ? "إخفاء " : "إظهار ") + title, { timeout: 60_000 });
   };
   const deletedTopicDestinations = async id => {
     const outcomes = [];
     for (const path of ["/admin/content/topics/" + id, "/admin/content/topics/" + id + "/preview"]) {
-      const response = await page.goto(origin + path, { waitUntil: "domcontentloaded" });
+      const response = await observe("page-page-navigation", () => page.goto(origin + path, { waitUntil: "domcontentloaded" }));
       await expect(page.getByRole("heading", { name: "صفحة الإدارة غير موجودة", exact: true })).toBeVisible();
       await expect(page.locator('[data-admin-entity-preview-action]')).toHaveCount(0);
       outcomes.push({ path, status: response.status(), missingRecordUi: true });
@@ -378,7 +435,7 @@ try {
   await run("article-preview-unpublished-and-deleted", [], async () => {
     const id = Number(fixtures.topic.id), title = fixtures.topic.title;
     await visibility(id, title, false);
-    await page.goto(origin + "/admin/content/topics/" + id, { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin/content/topics/" + id, { waitUntil: "domcontentloaded" }));
     await expect(page.locator('[data-admin-entity-preview-action="public-view"]')).toHaveCount(0);
     const unpublished = await popupProof(page.locator('a[data-admin-entity-preview-action="internal-preview"]'), "/admin/content/topics/" + id + "/preview", title);
     await collectionCommand("topics", id, title, "delete", "نقل إلى المحذوفات");
@@ -404,10 +461,10 @@ try {
     for (const [table, plural, consumer] of [["topic_categories", "categories", "topic-category-collection-preview"], ["topic_series", "series", "topic-series-collection-preview"]]) {
       const entity = databaseReadback.find(row => row.table === table && Object.hasOwn(row.expected, "slug")); assert.ok(entity);
       const expected = table === "topic_categories" ? "/topics?category=" + encodeURIComponent(entity.expected.slug) : "/admin/content/topics?series=" + entity.id;
-      await page.goto(origin + collectionPath(plural, entity.expected.name), { waitUntil: "domcontentloaded" });
+      await observe("page-page-navigation", () => page.goto(origin + collectionPath(plural, entity.expected.name), { waitUntil: "domcontentloaded" }));
       const unpublished = await popupProof(page.locator('a[href="' + expected + '"]').first(), expected, null);
       await collectionCommand(plural, entity.id, entity.expected.name, "delete", "نقل إلى المحذوفات");
-      await page.goto(origin + collectionPath(plural, entity.expected.name, true), { waitUntil: "domcontentloaded" });
+      await observe("page-page-navigation", () => page.goto(origin + collectionPath(plural, entity.expected.name, true), { waitUntil: "domcontentloaded" }));
       await expect(page.locator('[data-admin-row-action="more"][data-admin-entity-id="' + entity.id + '"]')).toBeVisible();
       await expect(page.locator('a[href="' + expected + '"]')).toHaveCount(0);
       await collectionCommand(plural, entity.id, entity.expected.name, "archive", "استعادة", true);
@@ -421,28 +478,44 @@ try {
     // The existing logout API increments session_version server-side. Keep the
     // pre-logout signed cookie only in memory to prove revocation, not absence.
     const retainedSession = await context.storageState(); assert.ok(retainedSession.cookies.some(cookie => cookie.httpOnly));
-    await page.goto(origin + "/admin", { waitUntil: "domcontentloaded" });
+    await observe("page-page-navigation", () => page.goto(origin + "/admin", { waitUntil: "domcontentloaded" }));
     // The existing button returns to the configured public website after the
     // real logout response. Block that navigation within this isolated proof.
-    let sawLogoutNavigation;
+    let sawLogoutNavigation, rejectLogoutNavigation;
     let navigationTimer;
     const navigationObserved = new Promise((resolve, reject) => {
       sawLogoutNavigation = resolve;
-      navigationTimer = setTimeout(() => reject(new Error("Existing logout public navigation was not observed.")), 25_000);
+      rejectLogoutNavigation = reject;
     });
     const containLogoutNavigation = async route => {
-      if (route.request().isNavigationRequest() && route.request().frame() === page.mainFrame()) { sawLogoutNavigation(); await route.abort("blockedbyclient"); }
-      else await route.fallback();
+      if (route.request().isNavigationRequest() && route.request().frame() === page.mainFrame()) {
+        // Signal only after abort completes; removing an active handler can race
+        // the context guard. Forward abort failure to the awaited proof promise.
+        try { await route.abort("blockedbyclient"); sawLogoutNavigation(); }
+        catch (error) { rejectLogoutNavigation(error); }
+      } else await route.fallback();
     };
-    await page.route("**/*", containLogoutNavigation);
-    const logout = page.waitForResponse(response => new URL(response.url()).pathname === "/api/admin/auth/logout" && response.request().method() === "POST");
-    await page.getByRole("button", { name: "خروج", exact: true }).click();
-    assert.equal((await logout).status(), 200);
-    try { await navigationObserved; } finally { clearTimeout(navigationTimer); }
-    await page.unroute("**/*", containLogoutNavigation);
-    const stale = await browser.newContext({ storageState: retainedSession });
+    try {
+      await page.route("**/*", containLogoutNavigation);
+      const [logout] = await observe("logout-response-and-navigation", () => {
+        navigationTimer = setTimeout(() => rejectLogoutNavigation(new Error("Existing logout public navigation was not observed.")), 25_000);
+        // Observe all branches immediately so a click/response failure cannot
+        // leave the navigation timeout as an unhandled rejection.
+        return Promise.all([
+          page.waitForResponse(response => new URL(response.url()).pathname === "/api/admin/auth/logout" && response.request().method() === "POST", { timeout: 25_000 }),
+          navigationObserved,
+          page.getByRole("button", { name: "خروج", exact: true }).click(),
+        ]);
+      });
+      assert.equal(logout.status(), 200);
+    } finally {
+      clearTimeout(navigationTimer);
+      // Only page handlers are removed; the context network guard stays active.
+      await observe("logout-route-drain", () => page.unrouteAll({ behavior: "wait" }));
+    }
+    const stale = await observe("browser-context-create", () => browser.newContext({ storageState: retainedSession }));
     await stale.route("**/*", ownedNetworkOnly);
-    const tab = await stale.newPage();
+    const tab = await observe("stale-page-create", () => stale.newPage());
     const media = databaseReadback.find(row => row.expected.content_type === "news"); assert.ok(media);
     const checks = [
       { consumer: "topic-article-edit-preview-public", publication: "published", paths: ["/admin/content/topics/" + fixtures.topic.id, "/admin/content/topics/" + fixtures.topic.id + "/preview"] },
@@ -453,30 +526,38 @@ try {
     const outcomes = [];
     try {
       for (const check of checks) for (const path of check.paths) {
-        await tab.goto(origin + path, { waitUntil: "domcontentloaded" });
-        await tab.waitForURL(url => url.pathname === "/admin/login");
+        await observe("tab-page-navigation", () => tab.goto(origin + path, { waitUntil: "domcontentloaded" }));
+        await observe("tab-expected-route", () => tab.waitForURL(url => url.pathname === "/admin/login"));
         await expect(tab.locator('input[name="username"]')).toBeVisible();
         outcomes.push({ consumer: check.consumer, path, rejectedToExistingLogin: true });
       }
       // Public-view destinations remain public; a revoked Admin cookie grants
       // nothing and is not required to read them.
       for (const path of ["/topics/" + fixtures.topic.slug, "/topics?category=" + encodeURIComponent(fixtures.category.slug)]) {
-        const response = await tab.goto(origin + path, { waitUntil: "domcontentloaded" });
+        const response = await observe("tab-page-navigation", () => tab.goto(origin + path, { waitUntil: "domcontentloaded" }));
         assert.equal(response.status(), 200); await expect(tab.locator("h1").first()).toBeVisible();
         outcomes.push({ path, publicViewStillPublic: true });
       }
-    } finally { await stale.close(); }
+    } finally { await observe("stale-close", () => stale.close()); }
     return { outcomes, existingLogoutRevokedRetainedSignedCookie: true, cookieArtifactsWritten: false,
       previewCells: checks.map(check => ({ consumer: check.consumer, publication: check.publication, session: "revoked", protectedConsumerAndDestination: "redirect to login" })) };
   });
   assert.deepEqual(externalRequests, [], "The browser attempted an unowned network destination.");
+  driverCompleted = true; checkpoint("driver", "complete");
 } catch (error) {
-  errors.push({ id: "driver", message: String(error?.message ?? error) });
+  const failure = { id: "driver", message: String(error?.message ?? error), pathname: new URL(page.url()).pathname };
+  errors.push(failure);
+  checkpoint("driver", "failed");
+  write("admin-adoption-browser.json", receipt());
+  const visibleHeadings = await diagnosticWithin(async () => (await page.locator("h1:visible").allTextContents()).slice(0, 10).map(value => value.trim().slice(0, 500)), null);
+  if (visibleHeadings !== null) { failure.visibleHeadings = visibleHeadings; write("admin-adoption-browser.json", receipt()); }
+  await failureScreenshot("driver");
 } finally {
   delete process.env.QA_ADMIN_USERNAME; delete process.env.QA_ADMIN_PASSWORD;
-  await context.close(); await browser.close();
+  write("admin-adoption-browser.json", receipt());
+  await observe("context-close", () => context.close()); await observe("browser-close", () => browser.close());
   write("admin-adoption-browser.json", receipt());
 }
-console.log(JSON.stringify({ status: errors.length ? "fail" : "pass", passed: evidence.filter(row => row.status === "pass").length,
+console.log(JSON.stringify({ status: receipt().status, passed: evidence.filter(row => row.status === "pass").length,
   failed: errors.length, globalClosed: receipt().globalClosed, requiredCases: requiredCases.length, output: join(output, "admin-adoption-browser.json") }));
 assert.deepEqual(errors, [], "Every selected authenticated journey must pass; unexecuted inventory cells remain open.");
