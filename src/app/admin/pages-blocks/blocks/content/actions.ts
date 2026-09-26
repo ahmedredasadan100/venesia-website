@@ -1,5 +1,7 @@
 "use server";
 
+import { adminActionSuccess, adminActionWarning } from "../../../../../lib/admin/admin-action-result";
+
 import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
@@ -32,7 +34,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidateCommittedPageBlockAction } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -1268,7 +1270,7 @@ export async function updateContentBlock(formData: FormData) {
 }
 
 export async function toggleContentBlockStatus(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   const nextStatus = getStatus(
     cleanText(formData.get("next_status")) || "unpublished",
@@ -1281,11 +1283,18 @@ export async function toggleContentBlockStatus(formData: FormData) {
     .eq("id", id);
 
   if (error) throw new Error(error.message);
-  await revalidateBlockModulePaths("content");
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", nextStatus === "published" ? "publish" : "unpublish"),
+    entityType: "content_block_template",
+    entityId: id,
+    metadata: { blockType: "content", status: nextStatus },
+  }, actor);
+  const result = adminActionSuccess("تم الحفظ", "تم حفظ حالة القالب.", { code: "saved", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("content"));
 }
 
 export async function deleteContentBlock(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const id = parseNumber(formData.get("id"));
   if (!id) throw new Error("معرّف البلوك مفقود.");
 
@@ -1303,24 +1312,20 @@ export async function deleteContentBlock(formData: FormData) {
     .eq("id", cleanupIdentity);
   if (error) throw new Error(error.message);
 
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "delete"),
+    entityType: "content_block_template",
+    entityId: cleanupIdentity,
+    metadata: { blockType: "content" },
+  }, actor);
   const mediaSynchronization =
     await synchronizeMediaReferenceWriteScopesAfterDomainMutation([], null, [
       { domainKey: "content_block_templates", entityIdentity: cleanupIdentity },
     ]);
-  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateBlockModulePaths("content");
-    } catch (revalidationError) {
-      console.error(
-        "Content block delete committed with a Media synchronization warning; cache revalidation also failed.",
-        revalidationError,
-      );
-    }
-    redirect(
-      "/admin/pages-blocks/blocks/content?notice=saved_with_media_sync_warning",
-    );
-  }
-  await revalidateBlockModulePaths("content");
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حذف القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: id })
+    : adminActionSuccess("تم الحفظ", "تم حذف القالب.", { code: "deleted", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("content"));
 }
 
 export async function duplicateContentBlock(formData: FormData) {
@@ -1368,18 +1373,21 @@ export async function duplicateContentBlock(formData: FormData) {
     },
     resolveEntityIdentity: (value) => String(value.id),
   });
-  await revalidateBlockModulePaths("content");
-  if (
-    coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
-  ) {
-    redirect(
-      "/admin/pages-blocks/blocks/content?notice=saved_with_media_sync_warning",
-    );
-  }
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", "duplicate"),
+    entityType: "content_block_template",
+    entityId: coordinated.value.id,
+    entityLabel: nextRow.name,
+    metadata: { blockType: "content", sourceId: id },
+  }, actor);
+  const result = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم نسخ القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: coordinated.value.id })
+    : adminActionSuccess("تم الحفظ", "تم نسخ القالب.", { code: "created", completion: "committed", entityId: coordinated.value.id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("content"));
 }
 
 export async function bulkContentBlocks(formData: FormData) {
-  await requireAdminSession();
+  const actor = await requireAdminSession();
   const action = parsePageBlockBulkAction(
     formData.get("bulk_action"),
     PAGE_BLOCK_BULK_ACTIONS,
@@ -1424,20 +1432,16 @@ export async function bulkContentBlocks(formData: FormData) {
       );
   }
 
-  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateBlockModulePaths("content");
-    } catch (revalidationError) {
-      console.error(
-        "Content block bulk delete committed with a Media synchronization warning; cache revalidation also failed.",
-        revalidationError,
-      );
-    }
-    redirect(
-      "/admin/pages-blocks/blocks/content?notice=saved_with_media_sync_warning",
-    );
-  }
-  await revalidateBlockModulePaths("content");
+  await recordCmsAdminAudit({
+    action: buildCmsAuditAction("content_block_template", action === "delete" ? "delete" : action === "publish" ? "publish" : "unpublish"),
+    entityType: "content_block_template",
+    entityLabel: "content_block_templates",
+    metadata: { blockType: "content", action, ids, count: ids.length },
+  }, actor);
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حفظ التغييرات المحددة. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed" })
+    : adminActionSuccess("تم الحفظ", "تم حفظ التغييرات المحددة.", { code: "saved", completion: "committed" });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("content"));
 }
 
 export type ContentBlockRow = Pick<

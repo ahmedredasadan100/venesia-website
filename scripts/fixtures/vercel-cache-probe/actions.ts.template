@@ -1,0 +1,5 @@
+"use server";
+import { executeAction } from "./runtime";
+export async function runCacheProbeAction(_previous: unknown, formData: FormData) {
+  return executeAction(String(formData.get("ticket") ?? ""));
+}

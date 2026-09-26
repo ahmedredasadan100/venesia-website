@@ -1,5 +1,7 @@
 "use server";
 
+import { adminActionSuccess, adminActionWarning } from "../../../../../lib/admin/admin-action-result";
+
 import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
@@ -26,7 +28,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidateCommittedPageBlockAction } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -283,7 +285,8 @@ export async function toggleBreadcrumbBlockStatus(formData: FormData) {
     entityId: id,
     metadata: { blockType: "breadcrumb", status: nextStatus },
   }, actor);
-  await revalidateBlockModulePaths("breadcrumb");
+  const result = adminActionSuccess("تم الحفظ", "تم حفظ حالة القالب.", { code: "saved", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("breadcrumb"));
 }
 
 export async function deleteBreadcrumbBlock(formData: FormData) {
@@ -316,15 +319,10 @@ export async function deleteBreadcrumbBlock(formData: FormData) {
     null,
     [{ domainKey: "breadcrumb_block_templates", entityIdentity: cleanupIdentity }],
   );
-  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateBlockModulePaths("breadcrumb");
-    } catch (revalidationError) {
-      console.error("Breadcrumb block delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
-    }
-    redirect("/admin/pages-blocks/blocks/breadcrumb?notice=saved_with_media_sync_warning");
-  }
-  await revalidateBlockModulePaths("breadcrumb");
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حذف القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: id })
+    : adminActionSuccess("تم الحفظ", "تم حذف القالب.", { code: "deleted", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("breadcrumb"));
 }
 
 export async function duplicateBreadcrumbBlock(formData: FormData) {
@@ -375,10 +373,10 @@ export async function duplicateBreadcrumbBlock(formData: FormData) {
     entityLabel: nextRow.name,
     metadata: { blockType: "breadcrumb", sourceId: id },
   }, actor);
-  await revalidateBlockModulePaths("breadcrumb");
-  if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
-    redirect("/admin/pages-blocks/blocks/breadcrumb?notice=saved_with_media_sync_warning");
-  }
+  const result = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم نسخ القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: coordinated.value.id })
+    : adminActionSuccess("تم الحفظ", "تم نسخ القالب.", { code: "created", completion: "committed", entityId: coordinated.value.id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("breadcrumb"));
 }
 
 export async function bulkBreadcrumbBlocks(formData: FormData) {
@@ -435,13 +433,8 @@ export async function bulkBreadcrumbBlocks(formData: FormData) {
     entityLabel: "breadcrumb_block_templates",
     metadata: { blockType: "breadcrumb", action, ids, count: ids.length },
   }, actor);
-  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateBlockModulePaths("breadcrumb");
-    } catch (revalidationError) {
-      console.error("Breadcrumb bulk delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
-    }
-    redirect("/admin/pages-blocks/blocks/breadcrumb?notice=saved_with_media_sync_warning");
-  }
-  await revalidateBlockModulePaths("breadcrumb");
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حفظ التغييرات المحددة. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed" })
+    : adminActionSuccess("تم الحفظ", "تم حفظ التغييرات المحددة.", { code: "saved", completion: "committed" });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("breadcrumb"));
 }

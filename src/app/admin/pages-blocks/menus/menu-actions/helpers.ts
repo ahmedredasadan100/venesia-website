@@ -54,6 +54,9 @@ export async function mutateMenuTree(
     p_actor_admin_user_id: actor.id,
     p_actor_username: actor.username,
   });
+  if (error?.code === '23503' && error.message.includes('menu_items_linked_')) {
+    throw new Error('لم يعد هدف الرابط الداخلي موجودًا. حدّث الاختيار ثم احفظ القائمة.');
+  }
   if (error) throw new Error(error.message);
   if (!data || typeof data !== "object" || Array.isArray(data)) {
     throw new Error("Menu atomic mutation returned an invalid result.");

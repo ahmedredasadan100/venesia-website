@@ -9,6 +9,7 @@ import ts from "typescript";
 // @ts-expect-error The repository uses pg without separate declarations.
 import pg from "pg";
 import { loadEntitySeoPersistenceOwner, runEntitySeoBackfill } from "./backfill-entity-seo-scores.mts";
+import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
 
 // Native PostgreSQL cutover proof. Real old/new payload builders, domain create,
 // duplicate actions and rebind owner execute against a small SQL transport port.
@@ -84,6 +85,7 @@ function nativeTransport(db: NativeDatabase, jsonColumns: Set<string>) {
       is(key: string, value: unknown) { filters.push({ key, op: "is", value }); return query; },
       not(key: string, op: string, value: unknown) { assert.equal(op, "is"); assert.equal(value, null); filters.push({ key, op: "not-null", value }); return query; },
       in(key: string, value: unknown[]) { filters.push({ key, op: "in", value }); return query; },
+      contains(key: string, value: Row) { filters.push({ key, op: "@>", value }); return query; },
       order(key: string, options: { ascending?: boolean; nullsFirst?: boolean } = {}) { orders.push(`${identifier(key)} ${options.ascending === false ? "desc" : "asc"} nulls ${options.nullsFirst === true ? "first" : "last"}`); return query; },
       range(start: number, end: number) { assert.ok(start >= 0 && end >= start); offset = start; limit = end - start + 1; return query; },
       limit(value: number) { assert.ok(Number.isSafeInteger(value) && value > 0); limit = value; return query; },
@@ -95,10 +97,11 @@ function nativeTransport(db: NativeDatabase, jsonColumns: Set<string>) {
     return query;
   }
   const rpc = async (name: string, args: Row): Promise<Reply> => {
-    identifier(name); const keys = Object.keys(args); const values = keys.map(key => typeof args[key] === "object" && args[key] !== null ? JSON.stringify(args[key]) : args[key]);
+    identifier(name); const keys = Object.keys(args); const values = keys.map(key => typeof args[key] === "object" && args[key] !== null && !Array.isArray(args[key]) ? JSON.stringify(args[key]) : args[key]);
     try {
       const result = await db.query(`select * from public.${identifier(name)}(${keys.map((key, i) => `${identifier(key)}=>$${i + 1}`)})`, values);
-      const data = name === "admin_content_topic_metrics" ? result.rows[0]?.[name] : result.rows;
+      const scalar = ["admin_content_topic_metrics", "admin_mutate_topics_batch_atomically", "admin_publish_topics_atomically"].includes(name);
+      const data = scalar ? result.rows[0]?.[name] : result.rows;
       return { data: clone(data), error: null };
     } catch (error) { const value = error as { code?: string; message?: string }; return { data: null, error: { code: value.code, message: value.message ?? "Native RPC failed" } }; }
   };
@@ -179,12 +182,19 @@ function sourceRuntime(sourceRoot: string, transport: ReturnType<typeof nativeTr
   return { load, files, analysisCount: () => analyses, infrastructurePorts: [...ports.keys()] };
 }
 
-export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: string; migrationLauncher?: string; enforceMigration: string; output: string }) {
+export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: string; migrationLauncher?: string; enforceMigration: string; output: string; ownedHandle?: OwnedLocalHandle }) {
   const config = JSON.parse(readFileSync(resolve(ROOT, options.fixtureConfig), "utf8"));
-  const target = new URL(config.databaseUrl);
-  assert.ok(target.protocol === "postgres:" || target.protocol === "postgresql:");
-  assert.equal(target.search, ""); assert.equal(target.hash, "");
-  assert.equal(target.hostname, "127.0.0.1"); assert.equal(target.port, "55445"); assert.equal(target.pathname, "/entity_seo_rollout");
+  const owned = options.ownedHandle;
+  if (owned) {
+    assertOwnedLocalHandle(owned);
+    assert.equal(options.migrationLauncher, undefined, "Owned cutover uses its scoped native connection.");
+  }
+  if (!owned) {
+    const target = new URL(config.databaseUrl);
+    assert.ok(target.protocol === "postgres:" || target.protocol === "postgresql:");
+    assert.equal(target.search, ""); assert.equal(target.hash, "");
+    assert.equal(target.hostname, "127.0.0.1"); assert.equal(target.port, "55445"); assert.equal(target.pathname, "/entity_seo_rollout");
+  }
   assert.equal(config.disposable, true); assert.equal(config.baselineSha, OLD_SHA);
   assert.ok(relative(resolve(ROOT, ".tmp-qa"), resolve(ROOT, options.output)).startsWith("entity-seo-cutover"));
   pg.types.setTypeParser(20, (value: string) => Number(value));
@@ -192,8 +202,12 @@ export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: stri
   // would truncate the revision token and create a false duplicate conflict.
   pg.types.setTypeParser(1184, (value: string) => value);
   pg.types.setTypeParser(1114, (value: string) => value);
-  const db = new pg.Client({ connectionString: config.databaseUrl, application_name: "entity-seo-cutover-rehearsal" });
-  await db.connect();
+  const db: NativeDatabase = owned ? { query: (sql, values) => owned.query(sql, values), async end() {} }
+    : new pg.Client({ connectionString: config.databaseUrl, application_name: "entity-seo-cutover-rehearsal" });
+  if (!owned) await (db as NativeDatabase & { connect(): Promise<void> }).connect();
+  const runBackfill = (mode: "apply" | "verify") => owned
+    ? owned.runEntitySeoBackfill({ mode, entities: ["topics", "projects"] })
+    : runEntitySeoBackfill({ connectionString: config.databaseUrl, expectedDatabase: "entity_seo_rollout", entities: ["topics", "projects"], [mode]: true, batchSize: 37 });
   const owner = loadEntitySeoPersistenceOwner();
   const checks: Array<{ stage: string; check: string }> = [];
   const stages: Array<{ stage: string; result: unknown }> = [];
@@ -267,7 +281,10 @@ export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: stri
     const duplicated = await call<Promise<Row>>(actions, "duplicateUnifiedContent", actionForm); resultOk(duplicated);
     const copyId = Number(duplicated.entityId); const copy = await readTopic(copyId); if (pending) assertPending(copy); else assertCanonical("topics", copy); pass(`${prefix} actual Topics duplicate action`);
     const beforeFlags = tuple(await readTopic(articleId));
-    resultOk(await call<Promise<Row>>(actions, "toggleUnifiedContentFeatured", actionForm));
+    const featuredForm = new FormData(); featuredForm.set("id", String(articleId));
+    featuredForm.set("desired_featured", "true");
+    resultOk(await call<Promise<Row>>(actions, "toggleUnifiedContentFeatured", featuredForm));
+    assert.equal((await readTopic(articleId)).is_featured, true);
     assert.deepEqual(tuple(await readTopic(articleId)), beforeFlags); pass(`${prefix} actual Featured retains derived state`);
     const statusForm = new FormData(); statusForm.set("id", "80"); statusForm.set("next_status", "unpublished");
     const statusBefore = tuple(await readTopic(80)); resultOk(await call<Promise<Row>>(actions, "setUnifiedContentStatus", statusForm));
@@ -304,7 +321,7 @@ export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: stri
   }
   async function backfill(label: string, mode: "apply" | "verify") {
     const before = await sourceDigest();
-    const result = await runEntitySeoBackfill({ connectionString: config.databaseUrl, expectedDatabase: "entity_seo_rollout", [mode]: true, batchSize: 37 });
+    const result = await runBackfill(mode);
     assert.deepEqual(await sourceDigest(), before, "Backfill preserves every non-derived field including editorial timestamps");
     assert.equal(result.complete, true); assert.equal(result.readyForEnforcement, mode === "verify");
     assert.equal(result.counts.conflicted, 0); assert.equal(result.counts.failed, 0); assert.equal(result.counts.unresolved, 0);
@@ -313,7 +330,7 @@ export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: stri
     return result;
   }
   try {
-    assert.equal((await one("select current_database() as name")).name, "entity_seo_rollout");
+    assert.equal((await one("select current_database() as name")).name, owned ? owned.identity.database : "entity_seo_rollout");
     assert.equal((await one("select exists(select 1 from information_schema.columns where table_schema='public' and table_name='topics' and column_name='seo_score') expanded")).expanded, false);
     assert.equal((await one("select count(*)::int n from supabase_migrations.schema_migrations")).n, 103);
     pass("fresh canonical pre-162 schema/registry and synthetic data");
@@ -329,7 +346,7 @@ export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: stri
       coreDefinitions.set(spec.signature, original);
       const unknown = original.replace("AS $function$\n", "AS $function$\n-- isolated unknown-core fingerprint proof\n"); assert.notEqual(unknown, original);
       await db.query("begin");
-      try { await db.query(unknown); await assert.rejects(db.query(patchBlock), /provenance mismatch/); }
+      try { await db.query(unknown); await assert.rejects(db.query(patchBlock), owned ? { code: "P0001" } : /provenance mismatch/); }
       finally { await db.query("rollback"); }
       assert.equal(String((await one("select pg_get_functiondef($1::regprocedure) as body", [spec.signature])).body).replaceAll("\r\n", "\n"), original);
     }
@@ -345,6 +362,19 @@ export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: stri
     pass("native core definitions differ only by the authorized code INSERT columns/values");
     const oldRows = await topicsWriters(old, "legacy-expand", true);
     const oldProjects = await projectWriters("legacy-expand", false);
+    // Current command writers additionally depend on the later atomic RPC and
+    // durable completion contract. Apply their exact SQL to this native cutover
+    // fixture only; this overlay is not a canonical full-prefix replay claim.
+    stage = "current-action-dependencies";
+    for (const file of [
+      "sql/migrations/20260925200723_topics_batch_atomic_current_state.sql",
+      "sql/migrations/20260926013216_topics_command_completion.sql",
+    ]) {
+      const sql = readFileSync(resolve(ROOT, file), "utf8");
+      await db.query(sql);
+      stages.push({ stage, result: { file, sha256: hash(sql), application: "exact native action dependency overlay; canonical full replay is separate" } });
+    }
+    pass("current Topics command dependencies installed without changing the SEO transition/enforcement sequence");
     stage = "adopt"; await topicsWriters(current, "adopted-expand", false); await projectWriters("adopted-expand", true);
     const loader = current.load("src/lib/admin/content/load-unified-content.ts");
     const metricsBefore = await call<Promise<Row>>(loader, "loadUnifiedContentMetrics"); assert.equal(metricsBefore.error, null); assert.equal(metricsBefore.seoAverage, null); assert.ok(Number(metricsBefore.staleScores) > 0); pass("actual metrics reports unresolved count and null average before backfill");
@@ -361,14 +391,14 @@ export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: stri
     await one("select * from public.save_project_admin_entry($1,$2::jsonb)", [oldProjects.id, JSON.stringify(oldProjects.payload)]); assertPending(await readProject(oldProjects.id)); pass("late legacy Project edit invalidates prior canonical tuple");
     const lateMetrics = await call<Promise<Row>>(loader, "loadUnifiedContentMetrics"); assert.equal(lateMetrics.seoAverage, null); assert.equal(Number(lateMetrics.staleScores), 2);
     assert.equal((await one("select count(*)::int n from public.projects where seo_score is null")).n, 1);
-    await assert.rejects(runEntitySeoBackfill({ connectionString: config.databaseUrl, expectedDatabase: "entity_seo_rollout", verify: true, batchSize: 37 }), (error: unknown) => {
+    await assert.rejects(runBackfill("verify"), (error: unknown) => {
       const blocked = error as { report: { complete: boolean; readyForEnforcement: boolean; counts: { unresolved: number; written: number } } };
       assert.equal(blocked.report.complete, false); assert.equal(blocked.report.readyForEnforcement, false);
       assert.equal(blocked.report.counts.unresolved, 3); assert.equal(blocked.report.counts.written, 0);
       stages.push({ stage: "late-legacy-blocked-verify", result: blocked.report }); return true;
     });
     pass("independent verify blocks enforcement for exactly two unresolved Topics and one Project");
-    try { await assert.rejects(db.query(readFileSync(resolve(ROOT, options.enforceMigration), "utf8")), /ENFORCE blocked/); }
+    try { await assert.rejects(db.query(readFileSync(resolve(ROOT, options.enforceMigration), "utf8")), owned ? { code: "23514" } : /ENFORCE blocked/); }
     finally { await db.query("rollback"); }
     assert.equal((await one("select count(*)::int n from pg_trigger where tgname in ('topics_entity_seo_score_transition','projects_entity_seo_score_transition') and tgenabled='O'")).n, 2);
     pass("native ENFORCE rejects unresolved rows and preserves both transition triggers");
@@ -391,9 +421,9 @@ export async function runEntitySeoCutoverPostgres(options: { fixtureConfig: stri
     assert.deepEqual(descList.rows.map(row => row.id), descending.rows.map((row: Row) => row.id));
     assert.ok(ascending.rows.length === 10 && descending.rows.length === 10); assert.ok(Number(ascending.rows[0].seo_score) <= Number(descending.rows[0].seo_score));
     assert.equal(current.analysisCount(), beforeAnalysis); pass("persisted metrics and native SQL score sorting without read-time analysis");
-    const report = { completedAt: new Date().toISOString(), complete: true, baselineSha: OLD_SHA, target: "127.0.0.1:55445/entity_seo_rollout", checks, stages,
+    const report = { completedAt: new Date().toISOString(), complete: true, baselineSha: OLD_SHA, target: owned ? "127.0.0.1:" + owned.identity.port + "/" + owned.identity.database : "127.0.0.1:55445/entity_seo_rollout", checks, stages,
       sourceEvidence: { old: old.files, adopted: current.files }, infrastructurePorts: old.infrastructurePorts,
-      scope: "Native persistence/rollout proof; no HTTP, Browser, authentication, cache, audit delivery or media lease coverage is claimed", nativeProjectCodeBaselineEvidence: ".tmp-qa/entity-seo-cutover/project-code-baseline-proof.json" };
+      scope: "Native persistence/rollout proof; no HTTP, Browser, authentication, cache, audit delivery or media lease coverage is claimed", projectCoreCodeDeltaVerified: true };
     writeFileSync(resolve(ROOT, options.output), JSON.stringify(report, null, 2)); console.log(`PASS cutover rehearsal: ${checks.length} checks`); return report;
   } catch (error) {
     const value = error as { code?: string; message?: string };

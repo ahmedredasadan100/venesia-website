@@ -555,7 +555,7 @@ const pageBlockCacheStart = pageBlockStateSource.indexOf(
   "export const loadPageBlockStateBySlug",
 );
 const pageBlockCacheCall = pageBlockStateSource.indexOf(
-  "return await unstable_cache(",
+  "return await cachePublicRead(",
   pageBlockCacheStart,
 );
 const pageBlockCacheCatch = pageBlockStateSource.indexOf(
@@ -596,7 +596,7 @@ const publishedPageCacheStart = publishedPageOwnerSource.indexOf(
   "export const getPublishedPageStateBySlug",
 );
 const publishedPageCacheCall = publishedPageOwnerSource.indexOf(
-  "return await unstable_cache(",
+  "return await cachePublicRead(",
   publishedPageCacheStart,
 );
 const publishedPageCatch = publishedPageOwnerSource.indexOf(
@@ -618,7 +618,7 @@ assert.ok(
 );
 
 const projectsCacheCall = projectsCompositionSource.indexOf(
-  "return await unstable_cache(queryProjectsHubComposition",
+  "return await cachePublicRead(queryProjectsHubComposition",
 );
 const projectsCacheCatch = projectsCompositionSource.indexOf(
   "} catch (error)",

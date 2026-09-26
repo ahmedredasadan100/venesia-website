@@ -6,7 +6,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 // @ts-expect-error The repository uses pg without separate declarations.
 import pg from "pg";
-import { assertApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicationMigrations, runOwnedEntitySeoBackfill,
+import { assertApplicationMigrationTool, selectApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicationMigrations, runOwnedEntitySeoBackfill, generateOwnedDatabaseTypes,
   type ApplicationMigrationCliContext, type ApplicationMigrationCliResult,
   type ApplicationMigrationStage, type ApplicationMigrationTool, type EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 export type { ApplicationMigrationCliResult, ApplicationMigrationStage, EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
@@ -77,7 +77,7 @@ export function observeApplicationClient(client: Pick<PgConnection, "on">, recor
   };
 }
 
-/** Planned renewal of the Admin measurement control socket only. The pinned
+/** Planned renewal for Admin jobs and verified idle fixture boundaries. The pinned
  * transport's ten-minute hard lifetime and error handling remain unchanged. */
 export function createAdminMeasurementControlLease(initial: PgConnection, options: {
   connect(): Promise<PgConnection>;
@@ -92,9 +92,9 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
   let current=initial,bornAt=now(),renewing:Promise<void>|undefined;
   return {
     get client(){return current;},
-    async renewIfDue(adminJobActive:boolean) {
+    async renewIfDue(adminJobActive:boolean, explicitIdleBoundary = false) {
       options.assertHealthy();
-      if(!adminJobActive || now()-bornAt<240_000) return;
+      if(!adminJobActive || (!explicitIdleBoundary && now()-bornAt<240_000)) return;
       if(renewing) return renewing;
       requireThat(now()-bornAt<480_000,"ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE","admin-measurement");
       renewing=(async()=>{
@@ -102,6 +102,7 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
         let next: PgConnection;
         try { next=await options.connect(); }
         catch(error) {
+          if (explicitIdleBoundary) throw error; // The next bounded phase requires an actually fresh healthy socket.
           // A fresh socket can be rejected while the pinned host bridge is at
           // capacity (for example, parallel Next build workers). Defer only
           // this connection reset; never reconnect a failed current session or
@@ -184,6 +185,11 @@ export type ReleaseLock = {
   images: Record<ImageService, { reference: string; manifestDigest: string; configDigest: string }>;
   transport: { path: string; sha256: string };
   applicationMigrationTool: ApplicationMigrationTool;
+  applicationMigrationToolLinuxX64: ApplicationMigrationTool;
+};
+
+export type OwnedDatabaseConnection = {
+  query(sql: string, params?: unknown[]): Promise<QueryResult>;
 };
 
 export type OwnedLocalHandle = {
@@ -196,6 +202,11 @@ export type OwnedLocalHandle = {
     databaseContainerId: string;
   };
   query(sql: string, params?: unknown[]): Promise<QueryResult>;
+  renewDatabaseControlConnection(): Promise<void>;
+  generateDatabaseTypes(): ReturnType<typeof generateOwnedDatabaseTypes>;
+  callDataApiRpc(name: string, args: Record<string, unknown>): Promise<Response>;
+  readDataApi(path: string, headers?: HeadersInit, method?: "GET" | "HEAD"): Promise<Response>;
+  withDatabaseConnection<T>(run: (connection: OwnedDatabaseConnection) => Promise<T>): Promise<T>;
   pushApplicationMigrations(request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }): Promise<ApplicationMigrationCliResult>;
   runEntitySeoBackfill(request: { mode: "dry-run" | "apply" | "verify"; entities?: readonly ("topics" | "projects" | "pages")[] }): Promise<EntitySeoBackfillReport>;
   preparePublicVerification(): Promise<PublicFixtureReadiness>;
@@ -286,6 +297,8 @@ export function readReleaseLock(lockPath: string): ReleaseLock {
   requireThat(value.schemaVersion === 1 && object(value.release).commit === RELEASE_COMMIT, "UNAPPROVED_RELEASE", "provenance");
   const lock = value as unknown as ReleaseLock;
   assertApplicationMigrationTool(lock.applicationMigrationTool);
+  selectApplicationMigrationTool(lock, "win32", "x64");
+  selectApplicationMigrationTool(lock, "linux", "x64");
   requireThat(Array.isArray(lock.files) && lock.files.length > 0
     && lock.release.sourceBaseUrl === `https://raw.githubusercontent.com/supabase/supabase/${RELEASE_COMMIT}/`, "INCOMPLETE_RELEASE_LOCK", "provenance");
   requireThat(Object.keys(lock.images).sort().join(",") === [...IMAGE_SERVICES].sort().join(","), "INVALID_IMAGE_SET", "provenance");
@@ -446,11 +459,12 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const lockPath = resolve(options.lockPath);
   requireThat(relative(ROOT, lockPath).startsWith(`scripts${sep}fixtures${sep}`), "LOCK_OUTSIDE_FIXTURES", "preflight");
   const lock = readReleaseLock(lockPath);
+  const applicationTool = options.handoff ? selectApplicationMigrationTool(lock) : lock.applicationMigrationTool;
   if (options.handoff) {
     requireThat(options.cliBinary && isAbsolute(options.cliBinary), "CLI_BINARY_REQUIRED_FOR_HANDOFF", "preflight");
     const binary = resolve(options.cliBinary);
     requireThat(existsSync(binary) && lstatSync(binary).isFile() && !lstatSync(binary).isSymbolicLink()
-      && realpathSync(binary) === binary && sha256(readFileSync(binary)) === lock.applicationMigrationTool.executableSha256,
+      && realpathSync(binary) === binary && sha256(readFileSync(binary)) === applicationTool.executableSha256,
     "CLI_BINARY_DIGEST_MISMATCH", "preflight");
   }
   const artifactDir = resolve(options.artifactDir);
@@ -576,6 +590,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const captured: CapturedResource[] = [];
   let handle: OwnedLocalHandle | undefined;
   let appConnection: PgConnection | undefined;
+  const scopedConnections = new Set<PgConnection>();
+  let controlMaintenance = false;
   let publicJobAbort: AbortController | undefined;
   let publicJob: ReturnType<typeof runOwnedPublicVerification> | undefined;
   let hostBridge: HostBridge | undefined;
@@ -1047,7 +1063,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       // and dry-run/apply sequencing. Neither it nor its credential is exposed.
       const cliContext: ApplicationMigrationCliContext = Object.freeze({ runDirectory: artifactDir,
         host: "127.0.0.1", port: run.pgPort, database: "postgres", password,
-        tool: Object.freeze({ ...lock.applicationMigrationTool }), sourceBinary: resolve(options.cliBinary),
+        tool: Object.freeze({ ...applicationTool }), sourceBinary: resolve(options.cliBinary),
+        generatorDocker: Object.freeze({ binary: dockerBinary, host: dockerHost, databaseContainerId: serviceResource("db").identity.id }),
         assertOwned: async () => {
           assertOwnedLocalHandle(handle);
           applicationClient.assertHealthy();
@@ -1068,6 +1085,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       let acceptedAdminFixtureHash: string | undefined;
       handle = Object.freeze({ identity: Object.freeze({ runId, projectName: run.projectName, database: "postgres" as const, host: "127.0.0.1" as const, port: run.pgPort, databaseContainerId: serviceResource("db").identity.id }),
         query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
+          requireThat(!controlMaintenance, "CONTROL_CONNECTION_MAINTENANCE", "application-query");
           assertOwnedLocalHandle(handle);
           applicationClient.assertHealthy();
           await inspectCaptured(serviceResource("db"));
@@ -1075,6 +1093,87 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
             const result = await applicationLease.client.query(sql, params);
             return Array.isArray(result) ? result[result.length - 1] as QueryResult : result;
           } catch (error) { throw asSafeError(error, "application-query"); }
+        },
+        renewDatabaseControlConnection: async (): Promise<void> => {
+          await cliContext.assertOwned();
+          requireThat(!controlMaintenance && scopedConnections.size === 0 && !publicJob,
+            "CONTROL_CONNECTION_NOT_IDLE", "application-query");
+          controlMaintenance = true;
+          try {
+            const pid = Number((await applicationLease.client.query("select pg_backend_pid() pid")).rows[0].pid);
+            const probe = await connect("postgres");
+            try {
+              const state = (await probe.query("select state from pg_stat_activity where pid=$1", [pid])).rows[0]?.state;
+              requireThat(state === "idle", "CONTROL_TRANSACTION_OPEN", "application-query");
+            } finally { await probe.end(); }
+            await applicationLease.renewIfDue(true, true);
+            await cliContext.assertOwned();
+            safeRecord("verification-control-lease-boundary", { idleVerified: true, scopedSessions: 0,
+              transportLifetimeUnchanged: true, failedTransportRecovered: false });
+          } finally { controlMaintenance = false; }
+        },
+        generateDatabaseTypes: () => generateOwnedDatabaseTypes(cliContext),
+        callDataApiRpc: async (name: string, args: Record<string, unknown>): Promise<Response> => {
+          await publicContext.assertOwned();
+          requireThat(typeof name === "string" && /^[a-z][a-z0-9_]*$/u.test(name)
+            && args !== null && typeof args === "object" && !Array.isArray(args),
+            "INVALID_DATA_API_RPC", "data-api-rpc");
+          const body = JSON.stringify(args);
+          requireThat(Buffer.byteLength(body, "utf8") <= 1_000_000, "DATA_API_RPC_BODY_LIMIT", "data-api-rpc");
+          const response = await fetch("http://127.0.0.1:" + run.apiPort + "/rest/v1/rpc/" + name, {
+            method: "POST", body, headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey,
+              "Content-Type": "application/json" }, redirect: "error", signal: AbortSignal.timeout(30_000),
+          });
+          await publicContext.assertOwned();
+          return response;
+        },
+        readDataApi: async (path: string, headers?: HeadersInit, method: "GET" | "HEAD" = "GET"): Promise<Response> => {
+          await publicContext.assertOwned();
+          requireThat(method === "GET" || method === "HEAD", "INVALID_DATA_API_METHOD", "data-api-read");
+          const origin = "http://127.0.0.1:" + run.apiPort;
+          requireThat(typeof path === "string" && path.startsWith("/rest/v1/") && !path.includes("\\"),
+            "INVALID_DATA_API_PATH", "data-api-read");
+          const target = new URL(path, origin);
+          requireThat(target.origin === origin && /^\/rest\/v1\/[a-z][a-z0-9_]*$/u.test(target.pathname)
+            && !target.hash, "INVALID_DATA_API_PATH", "data-api-read");
+          const safeHeaders = new Headers({ apikey: serviceKey, Authorization: "Bearer " + serviceKey });
+          for (const [key, value] of new Headers(headers)) {
+            requireThat(["accept", "prefer", "range", "range-unit"].includes(key),
+              "INVALID_DATA_API_HEADER", "data-api-read");
+            safeHeaders.set(key, value);
+          }
+          const response = await fetch(target, { method, headers: safeHeaders,
+            redirect: "error", signal: AbortSignal.timeout(15_000) });
+          await publicContext.assertOwned();
+          return response;
+        },
+        withDatabaseConnection: async <T,>(run: (connection: OwnedDatabaseConnection) => Promise<T>): Promise<T> => {
+          await cliContext.assertOwned();
+          const client = await connect("postgres");
+          scopedConnections.add(client);
+          let open = true;
+          const observer = observeApplicationClient(client, () => { open = false; });
+          const connection: OwnedDatabaseConnection = Object.freeze({
+            query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
+              requireThat(open, "EXPIRED_DATABASE_CONNECTION", "application-query");
+              await cliContext.assertOwned(); observer.assertHealthy();
+              try {
+                const result = await client.query(sql, params);
+                await cliContext.assertOwned(); observer.assertHealthy();
+                return Array.isArray(result) ? result[result.length - 1] as QueryResult : result;
+              } catch (error) { throw asSafeError(error, "application-query"); }
+            },
+          });
+          try {
+            return await observer.run(async () => {
+              const result = await run(connection);
+              await cliContext.assertOwned(); observer.assertHealthy();
+              return result;
+            });
+          } finally {
+            open = false;
+            try { await client.end(); } finally { scopedConnections.delete(client); }
+          }
         },
         pushApplicationMigrations: async (request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }) => {
           assertOwnedLocalHandle(handle);
@@ -1129,7 +1228,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               try {
                 // This timer has no application transaction or concurrent SQL
                 // operation: only this serialized ownership/heartbeat pulse.
-                await applicationLease.renewIfDue(request.selection==="admin-interactions");
+                await applicationLease.renewIfDue(request.selection==="admin-interactions" || request.selection==="admin-adoption");
                 await publicContext.assertOwned();
                 await handle!.query("select 1 as owned_public_job_heartbeat");
                 safeRecord("public-job-heartbeat", { active: true });
@@ -1143,7 +1242,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           try { const result = await publicJob; if (heartbeatFailure) throw heartbeatFailure; return result; }
           catch(error) {throw heartbeatFailure ?? error;}
           finally { heartbeatActive = false; clearInterval(timer); await pulse;
-            if (request.selection === "admin-interactions") publicJob = undefined; }
+            if (request.selection === "admin-interactions" || request.selection === "admin-adoption") publicJob = undefined; }
         }, record: safeRecord });
       activeHandles.add(handle);
       const boundHandle = handle;
@@ -1159,6 +1258,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     if (publicJob) await publicJob.catch(() => undefined);
     cleaning = true;
     if (handle) activeHandles.delete(handle);
+    await Promise.all([...scopedConnections].map(client => client.end().catch(() => undefined)));
+    scopedConnections.clear();
     if (appConnection) await appConnection.end().catch(() => undefined);
     if (hostBridge) {
       try {

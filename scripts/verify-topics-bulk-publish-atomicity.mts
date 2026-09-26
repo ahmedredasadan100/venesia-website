@@ -16,7 +16,7 @@ const MEDIA_CENTER_PUBLIC_PATHS_OWNER_PATH =
 const REFERENCE_PROVIDERS_PATH =
   "src/lib/admin/media-catalog/reference-providers.ts";
 const MIGRATION_PATH =
-  "sql/migrations/20260905090000_topics_bulk_publish_atomicity.sql";
+  "sql/migrations/20260926013216_topics_command_completion.sql";
 
 function read(path: string) {
   return readFileSync(join(ROOT, path), "utf8")
@@ -514,6 +514,8 @@ async function verifyCommittedRpcPayloadWarningComposition() {
         (41, 'Topic 41', 'unpublished', null, null, null, '2026-09-05T06:00:41Z', null),
         (42, 'Topic 42', 'unpublished', null, null, null, '2026-09-05T06:00:42Z', null);
     `);
+    await db.exec(read("sql/migrations/20260905090000_topics_bulk_publish_atomicity.sql"));
+    await db.exec(read("sql/migrations/20260925200723_topics_batch_atomic_current_state.sql"));
     await db.exec(read(MIGRATION_PATH));
     await db.exec(`
       grant usage on schema public to service_role;
@@ -767,8 +769,8 @@ assert.match(publishRpc.body, /status\s+is\s+distinct\s+from\s+'published'/iu);
 assert.doesNotMatch(publishRpc.body, /\bexecute\b/iu);
 assert.equal(
   countMatches(publishRpc.body, /insert\s+into\s+public\.admin_audit_logs\b/giu),
-  1,
-  "The RPC must own one transactional Audit insert for newly published Topics.",
+  2,
+  "The RPC owns transition audit rows plus one optional atomic command receipt.",
 );
 assert.match(publishRpc.body, /'topic\.publish'/u);
 assert.match(publishRpc.body, /entity_id[\s\S]*topic\.id/iu);
@@ -776,6 +778,13 @@ assert.match(publishRpc.body, /returning\s+id/iu);
 assert.match(publishRpc.body, /'auditIds'\s*,\s*v_audit_ids/u);
 assert.doesNotMatch(publishRpc.body, /outbox/iu);
 
+// Receipt audit snapshots may project identity fields; no predicate, write,
+// semantic transform or return branch is exempt from the validation guard.
+const withoutAuditIdentityProjections = (body: string) => body
+  .replace(/'(slug|content_type)',\s*topic\.\1/gu, "'audit_identity', null")
+  .replace(/pg_catalog\.jsonb_agg\(topic\.(?:slug|content_type) order by topic\.id\)/gu, "null");
+const semanticValidationBody = withoutAuditIdentityProjections(publishRpc.body);
+assert.match(withoutAuditIdentityProjections(publishRpc.body + "\nif topic.slug is null then return null; end if;"), /\bslug\b/u);
 for (const semanticField of [
   "slug",
   "excerpt",
@@ -792,7 +801,7 @@ for (const semanticField of [
   "faq",
 ]) {
   assert.doesNotMatch(
-    publishRpc.body,
+    semanticValidationBody,
     new RegExp(`\\b${semanticField}\\b`, "iu"),
     `The RPC must not duplicate semantic validation for ${semanticField}.`,
   );
@@ -800,11 +809,11 @@ for (const semanticField of [
 
 assert.match(
   migration,
-  /revoke\s+all\s+on\s+function\s+public\.admin_publish_topics_atomically\(bigint,\s*jsonb\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/iu,
+  /revoke\s+all\s+on\s+function\s+public\.admin_publish_topics_atomically\(bigint,\s*jsonb,\s*uuid\)\s+from\s+public\s*,\s*anon\s*,\s*authenticated/iu,
 );
 assert.match(
   migration,
-  /grant\s+execute\s+on\s+function\s+public\.admin_publish_topics_atomically\(bigint,\s*jsonb\)\s+to\s+service_role/iu,
+  /grant\s+execute\s+on\s+function\s+public\.admin_publish_topics_atomically\(bigint,\s*jsonb,\s*uuid\)\s+to\s+service_role/iu,
 );
 
 type RebindProviderRuntime = {
@@ -966,14 +975,14 @@ const expectedDynamicTopicWriters = [
 ];
 assert.deepEqual(actualDynamicTopicWriters, expectedDynamicTopicWriters);
 
-const genericAtomicMigration = read("sql/migrations/20260925200723_topics_batch_atomic_current_state.sql");
+const genericAtomicMigration = read(MIGRATION_PATH);
 assert.match(actions, /admin_mutate_topics_batch_atomically/u);
 assert.match(genericAtomicMigration, /create function public\.admin_mutate_topics_batch_atomically\(/u);
 assert.match(genericAtomicMigration, /topics_batch_atomic_membership_mismatch/u);
 const expectedDirectWriters = new Map<string, TopicMutationOperation[]>([
   [
     "src/app/admin/content/topics/actions.ts",
-    ["insert", "update", "update", "update"],
+    ["insert", "update"],
   ],
   ["src/app/admin/content/topics/article-actions/create-domain.ts", ["insert"]],
   ["src/app/admin/content/topics/article-actions/save.ts", ["update"]],
@@ -1055,10 +1064,8 @@ assert.match(mediaSave, /buildMediaWritePayload[\s\S]*\.update\(\{[\s\S]*\.\.\.d
 assert.match(mediaSave, /\.eq\(["']updated_at["'],\s*expectedRevision\.value\)/u);
 
 for (const [startToken, endToken] of [
-  ["export async function setUnifiedContentStatus", "export async function toggleUnifiedContentFeatured"],
-  ["export async function toggleUnifiedContentFeatured", "async function createUniqueCopySlug"],
-  ["export async function duplicateUnifiedContent", "export async function softDeleteUnifiedContent"],
-  ["export async function softDeleteUnifiedContent", "async function restoreTopicsWithCanonicalOwner"],
+  ["export async function setUnifiedContentStatus", "async function toggleUnifiedContentFeaturedImpl"],
+  ["export async function duplicateUnifiedContent", "async function softDeleteUnifiedContentImpl"],
 ] as const) {
   assert.match(
     sourceSection(actions, startToken, endToken),
@@ -1066,6 +1073,10 @@ for (const [startToken, endToken] of [
     `${startToken} must advance the Topic revision.`,
   );
 }
+for (const [startToken, endToken] of [
+  ["async function toggleUnifiedContentFeaturedImpl", "async function createUniqueCopySlug"],
+  ["async function softDeleteUnifiedContentImpl", "async function restoreTopicsWithCanonicalOwner"],
+] as const) assert.match(sourceSection(actions, startToken, endToken), /runAtomicTopicsBatch/u);
 assert.match(genericAtomicMigration, /updated_at\s*=\s*v_now/u);
 
 const activeSqlTopicWriters = new Map(

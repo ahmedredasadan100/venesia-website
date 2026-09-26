@@ -1,8 +1,9 @@
 "use server";
 
+import { revalidateCommittedPageBlockResult } from "./helpers";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
-import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { cleanText, parseFormBoolean, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
 import { databaseAssignmentKind, failure, mutatePageComposition, success } from "./helpers";
 
@@ -20,6 +21,5 @@ export async function togglePageBlockAssignment(formData: FormData): Promise<Pag
   } catch (error) {
     return failure(error instanceof Error ? error.message : "تعذر تغيير حالة الربط.");
   }
-  await revalidatePageBlocksPath(pageId);
-  return success();
+  return revalidateCommittedPageBlockResult(pageId, success());
 }

@@ -127,6 +127,7 @@ export default function SeriesTableClient({
     async (row: SeriesListRow): Promise<AdminActionResult> => {
       const nextStatus =
         row.status === "published" ? "unpublished" : "published";
+      let actionResult: AdminActionResult | null = null;
       try {
         const result = await instant.mutateAsync({
           rowId: row.id,
@@ -143,30 +144,26 @@ export default function SeriesTableClient({
             );
           },
           execute: async () => {
-            const actionResult = await toggleSeriesStatusAjax(row.id, row.status);
-            return actionResult.ok
+            const confirmedResult = await toggleSeriesStatusAjax(row.id, row.status);
+            actionResult = confirmedResult;
+            return confirmedResult.ok
               ? {
                   ok: true as const,
-                  message: actionResult.message ?? "تم تحديث حالة السلسلة.",
+                  message: confirmedResult.message ?? "تم تحديث حالة السلسلة.",
                   feedbackStatus:
-                    actionResult.feedbackStatus === "warning"
+                    confirmedResult.feedbackStatus === "warning"
                       ? ("warning" as const)
                       : ("success" as const),
                 }
               : {
                   ok: false as const,
                   code: "series_status_failed",
-                  message: actionResult.message ?? "تعذر تحديث حالة السلسلة.",
+                  message: confirmedResult.message ?? "تعذر تحديث حالة السلسلة.",
                 };
           },
         });
         return {
-          ok: true,
-          title: "تم بنجاح",
-          message: result.message,
-          feedbackStatus: result.feedbackStatus,
-          code: nextStatus === "published" ? "published" : "unpublished",
-          entityId: row.id,
+          ...withAdminActionSettledResult(actionResult!, result),
         };
       } catch (error) {
         return {
@@ -185,43 +182,37 @@ export default function SeriesTableClient({
 
   const duplicateSeries = useCallback(
     async (row: SeriesListRow): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
       try {
         const result = await instant.mutateAsync({
           rowId: row.id,
           action: "duplicate",
           optimistic: () => undefined,
           execute: async () => {
-            const actionResult = await duplicateSeriesAjax(row.id);
-            return actionResult.ok
+            const confirmedResult = await duplicateSeriesAjax(row.id);
+            actionResult = confirmedResult;
+            return confirmedResult.ok
               ? {
                   ok: true as const,
-                  message: actionResult.message ?? "تم نسخ السلسلة بنجاح.",
+                  message: confirmedResult.message ?? "تم نسخ السلسلة بنجاح.",
                   feedbackStatus:
-                    actionResult.feedbackStatus === "warning"
+                    confirmedResult.feedbackStatus === "warning"
                       ? ("warning" as const)
                       : ("success" as const),
                   affectedIds:
-                    actionResult.entityId == null
+                    confirmedResult.entityId == null
                       ? undefined
-                      : [actionResult.entityId],
+                      : [confirmedResult.entityId],
                 }
               : {
                   ok: false as const,
                   code: "series_duplicate_failed",
-                  message: actionResult.message ?? "تعذر نسخ السلسلة.",
+                  message: confirmedResult.message ?? "تعذر نسخ السلسلة.",
                 };
           },
         });
-        const insertedId = Array.isArray(result.affectedIds)
-          ? result.affectedIds.find((id): id is number => typeof id === "number")
-          : undefined;
         return {
-          ok: true,
-          title: "تم بنجاح",
-          message: result.message,
-          feedbackStatus: result.feedbackStatus,
-          code: "created",
-          entityId: insertedId,
+          ...withAdminActionSettledResult(actionResult!, result),
         };
       } catch (error) {
         return {
@@ -361,6 +352,7 @@ export default function SeriesTableClient({
     async (action: string, ids: number[]): Promise<AdminActionResult> => {
       const idSet = new Set(ids);
       const nextStatus = action === "publish" ? "published" : "unpublished";
+      let actionResult: AdminActionResult | null = null;
       try {
         const result = await instant.mutateAsync({
           action: `bulk-${action}`,
@@ -384,42 +376,30 @@ export default function SeriesTableClient({
             );
           },
           execute: async () => {
-            const actionResult = await bulkSeriesActionAjax(
+            const confirmedResult = await bulkSeriesActionAjax(
               action,
               ids,
               action === "permanent_delete",
             );
-            return actionResult.ok
+            actionResult = confirmedResult;
+            return confirmedResult.ok
               ? {
                   ok: true as const,
-                  message: actionResult.message ?? "تم تنفيذ العملية.",
+                  message: confirmedResult.message ?? "تم تنفيذ العملية.",
                   feedbackStatus:
-                    actionResult.feedbackStatus === "warning"
+                    confirmedResult.feedbackStatus === "warning"
                       ? ("warning" as const)
                       : ("success" as const),
                 }
               : {
                   ok: false as const,
                   code: "series_bulk_failed",
-                  message: actionResult.message ?? "تعذر تنفيذ العملية.",
+                  message: confirmedResult.message ?? "تعذر تنفيذ العملية.",
                 };
           },
         });
         return {
-          ok: true,
-          title: "تم بنجاح",
-          message: result.message,
-          feedbackStatus: result.feedbackStatus,
-          code:
-            action === "delete"
-              ? "deleted"
-              : action === "restore"
-                ? "restored"
-                : action === "permanent_delete"
-                  ? "permanently_deleted"
-              : nextStatus === "published"
-                ? "published"
-                : "unpublished",
+          ...withAdminActionSettledResult(actionResult!, result),
         };
       } catch (error) {
         return {

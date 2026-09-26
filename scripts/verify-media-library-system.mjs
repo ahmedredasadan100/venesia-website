@@ -993,7 +993,9 @@ const mediaSettingsCachePorts = {
 };
 const publicCacheRevalidationModule = loadTypeScriptModule(
   "src/lib/cache/revalidate-public-cache-tags.ts",
-  { "server-only": {}, "next/cache": mediaSettingsCachePorts },
+  { "server-only": {}, "next/cache": mediaSettingsCachePorts,
+    "./public-cache-generation": { advancePublicCacheGeneration: async () => { throw new Error("Path-only Media Settings must not advance the public cache generation"); } },
+  },
 );
 const mediaSettingsActionModule = loadTypeScriptModule("src/app/admin/settings/media/actions.ts", {
   "next/cache": mediaSettingsCachePorts,

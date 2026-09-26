@@ -137,6 +137,7 @@ export default function PageBlocksClient({
   const [actionFeedback, setActionFeedback] = useState<{
     message: string;
     ok: boolean;
+    feedbackStatus?: "success" | "warning";
   } | null>(null);
   const instant = useAdminBoundedClientInstantMutation<PageBlockAssignmentRow>({
     entity: "page-block-assignments",
@@ -160,8 +161,8 @@ export default function PageBlocksClient({
   const regionLabels = useMemo(() => Object.fromEntries(
     regions.map((region) => [region.key, region.adminLabel]),
   ) as Record<string, string>, [regions]);
-  const setActionMessage = (message: string | null) =>
-    setActionFeedback(message ? { message, ok: false } : null);
+  const setActionMessage = (message: string | null, feedbackStatus?: "success" | "warning") =>
+    setActionFeedback(message ? { message, ok: Boolean(feedbackStatus), feedbackStatus } : null);
 
   const {
     assignModalOpen,
@@ -365,6 +366,7 @@ export default function PageBlocksClient({
           return response.ok
             ? {
                 ok: true as const,
+                feedbackStatus: response.feedbackStatus,
                 message: response.message ?? "تم تحديث حالة الموديول.",
               }
             : {
@@ -374,7 +376,7 @@ export default function PageBlocksClient({
               };
         },
       });
-      setActionFeedback({ message: result.message, ok: true });
+      setActionFeedback({ message: result.message, ok: true, feedbackStatus: result.feedbackStatus });
     } catch (error) {
       setActionFeedback({
         message:
@@ -413,11 +415,12 @@ export default function PageBlocksClient({
           redirectTo = response.redirectTo ?? null;
           return {
             ok: true as const,
+            feedbackStatus: response.feedbackStatus,
             message: response.message ?? "تم تكرار الموديول.",
           };
         },
       });
-      setActionFeedback({ message: result.message, ok: true });
+      setActionFeedback({ message: result.message, ok: true, feedbackStatus: result.feedbackStatus });
       if (redirectTo) {
         router.push(adminFormEditHref(redirectTo, returnTo, "/admin/pages-blocks/pages"));
         return;
@@ -444,11 +447,11 @@ export default function PageBlocksClient({
         execute: async () => {
           const response = await detachPageBlockAssignment(formData);
           return response.ok
-            ? { ok: true as const, message: response.message ?? "تمت إزالة الموديول من الصفحة." }
+            ? { ok: true as const, feedbackStatus: response.feedbackStatus, message: response.message ?? "تمت إزالة الموديول من الصفحة." }
             : { ok: false as const, code: "assignment_detach_failed", message: response.message ?? "تعذرت إزالة الموديول من الصفحة." };
         },
       });
-      setActionFeedback({ message: result.message, ok: true });
+      setActionFeedback({ message: result.message, ok: true, feedbackStatus: result.feedbackStatus });
     } catch (error) {
       setActionFeedback({
         message: error instanceof Error ? error.message : "تعذرت إزالة الموديول من الصفحة.",
@@ -561,6 +564,7 @@ export default function PageBlocksClient({
           return response.ok
             ? {
                 ok: true as const,
+                feedbackStatus: response.feedbackStatus,
                 message: response.message ?? "تم تحديث موضع العرض.",
                 updatedAt: response.updatedAt,
               }
@@ -579,7 +583,7 @@ export default function PageBlocksClient({
           );
         },
       });
-      setActionFeedback({ message: result.message, ok: true });
+      setActionFeedback({ message: result.message, ok: true, feedbackStatus: result.feedbackStatus });
     } catch (error) {
       setActionFeedback({
         message: error instanceof Error ? error.message : "تعذر تحديث موضع العرض.",
@@ -636,7 +640,6 @@ export default function PageBlocksClient({
       ordered.map((item, orderedIndex) => [assignmentRowId(item), (orderedIndex + 1) * 10]),
     );
     try {
-      let warning: string | null = null;
       const result = await instant.mutateAsync({
         rowId: assignmentRowId(row),
         action: "reorder",
@@ -664,6 +667,7 @@ export default function PageBlocksClient({
             return response.ok
               ? {
                   ok: true as const,
+                  feedbackStatus: response.feedbackStatus,
                   message: response.message ?? "تم حفظ ترتيب الموديولات ذريًا.",
                   updatedAt: response.updatedAt,
                 }
@@ -681,10 +685,10 @@ export default function PageBlocksClient({
           if (!response.ok) {
             return { ok: false as const, code: response.code, message: response.message };
           }
-          warning = response.warning ?? null;
           return {
             ok: true as const,
             message: response.warning ?? "تم حفظ ترتيب الموديولات ذريًا.",
+            feedbackStatus: response.warning ? "warning" as const : "success" as const,
             updatedAt: undefined,
           };
         },
@@ -697,7 +701,7 @@ export default function PageBlocksClient({
           );
         },
       });
-      setActionFeedback({ message: warning ?? result.message, ok: true });
+      setActionFeedback({ message: result.message, ok: true, feedbackStatus: result.feedbackStatus });
     } catch (error) {
       setActionFeedback({
         message: error instanceof Error ? error.message : "تعذر حفظ ترتيب الموديولات.",
@@ -716,7 +720,7 @@ export default function PageBlocksClient({
 
     try {
       const idSet = new Set(ids);
-      await instant.mutateAsync({
+      const result = await instant.mutateAsync({
         action: `bulk-${action}`,
         bulk: true,
         optimistic: (cache) => {
@@ -738,17 +742,19 @@ export default function PageBlocksClient({
           );
         },
         execute: async () => {
-          await bulkPageBlockAssignments(formData);
+          const response = await bulkPageBlockAssignments(formData);
           return {
             ok: true as const,
-            message: action === "detach" ? "تمت إزالة الروابط المحددة من الصفحة." : "تم تحديث الروابط المحددة.",
+            message: response.message ?? (action === "detach" ? "تمت إزالة الروابط المحددة من الصفحة." : "تم تحديث الروابط المحددة."),
+            feedbackStatus: response.feedbackStatus,
           };
         },
       });
       selection.clearSelection();
       setActionFeedback({
-        message: action === "detach" ? "تمت إزالة الروابط المحددة من الصفحة." : "تم تحديث الروابط المحددة.",
+        message: result.message,
         ok: true,
+        feedbackStatus: result.feedbackStatus,
       });
     } catch (error) {
       setActionFeedback({
@@ -779,8 +785,8 @@ export default function PageBlocksClient({
             feedback={
               actionFeedback
                 ? {
-                    variant: actionFeedback.ok ? "success" : "danger",
-                    title: actionFeedback.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
+                    variant: actionFeedback.feedbackStatus === "warning" ? "warning" : actionFeedback.ok ? "success" : "danger",
+                    title: actionFeedback.feedbackStatus === "warning" ? "تم الحفظ مع تنبيه" : actionFeedback.ok ? "تم تنفيذ الإجراء" : "تعذر تنفيذ الإجراء",
                     message: actionFeedback.message,
                     layout: "inline",
                     dismissible: true,

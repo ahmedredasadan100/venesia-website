@@ -52,6 +52,7 @@ export type ApplicationMigrationCliContext = {
   readonly password: string;
   readonly tool: ApplicationMigrationTool;
   readonly sourceBinary: string;
+  readonly generatorDocker: Readonly<{ binary: string; host: string; databaseContainerId: string }>;
   readonly assertOwned: () => Promise<void>;
 };
 type Request = { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage };
@@ -108,12 +109,26 @@ export function assertApplicationMigrationStage(stage: ApplicationMigrationStage
 }
 
 export function assertApplicationMigrationTool(tool: ApplicationMigrationTool): void {
+  const linux = tool?.platform === "linux-x64";
+  const packageName = linux ? "cli-linux-x64" : "cli-windows-x64";
   check(tool && tool.name === "Supabase CLI" && /^\d+\.\d+\.\d+$/u.test(tool.version)
-    && tool.platform === "win32-x64" && tool.package === "@supabase/cli-windows-x64"
-    && tool.metadataUrl === `https://registry.npmjs.org/@supabase%2fcli-windows-x64/${tool.version}`
+    && (linux || tool.platform === "win32-x64") && tool.package === `@supabase/${packageName}`
+    && tool.metadataUrl === `https://registry.npmjs.org/@supabase%2f${packageName}/${tool.version}`
     && /^sha512-[A-Za-z0-9+/]{86}==$/u.test(tool.packageIntegrity)
-    && tool.executablePathInPackage === "package/bin/supabase.exe" && HASH.test(tool.executableSha256)
+    && tool.executablePathInPackage === (linux ? "package/bin/supabase" : "package/bin/supabase.exe") && HASH.test(tool.executableSha256)
     && tool.sourceTag === `https://github.com/supabase/cli/tree/v${tool.version}`, "INVALID_MIGRATION_TOOL_LOCK");
+}
+
+/** Select only an explicitly reviewed host tuple; never fall back to another binary. */
+export function selectApplicationMigrationTool(lock: {
+  applicationMigrationTool: ApplicationMigrationTool;
+  applicationMigrationToolLinuxX64: ApplicationMigrationTool;
+}, platform: NodeJS.Platform = process.platform, architecture: string = process.arch): ApplicationMigrationTool {
+  check(architecture === "x64" && (platform === "win32" || platform === "linux"), "UNSUPPORTED_CLI_PLATFORM");
+  const tool = platform === "linux" ? lock.applicationMigrationToolLinuxX64 : lock.applicationMigrationTool;
+  assertApplicationMigrationTool(tool);
+  check(tool.platform === (platform === "linux" ? "linux-x64" : "win32-x64"), "CLI_PLATFORM_LOCK_MISMATCH");
+  return tool;
 }
 
 export function applicationMigrationChildEnvironment(home: string, workdir: string, password: string, source: Readonly<Record<string, string | undefined>> = process.env): NodeJS.ProcessEnv {
@@ -215,7 +230,7 @@ function prepare(context: ApplicationMigrationCliContext): Prepared {
   const directory = mkdtempSync(join(context.runDirectory, "application-cli-"));
   const toolsDirectory = join(directory, "tools");
   mkdirSync(toolsDirectory, { mode: 0o700 });
-  const binary = join(toolsDirectory, "supabase.exe");
+  const binary = join(toolsDirectory, context.tool.platform === "linux-x64" ? "supabase" : "supabase.exe");
   writeFileSync(binary, bytes, { flag: "wx", mode: 0o700 });
   check(sha256(sourceBytes(binary)) === context.tool.executableSha256, "COPIED_CLI_DIGEST_MISMATCH");
   state = { directory, binary, busy: false, dryRunStage: null };
@@ -259,7 +274,8 @@ export async function pushApplicationMigrations(context: ApplicationMigrationCli
     corpusSha256: input.stage.corpusSha256,
     files: input.stage.files.map(entry => ({ file: entry.file, sourceSha256: entry.sourceSha256 })),
   } };
-  check(process.platform === "win32" && process.arch === "x64", "UNSUPPORTED_CLI_PLATFORM");
+  check(process.arch === "x64" && (process.platform === "win32" || process.platform === "linux")
+    && context.tool.platform === `${process.platform}-x64`, "UNSUPPORTED_CLI_PLATFORM");
   check(context.host === "127.0.0.1" && context.database === "postgres"
     && Number.isInteger(context.port) && context.port > 1024 && context.port <= 65535
     && /^[a-f0-9]{64}$/u.test(context.password), "INVALID_OWNED_CLI_TARGET");
@@ -335,4 +351,88 @@ export async function runOwnedEntitySeoBackfill(
   } finally {
     state.busy = false;
   }
+}
+// Dependency pinned by Supabase CLI v2.116.0's official
+// apps/cli-go/pkg/config/templates/Dockerfile, resolved to linux/amd64 content.
+const TYPE_GENERATOR_IMAGE = "public.ecr.aws/supabase/postgres-meta@sha256:cef71ba901751dcc242cc685cf13786935ea8926820fb342f23bb0fbef77de5a";
+const TYPE_GENERATOR_IMAGE_ID = "sha256:cef71ba901751dcc242cc685cf13786935ea8926820fb342f23bb0fbef77de5a";
+
+/** Official Supabase generator, confined to the opaque owned local database. */
+export async function generateOwnedDatabaseTypes(context: ApplicationMigrationCliContext): Promise<{
+  source: string; sourceSha256: string; cliVersion: string; cliSha256: string;
+  cliExecuted: boolean; generator: string;
+}> {
+  await context.assertOwned();
+  const state = prepare(context);
+  check(!state.busy, "TYPES_REQUIRE_IDLE_APPLICATION_HANDOFF");
+  state.busy = true;
+  try {
+    const workdir = mkdtempSync(join(state.directory, "types-"));
+    const home = join(workdir, "home");
+    for (const directory of [home, ...["appdata", "localappdata", "temp", "supabase"].map(name => join(home, name))]) mkdirSync(directory, { mode: 0o700 });
+    const environment = () => applicationMigrationChildEnvironment(home, workdir, context.password);
+    check(sha256(sourceBytes(state.binary)) === context.tool.executableSha256, "CLI_BINARY_IDENTITY_CHANGED");
+    let result: Awaited<ReturnType<typeof run>>;
+    if (process.platform === "win32") {
+      // CLI --db-url probes Windows loopback, then launches its generator with
+      // Linux host networking. That is a different loopback namespace. Execute
+      // the very same official generator in the captured DB namespace instead;
+      // do not widen host bindings, use another DB, or claim host CLI execution.
+      const docker = context.generatorDocker;
+      check(HASH.test(docker.databaseContainerId) && ["npipe:////./pipe/dockerDesktopLinuxEngine", "npipe:////./pipe/docker_engine"].includes(docker.host), "INVALID_TYPES_DOCKER_TARGET");
+      const invoke = (args: string[], env = environment()) => run(docker.binary, ["--host", docker.host, ...args], workdir, env);
+      const image = await invoke(["image", "inspect", TYPE_GENERATOR_IMAGE]);
+      check(image.exitCode === 0, "TYPE_GENERATOR_IMAGE_MISSING");
+      const identity = JSON.parse(image.stdout)[0];
+      check(identity.Id === TYPE_GENERATOR_IMAGE_ID && identity.RepoDigests.includes(TYPE_GENERATOR_IMAGE)
+        && identity.Os === "linux" && identity.Architecture === "amd64", "TYPE_GENERATOR_IMAGE_MISMATCH");
+      const cidPath = join(workdir, "generator.cid");
+      const owner = sha256(workdir);
+      const label = "com.venisia.isolated-types-owner";
+      const network = `container:${docker.databaseContainerId}`;
+      const env = { ...environment(),
+        PG_META_DB_URL: `postgresql://postgres:${context.password}@127.0.0.1:5432/postgres?sslmode=disable`,
+        PG_META_GENERATE_TYPES: "typescript", PG_META_GENERATE_TYPES_INCLUDED_SCHEMAS: "public",
+        PG_META_GENERATE_TYPES_DETECT_ONE_TO_ONE_RELATIONSHIPS: "true", PG_CONN_TIMEOUT_SECS: "15", PG_QUERY_TIMEOUT_SECS: "15" };
+      try {
+        result = await invoke(["run", "--rm", "--pull", "never", "--cidfile", cidPath, "--label", `${label}=${owner}`,
+          "--network", network, "--read-only", "--tmpfs", "/tmp:rw,nosuid,nodev,size=16m", "--cap-drop", "ALL",
+          "--security-opt", "no-new-privileges", "--log-driver", "none",
+          ...Object.keys(env).filter(key => key.startsWith("PG_META_") || key === "PG_CONN_TIMEOUT_SECS" || key === "PG_QUERY_TIMEOUT_SECS").flatMap(key => ["--env", key]),
+          TYPE_GENERATOR_IMAGE, "node", "dist/server/server.js"], env);
+      } finally {
+        env.PG_META_DB_URL = "";
+        if (existsSync(cidPath)) {
+          const id = readFileSync(cidPath, "utf8").trim(); check(HASH.test(id), "INVALID_TYPE_GENERATOR_ID");
+          const remaining = await invoke(["container", "inspect", id]);
+          if (remaining.exitCode === 0) {
+            const container = JSON.parse(remaining.stdout)[0];
+            check(container.Id === id && container.Config.Labels?.[label] === owner
+              && container.Config.Image === TYPE_GENERATOR_IMAGE && container.HostConfig.NetworkMode === network,
+            "TYPE_GENERATOR_CLEANUP_IDENTITY_CHANGED");
+            check((await invoke(["rm", "--force", id])).exitCode === 0, "TYPE_GENERATOR_CLEANUP_FAILED");
+          }
+          check((await invoke(["container", "inspect", id])).exitCode !== 0, "TYPE_GENERATOR_REMAINED");
+          writeFileSync(join(context.runDirectory, "database-types-generator-cleanup.json"), JSON.stringify({
+            generator: "Supabase postgres-meta v0.98.0", image: TYPE_GENERATOR_IMAGE, containerId: id,
+            removed: true, databaseNamespaceOnly: true, hostBindingChanged: false, cliExecuted: false,
+          }, null, 2), { mode: 0o600 });
+        }
+      }
+    } else {
+      result = await run(state.binary, ["gen", "types", "typescript", "--db-url",
+        `postgresql://postgres@127.0.0.1:${context.port}/postgres`, "--schema", "public", "--workdir", workdir], workdir, environment());
+    }
+    await context.assertOwned();
+    if (result.exitCode !== 0) {
+      const diagnostics = `${result.stdout}\n${result.stderr}`.replaceAll(context.password, "[REDACTED_LOCAL_CREDENTIAL]").slice(0, 4_000);
+      writeFileSync(join(context.runDirectory, "database-types-diagnostic.json"), JSON.stringify({ exitCode: result.exitCode,
+        stdoutSha256: sha256(result.stdout), stderrSha256: sha256(result.stderr), diagnostics }, null, 2), { mode: 0o600 });
+    }
+    check(result.exitCode === 0, "DATABASE_TYPES_CLI_FAILED");
+    check(result.stdout.includes("export type Database =") && result.stdout.includes("export type Json ="), "INVALID_DATABASE_TYPES_OUTPUT");
+    return { source: result.stdout, sourceSha256: sha256(result.stdout), cliVersion: context.tool.version,
+      cliSha256: context.tool.executableSha256, cliExecuted: process.platform !== "win32",
+      generator: process.platform === "win32" ? TYPE_GENERATOR_IMAGE : "Supabase CLI" };
+  } finally { state.busy = false; }
 }

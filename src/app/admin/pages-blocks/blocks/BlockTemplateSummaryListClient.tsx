@@ -1,5 +1,7 @@
 "use client";
 
+import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
@@ -70,8 +72,8 @@ type BlockTemplateSummaryListClientProps = {
   toggleAction: (
     id: number,
     nextStatus: "published" | "unpublished",
-  ) => Promise<void>;
-  bulkAction: (formData: FormData) => Promise<void>;
+  ) => Promise<void | AdminActionResult>;
+  bulkAction: (formData: FormData) => Promise<void | AdminActionResult>;
   errorMessage?: string | null;
   mediaSynchronizationWarning?: boolean;
   initialVisibleColumns?: readonly string[] | null;
@@ -213,7 +215,7 @@ export default function BlockTemplateSummaryListClient({
       nextStatus === "published" ? "تم نشر الموديول." : "تم إخفاء الموديول.";
     clearFeedback(feedbackChannel);
     try {
-      await instant.mutateAsync({
+      const settled = await instant.mutateAsync({
         rowId: row.id,
         action: "visibility",
         optimistic: (cache) =>
@@ -223,20 +225,21 @@ export default function BlockTemplateSummaryListClient({
               : candidate,
           ),
         execute: async () => {
-          await toggleAction(row.id, nextStatus);
-          return { ok: true, message: successMessage };
+          const response = await toggleAction(row.id, nextStatus);
+          if (response && !response.ok) throw Object.assign(new Error(response.message), response);
+          return { ok: true as const, message: response?.message ?? successMessage, feedbackStatus: response?.feedbackStatus === "warning" ? "warning" as const : "success" as const };
         },
       });
       publishFeedback(
         {
-          variant: "success",
-          title: "تم تنفيذ الإجراء",
-          message: successMessage,
+          variant: settled.feedbackStatus === "warning" ? "warning" : "success",
+          title: settled.feedbackStatus === "warning" ? "تم الحفظ مع تنبيه" : "تم تنفيذ الإجراء",
+          message: settled.message,
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline" },
+        { channel: feedbackChannel, placement: "global" },
       );
     } catch (error) {
       publishFeedback(
@@ -251,7 +254,7 @@ export default function BlockTemplateSummaryListClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline", reveal: true },
+        { channel: feedbackChannel, placement: "global", reveal: true },
       );
     }
   }
@@ -268,7 +271,7 @@ export default function BlockTemplateSummaryListClient({
     clearFeedback(feedbackChannel);
 
     try {
-      await instant.mutateAsync({
+      const settled = await instant.mutateAsync({
         action: `bulk-${action}`,
         bulk: true,
         optimistic: (cache) =>
@@ -276,30 +279,25 @@ export default function BlockTemplateSummaryListClient({
             selectedIds.has(row.id) ? { ...row, status: nextStatus } : row,
           ),
         execute: async () => {
-          await bulkAction(formData);
-          return {
-            ok: true as const,
-            message:
-              action === "publish"
+          const response = await bulkAction(formData);
+          if (response && !response.ok) throw Object.assign(new Error(response.message), response);
+          return { ok: true as const, message: response?.message ?? (action === "publish"
                 ? "تم نشر الموديولات المحددة."
-                : "تم إخفاء الموديولات المحددة.",
-          };
+                : "تم إخفاء الموديولات المحددة."), feedbackStatus: response?.feedbackStatus === "warning" ? "warning" as const : "success" as const };
         },
       });
       selection.clearSelection();
       publishFeedback(
         {
-          variant: "success",
-          title: "تم تنفيذ الإجراء",
+          variant: settled.feedbackStatus === "warning" ? "warning" : "success",
+          title: settled.feedbackStatus === "warning" ? "تم الحفظ مع تنبيه" : "تم تنفيذ الإجراء",
           message:
-            action === "publish"
-              ? "تم نشر الموديولات المحددة."
-              : "تم إخفاء الموديولات المحددة.",
+            settled.message,
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline" },
+        { channel: feedbackChannel, placement: "global" },
       );
     } catch (error) {
       publishFeedback(
@@ -314,7 +312,7 @@ export default function BlockTemplateSummaryListClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline", reveal: true },
+        { channel: feedbackChannel, placement: "global", reveal: true },
       );
     }
   }

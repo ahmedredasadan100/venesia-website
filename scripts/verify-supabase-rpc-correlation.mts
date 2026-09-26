@@ -47,6 +47,7 @@ type CapturedRequest = {
   url: string;
   headers: Headers;
   response?: Response;
+  cache?: RequestCache;
 };
 
 type ParsedLog = {
@@ -66,6 +67,7 @@ let fetchImplementation: typeof fetch = async (input, init) => {
   requests.push({
     url: String(input),
     headers: new Headers(init?.headers),
+    cache: init?.cache,
     response,
   });
   return response;
@@ -132,9 +134,11 @@ async function main() {
   // A valid RPC outside the Heavy Save scope retains the previous transport behavior.
   await transport(`${SUPABASE_ORIGIN}/rest/v1/rpc/outside_scope`, {
     headers: { "x-existing": REQUEST_SECRET },
+    cache: "force-cache",
   });
   assert.equal(logLines.length, 0);
   assert.equal(requests[0]?.headers.has("traceparent"), false);
+  assert.equal(requests[0]?.cache, "no-store", "Caller cache options cannot reintroduce hidden Supabase caching.");
 
   // Non-RPC paths and non-Supabase origins never receive instrumentation.
   clearCaptured();
@@ -480,12 +484,16 @@ async function main() {
 
   // Timeout and upstream abort keep the existing thrown error contract.
   clearCaptured();
-  fetchImplementation = abortablePendingFetch as typeof fetch;
+  fetchImplementation = async (input, init) => {
+    assert.equal(init?.cache, "no-store");
+    assert.ok(init?.signal instanceof AbortSignal);
+    return abortablePendingFetch(input, init);
+  };
   const timeoutTransport = createSupabaseFetch(5);
   await expectReject(
     () =>
       runWithSupabaseRpcCorrelation(() =>
-        timeoutTransport(`${SUPABASE_ORIGIN}/rest/v1/rpc/timeout_case`),
+        timeoutTransport(`${SUPABASE_ORIGIN}/rest/v1/rpc/timeout_case`, { cache: "force-cache" }),
       ),
     (error) => {
       assert.ok(error instanceof Error);
@@ -505,6 +513,7 @@ async function main() {
       runWithSupabaseRpcCorrelation(() =>
         transport(`${SUPABASE_ORIGIN}/rest/v1/rpc/abort_case`, {
           signal: upstreamController.signal,
+          cache: "force-cache",
         }),
       ),
     (error) => {
@@ -516,6 +525,31 @@ async function main() {
   const abortEnd = parseLogs().find((entry) => entry.event === "rpc_end")!;
   assert.equal(abortEnd.fields.sanitized_error_class, "AbortError");
   assert.equal(abortEnd.fields.http_status, null);
+
+  // A signal aborted after dispatch still cancels the wrapped no-store request.
+  clearCaptured();
+  const liveController = new AbortController();
+  fetchImplementation = async (input, init) => {
+    assert.equal(init?.cache, "no-store");
+    assert.ok(init?.signal instanceof AbortSignal);
+    assert.notEqual(init.signal, liveController.signal, "The existing timeout controller remains active.");
+    assert.equal(init.signal.aborted, false);
+    const pending = abortablePendingFetch(input, init);
+    queueMicrotask(() => liveController.abort());
+    return pending;
+  };
+  await expectReject(
+    () => runWithSupabaseRpcCorrelation(() => transport(SUPABASE_ORIGIN + "/rest/v1/rpc/live_abort_case", {
+      signal: liveController.signal, cache: "force-cache",
+    })),
+    error => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.name, "TimeoutError");
+      assert.equal((error as Error & { code?: string }).code, "SUPABASE_TIMEOUT");
+      assert.equal(liveController.signal.aborted, true);
+    },
+  );
+  assert.equal(parseLogs().find(entry => entry.event === "rpc_end")!.fields.sanitized_error_class, "AbortError");
 
   const [
     saveSource,
@@ -580,7 +614,7 @@ async function main() {
   );
   assert.match(auditSource, /"audit_write"/);
 
-  originalConsoleInfo("Supabase RPC correlation verification passed (16 RPCs, phase timings, W3C, isolation, headers, errors, and sensitive-data contract).");
+  originalConsoleInfo("Supabase RPC correlation verification passed (16 RPCs, phase timings, W3C, isolation, headers, forced no-store, timeout/live abort, errors, and sensitive-data contract).");
 }
 
 try {

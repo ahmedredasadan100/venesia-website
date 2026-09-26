@@ -22,6 +22,7 @@ import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-acti
 import {
   adminActionFailure,
   adminActionSuccess,
+  withAdminActionSettledResult,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import type { AdminEntityColumnDef } from "../../../../lib/admin/entity-list";
@@ -181,44 +182,46 @@ function createRedirectColumns(input: {
               ],
             },
             copyPublicLink: { access: "hidden" },
-            visibility: pendingAction === "visibility"
-              ? {
-                  access: "disabled",
-                  disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                  pending: true,
-                  isVisible: row.status === "active",
-                }
-              : {
-                  access: "allowed",
-                  isVisible: row.status === "active",
-                  onSelect: async () => {
-                    const result = await input.onToggle(row);
-                    onMutationResult?.(result);
+            visibility:
+              pendingAction === "visibility"
+                ? {
+                    access: "disabled",
+                    disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                    pending: true,
+                    isVisible: row.status === "active",
+                  }
+                : {
+                    access: "allowed",
+                    isVisible: row.status === "active",
+                    onSelect: async () => {
+                      const result = await input.onToggle(row);
+                      onMutationResult?.(result);
+                    },
                   },
-                },
             featured: { access: "hidden" },
             duplicate: { access: "hidden" },
             archive: { access: "hidden" },
-            delete: pendingAction === "delete"
-              ? {
-                  access: "disabled",
-                  disabledReason: "انتظر انتهاء الإجراء الحالي.",
-                  pending: true,
-                }
-              : {
-                  access: "allowed",
-                  onSelect: async () => {
-                    const result = await input.onDelete(row);
-                    onMutationResult?.(result);
-                    if (!result.ok) throw new Error(result.message);
+            delete:
+              pendingAction === "delete"
+                ? {
+                    access: "disabled",
+                    disabledReason: "انتظر انتهاء الإجراء الحالي.",
+                    pending: true,
+                  }
+                : {
+                    access: "allowed",
+                    onSelect: async () => {
+                      const result = await input.onDelete(row);
+                      onMutationResult?.(result);
+                      if (!result.ok) throw new Error(result.message);
+                    },
+                    confirmation: {
+                      mode: "shared",
+                      title: "تأكيد حذف التحويل",
+                      description: `هل أنت متأكد من حذف التحويل من ${row.source_path}؟ لا يمكن التراجع عن هذا الإجراء.`,
+                      confirmLabel: "حذف التحويل",
+                    },
                   },
-                  confirmation: {
-                    mode: "shared",
-                    title: "تأكيد حذف التحويل",
-                    description: `هل أنت متأكد من حذف التحويل من ${row.source_path}؟ لا يمكن التراجع عن هذا الإجراء.`,
-                    confirmLabel: "حذف التحويل",
-                  },
-                },
           },
         };
         return (
@@ -297,16 +300,18 @@ export default function RedirectsClient({
           result.status === "active" || result.status === "inactive"
             ? result.status
             : nextStatus;
-        return adminActionSuccess(
-          confirmedStatus === "active"
-            ? "تم تفعيل التحويل"
-            : "تم إيقاف التحويل",
-          result.message,
-          {
-            code:
-              confirmedStatus === "active" ? "published" : "unpublished",
-            entityId: row.id,
-          },
+        return withAdminActionSettledResult(
+          adminActionSuccess(
+            confirmedStatus === "active"
+              ? "تم تفعيل التحويل"
+              : "تم إيقاف التحويل",
+            result.message,
+            {
+              code: confirmedStatus === "active" ? "published" : "unpublished",
+              entityId: row.id,
+            },
+          ),
+          result,
         );
       } catch (error) {
         return adminActionFailure(
@@ -330,10 +335,13 @@ export default function RedirectsClient({
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
           execute: () => deleteRedirectAction(row.id),
         });
-        return adminActionSuccess("تم حذف التحويل", result.message, {
-          code: "deleted",
-          entityId: row.id,
-        });
+        return withAdminActionSettledResult(
+          adminActionSuccess("تم حذف التحويل", result.message, {
+            code: "deleted",
+            entityId: row.id,
+          }),
+          result,
+        );
       } catch (error) {
         return adminActionFailure(
           "تعذر حذف التحويل",
@@ -355,11 +363,7 @@ export default function RedirectsClient({
         onToggle: toggleRedirect,
         onDelete: deleteRedirect,
       }),
-    [
-      deleteRedirect,
-      instant.getRowInteraction,
-      toggleRedirect,
-    ],
+    [deleteRedirect, instant.getRowInteraction, toggleRedirect],
   );
   const hasFilters =
     Boolean(controller.query.search) ||
@@ -373,7 +377,9 @@ export default function RedirectsClient({
               controller.error
                 ? "تعذر تحميل التحويلات"
                 : "تعذر تحميل تفضيلات الأعمدة",
-              controller.error?.message ?? preferenceError ?? "تعذر تحميل التفضيلات.",
+              controller.error?.message ??
+                preferenceError ??
+                "تعذر تحميل التفضيلات.",
             ),
           )
         : null,

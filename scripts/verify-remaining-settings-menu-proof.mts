@@ -121,6 +121,10 @@ function cache(kind: string, target: string) {
 stubs.set("next/cache", { revalidatePath: (target: string) => cache("path", target),
   revalidateTag: (target: string) => cache("tag", target), updateTag: (target: string) => cache("update", target),
   unstable_cache: (fn: unknown) => fn, unstable_noStore() {} });
+stub("src/lib/cache/public-cache-generation.ts", {
+  cachePublicRead: (fn: unknown) => fn,
+  advancePublicCacheGeneration: async () => undefined,
+});
 class Redirect extends Error { href: string; constructor(href: string) { super("isolated redirect"); this.href = href; } }
 stubs.set("next/navigation", { redirect: (href: string) => { throw new Redirect(href); } });
 stubs.set("react", { ...require("react"), cache: (fn: unknown) => fn });

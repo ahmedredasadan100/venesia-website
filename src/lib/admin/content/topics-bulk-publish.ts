@@ -70,6 +70,7 @@ const publishedRpcResultSchema = z
     alreadyPublishedIds: optionalTopicIdsSchema,
     committedAt: z.string().datetime({ offset: true }),
     auditIds: auditIdsSchema,
+    commandId: z.string().uuid().optional(),
   })
   .superRefine((result, context) => {
     const resolvedIds = [
@@ -98,6 +99,7 @@ const publishedRpcResultSchema = z
 
 const topicsBulkPublishRpcResultSchema = z.discriminatedUnion("code", [
   publishedRpcResultSchema,
+  z.strictObject({ ok: z.literal(false), code: z.literal("command_conflict") }),
   z.strictObject({
     ok: z.literal(false),
     code: z.literal("invalid_input"),

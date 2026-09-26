@@ -1,7 +1,8 @@
 "use server";
 
+import { revalidateCommittedPageBlockResult, success } from "./helpers";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
-import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { cleanText, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
 import { databaseAssignmentKind, mutatePageComposition, parseAssignmentKeys } from "./helpers";
 
@@ -22,5 +23,5 @@ export async function bulkPageBlockAssignments(formData: FormData) {
       action: databaseAction,
     })),
   }, actor);
-  await revalidatePageBlocksPath(pageId);
+  return revalidateCommittedPageBlockResult(pageId, success({ message: action === "detach" ? "تمت إزالة الروابط المحددة من الصفحة." : "تم تحديث الروابط المحددة." }));
 }

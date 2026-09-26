@@ -1163,6 +1163,17 @@ function runConsumerCapabilityAuditPreflight() {
       [],
       `Consumer Capability Adoption Audit failed: ${failures.join(", ")}`,
     );
+    if (process.argv.includes("--json")) {
+      console.log(JSON.stringify({
+        phase: requestedPhase,
+        capabilities: currentSharedCapabilityKeys,
+        consumers: consumerCapabilityAuditRecords.map(consumer => ({
+          id: consumer.id,
+          boundary: consumer.boundary,
+          decisions: resolveConsumerCapabilityAudit(consumer),
+        })),
+      }));
+    }
     console.log("Consumer Capability Adoption Audit passed.");
     process.exit(0);
   }

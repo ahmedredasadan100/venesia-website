@@ -22,6 +22,7 @@ import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-
 import {
   adminActionFailure,
   adminActionSuccess,
+  withAdminActionSettledResult,
   type AdminActionResult,
 } from "../../../lib/admin/admin-action-result";
 import type {
@@ -121,7 +122,10 @@ function createAdminUserColumns(input: {
       minWidth: 220,
       width: 240,
       renderCell: ({ row }) => (
-        <span className="block truncate text-left font-en text-sm text-white/72" dir="ltr">
+        <span
+          className="block truncate text-left font-en text-sm text-white/72"
+          dir="ltr"
+        >
           {row.email}
         </span>
       ),
@@ -203,71 +207,76 @@ function createAdminUserColumns(input: {
                   label: "الحالة",
                   value: row.is_active ? "نشط" : "موقوف",
                 },
-                { label: "آخر دخول", value: formatAdminDateTime(row.last_login_at) },
+                {
+                  label: "آخر دخول",
+                  value: formatAdminDateTime(row.last_login_at),
+                },
               ],
             },
             copyPublicLink: { access: "hidden" },
-            visibility: pendingAction === "visibility"
-              ? {
-                  access: "disabled",
-                  disabledReason: blockedReason,
-                  pending: true,
-                  isVisible: row.is_active,
-                }
-              : isSelf && row.is_active
+            visibility:
+              pendingAction === "visibility"
                 ? {
                     access: "disabled",
-                    disabledReason: "لا يمكنك تعطيل حسابك الحالي.",
-                    isVisible: true,
-                  }
-                : {
-                    access: "allowed",
+                    disabledReason: blockedReason,
+                    pending: true,
                     isVisible: row.is_active,
-                    onSelect: async () => {
-                      const result = await input.onToggle(row);
-                      onMutationResult?.(result);
+                  }
+                : isSelf && row.is_active
+                  ? {
+                      access: "disabled",
+                      disabledReason: "لا يمكنك تعطيل حسابك الحالي.",
+                      isVisible: true,
+                    }
+                  : {
+                      access: "allowed",
+                      isVisible: row.is_active,
+                      onSelect: async () => {
+                        const result = await input.onToggle(row);
+                        onMutationResult?.(result);
+                      },
+                      confirmation: {
+                        mode: "shared",
+                        title: row.is_active
+                          ? "تعطيل المستخدم؟"
+                          : "تفعيل المستخدم؟",
+                        description: row.is_active
+                          ? `سيتم تعطيل «${row.username}» وإبطال جلساته فورًا.`
+                          : `سيتم تفعيل «${row.username}» والسماح له بتسجيل الدخول وفق الصلاحيات الحالية.`,
+                        confirmLabel: row.is_active
+                          ? "تأكيد التعطيل"
+                          : "تأكيد التفعيل",
+                      },
                     },
-                    confirmation: {
-                      mode: "shared",
-                      title: row.is_active
-                        ? "تعطيل المستخدم؟"
-                        : "تفعيل المستخدم؟",
-                      description: row.is_active
-                        ? `سيتم تعطيل «${row.username}» وإبطال جلساته فورًا.`
-                        : `سيتم تفعيل «${row.username}» والسماح له بتسجيل الدخول وفق الصلاحيات الحالية.`,
-                      confirmLabel: row.is_active
-                        ? "تأكيد التعطيل"
-                        : "تأكيد التفعيل",
-                    },
-                  },
             featured: { access: "hidden" },
             duplicate: { access: "hidden" },
             archive: { access: "hidden" },
-            delete: pendingAction === "delete"
-              ? {
-                  access: "disabled",
-                  disabledReason: blockedReason,
-                  pending: true,
-                }
-              : isSelf
+            delete:
+              pendingAction === "delete"
                 ? {
                     access: "disabled",
-                    disabledReason: "لا يمكنك حذف حسابك الحالي.",
+                    disabledReason: blockedReason,
+                    pending: true,
                   }
-                : {
-                    access: "allowed",
-                    onSelect: async () => {
-                      const result = await input.onDelete(row);
-                      onMutationResult?.(result);
-                      if (!result.ok) throw new Error(result.message);
+                : isSelf
+                  ? {
+                      access: "disabled",
+                      disabledReason: "لا يمكنك حذف حسابك الحالي.",
+                    }
+                  : {
+                      access: "allowed",
+                      onSelect: async () => {
+                        const result = await input.onDelete(row);
+                        onMutationResult?.(result);
+                        if (!result.ok) throw new Error(result.message);
+                      },
+                      confirmation: {
+                        mode: "shared",
+                        title: "حذف المستخدم نهائيًا؟",
+                        description: `سيتم حذف المستخدم «${row.username}» نهائيًا. لا يمكن التراجع عن هذا الإجراء.`,
+                        confirmLabel: "تأكيد الحذف النهائي",
+                      },
                     },
-                    confirmation: {
-                      mode: "shared",
-                      title: "حذف المستخدم نهائيًا؟",
-                      description: `سيتم حذف المستخدم «${row.username}» نهائيًا. لا يمكن التراجع عن هذا الإجراء.`,
-                      confirmLabel: "تأكيد الحذف النهائي",
-                    },
-                  },
           },
         };
         return (
@@ -299,8 +308,9 @@ export default function UsersManagementClient({
     controller.query,
   );
   const [createOpen, setCreateOpen] = useState(false);
-  const [editingUser, setEditingUser] =
-    useState<AdminUserEntityListRow | null>(null);
+  const [editingUser, setEditingUser] = useState<AdminUserEntityListRow | null>(
+    null,
+  );
 
   const toggleUserActive = useCallback(
     async (row: AdminUserEntityListRow): Promise<AdminActionResult> => {
@@ -344,20 +354,21 @@ export default function UsersManagementClient({
             );
           },
         });
-        return adminActionSuccess(
-          nextActive ? "تم تفعيل المستخدم" : "تم تعطيل المستخدم",
-          result.message,
-          {
-            code: nextActive ? "published" : "unpublished",
-            entityId: row.id,
-          },
+        return withAdminActionSettledResult(
+          adminActionSuccess(
+            nextActive ? "تم تفعيل المستخدم" : "تم تعطيل المستخدم",
+            result.message,
+            {
+              code: nextActive ? "published" : "unpublished",
+              entityId: row.id,
+            },
+          ),
+          result,
         );
       } catch (error) {
         return adminActionFailure(
           "تعذر تحديث حالة المستخدم",
-          error instanceof Error
-            ? error.message
-            : "تعذر تحديث حالة المستخدم.",
+          error instanceof Error ? error.message : "تعذر تحديث حالة المستخدم.",
           { entityId: row.id },
         );
       }
@@ -381,10 +392,13 @@ export default function UsersManagementClient({
             };
           },
         });
-        return adminActionSuccess("تم حذف المستخدم", result.message, {
-          code: "deleted",
-          entityId: row.id,
-        });
+        return withAdminActionSettledResult(
+          adminActionSuccess("تم حذف المستخدم", result.message, {
+            code: "deleted",
+            entityId: row.id,
+          }),
+          result,
+        );
       } catch (error) {
         return adminActionFailure(
           "تعذر حذف المستخدم",
@@ -405,12 +419,7 @@ export default function UsersManagementClient({
         onToggle: toggleUserActive,
         onDelete: deleteUser,
       }),
-    [
-      currentUserId,
-      deleteUser,
-      instant.getRowInteraction,
-      toggleUserActive,
-    ],
+    [currentUserId, deleteUser, instant.getRowInteraction, toggleUserActive],
   );
   const filters = useMemo<readonly AdminEntityFilterDef[]>(
     () => [
@@ -489,8 +498,7 @@ export default function UsersManagementClient({
                 preserveParams: ["sort", "limit"],
                 search: {
                   value: controller.query.search,
-                  placeholder:
-                    "بحث باسم المستخدم أو البريد أو الاسم الكامل...",
+                  placeholder: "بحث باسم المستخدم أو البريد أو الاسم الكامل...",
                   minLength: adminUsersQueryContract.searchMinLength,
                 },
                 filters,
@@ -506,9 +514,7 @@ export default function UsersManagementClient({
               getRowId={(row) => row.id}
               getRowLabel={(row) => row.username}
               initialVisibleColumns={initialVisibleColumns}
-              defaultVisibleColumns={[
-                ...getAdminUsersDefaultColumnKeys(),
-              ]}
+              defaultVisibleColumns={[...getAdminUsersDefaultColumnKeys()]}
               onPersistColumns={saveAdminUsersTablePreferences}
               onRestoreColumns={restoreAdminUsersTablePreferences}
               enableColumnManagement

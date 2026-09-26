@@ -182,13 +182,23 @@ function requireImage(
   return image;
 }
 
+function indexLocationRows(locations: PublicProjectLocationRow[]) {
+  const index = new Map<number, PublicProjectLocationRow>();
+  for (const location of locations) {
+    const id = Number(location.id);
+    // Preserve the previous first-match semantics for duplicate numeric IDs.
+    if (!Number.isNaN(id) && !index.has(id)) index.set(id, location);
+  }
+  return index;
+}
+
 function mapLocationLevel(
-  locations: PublicProjectLocationRow[],
+  locations: ReadonlyMap<number, PublicProjectLocationRow>,
   idValue: number | null,
 ): PublicProjectLocationLevel | null {
   if (idValue === null || idValue === undefined) return null;
   const id = Number(idValue);
-  const row = locations.find((candidate) => Number(candidate.id) === id);
+  const row = locations.get(id);
   if (!row) return null;
   return {
     id: String(id),
@@ -210,6 +220,7 @@ function requireLocationPointKind(value: string): PublicProjectLocationPoint["ki
 
 export function mapProjectAggregateToPublicProject(
   aggregate: PublicProjectAggregate,
+  locationIndex: ReadonlyMap<number, PublicProjectLocationRow> = indexLocationRows(aggregate.locations ?? []),
 ): PublicProject {
   const project = aggregate.project;
   const category = project.type;
@@ -217,7 +228,7 @@ export function mapProjectAggregateToPublicProject(
     throw new PublicProjectMappingError("Invalid project type");
   }
 
-  const locations = rows(aggregate.locations);
+  const locations = locationIndex;
   const floorPlanDetails = rows(aggregate.floorPlanDetails);
   const media = rows(aggregate.media);
   const videos = rows(aggregate.videos);
@@ -343,4 +354,12 @@ export function mapProjectRowToPublicProject(
   locations: PublicProjectLocationRow[] = [],
 ) {
   return mapProjectAggregateToPublicProject({ project, locations });
+}
+
+export function mapProjectRowsToPublicProjects(
+  projects: PublicProjectRootRow[],
+  locations: PublicProjectLocationRow[],
+): PublicProject[] {
+  const locationIndex = indexLocationRows(locations);
+  return projects.map((project) => mapProjectAggregateToPublicProject({ project }, locationIndex));
 }

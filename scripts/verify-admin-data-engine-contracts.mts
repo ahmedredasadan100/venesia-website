@@ -39,6 +39,7 @@ import {
   type AdminCollectionSurfaceInventoryEntry,
 } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 import { collectAdminNavigationAdoptionFailures } from "./lib/admin-navigation-source-proof.mts";
+import { withAdminActionSettledResult } from "../src/lib/admin/admin-action-result.ts";
 
 type Filters = { status: "all" | "published"; category: number | null };
 type SortField =
@@ -847,6 +848,7 @@ const committedWarning = { ok: true, feedbackStatus: "warning", message: "تم �
 let adapterWriteCalls = 0;
 const confirmedAction = async () => { adapterWriteCalls += 1; return committedWarning; };
 const adapterBindings = {
+  withAdminActionSettledResult,
   instant: { mutateAsync: async (options: { execute: () => Promise<unknown> }) => options.execute() },
   controller: { query: { filters: { status: "all" } } },
   toggleSeriesStatusAjax: confirmedAction,

@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import type { QueryData } from "@supabase/supabase-js";
-import { unstable_cache } from "next/cache";
 import { cache } from "react";
 
 import type { ProjectPublicationStatus } from "../admin/projects/project-publishing-capability";
@@ -9,7 +10,7 @@ import { logError } from "../logging";
 import { getSupabaseAdmin } from "../supabase-admin";
 import {
   mapProjectAggregateToPublicProject,
-  mapProjectRowToPublicProject,
+  mapProjectRowsToPublicProjects,
   PublicProjectMappingError,
   type PublicProjectLocationRow,
   type PublicProjectRootRow,
@@ -80,29 +81,55 @@ async function loadLocationRows(
 ): Promise<PublicProjectLocationRow[]> {
   const ids = locationIdsFromProjects(projects);
   if (!ids.length) return [];
-  const result = await getSupabaseAdmin()
-    .from("project_locations")
-    .select("id,level,parent_id,name_ar,name_en")
-    .in("id", ids);
-  if (result.error) throwReadError("Public projects location lookup failed", result.error);
-  return result.data ?? [];
+  const locations: PublicProjectLocationRow[] = [];
+  // Bound the membership URL as well as each response. Continue until empty:
+  // a hosted response cap may be lower than the requested chunk size.
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const chunk = ids.slice(offset, offset + 100);
+    let afterId: number | undefined;
+    for (;;) {
+      const request = getSupabaseAdmin()
+        .from("project_locations")
+        .select("id,level,parent_id,name_ar,name_en")
+        .in("id", chunk)
+        .order("id", { ascending: true })
+        .limit(100);
+      if (afterId !== undefined) request.gt("id", afterId);
+      const { data, error } = await request;
+      if (error) throwReadError("Public projects location lookup failed", error);
+      if (!data?.length) break;
+      locations.push(...data);
+      afterId = data[data.length - 1].id;
+    }
+  }
+  return locations;
 }
 
 async function queryPublicProjects() {
-  const request = getSupabaseAdmin()
-    .from("projects")
-    .select(PUBLIC_PROJECT_COLUMNS)
-    .eq("publication_status", "published");
-  const result = await request
-    .order("updated_at", { ascending: false })
-    .order("id", { ascending: false });
-
-  if (result.error) throwReadError("Public projects query failed", result.error);
-
-  const projects = result.data ?? [];
+  const projects: PublicProjectRootRow[] = [];
+  let afterId: number | undefined;
+  for (;;) {
+    const request = getSupabaseAdmin()
+      .from("projects")
+      .select(PUBLIC_PROJECT_COLUMNS)
+      .eq("publication_status", "published")
+      .order("id", { ascending: true })
+      .limit(500);
+    if (afterId !== undefined) request.gt("id", afterId);
+    const { data, error } = await request;
+    if (error) throwReadError("Public projects query failed", error);
+    if (!data?.length) break;
+    projects.push(...data);
+    afterId = data[data.length - 1].id;
+  }
+  // Preserve the existing newest-first collection contract after enumeration.
+  projects.sort((left, right) => {
+    if (left.updated_at === right.updated_at) return right.id - left.id;
+    return left.updated_at < right.updated_at ? 1 : -1;
+  });
   const locations = await loadLocationRows(projects);
   try {
-    return projects.map((project) => mapProjectRowToPublicProject(project, locations));
+    return mapProjectRowsToPublicProjects(projects, locations);
   } catch (error) {
     logError("Public projects mapping failed", error);
     throw new PublicProjectReadError("mapping_failed", "تعذر تجهيز بيانات المشاريع للعرض.");
@@ -110,7 +137,7 @@ async function queryPublicProjects() {
 }
 
 async function queryPublicProjectsCached() {
-  return unstable_cache(
+  return cachePublicRead(
     () => queryPublicProjects(),
     ["public-projects-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION],
     { revalidate: 300, tags: ["projects"] },
@@ -131,15 +158,30 @@ export type PublishedProjectSitemapRow = {
 export async function loadPublishedProjectSitemapRows(): Promise<
   PublishedProjectSitemapRow[]
 > {
-  return unstable_cache(
+  return cachePublicRead(
     async () => {
-      const { data, error } = await getSupabaseAdmin()
-        .from("projects")
-        .select("slug,updated_at,canonical_url,robots_index")
-        .eq("publication_status", "published")
-        .order("updated_at", { ascending: false });
-      if (error) throwReadError("Published project sitemap query failed", error);
-      return (data ?? []).map((row) => ({
+      const rows = [];
+      let afterId: number | undefined;
+      for (;;) {
+        const request = getSupabaseAdmin()
+          .from("projects")
+          .select("id,slug,updated_at,canonical_url,robots_index")
+          .eq("publication_status", "published")
+          .order("id", { ascending: true })
+          .limit(500);
+        if (afterId !== undefined) request.gt("id", afterId);
+        const { data, error } = await request;
+        if (error) throwReadError("Published project sitemap query failed", error);
+        if (!data?.length) break;
+        rows.push(...data);
+        afterId = data[data.length - 1].id;
+      }
+      // Keep the existing newest-first result; ID breaks timestamp ties.
+      rows.sort((left, right) => {
+        if (left.updated_at === right.updated_at) return right.id - left.id;
+        return left.updated_at < right.updated_at ? 1 : -1;
+      });
+      return rows.map((row) => ({
         slug: String(row.slug),
         updatedAt: String(row.updated_at),
         canonicalUrl: typeof row.canonical_url === "string" ? row.canonical_url : null,
@@ -234,7 +276,7 @@ async function queryProjectBySlug(
 export const loadProjectBySlugResult = cache(async function loadProjectBySlugResult(
   slug: string,
 ): Promise<LoadProjectBySlugResult> {
-  return unstable_cache(
+  return cachePublicRead(
     () => queryProjectBySlug(slug, "marketing"),
     ["public-project-clean-aggregate", PUBLIC_PROJECT_MODEL_CACHE_VERSION, slug],
     { revalidate: 300, tags: ["projects", "project"] },

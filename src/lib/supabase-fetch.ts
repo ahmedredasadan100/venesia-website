@@ -356,6 +356,7 @@ export function createSupabaseFetch(defaultTimeoutMs = 8000): typeof fetch {
     try {
       const response = await fetch(input, {
         ...init,
+        cache: "no-store",
         ...(correlationSpan ? { headers: correlationSpan.headers } : {}),
         signal: controller.signal,
       });

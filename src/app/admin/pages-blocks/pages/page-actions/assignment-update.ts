@@ -1,9 +1,10 @@
 "use server";
 
+import { revalidateCommittedPageBlockResult } from "./helpers";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { BLOCK_MODULE_REGISTRY } from "../../../../../lib/page-blocks/block-module-registry";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
-import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { cleanText, parseFormBoolean, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
 import type { PageBlockType } from "../../../../../lib/page-blocks/types";
 import { getDefaultAssignmentPosition } from "../../../../../lib/page-composition/page-assignment-contract";
@@ -44,8 +45,7 @@ export async function updatePageBlockAssignment(
   } catch (error) {
     return failure(error instanceof Error ? error.message : "تعذر تحديث الربط.");
   }
-  await revalidatePageBlocksPath(pageId);
-  return success({ updatedAt });
+  return revalidateCommittedPageBlockResult(pageId, success({ updatedAt }));
 }
 
 export async function updateHeroPageAssignment(
@@ -74,6 +74,5 @@ export async function updateHeroPageAssignment(
   } catch (error) {
     return failure(error instanceof Error ? error.message : "تعذر تحديث ربط الهيرو.");
   }
-  await revalidatePageBlocksPath(pageId);
-  return success();
+  return revalidateCommittedPageBlockResult(pageId, success());
 }

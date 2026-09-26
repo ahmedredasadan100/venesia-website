@@ -50,6 +50,12 @@ export type AdminEntityListFiltersProps = {
   ) => void;
   /** Collection-owned columns control, rendered at inline-end. */
   columnsControl?: ReactNode;
+  /** Read-only recovery of an unresolved command, owned by the Data runtime. */
+  recoveryAction?: {
+    label: string;
+    pending: boolean;
+    onRecover: () => Promise<void>;
+  };
   /** Bulk actions replace chips while selection is active. */
   contextOverride?: ReactNode;
   contextOverrideActive?: boolean;
@@ -240,6 +246,7 @@ export default function AdminEntityListFilters({
   onClearFilters,
   onQueryPatch,
   columnsControl,
+  recoveryAction,
   contextOverride,
   contextOverrideActive = false,
   surface = "standalone",
@@ -601,6 +608,18 @@ export default function AdminEntityListFilters({
             </button>
           </div>
 
+          {recoveryAction ? (
+            <button
+              type="button"
+              data-admin-command-recovery=""
+              disabled={recoveryAction.pending}
+              aria-busy={recoveryAction.pending}
+              onClick={() => void recoveryAction.onRecover()}
+              className="rounded-[11px] border border-amber-300/25 bg-amber-400/10 px-3.5 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-400/15 disabled:cursor-wait disabled:opacity-50"
+            >
+              {recoveryAction.label}
+            </button>
+          ) : null}
           <div className="ms-auto shrink-0" data-admin-toolbar-columns="">
             {columnsControl}
           </div>

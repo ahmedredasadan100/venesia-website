@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
@@ -87,6 +88,39 @@ function findFunction(sourceFile: ts.SourceFile, name: string) {
   );
   assert.ok(declaration?.body, `Missing executable function ${name}.`);
   return declaration;
+}
+
+function resolveCommandActionImplementation(sourceFile: ts.SourceFile, exportName: string, implementationName: string) {
+  const wrapper = findFunction(sourceFile, exportName);
+  assert.equal(wrapper.body!.statements.length, 1, "Command wrapper must delegate directly");
+  const returned = wrapper.body!.statements[0];
+  assert.ok(ts.isReturnStatement(returned) && returned.expression && ts.isCallExpression(returned.expression));
+  const commandCall = returned.expression;
+  assert.ok(ts.isIdentifier(commandCall.expression) && commandCall.expression.text === "withTopicCommand");
+  assert.equal(commandCall.arguments.length, 3);
+  const delegate = commandCall.arguments[2];
+  assert.ok(ts.isArrowFunction(delegate) && ts.isCallExpression(delegate.body));
+  assert.ok(ts.isIdentifier(delegate.body.expression) && delegate.body.expression.text === implementationName,
+    "Exported action must reach the inspected implementation through its command callback");
+  assert.equal(delegate.body.arguments.length, 1);
+  assert.equal(delegate.body.arguments[0].getText(sourceFile), commandCall.arguments[0].getText(sourceFile));
+  const commandOwner = findFunction(sourceFile, "withTopicCommand");
+  const callbackName = commandOwner.parameters[2]?.name.getText(sourceFile);
+  assert.ok(callsInSourceOrder(commandOwner).some(call => ts.isPropertyAccessExpression(call.expression)
+    && call.expression.expression.getText(sourceFile) === "topicCommandContext" && call.expression.name.text === "run"
+    && call.arguments[1]?.getText(sourceFile) === callbackName), "Command owner must execute the callback");
+  return findFunction(sourceFile, implementationName);
+}
+
+function bulkValidationPrecedesPublishRpc(sourceFile: ts.SourceFile, implementation: ts.FunctionDeclaration) {
+  const calls = callsInSourceOrder(implementation);
+  const validation = calls.find(call => callName(call) === "getPublishFailure");
+  const titleValidation = calls.find(call => callName(call) === "getReleaseTitleQualityFailure");
+  const write = calls.find(call => callName(call) === "rpc" && call.arguments[0]
+    && ts.isStringLiteral(call.arguments[0]) && call.arguments[0].text === "admin_publish_topics_atomically");
+  return Boolean(validation && titleValidation && write
+    && validation.getStart(sourceFile) < write.getStart(sourceFile)
+    && titleValidation.getStart(sourceFile) < write.getStart(sourceFile));
 }
 
 function replaceFunctionBody(
@@ -185,6 +219,10 @@ function loadInMemoryBulkPublishAction(
   };
   const supabase = {
     from(table: string) {
+      if (table === "admin_audit_logs") {
+        const receipt = { select: () => receipt, eq: () => receipt, contains: () => receipt, maybeSingle: async () => ({ data: null, error: null }) };
+        return receipt;
+      }
       assert.equal(table, "topics");
       const query = {
         select() {
@@ -227,6 +265,7 @@ function loadInMemoryBulkPublishAction(
       return {
         data: {
           ok: true,
+          commandId: args.p_command_id,
           code: "published",
           requestedIds,
           publishedIds,
@@ -242,6 +281,7 @@ function loadInMemoryBulkPublishAction(
     code = "in_memory";
   }
   const actionDependencies: Readonly<Record<string, unknown>> = {
+    "node:async_hooks": { AsyncLocalStorage },
     "../../../../lib/admin/seo/entity-seo-persistence": {
       toTopicSeoScoreInput: unexpectedSeoCalculation,
       deriveEntitySeoScore: unexpectedSeoCalculation,
@@ -250,23 +290,7 @@ function loadInMemoryBulkPublishAction(
     "../../../../lib/admin/auth/require-admin-session": {
       requireAdminSession: async () => ({ id: 73 }),
     },
-    "../../../../lib/admin/admin-action-result": {
-      adminActionFailure: (
-        title: string,
-        message: string,
-        options: Record<string, unknown> = {},
-      ) => ({ status: "error", title, message, ...options }),
-      adminActionSuccess: (
-        title: string,
-        message: string,
-        options: Record<string, unknown> = {},
-      ) => ({ status: "success", title, message, ...options }),
-      adminActionWarning: (
-        title: string,
-        message: string,
-        options: Record<string, unknown> = {},
-      ) => ({ status: "warning", title, message, ...options }),
-    },
+    "../../../../lib/admin/admin-action-result": require("../src/lib/admin/admin-action-result.ts"),
     "../../../../lib/admin/audit/cms-audit-actions": {
       buildCmsAuditAction: () => "in-memory",
     },
@@ -822,31 +846,32 @@ check(
 
 const actionsAst = parseSource("src/app/admin/content/topics/actions.ts");
 const rowPublishFunction = findFunction(actionsAst, "setUnifiedContentStatus");
-const bulkPublishFunction = findFunction(actionsAst, "bulkUpdateUnifiedContent");
+const bulkPublishFunction = resolveCommandActionImplementation(actionsAst, "bulkUpdateUnifiedContent", "bulkUpdateUnifiedContentImpl");
 const rowPublishCalls = callsInSourceOrder(rowPublishFunction);
-const bulkPublishCalls = callsInSourceOrder(bulkPublishFunction);
 const rowValidationCall = rowPublishCalls.find(
   (call) => callName(call) === "getPublishFailure",
 );
 const rowWriteCall = rowPublishCalls.find((call) => callName(call) === "update");
-const bulkValidationCall = bulkPublishCalls.find(
-  (call) => callName(call) === "getPublishFailure",
-);
-const bulkReleaseTitleCall = bulkPublishCalls.find(
-  (call) => callName(call) === "getReleaseTitleQualityFailure",
-);
-const bulkRpcCall = bulkPublishCalls.find((call) => callName(call) === "rpc");
 check(
-  "row and bulk publish perform canonical semantic validation before their write boundary",
+  "row and delegated bulk publish perform canonical semantic validation before their write boundary",
   Boolean(rowValidationCall) &&
     Boolean(rowWriteCall) &&
     rowValidationCall!.getStart(actionsAst) < rowWriteCall!.getStart(actionsAst) &&
-    Boolean(bulkValidationCall) &&
-    Boolean(bulkReleaseTitleCall) &&
-    Boolean(bulkRpcCall) &&
-    bulkReleaseTitleCall!.getStart(actionsAst) < bulkRpcCall!.getStart(actionsAst) &&
-    bulkValidationCall!.getStart(actionsAst) < bulkRpcCall!.getStart(actionsAst),
+    bulkValidationPrecedesPublishRpc(actionsAst, bulkPublishFunction),
 );
+const detachedBulk = parseSource("src/app/admin/content/topics/actions.ts", replaceFunctionBody(
+  "src/app/admin/content/topics/actions.ts", "bulkUpdateUnifiedContent", "{ return Promise.resolve({ ok: true }); }",
+));
+assert.throws(() => resolveCommandActionImplementation(detachedBulk, "bulkUpdateUnifiedContent", "bulkUpdateUnifiedContentImpl"));
+for (const body of [
+  '{ return client.rpc("admin_publish_topics_atomically", {}); }',
+  '{ client.rpc("admin_publish_topics_atomically", {}); getReleaseTitleQualityFailure(row); getPublishFailure(row); }',
+  '{ getReleaseTitleQualityFailure(row); getPublishFailure(row); return client.rpc("unrelated_rpc", {}); }',
+]) {
+  const fixture = parseSource("bulk-order-negative.ts", "function bulk() " + body);
+  assert.equal(bulkValidationPrecedesPublishRpc(fixture, findFunction(fixture, "bulk")), false);
+}
+check("bulk guard rejects detached delegates, missing validation, early writes, and unrelated RPC targets", true);
 
 const capabilityAst = parseSource(
   "src/lib/admin/content-workflow/content-review-capability.ts",
@@ -957,7 +982,7 @@ const invalidBulkResult = await invalidBulkHarness.action(
 );
 check(
   "a mixed valid and temporary-title bulk selection aborts before every write and RPC",
-  invalidBulkResult.status === "error" &&
+  invalidBulkResult.ok === false &&
     invalidBulkResult.code === "publish_validation" &&
     invalidBulkResult.entityId === 2 &&
     invalidBulkResult.focusTarget === "content-title" &&
@@ -974,7 +999,7 @@ const invalidAlreadyPublishedBulkResult =
   await invalidAlreadyPublishedBulkHarness.action(bulkPublishForm([1, 2]));
 check(
   "a selected already-published temporary title aborts the whole mixed bulk request before RPC",
-  invalidAlreadyPublishedBulkResult.status === "error" &&
+  invalidAlreadyPublishedBulkResult.ok === false &&
     invalidAlreadyPublishedBulkResult.code === "publish_validation" &&
     invalidAlreadyPublishedBulkResult.entityId === 2 &&
     invalidAlreadyPublishedBulkHarness.rpcCalls() === 0 &&
@@ -1001,7 +1026,7 @@ const legacyNoOpBulkResult = await legacyNoOpBulkHarness.action(
 );
 check(
   "an already-published row with only legacy non-title debt remains a no-op in a valid mixed bulk request",
-  legacyNoOpBulkResult.status === "success" &&
+  legacyNoOpBulkResult.ok === true &&
     legacyNoOpBulkResult.code === "published" &&
     legacyNoOpBulkHarness.rpcCalls() === 1 &&
     legacyNoOpBulkHarness.directMutationCalls() === 0 &&
@@ -1015,7 +1040,7 @@ const validBulkHarness = loadInMemoryBulkPublishAction([
 const validBulkResult = await validBulkHarness.action(bulkPublishForm([1, 2]));
 check(
   "a valid bulk selection crosses one atomic RPC boundary and performs no direct row write",
-  validBulkResult.status === "success" &&
+  validBulkResult.ok === true &&
     validBulkResult.code === "published" &&
     validBulkHarness.rpcCalls() === 1 &&
     validBulkHarness.directMutationCalls() === 0 &&

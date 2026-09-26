@@ -161,7 +161,7 @@ export async function setProjectPublicationAjax(
   }
 
   try {
-    revalidateProjectPaths(
+    await revalidateProjectPaths(
       result.project_type,
       result.project_id,
       result.project_slug,

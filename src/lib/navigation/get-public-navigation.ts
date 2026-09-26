@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 
 import { getSupabaseAdmin } from "../supabase-admin";
 import { logError } from "../logging";
@@ -108,7 +109,7 @@ export const getPublicNavigationItemsByMenuId = cache(async function getPublicNa
   if (!Number.isFinite(menuId) || menuId < 1) return [];
 
   try {
-    return await unstable_cache(
+    return await cachePublicRead(
       async () => {
         const { data: menu, error: menuError } = await getSupabaseAdmin()
           .from("menus")
@@ -167,7 +168,7 @@ export const getPublicNavigationSnapshot = cache(async function getPublicNavigat
   location = "main",
 ): Promise<PublicNavigationSnapshot> {
   try {
-    return await unstable_cache(
+    return await cachePublicRead(
       async () => queryPublicNavigationSnapshot(location),
       ["public-navigation-snapshot", location],
       { revalidate: 300, tags: ["navigation", "menus", "public-content", "topics", "projects", "page-composition"] },

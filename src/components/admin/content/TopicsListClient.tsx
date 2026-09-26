@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useAdminFeedback } from "../AdminFeedbackProvider";
 
 import {
   bulkUpdateUnifiedContent,
@@ -8,6 +9,7 @@ import {
   emptyUnifiedContentTrash,
   permanentlyDeleteUnifiedContent,
   restoreUnifiedContent,
+  recoverUnifiedContentCommand,
   setUnifiedContentStatus,
   softDeleteUnifiedContent,
   toggleUnifiedContentFeatured,
@@ -67,14 +69,21 @@ function toInstantMutationResult(
 ) {
   if (!result.ok) {
     return {
+      ...result,
       ok: false as const,
+      commandId: result.commandId,
+      completion: result.completion === "unknown" ? "unknown" as const : "not_committed" as const,
+      feedbackStatus: result.feedbackStatus === "warning" ? "warning" as const : "error" as const,
       code: result.code ?? failureCode,
       message: result.message,
     };
   }
 
   return {
+    ...result,
     ok: true as const,
+    commandId: result.commandId,
+    completion: result.completion === "committed" ? "committed" as const : undefined,
     message: result.message,
     feedbackStatus:
       result.feedbackStatus === "warning"
@@ -85,11 +94,19 @@ function toInstantMutationResult(
 
 function unexpectedMutationFailure(
   error: unknown,
-  input: { title: string; fallbackMessage: string; entityId: number },
+  input: { title: string; fallbackMessage: string; entityId?: number },
 ): AdminActionResult {
+  const unknown = error && typeof error === "object" &&
+    "completion" in error && error.completion === "unknown";
   return {
     ok: false,
-    feedbackStatus: "error",
+    feedbackStatus: unknown ? "warning" : "error",
+    ...(unknown ? {
+      completion: "unknown" as const,
+      code: "completion_unknown" as const,
+      commandId: "commandId" in error && typeof error.commandId === "string"
+        ? error.commandId : undefined,
+    } : {}),
     title: input.title,
     message: error instanceof Error ? error.message : input.fallbackMessage,
     entityId: input.entityId,
@@ -207,6 +224,11 @@ export default function TopicsListClient({
 
       try {
         const settledResult = await instant.mutateAsync({
+          intentKey: JSON.stringify(["featured", row.id, nextFeatured]),
+          recover: async ({ commandId }) => {
+            actionResult = await recoverUnifiedContentCommand(commandId);
+            return toInstantMutationResult(actionResult, "topic_recovery_failed");
+          },
           rowId: row.id,
           action: "featured",
           optimistic: (cache) => {
@@ -220,9 +242,9 @@ export default function TopicsListClient({
                 : current,
             );
           },
-          execute: async () => {
+          execute: async ({ commandId }) => {
             actionResult = await toggleUnifiedContentFeatured(
-              topicActionFormData(row.id, { desired_featured: String(nextFeatured) }),
+              topicActionFormData(row.id, { command_id: commandId, desired_featured: String(nextFeatured) }),
             );
             return toInstantMutationResult(
               actionResult,
@@ -307,12 +329,17 @@ export default function TopicsListClient({
 
       try {
         const settledResult = await instant.mutateAsync({
+          intentKey: JSON.stringify(["delete", row.id]),
+          recover: async ({ commandId }) => {
+            actionResult = await recoverUnifiedContentCommand(commandId);
+            return toInstantMutationResult(actionResult, "topic_recovery_failed");
+          },
           rowId: row.id,
           action: "delete",
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
-          execute: async () => {
+          execute: async ({ commandId }) => {
             actionResult = await softDeleteUnifiedContent(
-              topicActionFormData(row.id),
+              topicActionFormData(row.id, { command_id: commandId }),
             );
             return toInstantMutationResult(
               actionResult,
@@ -345,12 +372,17 @@ export default function TopicsListClient({
 
       try {
         const settledResult = await instant.mutateAsync({
+          intentKey: JSON.stringify(["restore", row.id]),
+          recover: async ({ commandId }) => {
+            actionResult = await recoverUnifiedContentCommand(commandId);
+            return toInstantMutationResult(actionResult, "topic_recovery_failed");
+          },
           rowId: row.id,
           action: "restore",
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
-          execute: async () => {
+          execute: async ({ commandId }) => {
             actionResult = await restoreUnifiedContent(
-              topicActionFormData(row.id),
+              topicActionFormData(row.id, { command_id: commandId }),
             );
             return toInstantMutationResult(
               actionResult,
@@ -383,12 +415,17 @@ export default function TopicsListClient({
 
       try {
         const settledResult = await instant.mutateAsync({
+          intentKey: JSON.stringify(["permanent_delete", row.id]),
+          recover: async ({ commandId }) => {
+            actionResult = await recoverUnifiedContentCommand(commandId);
+            return toInstantMutationResult(actionResult, "topic_recovery_failed");
+          },
           rowId: row.id,
           action: "permanent_delete",
           optimistic: (cache) => cache.removeRows(new Set([row.id])),
-          execute: async () => {
+          execute: async ({ commandId }) => {
             actionResult = await permanentlyDeleteUnifiedContent(
-              topicActionFormData(row.id, { confirm_permanent: "true" }),
+              topicActionFormData(row.id, { command_id: commandId, confirm_permanent: "true" }),
             );
             return toInstantMutationResult(
               actionResult,
@@ -447,11 +484,17 @@ export default function TopicsListClient({
       let actionResult: AdminActionResult | null = null;
       try {
         const settledResult = await instant.mutateAsync({
+          intentKey: JSON.stringify(["bulk", action, [...ids].sort((a, b) => a - b), categoryId]),
+          recover: async ({ commandId }) => {
+            actionResult = await recoverUnifiedContentCommand(commandId);
+            return toInstantMutationResult(actionResult, "topic_recovery_failed");
+          },
           action: `bulk-${action}`,
           bulk: true,
           optimistic: () => undefined,
-          execute: async () => {
+          execute: async ({ commandId }) => {
             const formData = new FormData();
+            formData.set("command_id", commandId);
             formData.set("bulk_action", action);
             if (action === "permanent_delete") {
               formData.set("confirm_permanent", "true");
@@ -470,14 +513,10 @@ export default function TopicsListClient({
         if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
       } catch (error) {
         if (actionResult) return actionResult;
-        return {
-          ok: false,
+        return unexpectedMutationFailure(error, {
           title: "تعذر تنفيذ العملية",
-          message:
-            error instanceof Error
-              ? error.message
-              : "تعذر تنفيذ العملية على الموضوعات المحددة.",
-        };
+          fallbackMessage: "تعذر تنفيذ العملية على الموضوعات المحددة.",
+        });
       }
 
       return {
@@ -485,6 +524,44 @@ export default function TopicsListClient({
         title: "تعذر تنفيذ العملية",
         message: "تعذر إثبات نتيجة العملية على الموضوعات المحددة.",
       };
+    },
+    [instant],
+  );
+
+  const emptyTrash = useCallback(
+    async (expectedCount: number): Promise<AdminActionResult> => {
+      let actionResult: AdminActionResult | null = null;
+      try {
+        const settledResult = await instant.mutateAsync({
+          action: "empty_trash",
+          bulk: true,
+          intentKey: JSON.stringify(["empty_trash", expectedCount]),
+          optimistic: () => undefined,
+          recover: async ({ commandId }) => {
+            actionResult = await recoverUnifiedContentCommand(commandId);
+            return toInstantMutationResult(actionResult, "topic_recovery_failed");
+          },
+          execute: async ({ commandId }) => {
+            const formData = new FormData();
+            formData.set("command_id", commandId);
+            formData.set("confirm_permanent", "true");
+            formData.set("expected_count", String(expectedCount));
+            actionResult = await emptyUnifiedContentTrash(formData);
+            return toInstantMutationResult(actionResult, "topic_empty_trash_failed");
+          },
+        });
+        if (actionResult) return withAdminActionSettledResult(actionResult, settledResult);
+      } catch (error) {
+        if (actionResult) return actionResult;
+        return unexpectedMutationFailure(error, {
+          title: "تعذر تأكيد إفراغ المحذوفات",
+          fallbackMessage: "تعذر تأكيد نتيجة إفراغ المحذوفات.",
+        });
+      }
+      return unexpectedMutationFailure(null, {
+        title: "تعذر تأكيد إفراغ المحذوفات",
+        fallbackMessage: "تعذر إثبات نتيجة إفراغ المحذوفات.",
+      });
     },
     [instant],
   );
@@ -527,6 +604,30 @@ export default function TopicsListClient({
       ? `${ADMIN_CONTENT_ROUTES.topics}?${query}`
       : ADMIN_CONTENT_ROUTES.topics;
   }, [controller.query, sort]);
+  const { publishFeedback } = useAdminFeedback();
+  const recoverPendingCommand = useCallback(async () => {
+    if (!instant.pendingCommand) return;
+    let result: AdminActionResult;
+    try {
+      const settled = await instant.recoverPending(instant.pendingCommand.commandId);
+      if (!settled) return;
+      result = {
+        ...settled,
+        title: typeof settled.title === "string" ? settled.title : "استعادة نتيجة العملية",
+      };
+    } catch (error) {
+      result = unexpectedMutationFailure(error, {
+        title: "تعذر تأكيد نتيجة العملية",
+        fallbackMessage: "تعذر استعادة نتيجة العملية. حاول الاستعادة مرة أخرى.",
+      });
+    }
+    publishFeedback(mapTopicsActionResultToFeedback(result, { currentListPath }), {
+      channel: `entity-list:${UNIFIED_CONTENT_LIST_ID}`,
+      placement: "global",
+      critical: !result.ok,
+      reveal: true,
+    });
+  }, [instant, publishFeedback, currentListPath]);
   const toolbar = useUnifiedContentToolbar({
     values: {
       q: controller.query.search,
@@ -593,12 +694,7 @@ export default function TopicsListClient({
           mapResultToFeedback={(result) =>
             mapTopicsActionResultToFeedback(result, { currentListPath })
           }
-          onEmptyTrash={(expectedCount) => {
-            const formData = new FormData();
-            formData.set("confirm_permanent", "true");
-            formData.set("expected_count", String(expectedCount));
-            return emptyUnifiedContentTrash(formData);
-          }}
+          onEmptyTrash={emptyTrash}
           onSuccess={controller.invalidate}
         />
       ) : null}
@@ -623,7 +719,14 @@ export default function TopicsListClient({
           sort={sort}
           initialVisibleColumns={initialVisibleColumns}
           initialFeedback={initialFeedback}
-          toolbar={toolbar}
+          toolbar={{
+            ...toolbar,
+            recoveryAction: instant.pendingCommand ? {
+              label: "استعادة نتيجة العملية",
+              pending: instant.recoveryPending,
+              onRecover: recoverPendingCommand,
+            } : undefined,
+          }}
           trashView={isTrashView}
           rowActionHandlers={rowActionHandlers}
           bulkInteraction={instant.bulkInteraction}

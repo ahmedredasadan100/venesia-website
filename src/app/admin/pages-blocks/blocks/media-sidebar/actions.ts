@@ -1,5 +1,7 @@
 "use server";
 
+import { adminActionSuccess } from "../../../../../lib/admin/admin-action-result";
+
 import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
@@ -21,7 +23,7 @@ import {
   parsePageBlockBulkIds,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidateCommittedPageBlockAction } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   buildMediaSidebarModuleConfig,
   parseMediaSidebarWidgetKey,
@@ -107,7 +109,8 @@ export async function toggleMediaSidebarModuleStatus(
     entityId: id,
     metadata: { blockType: "media-sidebar", status: normalizedStatus },
   }, actor);
-  await revalidateBlockModulePaths("media-sidebar");
+  const result = adminActionSuccess("تم الحفظ", "تم حفظ حالة القالب.", { code: "saved", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("media-sidebar"));
 }
 
 export async function bulkMediaSidebarModuleStatuses(formData: FormData) {
@@ -134,5 +137,6 @@ export async function bulkMediaSidebarModuleStatuses(formData: FormData) {
     entityLabel: "media_sidebar_module_templates",
     metadata: { blockType: "media-sidebar", action, ids, count: ids.length },
   }, actor);
-  await revalidateBlockModulePaths("media-sidebar");
+  const result = adminActionSuccess("تم الحفظ", "تم حفظ التغييرات المحددة.", { code: "saved", completion: "committed" });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("media-sidebar"));
 }

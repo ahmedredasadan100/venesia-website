@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import * as nodeModule from "node:module";
@@ -23,6 +23,27 @@ const GATES = [
   { name: "public-e2e", module: "playwright/cli.js", args: ["test", "tests/e2e/public-foundation.spec.ts", "tests/e2e/topic-view-integrity.spec.ts", "--workers=1", "--retries=0"], limitMs: 600_000 },
 ] as const;
 
+/** Derive coverage from the one package owner; reject shell or tail drift. */
+export function finalQualityScriptNames(scripts: Readonly<Record<string, string>>) {
+  assert.equal(typeof scripts["ci:check"], "string");
+  const names = scripts["ci:check"].split(/\s*&&\s*/u).map(step => {
+    const match = /^npm run ([a-zA-Z0-9:_-]+)$/u.exec(step);
+    assert.ok(match && Object.hasOwn(scripts, match[1]), "Unrecognized ci:check step; update the canonical gate contract explicitly.");
+    return match[1];
+  });
+  const tail: string[] = GATES.map(gate => {
+    const script = gate.name === "normal-build" ? "build" : gate.name === "product-surface-build" ? "verify:product-surface-identity-build" : gate.name === "platform-contracts" ? "verify:platform-contracts" : "test:e2e:public";
+    const command = "script" in gate ? ["node", "--experimental-strip-types", gate.script, ...gate.args].join(" ")
+      : [gate.name === "normal-build" ? "next" : "playwright", ...gate.args.filter(arg => !/^--(?:workers|retries)=/u.test(arg))].join(" ");
+    assert.equal(scripts[script], command, "ci:check tail differs from the existing canonical Public gates.");
+    return script;
+  });
+  assert.deepEqual(names.slice(-tail.length), tail, "ci:check must end with the existing build and Public gates.");
+  const prefix = names.slice(0, -tail.length);
+  assert.ok(prefix.length > 0 && !prefix.some(name => tail.includes(name) || name === "ci:check"), "Build/Public gates must execute exactly once.");
+  return prefix;
+}
+
 /** Constructed only inside the canonical lifecycle; never returned by its handle. */
 export type PrivatePublicVerificationContext = {
   runDirectory: string;
@@ -36,8 +57,14 @@ export type PrivatePublicVerificationContext = {
 };
 export type PublicGateRequest = {
   additionalSourceFiles: readonly string[];
+  /** Full ci:check prefix, followed once by the existing build/Public/Admin gates. */
+  finalQualityGate?: true;
   /** Fixed affected-build subset; omission retains the complete Public gate contract. */
-  selection?: "build-contracts" | "admin-interactions";
+  selection?: "build-contracts" | "admin-interactions" | "admin-adoption";
+  /** Fixed follow-up journeys; retained Audit2 outcomes are not replayed. */
+  adoptionScope?: "core-closure";
+  /** Bounded independent Core families; the final gate still runs the Public suite. */
+  adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings" | "media-library" | "template-bulk" | "navigation-settings" | "auth-entry" | "media-recovery" | "query-presentation";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";
@@ -321,10 +348,15 @@ async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
 export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal) {
   await context.assertOwned();
   const readiness = prepared.get(context); assert.ok(readiness, "Public fixture readiness must precede gates.");
-  assert.ok(request.selection === undefined || request.selection === "build-contracts" || request.selection === "admin-interactions", "Unknown fixed Public gate selection.");
+  assert.ok(request.selection === undefined || request.selection === "build-contracts" || request.selection === "admin-interactions" || request.selection === "admin-adoption", "Unknown fixed Public gate selection.");
   const measurement = request.selection === "admin-interactions" ? request.adminMeasurement : undefined;
   assert.equal(Boolean(request.adminMeasurement), Boolean(measurement));
-  const credentials = measurement ? adminCredentials.get(context) : undefined;
+  const adoption = request.selection === "admin-adoption";
+  assert.ok(request.adoptionScope === undefined || (adoption && request.adoptionScope === "core-closure"), "Unknown fixed adoption scope.");
+  assert.ok(request.adoptionCohort === undefined || (request.adoptionScope === "core-closure" && ["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation"].includes(request.adoptionCohort)), "Unknown Core cohort.");
+  assert.ok(request.finalQualityGate === undefined || (request.finalQualityGate === true && adoption), "Final Quality Gate requires the complete Admin adoption selection.");
+  const credentials = measurement || adoption ? adminCredentials.get(context) : undefined;
+  if (adoption) assert.ok(credentials, "Owned Admin fixture preparation is required for adoption journeys.");
   const originalContext = context;
   let frozenDirectory: string | undefined;
   let frozenManifest: Array<{ file: string; sha256: string }> | undefined;
@@ -393,9 +425,14 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     context = { ...context, runDirectory: phaseDirectory,
       sanitize: value => [credentials.username, credentials.password, credentials.secret].reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_ADMIN]"), baseSanitize(value)) };
   }
-  const gates = measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
+  if (adoption && credentials) {
+    const baseSanitize = context.sanitize;
+    context = { ...context, sanitize: value => [credentials.username, credentials.password, credentials.secret]
+      .reduce((text, item) => text.replaceAll(item, "[REDACTED_LOCAL_ADMIN]"), baseSanitize(value)) };
+  }
+  const gates = adoption ? [...(request.adoptionCohort && !request.finalQualityGate ? GATES.filter(gate => gate.name !== "public-e2e") : GATES), { name: "admin-adoption", script: "scripts/qa-admin-adoption-journeys.mjs", args: request.adoptionScope === "core-closure" ? ["--core-closure", ...(request.adoptionCohort ? ["--core-cohort=" + request.adoptionCohort] : [])] : [], limitMs: 900_000 }] : measurement ? [GATES[0], { name: "admin-interactions", script: "scripts/qa-admin-production-interactions.mjs", args: [], limitMs: measurement.study === "heavy-editor-performance" ? 21_600_000 : 7_200_000 }] : request.selection === "build-contracts"
     ? GATES.filter(gate => gate.name !== "public-e2e") : GATES;
-  assert.equal(gates.length, measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
+  assert.equal(gates.length, adoption ? (request.adoptionCohort && !request.finalQualityGate ? 4 : 5) : measurement ? 2 : request.selection === "build-contracts" ? 3 : 4);
   assert.equal(completed.has(originalContext), false, "Successful selected gates cannot be rerun in this fixture.");
   const sourceDirectory = ownedPath(context, "public-build-source");
   assert.equal(existsSync(sourceDirectory), false, "Preserve any prior build workspace.");
@@ -418,6 +455,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   let appPort: number | null = null;
   let appFailed = false;
   const reports: Array<{ name: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
+  const qualityReports: Array<{ script: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   let buildIdSha256: string | null = null;
   const verifySource = () => {
     for (const row of manifest) { assert.equal(digest(readFileSync(sourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
@@ -457,12 +495,37 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       byteSource: frozenManifest ? "reviewed-frozen-directory" : "working-tree", additionalSourceFiles: request.additionalSourceFiles,
       fixtureContentSha256: readiness.fixtureContentSha256, collectorSha256,
       manifest, sourceSha256: digest(JSON.stringify(manifest)), environmentFilesCopied: false, generatedLocalCredentialsOnly: true });
-    for (const gate of gates) {
+    let qualityScripts: string[] = [];
+    let qualityEnvironment = context.cleanEnvironment();
+    let npmCli: string | undefined;
+    if (request.finalQualityGate) {
+      assert.equal(request.additionalSourceFiles.length, 0, "Final Quality Gate requires committed source membership.");
+      const gitOptions = { cwd: ROOT, env: context.cleanEnvironment(), encoding: "utf8" as const, windowsHide: true, timeout: 30_000, stdio: ["ignore", "pipe", "pipe"] as ["ignore", "pipe", "pipe"] };
+      execFileSync("git", ["diff", "--quiet", "HEAD", "--"], gitOptions);
+      const gitDirectory = realpathSync(execFileSync("git", ["rev-parse", "--absolute-git-dir"], gitOptions).trim());
+      assert.ok(lstatSync(gitDirectory).isDirectory(), "Final gate requires canonical read-only Git provenance.");
+      const scripts = JSON.parse(readFileSync(join(sourceDirectory, "package.json"), "utf8")).scripts as Record<string, string>;
+      qualityScripts = finalQualityScriptNames(scripts);
+      const nodeDirectory = dirname(process.execPath);
+      npmCli = [join(nodeDirectory, "node_modules/npm/bin/npm-cli.js"), resolve(nodeDirectory, "../lib/node_modules/npm/bin/npm-cli.js"), resolve(nodeDirectory, "../share/nodejs/npm/bin/npm-cli.js")]
+        .find(candidate => existsSync(candidate) && lstatSync(candidate).isFile());
+      assert.ok(npmCli, "Installed Node must provide npm-cli.js for the complete Quality Gate.");
+      const npmUserConfig = ownedPath(context, "quality-empty-user-npmrc"), npmGlobalConfig = ownedPath(context, "quality-empty-global-npmrc");
+      for (const file of [npmUserConfig, npmGlobalConfig]) writeFileSync(file, "", { flag: "wx", mode: 0o600 });
+      qualityEnvironment = { ...context.cleanEnvironment(), GIT_DIR: gitDirectory, GIT_WORK_TREE: sourceDirectory,
+        GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", npm_config_userconfig: npmUserConfig, npm_config_globalconfig: npmGlobalConfig };
+      receipt(context, "final-quality-plan.json", { headSha, sourceSha256: digest(JSON.stringify(manifest)),
+        prefix: qualityScripts, tail: GATES.map(gate => gate.name), adminAdoptionAfterPublic: true,
+        environmentFilesCopied: false, prefixUsesDatabaseCredentials: false });
+    }
+    const executionGates = [...qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 })), ...gates];
+    for (const gate of executionGates) {
       verifySource(); await context.assertOwned(); signal.throwIfAborted();
-      let env: NodeJS.ProcessEnv = context.cleanEnvironment();
+      let env: NodeJS.ProcessEnv = "qualityScript" in gate ? qualityEnvironment : context.cleanEnvironment();
+      let gateApp: ChildProcess | undefined;
       if (gate.name === "normal-build") env = childEnvironment;
-      if (gate.name !== "normal-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
-      if (gate.name === "public-e2e" || gate.name === "admin-interactions") {
+      if (!("qualityScript" in gate) && gate.name !== "normal-build") assert.equal(digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID"))), buildIdSha256);
+      if (gate.name === "public-e2e" || gate.name === "admin-interactions" || gate.name === "admin-adoption") {
         const measurementHarness = measurement ? ["scripts/qa-admin-production-interactions.mjs","scripts/fixtures/admin-atomic-readiness.mjs","scripts/fixtures/admin-measurement-restore-transition.mjs","scripts/fixtures/admin-interaction-server-trace.cjs"]
           .map(file=>({file,sha256:digest(readFileSync(safeSourcePath(file)))})) : null;
         if (measurement?.study === "heavy-editor-performance") {
@@ -474,10 +537,14 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         if(measurementHarness) receipt(context,"admin-measurement-harness.json",{manifest:measurementHarness,diagnosticInstrumentation:true,productSourceUnchanged:true});
         appPort = await new Promise<number>((done, reject) => { const reservation = net.createServer(); reservation.once("error", reject);
           reservation.listen(0, "127.0.0.1", () => { const port = (reservation.address() as net.AddressInfo).port; reservation.close(error => error ? reject(error) : done(port)); }); });
-        const app = spawn(process.execPath, [...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
+        const coreFault = gate.name === "admin-adoption" && request.adoptionScope === "core-closure";
+        const coreControl = coreFault ? ownedPath(context, "admin-core-cache-control.json") : null;
+        if (coreControl) writeFileSync(coreControl, JSON.stringify({ schemaVersion: 1, mode: "off" }), { flag: "wx", mode: 0o600 });
+        const app = spawn(process.execPath, [...(coreFault ? ["--require", join(sourceDirectory, "scripts/fixtures/admin-core-command-cache-fault.cjs")] : []), ...(measurement?["--require",join(ROOT,"scripts/fixtures/admin-interaction-server-trace.cjs")]:[]),join(sourceDirectory, "node_modules/next/dist/bin/next"), "start", "--hostname", "127.0.0.1", "--port", String(appPort)],
           { cwd: sourceDirectory, env: measurement ? {...childEnvironment,
             QA_ADMIN_SERVER_TRACE_PATH:ownedPath(context,"admin-server-trace.jsonl"),
-            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+            ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_TRACE_CONTROL_PATH: join(resolve(measurement.controlDirectory), "server-trace-mode.json") } : {})} : coreControl ? { ...childEnvironment, QA_ADMIN_CORE_CACHE_CONTROL: coreControl } : childEnvironment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+        gateApp = app;
         children.add(app); let appOutput = "";
         const captureAppOutput = (value: Buffer) => {
           if (appFailed) return;
@@ -486,7 +553,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         };
         app.stdout!.on("data", captureAppOutput); app.stderr!.on("data", captureAppOutput);
         app.once("error", () => { appFailed = true; });
-        app.once("close", () => { children.delete(app); writeFileSync(ownedPath(context, "public-server.log"), context.sanitize(appOutput), { mode: 0o600 }); });
+        app.once("close", () => { children.delete(app); writeFileSync(ownedPath(context, adoption ? `public-${gate.name}-server.log` : "public-server.log"), context.sanitize(appOutput), { mode: 0o600 }); });
         const origin = `http://127.0.0.1:${appPort}`; let ready = false;
         const deadline = Date.now() + 120_000;
         while (!ready && Date.now() < deadline) {
@@ -497,6 +564,10 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
         }
         assert.ok(ready, "Owned application readiness failed.");
         env = { ...context.cleanEnvironment(), E2E_BASE_URL: origin, E2E_ADMIN_STORAGE_STATE: "", E2E_TOPICS_CMS_STATE: readiness.topicsCmsState };
+        if (adoption && credentials) env = { ...env, QA_ADMIN_USERNAME: credentials.username, QA_ADMIN_PASSWORD: credentials.password,
+          QA_ADMIN_OUTPUT: context.runDirectory, QA_ADMIN_FIXTURES: ownedPath(originalContext, "admin-adoption-fixtures.json"),
+          QA_ADMIN_SOURCE_SHA256: digest(JSON.stringify(manifest)),
+          QA_ADMIN_STORAGE_PUBLIC_PREFIXES: JSON.stringify(["cms-images", "cms-documents"].map(bucket => `http://127.0.0.1:${context.apiPort}/storage/v1/object/public/${bucket}/`)) };
         if (measurement && credentials) env = { ...env, QA_ADMIN_USERNAME: credentials.username, QA_ADMIN_PASSWORD: credentials.password,
           QA_ADMIN_PHASE: measurement.phase, QA_ADMIN_CONTROL: resolve(measurement.controlDirectory), QA_ADMIN_OUTPUT: context.runDirectory,
           ...(measurement.study === "heavy-editor-performance" ? { QA_ADMIN_STUDY: measurement.study } : {}),
@@ -504,9 +575,16 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
           QA_ADMIN_SOURCE_SHA256: digest(JSON.stringify(manifest)) };
       }
       context.record("public-gate-start", { gate: gate.name });
-      const args = "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
+      const args = "qualityScript" in gate ? [npmCli!, "run", gate.qualityScript] : "script" in gate ? ["--experimental-strip-types", join(gate.name === "admin-interactions" ? ROOT : sourceDirectory, gate.script), ...gate.args]
         : [join(sourceDirectory, "node_modules", gate.module), ...gate.args];
       const result = await runChild(args, env, gate.name, gate.limitMs);
+      if ("qualityScript" in gate) {
+        const report = { script: gate.qualityScript, code: result.code, stdoutSha256: digest(result.stdout), stderrSha256: digest(result.stderr) };
+        qualityReports.push(report); receipt(context, `${gate.name}.json`, report);
+        assert.equal(result.code, 0, `Required Final Quality Gate failed: ${gate.qualityScript}`);
+        context.record("public-gate-pass", { gate: gate.name });
+        continue;
+      }
       if (measurement && gate.name === "admin-interactions" && result.code !== 0) {
         receipt(context, "admin-driver-restart-rejected.json", {
           status: "rejected", driverCode: result.code, cleanLifecycleRestartRequired: true,
@@ -521,6 +599,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       if (gate.name === "public-e2e") assert.equal(/(?:^|\n)\s*[1-9][0-9]*\s+(?:skipped|flaky)\b/iu.test(result.stdout), false, "Public E2E skipped/flaky coverage cannot pass.");
       if (gate.name === "normal-build") buildIdSha256 = digest(readFileSync(join(sourceDirectory, ".next/BUILD_ID")));
       context.record("public-gate-pass", { gate: gate.name });
+      if (gateApp) await stopChild(gateApp, context.cleanEnvironment());
     }
     verifySource();
     assert.equal(await gitHead(context), headSha, "Repository HEAD changed during the source snapshot gates.");
@@ -543,9 +622,18 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const result = { status: "pass", gates: reports, buildIdSha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
   if (measurement) { const value = { ...result, selection: "admin-interactions", phase: measurement.phase, ...(measurement.study ? { study: measurement.study } : {}), priorQualityGatesRerun: false };
     receipt(context, "admin-measurement-lifecycle.json", value); return value; }
+  if (adoption) {
+    const value = { ...result, selection: "admin-adoption", globalClosedClaimed: false,
+      ...(request.finalQualityGate ? { finalQualityGate: { status: "pass", prefix: qualityReports, tail: reports.filter(report => report.name !== "admin-adoption") } } : {}) };
+    if (request.finalQualityGate) receipt(context, "final-quality-gate.json", { ...value.finalQualityGate, sourceSha256: result.sourceSha256, buildIdSha256 });
+    receipt(context, "public-and-admin-adoption-gates.json", value); return value;
+  }
   if (request.selection === "build-contracts") {
     const buildResult = { ...result, selection: "build-contracts", publicE2EReexecuted: false };
     receipt(context, "public-build-contract-gates.json", buildResult); return buildResult;
   }
   receipt(context, "public-four-gates.json", result); return result;
 }
+
+/** Fixed synthetic Preview preparation stays under this verification boundary. */
+export { prepareVercelCacheProbe } from "./vercel-cache-probe.mts";

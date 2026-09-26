@@ -28,7 +28,14 @@ type Migration = { file: string; version: string; name: string; sha256: string }
 type RegistryRow = { version: string; name: string; statements: string[] };
 type RegistrySnapshot = { present: boolean; rows: RegistryRow[] };
 type Stage = "identity" | "corpus" | "registry_preflight" | "dry_run" | "apply" | "registry_verify"
-  | "seo_dry_run" | "seo_apply" | "seo_verify" | "seo_idempotency" | "complete";
+  | "seo_dry_run" | "seo_apply" | "seo_verify" | "seo_idempotency" | "closure_checkpoint" | "complete";
+
+const closureVersions = ["20260925200723", "20260926013156", "20260926013216"] as const;
+export type ApplicationClosureCheckpoint = Readonly<{
+  version: typeof closureVersions[number];
+  registered: number;
+  corpusSha256: string;
+}>;
 
 export type ApplicationHandoffReport = {
   status: "blocked" | "complete";
@@ -46,6 +53,7 @@ export type ApplicationHandoffReport = {
   seoBackfillVerified: boolean;
   seoIdempotencyVerified: boolean;
   seoEnforceVerified: boolean;
+  pageSeoBackfillVerified: boolean;
   registryReadback: "not_attempted" | "verified_prefix" | "unavailable_or_mismatch";
   canonicalWholeFileRegistryVerified: false;
   officialCliExecutionProvenanceVerified: boolean;
@@ -53,6 +61,7 @@ export type ApplicationHandoffReport = {
   failedMigrationState: "not_started" | "unconfirmed";
   provisioningOnly?: true;
   priorVerificationSuitesRerun?: false;
+  closureCheckpointsVerified?: number;
 };
 
 export class ApplicationHandoffBlocked extends Error {
@@ -126,7 +135,8 @@ function recordCli(handle: OwnedLocalHandle, result: ApplicationMigrationCliResu
 
 function recordSeo(handle: OwnedLocalHandle, result: EntitySeoBackfillReport, stage: Stage): void {
   handle.record("application-seo-backfill", {
-    stage, mode: result.mode, complete: result.complete, readyForEnforcement: result.readyForEnforcement,
+    stage, entities: result.entities.map(({ entity }) => entity).join(","),
+    mode: result.mode, complete: result.complete, readyForEnforcement: result.readyForEnforcement,
     ...result.counts,
   });
 }
@@ -211,20 +221,26 @@ export async function applyCanonicalApplicationVerificationPrefix(
 export async function runApplicationHandoff(
   handle: OwnedLocalHandle,
   checkpoints: readonly ApplicationMigrationCheckpoint[] = [],
-  options: { mode?: "measurement-provision" } = {},
+  options: {
+    mode?: "measurement-provision";
+    /** Fixed release boundaries only; observers cannot replace SQL or history. */
+    onClosureCheckpoint?: (handle: OwnedLocalHandle, checkpoint: ApplicationClosureCheckpoint) => Promise<void>;
+  } = {},
 ): Promise<ApplicationHandoffReport> {
   assertOwnedLocalHandle(handle);
   assert.ok(options.mode === undefined || options.mode === "measurement-provision");
+  assert.ok(options.onClosureCheckpoint === undefined || typeof options.onClosureCheckpoint === "function");
   const provisioningOnly = options.mode === "measurement-provision";
   if (provisioningOnly) assert.equal(checkpoints.length, 0, "Measurement provisioning does not replay verification checkpoints.");
   const report: ApplicationHandoffReport = {
     status: "blocked", stage: "identity", migration: null, sqlState: null, reason: null,
     planned: 0, baselinePlanned: 0, registered: 0, corpusSha256: null,
     firstMigrationVerified: false, baselineVerified: false, registryReadback: "not_attempted",
-    seoExpandVerified: false, seoBackfillVerified: false, seoIdempotencyVerified: false, seoEnforceVerified: false,
+    seoExpandVerified: false, seoBackfillVerified: false, seoIdempotencyVerified: false, seoEnforceVerified: false, pageSeoBackfillVerified: false,
     canonicalWholeFileRegistryVerified: false, officialCliExecutionProvenanceVerified: false,
     migrationIdempotencyVerified: false, failedMigrationState: "not_started",
     ...(provisioningOnly ? { provisioningOnly: true as const, priorVerificationSuitesRerun: false as const } : {}),
+    ...(options.onClosureCheckpoint ? { closureCheckpointsVerified: 0 } : {}),
   };
 
   try {
@@ -247,8 +263,12 @@ export async function runApplicationHandoff(
         "20260920010000_public_feed_aggregated_reads.sql",
         "20260920011000_page_composition_layout_regions.sql",
         "20260925001602_f03_page_layout_admin_f07_page_seo_persistence.sql",
+        "20260925200723_topics_batch_atomic_current_state.sql",
+        "20260926013156_menu_resource_reference_integrity.sql",
+        "20260926013216_topics_command_completion.sql",
+        "20260926153347_public_cache_invalidation_generation.sql",
       ],
-      "Only the reviewed Public Composition and Page SEO extensions may follow the SEO security declaration.",
+      "Only the reviewed composition, SEO, resource-integrity, Topics command, and cache generation extensions may follow the SEO security declaration.",
     );
     const baseline = migrations.slice(0, seoBoundary);
     assert.equal(new Set(checkpoints.map(({ version }) => version)).size, checkpoints.length);
@@ -341,7 +361,8 @@ export async function runApplicationHandoff(
     await applyPhase(migrations.slice(0, seoBoundary + 2));
     report.seoExpandVerified = true;
 
-    const backfill = async (mode: "dry-run" | "apply" | "verify", stage: Stage): Promise<EntitySeoBackfillReport> => {
+    const backfill = async (mode: "dry-run" | "apply" | "verify", stage: Stage,
+      entities: readonly ("topics" | "projects" | "pages")[] = ["topics", "projects"]): Promise<EntitySeoBackfillReport> => {
       assertOwnedLocalHandle(handle);
       assert.deepEqual(readCanonicalCorpus(), migrations, "Migration source changed before SEO backfill.");
       report.stage = stage;
@@ -349,7 +370,7 @@ export async function runApplicationHandoff(
       report.reason = "seo_backfill_failed";
       let result: EntitySeoBackfillReport;
       try {
-        result = await handle.runEntitySeoBackfill({ mode });
+        result = await handle.runEntitySeoBackfill({ mode, entities });
       } catch (error) {
         // The official tool exposes a counts-only blocked report, never SQL or
         // connection errors. Preserve that evidence without turning it into PASS.
@@ -397,7 +418,44 @@ export async function runApplicationHandoff(
       positionSummary: legacyPositions.rows.map((row) => `${String(row.slot)}=${Number(row.assignments)}`).join(",").slice(0, 256),
       unknownPositionKinds: legacyPositions.rows.length,
     });
-    await applyPhase(migrations);
+    // Pages adopt persisted SEO in the later Page SEO extension. Its columns and
+    // composition-region source do not exist at the Topic/Project EXPAND gate.
+    const backfillPages = async () => {
+      if (!provisioningOnly) await backfill("dry-run", "seo_dry_run", ["pages"]);
+      await backfill("apply", "seo_apply", ["pages"]);
+      await backfill("verify", "seo_verify", ["pages"]);
+      if (!provisioningOnly) {
+        const idempotentPages = await backfill("apply", "seo_idempotency", ["pages"]);
+        assert.equal(idempotentPages.counts.written, 0, "Page SEO idempotency rerun must not write any row.");
+        await backfill("verify", "seo_verify", ["pages"]);
+      }
+      report.pageSeoBackfillVerified = true;
+    };
+    if (options.onClosureCheckpoint) {
+      for (const version of closureVersions) {
+        const index = migrations.findIndex(migration => migration.version === version);
+        assert.ok(index > seoBoundary + 3, "Closure checkpoint must be in the reviewed post-SEO suffix.");
+        const phase = migrations.slice(0, index + 1);
+        await applyPhase(phase);
+        if (!report.pageSeoBackfillVerified) await backfillPages();
+        const checkpoint = Object.freeze({ version, registered: before.rows.length, corpusSha256: cliStage(phase).corpusSha256 });
+        report.stage = "closure_checkpoint";
+        assert.deepEqual(await readRegistry(handle), before, "Closure checkpoint began with changed CLI history.");
+        await options.onClosureCheckpoint(handle, checkpoint);
+        assertOwnedLocalHandle(handle);
+        assert.deepEqual(readCanonicalCorpus(), migrations, "Closure checkpoint changed canonical source.");
+        assert.deepEqual(await readRegistry(handle), before, "Closure checkpoint changed CLI history.");
+        report.closureCheckpointsVerified! += 1;
+        handle.record("application-closure-checkpoint", { ...checkpoint, status: "verified", registryUnchanged: true });
+      }
+      // Fixed release observers retain112/113/114; apply only the remaining
+      // exact reviewed corpus after their source/history invariants pass.
+      if (before.rows.length < migrations.length) await applyPhase(migrations);
+      assert.equal(before.rows.length, migrations.length, "Closure handoff must reach the complete reviewed corpus.");
+    } else {
+      await applyPhase(migrations);
+      await backfillPages();
+    }
     // The official CLI owns statement splitting. Preserve its rows and prove
     // source-bound execution; never relabel them as whole-file registry SQL.
     if (!provisioningOnly) {

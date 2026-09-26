@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { verifyApplicationClosureCheckpointsOffline } from "./verify-application-closure-checkpoints.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -112,6 +113,7 @@ type StackLock = {
   compose: { path: string; sha256: string };
   transport: { path: string; sha256: string };
   applicationMigrationTool: import("./lib/isolated-supabase-cli.mts").ApplicationMigrationTool;
+  applicationMigrationToolLinuxX64: import("./lib/isolated-supabase-cli.mts").ApplicationMigrationTool;
 };
 
 function verifyReleaseLock(): { lock: StackLock; hash: string } {
@@ -459,9 +461,30 @@ async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/is
     t.setTime(239_999); await t.lease.renewIfDue(true); assert.equal(t.connections(), 0);
     cases.push("control lease does no connection or probe outside active Admin jobs or before renewal is due");
   }
+  {
+    const t = setup(); t.setTime(1); t.setError();
+    await t.lease.renewIfDue(false, true); assert.equal(t.connections(), 0);
+    await t.lease.renewIfDue(true, true);
+    assert.equal(t.connections(), 1); assert.equal(t.first.closed, true); assert.equal(t.lease.client, t.second);
+    assert.equal(t.records[0].previousAgeMs, 1);
+    cases.push("explicit verified idle phase renews early through the same healthy identity and closes the prior socket");
+  }
+  {
+    const t = setup(); t.setTime(1);
+    await assert.rejects(t.lease.renewIfDue(true, true), /ECONNRESET/);
+    assert.equal(t.connections(), 1); assert.equal(t.first.closed, false); assert.equal(t.records.length, 0);
+    cases.push("explicit idle phase cannot continue on a deferred fresh socket failure");
+  }
+  {
+    const t = setup(); t.setTime(480_000); t.setError();
+    await assert.rejects(t.lease.renewIfDue(true, true), /ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE/);
+    assert.equal(t.connections(), 0);
+    cases.push("explicit idle phase preserves the existing lease deadline without reconnecting an expired control socket");
+  }
 }
 
 async function adminControlLeaseOnly() {
+  await verifyRestoreAclPolicy();
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-public-verification.mts", "scripts/verify-isolated-supabase.mts"];
   const sourceHashes = Object.fromEntries(sources.map(file => [file, sha256(readSource(file))]));
   await verifyAdminMeasurementControlLease(await import("./lib/isolated-supabase.mts"));
@@ -500,7 +523,111 @@ function verifyAdminMeasurementRestartPolicy() {
   cases.push("all failed Admin measurement drivers reject same-fixture restart; a successful driver continues");
 }
 
+function verifyFinalQualityGatePlan() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const gates = file.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(file) === "GATES"));
+  const planner = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "finalQualityScriptNames");
+  assert.ok(gates && planner);
+  const code = ts.transpileModule(gates.getText(file) + "\n" + planner.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const plan = new Function("assert", code + ";return finalQualityScriptNames;")(assert) as (scripts: Record<string, string>) => string[];
+  const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  const prefix = plan(scripts);
+  assert.equal(prefix.length + 4, scripts["ci:check"].split("&&").length);
+  assert.equal(prefix[0], "lint"); assert.equal(prefix[1], "typecheck");
+  for (const changed of [
+    { ...scripts, "ci:check": scripts["ci:check"] + " && npm run lint" },
+    { ...scripts, "ci:check": "npm run build && " + scripts["ci:check"] },
+    { ...scripts, "ci:check": scripts["ci:check"].replace("npm run lint", "npm run lint; echo bypass") },
+    { ...scripts, "test:e2e:public": "echo skipped" },
+  ]) assert.throws(() => plan(changed));
+  cases.push("Final Quality Gate derives every non-build step from ci:check and rejects skipped, duplicated, shell-injected or changed Public tails");
+}
+
+async function verifyMigrationToolPlatforms(lock: StackLock) {
+  const cli = await import("./lib/isolated-supabase-cli.mts");
+  check("migration tool selection preserves the exact existing Windows lock", () => {
+    assert.equal(cli.selectApplicationMigrationTool(lock, "win32", "x64"), lock.applicationMigrationTool);
+    assert.equal(lock.applicationMigrationTool.executableSha256, "5ccda93866ff48a3ec4a580679d71a44b9ee41150fb6143bdd4a6a57d3ecef1a");
+  });
+  check("Linux migration tool matches the independently verified npm package pin", () => {
+    const tool = cli.selectApplicationMigrationTool(lock, "linux", "x64");
+    const packageLock = JSON.parse(readSource("package-lock.json"));
+    const npm = packageLock.packages["node_modules/@supabase/cli-linux-x64"];
+    assert.equal(tool.packageIntegrity, npm.integrity);
+    assert.equal(tool.version, npm.version);
+    assert.equal(tool.executableSha256, "3cfb10e8cb7b8cb4d6807117865a2a39891178ec83f4d0c86ac49f633d2c43f4");
+    assert.equal(tool.executablePathInPackage, "package/bin/supabase");
+  });
+  for (const [platform, architecture] of [["darwin", "x64"], ["linux", "arm64"], ["win32", "arm64"]] as const) {
+    check("migration tool rejects unsupported host " + platform + "-" + architecture, () => {
+      assert.throws(() => cli.selectApplicationMigrationTool(lock, platform, architecture), { code: "UNSUPPORTED_CLI_PLATFORM" });
+    });
+  }
+  check("Linux selection cannot fall back to a Windows pin", () => {
+    assert.throws(() => cli.selectApplicationMigrationTool({ ...lock, applicationMigrationToolLinuxX64: lock.applicationMigrationTool }, "linux", "x64"), { code: "CLI_PLATFORM_LOCK_MISMATCH" });
+  });
+  check("Linux tool rejects a cross-platform package or executable path", () => {
+    for (const bad of [{ package: "@supabase/cli-windows-x64" }, { executablePathInPackage: "package/bin/supabase.exe" }]) {
+      assert.throws(() => cli.assertApplicationMigrationTool({ ...lock.applicationMigrationToolLinuxX64, ...bad }), { code: "INVALID_MIGRATION_TOOL_LOCK" });
+    }
+  });
+}
+
+async function verifyRestoreAclPolicy() {
+  const { planPublicSchemaUsageRestore } = await import("./lib/isolated-application-restore-verification.mts");
+  type Acl = import("./lib/isolated-application-restore-verification.mts").PublicSchemaAcl;
+  const publicGrant = { grantor: "pg_database_owner", grantee: "PUBLIC", privilege_type: "USAGE", is_grantable: false };
+  const before: Acl = { owner: "pg_database_owner", acl: [publicGrant,
+    { ...publicGrant, grantee: "pg_database_owner", privilege_type: "CREATE" },
+    { ...publicGrant, grantee: "pg_database_owner" }, { ...publicGrant, grantee: "anon" }] };
+  const after: Acl = { ...before, acl: before.acl.filter(row => row.grantee !== "PUBLIC") };
+  const security = [{ kind: "schema", name: "public", fingerprint: "a".repeat(32) },
+    { kind: "relation", name: "topics", fingerprint: "b".repeat(32) },
+    { kind: "default-acl", name: "postgres.public.r", fingerprint: "c".repeat(32) }];
+  const rawSecurity = security.map(row => row.kind === "schema" ? { ...row, fingerprint: "d".repeat(32) } : row);
+  check("restore ACL skips unchanged captured security", () => assert.deepEqual(planPublicSchemaUsageRestore(security, security, before, before), { restorePublicUsage: false }));
+  check("restore ACL permits only captured original PUBLIC USAGE", () => assert.deepEqual(planPublicSchemaUsageRestore(security, rawSecurity, before, after), { restorePublicUsage: true, recordedGrant: publicGrant }));
+  const reject = (name: string, first: Acl, second: Acl, earlier = security, later = rawSecurity) =>
+    check("restore ACL rejects " + name, () => assert.throws(() => planPublicSchemaUsageRestore(earlier, later, first, second)));
+  reject("different original owner", { ...before, owner: "postgres" }, after);
+  reject("changed restored owner", before, { ...after, owner: "postgres" });
+  reject("missing unrelated role", before, { ...before, acl: before.acl.filter(row => row.grantee !== "anon") });
+  reject("PUBLIC CREATE instead of captured USAGE", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, privilege_type: "CREATE" } : row) }, after);
+  reject("different original grantor", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, grantor: "postgres" } : row) }, after);
+  reject("original grant option", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, is_grantable: true } : row) }, after);
+  reject("no original PUBLIC grant", after, after);
+  reject("an extra missing grant", before, { ...after, acl: after.acl.filter(row => row.grantee !== "anon") });
+  reject("an added privilege", before, { ...after, acl: [...after.acl, { ...publicGrant, privilege_type: "CREATE" }] });
+  reject("another object's owner or ACL", before, after, security, rawSecurity.map(row => row.kind === "relation" ? { ...row, fingerprint: "e".repeat(32) } : row));
+  reject("default privilege drift", before, after, security, rawSecurity.map(row => row.kind === "default-acl" ? { ...row, fingerprint: "e".repeat(32) } : row));
+  reject("object membership loss", before, after, security, rawSecurity.filter(row => row.kind !== "relation"));
+  reject("duplicate ACL tuple", { ...before, acl: [...before.acl, publicGrant] }, after);
+  reject("expanded ACL disagrees with equal fingerprints", before, after, security, security);
+  reject("duplicate security object", before, after, security, [...rawSecurity, rawSecurity[0]]);
+  check("restore keeps exact other DDL and transactional ACL guards", () => {
+    const source = readSource("scripts/lib/isolated-application-restore-verification.mts");
+    const securityCheck = source.indexOf("assert.deepEqual(transactionSecurity, beforeSecurity");
+    const expandedCheck = source.indexOf("assert.deepEqual(transactionAcl.acl, beforePublicAcl.acl");
+    const commit = source.indexOf('await handle.query("commit")');
+    assert.ok(securityCheck >= 0 && expandedCheck >= 0 && commit >= 0);
+    assert.ok(securityCheck < commit && expandedCheck < commit);
+    assert.ok(source.includes('await handle.query("rollback")'));
+    assert.ok(source.includes('assert.equal(normalizeSchema(schemaAfter, after.identity), normalizeSchema(schemaBefore, before.identity)'));
+    assert.equal(source.includes('replace("REVOKE USAGE'), false);
+  });
+}
+
+async function restoreAclOnly() {
+  await verifyRestoreAclPolicy();
+  console.log(JSON.stringify({ status: "PASS", scope: "strict captured restore ACL policy", checks: cases.length, cases, dockerExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
+}
+
 async function main() {
+  const closure = await verifyApplicationClosureCheckpointsOffline();
+  cases.push(...closure.cases);
+  await verifyRestoreAclPolicy();
+  verifyFinalQualityGatePlan();
   verifyScanner();
   const provenance = verifyReleaseLock();
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-public-application.mts", "scripts/lib/isolated-supabase-cli.mts"];
@@ -514,6 +641,7 @@ async function main() {
   // Importing the lifecycle owner must be passive. Only pure exported guards are
   // invoked below; run/start/cleanup, Docker, SQL and environment loaders are not.
   const owner = await import("./lib/isolated-supabase.mts");
+  await verifyMigrationToolPlatforms(provenance.lock);
   await verifyAdminMeasurementControlLease(owner);
   verifyAdminMeasurementRestartPolicy();
   verifyImageIdentity(owner, provenance.lock.images.db);
@@ -617,6 +745,11 @@ async function main() {
   const forgedHandle: Parameters<typeof app.runApplicationHandoff>[0] = {
     identity: { runId, projectName, database: "postgres", host: "127.0.0.1", port: 55965, databaseContainerId: identity.id },
     async query() { queryCalls++; return { rows: [], rowCount: 0 }; },
+    async renewDatabaseControlConnection() { throw Error("Unowned handle must not renew its control connection."); },
+    async generateDatabaseTypes() { throw Error("Unowned handle must not generate database types."); },
+    async callDataApiRpc() { throw Error("Unowned handle must not invoke the Data API."); },
+    async readDataApi() { throw Error("Unowned handle must not read the Data API."); },
+    async withDatabaseConnection() { throw Error("Unowned handle must not open a database connection."); },
     async pushApplicationMigrations() { throw Error("Unowned handle must not reach the CLI."); },
     async runEntitySeoBackfill() { throw Error("Unowned handle must not reach the backfill."); },
     async preparePublicVerification() { throw Error("Unowned handle must not prepare Public verification."); },
@@ -670,5 +803,9 @@ async function cliDiagnosticsOnly() {
     cliExecuted: false, databaseCalls: 0, networkRequests: 0, retainedNavigationGatesReexecuted: false }, null, 2));
 }
 
-const verification = process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+async function closureCheckpointsOnly() {
+  console.log(JSON.stringify(await verifyApplicationClosureCheckpointsOffline(), null, 2));
+}
+
+const verification = process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });
