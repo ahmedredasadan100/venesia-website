@@ -16,6 +16,85 @@ const familyIds = ["topic-category-create-edit", "topic-series-create-edit", "to
 const lifecycle = ["save_reload", "failure_preserves_input", "retry"];
 const locationSurface = { governorate: "governorate", city: "city", main_area: "district", sub_area: "sub-district" };
 
+/** One fixed affected-journey selector; omission preserves the existing full cohort. */
+export function validateCoreJourneySelection({ scope, cohort, selection }) {
+  if (selection === undefined || selection === null) return null;
+  assert.equal(scope, "core-closure"); assert.equal(cohort, "domain-forms");
+  assert.equal(selection, "text-topic-forms", "Unknown affected journey selection.");
+  return selection;
+}
+function isTextTopic(recipe) { return !["video", "gallery"].includes(recipe.kind); }
+function buildCoreTopicFormRecipes(manifest, coverage) {
+  const forms = Object.fromEntries(["topic-article-create-edit", "topic-media-create-edit"].map(id => {
+    const matches = manifest.filter(row => row.id === id); assert.equal(matches.length, 1); return [id, matches[0]];
+  }));
+  const media = forms["topic-media-create-edit"].surfaces.filter(surface => surface.endsWith(":create")).map(surface => surface.split(":")[0]);
+  assert.deepEqual([...media].sort(), ["gallery", "news", "press", "site_update", "video"]);
+  return ["article", ...media].map(kind => {
+    const id = kind === "article" ? "topic-article-create-edit" : "topic-media-create-edit";
+    const surfaces = kind === "article" ? ["create", "edit"] : [`${kind}:create`, `${kind}:edit`];
+    return { kind, id, surfaces, coverage: coverage(id, surfaces) };
+  });
+ }
+export function coreSelectedTopicRecipes(selection, manifest) {
+  if (selection === null) return [];
+  validateCoreJourneySelection({ scope: "core-closure", cohort: "domain-forms", selection });
+  return buildCoreTopicFormRecipes(manifest, () => []).filter(isTextTopic);
+}
+export function selectCoreDomainFormPlan(plan, selection) {
+  if (selection === null || selection === undefined) return plan;
+  validateCoreJourneySelection({ scope: "core-closure", cohort: "domain-forms", selection });
+  return { ...plan, taxonomy: [], topics: plan.topics.filter(isTextTopic), projectEdits: [], locations: [], pending: [] };
+}
+export function coreTopicJourneyId(recipe) { return "core-" + recipe.kind + "-content-form-create-edit"; }
+/** Reject invented execution and full-cohort promotion before native database access.
+ * @param {object} browser
+ * @param {ReadonlyArray<object>} manifest
+ * @param {ReadonlyArray<object>|null} canonicalRequiredCases
+ * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string}>}|null} draftRestoration
+ */
+export function assertCoreJourneySelectionReceipt(browser, manifest, canonicalRequiredCases, draftRestoration = null) {
+  const selection = validateCoreJourneySelection({ scope: browser.scope, cohort: browser.cohort, selection: browser.journeySelection });
+  if (selection === null) return null;
+  const identities = rows => {
+    assert.ok(Array.isArray(rows) && rows.length > 0);
+    assert.ok(rows.every(row => typeof row.key === "string" && row.key.length > 0));
+    assert.equal(new Set(rows.map(row => row.key)).size, rows.length, "Canonical case identities must be unique.");
+    return rows.map(row => { const identity = { ...row }; delete identity.status; delete identity.evidence; return identity; }).sort((a, b) => a.key.localeCompare(b.key));
+  };
+  assert.deepEqual(identities(browser.requiredCases), identities(canonicalRequiredCases), "Selected verification must retain the entire current canonical required-case universe.");
+  const recipes = coreSelectedTopicRecipes(selection, manifest), ids = recipes.map(coreTopicJourneyId);
+  assert.equal(browser.driverCompleted, true); assert.equal(browser.status, "pass"); assert.deepEqual(browser.errors, []);
+  assert.equal(browser.globalClosed, false); assert.equal(browser.wholeCohortExecuted, false);
+  assert.deepEqual(browser.selectedJourneyIds, ids); assert.deepEqual(browser.executedJourneyIds, ids);
+  assert.deepEqual(browser.evidence.map(row => row.id), ["existing-auth-login", ...ids]);
+  assert.ok(browser.evidence.every(row => row.status === "pass"));
+  const expectedKeys = [];
+  for (const [index, recipe] of recipes.entries()) {
+    const row = browser.evidence[index + 1]; assert.equal(row.kind, recipe.kind); assert.equal(row.consumer, recipe.id);
+    assert.deepEqual(row.surfaces, recipe.surfaces); assert.equal(row.bodyBoundary, "authored_markdown_roundtrip");
+    assert.ok(Number.isSafeInteger(row.entityId) && row.entityId > 0);
+    const keys = recipe.surfaces.flatMap(surface => lifecycle.map(scenario => {
+      const cells = browser.requiredCases.filter(cell => cell.boundary === "form" && cell.consumer === recipe.id && cell.surface === surface && cell.scenario === scenario);
+      assert.equal(cells.length, 1); assert.equal(cells[0].status, "behavior_verified"); assert.equal(cells[0].evidence, ids[index]); return cells[0].key;
+    }));
+    assert.deepEqual(row.coverage, keys); expectedKeys.push(...keys);
+    const writes = browser.databaseReadback.filter(write => write.id === row.entityId); assert.equal(writes.length, 2);
+    assert.ok(writes.every(write => write.table === "topics" && write.auditEntityType === "topic"));
+    assert.deepEqual(writes.map(write => write.auditActions), [["topic.create"], ["topic.update"]]);
+    assert.equal(writes[1].expected.content_type, recipe.kind); assert.equal(typeof writes[1].expected.content, "string"); assert.ok(writes[1].expected.content.length > 0);
+  }
+  assert.equal(new Set(browser.evidence.slice(1).map(row => row.entityId)).size, recipes.length);
+  assert.equal(browser.databaseReadback.length, recipes.length * 2);
+  const allowed = new Set(expectedKeys);
+  for (const cell of browser.requiredCases) if (!allowed.has(cell.key)) { assert.equal(cell.status, "open"); assert.equal(cell.evidence, null); }
+  if (draftRestoration !== null) {
+    assert.equal(draftRestoration.globalClosed, false); assert.deepEqual(draftRestoration.automaticCoverage, []);
+    assert.deepEqual(draftRestoration.qualified.map(row => row.journeyId), ids);
+  }
+  return { selection, selectedJourneyIds: ids, executedJourneyIds: [...browser.executedJourneyIds], wholeCohortExecuted: false, globalClosed: false };
+}
+
 export function buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, locationConfig }) {
   assert.ok(Array.isArray(manifest) && Array.isArray(requiredCases));
   const forms = Object.fromEntries(familyIds.map(id => {
@@ -36,13 +115,7 @@ export function buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, loc
     const id = `topic-${kind}-create-edit`;
     return { kind, id, surfaces: ["create", "edit"], coverage: coverage(id, ["create", "edit"]) };
   });
-  const media = forms["topic-media-create-edit"].surfaces.filter(surface => surface.endsWith(":create")).map(surface => surface.split(":")[0]);
-  assert.deepEqual([...media].sort(), ["gallery", "news", "press", "site_update", "video"]);
-  const topics = ["article", ...media].map(kind => {
-    const id = kind === "article" ? "topic-article-create-edit" : "topic-media-create-edit";
-    const surfaces = kind === "article" ? ["create", "edit"] : [`${kind}:create`, `${kind}:edit`];
-    return { kind, id, surfaces, coverage: coverage(id, surfaces) };
-  });
+  const topics = buildCoreTopicFormRecipes(manifest, coverage);
   const projectEdits = ["residential", "commercial"].map(kind => {
     const fixture = kind === "residential" ? fixtures.project : fixtures.commercialProject;
     assert.ok(Number.isSafeInteger(fixture?.id) && fixture.editorPath === `/admin/projects/${fixture.id}`);
@@ -139,7 +212,7 @@ export async function runCoreDomainFormJourneys(ctx) {
   const { richTextHtmlToMarkdown } = await jiti.import("../../src/lib/rich-text/html-utils.ts");
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const { PROJECT_LOCATION_LEVEL_CONFIG: locationConfig } = await jiti.import("../../src/lib/admin/projects/location-management-contract.ts");
-  const plan = buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, locationConfig });
+  const plan = selectCoreDomainFormPlan(buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, locationConfig }), ctx.journeySelection ?? null);
   const suffix = Date.now().toString(36), completed = [], permissionEvidence = [];
   const permissionIntent = (recipe, surface, caseId, perform) => runCoreFormPermissionIntent({
     permissionReplay: ctx.permissionReplay, mapping: { caseId, formConsumer: recipe.id, surface }, perform, permissionEvidence,
@@ -263,12 +336,12 @@ export async function runCoreDomainFormJourneys(ctx) {
     return details(recipe, id, ["name", "slug", ...(recipe.kind === "series" ? ["category_id"] : [])]);
   });
 
-  for (const recipe of plan.topics) await run(`core-${recipe.kind}-content-form-create-edit`, recipe.coverage, async () => {
+  for (const recipe of plan.topics) await run(coreTopicJourneyId(recipe), recipe.coverage, async () => {
     await navigate(`/admin/content/topics/new?type=${recipe.kind}`);
     let form = currentForm();
     const title = `QA Core ${recipe.kind} ${suffix}`, slug = `qa-core-content-${recipe.kind.replaceAll("_", "-")}-${suffix}`;
     const excerpt = `QA authored excerpt for ${recipe.kind} content ${suffix}.`;
-    const markdown = !["video", "gallery"].includes(recipe.kind);
+    const markdown = isTextTopic(recipe);
     const body = `Authored core content for ${recipe.kind.replaceAll("_", " ")} ${suffix}.`;
     await form.locator('[data-admin-tab-id="basic"]').click();
     await control(form, "title").fill(title);

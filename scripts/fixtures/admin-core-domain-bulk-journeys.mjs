@@ -12,7 +12,7 @@ const recipes = {
  'content-topics': {entity:'topics',table:'topics',audit:'topic',source:'src/components/admin/content/UnifiedContentList.tsx',route:'/admin/content/topics',active:['publish','unpublish','move_to_trash','move_category','feature','unfeature'],trash:['restore','permanent_delete'],steps:['unpublish','publish','feature','unfeature','move_category','move_to_trash','restore','move_to_trash','permanent_delete']},
  'content-series': {entity:'series',table:'topic_series',audit:'topic_series',source:'src/app/admin/content/series/SeriesTableClient.tsx',route:'/admin/content/series',active:['publish','hide','delete'],trash:['restore','permanent_delete'],steps:['hide','publish','delete','restore','delete','permanent_delete']},
  'content-categories': {entity:'categories',table:'topic_categories',audit:'topic_category',source:'src/app/admin/content/categories/CategoriesListClient.tsx',route:'/admin/content/categories',active:[],trash:['restore','permanent_delete'],steps:['restore','permanent_delete']},
- pages: {entity:'pages',table:'pages',audit:'page_composition',source:'src/app/admin/pages-blocks/pages/PagesTableClient.tsx',route:'/admin/pages-blocks/pages',active:['delete'],trash:[],steps:['delete']},
+ pages: {entity:'pages',table:'pages',audit:'page',source:'src/app/admin/pages-blocks/pages/PagesTableClient.tsx',route:'/admin/pages-blocks/pages',active:['delete'],trash:[],steps:['delete']},
 };
 function positive(value){assert.ok(Number.isSafeInteger(value)&&value>0);return value;}
 function literalValues(array,ast){
@@ -59,14 +59,14 @@ export async function loadCoreDomainBulkPlan(fixtures){
 export function coreDomainBulkStep(recipe,action,ordinal){
  assert.equal(recipe.steps[ordinal],action);const trash=['restore','permanent_delete'].includes(action),deleted=action==='permanent_delete'||recipe.entity==='pages';
  const confirmation=recipe.entity==='pages'||action==='permanent_delete'||recipe.entity==='series'&&['delete','restore'].includes(action)||recipe.entity==='categories'||action==='move_to_trash';
- const verb=action==='hide'?'unpublish':action==='delete'&&recipe.entity==='series'||action==='move_to_trash'?'delete':['feature','unfeature','move_category'].includes(action)?'update':recipe.entity==='pages'?'delete_page':action;
+ const verb=action==='hide'?'unpublish':action==='delete'&&recipe.entity==='series'||action==='move_to_trash'?'delete':['feature','unfeature','move_category'].includes(action)?'update':recipe.entity==='pages'?'delete':action;
  const fields={};if(!deleted){
   fields.status=['publish','feature','unfeature','move_category'].includes(action)?'published':'unpublished';
   if(recipe.entity==='topics'){fields.is_featured=action==='feature';if(ordinal>=4)fields.category_id=recipe.destination.id;}
   if(recipe.entity==='categories')fields.is_active=false;
  }
  const metadata=recipe.entity==='topics'?{atomic:true,topic_ids:recipe.ids,count:recipe.ids.length}
-  :recipe.entity==='pages'?{operation:'delete_page',persistence_owner:'mutate_page_composition',atomic:true}
+  :recipe.entity==='pages'?{persistence_owner:'mutate_page_composition',atomic:true}
   :recipe.entity==='series'&&['hide','publish'].includes(action)?{bulk_action:action,ids:recipe.ids}
   :{bulk:true,bulk_action:action==='delete'?'move_to_trash':action,[recipe.entity==='categories'?'category_ids':'series_ids']:recipe.ids,count:recipe.ids.length};
  return {action,ordinal,trash,deleted,confirmation,verb,fields,metadata,trashed:action==='move_to_trash'||recipe.entity==='series'&&action==='delete'};
@@ -81,13 +81,13 @@ export function coreDomainBulkDescriptors(recipe,step,startedAt,checkpoint){
   if(step.trashed)assert.ok(typeof row.deleted_at==='string'&&Number.isFinite(Date.parse(row.deleted_at)));else assert.equal(row.deleted_at,null);
  }for(const [key,value]of Object.entries(step.fields))if(Object.hasOwn(row,key))assert.deepEqual(row[key],value);}
  return recipe.targets.map(row=>({table:recipe.table,id:row.id,deleted:step.deleted,expected:step.deleted?{}:{[recipe.entity==='topics'?'title':'name']:row.label,...step.fields,deleted_at:checkpoint.rows.find(item=>Number(item.id)===row.id).deleted_at},
-  auditEntityType:recipe.audit,auditEntityLabel:null,auditActions:[recipe.audit+'.'+step.verb],auditMetadata:step.metadata,auditSince:startedAt,exactAuditCount:1,...(recipe.entity==='topics'?{exactCommandReceiptCount:1}:{})}));
+  auditEntityType:recipe.audit,auditEntityLabel:recipe.entity==='pages'?row.label:null,auditActions:[recipe.audit+'.'+step.verb],auditMetadata:{...step.metadata,...(recipe.entity==='pages'?{slug:row.slug,path:'/'+row.slug}:{})},auditSince:startedAt,exactAuditCount:1,...(recipe.entity==='topics'?{exactCommandReceiptCount:1}:{})}));
 }
 export function assertCoreDomainBulkNative(result,recipe,step){
  assert.equal(result.kind,'form-save-native');assert.equal(result.status,'partial-not-global-pass');assert.equal(result.caseId,'domain-bulk-'+recipe.entity);assert.equal(result.formConsumer,recipe.consumer);assert.equal(result.surface,'bulk');
  assert.equal(result.writes.length,2);assert.deepEqual(result.writes.map(row=>Number(row.id)).sort((a,b)=>a-b),recipe.ids);const ids=new Set();
  for(const row of result.writes){assert.equal(row.table,recipe.table);assert.equal(row.deleted,step.deleted);assert.equal(row.expectedActorId,recipe.actorId);assert.equal(row.audit.length,1);
-  const audit=row.audit[0];assert.equal(Number(audit.actor_admin_user_id),recipe.actorId);assert.equal(audit.entity_type,recipe.audit);assert.equal(audit.entity_label,null);assert.equal(audit.action,recipe.audit+'.'+step.verb);
+  const audit=row.audit[0];assert.equal(Number(audit.actor_admin_user_id),recipe.actorId);assert.equal(audit.entity_type,recipe.audit);assert.equal(audit.entity_label,recipe.entity==='pages'?recipe.targets.find(target=>target.id===row.id).label:null);assert.equal(audit.action,recipe.audit+'.'+step.verb);
   assert.equal(Number.isSafeInteger(audit.entity_id)?audit.entity_id:audit.entity_id===null?null:Number(audit.entity_id),recipe.entity==='pages'?row.id:null);ids.add(positive(Number(audit.id)));
   if(recipe.entity==='topics')assert.equal(row.commandReceiptCount,1);
   if(!step.deleted)for(const [key,value]of Object.entries(step.fields))assert.deepEqual(row.actual[key],value);
@@ -102,6 +102,14 @@ export function readCoreBulkCommandIdentity(body){
  assert.equal(ids.length,1,'A fixed Topics request must carry one unambiguous command UUID.');return ids[0].toLowerCase();
 }
 
+/** Row presence is independent of whether this view permits bulk selection. */
+export async function assertCoreBulkTarget(page,target,{visible=true,timeout=60_000}={}){
+ positive(target.id);assert.equal(typeof target.label,'string');assert.ok(target.label.length>0);
+ const row=page.locator('tr[data-entity-row-id="'+target.id+'"]');
+ if(visible){await expect(row).toHaveCount(1,{timeout});await expect(row).toBeVisible({timeout});await expect(row).toContainText(target.label,{timeout});}
+ else await expect(row).toHaveCount(0,{timeout});
+}
+
 /** Actual bulk UI on independent targets. Global Empty Trash is never invoked. */
 export async function runCoreDomainBulkJourneys(ctx){
  const {page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint,databaseReadback}=ctx;
@@ -111,7 +119,7 @@ export async function runCoreDomainBulkJourneys(ctx){
  const bar=page.locator('[data-admin-bulk-action-bar]'),dialog=page.locator('[data-admin-confirm-dialog]'),outcomes=[];
  const actionRequest=(request,recipe)=>request.method()==='POST'&&Boolean(request.headers()['next-action'])&&new URL(request.url()).origin===origin&&new URL(request.url()).pathname===recipe.route;
  const selection=target=>page.getByRole('checkbox',{name:'تحديد '+target.label,exact:true});
- async function navigate(recipe,trash){await observe('domain-bulk-open-'+recipe.entity,()=>page.goto(origin+recipe.route+'?q='+encodeURIComponent(recipe.query)+(trash?'&view=trash':''),{waitUntil:'domcontentloaded'}));for(const target of recipe.targets)await expect(selection(target)).toBeVisible({timeout:60_000});}
+ async function navigate(recipe,trash){await observe('domain-bulk-open-'+recipe.entity,()=>page.goto(origin+recipe.route+'?q='+encodeURIComponent(recipe.query)+(trash?'&view=trash':''),{waitUntil:'domcontentloaded'}));for(const target of recipe.targets)await assertCoreBulkTarget(page,target);}
  async function fingerprint(correlationId,phase){const value=await nativeCheckpoint({id:randomUUID(),kind:'form-permission-fingerprint',correlationId,phase});assert.equal(value.status,'pass');assert.equal(value.correlationId,correlationId);assert.equal(value.phase,phase);assert.equal(value.adminAuditIncluded,true);assert.ok(value.publicTableCount>0);return value;}
  function unchanged(before,after){for(const key of ['ownedRunId','publicTableCount','publicTableInventorySha256','publicDataSha256'])assert.equal(after[key],before[key]);}
  async function select(recipe,step){
@@ -178,7 +186,7 @@ export async function runCoreDomainBulkJourneys(ctx){
   await navigate(recipe,false);const prepared=[];
   for(const target of recipe.targets){const startedAt=new Date().toISOString(),more=page.locator('[data-admin-row-action="more"][data-admin-entity-id="'+target.id+'"] button');await more.click();
    await page.locator('[data-admin-row-actions-menu][data-admin-entity-id="'+target.id+'"] [data-admin-row-action-menu-item="delete"]').click();await expect(dialog).toHaveCount(1);
-   await held(recipe,dialog.locator('[data-admin-confirm-submit]'),true,false);await expect(dialog).toHaveCount(0);await expect(selection(target)).toHaveCount(0,{timeout:60_000});
+   await held(recipe,dialog.locator('[data-admin-confirm-submit]'),true,false);await expect(dialog).toHaveCount(0);await assertCoreBulkTarget(page,target,{visible:false});
    const request={table:'topic_categories',id:target.id,expected:{name:target.label,status:'unpublished',is_active:false},auditEntityType:'topic_category',auditEntityLabel:target.label,auditActions:['topic_category.delete'],auditMetadata:{bulk:false,bulk_action:'move_to_trash',category_ids:[target.id],count:1},auditSince:startedAt,exactAuditCount:1};
    const result=await nativeCheckpoint({id:randomUUID(),kind:'form-save-native',caseId:'domain-bulk-categories-prepare',formConsumer:recipe.consumer,surface:'row-preparation',startedAt,descriptors:[request]});
    assert.equal(result.status,'partial-not-global-pass');assert.equal(result.writes.length,1);assert.equal(result.writes[0].expectedActorId,recipe.actorId);prepared.push(result.id);
@@ -194,7 +202,7 @@ export async function runCoreDomainBulkJourneys(ctx){
    const requests=await held(recipe,trigger,step.confirmation);await expect(dialog).toHaveCount(0);await expect(bar).toHaveCount(0,{timeout:60_000});
    await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"]').first()).toBeVisible({timeout:30_000});
    await page.reload({waitUntil:'domcontentloaded'});
-   for(const target of recipe.targets)if(step.deleted||step.trash||step.trashed)await expect(selection(target)).toHaveCount(0);else await expect(selection(target)).toBeVisible({timeout:60_000});
+   for(const target of recipe.targets)await assertCoreBulkTarget(page,target,{visible:!(step.deleted||step.trash||step.trashed)});
    const state=await probe(recipe,startedAt),descriptors=coreDomainBulkDescriptors(recipe,step,startedAt,state);
    let nativeCommandId;
    if(recipe.entity==='topics'){

@@ -6,6 +6,7 @@ import { randomUUID } from 'node:crypto';
 import { createJiti } from 'jiti';
 import ts from 'typescript';
 import { PGlite } from '@electric-sql/pglite';
+import { chromium } from 'playwright/test';
 import * as helper from './fixtures/admin-core-domain-bulk-journeys.mjs';
 
 const require=createRequire(import.meta.url),checks=[];
@@ -61,7 +62,7 @@ const since='2026-01-01T00:00:00Z',stamp='2026-01-02T00:00:00Z';
 let nextAudit=100;const records=[],outcomes=[],evidence=[];
 function record(value){const row={id:randomUUID(),...value};records.push(row);return row;}
 function pair(){const correlationId=randomUUID(),base={kind:'form-permission-fingerprint',status:'pass',ownedRunId:handle.identity.runId,correlationId,adminAuditIncluded:true,adminUsersIncluded:true,publicTableCount:4,publicTableInventorySha256:'a'.repeat(64),publicDataSha256:'b'.repeat(64)};return {before:record({...base,phase:'before'}).id,after:record({...base,phase:'after'}).id};}
-async function insertAudit({id,type,entity=null,label=null,action,metadata,actor=7}){await db.query('insert into public.admin_audit_logs values($1,$2,$3,$4,$5,$6,$7,$8)',[id,action,type,entity,label,actor,JSON.stringify(metadata),stamp]);}
+async function insertAudit({id,type,entity=null,label=null,action,metadata,actor=7}){await db.query('insert into public.admin_audit_logs(id,action,entity_type,entity_id,entity_label,actor_admin_user_id,metadata,created_at) values($1,$2,$3,$4,$5,$6,$7,$8)',[id,action,type,entity,label,actor,JSON.stringify(metadata),stamp]);}
 try{
  await db.exec("create table admin_users(id bigint,username text,email text,role text,is_active boolean);insert into admin_users values(7,'qa_admin_interaction','qa-admin-interaction@example.invalid','admin',true);create table admin_audit_logs(id bigint,action text,entity_type text,entity_id bigint,entity_label text,actor_admin_user_id bigint,metadata jsonb,created_at timestamptz);create table topics(id bigint,title text,status text,deleted_at timestamptz,is_featured boolean,category_id bigint,updated_at timestamptz);create table topic_categories(id bigint,name text,status text,deleted_at timestamptz,is_active boolean,updated_at timestamptz);create table topic_series(id bigint,name text,status text,deleted_at timestamptz,updated_at timestamptz);create table pages(id bigint,title text,status text,updated_at timestamptz);");
  for(const recipe of plan){
@@ -75,7 +76,7 @@ try{
    const aggregateId=nextAudit++;
    for(const target of recipe.entity==='pages'?recipe.targets:[null]){
     const commandId=randomUUID(),metadata={...step.metadata,...(recipe.entity==='topics'?{command:{id:commandId,actorId:7,result:{ok:true,commandId}}}:{})};
-    await insertAudit({id:target?nextAudit++:aggregateId,type:recipe.audit,entity:target?.id??null,action:recipe.audit+'.'+step.verb,metadata});
+    await insertAudit({id:target?nextAudit++:aggregateId,type:recipe.audit,entity:target?.id??null,action:recipe.audit+'.'+step.verb,label:target?.label??null,metadata:{...metadata,...(target?{slug:target.slug,path:'/'+target.slug}:{})}});
    }
    if(recipe.entity==='topics'&&action==='publish')for(const target of recipe.targets)await insertAudit({id:nextAudit++,type:'topic',entity:target.id,label:target.label,action:'topic.publish',metadata:{operation:'bulk_publish',atomic:true}});
    const state=record(await readback.readCoreDomainCheckpoint(handle,{id:randomUUID(),kind:'terminal-domain-state',entity:recipe.entity,ids:recipe.ids,startedAt:since}));
@@ -137,6 +138,33 @@ try{
    if(name==='ids-alias')assert.equal((await read()).length,2);else {await assert.rejects(read());assert.equal(statements.at(-1),'rollback');}
   });
  }
+
+ // Execute the actual historical SQL branch still reached by current delete_pages.
+ const migration=readFileSync('sql/migrations/20260805180000_global_truth_atomic_operations_closure.sql','utf8');
+ const start=migration.indexOf("  elsif p_operation = 'delete_page' then"),end=migration.indexOf("  elsif p_operation = 'replace_hero_template' then",start);assert.ok(start>0&&end>start);
+ const sqlBranch=migration.slice(start,end).replace("elsif p_operation = 'delete_page' then","if p_operation = 'delete_page' then");
+ await db.exec("delete from pages;delete from admin_audit_logs;alter table pages add column slug text,add column path text;alter table admin_audit_logs add column actor_username text;create sequence qa_page_audit_seq start 10000;alter table admin_audit_logs alter column id set default nextval('qa_page_audit_seq'),alter column created_at set default clock_timestamp();create function qa_actual_page_delete(p_page_id bigint,p_operation text,p_actor_admin_user_id bigint,p_actor_username text) returns jsonb language plpgsql as $actual$ declare v_now timestamptz:=clock_timestamp();begin "+sqlBranch+" end if;return null;end;$actual$;");
+ const pages=plan.find(row=>row.entity==='pages'),pageStep=helper.coreDomainBulkStep(pages,'delete',0);
+ for(const row of pages.targets){await db.query('insert into pages(id,title,status,slug,path) values($1,$2,$3,$4,$5)',[row.id,row.label,'unpublished',row.slug,'/'+row.slug]);await db.query("select qa_actual_page_delete($1,'delete_page',7,'qa_admin_interaction')",[row.id]);}
+ const pageState=await readback.readCoreDomainCheckpoint(handle,{id:randomUUID(),kind:'terminal-domain-state',entity:'pages',ids:pages.ids,startedAt:since});
+ const pageDescriptors=helper.coreDomainBulkDescriptors(pages,pageStep,since,pageState);
+ const readPages=()=>readback.verifyCoreExecutedWriteProjections(handle,{status:'in-progress',startedAt:since,databaseReadback:pageDescriptors});
+ await test('Actual current SQL delete branch supplies exact labelled per-page audit and native absence',async()=>{const proof={kind:'form-save-native',caseId:'domain-bulk-pages',formConsumer:'pages',surface:'bulk',...await readPages()};helper.assertCoreDomainBulkNative(proof,pages,pageStep);assert.equal(proof.writes.length,2);assert.deepEqual(proof.writes.map(row=>row.audit[0].entity_label),pages.targets.map(row=>row.label));});
+ await db.exec('create temporary table qa_page_audit_snapshot as select * from admin_audit_logs;');
+ const corruptions={missing:"delete from admin_audit_logs where entity_id=10",wrongActor:"update admin_audit_logs set actor_admin_user_id=8 where entity_id=10",wrongLabel:"update admin_audit_logs set entity_label='other' where entity_id=10",wrongType:"update admin_audit_logs set entity_type='page_composition' where entity_id=10",wrongAction:"update admin_audit_logs set action='page_composition.delete_page' where entity_id=10",wrongIdentity:"update admin_audit_logs set entity_id=900 where entity_id=10",missingMetadata:"update admin_audit_logs set metadata=metadata-'slug' where entity_id=10",wrongPath:"update admin_audit_logs set metadata=metadata||jsonb_build_object('path','/different') where entity_id=10",nonAtomic:"update admin_audit_logs set metadata=metadata||jsonb_build_object('atomic',false) where entity_id=10",extraAudit:"insert into admin_audit_logs select 19999,action,entity_type,entity_id,entity_label,actor_admin_user_id,metadata,created_at,actor_username from qa_page_audit_snapshot where entity_id=10"};
+ for(const[name,sql]of Object.entries(corruptions))await test('Real page audit contract rejects '+name,async()=>{await db.exec('delete from admin_audit_logs;insert into admin_audit_logs select * from qa_page_audit_snapshot;');await db.exec(sql);await assert.rejects(readPages());});
+ await db.exec('delete from admin_audit_logs;insert into admin_audit_logs select * from qa_page_audit_snapshot;');
+ await test('Actual remaining page cannot satisfy a deletion receipt',async()=>{await db.query('insert into pages(id,title) values($1,$2)',[10,pages.targets[0].label]);await assert.rejects(readPages());await db.exec('delete from pages;');});
+ const browserForRows=await chromium.launch({headless:true}),rowPage=await browserForRows.newPage();
+ try{
+  const rowHtml=(id,label)=>'<tr data-entity-row-id="'+id+'"><td>'+label+'</td></tr>';
+  const rowTarget={id:10,label:'Restored Category'},options={timeout:150};
+  await test('Actual row presence works in restored active Category view without a bulk checkbox',async()=>{await rowPage.setContent('<table><tbody>'+rowHtml(10,rowTarget.label)+'</tbody></table>');assert.equal(await rowPage.getByRole('checkbox').count(),0);await helper.assertCoreBulkTarget(rowPage,rowTarget,options);});
+  for(const[name,markup]of [['missing',''],['wrong-identity',rowHtml(11,rowTarget.label)],['wrong-label',rowHtml(10,'Other Category')],['duplicate',rowHtml(10,rowTarget.label)+rowHtml(10,rowTarget.label)]])await test('Actual row readiness rejects '+name,async()=>{await rowPage.setContent('<table><tbody>'+markup+'</tbody></table>');await assert.rejects(helper.assertCoreBulkTarget(rowPage,rowTarget,options));});
+  await test('Unselectable row cannot falsely count as deleted',async()=>{await rowPage.setContent('<table><tbody>'+rowHtml(10,rowTarget.label)+'</tbody></table>');await assert.rejects(helper.assertCoreBulkTarget(rowPage,rowTarget,{...options,visible:false}));});
+  await test('Actual absent row satisfies deletion after the row disappears',async()=>{await rowPage.setContent('<table><tbody></tbody></table>');await helper.assertCoreBulkTarget(rowPage,rowTarget,{...options,visible:false});});
+ }finally{await browserForRows.close();}
+
  await test('Expired owned handle fails completion before proof publication',async()=>{active=false;await assert.rejects(completion.verifyCoreDomainBulkCompletion(handle,browser,fixture,broker));active=true;});
  assert.equal(scopes,0);
  console.log(JSON.stringify({status:'pass',checks:checks.length,cases:checks,candidateReadback:candidate,boundary:'Current source/manifest, actual exported guards and PGlite SQL attribution. Full native PostgreSQL and authenticated Browser bulk execution remain pending.'},null,2));

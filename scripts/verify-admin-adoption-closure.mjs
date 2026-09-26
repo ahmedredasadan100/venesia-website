@@ -14,7 +14,7 @@ assert.equal(declarations.length, 1, "The current collector must expose its exis
 const collector = declarations[0].getText(ast);
 const context = patch => ({ requiredCases: [{key:"current-applicable-cell"}], evidence:[{id:"actual-journey",status:"pass",coverage:["current-applicable-cell"]}],
   inventory:[{domainJourneyInventoryComplete:true}],previewMatrix:[{status:"behavior_verified",evidence:"actual-journey"}],errors:[],driverCompleted:true,inventoryOnly:false,coreClosure:true,coreCohort:"preview-recovery-templates",
-  specializedSettingsResult:null,mediaResult:null,navigationSettingsResult:null,authEntryResult:null,mediaRecoveryResult:null,queryPresentationResult:null,templateControlsResult:null,topicControlsResult:null,projectControlsResult:null,presentationControlsResult:null,domainBulkResult:null,sourceHashes:{},process:{env:{}},startedAt:"2026-09-26T00:00:00.000Z",databaseReadback:[],readOnlyReadback:[],menuIntegrityReadback:[],previewNonApplicability:[],...patch });
+  journeySelection:null,selectedJourneyIds:[],executedJourneyIds:[],specializedSettingsResult:null,mediaResult:null,navigationSettingsResult:null,authEntryResult:null,mediaRecoveryResult:null,queryPresentationResult:null,templateControlsResult:null,topicControlsResult:null,projectControlsResult:null,presentationControlsResult:null,domainBulkResult:null,publicPreviewImpactResult:null,sourceHashes:{},process:{env:{}},startedAt:"2026-09-26T00:00:00.000Z",databaseReadback:[],readOnlyReadback:[],menuIntegrityReadback:[],previewNonApplicability:[],...patch });
 const evaluate = patch => vm.runInNewContext(collector + "; receipt()",context(patch));
 const checks = [
  ["complete-real-inventories-and-preview",{},true],
@@ -36,7 +36,7 @@ const runNode=ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.nam
 const identityChecks=[];
 for(const mode of ["domain-id","conflicting-owned-fields","explicit-entity-id","ordinary-details","failed-task"]){
  const evidence=[],errors=[];
- const sandbox={activeCase:"",checkpoint:()=>{},evidence,errors,previewMatrix:[],assert,receipt:()=>({}),write:()=>{},failureScreenshot:async()=>{},UnacknowledgedActionError:class extends Error{}};
+ const sandbox={journeySelection:null,selectedJourneyIds:[],executedJourneyIds:[],activeCase:"",checkpoint:()=>{},evidence,errors,previewMatrix:[],assert,receipt:()=>({}),write:()=>{},failureScreenshot:async()=>{},UnacknowledgedActionError:class extends Error{}};
  const task=async()=>{if(mode==="failed-task")throw Error("actual failure");return mode==="domain-id"?{id:51}:mode==="explicit-entity-id"?{id:51,entityId:91}:mode==="conflicting-owned-fields"?{id:51,status:"fail",coverage:["forged"],startedAt:"forged",finishedAt:"forged"}:{detail:"retained"};};
  await vm.runInNewContext(runNode.getText(ast)+";run",sandbox)("named-actual-case",["actual-cell"],task);
  assert.equal(evidence.length,1);assert.equal(evidence[0].id,"named-actual-case");assert.equal(evidence[0].status,mode==="failed-task"?"fail":"pass");assert.equal(JSON.stringify(evidence[0].coverage),JSON.stringify(mode==="failed-task"?[]:["actual-cell"]));
@@ -52,7 +52,7 @@ for(const mode of ["valid-preview", "unknown-preview", "later-unknown-preview", 
  const valid={consumer:"actual-consumer",publication:"published",session:"authorized"};
  const invalid={consumer:"unknown-consumer",publication:"published",session:"authorized"};
  const previewCells=mode==="unknown-preview"?[invalid]:mode==="later-unknown-preview"?[valid,invalid]:mode==="duplicate-preview"?[valid,valid]:[{...valid,...(mode==="owned-preview-fields"?{status:"open",evidence:"forged"}:{})}];
- const sandbox={activeCase:"",checkpoint:()=>{},evidence,errors,previewMatrix,assert,receipt:()=>({}),write:()=>{},failureScreenshot:async()=>{},UnacknowledgedActionError:class extends Error{}};
+ const sandbox={journeySelection:null,selectedJourneyIds:[],executedJourneyIds:[],activeCase:"",checkpoint:()=>{},evidence,errors,previewMatrix,assert,receipt:()=>({}),write:()=>{},failureScreenshot:async()=>{},UnacknowledgedActionError:class extends Error{}};
  await vm.runInNewContext(runNode.getText(ast)+";run",sandbox)("actual-journey",["current-applicable-cell"],async()=>({previewCells}));
  const successful=mode==="valid-preview"||mode==="owned-preview-fields";
  assert.equal(evidence.length,1);assert.equal(evidence[0].status,successful?"pass":"fail");

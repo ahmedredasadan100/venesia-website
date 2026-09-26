@@ -1,3 +1,8 @@
+import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
+import { assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
+import { createJiti } from "jiti";
+import { execFileSync } from "node:child_process";
+import { resolve } from "node:path";
 import { assertCorePresentationControlsCompleted } from "./verify-admin-core-presentation-controls-isolated.mts";
 import { PRESENTATION_CONTROL_PHASES } from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import { assertCoreProjectControlsCompleted } from "./verify-admin-core-project-controls-isolated.mts";
@@ -159,7 +164,7 @@ type ExpectedRead = { table: string; id: number; expected: Record<string, unknow
 export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, artifactDir: string) {
   assertOwnedLocalHandle(handle);
   const browser = JSON.parse(readFileSync(join(artifactDir, "admin-adoption-browser.json"), "utf8")) as {
-    status: string; scope?: string; cohort?: string; startedAt: string; databaseReadback: ExpectedRead[]; readOnlyReadback: unknown[];
+    status: string; scope?: string; cohort?: string; journeySelection?: string | null; startedAt: string; databaseReadback: ExpectedRead[]; readOnlyReadback: unknown[];
     previewMatrix: Array<{ status: string }>; presentationControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; projectControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; topicControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; templateControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; specializedSettings?: { status: string }; media?: MediaJoinResult; mediaRecovery?: MediaJoinResult;
     menuIntegrityReadback: Array<{ topicId: number; menuId: number; expectedItems: number }>;
     evidence: Array<{ id: string; status: string }>; globalClosed: boolean;
@@ -168,13 +173,47 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
   assert.ok(Number.isFinite(Date.parse(browser.startedAt)));
   if (browser.scope === "core-closure") {
     assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls", "presentation-controls"].includes(browser.cohort ?? ""));
+    const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } = await createJiti(import.meta.url, { fsCache: false, moduleCache: false }).import<typeof import("../src/lib/admin/form-system/adoption-manifest.ts")>("../src/lib/admin/form-system/adoption-manifest.ts");
+    let canonicalRequiredCases = null;
+    if (browser.journeySelection !== undefined && browser.journeySelection !== null) {
+      const canonicalDirectory = join(artifactDir, "selected-journey-canonical-inventory");
+      assert.equal(existsSync(canonicalDirectory), false, "Independent inventory receipt must be freshly generated for this join.");
+      execFileSync(process.execPath, [resolve(import.meta.dirname, "qa-admin-adoption-journeys.mjs"), "--inventory-only", "--core-closure"], {
+        cwd: resolve(import.meta.dirname, ".."), encoding: "utf8", timeout: 180_000, maxBuffer: 4_000_000, windowsHide: true,
+        env: { ...process.env, QA_ADMIN_OUTPUT: canonicalDirectory, QA_ADMIN_USERNAME: "", QA_ADMIN_PASSWORD: "", QA_ADMIN_FIXTURES: "", QA_ADMIN_SOURCE_SHA256: "" },
+      });
+      const canonical = JSON.parse(readFileSync(join(canonicalDirectory, "admin-adoption-browser.json"), "utf8"));
+      assert.equal(canonical.inventoryOnly, true); assert.equal(canonical.driverCompleted, false); assert.equal(canonical.status, "pass");
+      assert.equal(canonical.globalClosed, false); assert.deepEqual(canonical.evidence, []); assert.deepEqual(canonical.errors, []);
+      assert.ok(canonical.requiredCases.every((row: {status:string;evidence:unknown}) => row.status === "open" && row.evidence === null));
+      canonicalRequiredCases = canonical.requiredCases;
+    }
+    const isPreviewImpact = browser.journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION;
+    let previewImpactContext = null;
+    if (isPreviewImpact) {
+      const { ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION } = await createJiti(import.meta.url, { fsCache: false, moduleCache: false }).import<typeof import("../src/lib/admin/interaction-system/adoption-manifest.ts")>("../src/lib/admin/interaction-system/adoption-manifest.ts");
+      const previewMatrix = ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.flatMap(consumer => ["published","unpublished","deleted"].flatMap(publication => ["authorized","revoked"].map(session => ({consumer:consumer.id,publication,session,status:"open",evidence:null}))));
+      const fixtures = JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8"));
+      const source = JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
+      previewImpactContext = {fixtures,previewMatrix,canonicalRequiredCases,sourceSha256:source.sourceSha256};
+    }
+    const selectedJourneys = isPreviewImpact ? assertCorePreviewPublicImpactReceipt(browser, previewImpactContext!) : assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases);
     const previewStates = browser.cohort === "preview-recovery-templates" ? await verifyCorePreviewStateReadback(handle, artifactDir, "after") : null;
-    if (previewStates) {
+    let publicPreviewImpact = null;
+    if (isPreviewImpact) {
+      assert.ok(previewStates); assert.ok(previewImpactContext);
+      const nativeBefore=JSON.parse(readFileSync(join(artifactDir,"core-preview-native-before.json"),"utf8"));
+      const nativeControl=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));
+      assert.equal(nativeControl.status,"pass"); assert.equal(nativeControl.ownedRunId,handle.identity.runId); assert.deepEqual(nativeControl.records,[],"Read-only public supplement cannot borrow command checkpoints.");
+      const faultsFile=join(artifactDir,"core-native-write-faults.json");
+      if(existsSync(faultsFile)){const faults=JSON.parse(readFileSync(faultsFile,"utf8"));assert.equal(faults.status,"closed");assert.equal(faults.activeLocks,0);assert.deepEqual(faults.records,[]);}
+      publicPreviewImpact=assertCorePreviewPublicImpactReceipt(browser,{...previewImpactContext,nativeBefore,nativeAfter:previewStates,ownedRunId:handle.identity.runId});
+    } else if (previewStates) {
       assert.equal(browser.previewMatrix.length, previewStates.reads.length * 2);
       assert.ok(browser.previewMatrix.every(row => row.status === "behavior_verified"));
     }
     const draftFile=join(artifactDir,"admin-core-draft-restoration.json");
-    const draftRequired=["preview-recovery-templates","recovery-templates","domain-forms","navigation-settings"].includes(browser.cohort ?? "");
+    const draftRequired=!isPreviewImpact&&["preview-recovery-templates","recovery-templates","domain-forms","navigation-settings"].includes(browser.cohort ?? "");
     if(draftRequired)assert.equal(existsSync(draftFile),true,"Prepared Form restoration must retain its sanitized same-run receipt.");
     const draftArtifact=existsSync(draftFile)?JSON.parse(readFileSync(draftFile,"utf8")):null;
     let draftRestoration=null;
@@ -183,6 +222,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(draftNative.status,"pass");
       draftRestoration=assertCoreFormDraftRestorationJoin({artifact:draftArtifact,browser,native:draftNative,ownedRunId:handle.identity.runId,sourceSha256:(browser as unknown as {sourceSha256:string}).sourceSha256});
     }
+    if (selectedJourneys && !isPreviewImpact) { assert.ok(draftRestoration); assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration); }
     let nativeCheckpoints = null;
     let pageSeo = null;
     let navigationPermission: ReturnType<typeof assertCoreNavigationPermissionReceipts> | null = null;
@@ -289,7 +329,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     if (specializedSettings) assert.equal(browser.specializedSettings?.status,"pass");
     const writes = await verifyCoreDomainWrites(handle, browser);
     const readOnly = browser.cohort === "domain-commands" ? await verifyCoreReadonlyReadback(handle, browser) : null;
-    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }
@@ -362,7 +402,7 @@ export async function verifyCorePreviewStateReadback(handle: OwnedLocalHandle, a
     const before = JSON.parse(readFileSync(join(artifactDir, "core-preview-native-before.json"), "utf8"));
     assert.deepEqual(reads, before.reads, "Read-only Preview execution must preserve every synthetic state.");
   }
-  const result = { status: "pass", stage, reads, scope: "Twelve isolated publication/deletion states for the current four registered Preview consumers." };
+  const result = { status: "pass", ownedRunId: handle.identity.runId, stage, reads, scope: "Twelve isolated publication/deletion states for the current four registered Preview consumers." };
   writeFileSync(join(artifactDir, `core-preview-native-${stage}.json`), JSON.stringify(result, null, 2) + "\n");
   return result;
 }

@@ -58,6 +58,83 @@ function publicPath(row) {
   return contract.publicArticle ? `/topics/${encodeURIComponent(row.slug)}` : contract.publicCategory ? destinationPath(row) : null;
 }
 
+
+/** A bounded affected public-read supplement; this is not a full Preview-cell replay. */
+export const CORE_PREVIEW_PUBLIC_IMPACT_SELECTION = "preview-public-impact";
+export function validateCorePreviewPublicImpactSelection({scope,cohort,selection}) {
+  if(selection === undefined || selection === null) return null;
+  assert.equal(scope,"core-closure"); assert.equal(cohort,"preview-recovery-templates");
+  assert.equal(selection,CORE_PREVIEW_PUBLIC_IMPACT_SELECTION); return selection;
+}
+export function buildCorePreviewPublicImpactPlan({fixtures,previewMatrix}) {
+  const rows=validateFixturePlan(fixtures,previewMatrix).filter(row=>publicPath(row)!==null);
+  const observations=rows.flatMap(row=>SESSIONS.map(session=>({
+    consumer:row.consumer,publication:row.publication,session,
+    fixture:{table:row.table,id:Number(row.id),kind:row.kind,slug:row.slug,expectedPublication:row.publication},
+    path:publicPath(row),publicState:CONTRACTS[row.consumer].publicArticle&&row.publication!=="published"?"missing-record":"public-document",
+  })));
+  assert.equal(rows.length,6); assert.equal(observations.length,12);
+  const authorizedJourneyIds=rows.map(row=>"core-preview-public-impact-"+CONTRACTS[row.consumer].collection+"-"+row.id+"-"+row.publication+"-authorized");
+  return {selection:CORE_PREVIEW_PUBLIC_IMPACT_SELECTION,rows,observations,journeyIds:[...authorizedJourneyIds,"core-preview-public-impact-revoked"],
+    protectedWitnesses:rows.flatMap(row=>[...new Set([consumerPath(row),destinationPath(row)].filter(value=>value.startsWith("/admin/")))].map(value=>({fixture:{table:row.table,id:Number(row.id),kind:row.kind,slug:row.slug,expectedPublication:row.publication},path:value,rejectedToExistingLogin:true}))) };
+}
+/** Pure strict join. Canonical inventory stays complete and every ledger cell remains open.
+ * @param {object} browser
+ * @param {{fixtures:object,previewMatrix:object[],canonicalRequiredCases:object[],nativeBefore?:{status:string,stage:string,ownedRunId:string,reads:object[]}|null,nativeAfter?:{status:string,stage:string,ownedRunId:string,reads:object[]}|null,ownedRunId?:string|null,sourceSha256?:string}} input
+ */
+export function assertCorePreviewPublicImpactReceipt(browser,{fixtures,previewMatrix,canonicalRequiredCases,nativeBefore=null,nativeAfter=null,ownedRunId=null,sourceSha256=browser.sourceSha256}) {
+  assert.equal(validateCorePreviewPublicImpactSelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection}),CORE_PREVIEW_PUBLIC_IMPACT_SELECTION);
+  const plan=buildCorePreviewPublicImpactPlan({fixtures,previewMatrix});
+  const identities=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const identity={...row};delete identity.status;delete identity.evidence;return identity;}).sort((a,b)=>a.key.localeCompare(b.key));};
+  assert.deepEqual(identities(browser.requiredCases),identities(canonicalRequiredCases),"Keep the full canonical open-cell universe.");
+  assert.ok(browser.requiredCases.every(row=>row.status==="open"&&row.evidence===null),"Public-read supplement cannot close whole Preview or other ledger cells.");
+  assert.equal(browser.status,"pass");assert.equal(browser.driverCompleted,true);assert.deepEqual(browser.errors,[]);
+  assert.equal(browser.globalClosed,false);assert.equal(browser.wholeCohortExecuted,false);
+  assert.match(sourceSha256,/^[a-f0-9]{64}$/);assert.equal(browser.sourceSha256,sourceSha256);
+  assert.deepEqual(browser.selectedJourneyIds,plan.journeyIds);assert.deepEqual(browser.executedJourneyIds,plan.journeyIds);
+  assert.deepEqual(browser.databaseReadback,[]);assert.deepEqual(browser.readOnlyReadback,[]);assert.deepEqual(browser.menuIntegrityReadback,[]);
+  assert.deepEqual(browser.previewMatrix.map(({status,evidence,...cell})=>{assert.equal(status,"open");assert.equal(evidence,null);return cell;}),previewMatrix.map(row=>{const cell={...row};delete cell.status;delete cell.evidence;return cell;}));
+  assert.deepEqual(browser.evidence.map(row=>row.id),["existing-auth-login",...plan.journeyIds]);
+  assert.ok(browser.evidence.every(row=>row.status==="pass"&&Array.isArray(row.coverage)&&row.coverage.length===0&&!Object.hasOwn(row,"previewCells")));
+  const login=browser.evidence[0];assert.equal(login.authenticated,true);assert.equal(login.sessionArtifactWritten,false);
+  const observed=[];
+  for(const [index,row] of browser.evidence.slice(1).entries()){
+    assert.equal(row.nativeStateReadbackRequired,true);assert.ok(Array.isArray(row.publicPreviewObservations));
+    if(index<plan.rows.length){assert.equal(row.publicPreviewObservations.length,1);assert.equal(row.publicPreviewObservations[0].session,"authorized");}
+    else{assert.equal(row.publicPreviewObservations.length,plan.rows.length);assert.ok(row.publicPreviewObservations.every(value=>value.session==="revoked"));assert.equal(row.existingLogoutRevokedRetainedSignedCookie,true);assert.equal(row.cookieArtifactsWritten,false);assert.deepEqual(row.protectedWitnesses,plan.protectedWitnesses);}
+    observed.push(...row.publicPreviewObservations);
+  }
+  const expected=[...plan.observations.filter(row=>row.session==="authorized"),...plan.observations.filter(row=>row.session==="revoked")];
+  assert.equal(observed.length,expected.length);assert.equal(new Set(observed.map(cellKey)).size,expected.length);
+  for(const [index,row]of observed.entries()){
+    assert.deepEqual(Object.keys(row).sort(),["consumer","publication","session","fixture","path","publicState","status",...(CONTRACTS[row.consumer]?.publicCategory?["collectionDestinationNotEntityDetail"]:[])].sort());
+    const {status,collectionDestinationNotEntityDetail,...identity}=row;assert.deepEqual(identity,expected[index]);
+    assert.ok(Number.isSafeInteger(status)&&status>=200&&status<500);
+    if(row.publicState==="public-document")assert.equal(status,200);
+    if(CONTRACTS[row.consumer].publicCategory)assert.equal(collectionDestinationNotEntityDetail,true);
+  }
+  const summary={selection:plan.selection,consumerCount:2,physicalFixtures:6,plannedPublicObservations:12,completedPublicObservations:12,observationKeys:expected.map(cellKey),wholePreviewMatrixExecuted:false,automaticCoverage:[],globalClosed:false};
+  assert.deepEqual(browser.publicPreviewImpact,summary);
+  let native=null;
+  assert.equal(nativeBefore===null,nativeAfter===null,"Native stages must join together.");
+  if(nativeBefore!==null){
+    assert.ok(typeof ownedRunId==="string"&&ownedRunId.length>0);
+    for(const [stage,receipt]of [["before",nativeBefore],["after",nativeAfter]]){
+      assert.equal(receipt.status,"pass");assert.equal(receipt.stage,stage);assert.equal(receipt.ownedRunId,ownedRunId);
+      assert.equal(receipt.reads.length,fixtures.previewClosure.length);
+      for(const [index,fixture]of fixtures.previewClosure.entries()){
+        const row=receipt.reads[index];assert.deepEqual(Object.keys(row).sort(),["consumer","publication","table","id","slug","status","deleted",...(fixture.table==="topic_categories"?["is_active"]:[])].sort());
+        for(const key of ["consumer","publication","table","id","slug"])assert.equal(row[key],fixture[key]);
+        assert.equal(row.status,fixture.expectedStatus);assert.equal(row.deleted,fixture.expectedDeleted);
+        if(fixture.expectedActive!==null)assert.equal(row.is_active,fixture.expectedActive);
+      }
+    }
+    assert.deepEqual(nativeAfter.reads,nativeBefore.reads);
+    native={ownedRunId,selectedPhysicalRows:plan.rows.map(({table,id})=>({table,id})),additionalReadOnlyRows:fixtures.previewClosure.length-plan.rows.length,unchanged:true,additionalRowsReceiveBehaviorCredit:false};
+  }
+  return {...summary,sourceSha256,native};
+}
+
 /** No SQL, action injection, credentials, cookie artifacts or Product hooks. */
 export async function runCorePreviewJourneys(ctx) {
   const { browser, context, page, origin, fixtures, run, observe, popupProof, ownedNetworkOnly, revokeSession, previewMatrix } = ctx;
@@ -94,6 +171,38 @@ export async function runCorePreviewJourneys(ctx) {
     if (CONTRACTS[row.consumer].publicArticle) await expect(surface.getByRole("heading", { name: row.title, exact: true }).first()).toBeVisible();
     return { path, status: response.status(), publicState: "public-document", ...(CONTRACTS[row.consumer].publicCategory ? { collectionDestinationNotEntityDetail: true } : {}) };
   };
+
+
+  if(ctx.journeySelection!==undefined&&ctx.journeySelection!==null){
+    validateCorePreviewPublicImpactSelection({scope:"core-closure",cohort:"preview-recovery-templates",selection:ctx.journeySelection});
+    const plan=buildCorePreviewPublicImpactPlan({fixtures,previewMatrix}),observations=[];
+    const observation=(row,session,proof)=>({consumer:row.consumer,publication:row.publication,session,fixture:fixtureIdentity(row),...proof});
+    for(const [index,row]of plan.rows.entries())await run(plan.journeyIds[index],[],async()=>{
+      const item=observation(row,"authorized",await provePublic(page,row,"core-preview-impact-authorized-public-policy"));observations.push(item);
+      return {publicPreviewObservations:[item],nativeStateReadbackRequired:true};
+    });
+    assert.equal(observations.length,plan.rows.length,"Do not revoke after an incomplete selected authorized pass.");
+    await run(plan.journeyIds.at(-1),[],async()=>{
+      const retainedSession=await revokeSession();assert.ok(retainedSession?.cookies?.some(cookie=>cookie.httpOnly));
+      const stale=await observe("core-preview-impact-stale-context",()=>browser.newContext({storageState:retainedSession}));
+      const revoked=[],protectedWitnesses=[];
+      try{
+        await stale.route("**/*",ownedNetworkOnly);const tab=await observe("core-preview-impact-stale-page",()=>stale.newPage());tab.setDefaultTimeout(25_000);
+        for(const row of plan.rows){
+          for(const path of [...new Set([consumerPath(row),destinationPath(row)].filter(value=>value.startsWith("/admin/")))]){
+            await navigate(tab,path,"core-preview-impact-revoked-protected-witness");await observe("core-preview-impact-revoked-login",()=>tab.waitForURL(url=>url.pathname==="/admin/login"));
+            await expect(tab.locator('input[name="username"]')).toBeVisible();await expect(tab.locator("[data-admin-entity-preview-action]")).toHaveCount(0);
+            protectedWitnesses.push({fixture:fixtureIdentity(row),path,rejectedToExistingLogin:true});
+          }
+          revoked.push(observation(row,"revoked",await provePublic(tab,row,"core-preview-impact-revoked-public-policy")));
+        }
+      }finally{await observe("core-preview-impact-stale-close",()=>stale.close());}
+      assert.deepEqual(protectedWitnesses,plan.protectedWitnesses);observations.push(...revoked);
+      return {publicPreviewObservations:revoked,protectedWitnesses,existingLogoutRevokedRetainedSignedCookie:true,cookieArtifactsWritten:false,nativeStateReadbackRequired:true};
+    });
+    assert.equal(observations.length,plan.observations.length);
+    return {selection:plan.selection,consumerCount:2,physicalFixtures:6,plannedPublicObservations:12,completedPublicObservations:12,observationKeys:observations.map(cellKey),wholePreviewMatrixExecuted:false,automaticCoverage:[],globalClosed:false};
+  }
 
   // The fixtures are already validated physical states. These journeys only
   // read them; state transitions and native final readback remain with the owner.

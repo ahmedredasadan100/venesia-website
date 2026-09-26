@@ -1,3 +1,5 @@
+import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection, buildCorePreviewPublicImpactPlan, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
+import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { registerCorePageRoute } from "./fixtures/admin-core-form-permission-context.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -30,6 +32,15 @@ const inventoryOnly = process.argv.includes("--inventory-only");
 const coreClosure = process.argv.includes("--core-closure");
 const coreCohort = process.argv.find(arg => arg.startsWith("--core-cohort="))?.slice("--core-cohort=".length) ?? "preview-recovery-templates";
 assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls", "presentation-controls"].includes(coreCohort));
+const selectionArgs = process.argv.filter(arg => arg.startsWith("--core-journey-selection="));
+assert.ok(selectionArgs.length <= 1, "Duplicate journey selector.");
+assert.ok(!process.argv.includes("--core-journey-selection"), "Journey selector requires its fixed value.");
+const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".length);
+const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
+  ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
+  : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
+let selectedJourneyIds = journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION ? [] : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
+const executedJourneyIds = [];
 let driverCompleted = false, activeCase = "bootstrap";
 let specializedSettingsResult = null;
 let mediaResult = null;
@@ -42,6 +53,7 @@ let presentationControlsResult = null;
 let projectControlsResult = null;
 let topicControlsResult = null;
 let domainBulkResult = null;
+let publicPreviewImpactResult = null;
 const progress = [];
 const previewMatrix = collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.flatMap(consumer =>
   ["published", "unpublished", "deleted"].flatMap(publication => ["authorized", "revoked"].map(session => ({
@@ -82,10 +94,11 @@ function receipt() {
   const cases = requiredCases.map(row => ({ ...row, status: covered.has(row.key) ? "behavior_verified" : "open", evidence: covered.get(row.key) ?? null }));
   return {
     status: errors.length ? "fail" : inventoryOnly || driverCompleted ? "pass" : "running",
+    journeySelection, selectedJourneyIds, executedJourneyIds: [...executedJourneyIds], wholeCohortExecuted: journeySelection === null && driverCompleted,
     inventoryOnly, driverCompleted, scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreClosure ? coreCohort : null, proofBoundary: inventoryOnly ? "applicability inventory only; no browser execution" : "owned local production Next and real authenticated application persistence",
-    globalClosed: driverCompleted && errors.length === 0 && cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete) && settledPreviewMatrix.every(row => row.status === "behavior_verified"),
+    globalClosed: journeySelection === null && driverCompleted && errors.length === 0 && cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete) && settledPreviewMatrix.every(row => row.status === "behavior_verified"),
     inventorySource: sourceHashes, sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256 ?? null,
-    startedAt, specializedSettings: specializedSettingsResult, media: mediaResult, navigationSettings: navigationSettingsResult, authEntry: authEntryResult, mediaRecovery: mediaRecoveryResult, queryPresentation: queryPresentationResult, templateControls: templateControlsResult, topicControls: topicControlsResult, projectControls: projectControlsResult, presentationControls: presentationControlsResult, domainBulk: domainBulkResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
+    startedAt, publicPreviewImpact: publicPreviewImpactResult, specializedSettings: specializedSettingsResult, media: mediaResult, navigationSettings: navigationSettingsResult, authEntry: authEntryResult, mediaRecovery: mediaRecoveryResult, queryPresentation: queryPresentationResult, templateControls: templateControlsResult, topicControls: topicControlsResult, projectControls: projectControlsResult, presentationControls: presentationControlsResult, domainBulk: domainBulkResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
     limitations: ["Unexecuted applicability cells remain open; successful representative journeys do not close the full inventory.",
       "Database readback expectations require the owning parent to verify through its opaque owned handle.",
       "This verifier does not claim production, Vercel delivery, or every permission and failure state."],
@@ -127,6 +140,7 @@ const origin = new URL(process.env.E2E_BASE_URL).origin;
 assert.equal(new URL(origin).hostname, "127.0.0.1", "Only the owned loopback app is permitted.");
 assert.ok(process.env.QA_ADMIN_USERNAME && process.env.QA_ADMIN_PASSWORD, "The owned lifecycle must supply its private local account.");
 const fixtures = JSON.parse(readFileSync(process.env.QA_ADMIN_FIXTURES, "utf8"));
+if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) selectedJourneyIds = buildCorePreviewPublicImpactPlan({fixtures,previewMatrix}).journeyIds;
 const allowedStorage = JSON.parse(process.env.QA_ADMIN_STORAGE_PUBLIC_PREFIXES || "[]");
 assert.ok(allowedStorage.every(value => new URL(value).hostname === "127.0.0.1"));
 const browser = await observe("browser-launch", () => chromium.launch({ headless: true }));
@@ -193,6 +207,8 @@ async function saveForm({ rejectedField = null } = {}) {
   });
 }
 async function run(id, coverage, task) {
+  if (journeySelection !== null) { assert.ok(selectedJourneyIds.includes(id)); assert.ok(!executedJourneyIds.includes(id)); }
+  executedJourneyIds.push(id);
   activeCase = id; checkpoint("case", "begin");
   const startedAt = new Date().toISOString();
   try {
@@ -294,7 +310,11 @@ try {
   checkpoint("login", "complete");
 
   if (coreClosure) {
-   if (coreCohort === "preview-recovery-templates" || coreCohort === "recovery-templates") {
+   if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) {
+    const { runCorePreviewJourneys } = await import("./fixtures/admin-core-preview-journeys.mjs");
+    publicPreviewImpactResult = await runCorePreviewJourneys({ browser, context, page, origin, fixtures, run, observe, popupProof, ownedNetworkOnly, revokeSession, previewMatrix, journeySelection });
+    coreLogin.username = ""; coreLogin.password = "";
+   } else if (coreCohort === "preview-recovery-templates" || coreCohort === "recovery-templates") {
     if (coreCohort === "preview-recovery-templates") {
     const { runCorePreviewJourneys } = await import("./fixtures/admin-core-preview-journeys.mjs");
     try {
@@ -326,14 +346,18 @@ try {
    } else if (coreCohort === "domain-forms") {
     const { createCoreFormPermissionContext } = await import("./fixtures/admin-core-form-permission-context.mjs");
     coreFormPermission = createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
+    if (journeySelection === null) {
     const { runCoreProjectCreateJourneys } = await import("./fixtures/admin-core-project-create-journeys.mjs");
     await runCoreProjectCreateJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
+    }
     const { runCoreDomainFormJourneys } = await import("./fixtures/admin-core-domain-form-journeys.mjs");
-    await runCoreDomainFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
+    await runCoreDomainFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, journeySelection, permissionReplay:coreFormPermission });
+    if (journeySelection === null) {
     const { runCoreOperationalFormJourneys } = await import("./fixtures/admin-core-operational-form-journeys.mjs");
     await runCoreOperationalFormJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
     const { runCoreSettingsAndMenuJourneys } = await import("./fixtures/admin-core-settings-journeys.mjs");
     await runCoreSettingsAndMenuJourneys({ page, origin, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
+    }
     coreFormPermission.close();coreFormPermission=null;
    } else if (coreCohort === "domain-bulk") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
@@ -704,7 +728,10 @@ try {
   });
   }
   assert.deepEqual(externalRequests, [], "The browser attempted an unowned network destination.");
-  driverCompleted = true; checkpoint("driver", "complete");
+  driverCompleted = true;
+  if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) assertCorePreviewPublicImpactReceipt(receipt(), {fixtures,previewMatrix,canonicalRequiredCases:requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256});
+  else if (journeySelection !== null) assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
+  checkpoint("driver", "complete");
 } catch (error) {
   const failure = { id: "driver", message: String(error?.message ?? error), pathname: new URL(page.url()).pathname };
   errors.push(failure);

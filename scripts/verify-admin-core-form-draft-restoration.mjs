@@ -3,12 +3,9 @@ import {createServer}from'node:http';
 import{readFileSync,mkdtempSync,rmSync}from'node:fs';
 import{tmpdir}from'node:os';
 import{resolve}from'node:path';
-import{pathToFileURL}from'node:url';
 import{chromium}from'playwright/test';
-const{registerCorePageRoute,createCoreFormPermissionContext}=await import(pathToFileURL(resolve('scripts/fixtures/admin-core-form-permission-context.mjs')).href);
-
-const helper=process.argv.includes('--candidate')?resolve('.tmp-qa/core-final-closure/form-draft-restoration-stage/files/scripts/fixtures/admin-core-form-draft-restoration.mjs'):resolve('scripts/fixtures/admin-core-form-draft-restoration.mjs');
-const{verifyCoreFormDraftRestoration:verify,assertCoreFormDraftRestorationJoin:join}=await import(pathToFileURL(helper).href);
+import{registerCorePageRoute,createCoreFormPermissionContext}from'./fixtures/admin-core-form-permission-context.mjs';
+import{verifyCoreFormDraftRestoration as verify,assertCoreFormDraftRestorationJoin as join}from'./fixtures/admin-core-form-draft-restoration.mjs';
 const sourceSha256='a'.repeat(64),mapping={caseId:'accepted-form-save',journeyId:'actual-enclosing-journey',formConsumer:'topic-category-create-edit',surface:'create'},cell={key:'form:topic-category-create-edit:create:rollback',consumer:mapping.formConsumer,surface:mapping.surface,boundary:'form',scenario:'rollback'},checks=[];
 let receivedPosts=0,mode='pass';
 const html=`<!doctype html><html><body><form data-admin-form-runtime data-admin-form-entity="test-form" data-admin-form-dirty="true"><fieldset data-admin-form-fields><input name="name" value="Authored name"><input name="password" type="password" value="Private_control_value_never_exported"><input type="checkbox" name="visible" checked><select name="kind"><option value="a">A</option><option value="b" selected>B</option></select><input name="repeat" value="one"><input name="repeat" value="two"><input type="hidden" name="projection" value="Authored body"><div contenteditable="true">Authored body</div><button type="submit">Save</button><button type="button" id="close">Cancel</button></fieldset></form><div id="feedback"></div><script>
