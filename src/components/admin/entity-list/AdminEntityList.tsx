@@ -19,7 +19,9 @@ import {
   type AdminEntityListEmptyState,
   type AdminEntityPersistResult,
 } from "../../../lib/admin/entity-list";
-import AdminBulkActionBar from "../ui/AdminBulkActionBar";
+import AdminBulkActionBar, {
+  type AdminBulkActionRequest,
+} from "../ui/AdminBulkActionBar";
 import AdminColumnVisibilityMenu from "../ui/AdminColumnVisibilityMenu";
 import AdminListboxSelect from "../ui/AdminListboxSelect";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "../ui/admin-scrollbar-styles";
@@ -411,8 +413,14 @@ function AdminEntityListInner<
     }
   }
 
-  function requestBulkExecution(action: string, ids: TId[]) {
-    const confirmation = getBulkConfirmation?.(action, ids) ?? null;
+  function requestBulkExecution({
+    action,
+    ids,
+    confirmation: fallbackConfirmation,
+    returnFocusRef,
+  }: AdminBulkActionRequest<TId>) {
+    const confirmation =
+      getBulkConfirmation?.(action, ids) ?? fallbackConfirmation;
     if (!confirmation) {
       void executeBulk(action, ids);
       return;
@@ -431,6 +439,7 @@ function AdminEntityListInner<
 
     floating.openConfirmation({
       ...confirmation,
+      returnFocusRef,
       onConfirm: () => executeBulk(action, ids),
     });
   }
@@ -455,7 +464,7 @@ function AdminEntityListInner<
         entityLabel={bulkEntityLabel}
         options={[...bulkOptions]}
         onClearSelection={selection.clearSelection}
-        onExecute={requestBulkExecution}
+        onRequestExecution={requestBulkExecution}
         isBusy={bulkInteraction.isBlocked}
         actionValue={bulkAction}
         actionControl={
