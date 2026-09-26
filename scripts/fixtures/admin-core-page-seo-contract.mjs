@@ -1,3 +1,4 @@
+import { CORE_DIRECT_IMAGE_VALUES, assertCoreDirectImageReceipts } from "./admin-core-direct-image-adoption.mjs";
 import assert from "node:assert/strict";
 export const PAGE_SEO_PHASES = Object.freeze(["before", "rejected", "saved", "reloaded"]);
 export const PAGE_SEO_RECIPE = Object.freeze({
@@ -5,6 +6,7 @@ export const PAGE_SEO_RECIPE = Object.freeze({
  seo_description: "إعدادات سيو الصفحة تصف محتوى الصفحة المركب وتثبت حفظ العنوان والوصف والكلمات المفتاحية والإعدادات الاختيارية من خلال المالك الحالي.",
  focus_keyword: "إعدادات سيو الصفحة", seo_keywords: Object.freeze(["سيو الصفحة", "محتوى مركب"]),
  canonical_url: "https://example.invalid/qa-core-page-seo", robots_index: false, robots_follow: null,
+ og_image: CORE_DIRECT_IMAGE_VALUES.og_image, og_image_alt: CORE_DIRECT_IMAGE_VALUES.og_image_alt,
 });
 export const PAGE_SEO_INVALID_CANONICAL = "ftp://example.invalid/qa-core-page-seo";
 export function assertPageSeoScope(manifest) {
@@ -29,8 +31,6 @@ export function assertPageSeoEvidence(before, after, phase) {
  const omit = row => Object.fromEntries(Object.entries(row).filter(([key])=> ![...Object.keys(PAGE_SEO_RECIPE), "og_image", "og_image_alt", "seo_score", "seo_score_version", "seo_score_input_hash", "updated_at"].includes(key)));
  assert.deepEqual(omit(after.page), omit(before.page), "All target non-SEO fields must remain identical.");
  for (const [key, value] of Object.entries(PAGE_SEO_RECIPE)) assert.deepEqual(after.page[key], value, "Persisted SEO differs: " + key);
- assert.equal(after.page.og_image, String(before.page.og_image ?? "").trim() || null);
- assert.equal(after.page.og_image_alt, String(before.page.og_image_alt ?? "").trim(), "Untouched OG fields use the existing parser's null/empty normalization only.");
  for (const key of ["seo_score", "seo_score_version", "seo_score_input_hash"]) assert.equal(after.page[key], after.expectedScore[key], "Canonical composition score differs: " + key);
  assert.deepEqual(after.audit.slice(0, before.audit.length), before.audit);
  assert.equal(after.audit.length, before.audit.length + 1);
@@ -42,6 +42,7 @@ export function assertPageSeoReceiptJoin(browser, native, cleanup, completion) {
  assert.equal(browser.status,"pass");assert.equal(browser.driverCompleted,true);assert.deepEqual(browser.errors,[]);assert.equal(browser.cohort,"page-composition");
  assert.equal(native.status,"pass");assert.equal(completion.status,"pass");assert.deepEqual(completion.phases,PAGE_SEO_PHASES);assert.equal(completion.exactWrites,1);assert.equal(completion.nativeCheckpoints,4);
  const matches=browser.evidence.filter(row=>row.id==="core-page-composition-seo-reject-retry-reload");assert.equal(matches.length,1);const row=matches[0];assert.equal(row.status,"pass");assert.equal(row.consumer,"page-composition-and-seo");assert.equal(row.surface,"seo");
+ assertCoreDirectImageReceipts(row.imageAdoption,["og_image","og_image"],browser.sourceSha256);
  assert.deepEqual(row.automaticCoverage,[]);assert.deepEqual(row.coverage,[]);assert.equal(row.genericDraftPreservationClaim,false);assert.equal(row.rejectionUi.genericDraftPreservationClaim,false);
  assert.equal(row.nativeCheckpoints,4);assert.equal(row.exactWrites,1);assert.deepEqual(row.nativePhases,PAGE_SEO_PHASES);
  const snapshots=native.records.filter(item=>item.kind==="page-composition-state"&&item.seo);assert.equal(snapshots.length,4);assert.deepEqual(snapshots.map(item=>item.seo.phase),PAGE_SEO_PHASES);assert.deepEqual(snapshots.map(item=>item.id),row.checkpoints);

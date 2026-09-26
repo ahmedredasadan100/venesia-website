@@ -1,3 +1,4 @@
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,observeCoreModalPendingDismissal} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
@@ -217,6 +218,7 @@ export async function runCoreDomainFormJourneys(ctx) {
   const permissionIntent = (recipe, surface, caseId, perform) => runCoreFormPermissionIntent({
     permissionReplay: ctx.permissionReplay, mapping: { caseId, formConsumer: recipe.id, surface }, perform, permissionEvidence,
   });
+  let locationRendered=null;
   const currentForm = () => page.locator("form[data-admin-form-runtime]");
   const control = (form, name) => form.locator(`[name="${name}"]`);
   const save = form => form.locator('button[type="submit"]');
@@ -249,12 +251,27 @@ export async function runCoreDomainFormJourneys(ctx) {
   async function valuesEqual(form, fields) {
     for (const [name, value] of Object.entries(fields)) await expect(control(form, name)).toHaveValue(String(value));
   }
+  const locationBase=surface=>({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:"form",consumer:locationRendered.recipe.id,surface}]});
+  async function observeLocationOpening(form,trigger,surface) {
+    locationRendered.surface=surface;if(locationRendered.opened.has(surface))return;
+    const dialog=page.getByRole("dialog").filter({has:page.locator("form[data-admin-form-runtime]")}),common=locationBase(surface),prefix="location-"+locationRendered.recipe.level+"-"+surface;
+    locationRendered.observations.push(await observeCoreModalCleanReturn({...common,id:prefix+"-return",dialog,form,trigger,cancel:form.getByRole("button",{name:"إلغاء",exact:true})}));
+    locationRendered.observations.push(await observeCoreModalFocusAdoption({...common,id:prefix+"-focus",dialog}));
+    const body=dialog.locator(":scope > div").filter({has:page.locator("form[data-admin-form-runtime]")});
+    locationRendered.observations.push(await observeCoreScrollbarAdoption({...common,id:prefix+"-scroll",container:body,target:save(form),axis:"y",containment:"modal-lock"}));
+    locationRendered.opened.add(surface);
+  }
+  async function observeLocationPending(form,surface) {
+    const dialog=page.getByRole("dialog").filter({has:page.locator("form[data-admin-form-runtime]")});
+    locationRendered.observations.push(await observeCoreModalPendingDismissal({...locationBase(surface),id:"location-"+locationRendered.recipe.level+"-"+surface+"-pending",dialog,form}));
+  }
   async function dirtyCloseCancel(form, fields, modal = false) {
     const original = page.url();
     const close = modal ? form.getByRole("button", { name: "إلغاء", exact: true }) : form.locator('[data-admin-form-action="close"]');
     await close.click();
     const confirmation = page.getByRole("dialog", { name: "إغلاق دون حفظ؟", exact: true });
     await expect(confirmation).toBeVisible();
+    if(modal&&locationRendered&&!locationRendered.dirty.has(locationRendered.surface)){locationRendered.observations.push(await observeCoreModalFocusAdoption({...locationBase(locationRendered.surface),id:"location-"+locationRendered.recipe.level+"-"+locationRendered.surface+"-dirty-focus",dialog:confirmation,state:"dirty-confirmation",escape:"not-exercised"}));locationRendered.dirty.add(locationRendered.surface);}
     await confirmation.locator("[data-admin-confirm-cancel]").click();
     await expect(confirmation).toHaveCount(0);
     await expect(close).toBeFocused();
@@ -292,7 +309,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     return descriptor;
   }
   function details(recipe, id, fields, extra = {}) {
-    const result = { consumer: recipe.id, surfaces: recipe.surfaces, kind: recipe.kind ?? recipe.level, id,
+    const result = { ...(recipe.id==="project-locations-create-edit"?{renderedAdoption:locationRendered.observations}:{}), consumer: recipe.id, surfaces: recipe.surfaces, kind: recipe.kind ?? recipe.level, id,
       verified: ["required_server_validation", "input_preservation", "retry", "save_reload", "dirty_close_cancel"], fields, proofBoundary: ownedBoundary, ...extra };
     const permissions = permissionEvidence.filter(item => item.formConsumer === recipe.id && recipe.surfaces.includes(item.surface));
     if (permissions.length) result.permissionEvidence = permissions;
@@ -422,10 +439,12 @@ export async function runCoreDomainFormJourneys(ctx) {
   });
 
   for (const recipe of plan.locations) await run(`core-location-${recipe.level}-form-create-edit`, recipe.coverage, async () => {
+    locationRendered={recipe,surface:null,opened:new Set(),dirty:new Set(),observations:[]};
     const path = `/admin/projects/locations/${recipe.config.slug}`;
     await navigate(path, false);
     await page.getByRole("button", { name: `إضافة ${recipe.config.singularLabel}`, exact: true }).click();
     let form = page.locator(`#project-location-${recipe.level}-create`);
+    await observeLocationOpening(form,page.getByRole("button",{name:`إضافة ${recipe.config.singularLabel}`,exact:true}),recipe.surfaces[0]);
     const name = `QA Core ${recipe.level} ${suffix}`, english = `QA Location ${recipe.level} ${suffix}`;
     await control(form, "name_ar").fill(name);
     await control(form, "name_en").fill(english);
@@ -435,7 +454,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     await dirtyCloseCancel(form, fields, true);
     await rejectRequired(form, "name_ar", fields);
     let row;
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-create",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,fields),cancelDirty:()=>dirtyCloseCancel(form,fields,true),dirtyNavigation:'close'});
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-create",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,fields),cancelDirty:()=>dirtyCloseCancel(form,fields,true),dirtyNavigation:'close',observePending:()=>observeLocationPending(form,recipe.surfaces[0])});
     const id = await permissionIntent(recipe, recipe.surfaces[0], "core-location-" + recipe.level + "-form-create", async () => {
       await acknowledge(form);
       await expect(form).toHaveCount(0, { timeout: 60_000 });
@@ -448,6 +467,7 @@ export async function runCoreDomainFormJourneys(ctx) {
       const descriptor = audit("project_locations", createdId, "project_location", name, "create", {});
       await row.locator('[data-admin-row-action="edit"]').getByRole("button").click();
       form = page.locator("#project-location-" + recipe.level + "-edit");
+      await observeLocationOpening(form,row.locator('[data-admin-row-action="edit"]').getByRole("button"),recipe.surfaces[1]);
       await valuesEqual(form, fields);
       return { value: createdId, nativeWrites: [{ ...descriptor, expected: { ...fields, level: recipe.level, parent_id: recipe.parentId, is_active: true } }] };
     });
@@ -455,7 +475,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     for (const key of ["name_ar", "name_en", "sort_order"]) await control(form, key).fill(String(editFields[key]));
     await dirtyCloseCancel(form, editFields, true);
     await rejectRequired(form, "name_ar", editFields);
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-edit",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[1]},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields,true),dirtyNavigation:'close'});
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-edit",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[1]},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields,true),dirtyNavigation:'close',observePending:()=>observeLocationPending(form,recipe.surfaces[1])});
     await permissionIntent(recipe, recipe.surfaces[1], "core-location-" + recipe.level + "-form-edit", async () => {
       await acknowledge(form);
       await expect(form).toHaveCount(0, { timeout: 60_000 });

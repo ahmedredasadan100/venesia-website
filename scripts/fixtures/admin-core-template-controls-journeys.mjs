@@ -1,3 +1,4 @@
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
@@ -6,12 +7,13 @@ import { buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_VALUES as values } from
 
 /** Only finite owned templates. No generic capability/axis is promoted here. */
 export async function runCoreTemplateControlsJourneys(ctx) {
-  const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, nativeCheckpoint } = ctx;
+  const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, nativeCheckpoint, requiredCases } = ctx;
   assert.equal(new URL(origin).hostname, "127.0.0.1");
   const f = fixtures.templateControls; assert.ok(f);
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const plan = buildCoreTemplateControlsPlan({ manifest, fixtures: f }), outcomes = [];
+  let currentRecipe, renderedAdoption = [], renderedSeen = new Set();
   const input = (form, name) => form.locator('[name="' + name + '"]:not([type="hidden"])');
   const state = (form, name) => form.locator('[name="' + name + '"]');
   const formFor = id => page.locator("form").filter({ has: page.locator('input[name="id"][value="' + id + '"]') });
@@ -60,6 +62,13 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     await dialog.getByLabel("الرابط", { exact: true }).fill(href);
     await setChecked(dialog.getByRole("switch", { name: "فتح في تبويب جديد", exact: true }), target === "_blank");
     await expect(state(form, prefix + "_link_href")).toHaveValue(before);
+    if(!renderedSeen.has('link:'+prefix)){
+      const common={page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:currentRecipe.consumer,surface:currentRecipe.surface}]};
+      renderedAdoption.push(await observeCoreModalFocusAdoption({...common,id:'template-controls-'+currentRecipe.kind+'-'+prefix+'-link-focus',dialog}));
+      const body=dialog.locator(':scope > div').filter({has:page.getByLabel('الرابط',{exact:true})}),target=dialog.getByRole('switch',{name:'فتح في تبويب جديد',exact:true}).locator('xpath=ancestor::label[1]');
+      renderedAdoption.push(await observeCoreScrollbarAdoption({...common,id:'template-controls-'+currentRecipe.kind+'-'+prefix+'-link-scroll',container:body,target,axis:'y',containment:'modal-lock'}));
+      renderedSeen.add('link:'+prefix);
+    }
     if (cancelOnly) {
       await dialog.getByRole("button", { name: "إلغاء", exact: true }).click();
       await expect(state(form, prefix + "_link_href")).toHaveValue(before);
@@ -281,6 +290,7 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     }
   }
   for (const recipe of plan.recipes) await run("core-template-controls-" + recipe.kind, [], async () => {
+    currentRecipe=recipe;renderedAdoption=[];renderedSeen=new Set();
     const path = "/admin/pages-blocks/blocks/" + recipe.kind + "/" + recipe.template.id;
     await observe("template-controls-open", () => page.goto(origin + path, { waitUntil: "domcontentloaded" }));
     const form = formFor(recipe.template.id); await expect(form).toHaveCount(1); await tab(form, "content");
@@ -304,7 +314,7 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     await observe("template-controls-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
     const reloaded = formFor(recipe.template.id); await tab(reloaded, "content"); await checkReload(recipe, reloaded);
     await checkpoint(recipe.kind, "reloaded");
-    const result = { consumer: recipe.consumer, surface: recipe.surface, kind: recipe.kind, observations: recipe.controls, viewports, pendingProof,
+    const result = { renderedAdoption, consumer: recipe.consumer, surface: recipe.surface, kind: recipe.kind, observations: recipe.controls, viewports, pendingProof,
       nativeCheckpoints: 5, genericCoverage: [], completeAxisCoverage: [], globalClosed: false };
     outcomes.push(result); return result;
   });

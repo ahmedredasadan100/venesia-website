@@ -366,7 +366,7 @@ try {
    } else if (coreCohort === "presentation-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCorePresentationControlsJourneys}=await import("./fixtures/admin-core-presentation-controls-journeys.mjs");
-    presentationControlsResult=await runCorePresentationControlsJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    presentationControlsResult=await runCorePresentationControlsJourneys({requiredCases,page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "project-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreProjectControlsJourneys}=await import("./fixtures/admin-core-project-controls-journeys.mjs");
@@ -374,11 +374,11 @@ try {
    } else if (coreCohort === "topic-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreTopicControlsJourneys}=await import("./fixtures/admin-core-topic-controls-journeys.mjs");
-    topicControlsResult=await runCoreTopicControlsJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    topicControlsResult=await runCoreTopicControlsJourneys({requiredCases,page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "template-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreTemplateControlsJourneys}=await import("./fixtures/admin-core-template-controls-journeys.mjs");
-    templateControlsResult=await runCoreTemplateControlsJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    templateControlsResult=await runCoreTemplateControlsJourneys({requiredCases,page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "query-presentation") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreQueryPresentationJourneys } = await import("./fixtures/admin-core-query-presentation-journeys.mjs");
@@ -397,7 +397,7 @@ try {
     const { runCoreNavigationSettingsJourneys } = await import("./fixtures/admin-core-navigation-settings-journeys.mjs");
     const {createCoreFormPermissionContext}=await import("./fixtures/admin-core-form-permission-context.mjs");
     coreFormPermission=createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
-    navigationSettingsResult = await runCoreNavigationSettingsJourneys({page,origin,fixtures,run,observe,requiredCases,nativeCheckpoint:createCoreNativeCheckpoint({origin,output}),permissionReplay:coreFormPermission});
+    navigationSettingsResult = await runCoreNavigationSettingsJourneys({page,origin,fixtures,run,observe,requiredCases,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output}),permissionReplay:coreFormPermission});
     coreFormPermission.close();coreFormPermission=null;
    } else if (coreCohort === "media-library") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");

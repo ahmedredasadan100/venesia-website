@@ -1,3 +1,4 @@
+import {observeCoreScrollbarAdoption} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
@@ -19,11 +20,12 @@ export function resolveTopicControlOptionIndex(listboxId, options, value) {
 }
 
 export async function runCoreTopicControlsJourneys(ctx) {
-  const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, nativeCheckpoint } = ctx;
+  const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, nativeCheckpoint, requiredCases } = ctx;
   assert.equal(new URL(origin).hostname, "127.0.0.1"); const f = fixtures.topicControls; assert.ok(f);
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const plan = buildCoreTopicControlsPlan({ manifest, fixtures: f }), completed = [];
+  let currentRecipe,renderedAdoption=[],renderedPickerObserved=false;
   const form = () => page.locator("form[data-admin-form-runtime]");
   const field = name => form().locator('[name="' + name + '"]');
   const save = () => form().locator('button[type="submit"]');
@@ -70,6 +72,10 @@ export async function runCoreTopicControlsJourneys(ctx) {
     const button = dialog.locator("button[aria-pressed]").filter({ has: page.getByText(asset.displayName, { exact: true }) });
     await expect(button).toHaveCount(1); await button.click(); await expect(button).toHaveAttribute("aria-pressed", "true");
     // Selection is staged in the picker until explicit confirmation; no resource is mutated.
+    if(!renderedPickerObserved){
+      const container=dialog.locator('[data-media-picker-scroll]'),target=dialog.getByText('يُعاد التحقق من الارتباطات تلقائيًا قبل أي حذف.',{exact:true});
+      renderedAdoption.push(await observeCoreScrollbarAdoption({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:currentRecipe.consumer,surface:currentRecipe.surface}],id:'topic-'+currentRecipe.kind+'-media-scroll',container,target,axis:'y',containment:'overscroll-contain'}));renderedPickerObserved=true;
+    }
     await dialog.getByRole("button", { name: cancel ? "إلغاء" : "تأكيد الاختيار", exact: true }).click();
     await expect(dialog).toHaveCount(0); await expect(trigger).toBeFocused();
   }
@@ -186,6 +192,7 @@ export async function runCoreTopicControlsJourneys(ctx) {
     await dialog.locator("[data-admin-confirm-cancel]").click(); await expect(dialog).toHaveCount(0); await expect(close).toBeFocused();
   }
   for (const recipe of plan.recipes) await run("core-topic-controls-" + recipe.kind, [], async () => {
+    currentRecipe=recipe;renderedAdoption=[];renderedPickerObserved=false;
     const leave = async dialog => dialog.type() === "beforeunload" ? dialog.accept() : dialog.dismiss(); page.on("dialog", leave);
     try { await observe("topic-controls-navigation", () => page.goto(origin + recipe.editPath, { waitUntil: "domcontentloaded" })); } finally { page.off("dialog", leave); }
     await expect(form()).toHaveCount(1); await checkpoint(recipe.kind, "baseline"); await tab("basic");
@@ -211,7 +218,7 @@ export async function runCoreTopicControlsJourneys(ctx) {
     if (recipe.kind === "article") { await tab("faq"); const rows = form().locator("[data-faq-item]"); await expect(rows).toHaveCount(2); for (const [index, item] of [v.faq[1], v.faq[0]].entries()) { await expect(rows.nth(index).locator('[name="faq_question"]')).toHaveValue(item.question); await expect(rows.nth(index).locator('[name="faq_answer"]')).toHaveValue(item.answer); } }
     await expect(field("image")).toHaveValue(f.assets[1].publicUrl); await tab("publish"); await expect(field("status")).toHaveValue("unpublished");
     await checkpoint(recipe.kind, "reloaded");
-    const result = { consumer: recipe.consumer, surface: recipe.surface, kind: recipe.kind, status: "pass", coverage: [], nativePhases: ["baseline", "draft", "negative", "serverRejected", "saved", "reloaded"], rejectedPending, successfulPending, currentControlsOnly: true, datePublicationPersistenceClaimed: false, managedReferencesClaimed: false }; completed.push(result); return result;
+    const result = { renderedAdoption, consumer: recipe.consumer, surface: recipe.surface, kind: recipe.kind, status: "pass", coverage: [], nativePhases: ["baseline", "draft", "negative", "serverRejected", "saved", "reloaded"], rejectedPending, successfulPending, currentControlsOnly: true, datePublicationPersistenceClaimed: false, managedReferencesClaimed: false }; completed.push(result); return result;
   });
   return { planned: plan.recipes.length, completed: completed.length, outcomes: completed, automaticAxisCoverage: [], globalClosed: false, explicitNonCapabilities: plan.explicitNonCapabilities, nativeFinalityRequired: true };
 }

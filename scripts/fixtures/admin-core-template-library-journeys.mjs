@@ -110,12 +110,21 @@ export async function runCoreTemplateLibraryJourneys(ctx) {
     await page.getByRole('button', { name: 'تطبيق الفلاتر', exact: true }).click();
     await expect(field).toHaveCount(0);
   }
-  async function confirmDelete(id, { cancelOnly = false } = {}) {
+  async function confirmDelete(id, { cancelOnly = false, optimisticRemoval = false } = {}) {
     const open = async () => { const item = await menu(id, 'delete'); await expect(item).toBeEnabled(); await item.click(); await expect(dialog).toHaveCount(1); };
     await open(); await dialog.locator('[data-admin-confirm-cancel]').click(); await expect(dialog).toHaveCount(0);
     if (cancelOnly) return;
     await open();
     await heldCommand(() => dialog.locator('[data-admin-confirm-submit]').click(), async () => {
+      if (optimisticRemoval) {
+        // Content's existing bounded mutation removes the row and its local
+        // confirmation before the held request is delivered. A removed control
+        // cannot accept another user command; the held owner still requires
+        // exactly one request and later real acknowledgement/reload/native proof.
+        await expect(page.locator(moreSelector(id))).toHaveCount(0);
+        await expect(dialog).toHaveCount(0);
+        return;
+      }
       const button = dialog.locator('[data-admin-confirm-submit]'); await expect(button).toBeDisabled();
       await expect(dialog.locator('[data-admin-confirm-cancel]')).toBeDisabled(); await button.evaluate(node => node.click());
     });
@@ -179,7 +188,7 @@ export async function runCoreTemplateLibraryJourneys(ctx) {
     await expect(page.getByRole('link', { name: cloneName, exact: true })).toHaveAttribute('href', recipe.route + '/' + cloneId);
     await expect(page.locator(visibilitySelector(cloneId))).toHaveAttribute('aria-pressed', 'false');
     let deletePosts = 0; const count = request => { if (isAction(request)) deletePosts++; }; page.on('request', count);
-    try { await confirmDelete(cloneId); assert.equal(deletePosts, 1, 'Cancel plus one confirmed delete may dispatch exactly once.'); }
+    try { await confirmDelete(cloneId, { optimisticRemoval: recipe.kind === "content" }); assert.equal(deletePosts, 1, 'Cancel plus one confirmed delete may dispatch exactly once.'); }
     finally { page.off('request', count); }
     await reload(); await expect(page.locator(moreSelector(cloneId))).toHaveCount(0);
     await expect(page.locator(moreSelector(recipe.source.id))).toHaveCount(1);
@@ -189,7 +198,7 @@ export async function runCoreTemplateLibraryJourneys(ctx) {
       auditEntityLabel: null, auditActions: ['content_block_template.delete'], auditMetadata: metadata(recipe), auditSince: startedAt, exactAuditCount: 1 });
     const result = { consumer: recipe.consumer, sourceId: recipe.source.id, cloneId, cloneName,
       onePhysicalCloneAfterReload: true, cloneUnpublished: true, deleteCancelledThenConfirmed: true,
-      pendingDuplicateBlocked: true, deletedCloneAbsentAfterReload: true, originalPreserved: true, nativeAuditRequired: true,
+      pendingDuplicateBlocked: true, deletePendingBoundary: recipe.kind === "content" ? "optimistic_row_and_local_confirmation_removed_before_delivery" : "mounted_confirmation_disabled_before_delivery", deletedCloneAbsentAfterReload: true, originalPreserved: true, nativeAuditRequired: true,
       knownSourceAuditGap: recipe.knownSourceAuditGap.filter(action => ['duplicate', 'delete'].includes(action)),
       boundary: 'Only the newly created unassigned clone is deleted; no assigned cascade or global delete is attempted.' };
     outcomes.push(result); return result;

@@ -97,6 +97,53 @@ try {
   await audit(6, 'project_tracking_update', 31, 'Update name', 'project_children.update');
   await audit(7, 'project', 30, 'Project name', 'project.create');
   await audit(8, 'topic', null, null, 'topic.permanent_delete', { topic_ids: [40, 41] });
+  await db.exec(`
+    create table public.project_tracking_update_media(id bigint primary key,client_key uuid not null,update_id bigint,media_kind text,public_url text,poster_url text,title text,sort_order integer);
+    create table public.media_references(id bigint,domain_key text,entity_type text,entity_identity text);
+    create table public.admin_media_assets_catalog(id uuid,object_key text,public_url text,provider text,bucket text,status text,reconciliation_state text);
+    insert into public.admin_media_assets_catalog values
+    ('ee854cd4-e3b0-4d65-b1aa-96c0f7c94701','images/projects/c35/hero.jpg','/images/projects/c35/hero.jpg','filesystem','public','active','synced'),
+    ('ee854cd4-e3b0-4d65-b1aa-96c0f7c94702','images/projects/c35/cover.jpg','/images/projects/c35/cover.jpg','filesystem','public','active','synced'),
+    ('ee854cd4-e3b0-4d65-b1aa-96c0f7c94703','images/projects/c35/location-map.jpg','/images/projects/c35/location-map.jpg','filesystem','public','active','synced');
+    insert into public.project_tracking_update_media values
+    (111,'6d3a9c13-dda8-41ce-9ea9-4597078bc001',31,'image','/images/projects/c35/cover.jpg',null,null,0),
+    (112,'6d3a9c13-dda8-41ce-9ea9-4597078bc002',31,'image','/images/projects/c35/hero.jpg',null,null,1),
+    (113,'6d3a9c13-dda8-41ce-9ea9-4597078bc003',31,'video','https://example.invalid/core-tracking-video','/images/projects/c35/location-map.jpg','QA Core Tracking video create',2);
+  `);
+  const mediaRows=()=>[
+    {media_kind:'image',public_url:'/images/projects/c35/cover.jpg',poster_url:null,title:null,sort_order:0},
+    {media_kind:'image',public_url:'/images/projects/c35/hero.jpg',poster_url:null,title:null,sort_order:1},
+    {media_kind:'video',public_url:'https://example.invalid/core-tracking-video',poster_url:'/images/projects/c35/location-map.jpg',title:'QA Core Tracking video create',sort_order:2,client_key:'6d3a9c13-dda8-41ce-9ea9-4597078bc003'},
+  ];
+  const mediaWrite=()=>({table:'project_tracking_updates',id:31,expected:{occurred_at:'2026-01-04T12:00:00Z'},expectedTrackingMedia:mediaRows(),auditEntityType:'project_tracking_update',auditEntityLabel:'Update name',auditActions:['project_children.update'],exactAuditCount:1});
+  await test('Tracking child native SQL binds authored order, video key, catalog identities and zero fabricated managed references',async()=>{
+    const result=await owner.verifyCoreDomainWrites(handle,browser([mediaWrite()]));assert.ok(result[0].trackingMedia);assert.equal(result[0].trackingMedia.rows.length,3);assert.equal(result[0].trackingMedia.catalogIdentityCount,3);assert.equal(result[0].trackingMedia.referenceRows,0);assert.deepEqual(result[0].trackingMedia.removedAssociationIds,[]);
+  });
+  for(const [name,change]of [
+    ['foreign table',(w:Record<string,unknown>)=>{w.table='topics';}],['deleted parent',(w:Record<string,unknown>)=>{w.deleted=true;w.expected={};}],
+    ['injected child field',(w:Record<string,unknown>)=>{(w.expectedTrackingMedia as Record<string,unknown>[])[0].password_hash='invalid';}],
+    ['unowned image',(w:Record<string,unknown>)=>{(w.expectedTrackingMedia as Record<string,unknown>[])[0].public_url='/images/not-owned.jpg';}],
+    ['duplicate path',(w:Record<string,unknown>)=>{(w.expectedTrackingMedia as Record<string,unknown>[])[1].public_url='/images/projects/c35/cover.jpg';}],
+    ['noncontiguous order',(w:Record<string,unknown>)=>{(w.expectedTrackingMedia as Record<string,unknown>[])[1].sort_order=9;}],
+    ['missing video identity',(w:Record<string,unknown>)=>{delete (w.expectedTrackingMedia as Record<string,unknown>[])[2].client_key;}],
+    ['foreign external video',(w:Record<string,unknown>)=>{(w.expectedTrackingMedia as Record<string,unknown>[])[2].public_url='https://example.org/foreign';}],
+    ['oversized child set',(w:Record<string,unknown>)=>{(w.expectedTrackingMedia as unknown[]).push(...mediaRows());}],
+  ] as const)await test('Tracking media rejects '+name+' before SQL',async()=>{const w:Record<string,unknown>=mediaWrite();change(w);await rejectedBeforeSql(w);});
+  for(const [name,mutate,restore]of [
+    ['lost child','delete from public.project_tracking_update_media where id=112',"insert into public.project_tracking_update_media values(112,'6d3a9c13-dda8-41ce-9ea9-4597078bc002',31,'image','/images/projects/c35/hero.jpg',null,null,1)"],
+    ['changed order','update public.project_tracking_update_media set sort_order=8 where id=112','update public.project_tracking_update_media set sort_order=1 where id=112'],
+    ['changed video identity',"update public.project_tracking_update_media set client_key='6d3a9c13-dda8-41ce-9ea9-4597078bc099' where id=113","update public.project_tracking_update_media set client_key='6d3a9c13-dda8-41ce-9ea9-4597078bc003' where id=113"],
+    ['wrong poster',"update public.project_tracking_update_media set poster_url=null where id=113","update public.project_tracking_update_media set poster_url='/images/projects/c35/location-map.jpg' where id=113"],
+    ['fabricated managed reference',"insert into public.media_references values(1,'project_tracking_update_media','project_tracking_update_media','111')",'delete from public.media_references where id=1'],
+    ['inactive catalog image',"update public.admin_media_assets_catalog set status='deleted' where object_key='images/projects/c35/cover.jpg'","update public.admin_media_assets_catalog set status='active' where object_key='images/projects/c35/cover.jpg'"],
+  ])await test('Tracking native read rejects '+name,async()=>{await db.exec(mutate);await assert.rejects(owner.verifyCoreDomainWrites(handle,browser([mediaWrite()])));assert.equal(statements.at(-1),'rollback');await db.exec(restore);});
+  await test('Tracking removal detects moved children and dangling old references before proving actual absence',async()=>{
+    const w=mediaWrite();w.expectedTrackingMedia=[w.expectedTrackingMedia[0],{...w.expectedTrackingMedia[2],sort_order:1}];
+    await db.exec('update public.project_tracking_update_media set update_id=99 where id=112; update public.project_tracking_update_media set sort_order=1 where id=113');
+    await assert.rejects(owner.verifyCoreDomainWrites(handle,browser([w])));
+    await db.exec("delete from public.project_tracking_update_media where id=112; insert into public.media_references values(2,'project_tracking_update_media','project_tracking_update_media','112')");await assert.rejects(owner.verifyCoreDomainWrites(handle,browser([w])));await db.exec('delete from public.media_references where id=2');
+    const result=await owner.verifyCoreDomainWrites(handle,browser([w]));assert.ok(result[0].trackingMedia);assert.deepEqual(result[0].trackingMedia.removedAssociationIds,[112]);assert.equal(result[0].trackingMedia.rows.length,2);
+  });
   await test('Actual SQL projects saved fields and validates one actor-bound immutable receipt', async () => {
     const result = await owner.verifyCoreDomainWrites(handle, browser([base()]));
     assert.equal(result[0].actual?.title, 'Owned topic'); assert.equal(result[0].commandReceiptCount, 1);

@@ -37,6 +37,6 @@ export function acceptCorePageSeoCheckpoint(handle:OwnedLocalHandle, phase:strin
  state.phases.push(phase);states.set(handle,state);
  return {phase,status:"pass",exactWrites:phase==="saved"||phase==="reloaded"?1:0,canonicalScoreVerified:phase==="saved"||phase==="reloaded",auditIds:observation.audit.slice(state.baseline.audit.length).map(row=>row.id),
   pageHash:digest(observation.page),otherPagesHash:observation.otherPagesHash,compositionHash:observation.compositionHash,semanticContentHash:observation.semanticContentHash,assignedTemplatesHash:observation.assignedTemplatesHash,
-  boundary:"Read-only fixed owned Page; exact authored SEO, unchanged non-SEO/other Pages/composition/templates, current semantic score and actor audit. No generic Form rollback or OG picker claim."};
+  boundary:"Read-only fixed owned Page; exact authored SEO, unchanged non-SEO/other Pages/composition/templates, current semantic score and actor audit. Actual authored OG values are included; no generic Form rollback claim."};
 }
 export function assertCorePageSeoCompleted(handle:OwnedLocalHandle){assertOwnedLocalHandle(handle);const state=states.get(handle);assert.ok(state);assert.deepEqual(state.phases,PAGE_SEO_PHASES);assert.ok(state.saved);return{status:"pass",phases:[...state.phases],nativeCheckpoints:4,exactWrites:1,pageId:state.pageId,actorId:state.baseline.actorId,globalClosed:false};}

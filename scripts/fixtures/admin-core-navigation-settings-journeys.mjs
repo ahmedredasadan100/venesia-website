@@ -1,3 +1,4 @@
+import { runCoreDescendantPresentationJourneys } from './admin-core-descendant-presentation-journeys.mjs';
 import assert from "node:assert/strict";
 import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { randomUUID } from "node:crypto";
@@ -60,6 +61,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await picker.getByRole("button", { name: "اعتماد الرابط", exact: true }).click(); await expect(picker).toBeHidden();
   };
   let pageId, menuId, itemIds;
+  await runCoreDescendantPresentationJourneys(ctx,"navigation");
   await run("core-navigation-page-create-rejection-retry-reload", plan.pageCoverage, async () => {
     await goto("/admin/pages-blocks/pages"); await checkpoint("page", "baseline");
     await page.getByRole("button", { name: "إضافة صفحة", exact: true }).click(); const form = page.locator("#create-page-form");

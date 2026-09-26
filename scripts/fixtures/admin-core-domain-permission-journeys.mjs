@@ -4,7 +4,7 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createJiti } from 'jiti';
 import { expect } from 'playwright/test';
-import { buildCoreDomainCommandPlan } from './admin-core-domain-command-journeys.mjs';
+import { buildCoreDomainCommandPlan, coreDomainVisibilityRequiresConfirmation } from './admin-core-domain-command-journeys.mjs';
 
 export function classifyCorePermissionDenial(status, headers, origin) {
   const destination = headers.location ?? headers['x-action-redirect']?.split(';')[0];
@@ -62,13 +62,13 @@ export async function runCoreDomainPermissionJourneys(ctx) {
     assert.ok(retained.find(cookie => cookie.name === 'venesia_admin_session')?.value === originalCookie.value, 'The mounted context must present the original signed cookie, not a cleared or fabricated token.');
     for (const { recipe, page, visibility, original } of mounted) await run('domain-' + recipe.entity + '-mounted-revoked-session-rejection', [], async () => {
       const startedAt = new Date().toISOString(), before = await checkpoint(output, recipe, startedAt);
-      const dialog = page.locator('[data-admin-confirm-dialog]');
+      const dialog = page.locator('[data-admin-confirm-dialog]'),confirmationRequired=coreDomainVisibilityRequiresConfirmation(recipe,original);
       let posts = 0;
       const requests = request => { if (request.method() === 'POST' && request.headers()['next-action'] && new URL(request.url()).pathname === new URL(recipe.path, origin).pathname) posts++; };
       page.on('request', requests);
       try {
         await expect(visibility).toHaveAttribute('aria-pressed', original);
-        if (recipe.confirmVisibility) {
+        if (confirmationRequired) {
           await visibility.click(); await expect(dialog).toHaveCount(1);
           await dialog.locator('[data-admin-confirm-cancel]').click(); await expect(dialog).toHaveCount(0);
           assert.equal(posts, 0, 'Confirmation cancellation after revocation must still dispatch nothing.');
@@ -77,7 +77,7 @@ export async function runCoreDomainPermissionJourneys(ctx) {
         const response = page.waitForResponse(value => value.request().method() === 'POST'
           && Boolean(value.request().headers()['next-action']) && new URL(value.request().url()).pathname === new URL(recipe.path, origin).pathname, { timeout: 30_000 });
         response.catch(() => {});
-        await observe('permission-dispatch-' + recipe.entity, () => (recipe.confirmVisibility ? dialog.locator('[data-admin-confirm-submit]') : visibility).click());
+        await observe('permission-dispatch-' + recipe.entity, () => (confirmationRequired ? dialog.locator('[data-admin-confirm-submit]') : visibility).click());
         const actual = await response;
         const denial = classifyCorePermissionDenial(actual.status(), await actual.allHeaders(), origin);
         assert.ok(denial, 'The actual command HTTP response must identify the existing login-denial destination.');
@@ -91,7 +91,7 @@ export async function runCoreDomainPermissionJourneys(ctx) {
         assert.deepEqual(after.rows, before.rows, 'A revoked-session command changed persisted state or revision.');
         assert.deepEqual(after.audit, before.audit, 'A revoked-session command appended or changed domain audit.');
         const outcome = { entity: recipe.entity, id: recipe.id, mountedBeforeRevocation: true, retainedOriginalSignedCookie: true,
-          confirmationCancelled: Boolean(recipe.confirmVisibility), deniedRealCommandPosts: posts, denial,
+          confirmationCancelled: Boolean(confirmationRequired), deniedRealCommandPosts: posts, denial,
           nativeBefore: before.id, nativeAfter: after.id, persistedStateRevisionAndAuditUnchanged: true,
           visibleOutcome: new URL(page.url()).pathname === '/admin/login' ? 'login-navigation' : 'existing-rejected-or-unknown-feedback',
           boundary: 'Actual Auth/Proxy HTTP rejection of an already-mounted command; no claim that the domain Action ran or that role authorization policies changed.' };

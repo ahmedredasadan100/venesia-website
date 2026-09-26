@@ -1,4 +1,6 @@
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,observeCoreModalPendingDismissal} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
+import {authorCoreTrackingMedia,assertCoreTrackingMediaUI} from "./admin-core-tracking-media-adoption.mjs";
 import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
@@ -45,6 +47,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const plan = buildCoreOperationalFormPlan({ manifest, requiredCases, fixtures });
   const suffix = Date.now().toString(36), results = [], permissionEvidence = [], dateEvidence = [];
+  let renderedRecipe, renderedSurface, renderedAdoption=[], renderedOpened=new Set(), renderedDirty=new Set();
   const permissionIntent = (recipe, surface, perform) => runCoreFormPermissionIntent({ permissionReplay: ctx.permissionReplay, mapping: { caseId: "core-operational-" + recipe.kind + "-" + surface, formConsumer: recipe.consumer, surface }, perform, permissionEvidence });
   const form = () => page.locator("form[data-admin-form-runtime]");
   const input = name => form().locator(`[name="${name}"]`);
@@ -97,12 +100,28 @@ export async function runCoreOperationalFormJourneys(ctx) {
     await page.getByRole("option", { name: label, exact: true }).click();
     await expect(input(name)).toHaveValue(value);
   }
+  const renderedBase=surface=>({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:"form",consumer:renderedRecipe.consumer,surface}]});
+  async function observeOpenedForm(trigger,surface) {
+    renderedSurface=surface;if(renderedOpened.has(surface))return;
+    const current=form(),dialog=page.getByRole("dialog").filter({has:page.locator("form[data-admin-form-runtime]")});
+    const prefix="operational-"+renderedRecipe.kind+"-"+surface,common=renderedBase(surface);
+    renderedAdoption.push(await observeCoreModalCleanReturn({...common,id:prefix+"-return",dialog,form:current,trigger,cancel:current.getByRole("button",{name:"إلغاء",exact:true})}));
+    renderedAdoption.push(await observeCoreModalFocusAdoption({...common,id:prefix+"-focus",dialog}));
+    const body=dialog.locator(":scope > div").filter({has:page.locator("form[data-admin-form-runtime]")});
+    renderedAdoption.push(await observeCoreScrollbarAdoption({...common,id:prefix+"-scroll",container:body,target:save(),axis:"y",containment:"modal-lock"}));
+    renderedOpened.add(surface);
+  }
+  async function observePendingForm(surface) {
+    const dialog=page.getByRole("dialog").filter({has:page.locator("form[data-admin-form-runtime]")});
+    renderedAdoption.push(await observeCoreModalPendingDismissal({...renderedBase(surface),id:"operational-"+renderedRecipe.kind+"-"+surface+"-pending",dialog,form:form()}));
+  }
   async function openCreate(path, label) {
     await navigate(path);
     const trigger = page.getByRole("button", { name: label, exact: true });
     // Empty lists may repeat the same create trigger in their empty state.
     await expect(trigger.first()).toBeVisible(); await trigger.first().click();
     await expect(form()).toHaveCount(1);
+    await observeOpenedForm(trigger.first(),renderedRecipe.surfaces[0]);
   }
   async function openEdit(path, label) {
     await navigate(path + "?q=" + encodeURIComponent(label));
@@ -111,6 +130,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     assert.ok(Number.isSafeInteger(id) && id > 0);
     await row(label).locator('[data-admin-row-action="edit"] button').click();
     await expect(form()).toHaveCount(1);
+    await observeOpenedForm(row(label).locator('[data-admin-row-action="edit"] button'),renderedRecipe.surfaces.at(-1));
     return id;
   }
   async function closeUnchanged() {
@@ -121,6 +141,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     await form().getByRole("button", { name: "إلغاء", exact: true }).click();
     const confirmation = page.getByRole("dialog", { name: "إغلاق دون حفظ؟", exact: true });
     await expect(confirmation).toBeVisible();
+    if(!renderedDirty.has(renderedSurface)){renderedAdoption.push(await observeCoreModalFocusAdoption({...renderedBase(renderedSurface),id:"operational-"+renderedRecipe.kind+"-"+renderedSurface+"-dirty-focus",dialog:confirmation,state:"dirty-confirmation",escape:"not-exercised"}));renderedDirty.add(renderedSurface);}
     await confirmation.locator("[data-admin-confirm-cancel]").click();
     await expect(confirmation).toHaveCount(0);
     await expect(form().getByRole("button", { name: "إلغاء", exact: true })).toBeFocused();
@@ -134,6 +155,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
       assertDraft: async () => { await equal(values); if (assertPrivate) await assertPrivate(); },
       cancelDirty: async () => { await dirtyCancel(values); assert.equal(page.url(), retainedUrl, "Dirty-close cancellation must retain the current Form URL."); },
       dirtyNavigation: "close",
+      observePending:()=>observePendingForm(surface),
     });
   }
 
@@ -166,7 +188,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     databaseReadback.push(descriptor); return descriptor;
   }
   function complete(recipe, ids, fields, extra = {}) {
-    const result = { consumer: recipe.consumer, surfaces: recipe.surfaces, ids, fields,
+    const result = { renderedAdoption, consumer: recipe.consumer, surfaces: recipe.surfaces, ids, fields,
       verified: ["structured_validation_rejection", "field_preservation", "dirty_close_cancel", "retry", "save_reload"], proofBoundary, ...extra };
     result.permissionEvidence = permissionEvidence.filter(row => row.formConsumer === recipe.consumer && recipe.surfaces.includes(row.surface));
     if (recipe.consumer === "project-tracking-create-edit") result.dateEvidence = dateEvidence.filter(row => recipe.surfaces.includes(row.surface)).map(bindTrackingDates);
@@ -174,6 +196,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
   }
 
   for (const recipe of plan.recipes) await run(`core-operational-${recipe.kind}-form-roundtrip`, recipe.coverage, async () => {
+    renderedRecipe=recipe;renderedSurface=null;renderedAdoption=[];renderedOpened=new Set();renderedDirty=new Set();
     if (recipe.kind === "redirect") {
       const path = "/admin/seo/redirects", source = `/qa-core-redirect-${suffix}`;
       await openCreate(path, "إضافة تحويل");
@@ -229,26 +252,28 @@ export async function runCoreOperationalFormJourneys(ctx) {
       const nativeValues = values => kind === "stage" ? { ...values, start_date: values.start_date || null, planned_duration_value: 3, project_id: parent.projectId, is_visible: true }
         : kind === "item" ? { ...values, start_date: values.start_date || null, completion_date: values.completion_date || null, stage_id: parent.stage.id, is_visible: true }
           : { title: values.title, body: values.body, item_id: parent.item.id, occurred_at: values.occurred_on + "T12:00:00Z", publication_status: "draft" };
+      const createMedia=kind==="update"?await authorCoreTrackingMedia({page,origin,form:form(),phase:"create"}):null;
       const createDates = await trackingDates(recipe, kind + "-create", values);
       await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
-      await restoreDraft(recipe, kind + "-create", values);
+      await restoreDraft(recipe, kind + "-create", values,createMedia?()=>assertCoreTrackingMediaUI(form(),createMedia):null);
       const id = await permissionIntent(recipe, kind + "-create", async () => {
-        await accepted(); const createdId = await openEdit(config.path, createdLabel); await equal(values); createDates.reloaded = true;
+        await accepted(); const createdId = await openEdit(config.path, createdLabel); await equal(values); createDates.reloaded = true; if(createMedia){await assertCoreTrackingMediaUI(form(),createMedia);createMedia.reloaded=true;}
         const descriptor = audit(config.table, createdId, config.entity, "project_children.create", createdLabel, {});
-        return { value: createdId, nativeWrites: [{ ...descriptor, expected: nativeValues(values) }] };
+        return { value: createdId, nativeWrites: [{ ...descriptor, expected: nativeValues(values),...(createMedia?{expectedTrackingMedia:createMedia.expectedMedia,auditMetadata:{media_count:createMedia.expectedMedia.length}}:{}) }] };
       });
       values = { ...values, [config.labelField]: editedLabel,
         ...(kind === "update" ? { body: `QA edited update body ${suffix}`, occurred_on: "2026-01-05" } : { description: `QA edited ${kind} description ${suffix}`, start_date: "" }) };
       await fill(kind === "update" ? { title: values.title, body: values.body } : { name: values.name, description: values.description });
+      const editMedia=kind==="update"?await authorCoreTrackingMedia({page,origin,form:form(),phase:"edit",prior:createMedia}):null;
       const editDates = await trackingDates(recipe, kind + "-edit", values);
       await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
       const expected = nativeValues(values);
-      await restoreDraft(recipe, kind + "-edit", values);
+      await restoreDraft(recipe, kind + "-edit", values,editMedia?()=>assertCoreTrackingMediaUI(form(),editMedia):null);
       await permissionIntent(recipe, kind + "-edit", async () => {
-        await accepted(); assert.equal(await openEdit(config.path, editedLabel), id); await equal(values); editDates.reloaded = true; await closeUnchanged();
-        return { nativeWrites: [audit(config.table, id, config.entity, "project_children.update", editedLabel, expected)] };
+        await accepted(); assert.equal(await openEdit(config.path, editedLabel), id); await equal(values); editDates.reloaded = true; if(editMedia){await assertCoreTrackingMediaUI(form(),editMedia);editMedia.reloaded=true;} await closeUnchanged();
+        return { nativeWrites: [audit(config.table, id, config.entity, "project_children.update", editedLabel, expected,editMedia?{expectedTrackingMedia:editMedia.expectedMedia,auditMetadata:{media_count:editMedia.expectedMedia.length}}:{})] };
       });
-      return complete(recipe, [id], Object.keys(expected), { mediaBoundary: kind === "update" ? "Text-only draft; gallery/video selectors remain separate applicable work." : null });
+      return complete(recipe, [id], Object.keys(expected), { ...(kind === "update" ? {mediaEvidence:[createMedia,editMedia],mediaBoundary:"Actual local Catalog images and externally addressed video metadata only; native child identity/order/removal joined to original accepted saves. No Storage writes or external video availability claim."} : {}) });
     }
     assert.equal(recipe.kind, "user");
     const path = "/admin/users-roles", username = `qa.core.${suffix}`, password = `Qa!${randomUUID()}`;
@@ -285,6 +310,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
   });
 
   await run("core-operational-user-current-identity-protection", [], async () => {
+    renderedRecipe={kind:"identity",consumer:"users-and-roles",surfaces:["identity-collection"]};renderedAdoption=[];renderedOpened=new Set();renderedDirty=new Set();
     await navigate("/admin/users-roles");
     const identity = page.locator("p").filter({ hasText: /^المستخدم الحالي:/u });
     await expect(identity).toHaveCount(1);
@@ -302,11 +328,12 @@ export async function runCoreOperationalFormJourneys(ctx) {
     }
     await page.keyboard.press("Escape"); await expect(menu).toHaveCount(0); await expect(more.getByRole("button")).toBeFocused();
     await row(currentName).locator('[data-admin-row-action="edit"] button').click();
+    await observeOpenedForm(row(currentName).locator('[data-admin-row-action="edit"] button'),"identity-collection");
     await expect(form().locator("#admin-user-self-status")).toHaveText("لا يمكنك تعطيل حسابك الحالي من هنا.");
     await expect(form().getByRole("switch")).toBeDisabled();
     await expect(input("password")).toHaveCount(0); await expect(input("confirmPassword")).toHaveCount(0);
     await closeUnchanged();
-    return { consumer: "users-and-roles", surface: "identity-collection", verified: ["current_user_visibility_disabled", "current_user_delete_disabled", "current_user_edit_status_disabled", "self_password_controls_absent"], proofBoundary: "Read-only current authenticated synthetic identity UI restrictions; no denied server-command or complete Auth capability claim." };
+    return { renderedAdoption, consumer: "users-and-roles", surface: "identity-collection", verified: ["current_user_visibility_disabled", "current_user_delete_disabled", "current_user_edit_status_disabled", "self_password_controls_absent"], proofBoundary: "Read-only current authenticated synthetic identity UI restrictions; no denied server-command or complete Auth capability claim." };
   });
   return { planned: plan.recipes.length, completed: results.length, results, permissionEvidence, permissionCandidateKeys: permissionEvidence.map(row => row.candidateRequiredCase) };
 }

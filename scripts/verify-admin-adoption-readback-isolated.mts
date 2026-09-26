@@ -1,3 +1,6 @@
+import {assertCoreTrackingMediaCompletion} from "./fixtures/admin-core-tracking-media-adoption.mjs";
+import { assertCoreCompanyImageCompletion } from "./fixtures/admin-core-direct-image-adoption.mjs";
+import { verifyCoreDescendantPresentationCompletion, partitionCoreDescendantNativeCheckpoints } from './verify-admin-core-descendant-presentation-isolated.mts';
 import { assertCoreTrackingDateReceipts } from "./fixtures/admin-core-operational-form-journeys.mjs";
 import { verifyCoreTemplatePresentationCompletion } from './verify-admin-core-template-library-presentation-isolated.mts';
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
@@ -225,7 +228,9 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       draftRestoration=assertCoreFormDraftRestorationJoin({artifact:draftArtifact,browser,native:draftNative,ownedRunId:handle.identity.runId,sourceSha256:(browser as unknown as {sourceSha256:string}).sourceSha256});
     }
     if (selectedJourneys && !isPreviewImpact) { assert.ok(draftRestoration); assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration); }
+    const companyImages=browser.cohort==="domain-forms"&&!browser.journeySelection?assertCoreCompanyImageCompletion(browser,JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),handle.identity.runId):null;
     let nativeCheckpoints = null;
+    let descendantPresentation = null;
     let pageSeo = null;
     let navigationPermission: ReturnType<typeof assertCoreNavigationPermissionReceipts> | null = null;
     if (browser.cohort === "page-composition" || browser.cohort === "readonly-hubs" || browser.cohort === "specialized-settings" || browser.cohort === "media-library" || browser.cohort === "navigation-settings" || browser.cohort === "auth-entry") {
@@ -233,8 +238,13 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(nativeCheckpoints.status, "pass", "Every joined fixed checkpoint must complete.");
       const kind = browser.cohort === "page-composition" ? "page-composition-state" : browser.cohort === "readonly-hubs" ? "readonly-hub-state" : browser.cohort === "media-library" ? "media-library-state" : browser.cohort === "navigation-settings" ? "navigation-settings-state" : browser.cohort === "auth-entry" ? "auth-entry-state" : "specialized-settings-state";
       assert.ok(Array.isArray(nativeCheckpoints.records) && nativeCheckpoints.records.length > 0);
-      if (browser.cohort === "navigation-settings") navigationPermission = assertCoreNavigationPermissionReceipts(handle, browser, nativeCheckpoints, draftArtifact);
-      else if (browser.cohort === "page-composition") pageSeo = assertPageSeoReceiptJoin(browser, nativeCheckpoints, JSON.parse(readFileSync(join(artifactDir, "core-native-write-faults.json"), "utf8")), assertCorePageSeoCompleted(handle));
+      let cohortNative = nativeCheckpoints;
+      if (browser.cohort === "navigation-settings" || browser.cohort === "page-composition") {
+        descendantPresentation = verifyCoreDescendantPresentationCompletion(handle,browser,nativeCheckpoints);
+        cohortNative = partitionCoreDescendantNativeCheckpoints(handle,nativeCheckpoints);
+      }
+      if (browser.cohort === "navigation-settings") navigationPermission = assertCoreNavigationPermissionReceipts(handle, browser, cohortNative, draftArtifact);
+      else if (browser.cohort === "page-composition") pageSeo = assertPageSeoReceiptJoin(browser, cohortNative, JSON.parse(readFileSync(join(artifactDir, "core-native-write-faults.json"), "utf8")), assertCorePageSeoCompleted(handle));
       else assert.ok(nativeCheckpoints.records.every((row: {kind: string; status: string}) => row.kind === kind && row.status === "pass"));
     }
     const mediaCompletion = browser.cohort === "media-library" ? assertCoreMediaCompletionReceipts(handle, browser, nativeCheckpoints) : null;
@@ -324,11 +334,12 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       presentationControls={...result,completion,cleanup};
     }
     const domainBulk=browser.cohort==="domain-bulk"?await verifyCoreDomainBulkCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"))):null;
-    let trackingDates=null;
+    let trackingDates=null,trackingMedia=null;
     if(browser.cohort==='domain-forms'&&!browser.journeySelection){
       const {ADMIN_COLLECTION_SURFACE_ADOPTION}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import('../src/lib/admin/interaction-system/adoption-manifest.ts')>('../src/lib/admin/interaction-system/adoption-manifest.ts');
       const source=JSON.parse(readFileSync(join(artifactDir,'public-source-manifest.json'),'utf8'));
       trackingDates=assertCoreTrackingDateReceipts({browser,native:JSON.parse(readFileSync(join(artifactDir,'core-native-control-readback.json'),'utf8')),ownedRunId:handle.identity.runId,sourceSha256:source.sourceSha256,actorId:await readCoreFixedQaActor(handle),fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION});
+      trackingMedia=assertCoreTrackingMediaCompletion({browser,native:JSON.parse(readFileSync(join(artifactDir,'core-native-control-readback.json'),'utf8')),ownedRunId:handle.identity.runId,sourceSha256:source.sourceSha256,actorId:await readCoreFixedQaActor(handle),fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION});
     }
     const templateLibraryPresentation = browser.cohort === "template-libraries" ? verifyCoreTemplatePresentationCompletion(handle,browser) : null;
     const queryPresentation = browser.cohort === "query-presentation" ? verifyCoreQueryPresentationCompletion(handle,browser) : null;
@@ -338,7 +349,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     if (specializedSettings) assert.equal(browser.specializedSettings?.status,"pass");
     const writes = await verifyCoreDomainWrites(handle, browser);
     const readOnly = browser.cohort === "domain-commands" ? await verifyCoreReadonlyReadback(handle, browser) : null;
-    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, trackingDates, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, trackingDates, trackingMedia, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }

@@ -122,9 +122,25 @@ export async function readCoreDomainCheckpoint(handle: OwnedLocalHandle, input: 
   return { id: request.id, kind: request.kind, entity, status: 'pass', observedAt: new Date().toISOString(), ...result };
 }
 
+type ExpectedTrackingMedia = { media_kind: 'image' | 'video'; public_url: string; poster_url: string | null; title: string | null; sort_order: number; client_key?: string };
+const trackingMediaHistory = new WeakMap<OwnedLocalHandle, Map<number, number[]>>();
+const trackingImagePaths = ['/images/projects/c35/hero.jpg','/images/projects/c35/cover.jpg','/images/projects/c35/location-map.jpg'];
+function validateTrackingMedia(value: unknown): ExpectedTrackingMedia[] {
+  assert.ok(Array.isArray(value) && value.length >= 1 && value.length <= 3, 'Only the declared bounded Tracking media recipe is allowed.');
+  let videoCount=0;
+  const rows=value.map((raw,index)=>{const row=object(raw) as ExpectedTrackingMedia;
+    assert.ok(Object.keys(row).every(key=>['media_kind','public_url','poster_url','title','sort_order','client_key'].includes(key)));
+    assert.equal(row.sort_order,index);assert.ok(['image','video'].includes(row.media_kind));
+    if(row.media_kind==='image'){assert.equal(videoCount,0);assert.ok(trackingImagePaths.includes(row.public_url));assert.equal(row.poster_url,null);assert.equal(row.title,null);assert.equal(row.client_key,undefined);}
+    else{videoCount++;assert.equal(videoCount,1);assert.ok(['https://example.invalid/core-tracking-video','https://example.invalid/core-tracking-video-edited'].includes(row.public_url));assert.ok(row.poster_url===null||trackingImagePaths.includes(row.poster_url));assert.ok(typeof row.title==='string'&&row.title.length>0&&row.title.length<=180);assert.match(String(row.client_key),uuid);}
+    return row;
+  });
+  assert.equal(new Set(rows.map(row=>row.public_url)).size,rows.length);return rows;
+}
 type ExpectedWrite = {
   table: string; id: number | string; expected: Row; deleted?: boolean;
   expectedJson?: Array<{ column: string; path: string[]; value: unknown }>;
+  expectedTrackingMedia?: ExpectedTrackingMedia[];
   auditEntityType?: string; auditEntityTypes?: string[]; auditEntityLabel?: string | null;
   auditActions?: string[]; auditMetadata?: Row; auditSince?: string;
   exactAuditCount?: number; exactCommandReceiptCount?: number; aggregateAuditIds?: number[];
@@ -139,6 +155,7 @@ function validateWrite(raw: unknown, browserSince: string) {
   const fields = Object.keys(value.expected); assert.ok(fields.every(field => contract.fields.includes(field)), 'A requested saved field is outside its fixed table contract.');
   assert.ok(value.deleted === undefined || typeof value.deleted === 'boolean');
   if (value.deleted) assert.ok(fields.length === 0 && !(value.expectedJson?.length) && contract.key !== 'key', 'Deleted rows cannot also claim saved fields.');
+  if(value.expectedTrackingMedia!==undefined){assert.equal(value.table,'project_tracking_updates');assert.equal(Boolean(value.deleted),false);validateTrackingMedia(value.expectedTrackingMedia);}
   const projections = value.expectedJson ?? []; assert.ok(Array.isArray(projections) && projections.length <= 32);
   for (const projection of projections) {
     assert.ok(contract.json?.includes(projection.column), 'JSON projections must use the actual table JSON column.');
@@ -194,7 +211,7 @@ async function readExecutedWrites(handle: OwnedLocalHandle, browser: BrowserWrit
       renewedAt = Date.now();
     }
     const { value, contract, fields, projections, types, since, label, metadata } = plan;
-    result.push(await readOnly(handle, async connection => {
+    const completed = await readOnly(handle, async connection => {
       const parameters: unknown[] = [value.id];
       const parts = [jsonObjectExpression(fields.length ? fields : [contract.key]) + ' as projection'];
       for (const [index, projection] of projections.entries()) {
@@ -214,6 +231,27 @@ async function readExecutedWrites(handle: OwnedLocalHandle, browser: BrowserWrit
         const actualValue = rows[0]['json_' + index]; assert.deepEqual(actualValue, projection.value, 'Native authored JSON projection differs.');
         return { column: projection.column, path: projection.path, actual: actualValue };
       });
+      let trackingMedia: { rows: Row[]; priorAssociationIds: number[]; removedAssociationIds: number[]; referenceRows: number; catalogIdentityCount: number } | undefined;
+      if(value.expectedTrackingMedia){
+        const mediaRows=(await connection.query('select id,client_key,update_id,media_kind,public_url,poster_url,title,sort_order from public.project_tracking_update_media where update_id=$1 order by sort_order,id',[value.id])).rows;
+        assert.equal(mediaRows.length,value.expectedTrackingMedia.length,'Tracking child media count differs from authored UI.');
+        assert.equal(new Set(mediaRows.map(row=>String(row.client_key))).size,mediaRows.length);
+        for(const [index,row]of mediaRows.entries()){
+          positive(Number(row.id));assert.equal(positive(Number(row.update_id)),value.id);assert.match(String(row.client_key),uuid);
+          const expected: ExpectedTrackingMedia=value.expectedTrackingMedia[index];for(const[key,wanted]of Object.entries(expected) as Array<[string,unknown]>)assert.deepEqual(key==='sort_order'?Number(row[key]):row[key],wanted,'Tracking media child mismatch: '+key);
+        }
+        const ids=mediaRows.map(row=>positive(Number(row.id))),prior=trackingMediaHistory.get(handle)?.get(value.id as number)??[],removed=prior.filter(id=>!ids.includes(id)),union=[...new Set([...prior,...ids])];
+        const all=(await connection.query('select id from public.project_tracking_update_media where id=any($1::bigint[]) order by id',[union])).rows.map(row=>positive(Number(row.id)));
+        assert.deepEqual(all,[...ids].sort((a,b)=>a-b),'Removed owned media associations must be absent, not moved to another update.');
+        // This existing provider does not adopt legacy filesystem assets; it must
+        // not manufacture managed references for local image paths or external video.
+        const references=(await connection.query("select id from public.media_references where domain_key='project_tracking_update_media' and entity_type='project_tracking_update_media' and entity_identity=any($1::text[]) order by id",[union.map(String)])).rows;
+        assert.equal(references.length,0,'Unexpected managed or dangling reference for legacy Tracking media.');
+        const paths=[...new Set(value.expectedTrackingMedia.flatMap(row=>[row.media_kind==='image'?row.public_url:null,row.poster_url]).filter((path):path is string=>path!==null))];
+        const catalog=(await connection.query("select id,object_key,public_url from public.admin_media_assets_catalog where public_url=any($1::text[]) and provider='filesystem' and bucket='public' and status='active' and reconciliation_state='synced' order by public_url",[paths])).rows;
+        assert.deepEqual(catalog.map(row=>row.public_url),[...paths].sort());for(const row of catalog){assert.match(String(row.id),uuid);assert.equal(row.public_url,'/'+String(row.object_key));}
+        trackingMedia={rows:mediaRows,priorAssociationIds:prior,removedAssociationIds:removed,referenceRows:references.length,catalogIdentityCount:catalog.length};
+      }
       let audit: Row[];
       if (contract.key === 'key') audit = (await connection.query('select id,action,entity_type,entity_id,entity_label,actor_admin_user_id,metadata from public.admin_audit_logs where entity_type=any($1::text[]) and entity_id is null and entity_label=$2 and created_at >= $3::timestamptz order by id', [types, value.id, since])).rows;
       else audit = await readAudit(connection, contract, types, [value.id as number], since);
@@ -234,8 +272,11 @@ async function readExecutedWrites(handle: OwnedLocalHandle, browser: BrowserWrit
       }
       return { table: value.table, id: value.id, deleted: Boolean(value.deleted), actual, json, expectedActorId,
         auditSince: since, audit: attributed.map(row => auditEvidence(row)),
+        ...(trackingMedia?{trackingMedia}:{}),
         ...(value.exactCommandReceiptCount !== undefined ? { commandReceiptCount: value.exactCommandReceiptCount } : {}) };
-    }));
+    });
+    if(completed.trackingMedia){const history=trackingMediaHistory.get(handle)??new Map<number,number[]>();history.set(value.id as number,[...new Set([...completed.trackingMedia.priorAssociationIds,...completed.trackingMedia.rows.map(row=>positive(Number(row.id)))])]);trackingMediaHistory.set(handle,history);}
+    result.push(completed);
   }
   return result;
 }

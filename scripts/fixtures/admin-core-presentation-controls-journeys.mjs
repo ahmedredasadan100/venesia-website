@@ -1,3 +1,4 @@
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {createJiti} from "jiti";
@@ -6,10 +7,10 @@ import {buildCorePresentationControlsPlan,loadPresentationControlBuilders,presen
 
 /** Existing unused internal Hero/generic Content only; no public destination follows. */
 export async function runCorePresentationControlsJourneys(ctx){
- const{page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint}=ctx;
+ const{page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint,requiredCases}=ctx;
  assert.equal(new URL(origin).hostname,"127.0.0.1");const f=fixtures.presentationControls;assert.ok(f);
  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});const{ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
- const plan=buildCorePresentationControlsPlan({manifest,fixtures:f}),builders=await loadPresentationControlBuilders(),outcomes=[];let current;
+ const plan=buildCorePresentationControlsPlan({manifest,fixtures:f}),builders=await loadPresentationControlBuilders(),outcomes=[];let current,renderedAdoption=[],renderedSeen=new Set();
  const form=()=>page.locator('form[data-admin-form-runtime]').filter({has:page.locator('input[name="id"][value="'+current.id+'"]')});
  const field=(name,scope=form())=>scope.locator('[name="'+name+'"]');
  const save=()=>form().locator('button[type="submit"]');
@@ -33,6 +34,12 @@ export async function runCorePresentationControlsJourneys(ctx){
  const linkOwner=prefix=>field(prefix+"_link_kind").locator('xpath=..');
  async function link(prefix,href,target,cancel=false){
   const trigger=linkOwner(prefix).getByRole("button",{name:"اختيار الرابط",exact:true}),before=await field(prefix+"_link_href").inputValue();await trigger.click();const dialog=page.getByRole("dialog",{name:"اختيار رابط",exact:true});await expect(dialog).toBeVisible();await dialog.getByRole("button",{name:"External",exact:true}).click();await dialog.getByLabel("الرابط",{exact:true}).fill(href);await checked(dialog.getByRole("switch",{name:"فتح في تبويب جديد",exact:true}),target==="_blank");await expect(field(prefix+"_link_href")).toHaveValue(before);
+  if(!renderedSeen.has('link:'+prefix)){
+   const common={page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:current.consumer,surface:current.surface}]};
+   renderedAdoption.push(await observeCoreModalFocusAdoption({...common,id:'presentation-'+current.kind+'-'+prefix+'-link-focus',dialog}));
+   const body=dialog.locator(':scope > div').filter({has:page.getByLabel('الرابط',{exact:true})}),target=dialog.getByRole('switch',{name:'فتح في تبويب جديد',exact:true}).locator('xpath=ancestor::label[1]');
+   renderedAdoption.push(await observeCoreScrollbarAdoption({...common,id:'presentation-'+current.kind+'-'+prefix+'-link-scroll',container:body,target,axis:'y',containment:'modal-lock'}));renderedSeen.add('link:'+prefix);
+  }
   await dialog.getByRole("button",{name:cancel?"إلغاء":"اعتماد الرابط",exact:true}).click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();await expect(field(prefix+"_link_href")).toHaveValue(cancel?before:href);if(!cancel)await expect(field(prefix+"_link_target")).toHaveValue(target);
  }
  const gallery=name=>form().locator('[data-admin-media-gallery-mode="paths"]').filter({has:page.locator('input[name="'+name+'"]')});
@@ -42,7 +49,14 @@ export async function runCorePresentationControlsJourneys(ctx){
   const[initial]=await Promise.all([page.waitForResponse(match),trigger.click()]);assert.equal(initial.status(),200);const data=await initial.json(),root=data.folders.find(row=>row.path==="images");assert.ok(root);
   const dialog=page.getByRole("dialog",{name:"اختيار صورة من المكتبة",exact:true});await expect(dialog).toBeVisible();await dialog.getByRole("navigation",{name:"مجلدات الوسائط",exact:true}).getByRole("button").filter({has:page.getByText(root.displayName,{exact:true})}).click();
   const[found]=await Promise.all([page.waitForResponse(response=>match(response)&&new URL(response.url()).searchParams.get("q")===asset.objectKey&&new URL(response.url()).searchParams.get("folder")==="images"),dialog.getByPlaceholder("ابحث بالاسم أو المسار أو الوصف البديل…",{exact:true}).fill(asset.objectKey)]);assert.equal(found.status(),200);assert.deepEqual((await found.json()).assets.map(row=>row.publicUrl),[asset.publicUrl]);
-  const choice=dialog.locator('button[aria-pressed]').filter({has:page.getByText(asset.displayName,{exact:true})});await expect(choice).toHaveCount(1);await choice.click();await expect(choice).toHaveAttribute("aria-pressed","true");await dialog.getByRole("button",{name:cancel?"إلغاء":"تأكيد الاختيار",exact:true}).click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();
+  const choice=dialog.locator('button[aria-pressed]').filter({has:page.getByText(asset.displayName,{exact:true})});await expect(choice).toHaveCount(1);await choice.click();await expect(choice).toHaveAttribute("aria-pressed","true");
+  if(!renderedSeen.has('media-picker')){
+   const common={page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:current.consumer,surface:current.surface}]};
+   renderedAdoption.push(await observeCoreModalFocusAdoption({...common,id:'presentation-'+current.kind+'-media-focus',dialog,escape:'not-exercised'}));
+   const container=dialog.locator('[data-media-picker-scroll]'),target=dialog.getByText('يُعاد التحقق من الارتباطات تلقائيًا قبل أي حذف.',{exact:true});
+   renderedAdoption.push(await observeCoreScrollbarAdoption({...common,id:'presentation-'+current.kind+'-media-scroll',container,target,axis:'y',containment:'overscroll-contain'}));renderedSeen.add('media-picker');
+  }
+  await dialog.getByRole("button",{name:cancel?"إلغاء":"تأكيد الاختيار",exact:true}).click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();
  }
  async function authorMedia(){
   await tab("media");await select("image_composition","cover-center");await select("image_composition","cover-upper");
@@ -67,7 +81,7 @@ export async function runCorePresentationControlsJourneys(ctx){
   }else{await expect(form().locator('[data-admin-tab-id="media"], [data-admin-tab-id="buttons"]')).toHaveCount(0);await expect(field("variant")).toHaveAttribute("type","hidden");await expect(field("style_preset")).toHaveAttribute("type","hidden");}
   await tab("content");await assertUi();
  }
- async function cancelDirtyBacklink(){const original=page.url(),trigger=page.locator('a[href="/admin/pages-blocks/blocks/'+current.kind+'"]').first();await expect(form()).toHaveAttribute("data-admin-form-dirty","true");await expect(trigger).toBeVisible();await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form()).toHaveAttribute("data-admin-form-dirty","true");await assertUi();}
+ async function cancelDirtyBacklink(){const original=page.url(),trigger=page.locator('a[href="/admin/pages-blocks/blocks/'+current.kind+'"]').first();await expect(form()).toHaveAttribute("data-admin-form-dirty","true");await expect(trigger).toBeVisible();await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();if(!renderedSeen.has('dirty-confirmation')){renderedAdoption.push(await observeCoreModalFocusAdoption({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:current.consumer,surface:current.surface}],id:'presentation-'+current.kind+'-dirty-focus',dialog,state:'dirty-confirmation',escape:'not-exercised'}));renderedSeen.add('dirty-confirmation');}await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form()).toHaveAttribute("data-admin-form-dirty","true");await assertUi();}
  async function semanticNegative(){await field("name").fill("");const[response]=await Promise.all([actionResponse(),save().click()]);assert.equal(response.status(),500,"Canonical current missing-name Action throws before its domain write.");await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible();await expect(save()).toBeEnabled();await expect(field("title")).toHaveValue(v.title);await expect(field("name")).toHaveValue("");await field("name").fill(current.name);await assertUi();}
  async function pending(cancel){
   const token=randomUUID(),entity="presentation_control_"+current.kind;const fault=async operation=>{const request={id:randomUUID(),kind:"domain-write-fault-"+operation,entity,token},result=await nativeCheckpoint(request);for(const key of Object.keys(request))assert.equal(result[key],request[key]);assert.equal(result.status,"pass");return result;};let armed=false,responsePromise;const posts=[],listener=request=>{if(request.method()==="POST"&&request.headers()["next-action"]&&new URL(request.url()).origin===origin)posts.push(request);};
@@ -76,11 +90,11 @@ export async function runCorePresentationControlsJourneys(ctx){
   }finally{page.off("request",listener);try{if(armed)await fault("release");}finally{if(responsePromise)await Promise.allSettled([responsePromise]);}}
  }
  for(const recipe of plan.recipes)await run("core-presentation-controls-"+recipe.kind,[],async()=>{
-  current=recipe;const leave=async dialog=>dialog.type()==="beforeunload"?dialog.accept():dialog.dismiss();page.on("dialog",leave);try{await observe("presentation-controls-navigation",()=>page.goto(origin+recipe.editPath,{waitUntil:"domcontentloaded"}));}finally{page.off("dialog",leave);}
+  current=recipe;renderedAdoption=[];renderedSeen=new Set();const leave=async dialog=>dialog.type()==="beforeunload"?dialog.accept():dialog.dismiss();page.on("dialog",leave);try{await observe("presentation-controls-navigation",()=>page.goto(origin+recipe.editPath,{waitUntil:"domcontentloaded"}));}finally{page.off("dialog",leave);}
   await expect(form()).toHaveCount(1);await checkpoint("baseline");await author();await checkpoint("draft");await semanticNegative();await checkpoint("negative");const rejected=await observe("presentation-controls-native-rejection",()=>pending(true));await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible();await assertUi();await observe("presentation-controls-post-rejection-dirty-navigation",cancelDirtyBacklink);await checkpoint("serverRejected");
   const saved=await observe("presentation-controls-native-pending",()=>pending(false));await expect(page).toHaveURL(url=>url.pathname===recipe.editPath&&url.searchParams.get("saved")==="1",{timeout:60_000});await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first()).toBeVisible();await assertUi();await checkpoint("saved");
   await observe("presentation-controls-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await tab("content");await assertUi();await checkpoint("reloaded");
-  const result={kind:recipe.kind,consumer:recipe.consumer,surface:recipe.surface,nativeCheckpoints:6,nativePhases:[...PRESENTATION_CONTROL_PHASES],exactWrites:1,pendingRejection:rejected,pendingSave:saved,postRejectionDirtyNavigationCancelled:true,controls:recipe.kind==="hero"?["five_text_fields","visibility_bold_alignment","current_variant_selection_restored","image_composition","desktop_add_replace_cancel_order_remove","optional_mobile_add_replace_empty","primary_link_replace_target_cancel","secondary_link_clear","mirrored_cta_controls"]:["four_generic_text_fields","visibility_bold_alignment","hidden_identity_preserved"],automaticAxisCoverage:[],globalClosed:false};outcomes.push(result);return result;
+  const result={renderedAdoption,kind:recipe.kind,consumer:recipe.consumer,surface:recipe.surface,nativeCheckpoints:6,nativePhases:[...PRESENTATION_CONTROL_PHASES],exactWrites:1,pendingRejection:rejected,pendingSave:saved,postRejectionDirtyNavigationCancelled:true,controls:recipe.kind==="hero"?["five_text_fields","visibility_bold_alignment","current_variant_selection_restored","image_composition","desktop_add_replace_cancel_order_remove","optional_mobile_add_replace_empty","primary_link_replace_target_cancel","secondary_link_clear","mirrored_cta_controls"]:["four_generic_text_fields","visibility_bold_alignment","hidden_identity_preserved"],automaticAxisCoverage:[],globalClosed:false};outcomes.push(result);return result;
  });
  return{planned:2,completed:outcomes.length,outcomes,nonCapabilities:plan.nonCapabilities,nativeFinalityRequired:true,globalClosed:false};
 }

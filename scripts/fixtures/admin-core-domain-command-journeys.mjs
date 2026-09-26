@@ -10,7 +10,7 @@ const recipes = {
   categories: { table: 'topic_categories', state: 'status', values: ['published', 'unpublished'], audit: 'topic_category' },
   series: { table: 'topic_series', state: 'status', values: ['published', 'unpublished'], audit: 'topic_series' },
   pages: { table: 'pages', state: 'status', values: ['published', 'unpublished'], audit: 'page' },
-  projects: { table: 'projects', state: 'publication_status', values: ['published', 'unpublished'], audit: 'project' },
+  projects: { confirmVisibleOnly: true, table: 'projects', state: 'publication_status', values: ['published', 'unpublished'], audit: 'project' },
   project_locations_governorate: { table: 'project_locations', state: 'is_active', values: [true, false], audit: 'project_location', confirmVisibility: true },
   project_locations_city: { table: 'project_locations', state: 'is_active', values: [true, false], audit: 'project_location', confirmVisibility: true },
   project_locations_main_area: { table: 'project_locations', state: 'is_active', values: [true, false], audit: 'project_location', confirmVisibility: true },
@@ -63,6 +63,12 @@ export function buildCoreDomainCommandPlan({ rowActions, fixtures, paths }) {
   });
 }
 
+export function coreDomainVisibilityRequiresConfirmation(recipe,pressed){
+ assert.ok(pressed==='true'||pressed==='false','The actual mounted visibility state is required.');
+ assert.ok(Object.hasOwn(recipes,recipe.entity));
+ const current=recipes[recipe.entity];assert.equal(Boolean(recipe.confirmVisibility),Boolean(current.confirmVisibility));assert.equal(Boolean(recipe.confirmVisibleOnly),Boolean(current.confirmVisibleOnly));
+ return Boolean(current.confirmVisibility)||(Boolean(current.confirmVisibleOnly)&&pressed==='true');
+}
 export async function runCoreDomainCommandJourneys(ctx) {
   const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback } = ctx;
   assert.equal(new URL(origin).hostname, '127.0.0.1');
@@ -90,7 +96,7 @@ export async function runCoreDomainCommandJourneys(ctx) {
     page.on('request', trackPost);
     let confirmationCancelled = false, rollbackRetried = false, pendingDedup = false;
     try {
-      if (recipe.confirmVisibility) {
+      if (coreDomainVisibilityRequiresConfirmation(recipe,original)) {
         await observe('domain-confirmation-cancel', async () => {
           await visibility.click(); await expect(dialog).toHaveCount(1);
           await dialog.locator('[data-admin-confirm-cancel]').click(); await expect(dialog).toHaveCount(0);
@@ -118,6 +124,7 @@ export async function runCoreDomainCommandJourneys(ctx) {
       for (const [index, expected] of [[0, original === 'true' ? 'false' : 'true'], [1, original]]) {
         // The first actual request is held before dispatch so pending ownership
         // and disabled duplicate activation are observed without fake responses.
+        const confirmationRequired=coreDomainVisibilityRequiresConfirmation(recipe,index===0?original:(original==='true'?'false':'true'));
         let release, signalHeld, signalContinued, intercepted = 0;
         const gate = new Promise(resolve => { release = resolve; });
         const held = new Promise(resolve => { signalHeld = resolve; });
@@ -129,16 +136,16 @@ export async function runCoreDomainCommandJourneys(ctx) {
           intercepted++; signalHeld(); await gate;
           try { await route.fallback(); } catch (error) { routeFailure = error; } finally { signalContinued(); }
         };
-        const removeHeldRoute = index === 0 ? await registerCorePageRoute(page, '**/*', holdRequest) : null;
+        const removeHeldRoute = (index === 0 || confirmationRequired) ? await registerCorePageRoute(page, '**/*', holdRequest) : null;
         let timer;
         try {
           const response = actionResponse();
           response.catch(() => {});
-          if (recipe.confirmVisibility) { await visibility.click(); await expect(dialog).toHaveCount(1); }
-          const trigger = recipe.confirmVisibility ? dialog.locator('[data-admin-confirm-submit]') : visibility;
+          if (confirmationRequired) { await visibility.click(); await expect(dialog).toHaveCount(1); }
+          const trigger = confirmationRequired ? dialog.locator('[data-admin-confirm-submit]') : visibility;
           const click = trigger.click();
           click.catch(() => {});
-          if (index === 0) {
+          if (index === 0 || confirmationRequired) {
             await Promise.race([held, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The real domain command did not reach its owned request hold.')), 30_000); })]);
             await expect(trigger).toBeDisabled();
             await trigger.evaluate(button => button.click());
@@ -146,9 +153,9 @@ export async function runCoreDomainCommandJourneys(ctx) {
             release(); await continued; if (routeFailure) throw routeFailure; pendingDedup = true;
           }
           const acknowledged = await response; assertActionAcknowledged(acknowledged); await click;
-          if (recipe.confirmVisibility) await expect(dialog).toHaveCount(0, { timeout: 60_000 });
+          if (confirmationRequired) await expect(dialog).toHaveCount(0, { timeout: 60_000 });
           await expect(visibility).toBeEnabled({ timeout: 60_000 }); await expect(visibility).toHaveAttribute('aria-pressed', expected);
-          if (index === 0) assert.equal(intercepted, 1);
+          if (index === 0 || confirmationRequired) assert.equal(intercepted, 1);
         } finally {
           clearTimeout(timer); release();
           if (removeHeldRoute) await removeHeldRoute();
@@ -162,8 +169,8 @@ export async function runCoreDomainCommandJourneys(ctx) {
           : [recipe.audit + '.publish', recipe.audit + '.unpublish'];
       databaseReadback.push({ table: recipe.table, id: recipe.id, expected: { [recipe.state]: originalState },
         auditEntityType: recipe.audit, auditActions, auditEntityLabel: ['categories', 'series', 'pages'].includes(recipe.entity) ? null : recipe.label,
-        auditSince: startedAt, exactAuditCount: recipe.entity === 'topics' ? 3 : 2,
-        ...(recipe.entity === 'topics' ? { exactCommandReceiptCount: 2 } : {}) });
+        auditSince: startedAt, exactAuditCount: 2,
+        ...(recipe.entity === 'topics' ? { exactCommandReceiptCount: 0 } : {}) });
       const outcome = { entity: recipe.entity, table: recipe.table, id: recipe.id, startedAt, finalState: originalState,
         visibleStateChangeAndRestore: true, realRequests: posts.length, freshReloads: 2, confirmationCancelled,
         pendingDuplicateBlocked: pendingDedup, preDispatchFailureRollbackAndRetry: rollbackRetried,

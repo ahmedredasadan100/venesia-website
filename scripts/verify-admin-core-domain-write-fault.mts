@@ -158,6 +158,14 @@ try {
       await f.request('release', entity); await f.broker.close();
     }
   });
+  await test('Topics row visibility allows only its current status SET fields, retaining the separate atomic RPC paths',async()=>{
+   const f=fixture();await f.request('arm','topics');await f.request('observe-blocked','topics');const pattern=f.signatures[0];
+   const valid=['WITH pgrst_source AS (UPDATE "public"."topics" SET "status" = "pgrst_body"."status", "updated_at" = "pgrst_body"."updated_at", "updated_by" = "pgrst_body"."updated_by" FROM (SELECT $1) pgrst_body WHERE id=$2 RETURNING *) SELECT * FROM pgrst_source','UPDATE public.topics SET published_at=$1, status=$2, updated_at=$3 WHERE id=$4','SELECT * FROM public.admin_mutate_topics_batch_atomically($1,$2,$3)','SELECT * FROM public.admin_publish_topics_atomically($1,$2)'];
+   const invalid=['UPDATE public.topics SET title=$1 WHERE id=$2','UPDATE public.topics SET status=$1,title=$2 WHERE id=$3','UPDATE public.topics SET updated_at=$1 WHERE id=$2','UPDATE public.topics SET status=$1,deleted_at=$2 WHERE id=$3','UPDATE public.topics SET status=$1,category_id=$2 WHERE id=$3','UPDATE public.topics_archive SET status=$1 WHERE id=$2','SELECT * FROM public.topics','SELECT * FROM public.admin_publish_topics_atomically_other($1)'];
+   for(const sql of valid)assert.equal((await db.query<{matches:boolean}>('select $1::text ~* $2::text as matches',[sql,pattern])).rows[0].matches,true,sql);
+   for(const sql of invalid)assert.equal((await db.query<{matches:boolean}>('select $1::text ~* $2::text as matches',[sql,pattern])).rows[0].matches,false,sql);
+   await f.request('release','topics');assert.deepEqual(f.counts(),{liveConnections:0,rollbacks:1,cancels:0});await f.broker.close();
+  });
   await test('Native callback accepts canonical PostgreSQL bigint strings and refuses coercive or unsafe fixture IDs before database work', async () => {
     const path = resolve(import.meta.dirname, 'verify-admin-core-domain-write-fault-postgres.mts');
     const source = ts.transpileModule(readFileSync(path, 'utf8'), { fileName: path.replace(/\.mts$/, '.ts'), compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
@@ -260,6 +268,6 @@ try {
     const f=fixture();const {TEMPLATE_CONTROL_RECIPES}=require(resolve(process.cwd(),'scripts/fixtures/admin-core-template-controls-contract.mjs'));const other=Object.keys(TEMPLATE_CONTROL_RECIPES).map((kind,index)=>({kind,id:600+index,slug:'qa-admin-page-interaction-'+kind+'-8'}));
     assert.throws(()=>f.owner.createOwnedCoreDomainWriteFaults(f.handle,{...fixtures,presentationControls:{templates},templateControls:{templates:[...other,{kind:'hero',id:501,slug:templates[0].slug}]}}));assert.equal(f.statements.length,0);await f.broker.close();
   });
-  assert.equal(checks.length, 27);
+  assert.equal(checks.length, 28);
   console.log(JSON.stringify({ status: 'pass', cases: checks.length, checks, scope: 'Actual producer control flow with bounded connection ports, plus PostgreSQL signature matching. Live PostgreSQL locking/cancellation and Browser outcomes remain pending.' }, null, 2));
 } finally { await db.close(); }

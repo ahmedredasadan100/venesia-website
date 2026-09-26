@@ -45,8 +45,9 @@ export async function runCoreTemplateLibraryPresentationJourneys(ctx){
     await button.click();await expect(button).toContainText('مرتب تنازليًا');await assertIds(nativeSort.descending);const descending=await visibleIds();
     await button.click();await expect(button).toHaveAttribute('aria-pressed','false');await assertIds(first.orderedIds);sorts.push({key:nativeSort.key,ascending,descending,reset:await visibleIds()});
    }
-   // Restore default-size rows before column and information observations.
-   await limit(spec.pageSize);await assertIds(pages[0]);assert.equal(posts,0,'Pagination, every declared sort and scrollbar observations are read-only.');
+   // The actual auto footer disappears when all23rows fit. Restore the default
+   // through the existing bounded URL owner; there is no hidden control to click.
+   await expect(pagination).toHaveCount(0);await go(spec,base);await assertIds(pages[0]);assert.equal(posts,0,'Pagination, every declared sort and scrollbar observations are read-only.');
    const statusSort=spec.sorts.find(sort=>sort.key==='status'),statusHeader=header.getByRole('button',{name:new RegExp('^'+escape(statusSort.label)+'(?:\\s|$)')});
    const originalHeaderCells=await header.locator(':scope > *').count(),originalRowCells=await rows.evaluateAll(nodes=>nodes.map(node=>node.children.length));
    await expect(statusHeader).toHaveCount(1);await expect(rows.locator('[data-admin-row-action="visibility"]')).toHaveCount(pages[0].length);

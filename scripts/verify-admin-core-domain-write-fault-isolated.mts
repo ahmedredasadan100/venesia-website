@@ -16,12 +16,20 @@ const relation = (name: string) => '("public"|public)[[:space:]]*\\.[[:space:]]*
 const update = (table: string) => 'UPDATE[[:space:]]+' + relation(table) + '[[:space:]]+SET[[:space:]]';
 const rpc = (...names: string[]) => '(' + names.map(name => relation(name) + '[[:space:]]*\\(').join('|') + ')';
 
+// The row-visibility owner writes exactly these fields. Match only its bounded
+// PostgREST SET projection (including status), not arbitrary topics UPDATEs.
+const topicVisibilityAssignment = (column:string) => '("'+column+'"|'+column+')[[:space:]]*=[[:space:]]*(("pgrst_body"|pgrst_body)[[:space:]]*\\.[[:space:]]*("'+column+'"|'+column+')|\\$[1-9][0-9]*)';
+const topicVisibilityUpdate = () => {
+ const allowed='('+['status','updated_at','updated_by','published_at','published_by'].map(topicVisibilityAssignment).join('|')+')';
+ return update('topics')+'('+allowed+'[[:space:]]*,[[:space:]]*)*'+topicVisibilityAssignment('status')+'([[:space:]]*,[[:space:]]*'+allowed+')*[[:space:]]+(FROM|WHERE)[[:space:]]';
+};
+
 /** Fixed fixture identities come from the owner, never from a Browser request. */
 function fixedTargets(input: unknown): Record<string, Target> {
   const fixtures = object(input), closure = object(fixtures.commandClosure), tracking = object(closure.tracking);
   const getId = (row: unknown) => positive(Number(object(row).id));
   const targets: Record<string, Target> = {
-    topics: { table: 'topics', id: getId(fixtures.topic), signature: rpc('admin_mutate_topics_batch_atomically', 'admin_publish_topics_atomically') },
+    topics: { table: 'topics', id: getId(fixtures.topic), signature: '('+rpc('admin_mutate_topics_batch_atomically', 'admin_publish_topics_atomically')+'|'+topicVisibilityUpdate()+')' },
     categories: { table: 'topic_categories', id: getId(fixtures.category), signature: update('topic_categories') },
     series: { table: 'topic_series', id: getId(fixtures.series), signature: update('topic_series') },
     pages: { table: 'pages', id: positive(Number(object(fixtures.pages).pageId)), signature: update('pages') },

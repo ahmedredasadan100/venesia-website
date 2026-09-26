@@ -1,3 +1,4 @@
+import { exerciseCoreImageField, CORE_DIRECT_IMAGE_VALUES } from "./admin-core-direct-image-adoption.mjs";
 import assert from "node:assert/strict";
 import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
@@ -36,13 +37,17 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     await expect(field(current,"name")).toHaveAttribute("aria-invalid","true");await expect(current.locator("#name-error")).toBeVisible();
     await expect(field(current,"name")).toHaveValue("   ");await expect(field(current,"adminLabel")).toHaveValue(originalLabel);
     await field(current,"name").fill(name);
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-company-settings-accepted-save",journeyId:"core-company-settings-rejection-preservation-save-reload",formConsumer:"company-identity-settings",surface:"singleton-settings"},form:current,submit:submit(current),dirtyNavigation:"close",assertDraft:async()=>{await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"adminLabel")).toHaveValue(originalLabel);},cancelDirty:async()=>{await cancelDirty(current.locator('[data-admin-form-action="close"]'));}});
+    const imageAdoption=[];
+    for(const imageName of ["logoUrl","compactLogoUrl"])imageAdoption.push(await exerciseCoreImageField({page,origin,form:current,name:imageName,finalEmpty:imageName==="compactLogoUrl",preserveNames:["name","adminLabel"]}));
+    const assertImages=async()=>{for(const imageName of ["logoUrl","compactLogoUrl"])await expect(current.locator('[name="'+imageName+'"]')).toHaveValue(CORE_DIRECT_IMAGE_VALUES[imageName]);};
+    await assertImages();
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-company-settings-accepted-save",journeyId:"core-company-settings-rejection-preservation-save-reload",formConsumer:"company-identity-settings",surface:"singleton-settings"},form:current,submit:submit(current),dirtyNavigation:"close",assertDraft:async()=>{await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"adminLabel")).toHaveValue(originalLabel);await assertImages();},cancelDirty:async()=>{await cancelDirty(current.locator('[data-admin-form-action="close"]'));}});
     await permissionIntent("company-identity-settings","singleton-settings","core-company-settings-accepted-save",async()=>{
       await acknowledge(current);await saved(current);
       await observe("company-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"adminLabel")).toHaveValue(originalLabel);
-      return {nativeWrites:[nativeSetting(settingRead("admin.company",[[["name"],name]],since))]};
+      await assertImages();return {nativeWrites:[nativeSetting(settingRead("admin.company",[[["name"],name],[["logoUrl"],CORE_DIRECT_IMAGE_VALUES.logoUrl],[["compactLogoUrl"],CORE_DIRECT_IMAGE_VALUES.compactLogoUrl]],since))]};
     });
-    return {consumer:"company-identity-settings",permissionEvidence:permissionFor("company-identity-settings"),serverValidation:true,unrelatedFieldPreserved:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
+    return {consumer:"company-identity-settings",imageAdoption,permissionEvidence:permissionFor("company-identity-settings"),serverValidation:true,unrelatedFieldPreserved:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
   });
   await run("core-global-seo-settings-rejection-save-reload",[],async()=>{
     const since=new Date().toISOString(),title="QA Core Global SEO "+suffix;

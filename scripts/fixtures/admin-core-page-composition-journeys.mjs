@@ -1,3 +1,5 @@
+import { exerciseCoreImageField } from "./admin-core-direct-image-adoption.mjs";
+import { runCoreDescendantPresentationJourneys } from './admin-core-descendant-presentation-journeys.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
@@ -84,6 +86,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     checkpoints.push({ label, receiptId: value.id });
     return value;
   }
+  await runCoreDescendantPresentationJourneys({...ctx,nativeCheckpoint:compositionCheckpoint},"composition");
   const initial = await snapshot("initial");
   const originalLayoutId = number(initial.page.layout_id);
   const regions = initial.regions.filter(region => number(region.layout_id) === originalLayoutId);
@@ -288,7 +291,7 @@ export async function runCorePageCompositionJourneys(ctx) {
       return seoOwner.toEntitySeoPersistence(seoOwner.readEntitySeoFormData(data));
     }
     await expect(form()).toHaveCount(1);await expect(save()).toBeEnabled();
-    const beforeUi=await readUi(), before=await snapshot("seo-before","before");
+    const beforeUi=await readUi(), before=await snapshot("seo-before","before"),imageAdoption=[];
     async function author(canonical) {
       for(const name of ["seo_title","seo_description","focus_keyword"])await field(name).fill(PAGE_SEO_RECIPE[name]);
       const tags=form().locator('[data-admin-tags-field]').filter({has:field("seo_keywords")});
@@ -301,9 +304,9 @@ export async function runCorePageCompositionJourneys(ctx) {
       await field("canonical_url").fill(canonical);
       for(const name of ["robots_index","robots_follow"])for(const value of ["true","false",""])await select(form(),name,value);
       await select(form(),"robots_index","false");
+      imageAdoption.push(await exerciseCoreImageField({page,origin,form:form(),name:"og_image",altName:"og_image_alt",finalAlt:PAGE_SEO_RECIPE.og_image_alt,preserveNames:["seo_title","canonical_url"]}));
       const authored=await readUi();
       for(const [key,value] of Object.entries(PAGE_SEO_RECIPE))assert.deepEqual(authored[key],key==="canonical_url"?canonical:value);
-      for(const key of ["og_image","og_image_alt"])assert.deepEqual(authored[key],beforeUi[key],"OG controls remain unchanged.");
       return authored;
     }
     const authored=await author(PAGE_SEO_INVALID_CANONICAL);
@@ -331,14 +334,14 @@ export async function runCorePageCompositionJourneys(ctx) {
       await expect(page).toHaveURL(url=>url.pathname===fixtures.pages.editorPath&&url.searchParams.get("seo_notice")==="saved",{timeout:60_000});
       await expect(seoFeedback()).toHaveAttribute("data-admin-feedback-variant","success");await expect(save()).toBeEnabled();assert.equal(posts.length,1);
     } finally {page.off("request",listener);try{if(armed)await fault("release");}finally{if(responsePromise)await Promise.allSettled([responsePromise]);}}
-    async function assertSavedUi(){const value=await readUi();for(const[key,expected]of Object.entries(PAGE_SEO_RECIPE))assert.deepEqual(value[key],expected);for(const key of["og_image","og_image_alt"])assert.deepEqual(value[key],beforeUi[key]);}
+    async function assertSavedUi(){const value=await readUi();for(const[key,expected]of Object.entries(PAGE_SEO_RECIPE))assert.deepEqual(value[key],expected);}
     await assertSavedUi();const saved=await snapshot("seo-saved","saved");
     await reload("seo");await assertSavedUi();const reloaded=await snapshot("seo-reloaded","reloaded");
-    return result("seo",{...scope,nativePhases:[...PAGE_SEO_PHASES],nativeCheckpoints:4,exactWrites:1,rejectionUi,
+    return result("seo",{...scope,imageAdoption,nativePhases:[...PAGE_SEO_PHASES],nativeCheckpoints:4,exactWrites:1,rejectionUi,
       checkpoints:[before.id,rejected.id,saved.id,reloaded.id],faultToken:token,faultReceipts,
       pending:{nativeStatementObservedTwice:true,sameStatementIdentity:true,normalKeyboardDedup:true,actionRequests:1,fieldsDisabledAndInert:true,ownedLockReleased:true},
-      verified:["authored_text_metadata","keywords_add_remove_deduplicate","robots_true_false_inherit","canonical_rejection_no_write","explicit_reauthor_retry","pending_dedup","saved_reload_native_score_actor_audit"],
-      notClaimed:["generic_form_rollback","permission_replay","og_picker","full_capability_axes"]});
+      verified:["authored_text_metadata","keywords_add_remove_deduplicate","robots_true_false_inherit","canonical_rejection_no_write","explicit_reauthor_retry","pending_dedup","saved_reload_native_score_actor_audit","og_picker_cancel_select_replace_clear_reauthor"],
+      notClaimed:["generic_form_rollback","permission_replay","full_capability_axes"]});
   });
 
   return { results, checkpoints, relatedRequiredCases: plan.relatedCases, automaticCoverage: [], globalClosed: false };

@@ -364,3 +364,10 @@ export async function seedOwnedCoreTemplateLibraryPresentationFixtures(handle: O
   const { seedOwnedCoreTemplatePresentationFixture } = await import("../verify-admin-core-template-library-presentation-isolated.mts");
   return seedOwnedCoreTemplatePresentationFixture(handle, fixtures);
 }
+
+/** Existing owned account gates descendant fixture opt-in before navigation captures its baseline. */
+export async function seedOwnedCoreDescendantPresentationFixtures(handle: OwnedLocalHandle, fixtures: Record<string, unknown>, scope: "navigation" | "composition") {
+ assertOwnedLocalHandle(handle); assert.ok(credentialsByHandle.has(handle),"Prepare the canonical QA account first.");
+ const {prepareCoreDescendantPresentationFixtures}=await import("../verify-admin-core-descendant-presentation-isolated.mts");
+ return prepareCoreDescendantPresentationFixtures(handle,fixtures,scope);
+}

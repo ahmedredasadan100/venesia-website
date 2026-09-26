@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,validateCoreRenderedAdoptionBindings} from './admin-core-rendered-adoption.mjs';
 import { randomUUID } from 'node:crypto';
 import { expect } from 'playwright/test';
-import { loadCoreQueryPresentationPlan } from './admin-core-query-presentation-plan.mjs';
+import { loadCoreQueryPresentationPlan, CORE_QUERY_SEARCH_SCENARIOS, coreQueryExtraFilterCases } from './admin-core-query-presentation-plan.mjs';
 
 export function assertCoreQueryProjection(receipt,payload){
  assert.deepEqual(payload.rows.map(row=>Number(row.id)),receipt.expectedIds,'API must return the exact native ordered page.');
@@ -64,6 +64,19 @@ export async function runCoreQueryPresentationJourneys(ctx){
   const renderedPlan=buildCoreQueryRenderedPlan(spec,first.route,requiredCases),renderedBase={page,origin,requiredCases,bindings:renderedPlan.bindings};
   const grid=page.locator('[data-admin-data-grid-scroll]'),farCell=page.locator('tbody tr[data-entity-row-id="'+first.expectedIds[0]+'"]').locator('td[data-admin-column-key]:not([data-admin-grid-sticky])').last();
   renderedAdoption.push(await observeCoreScrollbarAdoption({...renderedBase,id:renderedPlan.gridId,container:grid,target:farCell,axis:'x',containment:'overscroll-contain'}));
+  const searchObservations=[];
+  for(const scenario of CORE_QUERY_SEARCH_SCENARIOS){
+   const receipt=await checkpoint(spec,scenario),requested=new URLSearchParams(receipt.query).get('q')??'';
+   if(scenario==='search-cleared'){
+    await search.fill(fixtures.queryClosure.contexts[spec.key].search);await search.press('Enter');await assertPage(spec,first);
+    await toolbar.getByRole('button',{name:'مسح',exact:true}).click();await expect(search).toHaveValue('');
+   }else{await search.fill(requested);await search.press('Enter');}
+   await assertPage(spec,receipt);
+   if(scenario.startsWith('search-literal-'))assert.equal(receipt.completeIds.length,0,'Literal punctuation is absent from this exact fixture namespace; wildcard widening must fail.');
+   if(scenario==='search-restored')assert.deepEqual(receipt.completeIds,first.completeIds);
+   searchObservations.push({scenario,requested,normalizedSearch:receipt.searchProjection.normalizedSearch,nativeId:receipt.id,actualInputInteraction:true,actualClearButton:scenario==='search-cleared',registeredRouteScopeVerified:true});
+  }
+  const searchBoundary={observations:searchObservations,automaticCoverage:[],globalClosed:false,boundary:'Actual registered literal punctuation, contract-derived one-character search, clear and restored namespace joined to native route rows. Stale-response ordering remains separate pending proof.'};
   const pages=[first];
   for(const [scenario,text]of [['second','2'],['third','3']]){
    const receipt=await checkpoint(spec,scenario);await page.locator('[data-admin-pagination-slot="page"]').filter({hasText:new RegExp('^'+text+'$')}).click();await assertPage(spec,receipt);pages.push(receipt);
@@ -103,6 +116,20 @@ export async function runCoreQueryPresentationJourneys(ctx){
    }
    await page.getByRole('button',{name:'مسح كل الفلاتر',exact:true}).click();await assertPage(spec,first);filterBoundary={key:spec.filter.key,actualFilterAndClear:true,filteredRows:filtered.pagination.totalRows,otherDeclaredFilterKeysRemainUnproven:Object.keys(spec.contract.rawFilterSchemas).filter(key=>key!==spec.filter.key&&!(dateFilterEvidence&&['dateFrom','dateTo'].includes(key)))};
   }
+  const extraFilterObservations=[],extraFilterCases=coreQueryExtraFilterCases(spec,fixtures.queryClosure.contexts[spec.key]);
+  for(let ordinal=0;ordinal<extraFilterCases.length;ordinal+=2){
+   const appliedCase=extraFilterCases[ordinal],clearedCase=extraFilterCases[ordinal+1];assert.equal(appliedCase.phase,'applied');assert.equal(clearedCase.phase,'cleared');
+   const trigger=page.locator('[data-admin-filter-trigger]'),field=page.locator('[data-admin-filter-modal-fields] [data-admin-filter-field="'+appliedCase.fieldId+'"]'),option=field.getByRole('option',{name:appliedCase.optionLabel,exact:true});
+   await trigger.click();await expect(field).toHaveCount(1);await expect(option).toHaveCount(1);await expect(option).toHaveAttribute('aria-selected','false');await option.click();
+   await page.locator('[data-venesia-modal]').getByRole('button',{name:'إلغاء',exact:true}).click();await expect(trigger).toBeFocused();await assertPage(spec,first);
+   await trigger.click();await expect(option).toHaveAttribute('aria-selected','false');await option.click();await page.getByRole('button',{name:'تطبيق الفلاتر',exact:true}).click();
+   const applied=await checkpoint(spec,appliedCase.scenario);await assertPage(spec,applied);await page.reload({waitUntil:'domcontentloaded'});await assertPage(spec,applied);
+   extraFilterObservations.push({...appliedCase,nativeId:applied.id,actualOptionInteraction:true,cancelPreservedQuery:true,cancelRestoredTriggerFocus:true,reloadPreservedAppliedQuery:true,querySortSizePreserved:true,actualChipClear:false});
+   await page.getByRole('button',{name:'إزالة فلتر '+appliedCase.label,exact:true}).click();const cleared=await checkpoint(spec,clearedCase.scenario);await assertPage(spec,cleared);assert.deepEqual(cleared.completeIds,first.completeIds);assert.equal(new URL(page.url()).searchParams.has(appliedCase.key),false);
+   extraFilterObservations.push({...clearedCase,nativeId:cleared.id,actualOptionInteraction:true,cancelPreservedQuery:true,cancelRestoredTriggerFocus:true,reloadPreservedAppliedQuery:true,querySortSizePreserved:true,actualChipClear:true});
+  }
+  const extraFilterEvidence={observations:extraFilterObservations,automaticCoverage:[],globalClosed:false,boundary:'Existing modal options only; each cancelled draft, accepted query, reload and chip clear independently compared with native rows. No full toolbar-axis credit.'};
+
   assert.equal(spec.columnVisibility,'shared_optional_columns');
   const beforeColumns=await page.locator('thead th[data-admin-column-key]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-admin-column-key')));
   const columnsTrigger=page.locator('[data-admin-toolbar-columns] button');await expect(columnsTrigger).toHaveCount(1);await columnsTrigger.click();
@@ -162,7 +189,7 @@ export async function runCoreQueryPresentationJourneys(ctx){
    }
   }
   const after=await checkpoint(spec,'first');assert.equal(after.fixtureFingerprint,first.fixtureFingerprint);assert.equal(after.actorId,first.actorId);
-  const outcome={renderedAdoption,nativeCheckpointIds:[...nativeIds.get(spec.key)],routeKey:spec.key,consumerId:spec.consumerId,entity:spec.entity,nativeActorId:first.actorId,querySearchEmptyNonempty:true,pageUnion:union.length,backAndReload:true,outOfRangeClamped:true,pageSizeChanged:true,sortBoundary,filterBoundary,dateFilterEvidence,optionalColumn:{key:removed[0],persistedAndReloaded:true,semanticBaselineRestored:true,physicalInitialAbsenceRestored:first.preference!==null},rowEvidence,domainFingerprintUnchanged:true,remaining:['Other registered filters not listed above','No full capability-axis promotion from this receipt alone']};outcomes.push(outcome);return outcome;
+  const outcome={renderedAdoption,nativeCheckpointIds:[...nativeIds.get(spec.key)],routeKey:spec.key,consumerId:spec.consumerId,entity:spec.entity,nativeActorId:first.actorId,querySearchEmptyNonempty:true,pageUnion:union.length,backAndReload:true,outOfRangeClamped:true,pageSizeChanged:true,sortBoundary,filterBoundary,dateFilterEvidence,searchBoundary,extraFilterEvidence,optionalColumn:{key:removed[0],persistedAndReloaded:true,semanticBaselineRestored:true,physicalInitialAbsenceRestored:first.preference!==null},rowEvidence,domainFingerprintUnchanged:true,remaining:['Other registered filters not listed above','No full capability-axis promotion from this receipt alone']};outcomes.push(outcome);return outcome;
  });
  return {status:outcomes.length===plan.length?'pass':'fail',outcomes,scope:'Actual registered query/presentation and bounded nonmutating row information, joined to same-run native fixture projections. Each missing sub-invariant remains explicit.'};
 }

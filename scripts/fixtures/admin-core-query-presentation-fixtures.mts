@@ -85,7 +85,7 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
   });
   if(spec.entity==='projects'&&chunk%4===3)await handle.renewDatabaseControlConnection();
   }
-  assert.equal(ids.length,count);assert.equal(new Set(ids).size,count);contexts[spec.key]??={search,ids};await handle.renewDatabaseControlConnection();
+  assert.equal(ids.length,count);assert.equal(new Set(ids).size,count);contexts[spec.key]??={search,ids};if(['topics','series'].includes(spec.entity)){assert.ok(Number.isSafeInteger(Number(category.id))&&Number(category.id)>0);assert.equal(typeof category.name,'string');contexts[spec.key].filterOptions={category:{id:Number(category.id),name:String(category.name)}};}await handle.renewDatabaseControlConnection();
  }
  // Keep synthetic audit rows labelled as read fixtures, never domain-write proof.
  return {contexts,namespace,scope:'Read-model fixtures only; Activity Log entries are synthetic fixtures, not evidence of audited Product mutations.'};

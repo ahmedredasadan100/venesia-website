@@ -6,21 +6,25 @@ const hash=/^[a-f0-9]{64}$/u,identifier=/^[a-z0-9][a-z0-9:_-]{0,179}$/u;
 const viewports=[{name:'desktop',width:1280,height:900},{name:'narrow',width:390,height:760}];
 
 /** Bind observations to the live inventory; this is not a capability registry. */
-export function validateCoreRenderedAdoptionBindings({requiredCases,bindings,axis,pathname}){
+export function validateCoreRenderedAdoptionBindings({requiredCases,bindings,axis,pathname,formManifest}){
  assert.ok(['scrollbar','modal'].includes(axis));assert.ok(Array.isArray(requiredCases));assert.ok(Array.isArray(bindings)&&bindings.length>0&&bindings.length<=4);
  const keys=new Set();return bindings.map(binding=>{
   assert.deepEqual(Object.keys(binding).sort(),['boundary','consumer','surface']);assert.ok(['form','collection'].includes(binding.boundary));assert.match(binding.consumer,identifier);
   const cells=requiredCases.filter(row=>row.boundary===binding.boundary&&row.consumer===binding.consumer&&row.axis===axis&&row.scenario==='complete_applicable_capability_behavior');
   assert.equal(cells.length,1,'The exact applicable capability cell must exist once.');const cell=cells[0];assert.ok(['adopted','specialized_exception'].includes(cell.declaration));assert.equal(cell.key,`${binding.boundary}:${binding.consumer}:capability:${axis}`);assert.equal(keys.has(cell.key),false);keys.add(cell.key);
   if(binding.boundary==='collection')assert.equal(binding.surface,pathname,'Collection observation must use its actual recipe route.');
-  else{assert.match(binding.surface,identifier);assert.ok(requiredCases.some(row=>row.boundary==='form'&&row.consumer===binding.consumer&&row.surface===binding.surface),'Form surface must already exist in the canonical inventory.');}
+  else{
+   assert.match(binding.surface,identifier);
+   if(formManifest!==undefined){assert.ok(Array.isArray(formManifest));const entries=formManifest.filter(row=>row.id===binding.consumer);assert.equal(entries.length,1,'Canonical Form entry must be unique.');assert.ok(Array.isArray(entries[0].surfaces)&&entries[0].surfaces.includes(binding.surface),'Observation must target the actual declared Form surface.');}
+   else assert.ok(requiredCases.some(row=>row.boundary==='form'&&row.consumer===binding.consumer&&row.surface===binding.surface),'Without the canonical Form manifest, a concrete lifecycle surface is required.');
+  }
   return{key:cell.key,...binding};
  });
 }
 function scope(input,axis){
  const {page,origin,requiredCases,bindings,id}=input,sourceSha256=input.sourceSha256??process.env.QA_ADMIN_SOURCE_SHA256;
  const base=new URL(origin),current=new URL(page.url());assert.equal(base.origin,origin);assert.equal(base.protocol,'http:');assert.equal(base.hostname,'127.0.0.1');assert.ok(base.port);assert.equal(current.origin,origin);assert.ok(current.pathname.startsWith('/admin/')&&!current.pathname.startsWith('/admin/login'));assert.match(sourceSha256,hash);assert.match(id,identifier);
- return{receiptId:randomUUID(),id,axis,sourceSha256,routePathname:current.pathname,bindings:validateCoreRenderedAdoptionBindings({requiredCases,bindings,axis,pathname:current.pathname}),automaticCoverage:[],globalClosed:false};
+ return{receiptId:randomUUID(),id,axis,sourceSha256,routePathname:current.pathname,bindings:validateCoreRenderedAdoptionBindings({requiredCases,bindings,axis,pathname:current.pathname,formManifest:input.formManifest}),automaticCoverage:[],globalClosed:false};
 }
 async function frames(page){await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));}
 async function remember(page,container){
@@ -114,7 +118,7 @@ export async function observeCoreModalCleanReturn(input){
 }
 
 /** Exact completed-journey join only; this never promotes an entire capability axis. */
-export function assertCoreRenderedAdoptionJoin({browser,sourceSha256,expected}){
+export function assertCoreRenderedAdoptionJoin({browser,sourceSha256,expected,formManifest=undefined}){
  assert.match(sourceSha256,hash);assert.equal(browser.sourceSha256,sourceSha256);assert.equal(browser.inventoryOnly,false);assert.equal(browser.driverCompleted,true);assert.ok(Array.isArray(expected)&&expected.length>0&&expected.length<=1000);assert.ok(Array.isArray(browser.requiredCases)&&Array.isArray(browser.evidence)&&Array.isArray(browser.errors));
  const login=browser.evidence.filter(row=>row.id==='existing-auth-login');assert.equal(login.length,1);assert.equal(login[0].status,'pass');assert.equal(login[0].authenticated,true);assert.equal(browser.errors.some(row=>row.id==='existing-auth-login'),false);
  const identities=new Set(),receipts=new Set(),qualified=[];
@@ -122,7 +126,7 @@ export function assertCoreRenderedAdoptionJoin({browser,sourceSha256,expected}){
   assert.deepEqual(Object.keys(plan).sort(),['axis','bindings','journeyId','observationId','routePathname']);assert.match(plan.journeyId,identifier);assert.match(plan.observationId,identifier);assert.equal(identities.has(plan.observationId),false);identities.add(plan.observationId);
   const journey=browser.evidence.filter(row=>row.id===plan.journeyId);assert.equal(journey.length,1);assert.equal(journey[0].status,'pass');assert.equal(browser.errors.some(row=>row.id===plan.journeyId),false);
   const found=journey[0].renderedAdoption?.filter(row=>row.id===plan.observationId);assert.equal(found?.length,1);const value=found[0];assert.equal(value.status,'rendered-fragments-observed');assert.equal(value.sourceSha256,sourceSha256);assert.equal(value.axis,plan.axis);assert.equal(value.routePathname,plan.routePathname);assert.match(value.receiptId,/^[a-f0-9-]{36}$/u);assert.equal(receipts.has(value.receiptId),false);receipts.add(value.receiptId);assert.deepEqual(value.automaticCoverage,[]);assert.equal(value.globalClosed,false);
-  assert.deepEqual(value.bindings,validateCoreRenderedAdoptionBindings({requiredCases:browser.requiredCases,bindings:plan.bindings,axis:plan.axis,pathname:plan.routePathname}));assert.equal(value.observations.length,viewports.length);
+  assert.deepEqual(value.bindings,validateCoreRenderedAdoptionBindings({requiredCases:browser.requiredCases,bindings:plan.bindings,axis:plan.axis,pathname:plan.routePathname,formManifest}));assert.equal(value.observations.length,viewports.length);
   for(const [index,view]of viewports.entries()){
    const row=value.observations[index];for(const key of ['width','height'])assert.equal(row[key],view[key]);assert.equal(row.viewport,view.name);
    if(plan.axis==='scrollbar'){
