@@ -102,8 +102,10 @@ async function reader(state: State, cache: AmbientCache) {
   // This exact callback and key are shared by the two real HTTP entry points.
   const callback = async () => {
     state.callbackCount++;
-    const captured = state.db.prepare("select revision from synthetic_cache_source where id=1").get() as Value | undefined;
-    assert.ok(captured);
+    const row = state.db.prepare("select revision from synthetic_cache_source where id=1").get() as Value | undefined;
+    assert.ok(row && (row.revision === "Old" || row.revision === "New"));
+    // Native SQLite rows have a null prototype; the action/cache value is an ordinary DTO.
+    const captured: Value = { revision: row.revision };
     state.captured = captured; state.captureAt = Date.now();
     if (state.hold) await state.hold;
     if (state.ticket.scenario === "reader-failure" && captured.revision === "Old") throw Error("Injected synthetic reader failure.");

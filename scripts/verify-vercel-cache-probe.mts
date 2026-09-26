@@ -49,12 +49,12 @@ try {
     getBuiltinModule: (name: string): object | undefined => { builtinCalls++; assert.equal(name, "node:sqlite"); return process.getBuiltinModule(name); } }, Buffer, console, setTimeout, clearTimeout,
     require: (name:string) => {
       if(name==="server-only")return {};
-      if(name==="next/cache")return {};
+      if(name==="next/cache")return { unstable_cache: (callback: () => unknown) => callback };
       if(name==="next/dist/server/app-render/work-async-storage.external")return {workAsyncStorage:{getStore:()=>{ambientCalls++;return undefined;}}};
       assert.ok(["node:assert/strict","node:crypto"].includes(name));return required(name);
     } };
   const sandbox = vm.createContext(context);
-  vm.runInContext(compiled.outputText+"\nexports.checkTicket=ticketFor;exports.database=database;",sandbox);
+  vm.runInContext(compiled.outputText+"\nexports.checkTicket=ticketFor;exports.database=database;exports.reader=reader;",sandbox);
   const check = exports.checkTicket as (raw:string, phases:string[])=>unknown;
   const action = exports.executeAction as (raw:string)=>Promise<{status:string}>;
   const payload={requestId:randomUUID(),run:randomUUID(),phase:"init",scenario:"serial",expiresAt:Date.now()+300_000,sourceHead:baseEnv.VERCEL_GIT_COMMIT_SHA};
@@ -80,6 +80,32 @@ try {
     assert.equal(read(old),"Old"); cases.push("synthetic-sql-rollback-preserves-old");
     old.exec("begin; update synthetic_cache_source set revision='New' where id=1; commit;");
     assert.equal(read(old),"New"); cases.push("synthetic-sql-committed-new-readback");
+    // Exercise the installed Flight serializer, including the measured null-prototype failure.
+    const serializer: { renderToReadableStream?: (value: unknown, map: object, options: { onError(error: Error): string }) => ReadableStream<Uint8Array> } = {};
+    vm.runInNewContext(readFileSync(resolve(root,"node_modules/next/dist/compiled/react-server-dom-turbopack/cjs/react-server-dom-turbopack-server.edge.production.js"),"utf8"), {
+      exports: serializer, AbortController, TextEncoder, ReadableStream, Uint8Array, ArrayBuffer, setTimeout, clearTimeout, queueMicrotask,
+      require: (name: string) => {
+        if(name==="react")return required("next/dist/compiled/react/react.react-server");
+        if(name==="react-dom")return required("next/dist/compiled/react-dom");
+        throw Error("Unexpected installed serializer dependency.");
+      },
+    });
+    const serialize = async (value: unknown) => {
+      const errors: string[] = [];
+      const stream = serializer.renderToReadableStream!(value, {}, {onError(error) { errors.push(error.message); return "test-null-prototype"; }});
+      return { body: await new Response(stream).text(), errors };
+    };
+    const raw = old.prepare("select revision from synthetic_cache_source where id=1").get();
+    assert.equal(Object.getPrototypeOf(raw),null);
+    const rejected = await serialize({value:raw});
+    assert.equal(rejected.errors.length,1); assert.match(rejected.errors[0],/null prototypes are not supported/);
+    cases.push("installed-flight-rejects-raw-sql-row");
+    const reader = exports.reader as (state: Record<string, unknown>, cache: {generateSimpleCacheKey(key: string): Promise<string>}) => Promise<{read(): Promise<{revision: string}>}>;
+    const state = { ticket: { run: "isolated-projection-control", scenario: "serial" }, db: old, callbackCount: 0, hold: null, captured: null };
+    const projected = await (await reader(state,{generateSimpleCacheKey:async()=>"isolated-projection-control"})).read();
+    const accepted = await serialize({value:projected,captured:state.captured});
+    assert.equal(projected.revision,"New"); assert.equal(accepted.errors.length,0); assert.ok(accepted.body.includes("New"));
+    cases.push("installed-flight-accepts-actual-reader-projection");
   } finally { old.close(); independent.close(); }
   assert.throws(()=>read(old)); cases.push("synthetic-sql-close-rejects-read");
   context.process.getBuiltinModule=()=>undefined;
