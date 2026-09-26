@@ -92,7 +92,7 @@ if (args[0] === "prepare") {
     for (const scenario of ["no-invalidation", "serial", "reordered", "repeated", "reader-failure"]) {
       const run = randomUUID(), initial = await action(pageA, run, scenario, "init"), worker = initial.worker;
       proof.adapter = initial.adapter.binding;
-      const row: Record<string, unknown> = { scenario, run, status: "running", adapter: initial.adapter };
+      const row: Record<string, unknown> = { scenario, run, status: "running", adapter: initial.adapter, initial };
       results.push(row); flush();
       let held: Promise<{ result?: Awaited<ReturnType<typeof action>>; error?: unknown }> | null = null;
       try {
@@ -111,7 +111,7 @@ if (args[0] === "prepare") {
           if (completed.error) throw completed.error;
           row.oldRead = completed.result;
         }
-        const old = row.oldRead as { key: string; callbackSha256?: string; captureAt: number; commitAt: number; releaseAt: number; writeCompleteAt: number; status: string; invalidations: Array<{startedAt:number;completedAt:number;calls:number}> };
+        const old = row.oldRead as { key: string; callbackSha256?: string; readerSourceSha256?: string; captureAt: number; commitAt: number; releaseAt: number; writeCompleteAt: number; status: string; invalidations: Array<{startedAt:number;completedAt:number;calls:number}> };
         if (gated) {
           assert.ok(old.captureAt <= old.commitAt && old.commitAt <= old.invalidations[0].startedAt);
           assert.ok(old.invalidations[0].startedAt <= old.invalidations[0].completedAt && old.invalidations[0].completedAt <= old.releaseAt);
@@ -124,12 +124,13 @@ if (args[0] === "prepare") {
             Array.isArray(item.invalidations) && item.invalidations.length === 2 &&
             item.invalidations.every(value => value.calls === 1 && value.completedAt && !value.failed));
         }
-        const subsequent = await read(run, scenario);
+        const subsequent = await read(run, scenario); row.subsequent = subsequent;
         assert.equal(subsequent.adapter.constructorSha256, initial.adapter.constructorSha256);
         assert.equal(subsequent.key, old.key, "Separate HTTP request did not use the exact same cache key.");
         if (old.callbackSha256) assert.equal(subsequent.callbackSha256, old.callbackSha256);
+        assert.match(subsequent.readerSourceSha256, /^[a-f0-9]{64}$/u);
+        if (old.readerSourceSha256) assert.equal(subsequent.readerSourceSha256, old.readerSourceSha256);
         assert.equal(subsequent.sourceRevision, "New");
-        row.subsequent = subsequent;
         if (scenario === "no-invalidation") {
           assert.equal(subsequent.value.revision, "Old"); assert.equal(subsequent.callbackCount, 0);
         } else if (scenario === "reordered") {
@@ -141,7 +142,8 @@ if (args[0] === "prepare") {
         } else { assert.equal(subsequent.value.revision, "New"); assert.equal(subsequent.callbackCount, 1); }
         const hit = await read(run, scenario);
         assert.deepEqual(hit.value, subsequent.value); assert.equal(hit.callbackCount, 0);
-        assert.equal(hit.key, subsequent.key); row.followupHit = hit;
+        assert.equal(hit.key, subsequent.key); assert.equal(hit.callbackSha256, subsequent.callbackSha256);
+        assert.equal(hit.readerSourceSha256, subsequent.readerSourceSha256); row.followupHit = hit;
         row.cleanup = await action(pageB, run, scenario, "cleanup", worker);
         row.status = "pass"; flush();
       } catch (error) {

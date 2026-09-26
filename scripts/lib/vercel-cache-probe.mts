@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +40,7 @@ export function prepareVercelCacheProbe(options: { root?: string; env?: NodeJS.P
     rmSync(target, { recursive: true });
   }
   if (!enabled) return { generated: false, reason: "Only the exact unexpired PR Preview may contain this verification fixture." };
+  const readerSourceSha256 = createHash("sha256").update(readFileSync(resolve(templateRoot,"runtime.ts.template"),"utf8").replaceAll("\r\n","\n")).digest("hex");
   const inputs = [
     ["page.tsx", "src/app/verification-cache-probe/page.tsx"],
     ["actions.ts", "src/app/verification-cache-probe/actions.ts"],
@@ -47,7 +49,8 @@ export function prepareVercelCacheProbe(options: { root?: string; env?: NodeJS.P
   ];
   for (const [input, output] of inputs) {
     const content = readFileSync(resolve(templateRoot, input + ".template"), "utf8")
-      .replaceAll("__PROBE_MANIFEST__", JSON.stringify(manifest));
+      .replaceAll("__PROBE_MANIFEST__", JSON.stringify(manifest))
+      .replaceAll("__PROBE_SOURCE_SHA256__", readerSourceSha256);
     assertOwnedPath(output);
     const path = resolve(root, output);
     mkdirSync(dirname(path), { recursive: true });

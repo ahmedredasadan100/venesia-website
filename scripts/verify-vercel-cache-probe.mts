@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createPublicKey, generateKeyPairSync, randomUUID, sign } from "node:crypto";
+import { createHash, createPublicKey, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { resolve, sep } from "node:path";
 import { createRequire } from "node:module";
@@ -40,7 +40,9 @@ try {
 
   const pair = generateKeyPairSync("ed25519");
   const testManifest = { ...manifest, publicKey: createPublicKey(pair.privateKey).export({format:"pem",type:"spki"}).toString() };
-  const template = readFileSync(resolve(source,"runtime.ts.template"),"utf8").replace("__PROBE_MANIFEST__",JSON.stringify(testManifest));
+  const rawTemplate = readFileSync(resolve(source,"runtime.ts.template"),"utf8").replaceAll("\r\n","\n");
+  const sourceHash = createHash("sha256").update(rawTemplate).digest("hex");
+  const template = rawTemplate.replace("__PROBE_MANIFEST__",JSON.stringify(testManifest)).replaceAll("__PROBE_SOURCE_SHA256__",sourceHash);
   const compiled = ts.transpileModule(template,{ compilerOptions: { module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true },reportDiagnostics:true});
   assert.equal(compiled.diagnostics?.filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);
   const required = createRequire(import.meta.url), exports: Record<string, unknown> = {};
@@ -100,9 +102,25 @@ try {
     const rejected = await serialize({value:raw});
     assert.equal(rejected.errors.length,1); assert.match(rejected.errors[0],/null prototypes are not supported/);
     cases.push("installed-flight-rejects-raw-sql-row");
-    const reader = exports.reader as (state: Record<string, unknown>, cache: {generateSimpleCacheKey(key: string): Promise<string>}) => Promise<{read(): Promise<{revision: string}>}>;
+    type ProbeReader = (state: Record<string, unknown>, cache: {generateSimpleCacheKey(key: string): Promise<string>}) => Promise<{read(): Promise<{revision: string}>;key: string;callbackSha256: string;readerSourceSha256: string}>;
+    const reader = exports.reader as ProbeReader;
     const state = { ticket: { run: "isolated-projection-control", scenario: "serial" }, db: old, callbackCount: 0, hold: null, captured: null };
-    const projected = await (await reader(state,{generateSimpleCacheKey:async()=>"isolated-projection-control"})).read();
+    const keyPort = {generateSimpleCacheKey: async (key: string) => createHash("sha256").update(key).digest("hex")};
+    const originalReader = await reader(state,keyPort), projected = await originalReader.read();
+    const transformedExports: Record<string, unknown> = {};
+    // This models independent bundler identifier rewriting without changing canonical source.
+    vm.runInNewContext(compiled.outputText.replace(/\bstate\b/gu,"bundledState")+"\nexports.reader=reader;",{...context,exports:transformedExports});
+    const transformedReader = await (transformedExports.reader as ProbeReader)(state,keyPort);
+    assert.equal(transformedReader.key,originalReader.key);
+    assert.equal(transformedReader.callbackSha256,originalReader.callbackSha256);
+    assert.equal(transformedReader.readerSourceSha256,sourceHash);
+    cases.push("bound-reader-key-survives-independent-identifier-rewriting");
+    const changedExports: Record<string, unknown> = {};
+    vm.runInNewContext(compiled.outputText.replaceAll(sourceHash,"0".repeat(64))+"\nexports.reader=reader;",{...context,exports:changedExports});
+    const changedReader = await (changedExports.reader as ProbeReader)(state,keyPort);
+    assert.notEqual(changedReader.key,originalReader.key); cases.push("different-canonical-source-hash-changes-key");
+    const differentRun = await reader({...state,ticket:{...state.ticket,run:"another-isolated-control"}},keyPort);
+    assert.notEqual(differentRun.key,originalReader.key); cases.push("different-run-nonce-changes-key");
     const accepted = await serialize({value:projected,captured:state.captured});
     assert.equal(projected.revision,"New"); assert.equal(accepted.errors.length,0); assert.ok(accepted.body.includes("New"));
     cases.push("installed-flight-accepts-actual-reader-projection");
