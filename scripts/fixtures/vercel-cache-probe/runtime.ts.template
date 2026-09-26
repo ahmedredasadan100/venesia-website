@@ -1,7 +1,6 @@
 import "server-only";
 import assert from "node:assert/strict";
 import { createHash, randomUUID, verify } from "node:crypto";
-import { PGlite } from "@electric-sql/pglite";
 import { unstable_cache, updateTag } from "next/cache";
 import { workAsyncStorage } from "next/dist/server/app-render/work-async-storage.external";
 
@@ -12,6 +11,10 @@ type Phase = typeof phases[number];
 type Scenario = typeof scenarios[number];
 type Ticket = { requestId: string; run: string; phase: Phase; scenario: Scenario; expiresAt: number; sourceHead: string; worker?: string };
 type Value = { revision: string };
+type SyntheticDatabase = {
+  exec(sql: string): void; close(): void;
+  prepare(sql: string): { get(...values: string[]): unknown; run(...values: string[]): unknown };
+};
 type Invalidation = { calls: number; startedAt: number | null; completedAt: number | null; failed: boolean };
 type AmbientCache = {
   cacheHandler?: { constructor: { name: string; toString(): string } };
@@ -20,7 +23,7 @@ type AmbientCache = {
 };
 type Store = { incrementalCache?: AmbientCache; pendingRevalidates?: Record<string, Promise<unknown>> };
 type State = {
-  ticket: Ticket; db: PGlite; createdAt: number; callbackCount: number; captured: Value | null;
+  ticket: Ticket; db: SyntheticDatabase; createdAt: number; callbackCount: number; captured: Value | null;
   captureAt: number | null; commitAt: number | null; releaseAt: number | null; writeCompleteAt: number | null;
   hold: Promise<void> | null; release: (() => void) | null; reject: ((error: Error) => void) | null;
   failedRead: boolean; reading: boolean; invalidations: Invalidation[]; restores: Array<() => void>; key: string | null;
@@ -67,7 +70,7 @@ function ambient() {
   }
   assert.ok(!/FileSystemCache/iu.test(handler.constructor.name), "Local FileSystemCache is not deployed-adapter proof.");
   return { store, cache, adapter: { binding: "ambient-global-FetchCache", constructor: handler.constructor.name,
-    constructorSha256: hash(handler.constructor.toString()), nextVersion: "16.3.0", region: process.env.VERCEL_REGION ?? null } };
+    constructorSha256: hash(handler.constructor.toString()), nextVersion: "16.3.0", nodeVersion: process.versions.node, syntheticDatabase: "node:sqlite-memory", region: process.env.VERCEL_REGION ?? null } };
 }
 
 function snapshot(state: State) {
@@ -86,9 +89,12 @@ function existing(ticket: Ticket) {
 }
 
 async function database(revision: "Old" | "New") {
-  const db = new PGlite();
-  await db.exec("create table synthetic_cache_source (id integer primary key, revision text not null)");
-  await db.query("insert into synthetic_cache_source values (1,$1)", [revision]);
+  // Only this isolated fixture owns this transient SQL database; no filesystem or external DB access.
+  const sqlite = process.getBuiltinModule("node:sqlite") as { DatabaseSync?: new (path: string) => SyntheticDatabase } | undefined;
+  assert.ok(sqlite?.DatabaseSync, "Inconclusive: deployed Node does not provide the built-in SQLite fixture.");
+  const db = new sqlite.DatabaseSync(":memory:");
+  db.exec("create table synthetic_cache_source (id integer primary key, revision text not null)");
+  db.prepare("insert into synthetic_cache_source values (1,?)").run(revision);
   return db;
 }
 
@@ -96,8 +102,7 @@ async function reader(state: State, cache: AmbientCache) {
   // This exact callback and key are shared by the two real HTTP entry points.
   const callback = async () => {
     state.callbackCount++;
-    const result = await state.db.query<Value>("select revision from synthetic_cache_source where id=1");
-    const captured = result.rows[0];
+    const captured = state.db.prepare("select revision from synthetic_cache_source where id=1").get() as Value | undefined;
     assert.ok(captured);
     state.captured = captured; state.captureAt = Date.now();
     if (state.hold) await state.hold;
@@ -168,7 +173,7 @@ export async function executeAction(raw: string) {
     if (ticket.phase === "mutate") {
       assert.equal(state.captured?.revision, "Old"); assert.equal(state.commitAt, null);
       await state.db.exec("begin; update synthetic_cache_source set revision='New' where id=1; commit;");
-      assert.equal((await state.db.query<Value>("select revision from synthetic_cache_source where id=1")).rows[0].revision, "New");
+      assert.equal((state.db.prepare("select revision from synthetic_cache_source where id=1").get() as Value).revision, "New");
       state.commitAt = Date.now();
       if (ticket.scenario !== "no-invalidation") observeInvalidation(state, cache);
     } else if (ticket.phase === "release") {

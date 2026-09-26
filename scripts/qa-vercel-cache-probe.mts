@@ -27,7 +27,7 @@ if (args[0] === "prepare") {
   mkdirSync(output, { recursive: true });
   const results: unknown[] = [], proof = { status: "running", sourceHead: head, deployment: deployment.origin,
     adapter: "pending ambient verification", scenarios: results, productionWrites: false,
-    scope: "Actual Preview ambient cache adapter; per-worker synthetic PGlite and two real Server Action HTTP contexts; independent GET cache-read. Not hosted Supabase, multi-region consistency, or Production mutation." };
+    scope: "Actual Preview ambient cache adapter; per-worker synthetic in-memory SQLite and two real Server Action HTTP contexts; independent GET cache-read. Not hosted Supabase, multi-region consistency, or Production mutation." };
   const flush = () => writeFileSync(resolve(output, "vercel-cache-probe.json"), JSON.stringify(proof, null, 2) + "\n");
   flush();
   const browser = await chromium.launch({ headless: true });

@@ -44,17 +44,17 @@ try {
   const compiled = ts.transpileModule(template,{ compilerOptions: { module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022,esModuleInterop:true },reportDiagnostics:true});
   assert.equal(compiled.diagnostics?.filter(d=>d.category===ts.DiagnosticCategory.Error).length,0);
   const required = createRequire(import.meta.url), exports: Record<string, unknown> = {};
-  let ambientCalls = 0;
-  const context = { exports, process:{env:{...baseEnv}}, Buffer, console, setTimeout, clearTimeout,
+  let ambientCalls = 0, builtinCalls = 0;
+  const context = { exports, process:{env:{...baseEnv}, versions: process.versions,
+    getBuiltinModule: (name: string): object | undefined => { builtinCalls++; assert.equal(name, "node:sqlite"); return process.getBuiltinModule(name); } }, Buffer, console, setTimeout, clearTimeout,
     require: (name:string) => {
       if(name==="server-only")return {};
-      if(name==="@electric-sql/pglite")return {PGlite:class{constructor(){throw Error("Unexpected DB creation in a guard control.");}}};
       if(name==="next/cache")return {};
       if(name==="next/dist/server/app-render/work-async-storage.external")return {workAsyncStorage:{getStore:()=>{ambientCalls++;return undefined;}}};
       assert.ok(["node:assert/strict","node:crypto"].includes(name));return required(name);
     } };
   const sandbox = vm.createContext(context);
-  vm.runInContext(compiled.outputText+"\nexports.checkTicket=ticketFor;",sandbox);
+  vm.runInContext(compiled.outputText+"\nexports.checkTicket=ticketFor;exports.database=database;",sandbox);
   const check = exports.checkTicket as (raw:string, phases:string[])=>unknown;
   const action = exports.executeAction as (raw:string)=>Promise<{status:string}>;
   const payload={requestId:randomUUID(),run:randomUUID(),phase:"init",scenario:"serial",expiresAt:Date.now()+300_000,sourceHead:baseEnv.VERCEL_GIT_COMMIT_SHA};
@@ -67,7 +67,23 @@ try {
   }
   context.process.env.VERCEL_ENV="production";assert.equal((await action(signed(payload))).status,"denied");
   cases.push("runtime-production-denied-before-adapter");
-  assert.equal(ambientCalls,0);
+  assert.equal(ambientCalls,0); assert.equal(builtinCalls,0);
+  const database = exports.database as (revision: "Old" | "New") => Promise<{
+    exec(sql: string): void; close(): void; prepare(sql: string): { get(): { revision: string } };
+  }>;
+  const old = await database("Old"), independent = await database("New");
+  const read = (db: Awaited<ReturnType<typeof database>>) => db.prepare("select revision from synthetic_cache_source where id=1").get().revision;
+  try {
+    assert.equal(read(old),"Old"); cases.push("synthetic-sql-old-read");
+    assert.equal(read(independent),"New"); cases.push("synthetic-sql-independent-new-read");
+    old.exec("begin; update synthetic_cache_source set revision='New' where id=1; rollback;");
+    assert.equal(read(old),"Old"); cases.push("synthetic-sql-rollback-preserves-old");
+    old.exec("begin; update synthetic_cache_source set revision='New' where id=1; commit;");
+    assert.equal(read(old),"New"); cases.push("synthetic-sql-committed-new-readback");
+  } finally { old.close(); independent.close(); }
+  assert.throws(()=>read(old)); cases.push("synthetic-sql-close-rejects-read");
+  context.process.getBuiltinModule=()=>undefined;
+  await assert.rejects(database("Old"),/built-in SQLite fixture/); cases.push("unsupported-node-sqlite-fails-closed");
   console.log(JSON.stringify({status:"pass",checks:cases.length,cases,ambientCalls,generatedProductionRoutes:0},null,2));
 } finally {
   assert.ok(realpathSync(out).startsWith(resolve(root,".tmp-qa/core-final-closure")+sep));
