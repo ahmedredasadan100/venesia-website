@@ -12,9 +12,11 @@ const root = resolve(import.meta.dirname, "..");
 const args = process.argv.slice(2);
 assert.equal(args.length, 2); assert.equal(args[0], "--cli-binary");
 const artifactDir = resolve(root, ".tmp-qa/audit2-root-cause-ci");
-mkdirSync(artifactDir, { recursive: true });
 const report: { status: string; steps: Array<{ name: string; durationMs: number; value: unknown }>; cleanup?: unknown; error?: unknown } = { status: "running", steps: [] };
-const record = () => writeFileSync(resolve(artifactDir, "root-cause-result.json"), JSON.stringify(report, null, 2) + "\n");
+const record = () => {
+  mkdirSync(artifactDir, { recursive: true });
+  writeFileSync(resolve(artifactDir, "root-cause-result.json"), JSON.stringify(report, null, 2) + "\n");
+};
 async function step<T>(name: string, run: () => Promise<T>) {
   const start = Date.now(); const value = await run();
   report.steps.push({ name, durationMs: Date.now() - start, value }); record(); console.log(`PASS ${name}`); return value;
