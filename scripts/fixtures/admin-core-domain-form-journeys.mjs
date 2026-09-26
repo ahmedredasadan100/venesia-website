@@ -51,6 +51,42 @@ export function buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, loc
     pending: forms["projects-create-edit"].surfaces.filter(surface => surface.endsWith(":create")).map(surface => ({ consumer: "projects-create-edit", surface, status: "unexecuted_actionable", reason: "Requires the current full Project create UI: media selection, hierarchy/maps, overview and delivery. Existing edits do not prove create." })) };
 }
 
+/** Canonical native settings projections and the one normalized Tracking instant; no generic empty-save allowance. */
+export function assertCoreFormPermissionNativeDescriptor(write, mapping) {
+  assert.ok(write?.expected && typeof write.expected === "object" && !Array.isArray(write.expected));
+  if (Object.keys(write.expected).length) return;
+  const canonical = {
+    "company-identity-settings": ["singleton-settings", "admin.company"],
+    "global-seo-settings": ["global-meta", "seo.global"],
+    "media-library-settings": ["media-policy-settings", "media.settings"],
+  }[mapping.formConsumer];
+  assert.ok(canonical && mapping.surface === canonical[0] && write.table === "site_settings" && write.id === canonical[1], "Empty scalar fields require the exact canonical settings consumer/key.");
+  assert.ok(Array.isArray(write.expectedJson) && write.expectedJson.length > 0 && write.expectedJson.length <= 32);
+  const paths = new Set();
+  for (const projection of write.expectedJson) {
+    assert.equal(projection.column, "value"); assert.ok(Array.isArray(projection.path) && projection.path.length > 0);
+    assert.ok(projection.path.every(key => typeof key === "string" && /^(?:[a-zA-Z_][a-zA-Z0-9_]*|0|[1-9][0-9]*)$/u.test(key) && !["__proto__", "constructor", "prototype"].includes(key)));
+    assert.ok(Object.hasOwn(projection, "value") && projection.value !== undefined);
+    const key = JSON.stringify(projection.path); assert.equal(paths.has(key), false); paths.add(key);
+  }
+}
+export function assertCoreFormPermissionNativeWrite(expected, actual, mapping) {
+  assertCoreFormPermissionNativeDescriptor(expected, mapping);
+  assert.equal(actual.deleted, false);
+  if (Object.keys(expected.expected).length === 0) assert.deepEqual(actual.actual, { key: expected.id }, "JSON-only settings must retain the canonical native key projection.");
+  else if (expected.table === "project_tracking_updates" && Object.hasOwn(expected.expected, "occurred_at")) {
+    assert.ok(actual.actual && Object.hasOwn(actual.actual, "occurred_at"));
+    assert.equal(typeof expected.expected.occurred_at, "string"); assert.equal(typeof actual.actual.occurred_at, "string");
+    const wanted = Date.parse(expected.expected.occurred_at), observed = Date.parse(actual.actual.occurred_at);
+    assert.ok(Number.isFinite(wanted) && Number.isFinite(observed)); assert.equal(observed, wanted, "Tracking authored instant changed.");
+    assert.deepEqual({ ...actual.actual, occurred_at: wanted }, { ...expected.expected, occurred_at: wanted });
+  } else assert.deepEqual(actual.actual, expected.expected, "Native save must prove every authored field.");
+  assert.deepEqual(actual.json, (expected.expectedJson ?? []).map(projection => ({ column: projection.column, path: projection.path, actual: projection.value })), "Native save must prove every authored JSON projection.");
+  assert.ok(Number.isSafeInteger(actual.expectedActorId) && actual.expectedActorId > 0, "Canonical native QA actor is required.");
+  assert.ok(Array.isArray(actual.audit) && actual.audit.length > 0 && actual.audit.every(row => Number(row.actor_admin_user_id) === actual.expectedActorId), "The original write requires its exact canonical QA actor audit.");
+  for (const action of expected.auditActions ?? []) assert.ok(actual.audit.some(row => row.action === action));
+}
+
 /** One accepted current Form intent; the optional replay never precedes native save proof. */
 export async function runCoreFormPermissionIntent({ permissionReplay, mapping, perform, permissionEvidence }) {
   const startedAt = new Date().toISOString();
@@ -60,8 +96,7 @@ export async function runCoreFormPermissionIntent({ permissionReplay, mapping, p
     if (!capture) return value;
     assert.equal(typeof permissionReplay.nativeSave, "function", "Original native save verification is required.");
     assert.ok(Array.isArray(nativeWrites) && nativeWrites.length > 0 && nativeWrites.length <= 4);
-    assert.ok(nativeWrites.every(write => write.expected && Object.keys(write.expected).length > 0),
-      "A midpoint create requires actual saved fields, not existence alone.");
+    for (const write of nativeWrites) assertCoreFormPermissionNativeDescriptor(write, mapping);
     const native = await permissionReplay.nativeSave(nativeWrites, { ...mapping, startedAt });
     assert.equal(native?.kind, "form-save-native");
     assert.equal(native.status, "partial-not-global-pass");
@@ -73,15 +108,7 @@ export async function runCoreFormPermissionIntent({ permissionReplay, mapping, p
       const matches = native.writes.filter(write => write.table === expected.table && write.id === expected.id);
       assert.equal(matches.length, 1, "Native save must cover exactly this persisted row.");
       const actual = matches[0];
-      assert.equal(actual.deleted, false);
-      assert.deepEqual(actual.actual, expected.expected, "Native save must prove every authored field.");
-      assert.deepEqual(actual.json, (expected.expectedJson ?? []).map(projection => ({
-        column: projection.column, path: projection.path, actual: projection.value,
-      })), "Native save must prove every authored JSON projection.");
-      assert.ok(Array.isArray(actual.audit) && actual.audit.length > 0
-        && actual.audit.every(row => Number.isSafeInteger(Number(row.actor_admin_user_id)) && Number(row.actor_admin_user_id) > 0),
-      "The original write requires its actor-bound native audit.");
-      for (const action of expected.auditActions ?? []) assert.ok(actual.audit.some(row => row.action === action));
+      assertCoreFormPermissionNativeWrite(expected, actual, mapping);
     }
     const receipt = await capture.verifyAfterSuccessfulUI({ canonicalUiSuccessVerified: true, nativeSaveVerified: true });
     assert.equal(receipt.status, "pass");

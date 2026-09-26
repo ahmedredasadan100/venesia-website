@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -62,7 +63,7 @@ export async function runCoreTemplateFormJourneys(ctx) {
   const field = (form, name) => form.locator(`[name="${name}"]:not([type="hidden"])`);
   const editorForm = id => page.locator("form").filter({ has: page.locator(`input[name="id"][value="${id}"]`) });
   const submit = form => form.locator('button[type="submit"]');
-  const outcomes = [];
+  const outcomes = [], permissionEvidence = [];
 
   async function navigate(path) {
     // Discard only the preceding independent synthetic case's unsaved draft.
@@ -154,6 +155,9 @@ export async function runCoreTemplateFormJourneys(ctx) {
       } finally { page.off("request", recordPost); }
       await field(form, "name").fill(name);
     });
+    const caseId = `core-template-${recipe.kind}-existing-edit`;
+    const permissionReplay = sharedRuntime && recipe.entry.registryModuleKind ? ctx.permissionReplay : undefined;
+    const value = await runCoreFormPermissionIntent({ permissionReplay, mapping: {caseId,formConsumer:recipe.entry.id,surface:recipe.surface}, permissionEvidence, perform: async () => {
     await acknowledge(form);
     await observe("template-canonical-save-outcome", async () => {
       await expect(page).toHaveURL(url => url.pathname === pathFor(recipe.kind, id) && url.searchParams.get("saved") === "1", { timeout: 60_000 });
@@ -166,15 +170,18 @@ export async function runCoreTemplateFormJourneys(ctx) {
     await expect(field(form, "name")).toHaveValue(name);
     await assertFields(form, authored);
     if (recipe.kind === "media-sidebar") await expect(form.locator('select[name="widget_key"]')).toHaveValue("latest");
-    databaseReadback.push({ table: recipe.table, id, expected: { name },
+    const descriptor = { table: recipe.table, id, expected: { name },
       expectedJson: authored.map(({ path, value }) => ({ column: "config", path, value })),
       auditEntityType: "content_block_template", auditActions: ["content_block_template.update"],
-      auditMetadata: recipe.kind === "content" ? {} : { blockType: recipe.kind }, auditEntityLabel: name });
-    return { kind: recipe.kind, consumer: recipe.entry.id, surface: recipe.surface, id,
+      auditMetadata: recipe.kind === "content" ? {} : { blockType: recipe.kind }, auditEntityLabel: name };
+    databaseReadback.push(descriptor);
+    return { value: { kind: recipe.kind, consumer: recipe.entry.id, surface: recipe.surface, id,
       metadataReloadVerified: true, authoredConfigReloadVerified: authored.map(({ path }) => path),
       validation: sharedRuntime ? "server_required_name_rejection_shared_form_preservation" : "native_required_name_rejection_no_action_request", preservedAuthoredFields: authored.map(({ name: fieldName }) => fieldName), retrySaved: true,
       dirtyCloseCancel: ["content", "hero"].includes(recipe.kind) ? "verified" : "not_declared_by_specialized_editor",
-      proofBoundary: "Selected metadata and authored configuration fields; native readback required. No complete capability axis, template-command, server-failure rollback, or permission-denial claim." };
+      proofBoundary: "Selected metadata and authored configuration fields; native readback required. No complete capability axis, template-command, server-failure rollback claim. Optional permission evidence proves only the cookie-free HTTP boundary after native save."}, nativeWrites: [descriptor] };
+    }});
+    return {...value, permissionEvidence: permissionEvidence.filter(row=>row.caseId===caseId)};
   }
 
   // Existing unused templates keep all nine edit cases independent of any
@@ -225,6 +232,8 @@ export async function runCoreTemplateFormJourneys(ctx) {
         await expect(submit(form)).toBeEnabled();
       });
       await field(form, "name").fill(name);
+      const caseId = `core-template-${recipe.kind}-create-reject-retry`;
+      const id = await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId,formConsumer:recipe.entry.id,surface:recipe.surface},permissionEvidence,perform:async()=>{
       await acknowledge(form);
       await observe("template-create-to-edit-handoff", async () => {
         const expectedPath = new RegExp(`^${pathFor(recipe.kind)}/[0-9]+$`, "u");
@@ -241,10 +250,13 @@ export async function runCoreTemplateFormJourneys(ctx) {
       await observe("template-created-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
       await expect(field(editorForm(id), "name")).toHaveValue(name);
       // The creation audit predates the authored edit and has its own label.
-      databaseReadback.push({ table: recipe.table, id, expected: {}, auditEntityType: "content_block_template", auditActions: ["content_block_template.create"], auditEntityLabel: name, auditMetadata: recipe.kind === "content" ? { slug } : { blockType: recipe.kind } });
+      const descriptor = { table: recipe.table, id, expected: { name }, auditEntityType: "content_block_template", auditActions: ["content_block_template.create"], auditEntityLabel: name, auditMetadata: recipe.kind === "content" ? { slug } : { blockType: recipe.kind } };
+      databaseReadback.push({...descriptor,expected:{}});
+      return {value:id,nativeWrites:[descriptor]};
+      }});
       const details = await editAndRead(recipe, id, `${name} saved`);
       outcomes.push(details);
-      return { ...details, createServerValidation: "trimmed_required_name", createInputPreserved: true, createRetryHandoff: true, createDirtyCloseCancel: true };
+      return { ...details, createServerValidation: "trimmed_required_name", createInputPreserved: true, createRetryHandoff: true, createDirtyCloseCancel: true, permissionEvidence: permissionEvidence.filter(row=>row.caseId===caseId) };
     });
   }
   return { planned: plan.editors.length + plan.creates.length, completed: outcomes.length, outcomes, boundary: "Selected template-domain lifecycle; no template-command or complete capability-axis promotion." };

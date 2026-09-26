@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import ts from "typescript";
 import { PGlite } from "@electric-sql/pglite";
-import { createCoreRecoveryQueueReadFault, assertCoreRecoveryReceipt, assertCoreRecoveryAudit, assertCoreRecoveryDomainUnchanged, assertCoreRecoveryQueue } from "./fixtures/admin-core-media-recovery-journeys.mjs";
+import { assertCoreRecoveryReservationAge, createCoreRecoveryQueueReadFault, assertCoreRecoveryReceipt, assertCoreRecoveryAudit, assertCoreRecoveryDomainUnchanged, assertCoreRecoveryQueue } from "./fixtures/admin-core-media-recovery-journeys.mjs";
 
 const require = createRequire(import.meta.url), checks = [];
 const check = async (name, execute) => { await execute(); checks.push({ name, status: "pass" }); };
@@ -12,9 +12,9 @@ const path = "scripts/verify-admin-core-media-recovery-isolated.mts";
 const compiled = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
 function fixture(changes = {}) {
   const faults = { ...changes }, timers = new Map(), statements = [], signatures = [];
-  let nextPid = 100, cancels = 0, active = 0, rollbacks = 0, ended = false;
-  const namespace = "qa-core-media-0123456789abcdef", assetIds = ["lease", "finalize", "missing"].map(() => randomUUID());
-  const assets = assetIds.map((id, index) => ({ id, display_name: namespace + "-" + ["lease", "finalize", "missing"][index] + ".png", status: "active", bucket: "cms-images", object_key: "images/" + namespace + "/" + index + ".png", public_url: "http://127.0.0.1:65123/" + index + ".png" }));
+  let nextPid = 100, cancels = 0, active = 0, rollbacks = 0, ended = false, storageCandidates = 0;
+  const namespace = "qa-core-media-0123456789abcdef", assetIds = ["lease", "finalize", "missing", "cancel"].map(() => randomUUID());
+  const assets = assetIds.map((id, index) => ({ id, display_name: namespace + "-" + ["lease", "finalize", "missing", "cancel"][index] + ".png", status: "active", bucket: "cms-images", object_key: "images/" + namespace + "/" + index + ".png", public_url: "http://127.0.0.1:65123/" + index + ".png" }));
   const media = { status: "pass", namespace, qaActorId: 7, articleId: 91, article: { title: "original", image: assets[0].public_url },
     assets, objects: assets.map(row => ({ bucket_id: row.bucket, name: row.object_key })), references: [{ id: randomUUID(), asset_id: assets[0].id, domain_key: "topics", entity_identity: "91", field_key: "image" }] };
   const holderBackends = new Map(); let disconnect; const disconnected = new Promise((_, reject) => { disconnect = () => reject(Error("controlled-holder-ended")); }); disconnected.catch(() => {});
@@ -27,10 +27,12 @@ function fixture(changes = {}) {
       if (faults.lockFailure) throw Error("controlled-lock");
       holderBackends.set(pid, stamp); return { rows: faults.missingTarget ? [] : [{ id: "owned" }] };
     }
+    if (sql === "select clock_timestamp()::text observed_at") return { rows: [{ observed_at: stamp }] };
     if (sql.startsWith("select pg_stat_clear_snapshot()")) return { rows: [] };
     if (sql.includes("from pg_stat_activity where $1")) {
       signatures.push(params[1]);
-      const row = { pid: 201, backend_start: stamp, query_start: "2026-09-26 00:00:01.123456+00", usename: String(params[1]).startsWith("DELETE") ? "supabase_storage_admin" : "authenticator",
+      const storageCandidate = String(params[1]).includes("DELETE"); if (storageCandidate) storageCandidates++;
+      const row = { pid: 201, backend_start: stamp, query_start: faults.changedStorageLifetime && storageCandidates > 1 ? "2026-09-26 00:00:02.123456+00" : "2026-09-26 00:00:01.123456+00", usename: storageCandidate ? "supabase_storage_admin" : "authenticator",
         datname: "postgres", state: "active", backend_type: "client backend", wait_event_type: "Lock", blockers: [params[0]], query_fingerprint: "a".repeat(32), signature_matches: true, ...(faults.candidate ?? {}) };
       return { rows: faults.multiple ? [row, { ...row, pid: 202 }] : [row] };
     }
@@ -62,12 +64,12 @@ function fixture(changes = {}) {
   return { broker, faults, statements, signatures, media, request: (step, scenario = "lease", change = {}) => broker.handleRequest({ id: randomUUID(), kind: "media-recovery-fault-" + step, scenario, token, ...change }),
     disconnect, counts: () => ({ active, cancels, rollbacks }), expire: () => { for (const callback of [...timers.values()]) callback(); }, end: () => { ended = true; } };
 }
-for (const scenario of ["lease", "finalize", "missing"]) await check("actual-producer-" + scenario, async () => {
+for (const scenario of ["lease", "finalize", "missing", "cancel"]) await check("actual-producer-" + scenario, async () => {
   const f = fixture(); await f.request("arm", scenario);
   if (scenario !== "lease") await f.request("switch", scenario);
   const result = await f.request("cancel", scenario); assert.equal(result.cancellationAcknowledged, true);
   assert.equal(result.domainCommitVerified, scenario === "lease");
-  await f.request("release", scenario); assert.equal(f.counts().active, 0); assert.equal(f.counts().cancels, 1);
+  await f.request("release", scenario); assert.equal(f.counts().active, 0); assert.equal(f.counts().cancels, scenario === "cancel" ? 2 : 1);
   assert.equal((await f.broker.close()).activeLocks, 0);
 });
 for (const candidate of [{ usename: "postgres" }, { datname: "production" }, { state: "idle" }, { backend_type: "parallel worker" }, { wait_event_type: "IO" }, { blockers: [100, 200] }, { signature_matches: false }, { backend_start: "bad" }, { query_fingerprint: "bad" }]) await check("refuse-foreign-candidate-" + checks.length, async () => {
@@ -81,6 +83,14 @@ for (const fault of ["missingTarget", "wrongHolder", "lockFailure"]) await check
 });
 await check("switch-refuses-uncommitted-reservation-and-releases-storage", async () => {
   const f = fixture({ reservationMissing: true }); await f.request("arm", "finalize"); await assert.rejects(f.request("switch", "finalize")); assert.equal(f.counts().active, 0); assert.equal(f.counts().cancels, 0); await f.broker.close();
+});
+await check("changed-first-Storage-statement-cannot-be-cancelled", async () => {
+  const f = fixture({ changedStorageLifetime: true }); await f.request("arm", "cancel");
+  await assert.rejects(f.request("switch", "cancel")); assert.equal(f.counts().cancels, 0); assert.equal(f.counts().active, 0); await f.broker.close();
+});
+await check("compensation-cancel-failure-releases-both-owned-holders", async () => {
+  const f = fixture(); await f.request("arm", "cancel"); await f.request("switch", "cancel"); assert.equal(f.counts().cancels, 1);
+  f.faults.cancelRefused = true; await assert.rejects(f.request("cancel", "cancel")); assert.equal(f.counts().active, 0); await f.broker.close();
 });
 await check("phase-identity-and-token-guards", async () => {
   for (const [step, scenario, change] of [["cancel", "finalize", {}], ["switch", "lease", {}], ["cancel", "lease", { token: randomUUID() }]]) {
@@ -110,19 +120,21 @@ try {
   await check("PostgreSQL-signatures-exclude-neighboring-statements", async () => {
     const f = fixture(); await f.request("arm"); await f.request("cancel"); await f.request("release"); await f.broker.close();
     const d = fixture(); await d.request("arm", "finalize"); await d.request("switch", "finalize"); await d.request("cancel", "finalize"); await d.request("release", "finalize"); await d.broker.close();
-    const pairs = [[f.signatures[0], 'SELECT * FROM "public"."replace_media_references_for_entity"($1,$2)'], [d.signatures[0], 'delete from "objects" where "bucket_id"=$1'], [d.signatures[1], 'SELECT * FROM "public"."finalize_media_asset_deletion"($1,$2)']];
+    const cancelled = fixture(); await cancelled.request("arm", "cancel"); await cancelled.request("switch", "cancel"); await cancelled.request("cancel", "cancel"); await cancelled.request("release", "cancel"); await cancelled.broker.close();
+    const pairs = [[cancelled.signatures[0], ' DELETE FROM storage.objects WHERE bucket_id = $1 AND "name" = ANY($2) RETURNING * '], [cancelled.signatures[0], 'DELETE FROM storage.objects WHERE bucket_id = $1 AND "name" = ANY($2) AND archived_at IS NULL RETURNING *'], [cancelled.signatures.at(-1), 'SELECT * FROM "public"."cancel_media_asset_deletion"($1,$2)'], [f.signatures[0], 'SELECT * FROM "public"."replace_media_references_for_entity"($1,$2)'], [d.signatures[0], 'delete from "objects" where "bucket_id"=$1'], [d.signatures[1], 'SELECT * FROM "public"."finalize_media_asset_deletion"($1,$2)']];
+    for (const wrong of ['DELETE FROM storage.objects WHERE name = ANY($1) RETURNING *', 'DELETE FROM storage.objects WHERE bucket_id = $1 AND "name" = ANY($2) OR true RETURNING *', 'DELETE FROM storage.objects WHERE bucket_id = $1 AND "name" = ANY($2) RETURNING *; DELETE FROM storage.objects', 'select \'DELETE FROM storage.objects\'']) assert.equal((await db.query("select $1::text ~* $2::text ok", [wrong, cancelled.signatures[0]])).rows[0].ok, false);
     for (const [pattern, valid] of pairs) {
       assert.equal((await db.query("select $1::text ~* $2::text ok", [valid, pattern])).rows[0].ok, true);
       for (const wrong of ['SELECT * FROM "storage"."objects"', 'delete from "objects_backup" where id=$1', 'SELECT * FROM "public"."unrelated_rpc"($1)']) assert.equal((await db.query("select $1::text ~* $2::text ok", [wrong, pattern])).rows[0].ok, false);
     }
   });
 } finally { await db.close(); }
-const nativeReceipt = { id: randomUUID(), kind: "media-recovery-state", status: "pass", namespace: "owned", articleId: 91, ownedRunId: "owned-run", qaActorId: 7,
+const nativeReceipt = { id: randomUUID(), kind: "media-recovery-state", status: "pass", namespace: "owned", articleId: 91, ownedRunId: "owned-run", qaActorId: 7, observedAt: "2026-09-26T00:10:00.000Z",
   assets: [], objects: [], folders: [], references: [], leases: [], reservations: [], audits: [], binaries: [], recoveryAudits: [],
   storageSha256: "a".repeat(64), publicDataSha256: "b".repeat(64), publicTableInventorySha256: "c".repeat(64) };
 const nativeFixture = { namespace: "owned", article: { id: 91 } };
 await check("complete-native-receipt-required", () => assertCoreRecoveryReceipt(nativeReceipt, nativeReceipt, nativeFixture));
-for (const field of ["id", "status", "namespace", "qaActorId", "objects", "recoveryAudits", "publicDataSha256"]) await check("receipt-rejects-" + field, () => assert.throws(() => assertCoreRecoveryReceipt({ ...nativeReceipt, [field]: null }, nativeReceipt, nativeFixture)));
+for (const field of ["id", "status", "namespace", "qaActorId", "objects", "recoveryAudits", "publicDataSha256", "observedAt"]) await check("receipt-rejects-" + field, () => assert.throws(() => assertCoreRecoveryReceipt({ ...nativeReceipt, [field]: null }, nativeReceipt, nativeFixture)));
 const before = { qaActorId: 7, recoveryAudits: [], assets: [{ id: "owned" }], article: { title: "same" }, storageSha256: "stable", publicDataSha256: "public", publicTableInventorySha256: "inventory" };
 const target = { kind: "asset", id: "owned" };
 const audits = ["requested", "verified"].map((outcome, i) => ({ id: i + 1, operation: "retry_verification", target_id: target.id, target_kind: target.kind, outcome, actor_admin_user_id: 7 }));
@@ -145,6 +157,12 @@ await check("actual-queue-read-fault-is-exact-and-single-use", async () => {
 await check("queue-summary-cannot-contradict-current-targets", () => {
   const queue = { available: true, truncated: false, counts: { stuckDeletes: 1, missingOrUncertainAssets: 0, unresolvedLeaseBatches: 0 }, items: [] };
   assert.throws(() => assertCoreRecoveryQueue(queue, before));
+});
+await check("actual-native-clock-threshold-and-twelve-minute-bound", () => {
+  const reservation = { started_at: "2026-09-26T00:00:00.000Z" };
+  assert.equal(assertCoreRecoveryReservationAge(nativeReceipt, reservation, true), 600000);
+  for (const observedAt of ["2026-09-26T00:09:59.999Z", "2026-09-26T00:12:00.001Z", "2026-09-25T23:59:59.999Z", "invalid"]) assert.throws(() => assertCoreRecoveryReservationAge({ ...nativeReceipt, observedAt }, reservation, true));
+  assert.throws(() => assertCoreRecoveryReservationAge(nativeReceipt, { started_at: null }));
 });
 const paths = [path, "scripts/fixtures/admin-core-media-recovery-journeys.mjs", "scripts/verify-admin-core-media-recovery.mjs"];
 const receipt = { status: "pass", count: checks.length, checks, sourceSha256: Object.fromEntries(paths.map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")])), scope: "Actual producer control flow with scoped controlled SQL ports, PostgreSQL regex semantics, and actual Browser helper proof assertions. Native live locking, Storage deletion and Product Browser remain pending.", automaticCoverage: [], globalClosed: false };

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -34,7 +35,7 @@ export async function runCoreProjectCreateJourneys(ctx) {
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const plan = buildCoreProjectCreatePlan({ manifest, requiredCases, fixtures });
-  const suffix = Date.now().toString(36), completed = [];
+  const suffix = Date.now().toString(36), completed = [], permissionEvidence = [];
   const form = () => page.locator('form[data-admin-form-runtime][data-admin-form-entity="project-entry"]');
   const field = name => form().locator(`[name="${name}"]`);
   const tab = id => form().locator(`[data-admin-tab-id="${id}"]`).click();
@@ -166,6 +167,8 @@ export async function runCoreProjectCreateJourneys(ctx) {
       await assertValues(Object.fromEntries(Object.entries(values).filter(([name]) => name !== "arabic_name")));
     });
     await field("arabic_name").fill(title);
+    const caseId = `core-project-${recipe.kind}-full-create`;
+    const result = await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId,formConsumer:recipe.consumer,surface:recipe.surface},permissionEvidence,perform:async()=>{
     await acknowledge();
     await expect(page).toHaveURL(url => /^\/admin\/projects\/[0-9]+$/u.test(url.pathname), { timeout: 60_000 });
     await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first()).toBeVisible();
@@ -176,13 +179,17 @@ export async function runCoreProjectCreateJourneys(ctx) {
     await expect(form().locator('[id="overview_body-editor"][role="textbox"]')).toHaveText(`Authored ${recipe.kind} project overview ${suffix}.`);
     await tab("delivery");
     await expect(form().locator('[id="delivery_body-editor"][role="textbox"]')).toHaveText(`Authored ${recipe.kind} delivery specification ${suffix}.`);
-    databaseReadback.push({ table: "projects", id, expected: { ...values, latitude: Number(values.latitude), longitude: Number(values.longitude), map_zoom: Number(values.map_zoom), publication_status: "unpublished" },
-      auditEntityType: "project", auditActions: ["project.create"], auditEntityLabel: title });
+    const descriptor = { table: "projects", id, expected: { ...values, latitude: Number(values.latitude), longitude: Number(values.longitude), map_zoom: Number(values.map_zoom), publication_status: "unpublished" },
+      auditEntityType: "project", auditActions: ["project.create"], auditEntityLabel: title };
+    databaseReadback.push(descriptor);
     const result = { consumer: recipe.consumer, surface: recipe.surface, id, kind: recipe.kind,
       verified: ["four_existing_catalog_images_selected_and_confirmed", "four_level_location_selection", "maps_authored_values", "overview_delivery_rich_text", "server_required_name_rejection", "all_authored_input_preserved", "dirty_close_cancel", "retry_create_to_edit", "reload"],
       fields: Object.keys(values), publication: "unpublished", sourceFixtureId: recipe.fixture.id,
-      proofBoundary: "Actual full valid root Project create through current Form controls and shared picker; parent native readback required. No complete capability-axis, publication, provider availability, optional child repeaters, or rollback/permission claim." };
-    completed.push(result); return result;
+      proofBoundary: "Actual full valid root Project create through current Form controls and shared picker; parent native readback required. No complete capability-axis, publication, provider availability, optional child repeaters, or rollback claim. Optional permission evidence proves only the cookie-free HTTP boundary after native save." };
+    return {value:result,nativeWrites:[descriptor]};
+    }});
+    const outcome = {...result,permissionEvidence:permissionEvidence.filter(row=>row.caseId===caseId)};
+    completed.push(outcome); return outcome;
   });
   return { planned: plan.length, completed: completed.length, results: completed };
 }

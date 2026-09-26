@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
 import { readCoreMediaCheckpoint } from "./verify-admin-core-media-isolated.mts";
 
 type Row = Record<string, unknown>;
-type Scenario = "lease" | "finalize" | "missing";
+type Scenario = "lease" | "finalize" | "missing" | "cancel";
 type Holder = { pid: number; backendStart: string; finished: boolean; released: boolean; release: () => void; settled: Promise<void>; failure?: unknown; timer?: ReturnType<typeof setTimeout> };
 type Live = { token: string; scenario: Scenario; assetId: string; articleId: number; deadline: number; phase: "armed" | "switched" | "cancelled"; storage?: Holder; holder: Holder; baselineTitle: string };
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
@@ -14,17 +14,28 @@ const relation = (schema: string, name: string) => '("' + schema + '"|' + schema
 const syncSignature = relation("public", "replace_media_references_for_entity") + "[[:space:]]*\\(";
 const finalizeSignature = relation("public", "finalize_media_asset_deletion") + "[[:space:]]*\\(";
 const storageSignature = 'DELETE[[:space:]]+FROM[[:space:]]+(' + relation("storage", "objects") + '|"?objects"?)[[:space:]]';
+const compensationSignature = relation("public", "cancel_media_asset_deletion") + "[[:space:]]*\\(";
+const exactStorageDeleteSignature = '^[[:space:]]*DELETE[[:space:]]+FROM[[:space:]]+storage\\.objects[[:space:]]+WHERE[[:space:]]+bucket_id[[:space:]]*=[[:space:]]*\\$1[[:space:]]+AND[[:space:]]+"name"[[:space:]]*=[[:space:]]*ANY[[:space:]]*\\(\\$2\\)([[:space:]]+AND[[:space:]]+archived_at[[:space:]]+IS[[:space:]]+NULL)?[[:space:]]+RETURNING[[:space:]]+\\*[[:space:]]*$';
 const committedTitle = "QA Media Recovery committed title";
+const completionReceipts = new WeakMap<OwnedLocalHandle, { records: Map<string, string>; cleanup: string | null }>();
+const receiptHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** Fixed server-registered synthetic Media fixture; no caller-selected SQL or resource identity. */
 export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
   assertOwnedLocalHandle(handle);
+  assert.equal(completionReceipts.has(handle), false, "One Recovery producer per owned lifecycle.");
+  const completion = { records: new Map<string, string>(), cleanup: null as string | null };
+  completionReceipts.set(handle, completion);
+  const bind = (record: Row) => {
+    const id = String(record.id); assert.equal(completion.records.has(id), false);
+    completion.records.set(id, receiptHash(record)); return record;
+  };
   let live: Live | undefined, closed = false, cleanupFailure: unknown;
   const used = new Set<string>(), records: Row[] = [];
   async function state() {
     const media = await readCoreMediaCheckpoint(handle, { id: randomUUID(), kind: "media-library-state" });
-    assert.ok(media.assets.length <= 3, "Recovery admits only three UI uploads, including tombstones.");
-    for (const row of media.assets) assert.ok(["lease", "finalize", "missing"].some(scenario => row.display_name === media.namespace + "-" + scenario + ".png"));
+    assert.ok(media.assets.length <= 4, "Recovery admits only four UI uploads, including tombstones.");
+    for (const row of media.assets) assert.ok(["lease", "finalize", "missing", "cancel"].some(scenario => row.display_name === media.namespace + "-" + scenario + ".png"));
     const ids = media.assets.map(row => row.id);
     const addition = await handle.withDatabaseConnection(async connection => {
       await connection.query("begin isolation level repeatable read read only");
@@ -38,8 +49,10 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
         const audits = (await connection.query("select id,action,entity_type,actor_admin_user_id,metadata->>'operation' operation,metadata->>'targetKind' target_kind,metadata->>'targetId' target_id,metadata->>'outcome' outcome,metadata->>'failureCode' failure_code from public.admin_audit_logs where entity_type='media_asset' and metadata->>'targetId'=any($1::text[]) order by id limit 65", [targets])).rows;
         assert.ok(audits.length <= 64);
         for (const row of audits) assert.equal(Number(row.actor_admin_user_id), media.qaActorId);
+        const observedAt = String((await connection.query("select clock_timestamp()::text observed_at")).rows[0]?.observed_at);
+        assert.ok(Number.isFinite(Date.parse(observedAt)));
         await connection.query("commit"); committed = true;
-        return { leases, reservations, recoveryAudits: audits };
+        return { leases, reservations, recoveryAudits: audits, observedAt };
       } finally { if (!committed) await connection.query("rollback"); }
     });
     return { ...media, ...addition, automaticCoverage: [], globalClosed: false };
@@ -91,7 +104,7 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
     assert.ok(Date.now() < live.deadline && !live.holder.finished && !live.holder.failure);
     return live;
   }
-  async function blocked(holder: Holder, role: "authenticator" | "supabase_storage_admin", signature: string, cancel: boolean, deadline: number) {
+  async function blocked(holder: Holder, role: "authenticator" | "supabase_storage_admin", signature: string, cancel: boolean, deadline: number, expected?: Row) {
     assert.ok(!holder.finished && !holder.released && !holder.failure);
     return handle.withDatabaseConnection(async connection => {
       while (true) {
@@ -111,6 +124,7 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
         assert.match(String(row.query_fingerprint), /^[a-f0-9]{32}$/u);
         const bound = { backendPid: pid, backendStartedAt: row.backend_start, queryStartedAt: row.query_start, queryFingerprint: row.query_fingerprint,
           backendRole: role, exactBlockers: row.blockers, fixedSignatureMatched: true, holderPid: holder.pid, holderBackendStart: holder.backendStart };
+        if (expected) for (const key of ["backendPid", "backendStartedAt", "queryStartedAt", "queryFingerprint", "backendRole", "holderPid", "holderBackendStart"]) assert.equal(bound[key as keyof typeof bound], expected[key], "The originally observed statement lifetime changed.");
         if (!cancel) return { ...bound, cancellationAcknowledged: false };
         assert.ok(!holder.finished && !holder.released && !holder.failure && Date.now() < deadline);
         await connection.query("select pg_stat_clear_snapshot()");
@@ -152,18 +166,22 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
   }
   async function switchDelete(request: Row) {
     const current = currentFor(request); assert.ok(current.scenario !== "lease"); assert.equal(current.phase, "armed");
-    const storageWait = await blocked(current.holder, "supabase_storage_admin", storageSignature, false, Math.min(current.deadline - 10_000, Date.now() + 20_000));
+    const storagePattern = current.scenario === "cancel" ? exactStorageDeleteSignature : storageSignature;
+    const storageWait = await blocked(current.holder, "supabase_storage_admin", storagePattern, false, Math.min(current.deadline - 10_000, Date.now() + 20_000));
     const reservations = (await handle.query("select id,status from public.media_delete_reservations where asset_id=$1::uuid and status='reserved'", [current.assetId])).rows;
     assert.equal(reservations.length, 1, "The real safe-delete reservation must already be committed.");
     const assetHolder = await hold("select id from public.media_assets where id=$1::uuid and status='deleting' for update", [current.assetId]);
     current.storage = current.holder; current.holder = assetHolder;
+    const storageCancelled = current.scenario === "cancel"
+      ? await blocked(current.storage, "supabase_storage_admin", exactStorageDeleteSignature, true, Math.min(current.deadline - 10_000, Date.now() + 15_000), storageWait)
+      : null;
     await release(current.storage); current.storage = undefined; current.phase = "switched";
-    return { status: "pass", phase: current.phase, assetId: current.assetId, reservationId: reservations[0].id, storageWait, storageLockRolledBack: true };
+    return { status: "pass", phase: current.phase, assetId: current.assetId, reservationId: reservations[0].id, storageWait, storageCancelled, storageLockRolledBack: true };
   }
   async function cancel(request: Row) {
     const current = currentFor(request);
     assert.equal(current.phase, current.scenario === "lease" ? "armed" : "switched");
-    const signature = current.scenario === "lease" ? syncSignature : finalizeSignature;
+    const signature = current.scenario === "lease" ? syncSignature : current.scenario === "cancel" ? compensationSignature : finalizeSignature;
     const proof = await blocked(current.holder, "authenticator", signature, true, Math.min(current.deadline - 5_000, Date.now() + 20_000));
     if (current.scenario === "lease") {
       const rows = (await handle.query("select title,image from public.topics where id=$1 and slug='qa-core-media-article'", [current.articleId])).rows;
@@ -179,10 +197,10 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
     const request = input as Row; assert.match(String(request.id), UUID);
     if (request.kind === "media-recovery-state") {
       assert.deepEqual(Object.keys(request).sort(), ["id", "kind"]); assert.equal(live, undefined, "No snapshot while a deliberately blocked writer is active.");
-      return { ...(await state()), id: request.id, kind: request.kind, status: "pass" };
+      return bind({ ...(await state()), id: request.id, kind: request.kind, status: "pass" });
     }
     assert.deepEqual(Object.keys(request).sort(), ["id", "kind", "scenario", "token"]);
-    assert.match(String(request.token), UUID); assert.ok(["lease", "finalize", "missing"].includes(String(request.scenario)));
+    assert.match(String(request.token), UUID); assert.ok(["lease", "finalize", "missing", "cancel"].includes(String(request.scenario)));
     assert.ok(["media-recovery-fault-arm", "media-recovery-fault-switch", "media-recovery-fault-cancel", "media-recovery-fault-release"].includes(String(request.kind)));
     let outcome: Row;
     try {
@@ -197,13 +215,29 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
       if (live) { const current = live; try { await clear(current); } finally { live = undefined; } }
       throw error;
     }
-    const record = { id: request.id, kind: request.kind, scenario: request.scenario, token: request.token, ...outcome }; records.push(record); return record;
+    const record = { id: request.id, kind: request.kind, scenario: request.scenario, token: request.token, ...outcome }; records.push(record); return bind(record);
   }
   async function close() {
     assertOwnedLocalHandle(handle); assert.equal(closed, false); closed = true;
     if (live) { const current = live; try { await clear(current); } finally { live = undefined; } }
     if (cleanupFailure) throw cleanupFailure;
-    return { status: "closed", activeLocks: 0, records, automaticCoverage: [] };
+    const result = { status: "closed", activeLocks: 0, records, automaticCoverage: [] };
+    completion.cleanup = receiptHash(result); return result;
   }
   return { handleRequest, close };
+}
+
+/** Closed producer receipts, including fault identities, must join the same owned lifecycle exactly. */
+export function assertOwnedCoreMediaRecoveryCompletion(handle: OwnedLocalHandle, records: Row[], cleanup: Row) {
+  assertOwnedLocalHandle(handle);
+  const expected = completionReceipts.get(handle); assert.ok(expected?.cleanup, "Recovery must finish owned cleanup first.");
+  assert.equal(receiptHash(cleanup), expected.cleanup, "Cleanup must match the actual closed producer.");
+  assert.equal(records.length, expected.records.size);
+  const seen = new Set<string>();
+  for (const row of records) {
+    const id = String(row.id); assert.match(id, UUID); assert.equal(seen.has(id), false); seen.add(id);
+    assert.equal(row.status, "pass");
+    assert.equal(receiptHash(row), expected.records.get(id), "Recovery checkpoint must match its private native receipt.");
+  }
+  return { checkpoints: seen.size, automaticCoverage: [], globalClosed: false };
 }

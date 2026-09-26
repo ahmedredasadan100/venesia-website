@@ -294,7 +294,9 @@ function AdminEntityListInner<
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const sortCorrectionRef = useRef(false);
   const feedbackChannel = `entity-list:${listId}`;
-  const selection = useAdminGridSelection(rows.map(getRowId));
+  const selection = useAdminGridSelection(rows.map(getRowId), {
+    mutationPending: bulkInteraction?.isBlocked ?? false,
+  });
   assertAdminEntityListContracts({
     listId,
     columns,

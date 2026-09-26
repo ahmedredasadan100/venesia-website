@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedDatabaseConnection, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 
 type Row = Record<string, unknown>;
-type Contract = { key: 'id' | 'project_id' | 'key'; fields: readonly string[]; json?: readonly string[]; audit: readonly string[]; aggregate?: string; blockType?: string };
+type Contract = { key: 'id' | 'project_id' | 'key'; fields: readonly string[]; json?: readonly string[]; audit: readonly string[]; aggregate?: string | readonly string[]; blockType?: string };
 const templates: Record<string, string> = {
   content_block_templates: 'content', hero_templates: 'hero', cta_block_templates: 'cta', cards_block_templates: 'cards',
   breadcrumb_block_templates: 'breadcrumb', feed_module_templates: 'feed', featured_module_templates: 'featured',
@@ -11,7 +11,7 @@ const templates: Record<string, string> = {
 const contracts: Record<string, Contract> = {
   topics: { key: 'id', fields: ['title', 'slug', 'excerpt', 'category_id', 'series_id', 'content_type', 'status', 'content', 'is_featured', 'deleted_at'], json: ['media_payload'], audit: ['topic'], aggregate: 'topic_ids' },
   topic_categories: { key: 'id', fields: ['name', 'slug', 'status', 'description', 'parent_id', 'is_active', 'deleted_at'], audit: ['topic_category'], aggregate: 'category_ids' },
-  topic_series: { key: 'id', fields: ['name', 'slug', 'status', 'description', 'category_id', 'deleted_at'], audit: ['topic_series'], aggregate: 'series_ids' },
+  topic_series: { key: 'id', fields: ['name', 'slug', 'status', 'description', 'category_id', 'deleted_at'], audit: ['topic_series'], aggregate: ['series_ids', 'ids'] },
   pages: { key: 'id', fields: ['title', 'slug', 'path', 'status', 'page_type', 'is_system'], audit: ['page', 'page_composition'] },
   projects: { key: 'id', fields: ['arabic_name', 'english_name', 'code', 'slug', 'type', 'publication_status', 'featured', 'general_description', 'short_description',
     'image', 'image_alt', 'hero_image', 'hero_image_alt', 'small_box_image', 'small_box_image_alt', 'overview_main_image', 'overview_main_image_alt',
@@ -61,11 +61,11 @@ async function readOnly<T>(handle: OwnedLocalHandle, work: (connection: OwnedDat
   });
 }
 function aggregateMatch(contract: Contract, idsParameter: string, keyParameter: string) {
-  return contract.aggregate ? '(a.entity_id is null and exists(select 1 from unnest(' + idsParameter + '::bigint[]) wanted(id) where a.metadata->' + keyParameter + '::text @> jsonb_build_array(wanted.id)))' : 'false';
+  return contract.aggregate ? '(a.entity_id is null and exists(select 1 from unnest(' + idsParameter + '::bigint[]) wanted(id) cross join unnest(' + keyParameter + '::text[]) allowed(key) where a.metadata->allowed.key @> jsonb_build_array(wanted.id)))' : 'false';
 }
 async function readAudit(connection: OwnedDatabaseConnection, contract: Contract, types: string[], ids: number[], since: string) {
   return (await connection.query('select a.id,a.action,a.entity_type,a.entity_id,a.entity_label,a.actor_admin_user_id,a.metadata from public.admin_audit_logs a where a.entity_type=any($1::text[]) and a.created_at >= $2::timestamptz and (a.entity_id=any($3::bigint[]) or ' + aggregateMatch(contract, '$3', '$4') + ') order by a.id',
-    contract.aggregate ? [types, since, ids, contract.aggregate] : [types, since, ids])).rows;
+    contract.aggregate ? [types, since, ids, typeof contract.aggregate === 'string' ? [contract.aggregate] : contract.aggregate] : [types, since, ids])).rows;
 }
 function validateCommandReceipt(row: Row) {
   positive(Number(row.actor_admin_user_id));

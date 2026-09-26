@@ -265,6 +265,7 @@ const cacheOwner = loadTypeScriptModule<
   >
 >(CACHE_OWNER_PATH, {
   "server-only": {},
+  "./public-cache-generation": { advancePublicCacheGeneration: async () => { throw new Error("Topics bounded SWR retry tests must not advance immediate public generations."); } },
   "next/cache": {
     revalidatePath: () => undefined,
     revalidateTag: () => undefined,

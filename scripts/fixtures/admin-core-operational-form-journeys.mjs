@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
@@ -43,13 +44,14 @@ export async function runCoreOperationalFormJourneys(ctx) {
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const plan = buildCoreOperationalFormPlan({ manifest, requiredCases, fixtures });
-  const suffix = Date.now().toString(36), results = [];
+  const suffix = Date.now().toString(36), results = [], permissionEvidence = [];
+  const permissionIntent = (recipe, surface, perform) => runCoreFormPermissionIntent({ permissionReplay: ctx.permissionReplay, mapping: { caseId: "core-operational-" + recipe.kind + "-" + surface, formConsumer: recipe.consumer, surface }, perform, permissionEvidence });
   const form = () => page.locator("form[data-admin-form-runtime]");
   const input = name => form().locator(`[name="${name}"]`);
   const save = () => form().locator('button[type="submit"], [data-admin-users-edit-save]');
   const successful = () => page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first();
   const row = label => page.getByRole("row").filter({ has: page.getByText(label, { exact: true }) });
-  const proofBoundary = "Actual isolated current Form controls, structured rejection, preserved fields, retry and reload; joined native expectations required. Selected authored fields only, no complete capability-axis, permission, rollback, media-provider or optional child-field claim.";
+  const proofBoundary = "Actual isolated current Form controls, structured rejection, preserved fields, retry and reload; joined native expectations required. Selected authored fields only; optional cookie-free HTTP permission receipts follow exact native save/audit proof. No complete capability-axis, UI denial, rollback, media-provider or optional child-field claim.";
 
   async function navigate(path) {
     const leave = async dialog => dialog.type() === "beforeunload" ? dialog.accept() : dialog.dismiss();
@@ -123,11 +125,13 @@ export async function runCoreOperationalFormJourneys(ctx) {
     });
   }
   function audit(table, id, entity, action, label, expected, extra = {}) {
-    databaseReadback.push({ table, id, expected, auditEntityType: entity, auditActions: [action], ...(label ? { auditEntityLabel: label } : {}), ...extra });
+    const descriptor = { table, id, expected, auditEntityType: entity, auditActions: [action], ...(label ? { auditEntityLabel: label } : {}), ...extra };
+    databaseReadback.push(descriptor); return descriptor;
   }
   function complete(recipe, ids, fields, extra = {}) {
     const result = { consumer: recipe.consumer, surfaces: recipe.surfaces, ids, fields,
       verified: ["structured_validation_rejection", "field_preservation", "dirty_close_cancel", "retry", "save_reload"], proofBoundary, ...extra };
+    result.permissionEvidence = permissionEvidence.filter(row => row.formConsumer === recipe.consumer && recipe.surfaces.includes(row.surface));
     results.push(result); return result;
   }
 
@@ -139,14 +143,18 @@ export async function runCoreOperationalFormJourneys(ctx) {
       await fill({ source_path: values.source_path, destination_path: values.destination_path, note: values.note });
       await select("redirect_type", values.redirect_type); await select("status", values.status);
       await dirtyCancel(values); await rejectField("source_path", "/admin/forbidden-core", values, "لا يمكن تحويل مسارات الإدارة أو النظام.");
-      await accepted();
-      const id = await openEdit(path, source); await equal(values);
-      audit("url_redirects", id, "redirect", "redirect.create", source, {});
+      const id = await permissionIntent(recipe, "create", async () => {
+        await accepted(); const createdId = await openEdit(path, source); await equal(values);
+        const descriptor = audit("url_redirects", createdId, "redirect", "redirect.create", source, {});
+        return { value: createdId, nativeWrites: [{ ...descriptor, expected: { ...values } }] };
+      });
       values = { ...values, destination_path: `/qa-core-edited-destination-${suffix}`, note: `QA redirect edited ${suffix}`, redirect_type: "301" };
       await fill({ destination_path: values.destination_path, note: values.note }); await select("redirect_type", values.redirect_type);
       await dirtyCancel(values); await rejectField("source_path", "/admin/forbidden-core", values, "لا يمكن تحويل مسارات الإدارة أو النظام.");
-      await accepted(); await openEdit(path, source); await equal(values); await closeUnchanged();
-      audit("url_redirects", id, "redirect", "redirect.update", source, values);
+      await permissionIntent(recipe, "edit", async () => {
+        await accepted(); await openEdit(path, source); await equal(values); await closeUnchanged();
+        return { nativeWrites: [audit("url_redirects", id, "redirect", "redirect.update", source, values)] };
+      });
       return complete(recipe, [id], Object.keys(values), { publication: "inactive" });
     }
     if (recipe.kind === "profile") {
@@ -157,8 +165,10 @@ export async function runCoreOperationalFormJourneys(ctx) {
       // A five-digit year is valid in the real native date control but is
       // rejected by this Domain's existing four-digit server date contract.
       await rejectField("project_receipt_date", "10000-01-01", values);
-      await accepted(); await openCreate(path, "تعديل بيانات الملف"); await equal(values); await closeUnchanged();
-      audit("project_tracking_profiles", projectId, "project_tracking_profile", "project_children.update", null, values);
+      await permissionIntent(recipe, "tracking-profile", async () => {
+        await accepted(); await openCreate(path, "تعديل بيانات الملف"); await equal(values); await closeUnchanged();
+        return { nativeWrites: [audit("project_tracking_profiles", projectId, "project_tracking_profile", "project_children.update", null, values)] };
+      });
       return complete(recipe, [projectId], Object.keys(values), { rejection: "native_date_value_rejected_by_existing_server_contract" });
     }
     if (["stage", "item", "update"].includes(recipe.kind)) {
@@ -175,18 +185,24 @@ export async function runCoreOperationalFormJourneys(ctx) {
       await fill(values);
       if (kind === "stage") { await input("planned_duration_value").fill("3"); await select("planned_duration_unit", "week"); values = { ...values, planned_duration_value: "3", planned_duration_unit: "week" }; }
       if (kind === "item") { await select("status", "in_progress"); values.status = "in_progress"; }
-      await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error); await accepted();
-      const id = await openEdit(config.path, createdLabel); await equal(values);
-      audit(config.table, id, config.entity, "project_children.create", createdLabel, {});
+      const nativeValues = values => kind === "stage" ? { ...values, planned_duration_value: 3, project_id: parent.projectId, is_visible: true }
+        : kind === "item" ? { ...values, stage_id: parent.stage.id, is_visible: true }
+          : { title: values.title, body: values.body, item_id: parent.item.id, occurred_at: values.occurred_on + "T12:00:00Z", publication_status: "draft" };
+      await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
+      const id = await permissionIntent(recipe, kind + "-create", async () => {
+        await accepted(); const createdId = await openEdit(config.path, createdLabel); await equal(values);
+        const descriptor = audit(config.table, createdId, config.entity, "project_children.create", createdLabel, {});
+        return { value: createdId, nativeWrites: [{ ...descriptor, expected: nativeValues(values) }] };
+      });
       values = { ...values, [config.labelField]: editedLabel,
         ...(kind === "update" ? { body: `QA edited update body ${suffix}` } : { description: `QA edited ${kind} description ${suffix}` }) };
       await fill(kind === "update" ? { title: values.title, body: values.body } : { name: values.name, description: values.description });
-      await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error); await accepted();
-      assert.equal(await openEdit(config.path, editedLabel), id); await equal(values); await closeUnchanged();
-      const expected = kind === "stage" ? { ...values, planned_duration_value: 3, project_id: parent.projectId, is_visible: true }
-        : kind === "item" ? { ...values, stage_id: parent.stage.id, is_visible: true }
-          : { title: values.title, body: values.body, item_id: parent.item.id, occurred_at: `${values.occurred_on}T12:00:00Z`, publication_status: "draft" };
-      audit(config.table, id, config.entity, "project_children.update", editedLabel, expected);
+      await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
+      const expected = nativeValues(values);
+      await permissionIntent(recipe, kind + "-edit", async () => {
+        await accepted(); assert.equal(await openEdit(config.path, editedLabel), id); await equal(values); await closeUnchanged();
+        return { nativeWrites: [audit(config.table, id, config.entity, "project_children.update", editedLabel, expected)] };
+      });
       return complete(recipe, [id], Object.keys(expected), { mediaBoundary: kind === "update" ? "Text-only draft; gallery/video selectors remain separate applicable work." : null });
     }
     assert.equal(recipe.kind, "user");
@@ -199,14 +215,19 @@ export async function runCoreOperationalFormJourneys(ctx) {
     // database expectation, stage name or receipt.
     assert.ok((await input("password").inputValue()) === password, "Private password must survive rejection.");
     assert.ok((await input("confirmPassword").inputValue()) === password, "Private password confirmation must survive rejection.");
-    await accepted(); const id = await openEdit(path, username); await equal(values);
-    audit("admin_users", id, "admin_user", "admin_user.created", username, {});
+    const id = await permissionIntent(recipe, "user-create", async () => {
+      await accepted(); const createdId = await openEdit(path, username); await equal(values);
+      const descriptor = audit("admin_users", createdId, "admin_user", "admin_user.created", username, {});
+      return { value: createdId, nativeWrites: [{ ...descriptor, expected: { ...values, role: "admin", is_active: true } }] };
+    });
     await expect(input("password")).toHaveValue(""); await expect(input("confirmPassword")).toHaveValue("");
     values = { ...values, full_name: `QA Core User edited ${suffix}` };
     await input("full_name").fill(values.full_name); await dirtyCancel(values);
     await rejectField("username", "", values, "اسم المستخدم مطلوب.");
-    await accepted(); assert.equal(await openEdit(path, username), id); await equal(values); await closeUnchanged();
-    audit("admin_users", id, "admin_user", "admin_user.updated", username, { ...values, role: "admin", is_active: true });
+    await permissionIntent(recipe, "user-edit", async () => {
+      await accepted(); assert.equal(await openEdit(path, username), id); await equal(values); await closeUnchanged();
+      return { nativeWrites: [audit("admin_users", id, "admin_user", "admin_user.updated", username, { ...values, role: "admin", is_active: true })] };
+    });
     return complete(recipe, [id], Object.keys(values), { credentialBoundary: "Generated solely in private process memory; no credential artifact or password/hash readback. Separate existing command cohort owns synthetic status/delete." });
   });
 
@@ -234,5 +255,5 @@ export async function runCoreOperationalFormJourneys(ctx) {
     await closeUnchanged();
     return { consumer: "users-and-roles", surface: "identity-collection", verified: ["current_user_visibility_disabled", "current_user_delete_disabled", "current_user_edit_status_disabled", "self_password_controls_absent"], proofBoundary: "Read-only current authenticated synthetic identity UI restrictions; no denied server-command or complete Auth capability claim." };
   });
-  return { planned: plan.recipes.length, completed: results.length, results };
+  return { planned: plan.recipes.length, completed: results.length, results, permissionEvidence, permissionCandidateKeys: permissionEvidence.map(row => row.candidateRequiredCase) };
 }

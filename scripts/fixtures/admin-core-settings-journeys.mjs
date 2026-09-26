@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -14,13 +15,16 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     });
   };
   for(const id of ["global-seo-settings","media-library-settings"])assert.ok(manifest.some(row=>row.id===id));
-  const suffix=Date.now().toString(36);
+  const suffix=Date.now().toString(36), permissionEvidence=[];
+  const permissionIntent=(formConsumer,surface,caseId,perform)=>runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{formConsumer,surface,caseId},perform,permissionEvidence});
+  const permissionFor=consumer=>permissionEvidence.filter(row=>row.formConsumer===consumer);
+  const nativeSetting=descriptor=>Object.fromEntries(Object.entries(descriptor).filter(([key])=>key!=="auditSince"));
   const form=entity=>page.locator('form[data-admin-form-entity="'+entity+'"]');
   const field=(scope,name)=>scope.locator('[name="'+name+'"]:not([type="hidden"])');
   const submit=scope=>scope.locator('button[type="submit"]');
   const acknowledge=async scope=>{const [response]=await Promise.all([actionResponse(),submit(scope).click()]);assertActionAcknowledged(response);};
   const saved=async scope=>{const entity=await scope.getAttribute("data-admin-form-entity");assert.ok(entity);await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="form:'+entity+'"][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-channel="form:'+entity+'"][data-admin-feedback-variant="warning"]').first()).toBeVisible({timeout:60000});await expect(submit(scope)).toBeEnabled();};
-  const settingRead=(key,path,value,since)=>databaseReadback.push({table:"site_settings",id:key,expected:{},expectedJson:[{column:"value",path,value}],auditEntityType:"site_settings",auditEntityLabel:key,auditActions:["site_settings.update"],auditSince:since});
+  const settingRead=(key,projections,since)=>{const descriptor={table:"site_settings",id:key,expected:{},expectedJson:projections.map(([path,value])=>({column:"value",path,value})),auditEntityType:"site_settings",auditEntityLabel:key,auditActions:["site_settings.update"],auditSince:since};databaseReadback.push(descriptor);return descriptor;};
 
   await run("core-company-settings-rejection-preservation-save-reload",coverage("company-identity-settings","singleton-settings"),async()=>{
     const since=new Date().toISOString(),name="QA Core Company "+suffix;
@@ -30,10 +34,13 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     await field(current,"name").fill("   ");await expect(field(current,"name")).toHaveValue("   ");await acknowledge(current);
     await expect(field(current,"name")).toHaveAttribute("aria-invalid","true");await expect(current.locator("#name-error")).toBeVisible();
     await expect(field(current,"name")).toHaveValue("   ");await expect(field(current,"adminLabel")).toHaveValue(originalLabel);
-    await field(current,"name").fill(name);await acknowledge(current);await saved(current);
-    await observe("company-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"adminLabel")).toHaveValue(originalLabel);
-    settingRead("admin.company",["name"],name,since);
-    return {consumer:"company-identity-settings",serverValidation:true,unrelatedFieldPreserved:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
+    await field(current,"name").fill(name);
+    await permissionIntent("company-identity-settings","singleton-settings","core-company-settings-accepted-save",async()=>{
+      await acknowledge(current);await saved(current);
+      await observe("company-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"adminLabel")).toHaveValue(originalLabel);
+      return {nativeWrites:[nativeSetting(settingRead("admin.company",[[["name"],name]],since))]};
+    });
+    return {consumer:"company-identity-settings",permissionEvidence:permissionFor("company-identity-settings"),serverValidation:true,unrelatedFieldPreserved:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
   });
   await run("core-global-seo-settings-rejection-save-reload",[],async()=>{
     const since=new Date().toISOString(),title="QA Core Global SEO "+suffix;
@@ -43,10 +50,15 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     await current.locator('[data-admin-tab-id="crawl"]').click();const canonical=field(current,"canonical_base_url"),old=await canonical.inputValue();
     await canonical.fill("not-a-url");await acknowledge(current);await expect(current.locator("#canonicalBaseUrl-error")).toBeVisible();
     await expect(canonical).toHaveValue("not-a-url");await expect(field(current,"default_title")).toHaveValue(title);
-    await canonical.fill(old);await acknowledge(current);await saved(current);
-    await observe("global-seo-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(field(current,"default_title")).toHaveValue(title);
-    settingRead("seo.global",["defaultTitle"],title,since);
-    return {consumer:"global-seo-settings",serverUrlValidation:true,preservedTitle:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
+    const acceptedCanonical=old.trim()||"https://example.invalid/qa-core-permission";
+    await canonical.fill(acceptedCanonical);
+    await permissionIntent("global-seo-settings","global-meta","core-global-seo-accepted-save",async()=>{
+      await acknowledge(current);await saved(current);
+      await observe("global-seo-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(field(current,"default_title")).toHaveValue(title);
+      await current.locator('[data-admin-tab-id="crawl"]').click();await expect(field(current,"canonical_base_url")).toHaveValue(acceptedCanonical);
+      return {nativeWrites:[nativeSetting(settingRead("seo.global",[[["defaultTitle"],title],[["canonicalBaseUrl"],acceptedCanonical]],since))]};
+    });
+    return {consumer:"global-seo-settings",permissionEvidence:permissionFor("global-seo-settings"),serverUrlValidation:true,preservedTitle:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
   });
   await run("core-media-settings-range-rejection-save-reload",[],async()=>{
     const since=new Date().toISOString();
@@ -56,10 +68,13 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     const document=await field(current,"maxDocumentMb").inputValue();await limit.fill("0");await acknowledge(current);
     await expect(limit).toHaveAttribute("aria-invalid","true");await expect(current.locator("#maxImageMb-error")).toBeVisible();
     await expect(limit).toHaveValue("0");await expect(field(current,"maxDocumentMb")).toHaveValue(document);
-    await limit.fill(String(value));await acknowledge(current);await saved(current);await observe("media-settings-reload",()=>page.reload({waitUntil:"domcontentloaded"}));
-    await expect(limit).toHaveValue(String(value));await expect(field(current,"maxDocumentMb")).toHaveValue(document);
-    settingRead("media.settings",["maxImageBytes"],value*1024*1024,since);
-    return {consumer:"media-library-settings",serverRangeValidation:true,unrelatedPolicyPreserved:true,retrySaved:true,reloaded:true,reconciliationInvoked:false,nativeReadbackRequired:true};
+    await limit.fill(String(value));
+    await permissionIntent("media-library-settings","media-policy-settings","core-media-policy-accepted-save",async()=>{
+      await acknowledge(current);await saved(current);await observe("media-settings-reload",()=>page.reload({waitUntil:"domcontentloaded"}));
+      await expect(limit).toHaveValue(String(value));await expect(field(current,"maxDocumentMb")).toHaveValue(document);
+      return {nativeWrites:[nativeSetting(settingRead("media.settings",[[["maxImageBytes"],value*1024*1024],[["maxDocumentBytes"],Number(document)*1024*1024]],since))]};
+    });
+    return {consumer:"media-library-settings",permissionEvidence:permissionFor("media-library-settings"),serverRangeValidation:true,unrelatedPolicyPreserved:true,retrySaved:true,reloaded:true,reconciliationInvoked:false,nativeReadbackRequired:true};
   });
   await run("core-menu-quick-create-rejection-preservation-retry",coverage("menu-quick-create","menu-create"),async()=>{
     const since=new Date().toISOString(),name="QA Core Menu "+suffix,slug="qa-authored-menu-"+suffix;
@@ -69,10 +84,15 @@ export async function runCoreSettingsAndMenuJourneys(ctx) {
     await current.getByRole("button",{name:"إلغاء",exact:true}).click();const confirm=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});
     await expect(confirm).toBeVisible();await confirm.locator("[data-admin-confirm-cancel]").click();await expect(current.getByRole("button",{name:"إلغاء",exact:true})).toBeFocused();await expect(field(current,"name")).toHaveValue(name);await expect(field(current,"slug")).toHaveValue(slug);
     await field(current,"name").fill("   ");await acknowledge(current);await expect(field(current,"name")).toHaveAttribute("aria-invalid","true");await expect(current.locator("#name-error")).toHaveText("اكتب اسم القائمة.");await expect(field(current,"slug")).toHaveValue(slug);
-    await field(current,"name").fill(name);await acknowledge(current);await expect(page).toHaveURL(url=>/^\/admin\/pages-blocks\/menus\/[0-9]+$/.test(url.pathname),{timeout:60000});
+    await field(current,"name").fill(name);
+    const id=await permissionIntent("menu-quick-create","menu-create","core-menu-quick-create-accepted-save",async()=>{
+await acknowledge(current);await expect(page).toHaveURL(url=>/^\/admin\/pages-blocks\/menus\/[0-9]+$/.test(url.pathname),{timeout:60000});
     const id=Number(new URL(page.url()).pathname.split("/").at(-1));assert.ok(Number.isSafeInteger(id)&&id>0);
     await observe("menu-created-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(page.locator('[name="name"]').first()).toHaveValue(name);await expect(page.locator('[name="slug"]').first()).toHaveValue(slug);
-    databaseReadback.push({table:"menus",id,expected:{name,slug},auditEntityType:"menu",auditEntityLabel:name,auditActions:["menu.create"],auditSince:since});
-    return {consumer:"menu-quick-create",id,dirtyCloseCancelled:true,serverValidation:true,preservedInput:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
+    const descriptor={table:"menus",id,expected:{name,slug},auditEntityType:"menu",auditEntityLabel:name,auditActions:["menu.create"],auditSince:since};databaseReadback.push(descriptor);
+    return {value:id,nativeWrites:[nativeSetting(descriptor)]};
+    });
+    return {consumer:"menu-quick-create",permissionEvidence:permissionFor("menu-quick-create"),id,dirtyCloseCancelled:true,serverValidation:true,preservedInput:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
   });
+  return {permissionEvidence,permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase),automaticCoverage:[]};
 }

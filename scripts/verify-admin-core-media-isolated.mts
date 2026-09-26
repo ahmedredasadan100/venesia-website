@@ -11,6 +11,7 @@ const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-
 type Row = Record<string, unknown>;
 type Registration = { namespace: string; origin: string; qaActorId: number; articleId: number; startedAt: string; ids: Set<string>; history: Map<string, { bucket: string; objectKey: string; publicUrl: string }> };
 const registrations = new WeakMap<OwnedLocalHandle, Registration>();
+const checkpointReceipts = new WeakMap<OwnedLocalHandle, Map<string, string>>();
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const positive = (value: unknown) => { const n = Number(value); assert.ok(Number.isSafeInteger(n) && n > 0); return n; };
 const rowsOf = (result: { rows: Row[] }) => result.rows;
@@ -42,6 +43,7 @@ export async function registerOwnedCoreMediaFixture(handle: OwnedLocalHandle) {
     const registration: Registration = { namespace, origin: url.origin, qaActorId: positive(actors[0].id),
       articleId: positive(article.id), startedAt: new Date().toISOString(), ids: new Set(), history: new Map() };
     registrations.set(handle, registration);
+    checkpointReceipts.set(handle, new Map());
     return { namespace, namespaceUnique: true, maximumAssets: MAX_ASSETS,
       article: { id: registration.articleId, slug: SLUG, title: String(article.title), editPath: "/admin/content/topics/" + registration.articleId } };
   } finally { await response.body?.cancel(); }
@@ -179,7 +181,26 @@ export async function readCoreMediaCheckpoint(handle: OwnedLocalHandle, input: u
   }
   const fingerprint = await readCoreFormPermissionFingerprint(handle, { id: randomUUID(), kind: "form-permission-fingerprint", correlationId: request.id, phase: "after" });
   assertOwnedLocalHandle(handle);
-  return { id: request.id, kind: request.kind, status: "pass", ownedRunId: handle.identity.runId,
+  const receipt = { id: request.id, kind: request.kind, status: "pass", ownedRunId: handle.identity.runId,
     qaActorId: registered.qaActorId, namespace: registered.namespace, articleId: registered.articleId, ...state, binaries, publicDataSha256: fingerprint.publicDataSha256, publicTableInventorySha256: fingerprint.publicTableInventorySha256,
     automaticCoverage: [], scope: "Fixed server-registered synthetic Media fixture and exact QA actor; read-only metadata and bounded local public-byte hashes. No secrets, raw bytes, provider mutation or global closure." };
+  const receipts = checkpointReceipts.get(handle); assert.ok(receipts);
+  assert.equal(receipts.has(request.id), false, "One native Media checkpoint per request identity.");
+  receipts.set(request.id, hash(JSON.stringify(receipt)));
+  return receipt;
+}
+
+/** Join only checkpoints actually produced in this owned lifecycle, without granting capability coverage. */
+export function assertOwnedCoreMediaCheckpointCompletion(handle: OwnedLocalHandle, records: Row[]) {
+  assertOwnedLocalHandle(handle);
+  const expected = checkpointReceipts.get(handle); assert.ok(expected && expected.size > 0);
+  assert.equal(records.length, expected.size, "Every actual Media checkpoint must remain in the aggregate.");
+  const seen = new Set<string>();
+  for (const row of records) {
+    assert.equal(row.kind, "media-library-state"); assert.equal(row.status, "pass");
+    assert.equal(row.ownedRunId, handle.identity.runId);
+    const id = String(row.id); assert.match(id, UUID); assert.equal(seen.has(id), false); seen.add(id);
+    assert.equal(hash(JSON.stringify(row)), expected.get(id), "Checkpoint must match its private native receipt.");
+  }
+  return { checkpoints: seen.size, automaticCoverage: [], globalClosed: false };
 }

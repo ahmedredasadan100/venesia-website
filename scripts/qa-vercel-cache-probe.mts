@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { chromium, expect, type Page } from "playwright/test";
 import { prepareVercelCacheProbe } from "./lib/isolated-public-verification.mts";
-import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode, parseVercelCacheProbeReadTransport } from "./lib/vercel-cache-probe.mts";
+import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode, parseVercelCacheProbeReadTransport, assertVercelCacheProbeFirstGeneration } from "./lib/vercel-cache-probe.mts";
 
 const args = process.argv.slice(2);
 if (args[0] === "prepare") {
@@ -128,9 +128,7 @@ if (args[0] === "prepare") {
         }
         const old = row.oldRead as { key: string; callbackSha256?: string; readerSourceSha256?: string; captureAt: number; commitAt: number; releaseAt: number; writeCompleteAt: number; status: string; invalidations: Array<{generation:string;generationCommittedAt:number;startedAt:number;completedAt:number;calls:number}> };
         if (expectFenced && scenario !== "no-invalidation") {
-          assert.equal(old.invalidations[0].generation, "1");
-          assert.ok(old.commitAt <= old.invalidations[0].generationCommittedAt);
-          assert.ok(old.invalidations[0].generationCommittedAt <= old.invalidations[0].startedAt);
+          assertVercelCacheProbeFirstGeneration(row.invalidated);
         }
         if (gated) {
           assert.ok(old.captureAt <= old.commitAt && old.commitAt <= old.invalidations[0].startedAt);

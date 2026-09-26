@@ -55,7 +55,7 @@ async function terminalTools(ctx) {
     const item = page.locator('[data-admin-row-actions-menu][data-admin-entity-id="' + id + '"] [data-admin-row-action-menu-item="' + kind + '"]');
     await expect(item).toHaveCount(1); return item;
   }
-  async function confirmed(trigger, { cancelFirst = true, reject = false, retryRejected = false } = {}) {
+  async function confirmed(trigger, { cancelFirst = true, reject = false, retryRejected = false, rejectBeforeDelivery = false } = {}) {
     await trigger(); await expect(dialog).toHaveCount(1);
     if (cancelFirst) {
       let posts = 0;
@@ -71,16 +71,16 @@ async function terminalTools(ctx) {
         const confirm = dialog.locator('[data-admin-confirm-submit]');
         await expect(confirm).toBeDisabled(); await expect(dialog.locator('[data-admin-confirm-cancel]')).toBeDisabled();
         await confirm.evaluate(button => button.click());
-      });
+      }, { rejectBeforeDelivery });
       if (reject) {
         await expect(dialog).toHaveCount(1); await expect(dialog.locator('[data-admin-confirm-submit]')).toBeEnabled();
         await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible();
       } else await expect(dialog).toHaveCount(0, { timeout: 60_000 });
     }
     if (reject) { await dialog.locator('[data-admin-confirm-cancel]').click(); await expect(dialog).toHaveCount(0); }
-    return { cancelledBeforeCommit: cancelFirst, pendingDuplicateBlocked: true, attempts, rejected: reject };
+    return { cancelledBeforeCommit: cancelFirst, pendingDuplicateBlocked: true, attempts, rejected: reject, rejectionBoundary: rejectBeforeDelivery ? "owned-pre-delivery-abort" : null };
   }
-  async function heldCommand(click, pendingProof) {
+  async function heldCommand(click, pendingProof, { rejectBeforeDelivery = false } = {}) {
     const currentPath = pathname(); let release, sawHeld, timer, routeFailure, count = 0;
     const gate = new Promise(resolve => { release = resolve; });
     const held = new Promise(resolve => { sawHeld = resolve; });
@@ -88,15 +88,18 @@ async function terminalTools(ctx) {
       const request = route.request();
       if (request.method() !== 'POST' || !request.headers()['next-action'] || new URL(request.url()).pathname !== currentPath) { await route.fallback(); return; }
       count++; sawHeld(); await gate;
-      try { await route.fallback(); } catch (error) { routeFailure = error; }
+      try { if (rejectBeforeDelivery) await route.abort("failed"); else await route.fallback(); } catch (error) { routeFailure = error; }
     };
     const removeRoute = await registerCorePageRoute(page, '**/*', routeHandler);
-    const response = actionResponse(); response.catch(() => {});
+    const response = rejectBeforeDelivery ? page.waitForEvent("requestfailed", { predicate: request => request.method() === "POST" && Boolean(request.headers()["next-action"]) && new URL(request.url()).origin === origin && new URL(request.url()).pathname === currentPath, timeout: 30_000 }) : actionResponse(); response.catch(() => {});
     const clicking = click(); clicking.catch(() => {});
     try {
       await Promise.race([held, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The terminal action did not reach its actual request hold.')), 30_000); })]);
       await pendingProof(); assert.equal(count, 1, 'Pending activation must not submit a duplicate terminal command.'); release();
-      const actual = await response; assertActionAcknowledged(actual); await clicking;
+      const actual = await response;
+      if (rejectBeforeDelivery) assert.ok(actual.failure()?.errorText, "The exact intercepted Action must actually fail transport.");
+      else assertActionAcknowledged(actual);
+      await clicking;
       if (routeFailure) throw routeFailure;
       assert.equal(count, 1);
     } finally { clearTimeout(timer); release(); await removeRoute(); }
@@ -214,15 +217,33 @@ export async function runCoreDomainTerminalJourneys(ctx) {
   for (const recipe of [...direct].sort((a, b) => rank(a.entity) - rank(b.entity))) await run('terminal-' + recipe.entity + '-delete', [], async () => {
     const startedAt = new Date().toISOString(); await t.navigate(recipe);
     const before = await t.probe(recipe, [recipe.id], startedAt); assert.equal(before.rows.length, 1);
+    let rejected = null, permissionCapture = null, permissionEvidence = [];
+    if (recipe.entity === 'admin_users') {
+      const attempt = await t.rowCommand(recipe, recipe.id, 'delete', { reject: true, rejectBeforeDelivery: true });
+      const unchanged = await t.probe(recipe, [recipe.id], startedAt);
+      assert.deepEqual(unchanged.rows, before.rows, 'The rejected Users delete must preserve the current native identity projection.');
+      assert.deepEqual(unchanged.audit, before.audit, 'The rejected Users delete must append no identity audit.');
+      await expect(page.locator(moreSelector(recipe.id))).toHaveCount(1);
+      rejected = { ...attempt, nativeRejected: unchanged.id, optimisticRowRestored: true, nativeIdentityProjectionAndAuditUnchanged: true };
+      assert.equal(typeof ctx.permissionReplay?.begin, 'function', 'Users delete requires the existing permission collector.');
+      permissionCapture = ctx.permissionReplay.begin({ caseId: 'terminal-admin_users-delete', formConsumer: 'users-and-roles', surface: 'delete-command' });
+    }
+    try {
     const confirmation = await t.rowCommand(recipe, recipe.id, 'delete');
     await observe('terminal-direct-delete-reload', () => page.reload({ waitUntil: 'domcontentloaded' })); await expect(page.locator(moreSelector(recipe.id))).toHaveCount(0);
     const after = await t.probe(recipe, [recipe.id], startedAt); assert.equal(after.rows.length, 0);
     const action = recipe.entity === 'admin_users' ? 'admin_user.deleted' : recipe.audit.startsWith('project_tracking_') ? 'project_children.delete' : recipe.audit + '.delete';
     assert.deepEqual(after.audit.map(row => row.action), [action]); assert.ok(after.audit[0].actor_admin_user_id !== null);
+    if (permissionCapture) {
+      const proof = await permissionCapture.verifyAfterSuccessfulUI({ canonicalUiSuccessVerified: true, nativeSaveVerified: true });
+      assert.equal(proof.caseId, 'terminal-admin_users-delete');assert.equal(proof.surface, 'delete-command');assert.deepEqual(proof.automaticCoverage, []);
+      permissionEvidence.push({...proof, originalNativeSaveReceipt: after.id, originalProjectionCount: 1, originalNativeOperation: 'delete'});
+    }
     databaseReadback.push({ table: recipe.table, id: recipe.id, deleted: true, expected: {}, auditEntityTypes: [recipe.audit], auditActions: [action], auditSince: startedAt, exactAuditCount: 1 });
-    const outcome = { entity: recipe.entity, id: recipe.id, confirmation, nativeBefore: before.id, nativeAfter: after.id, domainDeleteCommitted: true,
+    const outcome = { entity: recipe.entity, id: recipe.id, confirmation, rejected, permissionEvidence, nativeBefore: before.id, nativeAfter: after.id, domainDeleteCommitted: true,
       dependencyOrder: recipe.audit.startsWith('project_tracking_') ? 'update then item then stage, after guarded parents were observed' : null };
     outcomes.push(outcome); return outcome;
+    } finally { permissionCapture?.discard(); }
   });
   assert.equal(fixtures.terminalClosure.adminUser.id !== fixtures.commandClosure.adminUser.id, true, 'Terminal Auth fixture must be distinct from the prior visibility fixture.');
   return { outcomes, globalEmptyTrash: 'Only confirmation cancellation here; successful global command belongs to a separate complete-trash-set cohort.' };

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
@@ -31,7 +32,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const { ADMIN_COLLECTION_SURFACE_ADOPTION } = await jiti.import("../../src/lib/admin/interaction-system/adoption-manifest.ts");
   const plan = buildCoreNavigationSettingsPlan({ manifest, collections: ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces, requiredCases, fixtures: fixtures.navigationSettings });
-  const f = fixtures.navigationSettings, r = f.recipe, completed = [], checkpoints = [];
+  const f = fixtures.navigationSettings, r = f.recipe, completed = [], checkpoints = [], permissionEvidence = [];
   const checkpoint = async (entity, phase) => {
     const request = { id: randomUUID(), kind: "navigation-settings-state", entity, phase };
     const result = await nativeCheckpoint(request); for (const key of Object.keys(request)) assert.equal(result[key], request[key]); assert.equal(result.status, "pass"); checkpoints.push(result); return result;
@@ -71,11 +72,16 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await expect(form.locator('[name="title"]')).toHaveValue(r.page.title); await expect(form.locator('[name="path"]')).toHaveValue(f.duplicatePagePath);
     await checkpoint("page", "rejected");
     await form.locator('[name="path"]').fill(r.page.path);
+    await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId:"core-navigation-page-create-accepted-save",formConsumer:"pages-quick-create",surface:"create"},permissionEvidence,perform:async()=>{
     await action(() => form.getByRole("button", { name: "إنشاء وفتح المحرر", exact: true }).click());
     await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/pages\/\d+$/u.test(url.pathname));
     pageId = Number(new URL(page.url()).pathname.split("/").at(-1));
     await goto(`/admin/pages-blocks/pages/${pageId}`); await expect(page.getByRole("heading", { name: `إدارة صفحة ${r.page.title}`, exact: true })).toBeVisible();
-    assert.equal((await checkpoint("page", "created")).pageId, pageId); completed.push("page-create");
+    assert.equal((await checkpoint("page", "created")).pageId, pageId);
+      return {nativeWrites:[{table:"pages",id:pageId,expected:{title:r.page.title,path:r.page.path,slug:r.page.slug,status:"unpublished",page_type:"static"},auditEntityType:"page",auditEntityLabel:r.page.title,auditActions:["page.create"]}]};
+    }});
+    completed.push("page-create");
+    return {consumer:"pages-quick-create",surface:"create",permissionEvidence:[...permissionEvidence],automaticCoverage:[]};
   });
   assert.ok(pageId, "Page creation must finish before dependent metadata work.");
   await run("core-navigation-page-seo-validation-save-reload", [], async () => {
@@ -186,5 +192,5 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await tab("column-2"); await expect(panel().getByLabel("النص / Tagline", { exact: true })).toHaveValue(r.footer.body); await tab("social-legal"); await expect(panel().getByLabel("Copyright", { exact: true })).toHaveValue(r.footer.copyright); await checkpoint("footer", "reloaded"); completed.push("footer-aggregate");
   });
   assert.equal(completed.length, 6);
-  return { status: "pass", completed, plan, checkpoints, requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
+  return { status: "pass", completed, plan, checkpoints, permissionEvidence, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
 }

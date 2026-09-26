@@ -5,7 +5,7 @@ import { resolve, sep } from "node:path";
 import { createRequire } from "node:module";
 import vm from "node:vm";
 import ts from "typescript";
-import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode, parseVercelCacheProbeReadTransport, prepareVercelCacheProbe } from "./lib/vercel-cache-probe.mts";
+import { classifyVercelCacheProbeRequest, parseVercelCacheProbeFenceMode, parseVercelCacheProbeReadTransport, assertVercelCacheProbeFirstGeneration, prepareVercelCacheProbe } from "./lib/vercel-cache-probe.mts";
 const root = realpathSync(resolve(".")), out = resolve(root, ".tmp-qa/core-final-closure/probe-guard-tests-" + Date.now());
 assert.ok(out.startsWith(resolve(root, ".tmp-qa/core-final-closure") + sep)); mkdirSync(out, { recursive: true });
 const source = resolve(root, "scripts/fixtures/vercel-cache-probe");
@@ -15,6 +15,12 @@ const manifest = JSON.parse(readFileSync(resolve(source, "manifest.json"), "utf8
 const cases: string[] = [];
 const fresh = (name: string) => { const path = resolve(out, name); mkdirSync(resolve(path, "scripts/fixtures"), { recursive: true }); cpSync(source, resolve(path, "scripts/fixtures/vercel-cache-probe"), { recursive: true }); return path; };
 try {
+  const timeline={commitAt:10,invalidations:[{generation:"1",generationCommittedAt:11,startedAt:12,completedAt:13,calls:1,failed:false}]};
+  assertVercelCacheProbeFirstGeneration(timeline);cases.push("acknowledged-invalidation-snapshot-proves-serial-generation-order");
+  for(const invalid of [null,{commitAt:null,invalidations:[]},{...timeline,invalidations:[]},{...timeline,invalidations:[...timeline.invalidations,...timeline.invalidations]},
+    ...[{generation:"0"},{generationCommittedAt:9},{startedAt:10},{completedAt:11},{calls:2},{failed:true},{completedAt:NaN}].map(patch=>({...timeline,invalidations:[{...timeline.invalidations[0],...patch}]}))]) {
+    assert.throws(()=>assertVercelCacheProbeFirstGeneration(invalid));cases.push("incomplete-or-reordered-generation-timeline-rejected");
+  }
   assert.equal(parseVercelCacheProbeFenceMode(["run", "--head", "a".repeat(40)]),false); cases.push("omitted-mode-retains-positive-old-race-baseline");
   assert.equal(parseVercelCacheProbeFenceMode(["run", "--expect-fenced", "--head", "a".repeat(40)]),true); cases.push("explicit-flag-selects-fixed-fence-proof");
   for (const [name,args] of [

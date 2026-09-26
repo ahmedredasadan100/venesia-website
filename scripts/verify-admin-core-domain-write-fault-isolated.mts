@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 
+import { TOPIC_CONTROL_KINDS } from "./fixtures/admin-core-topic-controls-contract.mjs";
+import { TEMPLATE_CONTROL_RECIPES } from "./fixtures/admin-core-template-controls-contract.mjs";
+
 type Row = Record<string, unknown>;
-type Target = { table: string; id: number; signature: string; level?: string };
+type Target = { table: string; id: number; signature: string; level?: string; slug?: string };
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const object = (value: unknown): Row => { assert.ok(value && typeof value === 'object' && !Array.isArray(value)); return value as Row; };
@@ -33,6 +36,26 @@ function fixedTargets(input: unknown): Record<string, Target> {
     const entity = 'project_locations_' + row.level; assert.equal(row.entity, entity); assert.ok(!Object.hasOwn(targets, entity));
     targets[entity] = { table: 'project_locations', id: getId(row), signature: rpc('mutate_project_location'), level: String(row.level) };
   }
+  if (fixtures.templateControls !== undefined) {
+    const controls = object(fixtures.templateControls); assert.ok(Array.isArray(controls.templates));
+    assert.equal(controls.templates.length, Object.keys(TEMPLATE_CONTROL_RECIPES).length);
+    for (const [kind, recipe] of Object.entries(TEMPLATE_CONTROL_RECIPES)) {
+      const rows: Row[] = controls.templates.map(object).filter((row: Row) => row.kind === kind);
+      assert.equal(rows.length, 1); const slug = 'qa-admin-page-interaction-' + kind + '-8';
+      assert.equal(rows[0].slug, slug);
+      targets['template_control_' + kind.replaceAll('-', '_')] = { table: recipe.table, id: getId(rows[0]), slug, signature: rpc('mutate_page_composition') };
+    }
+  }
+  if (fixtures.topicControls !== undefined) {
+    const controls = object(fixtures.topicControls); assert.ok(Array.isArray(controls.topics));
+    assert.equal(controls.topics.length, TOPIC_CONTROL_KINDS.length);
+    for (const kind of TOPIC_CONTROL_KINDS) {
+      const rows: Row[] = controls.topics.map(object).filter((row: Row) => row.kind === kind);
+      assert.equal(rows.length, 1); const slug = 'qa-core-topic-controls-' + kind;
+      assert.equal(rows[0].slug, slug);
+      targets['topic_control_' + kind] = { table: 'topics', id: getId(rows[0]), slug, signature: update('topics') };
+    }
+  }
   const identities = Object.values(targets).map(row => row.table + ':' + row.id);
   assert.equal(new Set(identities).size, identities.length);
   return targets;
@@ -40,6 +63,7 @@ function fixedTargets(input: unknown): Record<string, Target> {
 
 type Armed = {
   token: string; entity: string; target: Target; state: 'arming' | 'armed' | 'cancelled' | 'released' | 'expired';
+  observedStatement?: { pid: number; backendStart: unknown; queryStart: unknown; fingerprint: unknown };
   holderPid?: number; holderBackendStart?: string; holderFinished: boolean; releaseRequested: boolean; deadline: number; release: () => void; settled: Promise<void>; failure?: unknown; timer?: ReturnType<typeof setTimeout>;
 };
 
@@ -77,9 +101,10 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
         current.holderPid = positive(Number(identity.pid)); current.holderBackendStart = String(identity.backend_start);
         assert.ok(Number.isFinite(Date.parse(current.holderBackendStart)));
         const target = current.target;
-        const rows = (await connection.query('select id' + (target.level ? ',level' : '') + ' from public.' + target.table + ' where id=$1 for update', [target.id])).rows;
+        const rows = (await connection.query('select id' + (target.level ? ',level' : '') + (target.slug ? ',slug' : '') + ' from public.' + target.table + ' where id=$1 for update', [target.id])).rows;
         assert.equal(rows.length, 1, 'The owned fault target must be one existing fixture row.');
         if (target.level) assert.equal(rows[0].level, target.level);
+        if (target.slug) assert.equal(rows[0].slug, target.slug);
         current.state = 'armed'; current.deadline = Date.now() + 45_000;
         current.timer = setTimeout(() => {
           current.state = 'expired'; current.failure ??= new Error('The owned fixture fault expired before explicit release.');
@@ -102,8 +127,8 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
     return { status: 'pass', state: 'armed', table: current.target.table, fixtureId: current.target.id, deadline: new Date(current.deadline).toISOString(), holderPid: current.holderPid,
       holderBackendStart: current.holderBackendStart, boundary: 'Only the fixed owned fixture row is locked; no grant, schema, Auth or Product change.' };
   }
-  async function cancel(request: Row) {
-    const current = currentFor(request); assert.equal(current.state, 'armed', 'Only one cancellation is allowed per armed token.');
+  async function inspectBlocked(request: Row, cancelStatement: boolean) {
+    const current = currentFor(request); assert.equal(current.state, 'armed', 'Only an armed token may observe or cancel a blocked statement.');
     const cancellationStarted = Date.now();
     const result = await handle.withDatabaseConnection(async connection => {
       const deadline = Math.min(current.deadline - 5_000, Date.now() + 20_000);
@@ -123,8 +148,10 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
         assert.ok(Number.isFinite(Date.parse(String(candidate.backend_start))) && Number.isFinite(Date.parse(String(candidate.query_start))));
         assert.match(String(candidate.query_fingerprint), /^[a-f0-9]{32}$/);
         assert.ok(Date.now() < current.deadline && current.state === 'armed' && !current.holderFinished && !current.failure);
+        const statementIdentity = { pid, backendStart: candidate.backend_start, queryStart: candidate.query_start, fingerprint: candidate.query_fingerprint };
+        if (current.observedStatement) assert.deepEqual(statementIdentity, current.observedStatement, 'A different statement cannot replace the first observed save.');
         await connection.query('select pg_stat_clear_snapshot()');
-        const cancelled = (await connection.query(`select pg_cancel_backend(a.pid) cancelled from pg_stat_activity a
+        const cancelled = (await connection.query(`select ${cancelStatement ? 'pg_cancel_backend(a.pid) cancelled' : 'a.pid observed_pid'} from pg_stat_activity a
           where a.pid=$1::integer and a.backend_start=$2::timestamptz and a.query_start=$3::timestamptz and md5(a.query)=$4
           and a.usename='authenticator' and a.datname=current_database() and a.state='active' and a.backend_type='client backend' and a.wait_event_type='Lock'
           and pg_blocking_pids(a.pid)=array[$5::integer] and a.query ~* $6::text
@@ -133,26 +160,30 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
           and (select count(*) from pg_stat_activity b where $5::integer=any(pg_blocking_pids(b.pid)))=1`,
         [pid, candidate.backend_start, candidate.query_start, candidate.query_fingerprint, current.holderPid, current.target.signature, current.holderBackendStart])).rows;
         assert.equal(cancelled.length, 1, 'The exact observed backend/query/blocker identity changed before cancellation.');
-        assert.equal(cancelled[0].cancelled, true, 'PostgreSQL did not acknowledge cancellation of the one observed statement.');
-        current.state = 'cancelled';
+        if (cancelStatement) {
+          assert.equal(cancelled[0].cancelled, true, 'PostgreSQL did not acknowledge cancellation of the one observed statement.');
+          current.state = 'cancelled';
+        } else assert.equal(Number(cancelled[0].observed_pid), pid, 'The read-only observation must retain the exact blocked statement.');
+        current.observedStatement = statementIdentity;
         return { backendPid: pid, backendStartedAt: candidate.backend_start, queryStartedAt: candidate.query_start,
           applicationName: candidate.application_name, backendRole: candidate.usename, queryFingerprint: candidate.query_fingerprint,
-          exactBlockers: candidate.blockers, fixedMutationSignatureMatched: true, holderLifetimeVerified: true, cancelledOneStatement: true };
+          exactBlockers: candidate.blockers, fixedMutationSignatureMatched: true, holderLifetimeVerified: true, observedOneStatement: true, cancelledOneStatement: cancelStatement };
       }
     });
     return { status: 'pass', state: current.state, table: current.target.table, fixtureId: current.target.id, holderPid: current.holderPid, cancellationElapsedMs: Date.now() - cancellationStarted, ...result,
-      boundary: 'Native query cancellation was acknowledged while the owned lock remains held. The Browser and native before/after proof must independently establish rejection and no commit.' };
+      boundary: cancelStatement ? 'Native query cancellation was acknowledged while the owned lock remains held. The Browser and native before/after proof must independently establish rejection and no commit.' : 'Read-only native observation matched one exact blocked statement and holder lifetime. No cancellation or commit occurred; Browser pending/dedup and later persistence remain separate assertions.' };
   }
   async function handleRequest(input: unknown): Promise<Row> {
     assertOwnedLocalHandle(handle); assert.equal(closed, false);
     const request = object(input); assert.deepEqual(Object.keys(request).sort(), ['entity', 'id', 'kind', 'token']);
     assert.match(String(request.id), uuid); assert.match(String(request.token), uuid);
     assert.equal(typeof request.entity, 'string'); assert.ok(Object.hasOwn(targets, String(request.entity)));
-    assert.ok(['domain-write-fault-arm', 'domain-write-fault-cancel', 'domain-write-fault-release'].includes(String(request.kind)));
+    assert.ok(['domain-write-fault-arm', 'domain-write-fault-observe-blocked', 'domain-write-fault-cancel', 'domain-write-fault-release'].includes(String(request.kind)));
     let outcome: Row;
     try {
       if (request.kind === 'domain-write-fault-arm') outcome = await arm(request);
-      else if (request.kind === 'domain-write-fault-cancel') outcome = await cancel(request);
+      else if (request.kind === 'domain-write-fault-cancel') outcome = await inspectBlocked(request, true);
+      else if (request.kind === 'domain-write-fault-observe-blocked') outcome = await inspectBlocked(request, false);
       else {
         const current = currentFor(request), cancellationObserved = current.state === 'cancelled';
         await settle(current); current.state = 'released'; live = undefined;

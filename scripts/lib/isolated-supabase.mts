@@ -133,6 +133,40 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
     },
   };
 }
+
+/** Fixed installed-pg messages only; never echo arbitrary driver text. */
+export function classifyOwnedPgConnectMessage(error: unknown) {
+  if (!(error instanceof Error)) return null;
+  const message = Object.getOwnPropertyDescriptor(error, "message")?.value;
+  switch (message) {
+    case "timeout expired": return { code: "DB_CONNECTION_TIMEOUT", messageClass: "pg_timeout_expired" };
+    case "Connection terminated unexpectedly": return { code: "DB_CONNECTION_EOF", messageClass: "pg_unexpected_end" };
+    case "Connection terminated": return { code: "DB_CONNECTION_ENDED", messageClass: "pg_requested_end" };
+    case "Connection terminated due to connection timeout": return { code: "DB_CONNECTION_TIMEOUT", messageClass: "pg_legacy_timeout" };
+    default: return null;
+  }
+}
+
+/** Snapshot totals describe this observation window, not the cause of a socket failure. */
+export function describeOwnedPgConnectFailure(error: unknown, elapsedMs: number, before: unknown, after: unknown): Record<string, SafeValue> {
+  const record: Record<string, SafeValue> = {
+    pgMessageClass: classifyOwnedPgConnectMessage(error)?.messageClass ?? "unclassified",
+    elapsedMs: Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs <= Number.MAX_SAFE_INTEGER ? Math.floor(elapsedMs) : null,
+  };
+  for (const [prefix, snapshot] of [["beforeBridge", before], ["afterBridge", after]] as const) {
+    for (const key of ["accepted", "rejected", "failed", "closed", "active", "localProcesses", "stopping"] as const) {
+      let value: SafeValue = null;
+      try {
+        const candidate = snapshot !== null && typeof snapshot === "object" ? (snapshot as Record<string, unknown>)[key] : undefined;
+        if (key === "stopping") { if (typeof candidate === "boolean") value = candidate; }
+        else if (Number.isSafeInteger(candidate) && Number(candidate) >= 0) value = Number(candidate);
+      } catch { /* Diagnostic snapshots cannot replace the original connect failure. */ }
+      record[prefix + key[0].toUpperCase() + key.slice(1)] = value;
+    }
+  }
+  return record;
+}
+
 const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const sleep = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
 const object = (value: unknown): JsonObject => {
@@ -605,7 +639,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       : new IsolatedSupabaseError(typeof error === "object" && error !== null && "code" in error
       && typeof error.code === "string" && (/^[0-9A-Z]{5}$/.test(error.code) || transportCodes.has(error.code)) ? error.code
       : error instanceof Error && ownerTransportCodes.has(error.message) ? error.message
-        : error instanceof Error && error.message === "Connection terminated due to connection timeout" ? "DB_CONNECTION_TIMEOUT" : "PREREQUISITE_OR_OPERATION_FAILED", stage);
+        : error instanceof Error && error.message === "Connection terminated due to connection timeout" ? "DB_CONNECTION_TIMEOUT"
+          : stage === "database-connect" ? classifyOwnedPgConnectMessage(error)?.code ?? "PREREQUISITE_OR_OPERATION_FAILED" : "PREREQUISITE_OR_OPERATION_FAILED", stage);
 
   const inspect = async (kind: "container" | "volume" | "network", id: string): Promise<JsonObject> => {
     requireThat(kind === "volume" ? /^[a-zA-Z0-9_.-]+$/.test(id) : /^[a-f0-9]{64}$/.test(id), "INVALID_RESOURCE_ID", "inventory");
@@ -731,7 +766,18 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     await inspectCaptured(serviceResource("db"));
     const client = new pg.Client({ connectionString: databaseUrl(username), connectionTimeoutMillis: 5000, ssl: false, options: "",
       statement_timeout: 30000, application_name: OWNER }) as PgConnection;
-    try { await client.connect(); } catch (error) { await client.end().catch(() => undefined); throw asSafeError(error, "database-connect"); }
+    const bridgeSnapshot = () => { try { return hostBridge?.snapshot() ?? null; } catch { return null; } };
+    const bridgeBefore = bridgeSnapshot(), started = performance.now();
+    try { await client.connect(); } catch (error) {
+      const elapsedMs = performance.now() - started, safe = asSafeError(error, "database-connect");
+      const observation = describeOwnedPgConnectFailure(error, elapsedMs, bridgeBefore, bridgeSnapshot());
+      // Preserve the classified original failure even if its optional receipt
+      // cannot be written. This never retries or recovers the failed attempt.
+      try { safeRecord("database-connect-failed", { safeCode: safe.code, ...observation }); }
+      catch { /* The original failed attempt still rejects below. */ }
+      await client.end().catch(() => undefined);
+      throw safe;
+    }
     return client;
   };
   const readonly = async (sql: string): Promise<QueryResult> => {

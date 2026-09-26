@@ -25,9 +25,17 @@ export function assertCoreRecoveryReceipt(value, request, fixture) {
   assert.equal(value.namespace, fixture.namespace); assert.equal(value.articleId, fixture.article.id);
   assert.ok(typeof value.ownedRunId === "string" && value.ownedRunId && Number.isSafeInteger(value.qaActorId) && value.qaActorId > 0);
   for (const key of ["assets", "objects", "folders", "references", "leases", "reservations", "audits", "binaries", "recoveryAudits"]) assert.ok(Array.isArray(value[key]), "Missing fixed native projection: " + key);
-  assert.ok(value.assets.length <= 3 && value.leases.length <= 16 && value.reservations.length <= 8);
+  assert.ok(value.assets.length <= 4 && value.leases.length <= 16 && value.reservations.length <= 8);
+  assert.ok(Number.isFinite(Date.parse(value.observedAt)), "The native database clock is required.");
   for (const key of ["storageSha256", "publicDataSha256", "publicTableInventorySha256"]) assert.match(value[key], /^[a-f0-9]{64}$/u);
   for (const row of [...value.audits, ...value.recoveryAudits]) assert.equal(Number(row.actor_admin_user_id), value.qaActorId);
+}
+export function assertCoreRecoveryReservationAge(state, reservation, ready = false) {
+  const start = Date.parse(reservation.started_at), now = Date.parse(state.observedAt);
+  assert.ok(Number.isFinite(start) && Number.isFinite(now));
+  const age = now - start; assert.ok(age >= 0 && age <= 12 * 60_000, "Real reservation age exceeded its 12-minute bound.");
+  if (ready) assert.ok(age >= 10 * 60_000, "Queue repair must follow the actual ten-minute threshold.");
+  return age;
 }
 export function assertCoreRecoveryAudit(before, after, target, action, outcome) {
   assert.equal(after.qaActorId, before.qaActorId);
@@ -83,12 +91,13 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
   const imageField = () => page.locator('[data-admin-media-image-field="image"]');
   const assetButton = (owner, name) => owner.locator("button[aria-pressed]").filter({ has: page.getByText(name, { exact: true }) });
   const specimens = [], completed = [], checkpoints = [], verifiedActions = new Set();
+  let pendingCancellation;
   async function snapshot(label) {
     const request = { id: randomUUID(), kind: "media-recovery-state" };
     const value = await observe("recovery-native-" + label, () => recoveryCheckpoint(request));
     assertCoreRecoveryReceipt(value, request, fixture);
     assert.equal(value.namespace, fixture.namespace); assert.equal(value.articleId, fixture.article.id);
-    assert.ok(Number.isSafeInteger(value.qaActorId) && value.qaActorId > 0 && value.assets.length <= 3);
+    assert.ok(Number.isSafeInteger(value.qaActorId) && value.qaActorId > 0 && value.assets.length <= 4);
     assert.ok(Array.isArray(value.recoveryAudits) && Array.isArray(value.leases) && Array.isArray(value.reservations));
     checkpoints.push({ label, id: value.id }); return value;
   }
@@ -199,7 +208,10 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
     await command("arm");
     try {
       await trigger();
-      if (scenario !== "lease") await command("switch");
+      if (scenario !== "lease") {
+        const switched = await command("switch");
+        if (scenario === "cancel") assert.equal(switched.storageCancelled?.cancellationAcknowledged, true);
+      }
       const cancelled = await command("cancel"); assert.equal(cancelled.cancellationAcknowledged, true);
       if (scenario === "lease") assert.equal(cancelled.domainCommitVerified, true);
     } finally { const released = await command("release"); assert.equal(released.activeLocks, 0); assert.equal(released.ownedTransactionsRolledBack, true); }
@@ -220,13 +232,13 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       const uploads = [], listener = response => { if (new URL(response.url()).pathname === "/api/admin/media-library" && response.request().method() === "POST") uploads.push(response); };
       page.on("response", listener);
       try {
-        await main().locator('input[type="file"][multiple]').setInputFiles(["lease", "finalize", "missing"].map(scenario => ({ name: fixture.namespace + "-" + scenario + ".png", mimeType: "image/png", buffer: png })));
-        await expect.poll(() => uploads.length, { timeout: 60_000 }).toBe(3);
+        await main().locator('input[type="file"][multiple]').setInputFiles(["lease", "finalize", "missing", "cancel"].map(scenario => ({ name: fixture.namespace + "-" + scenario + ".png", mimeType: "image/png", buffer: png })));
+        await expect.poll(() => uploads.length, { timeout: 60_000 }).toBe(4);
         for (const response of uploads) { assert.equal(response.status(), 201); assert.ok((await response.json()).asset.id); }
         await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="media-library"]')).toHaveAttribute("data-admin-feedback-variant", "success");
         await expect(main().getByRole("button", { name: "رفع ملفات", exact: true })).toBeEnabled();
       } finally { page.off("response", listener); }
-      const uploaded = await snapshot("uploaded"); assert.equal(uploaded.assets.length, 3);
+      const uploaded = await snapshot("uploaded"); assert.equal(uploaded.assets.length, 4);
       for (const asset of uploaded.assets) { assertCoreMediaAsset(uploaded, asset.id, { status: "active" }); assert.equal(asset.checksum, createHash("sha256").update(png).digest("hex")); }
       const lease = uploaded.assets.find(row => row.display_name.endsWith("-lease.png")); assert.ok(lease);
       await navigate(fixture.article.editPath); await page.locator('[data-admin-tab-id="basic"]').click();
@@ -242,7 +254,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       await expect(imageField().locator('input[name="image"]')).toHaveValue(lease.public_url);
       const saved = await snapshot("image-saved"); assert.equal(saved.article.image, lease.public_url);
       assert.equal(saved.references.filter(row => row.asset_id === lease.id && row.field_key === "image" && String(row.entity_identity) === String(saved.articleId)).length, 1);
-      return done("prepare", { assets: 3, ownedQueueInitiallyEmpty: true, globalQueueInitiallyEmpty: initial.items.length === 0 });
+      return done("prepare", { assets: 4, ownedQueueInitiallyEmpty: true, globalQueueInitiallyEmpty: initial.items.length === 0 });
     });
     await group("queue-fetch-retry", async () => {
       const before = await snapshot("queue-fetch-before"), prior = await settings();
@@ -260,7 +272,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       return done("queue-fetch-retry", { preDeliveryReadFailure: true, priorQueuePreserved: true, busyReleased: true, realRefreshRetry: true, domainAndAuditUnchanged: true });
     });
     await group("committed-lease-warning", async () => {
-      const before = await snapshot("lease-before"); assert.equal(before.assets.length, 3);
+      const before = await snapshot("lease-before"); assert.equal(before.assets.length, 4);
       await navigate(fixture.article.editPath); await page.locator('[data-admin-tab-id="basic"]').click();
       await page.locator('[name="title"]').fill("QA Media Recovery committed title");
       const response = actionResponse(); response.catch(() => {});
@@ -295,9 +307,32 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       assert.equal(assertCoreRecoveryQueue(await refresh(), after).some(row => row.kind === "write_lease" && row.id === target.id), false);
       return done("resolve-lease", { confirmedAfterNewerReconciliation: true, cancelNoWrite: true, exactActorAudits: true });
     });
+    await group("produce-existing-object-reservation", async () => {
+      const before = await snapshot("cancel-before"), asset = before.assets.find(row => row.display_name.endsWith("-cancel.png")); assert.ok(asset);
+      assertCoreMediaAsset(before, asset.id, { status: "active" });
+      await selectAsset(asset); await main().getByRole("button", { name: /^حذف آمن \(/u }).click();
+      const dialog = page.getByRole("dialog", { name: "حذف الأصول المحددة؟", exact: true });
+      const response = page.waitForResponse(result => matchesCoreMediaResponse(result, origin, "DELETE"), { timeout: 60_000 }); response.catch(() => {});
+      await faulted("cancel", () => dialog.locator("[data-admin-confirm-submit]").click());
+      const actual = await response; assert.equal(actual.status(), 503);
+      const body = await actual.json(); assert.equal(body.code, "media_delete_storage_failed");
+      assert.equal(body.workflow.repairRequired, true); assert.equal(body.workflow.recoveryState, "deleting");
+      await expect(dialog).toBeVisible(); await expect(dialog.locator("[data-admin-confirm-submit]")).toBeEnabled();
+      await dialog.locator("[data-admin-confirm-cancel]").click();
+      const after = await snapshot("cancel-produced"); assertCoreMediaAsset(after, asset.id, { status: "deleting" });
+      assert.deepEqual(after.objects.filter(row => row.bucket_id === asset.bucket && row.name === asset.object_key), before.objects.filter(row => row.bucket_id === asset.bucket && row.name === asset.object_key));
+      const rows = after.reservations.filter(row => row.asset_id === asset.id && row.status === "reserved"); assert.equal(rows.length, 1);
+      const reservation = rows[0]; assert.ok(assertCoreRecoveryReservationAge(after, reservation) < 60_000, "The age starts at a genuinely new reservation.");
+      assert.equal(after.references.some(row => row.asset_id === asset.id), false);
+      assert.equal(after.leases.some(row => row.asset_id === asset.id), false);
+      const initial = assertCoreRecoveryQueue(await settings(), after); assert.equal(initial.some(row => row.id === reservation.id), false);
+      pendingCancellation = { assetId: asset.id, reservationId: reservation.id, startedAt: reservation.started_at, checksum: asset.checksum, publicUrl: asset.public_url, originalObject: before.objects.find(row => row.bucket_id === asset.bucket && row.name === asset.object_key) };
+      return done("produce-existing-object-reservation", { actualStorageAndCompensationFailures: true, reservation: "reserved", objectBytesPreserved: true, earlyQueueHidden: true, startedAt: reservation.started_at });
+    });
     for (const scenario of ["finalize", "missing"]) {
       await group("produce-" + scenario, async () => {
-        await reconcile(); const before = await snapshot(scenario + "-before");
+        // A real complete reconciliation already preceded the reserved fourth asset; per-target guards remain active.
+        const before = await snapshot(scenario + "-before");
         const asset = before.assets.find(row => row.display_name.endsWith("-" + scenario + ".png")); assert.ok(asset);
         await selectAsset(asset);
         await main().getByRole("button", { name: /^حذف آمن \(/u }).click();
@@ -345,8 +380,35 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
         return done("repair-" + scenario, { readOnlyDomainChecks: true, missingCancelRefused: true, terminalState: reservation.status, standaloneAssetChecks: scenario === "missing" });
       });
     }
+    await group("repair-existing-object-reservation", async () => {
+      assert.ok(pendingCancellation, "The actual compensation failure must complete first.");
+      let state, reservation, target;
+      while (true) {
+        state = await snapshot("cancel-real-age");
+        reservation = state.reservations.find(row => row.id === pendingCancellation.reservationId);
+        assert.ok(reservation); assert.equal(reservation.status, "reserved"); assert.equal(reservation.started_at, pendingCancellation.startedAt);
+        const age = assertCoreRecoveryReservationAge(state, reservation);
+        assertCoreMediaAsset(state, pendingCancellation.assetId, { status: "deleting", checksum: pendingCancellation.checksum });
+        const queue = await settings(); target = assertCoreRecoveryQueue(queue, state).find(row => row.kind === "delete_reservation" && row.id === reservation.id);
+        if (target) {
+          state = await snapshot("cancel-age-visible"); reservation = state.reservations.find(row => row.id === pendingCancellation.reservationId);
+          assert.ok(reservation); assert.equal(reservation.started_at, pendingCancellation.startedAt); assertCoreRecoveryReservationAge(state, reservation, true);
+          break;
+        }
+        await observe("recovery-real-age-wait", () => page.waitForTimeout(Math.min(30_000, Math.max(250, 10 * 60_000 - age + 100))));
+      }
+      assert.ok(target.allowedActions.includes("cancel_reservation"));
+      const after = await recoveryAction(target, "cancel_reservation", "mutated");
+      const cancelled = after.reservations.find(row => row.id === reservation.id); assert.ok(cancelled); assert.equal(cancelled.status, "cancelled");
+      assert.equal(cancelled.started_at, pendingCancellation.startedAt);
+      assertCoreMediaAsset(after, pendingCancellation.assetId, { status: "active", reconciliation_state: "synced", missing_object: false, checksum: pendingCancellation.checksum });
+      assert.ok(after.objects.some(row => row.id === pendingCancellation.originalObject.id));
+      assert.equal(after.binaries.find(row => row.publicUrl === pendingCancellation.publicUrl).sha256, pendingCancellation.checksum);
+      assert.equal(assertCoreRecoveryQueue(await refresh(), after).some(row => row.id === target.id), false);
+      return done("repair-existing-object-reservation", { realAgeMs: assertCoreRecoveryReservationAge(state, reservation, true), cancelNoWrite: true, confirmedCancel: true, unchangedObjectIdentityAndBytes: true, exactActorAudits: true });
+    });
     await group("permission", async () => {
-      for (const action of ["retry_verification", "preview_scoped_reconciliation", "resolve_write_lease", "retry_finalization", "confirm_missing"]) {
+      for (const action of ["retry_verification", "preview_scoped_reconciliation", "resolve_write_lease", "retry_finalization", "confirm_missing", "cancel_reservation"]) {
         assert.ok(verifiedActions.has(action) && specimens.some(row => row.action === action), "Actual native-backed original action is mandatory.");
       }
       assert.ok(specimens.some(row => row.action === "GET"));
@@ -364,5 +426,5 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
     });
   } finally { for (const specimen of specimens) specimen.body.fill(0); }
   return { completed, checkpoints, relatedRequiredCases, automaticCoverage: [], globalClosed: false,
-    open: ["Successful cancel_reservation with a still-existing object requires its separate real producer; no fake ten-minute age.", "Active expired lease, queue truncation and missing-schema branches are not proved by these cases."] };
+    open: ["Active expired lease, queue truncation and missing-schema branches are not proved by these cases."] };
 }

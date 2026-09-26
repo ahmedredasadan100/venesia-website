@@ -29,7 +29,7 @@ const evidence = [], databaseReadback = [], readOnlyReadback = [], menuIntegrity
 const inventoryOnly = process.argv.includes("--inventory-only");
 const coreClosure = process.argv.includes("--core-closure");
 const coreCohort = process.argv.find(arg => arg.startsWith("--core-cohort="))?.slice("--core-cohort=".length) ?? "preview-recovery-templates";
-assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation"].includes(coreCohort));
+assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls"].includes(coreCohort));
 let driverCompleted = false, activeCase = "bootstrap";
 let specializedSettingsResult = null;
 let mediaResult = null;
@@ -37,6 +37,9 @@ let navigationSettingsResult = null;
 let authEntryResult = null;
 let mediaRecoveryResult = null;
 let queryPresentationResult = null;
+let templateControlsResult = null;
+let topicControlsResult = null;
+let domainBulkResult = null;
 const progress = [];
 const previewMatrix = collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION.flatMap(consumer =>
   ["published", "unpublished", "deleted"].flatMap(publication => ["authorized", "revoked"].map(session => ({
@@ -80,7 +83,7 @@ function receipt() {
     inventoryOnly, driverCompleted, scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreClosure ? coreCohort : null, proofBoundary: inventoryOnly ? "applicability inventory only; no browser execution" : "owned local production Next and real authenticated application persistence",
     globalClosed: driverCompleted && errors.length === 0 && cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete) && settledPreviewMatrix.every(row => row.status === "behavior_verified"),
     inventorySource: sourceHashes, sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256 ?? null,
-    startedAt, specializedSettings: specializedSettingsResult, media: mediaResult, navigationSettings: navigationSettingsResult, authEntry: authEntryResult, mediaRecovery: mediaRecoveryResult, queryPresentation: queryPresentationResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
+    startedAt, specializedSettings: specializedSettingsResult, media: mediaResult, navigationSettings: navigationSettingsResult, authEntry: authEntryResult, mediaRecovery: mediaRecoveryResult, queryPresentation: queryPresentationResult, templateControls: templateControlsResult, topicControls: topicControlsResult, domainBulk: domainBulkResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
     limitations: ["Unexecuted applicability cells remain open; successful representative journeys do not close the full inventory.",
       "Database readback expectations require the owning parent to verify through its opaque owned handle.",
       "This verifier does not claim production, Vercel delivery, or every permission and failure state."],
@@ -313,20 +316,35 @@ try {
     await runCoreCreateRecoveryJourney({ page, context, origin, output, run, observe, saveForm, saveButton, feedback, databaseReadback });
     const { runCoreCommandRecoveryJourney } = await import("./fixtures/admin-core-command-recovery-journeys.mjs");
     await runCoreCommandRecoveryJourney({ page, origin, output, fixtures, run, observe, feedback, databaseReadback });
-    const { runCoreTemplateFormJourneys } = await import("./fixtures/admin-core-form-journeys.mjs");
-    await runCoreTemplateFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
-   } else if (coreCohort === "domain-forms") {
-    const { runCoreProjectCreateJourneys } = await import("./fixtures/admin-core-project-create-journeys.mjs");
-    await runCoreProjectCreateJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
     const { createCoreFormPermissionContext } = await import("./fixtures/admin-core-form-permission-context.mjs");
     coreFormPermission = createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
+    const { runCoreTemplateFormJourneys } = await import("./fixtures/admin-core-form-journeys.mjs");
+    await runCoreTemplateFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
+    coreFormPermission.close();coreFormPermission=null;
+   } else if (coreCohort === "domain-forms") {
+    const { createCoreFormPermissionContext } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    coreFormPermission = createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
+    const { runCoreProjectCreateJourneys } = await import("./fixtures/admin-core-project-create-journeys.mjs");
+    await runCoreProjectCreateJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
     const { runCoreDomainFormJourneys } = await import("./fixtures/admin-core-domain-form-journeys.mjs");
     await runCoreDomainFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
-    coreFormPermission.close();coreFormPermission=null;
     const { runCoreOperationalFormJourneys } = await import("./fixtures/admin-core-operational-form-journeys.mjs");
-    await runCoreOperationalFormJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
+    await runCoreOperationalFormJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
     const { runCoreSettingsAndMenuJourneys } = await import("./fixtures/admin-core-settings-journeys.mjs");
-    await runCoreSettingsAndMenuJourneys({ page, origin, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases });
+    await runCoreSettingsAndMenuJourneys({ page, origin, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
+    coreFormPermission.close();coreFormPermission=null;
+   } else if (coreCohort === "domain-bulk") {
+    const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
+    const {runCoreDomainBulkJourneys}=await import("./fixtures/admin-core-domain-bulk-journeys.mjs");
+    domainBulkResult=await runCoreDomainBulkJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output}),databaseReadback});
+   } else if (coreCohort === "topic-controls") {
+    const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
+    const {runCoreTopicControlsJourneys}=await import("./fixtures/admin-core-topic-controls-journeys.mjs");
+    topicControlsResult=await runCoreTopicControlsJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+   } else if (coreCohort === "template-controls") {
+    const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
+    const {runCoreTemplateControlsJourneys}=await import("./fixtures/admin-core-template-controls-journeys.mjs");
+    templateControlsResult=await runCoreTemplateControlsJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "query-presentation") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreQueryPresentationJourneys } = await import("./fixtures/admin-core-query-presentation-journeys.mjs");
@@ -343,7 +361,10 @@ try {
    } else if (coreCohort === "navigation-settings") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreNavigationSettingsJourneys } = await import("./fixtures/admin-core-navigation-settings-journeys.mjs");
-    navigationSettingsResult = await runCoreNavigationSettingsJourneys({page,origin,fixtures,run,observe,requiredCases,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    const {createCoreFormPermissionContext}=await import("./fixtures/admin-core-form-permission-context.mjs");
+    coreFormPermission=createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
+    navigationSettingsResult = await runCoreNavigationSettingsJourneys({page,origin,fixtures,run,observe,requiredCases,nativeCheckpoint:createCoreNativeCheckpoint({origin,output}),permissionReplay:coreFormPermission});
+    coreFormPermission.close();coreFormPermission=null;
    } else if (coreCohort === "media-library") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreMediaJourneys } = await import("./fixtures/admin-core-media-journeys.mjs");
@@ -380,8 +401,11 @@ try {
     const { runCoreReadonlyJourneys } = await import("./fixtures/admin-core-readonly-journeys.mjs");
     await runCoreReadonlyJourneys({ page, context, origin, fixtures, run, observe, readOnlyReadback });
     const { runCoreDomainTerminalJourneys, runCoreEmptyTrashSuccessJourneys } = await import("./fixtures/admin-core-domain-terminal-journeys.mjs");
-    const terminalContext = { page, context, origin, output, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback };
+    const { createCoreFormPermissionContext } = await import("./fixtures/admin-core-form-permission-context.mjs");
+    coreFormPermission=createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
+    const terminalContext = { page, context, origin, output, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, permissionReplay:coreFormPermission };
     await runCoreDomainTerminalJourneys(terminalContext);
+    coreFormPermission.close();coreFormPermission=null;
     await runCoreEmptyTrashSuccessJourneys(terminalContext);
     const { runCoreDomainPermissionJourneys } = await import("./fixtures/admin-core-domain-permission-journeys.mjs");
     await runCoreDomainPermissionJourneys({ browser, context, origin, output, fixtures, run, observe, ownedNetworkOnly, revokeSession });

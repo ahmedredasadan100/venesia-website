@@ -90,3 +90,14 @@ export function parseVercelCacheProbeReadTransport(args: readonly string[]) {
   assert.ok(args[matches[0].index+1]===undefined || args[matches[0].index+1].startsWith("--"),"Read transport does not accept a value.");
   return "action" as const;
 }
+
+/** A serial read reply predates mutation; use the acknowledged invalidation snapshot. */
+export function assertVercelCacheProbeFirstGeneration(input: unknown) {
+  assert.ok(input && typeof input === "object");
+  const snapshot=input as {commitAt:number;invalidations:Array<{generation:string;generationCommittedAt:number;startedAt:number;completedAt:number;calls:number;failed:boolean}>};
+  assert.ok(Number.isFinite(snapshot.commitAt) && snapshot.commitAt>0);
+  assert.ok(Array.isArray(snapshot.invalidations));assert.equal(snapshot.invalidations.length,1);
+  const event=snapshot.invalidations[0];assert.equal(event.generation,"1");assert.equal(event.calls,1);assert.equal(event.failed,false);
+  for(const value of [event.generationCommittedAt,event.startedAt,event.completedAt])assert.ok(Number.isFinite(value) && value>0);
+  assert.ok(snapshot.commitAt<=event.generationCommittedAt);assert.ok(event.generationCommittedAt<=event.startedAt);assert.ok(event.startedAt<=event.completedAt);
+}

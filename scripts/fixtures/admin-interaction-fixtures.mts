@@ -313,3 +313,28 @@ export async function seedOwnedCoreQueryPresentationFixtures(handle: OwnedLocalH
   const { prepareCoreQueryPresentationFixtures } = await import('./admin-core-query-presentation-fixtures.mts');
   return prepareCoreQueryPresentationFixtures(handle, fixtures);
 }
+
+
+/** Explicit concrete-template controls opt-in; private credentials stay in this owner. */
+export async function seedOwnedCoreTemplateControlsFixtures(handle: OwnedLocalHandle) {
+  assertOwnedLocalHandle(handle);const credentials=credentialsByHandle.get(handle);assert.ok(credentials);
+  const {prepareCoreTemplateControlsFixtures}=await import("../verify-admin-core-template-controls-isolated.mts");
+  return prepareCoreTemplateControlsFixtures(handle,{username:credentials.username});
+}
+
+/** Explicit independent bulk cohort; existing private account owner remains mandatory. */
+export async function seedOwnedCoreDomainBulkFixtures(handle: OwnedLocalHandle, fixtures: Parameters<typeof import('./admin-core-domain-bulk-fixtures.mts').prepareCoreDomainBulkFixtures>[1]) {
+  assertOwnedLocalHandle(handle);
+  assert.ok(credentialsByHandle.has(handle), "Prepare the canonical owned Admin account before bulk fixtures.");
+  const { prepareCoreDomainBulkFixtures } = await import('./admin-core-domain-bulk-fixtures.mts');
+  return prepareCoreDomainBulkFixtures(handle, fixtures);
+}
+
+/** B4 Topic compound controls: existing owner keeps private credentials. */
+export async function seedOwnedCoreTopicControlsFixtures(handle: OwnedLocalHandle) {
+  assertOwnedLocalHandle(handle);
+  const credentials = credentialsByHandle.get(handle);
+  assert.ok(credentials, "Prepare the canonical owned Admin account before Topic controls.");
+  const { prepareCoreTopicControlsFixtures } = await import("../verify-admin-core-topic-controls-isolated.mts");
+  return prepareCoreTopicControlsFixtures(handle, credentials);
+}
