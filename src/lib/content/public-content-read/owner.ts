@@ -993,25 +993,35 @@ export const loadPublicContentDetail = cache(async function loadPublicContentDet
 
 export async function loadPublicContentSitemapRows(): Promise<PublicContentSitemapRow[]> {
   return unstable_cache(async () => {
-    const { data, error } = await getSupabaseAdmin()
-      .from("topics")
-      .select(PUBLIC_CONTENT_SITEMAP_SELECT)
-      .in("content_type", [...CONTENT_TYPES])
-      .eq("status", "published")
-      .is("deleted_at", null)
-      .not("slug", "like", "e2e-test%");
-
-    if (error) {
-      failPublicContentRead("query_failed", {
-        context: "Public Content sitemap query failed",
-        error,
-      });
-    }
-    if (data === null) {
-      failPublicContentRead("contract_failed", {
-        context: "Public Content sitemap query returned null data",
-        error: new Error("Public Content sitemap data does not satisfy the read contract."),
-      });
+    const data = [];
+    let afterId: number | undefined;
+    for (;;) {
+      const request = getSupabaseAdmin()
+        .from("topics")
+        .select(PUBLIC_CONTENT_SITEMAP_SELECT)
+        .in("content_type", [...CONTENT_TYPES])
+        .eq("status", "published")
+        .is("deleted_at", null)
+        .not("slug", "like", "e2e-test%")
+        .order("id", { ascending: true })
+        .limit(500);
+      if (afterId !== undefined) request.gt("id", afterId);
+      const result = await request;
+      if (result.error) {
+        failPublicContentRead("query_failed", {
+          context: "Public Content sitemap query failed",
+          error: result.error,
+        });
+      }
+      if (result.data === null) {
+        failPublicContentRead("contract_failed", {
+          context: "Public Content sitemap query returned null data",
+          error: new Error("Public Content sitemap data does not satisfy the read contract."),
+        });
+      }
+      if (!result.data.length) break;
+      data.push(...result.data);
+      afterId = result.data[result.data.length - 1].id;
     }
 
     return data.map((row) => {

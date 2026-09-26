@@ -1487,7 +1487,12 @@ export type Database = {
           is_visible: boolean
           item_type: string
           label: string
+          linked_category_id: number | null
           linked_id: number | null
+          linked_page_id: number | null
+          linked_project_id: number | null
+          linked_series_id: number | null
+          linked_topic_id: number | null
           linked_type: string | null
           menu_id: number
           parent_id: number | null
@@ -1505,7 +1510,12 @@ export type Database = {
           is_visible?: boolean
           item_type?: string
           label: string
+          linked_category_id?: number | null
           linked_id?: number | null
+          linked_page_id?: number | null
+          linked_project_id?: number | null
+          linked_series_id?: number | null
+          linked_topic_id?: number | null
           linked_type?: string | null
           menu_id: number
           parent_id?: number | null
@@ -1523,7 +1533,12 @@ export type Database = {
           is_visible?: boolean
           item_type?: string
           label?: string
+          linked_category_id?: number | null
           linked_id?: number | null
+          linked_page_id?: number | null
+          linked_project_id?: number | null
+          linked_series_id?: number | null
+          linked_topic_id?: number | null
           linked_type?: string | null
           menu_id?: number
           parent_id?: number | null
@@ -1533,6 +1548,48 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "menu_items_linked_category_fkey"
+            columns: ["linked_category_id"]
+            isOneToOne: false
+            referencedRelation: "topic_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_items_linked_page_fkey"
+            columns: ["linked_page_id"]
+            isOneToOne: false
+            referencedRelation: "pages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_items_linked_project_fkey"
+            columns: ["linked_project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_items_linked_series_fkey"
+            columns: ["linked_series_id"]
+            isOneToOne: false
+            referencedRelation: "topic_series"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_items_linked_topic_fkey"
+            columns: ["linked_topic_id"]
+            isOneToOne: false
+            referencedRelation: "admin_content_topics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_items_linked_topic_fkey"
+            columns: ["linked_topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "menu_items_menu_id_fkey"
             columns: ["menu_id"]
@@ -3651,16 +3708,17 @@ export type Database = {
       }
       admin_mutate_topics_batch_atomically: {
         Args: {
-          p_actor_id: number
           p_action: string
+          p_actor_id: number
+          p_category_id?: number
+          p_command_id?: string
+          p_expected_deleted_count?: number
           p_topic_ids: number[]
-          p_category_id?: number | null
-          p_expected_deleted_count?: number | null
         }
         Returns: Json
       }
       admin_publish_topics_atomically: {
-        Args: { p_actor_id: number; p_topics: Json }
+        Args: { p_actor_id: number; p_command_id?: string; p_topics: Json }
         Returns: Json
       }
       admin_move_topic_categories_to_trash: {

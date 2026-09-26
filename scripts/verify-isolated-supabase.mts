@@ -459,6 +459,26 @@ async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/is
     t.setTime(239_999); await t.lease.renewIfDue(true); assert.equal(t.connections(), 0);
     cases.push("control lease does no connection or probe outside active Admin jobs or before renewal is due");
   }
+  {
+    const t = setup(); t.setTime(1); t.setError();
+    await t.lease.renewIfDue(false, true); assert.equal(t.connections(), 0);
+    await t.lease.renewIfDue(true, true);
+    assert.equal(t.connections(), 1); assert.equal(t.first.closed, true); assert.equal(t.lease.client, t.second);
+    assert.equal(t.records[0].previousAgeMs, 1);
+    cases.push("explicit verified idle phase renews early through the same healthy identity and closes the prior socket");
+  }
+  {
+    const t = setup(); t.setTime(1);
+    await assert.rejects(t.lease.renewIfDue(true, true), /ECONNRESET/);
+    assert.equal(t.connections(), 1); assert.equal(t.first.closed, false); assert.equal(t.records.length, 0);
+    cases.push("explicit idle phase cannot continue on a deferred fresh socket failure");
+  }
+  {
+    const t = setup(); t.setTime(480_000); t.setError();
+    await assert.rejects(t.lease.renewIfDue(true, true), /ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE/);
+    assert.equal(t.connections(), 0);
+    cases.push("explicit idle phase preserves the existing lease deadline without reconnecting an expired control socket");
+  }
 }
 
 async function adminControlLeaseOnly() {
@@ -500,7 +520,29 @@ function verifyAdminMeasurementRestartPolicy() {
   cases.push("all failed Admin measurement drivers reject same-fixture restart; a successful driver continues");
 }
 
+function verifyFinalQualityGatePlan() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const gates = file.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(file) === "GATES"));
+  const planner = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "finalQualityScriptNames");
+  assert.ok(gates && planner);
+  const code = ts.transpileModule(gates.getText(file) + "\n" + planner.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const plan = new Function("assert", code + ";return finalQualityScriptNames;")(assert) as (scripts: Record<string, string>) => string[];
+  const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  const prefix = plan(scripts);
+  assert.equal(prefix.length + 4, scripts["ci:check"].split("&&").length);
+  assert.equal(prefix[0], "lint"); assert.equal(prefix[1], "typecheck");
+  for (const changed of [
+    { ...scripts, "ci:check": scripts["ci:check"] + " && npm run lint" },
+    { ...scripts, "ci:check": "npm run build && " + scripts["ci:check"] },
+    { ...scripts, "ci:check": scripts["ci:check"].replace("npm run lint", "npm run lint; echo bypass") },
+    { ...scripts, "test:e2e:public": "echo skipped" },
+  ]) assert.throws(() => plan(changed));
+  cases.push("Final Quality Gate derives every non-build step from ci:check and rejects skipped, duplicated, shell-injected or changed Public tails");
+}
+
 async function main() {
+  verifyFinalQualityGatePlan();
   verifyScanner();
   const provenance = verifyReleaseLock();
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-public-application.mts", "scripts/lib/isolated-supabase-cli.mts"];
@@ -617,6 +659,11 @@ async function main() {
   const forgedHandle: Parameters<typeof app.runApplicationHandoff>[0] = {
     identity: { runId, projectName, database: "postgres", host: "127.0.0.1", port: 55965, databaseContainerId: identity.id },
     async query() { queryCalls++; return { rows: [], rowCount: 0 }; },
+    async renewDatabaseControlConnection() { throw Error("Unowned handle must not renew its control connection."); },
+    async generateDatabaseTypes() { throw Error("Unowned handle must not generate database types."); },
+    async callDataApiRpc() { throw Error("Unowned handle must not invoke the Data API."); },
+    async readDataApi() { throw Error("Unowned handle must not read the Data API."); },
+    async withDatabaseConnection() { throw Error("Unowned handle must not open a database connection."); },
     async pushApplicationMigrations() { throw Error("Unowned handle must not reach the CLI."); },
     async runEntitySeoBackfill() { throw Error("Unowned handle must not reach the backfill."); },
     async preparePublicVerification() { throw Error("Unowned handle must not prepare Public verification."); },

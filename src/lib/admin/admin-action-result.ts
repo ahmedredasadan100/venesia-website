@@ -1,5 +1,7 @@
 export type AdminActionResultCode =
   | "batch_limit"
+  | "command_conflict"
+  | "completion_unknown"
   | "committed_cache_revalidation_pending"
   | "committed_reconciliation_pending"
   | "created"
@@ -14,6 +16,7 @@ export type AdminActionResultCode =
   | "published"
   | "permanently_deleted"
   | "revision_conflict"
+  | "resource_in_use"
   | "restored"
   | "saved"
   | "saved_with_media_sync_warning"
@@ -24,6 +27,8 @@ export type AdminActionResultCode =
 
 export type AdminActionResult = {
   ok: boolean;
+  commandId?: string;
+  completion?: "not_committed" | "committed" | "unknown";
   feedbackStatus?: "success" | "warning" | "error";
   title: string;
   message: string;
@@ -38,7 +43,7 @@ export function adminActionFailure(
   message: string,
   options: Pick<
     AdminActionResult,
-    "code" | "correlationId" | "entityId" | "focusTarget"
+    "code" | "correlationId" | "entityId" | "focusTarget" | "commandId" | "completion"
   > = {},
 ): AdminActionResult {
   return {
@@ -55,7 +60,7 @@ export function adminActionSuccess(
   message: string,
   options: Pick<
     AdminActionResult,
-    "code" | "correlationId" | "entityId"
+    "code" | "correlationId" | "entityId" | "commandId" | "completion"
   > = {},
 ): AdminActionResult {
   return {
@@ -72,7 +77,7 @@ export function adminActionWarning(
   message: string,
   options: Pick<
     AdminActionResult,
-    "code" | "correlationId" | "entityId"
+    "code" | "correlationId" | "entityId" | "commandId" | "completion"
   > = {},
 ): AdminActionResult {
   return {
@@ -104,11 +109,16 @@ export function withAdminActionCacheWarning<T extends AdminActionResult>(
 /** Preserve a confirmed domain result while carrying the Data owner's final read state. */
 export function withAdminActionSettledResult(
   result: AdminActionResult,
-  settled: { message: string; feedbackStatus?: "success" | "warning" },
+  settled: { message: string; feedbackStatus?: "success" | "warning"; commandId?: string; completion?: "committed" },
 ): AdminActionResult {
-  if (!result.ok || settled.feedbackStatus !== "warning") return result;
+  if (!result.ok) return result;
+  const confirmed = { ...result,
+    ...(settled.commandId ? { commandId: settled.commandId } : {}),
+    ...(settled.completion ? { completion: settled.completion } : {}),
+  };
+  if (settled.feedbackStatus !== "warning") return confirmed;
   return {
-    ...result,
+    ...confirmed,
     feedbackStatus: "warning",
     title: result.feedbackStatus === "warning"
       ? result.title

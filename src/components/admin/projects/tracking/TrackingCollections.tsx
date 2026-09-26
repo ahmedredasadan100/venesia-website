@@ -24,7 +24,10 @@ import {
   type AdminRowActionsCapability,
 } from "../../ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
-import type { AdminActionResult } from "../../../../lib/admin/admin-action-result";
+import {
+  withAdminActionSettledResult,
+  type AdminActionResult,
+} from "../../../../lib/admin/admin-action-result";
 import type {
   AdminEntityColumnDef,
   AdminEntityFilterDef,
@@ -196,9 +199,10 @@ function toInstantMutationResult(result: AdminActionResult) {
   };
 }
 
-function reorderOptimisticRows<
-  Row extends { id: number; sort_order: number },
->(rows: Row[], orderedIds: readonly number[]) {
+function reorderOptimisticRows<Row extends { id: number; sort_order: number }>(
+  rows: Row[],
+  orderedIds: readonly number[],
+) {
   const rank = new Map(orderedIds.map((id, index) => [id, index]));
   return [...rows]
     .sort(
@@ -330,7 +334,7 @@ export function TrackingStagesCollection({
       const nextVisible = !row.is_visible;
       let actionResult: AdminActionResult | null = null;
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "visibility",
           optimistic: (cache) => {
@@ -358,6 +362,12 @@ export function TrackingStagesCollection({
             return toInstantMutationResult(actionResult);
           },
         });
+        if (actionResult) {
+          actionResult = withAdminActionSettledResult(
+            actionResult,
+            settledResult,
+          );
+        }
         if (actionResult) onMutationResult?.(actionResult);
       } catch (error) {
         if (actionResult) onMutationResult?.(actionResult);
@@ -488,7 +498,7 @@ export function TrackingStagesCollection({
             onReorder={async (next) => {
               let actionResult: AdminActionResult | null = null;
               try {
-                await instant.mutateAsync({
+                const settledResult = await instant.mutateAsync({
                   action: "reorder",
                   bulk: true,
                   optimistic: (cache) =>
@@ -503,6 +513,12 @@ export function TrackingStagesCollection({
                     return toInstantMutationResult(actionResult);
                   },
                 });
+                if (actionResult) {
+                  actionResult = withAdminActionSettledResult(
+                    actionResult,
+                    settledResult,
+                  );
+                }
               } catch (error) {
                 if (actionResult) return actionResult;
                 throw error;
@@ -569,23 +585,31 @@ export function TrackingStagesCollection({
                             onSelect: async () => {
                               let actionResult: AdminActionResult | null = null;
                               try {
-                                await instant.mutateAsync({
-                                  rowId: row.id,
-                                  action: "delete",
-                                  optimistic: (cache) =>
-                                    cache.removeRows(new Set([row.id])),
-                                  execute: async () => {
-                                    actionResult =
-                                      await deleteTrackingStageAction(
-                                        projectId,
-                                        row.id,
-                                        row.name,
+                                const settledResult = await instant.mutateAsync(
+                                  {
+                                    rowId: row.id,
+                                    action: "delete",
+                                    optimistic: (cache) =>
+                                      cache.removeRows(new Set([row.id])),
+                                    execute: async () => {
+                                      actionResult =
+                                        await deleteTrackingStageAction(
+                                          projectId,
+                                          row.id,
+                                          row.name,
+                                        );
+                                      return toInstantMutationResult(
+                                        actionResult,
                                       );
-                                    return toInstantMutationResult(
-                                      actionResult,
-                                    );
+                                    },
                                   },
-                                });
+                                );
+                                if (actionResult) {
+                                  actionResult = withAdminActionSettledResult(
+                                    actionResult,
+                                    settledResult,
+                                  );
+                                }
                                 if (actionResult)
                                   onMutationResult?.(actionResult);
                               } catch (error) {
@@ -690,7 +714,9 @@ export function TrackingStagesCollection({
         </AdminEntityListPrimarySection>
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.stages}>
           <AdminEntityListTableRegion
-            data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}
+            data-admin-entity-list-pending={
+              controller.queryPending ? "true" : "false"
+            }
           >
             <AdminEntityList
               listId="project-tracking-stages"
@@ -736,7 +762,9 @@ export function TrackingStagesCollection({
                   }),
               }}
               onSortColumnHidden={() =>
-                controller.setSort({ ...trackingStagesQueryContract.defaultSort })
+                controller.setSort({
+                  ...trackingStagesQueryContract.defaultSort,
+                })
               }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               toolbar={{
@@ -845,7 +873,7 @@ export function TrackingItemsCollection({
       const nextVisible = !row.is_visible;
       let actionResult: AdminActionResult | null = null;
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "visibility",
           optimistic: (cache) => {
@@ -874,6 +902,12 @@ export function TrackingItemsCollection({
             return toInstantMutationResult(actionResult);
           },
         });
+        if (actionResult) {
+          actionResult = withAdminActionSettledResult(
+            actionResult,
+            settledResult,
+          );
+        }
         if (actionResult) onMutationResult?.(actionResult);
       } catch (error) {
         if (actionResult) onMutationResult?.(actionResult);
@@ -957,7 +991,8 @@ export function TrackingItemsCollection({
         width: 185,
         renderCell: ({ row }) => (
           <span className="text-xs text-white/55">
-            {formatAdminDateOnly(row.start_date)} ← {formatAdminDateOnly(row.completion_date)}
+            {formatAdminDateOnly(row.start_date)} ←{" "}
+            {formatAdminDateOnly(row.completion_date)}
           </span>
         ),
       },
@@ -1015,7 +1050,7 @@ export function TrackingItemsCollection({
             onReorder={async (next) => {
               let actionResult: AdminActionResult | null = null;
               try {
-                await instant.mutateAsync({
+                const settledResult = await instant.mutateAsync({
                   action: "reorder",
                   bulk: true,
                   optimistic: (cache) =>
@@ -1031,6 +1066,12 @@ export function TrackingItemsCollection({
                     return toInstantMutationResult(actionResult);
                   },
                 });
+                if (actionResult) {
+                  actionResult = withAdminActionSettledResult(
+                    actionResult,
+                    settledResult,
+                  );
+                }
               } catch (error) {
                 if (actionResult) return actionResult;
                 throw error;
@@ -1104,24 +1145,32 @@ export function TrackingItemsCollection({
                             onSelect: async () => {
                               let actionResult: AdminActionResult | null = null;
                               try {
-                                await instant.mutateAsync({
-                                  rowId: row.id,
-                                  action: "delete",
-                                  optimistic: (cache) =>
-                                    cache.removeRows(new Set([row.id])),
-                                  execute: async () => {
-                                    actionResult =
-                                      await deleteTrackingItemAction(
-                                        projectId,
-                                        stageId,
-                                        row.id,
-                                        row.name,
+                                const settledResult = await instant.mutateAsync(
+                                  {
+                                    rowId: row.id,
+                                    action: "delete",
+                                    optimistic: (cache) =>
+                                      cache.removeRows(new Set([row.id])),
+                                    execute: async () => {
+                                      actionResult =
+                                        await deleteTrackingItemAction(
+                                          projectId,
+                                          stageId,
+                                          row.id,
+                                          row.name,
+                                        );
+                                      return toInstantMutationResult(
+                                        actionResult,
                                       );
-                                    return toInstantMutationResult(
-                                      actionResult,
-                                    );
+                                    },
                                   },
-                                });
+                                );
+                                if (actionResult) {
+                                  actionResult = withAdminActionSettledResult(
+                                    actionResult,
+                                    settledResult,
+                                  );
+                                }
                                 if (actionResult)
                                   onMutationResult?.(actionResult);
                               } catch (error) {
@@ -1145,14 +1194,7 @@ export function TrackingItemsCollection({
         },
       },
     ],
-    [
-      canonicalReorder,
-      ids,
-      instant,
-      projectId,
-      stageId,
-      toggleVisibility,
-    ],
+    [canonicalReorder, ids, instant, projectId, stageId, toggleVisibility],
   );
   const metrics = controller.result.metrics!,
     basePath = trackingStagePath(projectId, stageId);
@@ -1182,7 +1224,9 @@ export function TrackingItemsCollection({
         />
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.items}>
           <AdminEntityListTableRegion
-            data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}
+            data-admin-entity-list-pending={
+              controller.queryPending ? "true" : "false"
+            }
           >
             <AdminEntityList
               listId="project-tracking-items"
@@ -1229,7 +1273,9 @@ export function TrackingItemsCollection({
                   }),
               }}
               onSortColumnHidden={() =>
-                controller.setSort({ ...trackingItemsQueryContract.defaultSort })
+                controller.setSort({
+                  ...trackingItemsQueryContract.defaultSort,
+                })
               }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               toolbar={{
@@ -1337,7 +1383,7 @@ export function TrackingUpdatesCollection({
       const nextStatus = nextPublished ? "published" : "draft";
       let actionResult: AdminActionResult | null = null;
       try {
-        await instant.mutateAsync({
+        const settledResult = await instant.mutateAsync({
           rowId: row.id,
           action: "visibility",
           optimistic: (cache) => {
@@ -1366,6 +1412,12 @@ export function TrackingUpdatesCollection({
             return toInstantMutationResult(actionResult);
           },
         });
+        if (actionResult) {
+          actionResult = withAdminActionSettledResult(
+            actionResult,
+            settledResult,
+          );
+        }
         if (actionResult) onMutationResult?.(actionResult);
       } catch (error) {
         if (actionResult) onMutationResult?.(actionResult);
@@ -1494,7 +1546,9 @@ export function TrackingUpdatesCollection({
                     items: [
                       {
                         label: "التاريخ",
-                        value: formatAdminDateOnly(row.occurred_at.slice(0, 10)),
+                        value: formatAdminDateOnly(
+                          row.occurred_at.slice(0, 10),
+                        ),
                       },
                       { label: "الحالة", value: row.publication_status },
                       { label: "الوسائط", value: String(row.media.length) },
@@ -1519,7 +1573,7 @@ export function TrackingUpdatesCollection({
                           onSelect: async () => {
                             let actionResult: AdminActionResult | null = null;
                             try {
-                              await instant.mutateAsync({
+                              const settledResult = await instant.mutateAsync({
                                 rowId: row.id,
                                 action: "delete",
                                 optimistic: (cache) =>
@@ -1535,6 +1589,12 @@ export function TrackingUpdatesCollection({
                                   return toInstantMutationResult(actionResult);
                                 },
                               });
+                              if (actionResult) {
+                                actionResult = withAdminActionSettledResult(
+                                  actionResult,
+                                  settledResult,
+                                );
+                              }
                               if (actionResult)
                                 onMutationResult?.(actionResult);
                             } catch (error) {
@@ -1558,13 +1618,7 @@ export function TrackingUpdatesCollection({
         },
       },
     ],
-    [
-      controller,
-      instant,
-      itemId,
-      projectId,
-      togglePublicationVisibility,
-    ],
+    [controller, instant, itemId, projectId, togglePublicationVisibility],
   );
   const metrics = controller.result.metrics!,
     basePath = trackingItemPath(projectId, itemId);
@@ -1594,7 +1648,9 @@ export function TrackingUpdatesCollection({
         />
         <AdminEntityListSurface consumer={PROJECT_TRACKING_ENTITY_KEYS.updates}>
           <AdminEntityListTableRegion
-            data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}
+            data-admin-entity-list-pending={
+              controller.queryPending ? "true" : "false"
+            }
           >
             <AdminEntityList
               listId="project-tracking-updates"
@@ -1639,7 +1695,9 @@ export function TrackingUpdatesCollection({
                   }),
               }}
               onSortColumnHidden={() =>
-                controller.setSort({ ...trackingUpdatesQueryContract.defaultSort })
+                controller.setSort({
+                  ...trackingUpdatesQueryContract.defaultSort,
+                })
               }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               toolbar={{

@@ -207,7 +207,7 @@ check(
     sitemap.includes("safeDate(project.updatedAt)") &&
     sitemap.includes("project.robotsIndex !== false") &&
     sitemap.includes("canonicalOverride: project.canonicalUrl") &&
-    publicLoader.includes('.select("slug,updated_at,canonical_url,robots_index")') &&
+    publicLoader.includes('.select("id,slug,updated_at,canonical_url,robots_index")') &&
     publicLoader.includes('.eq("publication_status", "published")') &&
     !sitemap.includes("loadPublishedProjectSlugs"),
 );

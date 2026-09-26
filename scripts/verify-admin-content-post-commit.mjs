@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,19 +47,27 @@ function harness(kind, options = {}) {
     calls.committed += 1;
     return { data: saved(), error: null };
   };
-  const supabase = { from() {
+  const receipts = new Map();
+  const supabase = { from(table) {
+    let receiptId, receiptActor;
     let columns = "";
     let operation = "read";
     let payload = {};
     const query = {
       select(value) { columns = value; return query; },
-      eq(key, value) { if (key === "slug") calls.slugs.push(value); return query; },
+      eq(key, value) { if (key === "slug") calls.slugs.push(value); if (key === "actor_admin_user_id") receiptActor = value; return query; },
+      contains(_key, value) { receiptId = value.command?.id; return query; },
       neq() { return query; }, is() { return query; }, in() { return query; }, not() { return query; },
       limit() { return query; }, order() { return query; },
       insert(value) { operation = "write"; payload = value; return query; },
       update(value) { operation = "write"; payload = value; return query; },
       delete() { operation = "write"; return query; },
       async maybeSingle() {
+        if (table === "admin_audit_logs") {
+          assert.equal(receiptActor, 1, "Recovery must restrict receipts to the authenticated actor");
+          if (options.receiptUnavailable && receipts.has(receiptId)) throw new Error("Injected receipt read outage");
+          return { data: receipts.get(receiptId) ?? null, error: null };
+        }
         if (operation === "write") {
           const response = write();
           if (response.data) {
@@ -82,6 +92,23 @@ function harness(kind, options = {}) {
       },
     };
     return query;
+  }, async rpc(name, params) {
+    assert.equal(name, "admin_mutate_topics_batch_atomically");
+    assert.equal(params.p_actor_id, 1);
+    assert.match(params.p_command_id, /^[0-9a-f-]{36}$/);
+    const response = write();
+    if (response.error) return { data: null, error: { ...response.error, code: "42501" } };
+    if (options.missingData) return { data: null, error: null };
+    const result = { ok: true, requestedIds: params.p_topic_ids, changedIds: params.p_topic_ids,
+      ...(options.missingIdentity ? {} : { commandId: params.p_command_id }) };
+    if (!options.missingIdentity) {
+      calls.audits += 1;
+      receipts.set(params.p_command_id, { metadata: { command: { id: params.p_command_id,
+        intent: { action: params.p_action, ids: params.p_topic_ids, categoryId: params.p_category_id ?? null, expectedCount: params.p_expected_deleted_count ?? null }, result } } });
+    }
+    if (options.rpcUnknownCode) return { data: null, error: { code: options.rpcUnknownCode, message: "Injected uncertain completion" } };
+    if (options.rpcLostReply) throw new TypeError("Injected lost RPC acknowledgement after commit");
+    return { data: result, error: null };
   } };
   const failCache = () => {
     calls.cache += 1;
@@ -90,7 +117,8 @@ function harness(kind, options = {}) {
   const cacheOwner = load("src/lib/cache/revalidate-public-cache-tags.ts", {
     "server-only": {}, "next/cache": { revalidatePath() {}, revalidateTag() {}, updateTag() {} },
   });
-  const cache = { ...cacheOwner, revalidateTopicsCache: failCache, revalidateMediaCenterCache() {} };
+  const cache = { ...cacheOwner, revalidateTopicsCache: failCache, revalidateMediaCenterCache() {},
+    ...(options.cacheBoundaryThrows ? { runBoundedPublicCacheRevalidation: async () => { throw new Error("Injected unexpected reconciliation boundary rejection"); } } : {}) };
   const audit = { recordCmsAdminAudit: async () => { calls.audits += 1; } };
   const mediaSynchronization = { status: options.mediaWarning ? "saved_with_media_sync_warning" : "synchronized" };
   const coordinatedResult = (value) => options.missingCoordinated ? null : ({ value: options.nullValue ? null : value, mediaSynchronization });
@@ -99,6 +127,7 @@ function harness(kind, options = {}) {
   class TestLeaseError extends Error {}
   const dependencies = {
     "next/cache": { revalidatePath() {} },
+    "node:async_hooks": { AsyncLocalStorage },
   };
   const imports = [...readSource(kind === "article" ? "src/app/admin/content/topics/article-actions/save.ts"
     : kind === "media" ? "src/app/admin/content/topics/media-actions/save.ts"
@@ -317,6 +346,76 @@ try {
       }
     }
   }
+  for (const command of ["toggleUnifiedContentFeatured", "softDeleteUnifiedContent"]) {
+    await check(command + ": lost RPC acknowledgement recovers immutable receipt without replay", async () => {
+      const options = { rpcLostReply: true, cacheFailures: 99 };
+      const { actions, calls } = harness("topics", options);
+      const input = form(); input.set("desired_featured", "true"); input.set("command_id", randomUUID());
+      const first = await actions[command](input);
+      assert.equal(first.completion, "committed"); assert.equal(first.ok, true); assert.equal(first.feedbackStatus, "warning");
+      assert.equal(first.commandId, input.get("command_id")); assert.equal(first.entityId, 7);
+      assert.equal(calls.writes, 1); assert.equal(calls.audits, 1);
+      const replay = await actions[command](input);
+      assert.equal(replay.completion, "committed"); assert.equal(replay.commandId, first.commandId);
+      assert.equal(calls.writes, 1); assert.equal(calls.audits, 1);
+      const opposite = new FormData(); opposite.set("id", "7"); opposite.set("desired_featured", "false"); opposite.set("command_id", first.commandId);
+      const conflict = await actions.toggleUnifiedContentFeatured(opposite);
+      assert.equal(conflict.code, "command_conflict"); assert.equal(conflict.completion, "not_committed");
+      assert.equal(calls.writes, 1); assert.equal(calls.audits, 1);
+    });
+    await check(command + ": known commit survives downstream throw and unreadable receipt", async () => {
+      const { actions, calls } = harness("topics", { cacheBoundaryThrows: true, receiptUnavailable: true });
+      const input = form(); input.set("desired_featured", "true"); input.set("command_id", randomUUID());
+      const result = await actions[command](input);
+      assert.equal(result.ok, true); assert.equal(result.completion, "committed");
+      assert.equal(result.feedbackStatus, "warning"); assert.equal(result.code, "committed_reconciliation_pending");
+      assert.equal(result.commandId, input.get("command_id")); assert.equal(result.entityId, 7);
+      assert.equal(calls.writes, 1); assert.equal(calls.audits, 1);
+    });
+    await check(command + ": known receipt replay and recovery survive downstream throw", async () => {
+      const { actions, calls } = harness("topics", { cacheBoundaryThrows: true });
+      const input = form(); input.set("desired_featured", "true"); input.set("command_id", randomUUID());
+      for (const result of [await actions[command](input), await actions[command](input), await actions.recoverUnifiedContentCommand(String(input.get("command_id")))]) {
+        assert.equal(result.ok, true); assert.equal(result.completion, "committed");
+        assert.equal(result.feedbackStatus, "warning"); assert.equal(result.code, "committed_reconciliation_pending");
+        assert.equal(result.commandId, input.get("command_id")); assert.equal(result.entityId, 7);
+      }
+      assert.equal(calls.writes, 1); assert.equal(calls.audits, 1);
+    });
+    for (const code of ["08007", "08006", "40003", "57P01"]) {
+      for (const receiptUnavailable of [false, true]) {
+        await check(command + ": " + code + " never proves rollback", async () => {
+          const options = { rpcUnknownCode: code, receiptUnavailable };
+          const { actions, calls } = harness("topics", options);
+          const input = form(); input.set("desired_featured", "true"); input.set("command_id", randomUUID());
+          const result = await actions[command](input);
+          assert.equal(result.completion, receiptUnavailable ? "unknown" : "committed");
+          assert.equal(result.ok, !receiptUnavailable);
+          assert.equal(calls.writes, 1); assert.equal(calls.audits, 1);
+          if (receiptUnavailable) {
+            options.receiptUnavailable = false;
+            assert.equal((await actions.recoverUnifiedContentCommand(result.commandId)).completion, "committed");
+            assert.equal(calls.writes, 1); assert.equal(calls.audits, 1);
+          }
+        });
+      }
+    }
+    await check(command + ": unreadable receipt stays unknown until read-only recovery succeeds", async () => {
+      const options = { rpcLostReply: true, receiptUnavailable: true };
+      const { actions, calls } = harness("topics", options);
+      const input = form(); input.set("desired_featured", "true"); input.set("command_id", randomUUID());
+      const first = await actions[command](input);
+      assert.equal(first.completion, "unknown"); assert.equal(first.ok, false); assert.equal(first.feedbackStatus, "warning");
+      assert.equal(calls.writes, 1); assert.equal(calls.audits, 1); assert.equal(calls.cache, 0);
+      const unavailable = await actions.recoverUnifiedContentCommand(first.commandId);
+      assert.equal(unavailable.completion, "unknown"); assert.equal(calls.writes, 1);
+      options.receiptUnavailable = false;
+      const recovered = await actions.recoverUnifiedContentCommand(first.commandId);
+      assert.equal(recovered.completion, "committed"); assert.equal(recovered.commandId, first.commandId);
+      assert.equal(recovered.correlationId, first.commandId); assert.equal(recovered.entityId, 7);
+      assert.equal(calls.writes, 1); assert.equal(calls.audits, 1); assert.equal(calls.cache, 1);
+    });
+  }
   await check("shared cache warning projection never converts explicit failure", () => {
     const result = resultOwner.adminActionFailure("failed", "write not confirmed");
     assert.equal(resultOwner.withAdminActionCacheWarning(result, false), result);
@@ -325,3 +424,6 @@ try {
 
 console.log(JSON.stringify({ proof: "isolated actual server actions; zero real database/network writes", baseline, passed, failed: failures.length, failures }, null, 2));
 if (failures.length && !baseline) process.exitCode = 1;
+
+// The existing post-commit gate also proves every reachable Data-to-Feedback adapter.
+if (!baseline && !failures.length) await import("./qa-admin-settled-result-adoption.mjs");

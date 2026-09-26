@@ -33,11 +33,16 @@ export type {
 
 export type AdminEntityMutationError = {
   ok: false;
+  commandId?: string;
+  completion?: "not_committed" | "committed" | "unknown";
+  feedbackStatus?: "error" | "warning" | "success";
   code: string;
   message: string;
 };
 export type AdminEntityMutationSuccess<Payload = Record<string, never>> = Payload & {
   ok: true;
+  commandId?: string;
+  completion?: "committed";
   message: string;
   feedbackStatus?: "success" | "warning";
 };
@@ -47,7 +52,9 @@ type CacheSnapshot<Row, Metrics> = Array<[
   AdminEntityListResult<Row, Metrics> | undefined,
 ]>;
 
-type AdminEntityMutationResult =
+export type AdminEntityMutationContext = { commandId: string };
+
+export type AdminEntityMutationResult =
   | AdminEntityMutationSuccess<Record<string, unknown>>
   | AdminEntityMutationError;
 
@@ -56,7 +63,10 @@ export type AdminEntityMutationRequest<Row> = {
   action: string;
   bulk?: boolean;
   optimistic: (cache: AdminInstantMutationPatch<Row>) => void;
-  execute: () => Promise<AdminEntityMutationResult>;
+  execute: (context: AdminEntityMutationContext) => Promise<AdminEntityMutationResult>;
+  /** Opt-in receipt recovery: same intent retries recover, never repeat writes. */
+  intentKey?: string;
+  recover?: (context: AdminEntityMutationContext) => Promise<AdminEntityMutationResult>;
   reconcileSuccess?: (
     result: AdminEntityMutationSuccess<Record<string, unknown>>,
     tools: {
@@ -74,6 +84,14 @@ export type AdminInstantMutationPatch<Row> = {
   upsertRows: (rows: Row[], getId: (row: Row) => number | string) => void;
 };
 
+function unknownCompletion(commandId: string): AdminEntityMutationError {
+  return {
+    ok: false, commandId, completion: "unknown", feedbackStatus: "warning",
+    code: "completion_unknown",
+    message: "تعذر تأكيد نتيجة العملية. قد تكون حُفظت؛ استخدم استعادة نتيجة العملية للتحقق قبل تنفيذ إجراء آخر.",
+  };
+}
+
 export function useAdminEntityInstantMutation<
   Row extends { id: number | string }, Metrics = unknown,
 >(
@@ -82,6 +100,20 @@ export function useAdminEntityInstantMutation<
 ) {
   const queryClient = useQueryClient();
   const queueRef = useRef<Promise<unknown>>(Promise.resolve());
+  const unresolvedCommands = useRef(new Map<string, {
+    commandId: string;
+    rowId?: number | string;
+    bulk?: boolean;
+    request: AdminEntityMutationRequest<Row>;
+  }>());
+  const [pendingCommands, setPendingCommands] = useState<Array<{
+    commandId: string; action: string;
+  }>>([]);
+  function publishPendingCommands() {
+    setPendingCommands(Array.from(unresolvedCommands.current.values(), (pending) => ({
+      commandId: pending.commandId, action: pending.request.action,
+    })));
+  }
   const pendingRowsRef = useRef(new Map<number | string, string>());
   const bulkPendingRef = useRef<string | null>(null);
   const [rowPendingActions, setRowPendingActions] = useState<AdminInstantMutationPendingAction[]>([]);
@@ -121,10 +153,45 @@ export function useAdminEntityInstantMutation<
   }
 
   const mutation = useMutation({
-    mutationFn: async (request: AdminEntityMutationRequest<Row>) => {
-      const result = await request.execute();
-      if (!result.ok) throw Object.assign(new Error(result.message), result);
-      return result;
+    mutationFn: async (request: AdminEntityMutationRequest<Row> & {
+      commandId: string;
+      recoveryOnly: boolean;
+    }) => {
+      const command = { commandId: request.commandId };
+      // Existing non-receipt adopters keep their current domain error contract.
+      if (!request.recover) {
+        const result = await request.execute(command);
+        if (!result.ok) throw Object.assign(new Error(result.message), result);
+        return result;
+      }
+      let result: AdminEntityMutationResult;
+      try {
+        result = await (request.recoveryOnly
+          ? request.recover(command)
+          : request.execute(command));
+      } catch {
+        result = unknownCompletion(command.commandId);
+      }
+      if (!result.ok && result.completion === "unknown" && !request.recoveryOnly) {
+        try {
+          result = await request.recover(command);
+        } catch {
+          result = unknownCompletion(command.commandId);
+        }
+      }
+      if (!result.ok) {
+        if (result.completion === "unknown" || request.recoveryOnly) {
+          unresolvedCommands.current.set(request.intentKey!, {
+            ...command, rowId: request.rowId, bulk: request.bulk, request,
+          });
+          publishPendingCommands();
+          result = unknownCompletion(command.commandId);
+        }
+        throw Object.assign(new Error(result.message), result, command);
+      }
+      unresolvedCommands.current.delete(request.intentKey!);
+      publishPendingCommands();
+      return { ...result, ...command, completion: "committed" as const };
     },
     onMutate: async (request) => {
       await queryClient.cancelQueries({ queryKey: adminEntityListQueryKeys.entity(entity) });
@@ -135,7 +202,17 @@ export function useAdminEntityInstantMutation<
       request.optimistic(helpers);
       return { snapshot } as { snapshot: CacheSnapshot<Row, Metrics> };
     },
-    onError: (_error, _request, context) => {
+    onError: async (error, request, context) => {
+      if (request.recover && "completion" in error && error.completion === "unknown") {
+        try {
+          await queryClient.invalidateQueries({
+            queryKey: adminEntityListQueryKeys.entity(entity), refetchType: "active",
+          }, { throwOnError: true });
+        } catch {
+          // A failed read cannot resolve an unknown commit or authorize replay.
+        }
+        return;
+      }
       if (context) restoreSnapshot(context.snapshot);
     },
     onSuccess: async (result, request, context) => {
@@ -172,6 +249,27 @@ export function useAdminEntityInstantMutation<
   });
 
   async function mutateAsync(request: AdminEntityMutationRequest<Row>) {
+    if (request.recover && !request.intentKey) {
+      throw new Error("Receipt-backed mutations require an explicit intent key.");
+    }
+    const previous = request.intentKey
+      ? unresolvedCommands.current.get(request.intentKey)
+      : undefined;
+    const unresolvedConflict = Array.from(unresolvedCommands.current.entries()).find(
+      ([key, pending]) => key !== request.intentKey &&
+        (pending.bulk || request.bulk || pending.rowId == null || request.rowId == null ||
+          pending.rowId === request.rowId),
+    );
+    if (unresolvedConflict) {
+      const result = unknownCompletion(unresolvedConflict[1].commandId);
+      throw Object.assign(new Error(result.message), result);
+    }
+    const identifiedRequest = {
+      ...request,
+      commandId: previous?.commandId ?? globalThis.crypto.randomUUID(),
+      recoveryOnly: Boolean(previous),
+      optimistic: previous ? () => undefined : request.optimistic,
+    };
     const isRowRequest = !request.bulk && request.rowId != null;
     const rowId = request.rowId as number | string;
     const conflictsWithPending = isRowRequest
@@ -199,7 +297,7 @@ export function useAdminEntityInstantMutation<
     }
 
     const queuedMutation = queueRef.current.then(() =>
-      mutation.mutateAsync(request),
+      mutation.mutateAsync(identifiedRequest),
     );
     queueRef.current = queuedMutation.catch(() => undefined);
 
@@ -219,6 +317,16 @@ export function useAdminEntityInstantMutation<
         setBulkPending(null);
       }
     }
+  }
+
+  async function recoverPending(commandId: string) {
+    const pending = Array.from(unresolvedCommands.current.values()).find(
+      (candidate) => candidate.commandId === commandId,
+    );
+    if (!pending) return null;
+    // The original intent and UUID stay in this mounted owner. Recovery never
+    // invokes execute, even after repeated lost recovery responses.
+    return mutateAsync(pending.request);
   }
 
   const getRowInteraction = useCallback(
@@ -242,6 +350,9 @@ export function useAdminEntityInstantMutation<
 
   return {
     mutateAsync,
+    pendingCommand: pendingCommands[0] ?? null,
+    recoverPending,
+    recoveryPending: mutation.isPending,
     getRowInteraction,
     bulkInteraction,
     error: mutation.error,

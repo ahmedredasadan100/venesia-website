@@ -1279,6 +1279,28 @@ try {
     "PostgreSQL recorded a deadlock during the multi-session proof",
   );
 
+  // Keep the historical transition proofs, then validate the current receipt
+  // signature on this same disposable schema before generated-type capture.
+  await resetFixtures(admin);
+  for (const filename of ["20260925200723_topics_batch_atomic_current_state.sql", "20260926013216_topics_command_completion.sql"]) {
+    await admin.query(readFileSync(new URL("../sql/migrations/" + filename, import.meta.url), "utf8"));
+  }
+  await admin.query("grant select(actor_admin_user_id, metadata) on public.admin_audit_logs to service_role; grant select(slug, content_type) on public.topics to service_role");
+  const commandId = "826370c6-7730-4d14-a6c1-dfe0bd4421ee";
+  const commandInput = JSON.stringify([{ id: 1, expected_updated_at: "2026-09-05T06:00:01Z" }]);
+  await admin.query("set role service_role");
+  try {
+    const sql = "select public.admin_publish_topics_atomically(1,$1::jsonb,$2::uuid) result";
+    const first = (await admin.query<{ result: { ok: boolean; commandId: string } }>(sql, [commandInput, commandId])).rows[0].result;
+    assert.equal(first.ok, true); assert.equal(first.commandId, commandId);
+    const replay = (await admin.query<{ result: unknown }>(sql, [commandInput, commandId])).rows[0].result;
+    assert.deepEqual(replay, first, "Explicit command replay must return the original publish receipt");
+  } finally { await admin.query("reset role"); }
+  const currentAcl = (await admin.query<{ overloads: number; anon: boolean; authenticated: boolean; service_role: boolean }>(
+    "select count(*)::int overloads, bool_or(has_function_privilege('anon',p.oid,'execute')) anon, bool_or(has_function_privilege('authenticated',p.oid,'execute')) authenticated, bool_and(has_function_privilege('service_role',p.oid,'execute')) service_role from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='admin_publish_topics_atomically'",
+  )).rows[0];
+  assert.deepEqual(currentAcl, { overloads: 1, anon: false, authenticated: false, service_role: true });
+
   console.log(
     `PASS verify-topics-bulk-publish-postgres17 (PostgreSQL ${identity.version_num}; transactional pgrst notification; catalog/ACL; four real multi-session/rollback proofs plus transactional Audit/input contracts; deadlocks delta=0).`,
   );

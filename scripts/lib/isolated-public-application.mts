@@ -46,6 +46,7 @@ export type ApplicationHandoffReport = {
   seoBackfillVerified: boolean;
   seoIdempotencyVerified: boolean;
   seoEnforceVerified: boolean;
+  pageSeoBackfillVerified: boolean;
   registryReadback: "not_attempted" | "verified_prefix" | "unavailable_or_mismatch";
   canonicalWholeFileRegistryVerified: false;
   officialCliExecutionProvenanceVerified: boolean;
@@ -126,7 +127,8 @@ function recordCli(handle: OwnedLocalHandle, result: ApplicationMigrationCliResu
 
 function recordSeo(handle: OwnedLocalHandle, result: EntitySeoBackfillReport, stage: Stage): void {
   handle.record("application-seo-backfill", {
-    stage, mode: result.mode, complete: result.complete, readyForEnforcement: result.readyForEnforcement,
+    stage, entities: result.entities.map(({ entity }) => entity).join(","),
+    mode: result.mode, complete: result.complete, readyForEnforcement: result.readyForEnforcement,
     ...result.counts,
   });
 }
@@ -221,7 +223,7 @@ export async function runApplicationHandoff(
     status: "blocked", stage: "identity", migration: null, sqlState: null, reason: null,
     planned: 0, baselinePlanned: 0, registered: 0, corpusSha256: null,
     firstMigrationVerified: false, baselineVerified: false, registryReadback: "not_attempted",
-    seoExpandVerified: false, seoBackfillVerified: false, seoIdempotencyVerified: false, seoEnforceVerified: false,
+    seoExpandVerified: false, seoBackfillVerified: false, seoIdempotencyVerified: false, seoEnforceVerified: false, pageSeoBackfillVerified: false,
     canonicalWholeFileRegistryVerified: false, officialCliExecutionProvenanceVerified: false,
     migrationIdempotencyVerified: false, failedMigrationState: "not_started",
     ...(provisioningOnly ? { provisioningOnly: true as const, priorVerificationSuitesRerun: false as const } : {}),
@@ -247,8 +249,11 @@ export async function runApplicationHandoff(
         "20260920010000_public_feed_aggregated_reads.sql",
         "20260920011000_page_composition_layout_regions.sql",
         "20260925001602_f03_page_layout_admin_f07_page_seo_persistence.sql",
+        "20260925200723_topics_batch_atomic_current_state.sql",
+        "20260926013156_menu_resource_reference_integrity.sql",
+        "20260926013216_topics_command_completion.sql",
       ],
-      "Only the reviewed Public Composition and Page SEO extensions may follow the SEO security declaration.",
+      "Only the reviewed composition, SEO, resource-integrity, and Topics command extensions may follow the SEO security declaration.",
     );
     const baseline = migrations.slice(0, seoBoundary);
     assert.equal(new Set(checkpoints.map(({ version }) => version)).size, checkpoints.length);
@@ -341,7 +346,8 @@ export async function runApplicationHandoff(
     await applyPhase(migrations.slice(0, seoBoundary + 2));
     report.seoExpandVerified = true;
 
-    const backfill = async (mode: "dry-run" | "apply" | "verify", stage: Stage): Promise<EntitySeoBackfillReport> => {
+    const backfill = async (mode: "dry-run" | "apply" | "verify", stage: Stage,
+      entities: readonly ("topics" | "projects" | "pages")[] = ["topics", "projects"]): Promise<EntitySeoBackfillReport> => {
       assertOwnedLocalHandle(handle);
       assert.deepEqual(readCanonicalCorpus(), migrations, "Migration source changed before SEO backfill.");
       report.stage = stage;
@@ -349,7 +355,7 @@ export async function runApplicationHandoff(
       report.reason = "seo_backfill_failed";
       let result: EntitySeoBackfillReport;
       try {
-        result = await handle.runEntitySeoBackfill({ mode });
+        result = await handle.runEntitySeoBackfill({ mode, entities });
       } catch (error) {
         // The official tool exposes a counts-only blocked report, never SQL or
         // connection errors. Preserve that evidence without turning it into PASS.
@@ -398,6 +404,17 @@ export async function runApplicationHandoff(
       unknownPositionKinds: legacyPositions.rows.length,
     });
     await applyPhase(migrations);
+    // Pages adopt persisted SEO in the later Page SEO extension. Its columns and
+    // composition-region source do not exist at the Topic/Project EXPAND gate.
+    if (!provisioningOnly) await backfill("dry-run", "seo_dry_run", ["pages"]);
+    await backfill("apply", "seo_apply", ["pages"]);
+    await backfill("verify", "seo_verify", ["pages"]);
+    if (!provisioningOnly) {
+      const idempotentPages = await backfill("apply", "seo_idempotency", ["pages"]);
+      assert.equal(idempotentPages.counts.written, 0, "Page SEO idempotency rerun must not write any row.");
+      await backfill("verify", "seo_verify", ["pages"]);
+    }
+    report.pageSeoBackfillVerified = true;
     // The official CLI owns statement splitting. Preserve its rows and prove
     // source-bound execution; never relabel them as whole-file registry SQL.
     if (!provisioningOnly) {
