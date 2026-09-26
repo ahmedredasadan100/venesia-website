@@ -133,6 +133,7 @@ function actionHarness(kind, options = {}) {
   const helper = kind === "media" ? media : article;
   const common = {
     "server-only": {},
+    "node:async_hooks": require("node:async_hooks"),
     "next/cache": { revalidatePath() {} },
   };
   class LeaseError extends Error {}
