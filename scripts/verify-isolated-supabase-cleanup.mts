@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { assertAbruptRecoveryEvidence, IsolatedSupabaseError, observeApplicationClient } from "./lib/isolated-supabase.mts";
+import { createHash } from "node:crypto";
+import { resolve } from "node:path";
+import { assertAbruptRecoveryBaseline, assertRecoveryCurrentInventory, assertRecoveryCleanupAuthorized, assertAbruptRecoveryArtifactLayout, assertAbruptRecoveryEvidence, IsolatedSupabaseError, observeApplicationClient } from "./lib/isolated-supabase.mts";
 
 let controls = 0;
 const passed = () => { controls++; };
@@ -75,4 +77,78 @@ for (const mutate of mutations) {
   assert.throws(() => assertAbruptRecoveryEvidence(changed), IsolatedSupabaseError);
   passed();
 }
+const runnerPath = resolve(".tmp-qa/core-final-closure/run-browser-cohort.mts");
+const directDir = resolve(".tmp-qa/core-final-closure/browser-r57");
+const layoutInput = { runnerPath, runnerArgument: "browser-r57", artifactDir: directDir };
+assert.doesNotThrow(() => assertAbruptRecoveryArtifactLayout({ ...layoutInput, artifactDir: resolve(directDir, "runtime") })); passed();
+assert.doesNotThrow(() => assertAbruptRecoveryArtifactLayout({ ...layoutInput, artifactDir: resolve(directDir, "runtime"), artifactLayout: "nested-runtime" })); passed();
+assert.doesNotThrow(() => assertAbruptRecoveryArtifactLayout({ ...layoutInput, artifactLayout: "direct-runner-argument" })); passed();
+const badLayouts: Array<Parameters<typeof assertAbruptRecoveryArtifactLayout>[0]> = [
+  layoutInput,
+  { ...layoutInput, artifactLayout: "nested-runtime" },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", artifactDir: resolve(directDir, "runtime") },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", artifactDir: resolve(directDir, "..", "browser-r58") },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", artifactDir: resolve(directDir, "..", "..", "foreign", "browser-r57") },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", runnerArgument: "../browser-r57" },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", runnerArgument: "browser-r57/runtime" },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", runnerArgument: "browser-r57\\runtime" },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", runnerArgument: "" },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", runnerArgument: directDir },
+  { ...layoutInput, artifactLayout: "direct-runner-argument", runnerPath: resolve(".tmp-qa/other/run-browser-cohort.mts") },
+  { ...layoutInput, artifactLayout: "arbitrary" as "nested-runtime" },
+];
+for (const input of badLayouts) { assert.throws(() => assertAbruptRecoveryArtifactLayout(input), IsolatedSupabaseError); passed(); }
+for (const [requested, authorized] of [[false, false], [false, true], [true, true]] as const) {
+  assert.doesNotThrow(() => assertRecoveryCleanupAuthorized(requested, authorized)); passed();
+}
+assert.throws(() => assertRecoveryCleanupAuthorized(true, false), error => error instanceof IsolatedSupabaseError
+  && error.code === "RECOVERY_CLEANUP_NOT_AUTHORIZED" && error.stage === "cleanup"); passed();
+
+const oldInventoryHash = "a".repeat(64), currentInventoryHash = "b".repeat(64);
+const transition = { priorOperationalSha256: oldInventoryHash, currentOperationalSha256: currentInventoryHash,
+  reason: "observed-pre-recovery-inventory-change" as const };
+assert.deepEqual(assertAbruptRecoveryBaseline(oldInventoryHash, oldInventoryHash),
+  { historicalBaselineUnchanged: true, baselineChangedBeforeRecovery: false }); passed();
+assert.throws(() => assertAbruptRecoveryBaseline(oldInventoryHash, currentInventoryHash),
+  error => error instanceof IsolatedSupabaseError && error.code === "PRIOR_BASELINE_CHANGED"); passed();
+assert.deepEqual(assertAbruptRecoveryBaseline(oldInventoryHash, currentInventoryHash, transition),
+  { historicalBaselineUnchanged: false, baselineChangedBeforeRecovery: true }); passed();
+for (const invalid of [
+  { ...transition, priorOperationalSha256: "c".repeat(64) },
+  { ...transition, currentOperationalSha256: "c".repeat(64) },
+  { ...transition, priorOperationalSha256: "bad" },
+  { ...transition, currentOperationalSha256: "bad" },
+  { ...transition, reason: "assumed-engine-only" as typeof transition.reason },
+]) { assert.throws(() => assertAbruptRecoveryBaseline(oldInventoryHash, currentInventoryHash, invalid), IsolatedSupabaseError); passed(); }
+assert.throws(() => assertAbruptRecoveryBaseline(oldInventoryHash, oldInventoryHash,
+  { ...transition, currentOperationalSha256: oldInventoryHash }), IsolatedSupabaseError); passed();
+const unownedInventory = { containers: [{ id: "foreign-container", state: "exited", labels: {} }],
+  volumes: [{ id: "foreign-volume", labels: {} }], networks: [{ id: "foreign-network", labels: {} }], imageIds: ["foreign-image"] };
+const canonicalInventory = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonicalInventory).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${canonicalInventory(item)}`).join(",")}}`;
+  return JSON.stringify(value);
+};
+const expectedInventoryHash = createHash("sha256").update(canonicalInventory(unownedInventory)).digest("hex");
+assert.doesNotThrow(() => assertRecoveryCurrentInventory(expectedInventoryHash, unownedInventory, projectName)); passed();
+const withOwned = structuredClone(unownedInventory);
+withOwned.containers.push({ id: "owned-container", state: "exited", labels: { "com.venisia.qa.run": projectName } });
+assert.doesNotThrow(() => assertRecoveryCurrentInventory(expectedInventoryHash, withOwned, projectName)); passed();
+const inventoryMutations: Array<(value: typeof unownedInventory) => void> = [
+  value => { value.containers[0].state = "running"; },
+  value => { value.containers.push({ id: "new-foreign", state: "exited", labels: {} }); },
+  value => { value.containers.pop(); },
+  value => { value.volumes.push({ id: "new-foreign-volume", labels: {} }); },
+  value => { value.volumes.pop(); },
+  value => { value.networks[0].id = "changed-network"; },
+  value => { value.networks.push({ id: "new-foreign-network", labels: {} }); },
+  value => { value.imageIds.push("new-foreign-image"); },
+  value => { value.imageIds.pop(); },
+];
+for (const mutate of inventoryMutations) { const changed = structuredClone(unownedInventory); mutate(changed);
+  assert.throws(() => assertRecoveryCurrentInventory(expectedInventoryHash, changed, projectName),
+    error => error instanceof IsolatedSupabaseError && error.code === "RECOVERY_CURRENT_INVENTORY_CHANGED"); passed(); }
+assert.doesNotThrow(() => assertRecoveryCurrentInventory(undefined, withOwned, projectName)); passed();
+
 console.log(JSON.stringify({ status: "PASS", controls, dockerCalls: 0, databaseCalls: 0, productionAccess: false }));

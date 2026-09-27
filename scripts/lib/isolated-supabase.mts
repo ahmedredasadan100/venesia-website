@@ -425,6 +425,8 @@ export type IsolatedSupabaseOptions = {
   failureInjection?: "before-handoff";
   cleanupOnly?: boolean;
   abruptRecovery?: {
+    artifactLayout?: "nested-runtime" | "direct-runner-argument";
+    baselineTransition?: RecoveryBaselineTransition;
     runnerPath: string;
     runnerArgument: string;
     runnerSha256: string;
@@ -518,6 +520,54 @@ export function assertAbruptRecoveryEvidence(input: {
   }
 }
 
+export type RecoveryBaselineTransition = {
+  priorOperationalSha256: string;
+  currentOperationalSha256: string;
+  reason: "observed-pre-recovery-inventory-change";
+};
+
+export function assertAbruptRecoveryBaseline(priorSha256: string, currentSha256: string,
+  transition?: RecoveryBaselineTransition): { historicalBaselineUnchanged: boolean; baselineChangedBeforeRecovery: boolean } {
+  if (!transition) {
+    requireThat(priorSha256 === currentSha256, "PRIOR_BASELINE_CHANGED", "cleanup-preflight");
+    return { historicalBaselineUnchanged: true, baselineChangedBeforeRecovery: false };
+  }
+  requireThat(transition.reason === "observed-pre-recovery-inventory-change"
+    && /^[a-f0-9]{64}$/.test(transition.priorOperationalSha256)
+    && /^[a-f0-9]{64}$/.test(transition.currentOperationalSha256)
+    && transition.priorOperationalSha256 === priorSha256
+    && transition.currentOperationalSha256 === currentSha256 && priorSha256 !== currentSha256,
+  "UNBOUND_RECOVERY_BASELINE_TRANSITION", "cleanup-preflight");
+  return { historicalBaselineUnchanged: false, baselineChangedBeforeRecovery: true };
+}
+
+export function assertRecoveryCurrentInventory(expectedSha256: string | undefined, current: Inventory, projectName: string): void {
+  if (expectedSha256 === undefined) return;
+  const unowned: Inventory = { ...current };
+  for (const key of ["containers", "volumes", "networks"] as const) {
+    unowned[key] = current[key].filter(row => object(row.labels ?? {})[LABEL_RUN] !== projectName);
+  }
+  requireThat(sha256(canonical(unowned)) === expectedSha256, "RECOVERY_CURRENT_INVENTORY_CHANGED", "cleanup");
+}
+
+export function assertRecoveryCleanupAuthorized(recoveryRequested: boolean, recoveryAuthorized: boolean): void {
+  requireThat(!recoveryRequested || recoveryAuthorized, "RECOVERY_CLEANUP_NOT_AUTHORIZED", "cleanup");
+}
+
+export function assertAbruptRecoveryArtifactLayout(input: {
+  runnerPath: string; runnerArgument: string; artifactDir: string;
+  artifactLayout?: "nested-runtime" | "direct-runner-argument";
+}): void {
+  const layout = input.artifactLayout ?? "nested-runtime";
+  requireThat(layout === "nested-runtime" || layout === "direct-runner-argument",
+    "INVALID_RECOVERY_ARTIFACT_LAYOUT", "cleanup-preflight");
+  requireThat(/^[a-zA-Z0-9_-]+$/.test(input.runnerArgument), "UNBOUND_RECOVERY_RUNNER", "cleanup-preflight");
+  const expected = layout === "nested-runtime"
+    ? resolve(dirname(input.runnerPath), input.runnerArgument, "runtime")
+    : resolve(dirname(input.runnerPath), input.runnerArgument);
+  requireThat(input.artifactDir === expected, "UNBOUND_RECOVERY_RUNNER", "cleanup-preflight");
+}
+
 export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Promise<{ status: "complete"; artifactDir: string }> {
   const lockPath = resolve(options.lockPath);
   requireThat(relative(ROOT, lockPath).startsWith(`scripts${sep}fixtures${sep}`), "LOCK_OUTSIDE_FIXTURES", "preflight");
@@ -570,9 +620,10 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         && priorIntent.lockSha256 === sha256(readFileSync(lockPath)) && priorIntent.artifacts === artifactDir,
       "AMBIGUOUS_ABRUPT_RECOVERY", "cleanup-preflight");
       const runnerPath = resolve(abruptRecovery.runnerPath), runnerRelative = relative(ROOT, runnerPath).replace(/\\/g, "/");
+      assertAbruptRecoveryArtifactLayout({ runnerPath, runnerArgument: abruptRecovery.runnerArgument, artifactDir,
+        artifactLayout: abruptRecovery.artifactLayout });
       requireThat(/^\.tmp-qa\/[a-zA-Z0-9_./-]+\.(?:mjs|mts)$/.test(runnerRelative)
         && /^[a-zA-Z0-9_-]+$/.test(abruptRecovery.runnerArgument)
-        && artifactDir === resolve(dirname(runnerPath), abruptRecovery.runnerArgument, "runtime")
         && existsSync(runnerPath) && lstatSync(runnerPath).isFile() && !lstatSync(runnerPath).isSymbolicLink()
         && realpathSync(runnerPath) === runnerPath && /^[a-f0-9]{64}$/.test(abruptRecovery.runnerSha256)
         && sha256(readFileSync(runnerPath)) === abruptRecovery.runnerSha256,
@@ -638,6 +689,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const privateEnvPath = resolve(artifactDir, recoveryPrefix + "compose.private.env");
   const originalPrivateEnvPath = resolve(artifactDir, "compose.private.env");
   let recoveryAuthorized = false;
+  let recoveryBaselineState: ReturnType<typeof assertAbruptRecoveryBaseline> | undefined;
+  let recoveryCurrentInventorySha256: string | undefined;
   const removePrivateEnv = () => {
     requireThat(realpathSync(artifactDir) === artifactDir, "ARTIFACT_REPARSE_POINT", "cleanup");
     for (const path of new Set([privateEnvPath, ...(recoveryAuthorized ? [originalPrivateEnvPath] : [])])) {
@@ -919,7 +972,15 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       const priorBaseline = recoveryBaseline ?? object(JSON.parse(readFileSync(resolve(artifactDir, "inventory-before.json"), "utf8")));
       recordFile("prior-baseline-comparison.json", { exact: priorBaseline.sha256 === inventoryReceipt(before).sha256,
         priorSha256: priorBaseline.sha256, currentSha256: inventoryReceipt(before).sha256 });
-      requireThat(priorBaseline.sha256 === inventoryReceipt(before).sha256, "PRIOR_BASELINE_CHANGED", "cleanup-preflight");
+      recoveryBaselineState = assertAbruptRecoveryBaseline(String(priorBaseline.sha256), inventoryReceipt(before).sha256,
+        abruptRecovery?.baselineTransition);
+      if (recoveryBaselineState.baselineChangedBeforeRecovery) {
+        recoveryCurrentInventorySha256 = abruptRecovery!.baselineTransition!.currentOperationalSha256;
+        recordFile("recovery-baseline-transition.json", { ...recoveryBaselineState,
+          priorOperationalSha256: priorBaseline.sha256, currentOperationalSha256: recoveryCurrentInventorySha256,
+          reason: abruptRecovery!.baselineTransition!.reason, historicalDriftCause: "unretained",
+          originalReceiptPreserved: true, cleanupAuthorized: false });
+      }
     }
     recordFile("inventory-before.json", inventoryReceipt(before));
     safeRecord("inventory-before", inventoryReceipt(before));
@@ -940,10 +1001,15 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         "RECOVERY_EVIDENCE_CHANGED", "cleanup-preflight");
       created = true;
       recoveryAuthorized = true;
+      if (recoveryCurrentInventorySha256) recordFile("recovery-baseline-transition.json", { ...recoveryBaselineState,
+        priorOperationalSha256: recoveryBaseline!.sha256, currentOperationalSha256: recoveryCurrentInventorySha256,
+        reason: abruptRecovery!.baselineTransition!.reason, historicalDriftCause: "unretained",
+        originalReceiptPreserved: true, cleanupAuthorized: true, originalOwnedResourcesVerified: captured.length });
       recordFile("owned-resources.json", captured);
       safeRecord(recoveryManifest ? "abrupt-run-cleanup-verified" : "failed-creation-cleanup-verified", {
         resources: captured.length, sqlExecuted: false, originalEvidencePreserved: true,
-        exactOperationalBaseline: Boolean(recoveryBaseline), originalHostListenersAbsent: true });
+        exactOperationalBaseline: Boolean(recoveryBaseline) && !recoveryBaselineState?.baselineChangedBeforeRecovery,
+        currentOperationalBaselinePinned: Boolean(recoveryCurrentInventorySha256), originalHostListenersAbsent: true });
     } else {
     for (const port of ports) {
       await new Promise<void>((done, reject) => {
@@ -1393,13 +1459,18 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       }
     }
     try {
+      assertRecoveryCleanupAuthorized(Boolean(priorIntent), recoveryAuthorized);
       if (created) {
         // Discovery also handles a create operation that completed after its
         // client timed out. Every discovered resource must pass the same full
         // run/compose/image/mount checks before it can become cleanup-owned.
         for (const [path, expectedHash] of recoveryFiles) requireThat(sha256(readFileSync(path)) === expectedHash,
           "RECOVERY_EVIDENCE_CHANGED", "cleanup");
-        if (recoveryAuthorized) assertOriginalsUnchanged(await inventory());
+        if (recoveryAuthorized) {
+          const current = await inventory();
+          assertOriginalsUnchanged(current);
+          assertRecoveryCurrentInventory(recoveryCurrentInventorySha256, current, run.projectName);
+        }
         await discoverOwned();
         for (const item of captured) await inspectCaptured(item);
         for (const item of captured.filter(row => row.identity.kind === "container").reverse()) {
@@ -1423,6 +1494,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       removePrivateEnv();
       if (before) {
         const after = await inventory(); assertOriginalsUnchanged(after);
+        assertRecoveryCurrentInventory(recoveryCurrentInventorySha256, after, run.projectName);
         recordFile("inventory-after.json", inventoryReceipt(after));
       }
       const releasedPorts: number[] = [];
@@ -1441,7 +1513,10 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       }
       recordFile("cleanup.json", { status: cleanupFailure ? "blocked" : "complete", code: cleanupFailure?.code ?? null,
         ownedResourcesRemoved: captured.length, remainingOwnedResources: 0,
-        originalResourcesUnchanged: Boolean(before), privateEnvRemoved: !existsSync(privateEnvPath)
+        originalResourcesUnchanged: Boolean(before) && !recoveryBaselineState?.baselineChangedBeforeRecovery,
+        ...(recoveryBaselineState ? { ...recoveryBaselineState,
+          ...(recoveryCurrentInventorySha256 ? { unchangedDuringRecovery: true } : {}) } : {}),
+        privateEnvRemoved: !existsSync(privateEnvPath)
           && (!recoveryAuthorized || !existsSync(originalPrivateEnvPath)), hostPortsReleased: releasedPorts, oldImagesRemoved: 0, engineStopped: false });
     } catch (error) {
       cleanupFailure = asSafeError(error, "cleanup");

@@ -56,7 +56,7 @@ export function coreTopicJourneyId(recipe) { return "core-" + recipe.kind + "-co
  * @param {object} browser
  * @param {ReadonlyArray<object>} manifest
  * @param {ReadonlyArray<object>|null} canonicalRequiredCases
- * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string}>}|null} draftRestoration
+ * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,key:string}>}|null} draftRestoration
  */
 export function assertCoreJourneySelectionReceipt(browser, manifest, canonicalRequiredCases, draftRestoration = null) {
   const selection = validateCoreJourneySelection({ scope: browser.scope, cohort: browser.cohort, selection: browser.journeySelection });
@@ -95,7 +95,8 @@ export function assertCoreJourneySelectionReceipt(browser, manifest, canonicalRe
   for (const cell of browser.requiredCases) if (!allowed.has(cell.key)) { assert.equal(cell.status, "open"); assert.equal(cell.evidence, null); }
   if (draftRestoration !== null) {
     assert.equal(draftRestoration.globalClosed, false); assert.deepEqual(draftRestoration.automaticCoverage, []);
-    assert.deepEqual(draftRestoration.qualified.map(row => row.journeyId), ids);
+    const expectedDrafts=recipes.flatMap(recipe=>recipe.surfaces.map(surface=>({journeyId:coreTopicJourneyId(recipe),key:browser.requiredCases.find(row=>row.boundary==='form'&&row.consumer===recipe.id&&row.surface===surface&&row.scenario==='rollback')?.key})));
+    assert.deepEqual(draftRestoration.qualified.map(row=>({journeyId:row.journeyId,key:row.key})),expectedDrafts);
   }
   return { selection, selectedJourneyIds: ids, executedJourneyIds: [...browser.executedJourneyIds], wholeCohortExecuted: false, globalClosed: false };
 }
@@ -252,9 +253,9 @@ export async function runCoreDomainFormJourneys(ctx) {
     await page.getByRole("option", { name: label, exact: true }).click();
     await expect(source).toHaveValue(String(value));
   }
-  async function acceptedClose(form, destinationPathname, refill) {
+  async function acceptedClose(form, destinationPathname, refill, verifyReopen = false) {
     const original=page.url(),trigger=form.locator('[data-admin-form-action="close"]'),target=new URL(destinationPathname,origin);assert.equal(target.origin,origin);
-    return{trigger,destination:{kind:'navigated',pathname:target.pathname},reopenAndRefill:async()=>{await navigate(new URL(original).pathname+new URL(original).search);await refill();}};
+    return{trigger,destination:{kind:'navigated',pathname:target.pathname},...(verifyReopen?{verifyReopen:true}:{}),reopenAndRefill:async()=>{await navigate(new URL(original).pathname+new URL(original).search);await refill();}};
   }
   async function valuesEqual(form, fields) {
     for (const [name, value] of Object.entries(fields)) await expect(control(form, name)).toHaveValue(String(value));
@@ -420,6 +421,9 @@ export async function runCoreDomainFormJourneys(ctx) {
     const editFields = { ...createFields, title: edited, excerpt: editedExcerpt };
     await dirtyCloseCancel(form, editFields);
     await rejectRequired(form, "title", editFields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-content-edit",journeyId:"core-"+recipe.kind+"-content-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[1]},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/topics',async()=>{
+      await form.locator('[data-admin-tab-id="basic"]').click();await control(form,'title').fill(edited);await control(form,'excerpt').fill(editedExcerpt);
+    },true)});
     await permissionIntent(recipe, recipe.surfaces[1], "core-" + recipe.kind + "-content-edit", async () => {
       await accepted(form);
       await reloadValues(editFields, "basic");
@@ -439,6 +443,9 @@ export async function runCoreDomainFormJourneys(ctx) {
     const fields = { arabic_name: name, general_description: description };
     await dirtyCloseCancel(form, fields);
     await rejectRequired(form, "arabic_name", fields);
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-project-"+recipe.kind+"-form-edit",journeyId:"core-project-"+recipe.kind+"-existing-form-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,fields),cancelDirty:()=>dirtyCloseCancel(form,fields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/projects/'+recipe.kind,async()=>{
+      await form.locator('[data-admin-tab-id="basic"]').click();await control(form,'arabic_name').fill(name);await control(form,'general_description').fill(description);
+    },true)});
     await permissionIntent(recipe, recipe.surfaces[0], "core-project-" + recipe.kind + "-form-edit", async () => {
       await accepted(form);
       await reloadValues(fields, "basic");

@@ -107,6 +107,7 @@ for (const absolute of files(path.join(root, "src"))) {
               "unexpectedMutationFailure",
               "topicActionFormData",
               "reorderOptimisticRows",
+              "publishTrackingVisibilityFailure",
             ].includes(n.name?.text),
         )
         .map((n) => n.getText(sf))

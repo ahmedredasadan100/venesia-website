@@ -33,6 +33,41 @@ async function privateDraft(form){
  });
 }
 
+/** Shared accepted leave observation. Native no-write is settled before reauthoring. */
+export async function observeCoreAcceptedDraftDiscard({page,origin,nativeCheckpoint,form,submit,assertDraft,discardDirty,priorNative}){
+ let phase='discard-input-validation';
+ try{
+  const base=new URL(origin);assert.equal(base.origin,origin);assert.equal(base.protocol,'http:');assert.equal(base.hostname,'127.0.0.1');assert.ok(base.port);
+  assert.equal(typeof nativeCheckpoint,'function');assert.ok(assertDraft===undefined||typeof assertDraft==='function');
+  assert.deepEqual(Object.keys(discardDirty).sort(),['destination','reopenAndRefill','trigger',...(discardDirty.verifyReopen===undefined?[]:['verifyReopen'])].sort());if(discardDirty.verifyReopen!==undefined)assert.equal(discardDirty.verifyReopen,true);assert.equal(typeof discardDirty.trigger?.click,'function');assert.equal(typeof discardDirty.reopenAndRefill,'function');
+  assert.deepEqual(Object.keys(discardDirty.destination).sort(),['kind','pathname']);assert.ok(['closed','navigated'].includes(discardDirty.destination.kind));assert.ok(typeof discardDirty.destination.pathname==='string'&&discardDirty.destination.pathname.startsWith('/admin')&&!discardDirty.destination.pathname.includes('?')&&!discardDirty.destination.pathname.includes('#'));
+  const originalUrl=page.url(),url=new URL(originalUrl);assert.equal(url.origin,origin);assert.ok(url.pathname.startsWith('/admin/'));
+  await expect(form).toHaveCount(1);await expect(form).toHaveAttribute('data-admin-form-runtime','');await expect(form).toHaveAttribute('data-admin-form-dirty','true');await expect(submit).toBeEnabled();if(assertDraft)await assertDraft();
+  let acceptedDiscard;
+    const discardCorrelationId=randomUUID(),readDiscard=async step=>{const request={id:randomUUID(),kind:'form-permission-fingerprint',correlationId:discardCorrelationId,phase:step};return fingerprint(await nativeCheckpoint(request),request);};
+    phase='discard-native-before';const discardBefore=await readDiscard('before');if(priorNative)unchanged(priorNative,discardBefore);
+    let discardPosts=0;const discardListener=request=>{if(request.method()==='POST'&&new URL(request.url()).origin===origin)discardPosts++;};page.on('request',discardListener);
+    try {
+     phase='discard-guard-open';await expect(form).toHaveAttribute('data-admin-form-dirty','true');await expect(discardDirty.trigger).toHaveCount(1);await expect(discardDirty.trigger).toBeEnabled();await discardDirty.trigger.click();
+     await expect(page.locator('[data-admin-unsaved-dialog]')).toHaveCount(1);const dialog=page.getByRole('dialog',{name:'إغلاق دون حفظ؟',exact:true});await expect(dialog).toHaveCount(1);await expect(dialog).toBeVisible();
+     const accept=dialog.locator('[data-admin-confirm-submit]');await expect(accept).toBeEnabled();await expect(accept).toHaveText('إغلاق دون حفظ');
+     phase='discard-accepted';await accept.click();await expect(dialog).toHaveCount(0);
+     if(discardDirty.destination.kind==='closed'){await expect(form).toHaveCount(0);assert.equal(page.url(),originalUrl);assert.equal(discardDirty.destination.pathname,url.pathname);}
+     else{await expect(page).toHaveURL(current=>current.origin===origin&&current.pathname===discardDirty.destination.pathname);assert.notEqual(discardDirty.destination.pathname,url.pathname);}
+     assert.equal(discardPosts,0,'Accepted discard must not deliver a mutation.');
+     phase='discard-native-after';const discardAfter=await readDiscard('after');unchanged(discardBefore,discardAfter);assert.equal(discardPosts,0);
+     acceptedDiscard={status:'discard-accepted-before-reauthor',kind:discardDirty.destination.kind,fromPathname:url.pathname,toPathname:discardDirty.destination.pathname,nativeBefore:discardBefore.id,nativeAfter:discardAfter.id,nativeCorrelationId:discardCorrelationId,actionRequests:0,nativePublicStateUnchanged:true,adminAuditIncluded:true,guardAccepted:true,observedDestination:true,acceptedBeforeReauthor:true};
+    }finally{page.off('request',discardListener);}
+    const reopenCorrelationId=randomUUID(),readReopen=async step=>{const request={id:randomUUID(),kind:'form-permission-fingerprint',correlationId:reopenCorrelationId,phase:step};return fingerprint(await nativeCheckpoint(request),request);};
+    const reopenBefore=discardDirty.verifyReopen?await readReopen('before'):null;if(reopenBefore)unchanged(discardBefore,reopenBefore);
+    let reopenPosts=0;const reopenListener=request=>{if(request.method()==='POST'&&new URL(request.url()).origin===origin)reopenPosts++;};if(reopenBefore)page.on('request',reopenListener);
+    try{phase='discard-reopen-refill';await discardDirty.reopenAndRefill();assert.equal(page.url(),originalUrl);await expect(form).toHaveCount(1);await expect(form).toHaveAttribute('data-admin-form-dirty','true');await expect(submit).toBeEnabled();if(assertDraft)await assertDraft();
+     if(reopenBefore){assert.equal(reopenPosts,0);const reopenAfter=await readReopen('after');unchanged(reopenBefore,reopenAfter);assert.equal(reopenPosts,0);acceptedDiscard.reopen={nativeBefore:reopenBefore.id,nativeAfter:reopenAfter.id,nativeCorrelationId:reopenCorrelationId,actionRequests:0,nativePublicStateUnchanged:true,draftReauthored:true,originalRouteRestored:true};}
+    }finally{if(reopenBefore)page.off('request',reopenListener);}
+  return acceptedDiscard;
+ }catch{throw Error('Accepted draft discard proof failed at '+phase+'. No discard coverage granted.');}
+}
+
 /** One known pre-delivery rejection, native no-write and submitted-draft proof; never SQL rollback. */
 export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,requiredCases,nativeCheckpoint,registerPageRoute,mapping,form,submit,assertDraft,cancelDirty,dirtyNavigation,dirtyNavigationLimit,observePending,discardDirty}){
  let phase='input-validation',release,removeRoute,timer,requestFailure,clicking;let attempted=false,aborted=0,matching=0,observed=0,routeFailure;
@@ -46,7 +81,7 @@ export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,r
   if(dirtyNavigation==='not-declared'){assert.equal(cancelDirty,undefined);assert.ok(typeof dirtyNavigationLimit==='string'&&dirtyNavigationLimit.length>0&&dirtyNavigationLimit.length<=300);}
   else{assert.equal(typeof cancelDirty,'function');assert.equal(dirtyNavigationLimit,undefined);}
   if(discardDirty!==undefined){
-   assert.ok(dirtyNavigation!=='not-declared');assert.deepEqual(Object.keys(discardDirty).sort(),['destination','reopenAndRefill','trigger']);
+   assert.ok(dirtyNavigation!=='not-declared');assert.deepEqual(Object.keys(discardDirty).sort(),['destination','reopenAndRefill','trigger',...(discardDirty.verifyReopen===undefined?[]:['verifyReopen'])].sort());if(discardDirty.verifyReopen!==undefined)assert.equal(discardDirty.verifyReopen,true);
    assert.equal(typeof discardDirty.trigger?.click,'function');assert.equal(typeof discardDirty.reopenAndRefill,'function');
    assert.deepEqual(Object.keys(discardDirty.destination).sort(),['kind','pathname']);assert.ok(['closed','navigated'].includes(discardDirty.destination.kind));
    assert.ok(typeof discardDirty.destination.pathname==='string'&&discardDirty.destination.pathname.startsWith('/admin')&&!discardDirty.destination.pathname.includes('?')&&!discardDirty.destination.pathname.includes('#'));
@@ -80,24 +115,7 @@ export async function verifyCoreFormDraftRestoration({page,origin,sourceSha256,r
    phase='dirty-cancellation';if(cancelDirty)await cancelDirty();assert.equal(page.url(),originalUrl);await expect(form).toHaveAttribute('data-admin-form-dirty','true');same(await privateDraft(form),snapshot,'Submitted private controls changed during dirty cancellation.');if(assertDraft)await assertDraft();
    phase='route-cleanup';await removeRoute();removeRoute=undefined;assert.equal(routeFailure,undefined);assert.equal(matching,1);assert.equal(observed,1);assert.equal(aborted,1);
    phase='native-after';const after=await native('after');unchanged(before,after);
-   let acceptedDiscard;
-   if(discardDirty){
-    const discardCorrelationId=randomUUID(),readDiscard=async step=>{const request={id:randomUUID(),kind:'form-permission-fingerprint',correlationId:discardCorrelationId,phase:step};return fingerprint(await nativeCheckpoint(request),request);};
-    phase='discard-native-before';const discardBefore=await readDiscard('before');unchanged(after,discardBefore);
-    let discardPosts=0;const discardListener=request=>{if(request.method()==='POST'&&new URL(request.url()).origin===origin)discardPosts++;};page.on('request',discardListener);
-    try {
-     phase='discard-guard-open';await expect(form).toHaveAttribute('data-admin-form-dirty','true');await expect(discardDirty.trigger).toHaveCount(1);await expect(discardDirty.trigger).toBeEnabled();await discardDirty.trigger.click();
-     await expect(page.locator('[data-admin-unsaved-dialog]')).toHaveCount(1);const dialog=page.getByRole('dialog',{name:'إغلاق دون حفظ؟',exact:true});await expect(dialog).toHaveCount(1);await expect(dialog).toBeVisible();
-     const accept=dialog.locator('[data-admin-confirm-submit]');await expect(accept).toBeEnabled();await expect(accept).toHaveText('إغلاق دون حفظ');
-     phase='discard-accepted';await accept.click();await expect(dialog).toHaveCount(0);
-     if(discardDirty.destination.kind==='closed'){await expect(form).toHaveCount(0);assert.equal(page.url(),originalUrl);assert.equal(discardDirty.destination.pathname,url.pathname);}
-     else{await expect(page).toHaveURL(current=>current.origin===origin&&current.pathname===discardDirty.destination.pathname);assert.notEqual(discardDirty.destination.pathname,url.pathname);}
-     assert.equal(discardPosts,0,'Accepted discard must not deliver a mutation.');
-     phase='discard-native-after';const discardAfter=await readDiscard('after');unchanged(discardBefore,discardAfter);assert.equal(discardPosts,0);
-     acceptedDiscard={status:'discard-accepted-before-reauthor',kind:discardDirty.destination.kind,fromPathname:url.pathname,toPathname:discardDirty.destination.pathname,nativeBefore:discardBefore.id,nativeAfter:discardAfter.id,nativeCorrelationId:discardCorrelationId,actionRequests:0,nativePublicStateUnchanged:true,adminAuditIncluded:true,guardAccepted:true,observedDestination:true,acceptedBeforeReauthor:true};
-    }finally{page.off('request',discardListener);}
-    phase='discard-reopen-refill';await discardDirty.reopenAndRefill();assert.equal(page.url(),originalUrl);await expect(form).toHaveCount(1);await expect(form).toHaveAttribute('data-admin-form-dirty','true');await expect(submit).toBeEnabled();if(assertDraft)await assertDraft();
-   }
+   phase='discard-shared-observation';const acceptedDiscard=discardDirty?await observeCoreAcceptedDraftDiscard({page,origin,nativeCheckpoint,form,submit,assertDraft,discardDirty,priorNative:after}):undefined;
    return{status:'submitted-draft-restored-known-no-write',...mapping,receiptId:randomUUID(),candidateRequiredCase:cells[0].key,sourceSha256,ownedRunId:before.ownedRunId,routePathname:url.pathname,nativeBefore:before.id,nativeAfter:after.id,nativeCorrelationId:correlationId,actionRequests:observed,interceptedActions:matching,abortedActions:aborted,matchingActionForwarded:false,actualRequestFailed:true,nativePublicStateUnchanged:true,adminAuditIncluded:true,submittedControlsRestored:true,dirtyStateRetained:true,dirtyNavigation,dirtyNavigationVerified:Boolean(cancelDirty),...(dirtyNavigationLimit?{dirtyNavigationLimit}:{}),...(acceptedDiscard?{acceptedDiscard}:{}),fileBoundary:snapshot.nonemptyFileControls?'File metadata retained; binary upload/Storage restoration is not claimed.':'No authored FileList restoration claim.',secretsOrDraftArtifactsWritten:false,automaticCoverage:[],globalClosed:false,proofBoundary:'Exactly one actual Action aborted before forwarding, full owned public state including audit unchanged, and submitted Form draft retained. No SQL transaction rollback, unknown-commit recovery or later retry success is inferred.'};
   }finally{page.off('request',listener);}
  }catch{throw Error('Submitted-draft restoration proof failed at '+phase+'. No restoration coverage granted.');}
@@ -131,6 +149,7 @@ export function assertCoreFormDraftRestorationJoin({artifact,browser,native,owne
    const pair=native.records.filter(row=>row.correlationId===d.nativeCorrelationId);assert.equal(pair.length,2);
    const db=pair.find(row=>row.id===d.nativeBefore),da=pair.find(row=>row.id===d.nativeAfter);fingerprint(db,{id:d.nativeBefore,correlationId:d.nativeCorrelationId,phase:'before'});fingerprint(da,{id:d.nativeAfter,correlationId:d.nativeCorrelationId,phase:'after'});unchanged(after,db);unchanged(db,da);
    const originalAfter=native.records.findIndex(row=>row.id===receipt.nativeAfter),discardBefore=native.records.findIndex(row=>row.id===d.nativeBefore),discardAfter=native.records.findIndex(row=>row.id===d.nativeAfter);assert.ok(originalAfter>=0&&discardBefore>originalAfter&&discardAfter>discardBefore);
+   if(d.reopen){const r=d.reopen;assert.equal(r.actionRequests,0);for(const key of ['nativePublicStateUnchanged','draftReauthored','originalRouteRestored'])assert.equal(r[key],true);for(const key of ['nativeBefore','nativeAfter','nativeCorrelationId'])assert.match(r[key],uuid);assert.equal(correlations.has(r.nativeCorrelationId),false);correlations.add(r.nativeCorrelationId);for(const id of [r.nativeBefore,r.nativeAfter]){assert.equal(nativeClaims.has(id),false);nativeClaims.add(id);}const pair=native.records.filter(row=>row.correlationId===r.nativeCorrelationId);assert.equal(pair.length,2);assert.deepEqual(pair.map(row=>row.id),[r.nativeBefore,r.nativeAfter]);fingerprint(pair[0],{id:r.nativeBefore,correlationId:r.nativeCorrelationId,phase:'before'});fingerprint(pair[1],{id:r.nativeAfter,correlationId:r.nativeCorrelationId,phase:'after'});unchanged(da,pair[0]);unchanged(pair[0],pair[1]);assert.ok(native.records.indexOf(pair[0])>discardAfter);}
   }
   qualified.push({key:receipt.candidateRequiredCase,receiptId:receipt.receiptId,journeyId:receipt.journeyId,nativeBefore:receipt.nativeBefore,nativeAfter:receipt.nativeAfter,dirtyNavigation:receipt.dirtyNavigation,...(receipt.acceptedDiscard?{acceptedDiscard:receipt.acceptedDiscard}:{})});
  }

@@ -18,7 +18,7 @@ import { createJiti } from "jiti";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
 import { assertCorePresentationControlsCompleted, assertCoreContentScrollCompleted } from "./verify-admin-core-presentation-controls-isolated.mts";
-import { PRESENTATION_CONTROL_PHASES, partitionContentScrollNativeRecords } from "./fixtures/admin-core-presentation-controls-contract.mjs";
+import { PRESENTATION_CONTROL_PHASES, partitionContentScrollNativeRecords, assertPresentationAcceptedDiscardReceipts, partitionPresentationDiscardNativeRecords, buildCorePresentationControlsPlan } from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import { assertCoreProjectControlsCompleted } from "./verify-admin-core-project-controls-isolated.mts";
 import { PROJECT_CONTROL_PHASES } from "./fixtures/admin-core-project-controls-contract.mjs";
 import { assertCoreTopicControlsCompleted } from "./verify-admin-core-topic-controls-isolated.mts";
@@ -388,7 +388,10 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(result.planned,completion.recipes);assert.equal(result.completed,completion.recipes);assert.equal(result.outcomes.length,completion.recipes);
       assert.deepEqual(result.outcomes.map(row=>row.kind).sort(),["content","hero"]);
       const native=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));assert.equal(native.status,"pass");assert.equal(native.ownedRunId,handle.identity.runId);
-      const contentScroll=await assertCoreContentScrollCompleted(handle,browser,native.records);const contentNative=partitionContentScrollNativeRecords(native.records,contentScroll);
+      const presentationSource=JSON.parse(readFileSync(join(artifactDir,'public-source-manifest.json'),'utf8'));
+      const acceptedDiscard=assertPresentationAcceptedDiscardReceipts({browser,nativeRecords:native.records,ownedRunId:handle.identity.runId,sourceSha256:presentationSource.sourceSha256,plan:buildCorePresentationControlsPlan({manifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")).presentationControls})});
+      const remainingNative=partitionPresentationDiscardNativeRecords(native.records,acceptedDiscard);
+      const contentScroll=await assertCoreContentScrollCompleted(handle,browser,remainingNative);const contentNative=partitionContentScrollNativeRecords(remainingNative,contentScroll);
       const contentScrollSource=JSON.parse(readFileSync(join(artifactDir,'public-source-manifest.json'),'utf8'));
       const contentScrollRendered=assertCoreRenderedAdoptionJoin({browser,sourceSha256:contentScrollSource.sourceSha256,expected:[{journeyId:'core-presentation-content-variant-scroll',observationId:'presentation-content-single-image-media-scroll',axis:'scrollbar',bindings:[{boundary:'form',consumer:'block-template-content-editor',surface:'content:template-edit'}],routePathname:'/admin/pages-blocks/blocks/content/'+contentScroll.fixtureId}]});
       const cleanup=JSON.parse(readFileSync(join(artifactDir,"core-native-write-faults.json"),"utf8"));assert.equal(cleanup.status,"closed");assert.equal(cleanup.activeLocks,0);
@@ -405,7 +408,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
           assert.equal(sequence.at(-1).ownedLockRolledBack,true);assert.equal(sequence.at(-1).cancellationObserved,index===0);
         }
       }
-      presentationControls={...result,completion,cleanup,contentScroll,contentScrollRendered};
+      presentationControls={...result,completion,cleanup,contentScroll,contentScrollRendered,acceptedDiscard};
     }
     const domainBulk=browser.cohort==="domain-bulk"?await verifyCoreDomainBulkCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"))):null;
     let trackingDates=null,trackingMedia=null,trackingMediaApplicability=null;
