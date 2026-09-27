@@ -10,7 +10,7 @@ export function createCoreDomainVisibilityControl({page,recipe,timeout=60_000}){
  const inline=page.locator('[data-admin-row-action="visibility"][data-admin-entity-id="'+recipe.id+'"] button');
  const identity=menuContract?'[data-admin-row-action="more"][data-admin-entity-type="'+menuContract.entityType+'"][data-admin-entity-id="'+recipe.id+'"]':null;
  const more=menuContract?page.locator(identity+' button'):null;
- const row=menuContract?page.locator('article').filter({has:page.locator(identity)}):null;
+ const row=menuContract?page.locator('table tbody tr[data-entity-row-id="'+recipe.id+'"]').filter({has:page.locator(identity)}):null;
  const status=menuContract?row.locator('span.rounded-full').filter({hasText:new RegExp('^(?:'+menuContract.states.join('|')+')$')}):null;
  const menu=menuContract?page.locator('[data-admin-row-actions-menu][data-admin-entity-type="'+menuContract.entityType+'"][data-admin-entity-id="'+recipe.id+'"]'):null;
  const item=menuContract?menu.locator('[data-admin-row-action-menu-item="visibility"]'):inline;

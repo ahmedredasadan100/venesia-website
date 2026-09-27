@@ -1,3 +1,4 @@
+import {loadCoreResidualSearchContract,coreResidualSearchQueries,projectCoreResidualSearchRows,assertCoreResidualSearchFragments,bindCoreResidualSearchCells,coreResidualMediaRows} from './admin-core-residual-search.mjs';
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
@@ -245,6 +246,7 @@ export async function runCoreMediaJourneys(ctx) {
       return details("upload-validation-retry", ["invalid_zero_write", "busy_released", "valid_png_pdf_retry", "eleven_catalog_object_binary_audits"]);
     });
     await group("catalog-query", async () => {
+      let searchWrites=0;const countSearchWrites=request=>{if(new URL(request.url()).origin===origin&&!['GET','HEAD'].includes(request.method()))searchWrites++;};page.on('request',countSearchWrites);try{
       const state = await snapshot("query-baseline"); assert.equal(state.assets.length, 11);
       const first = await library(); assert.equal(first.assets.length, 10); assert.equal(first.total, 11);
       const selectedFirstPage = assetButton(main(), first.assets[0].displayName);
@@ -273,8 +275,21 @@ export async function runCoreMediaJourneys(ctx) {
       const empty = await api("GET", () => search(main()).fill(plan.namespace + "-absent"), { queryMatch: { q: plan.namespace + "-absent" } }); assert.equal(empty.total, 0);
       await expect(main().locator('[data-media-library-mode="manage"]')).toContainText("لا توجد ملفات مطابقة داخل هذا العرض.");
       await expect(main().locator('button[aria-pressed="true"]').filter({ hasNotText: /^(?:شبكة|قائمة)$/u })).toHaveCount(0);
-      assertCoreMediaUnchanged(state, await snapshot("query-after"), true);
-      return details("catalog-query", ["query_reload", "kind_filter", "selection_clear", "page_query_selection_reset", "grid_list", "pagination_disjoint_union", "page_size", "empty_result"]);
+      // Reuse only the already populated owned images folder; no new asset or metadata mutation.
+      await folder('images',true);const folderPath='images/'+plan.namespace,contract=await loadCoreResidualSearchContract('media'),searchRows=coreResidualMediaRows(contract,state,folderPath),observations=[];
+      assert.equal(searchRows.length,10);const cards=main().locator('[data-media-library-mode="manage"] button[aria-pressed]').filter({hasNotText:/^(?:شبكة|قائمة)$/u});
+      for(const query of coreResidualSearchQueries(plan.namespace)){
+        const payload=await api('GET',()=>search(main()).fill(query.query),{queryMatch:{q:query.query||null,folder:folderPath}});
+        const ids=projectCoreResidualSearchRows(contract,searchRows,query.query);assert.deepEqual(payload.assets.map(row=>row.id).sort(),ids);assert.equal(payload.total,ids.length);
+        await expect(cards).toHaveCount(ids.length);for(const id of ids){const asset=state.assets.find(row=>row.id===id);await expect(assetButton(main(),asset.display_name)).toHaveCount(1);}
+        assert.equal(new URL(page.url()).searchParams.get('folder'),folderPath);assert.equal(new URL(page.url()).searchParams.get('q')??'',query.query);
+        observations.push({...query,ids:payload.assets.map(row=>row.id).sort(),uiExact:true,queryStateExact:true});
+      }
+      const searchFragments=assertCoreResidualSearchFragments(contract,searchRows,plan.namespace,observations),searchNamedCellBindings=bindCoreResidualSearchCells(contract,requiredCases);
+      await page.reload({waitUntil:'domcontentloaded'});await expect(search(main())).toHaveValue(plan.namespace);assert.equal(new URL(page.url()).searchParams.get('folder'),folderPath);await expect(cards).toHaveCount(searchRows.length);
+      const searchAfter=await snapshot('query-after');assertCoreMediaUnchanged(state,searchAfter,true);assert.equal(searchWrites,0);
+      return details("catalog-query", ["query_reload", "kind_filter", "selection_clear", "page_query_selection_reset", "grid_list", "pagination_disjoint_union", "page_size", "empty_result"],{searchFragments,searchNamedCellBindings,searchNativeCheckpointIds:[state.id,searchAfter.id],searchFolder:folderPath,searchReloadRetained:true,searchWrites});
+      }finally{page.off('request',countSearchWrites);}
     });
     await group("metadata-failure-retry", async () => {
       const before = await snapshot("metadata-before"), asset = before.assets.find(row => row.id === primaryId); assert.ok(asset); await selectAsset(asset);

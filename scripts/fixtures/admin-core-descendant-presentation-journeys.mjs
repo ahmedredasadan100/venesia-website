@@ -1,3 +1,4 @@
+import {loadCoreResidualSearchContract,coreResidualSearchQueries,projectCoreResidualSearchRows,assertCoreResidualSearchFragments,bindCoreResidualSearchCells} from './admin-core-residual-search.mjs';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {expect} from 'playwright/test';
@@ -36,6 +37,19 @@ export async function runCoreDescendantPresentationJourneys(ctx,scope){
    const wide=spec.pageSizeOptions.find(size=>size>=spec.rowCount);assert.ok(wide);await limit(wide);await assertIds(first.ids);await expect(paging).toHaveCount(0);
    // Auto footer intentionally vanishes at23of30; reset through this owner's actual lifetime.
    if(bounded)await navigate(fixture,params);else{await page.reload({waitUntil:'domcontentloaded'});await activate(fixture);}await assertIds(pages[0]);assert.equal(posts,0);
+   let searchFragments=null,searchNamedCellBindings=[];
+   if(bounded){
+    const contract=await loadCoreResidualSearchContract(spec.key);assert.equal(contract.sourceSha256,first.searchOwnerSha256);searchNamedCellBindings=bindCoreResidualSearchCells(contract,requiredCases);const observations=[];
+    const search=page.locator('main input[type="search"]:visible');
+    for(const query of coreResidualSearchQueries(fixture.search)){
+     await search.fill(query.query);const expected=projectCoreResidualSearchRows(contract,first.searchRows,query.query);await assertIds(expected.slice(0,spec.pageSize));
+     await expect.poll(()=>new URL(page.url()).searchParams.get('q')??'').toBe(query.query);assert.equal(new URL(page.url()).searchParams.get('page'),null);
+     const actual=[...await visibleIds()];for(let pageIndex=2;pageIndex<=Math.ceil(expected.length/spec.pageSize);pageIndex++){await page.locator('[data-admin-pagination-slot="page"]:visible').filter({hasText:new RegExp('^'+pageIndex+'$')}).click();await assertIds(expected.slice((pageIndex-1)*spec.pageSize,pageIndex*spec.pageSize));actual.push(...await visibleIds());}
+     observations.push({...query,ids:actual,uiExact:true,queryStateExact:true});
+    }
+    searchFragments=assertCoreResidualSearchFragments(contract,first.searchRows,fixture.search,observations);
+    await navigate(fixture,params);await page.reload({waitUntil:'domcontentloaded'});await activate(fixture);await assertIds(pages[0]);await expect(search).toHaveValue(fixture.search);assert.equal(posts,0);
+   }
    let headerAndCellsPersisted=false,preferenceSemanticRestored=false;
    if(spec.preferenceId){
     const statusHeader=header.getByText(spec.label,{exact:true});await expect(statusHeader).toHaveCount(1);const originalHeader=await header.locator(':scope > *').count(),originalCells=await rows.evaluateAll(nodes=>nodes.map(node=>node.children.length));
@@ -46,7 +60,7 @@ export async function runCoreDescendantPresentationJourneys(ctx,scope){
     const restored=await checkpoint('restored');assert.equal(restored.fingerprint,first.fingerprint);assert.deepEqual([...restored.preference.visibleColumns].sort(),[...first.preference.visibleColumns].sort());preferenceSemanticRestored=true;assert.equal(posts,2);
    }
    const after=await checkpoint('after');assert.equal(after.fingerprint,first.fingerprint);assert.deepEqual(after.ids,first.ids);assert.equal(posts,spec.preferenceId?2:0);
-   const result={key:spec.key,consumer:spec.consumer,route:fixture.route,namedCellBindings,nativeActorId:first.actorId,nativeCheckpointIds,pages,paginationMode:spec.paginationMode,pageSizeChanged:true,backAndReload,clamp,searchReset,localReloadReset,preferencePosts:posts,headerAndCellsPersisted,preferenceSemanticRestored,nativeRowsUnchanged:true,urlPagingClaimed:bounded,structuralSlotsPaged:false,renderedAdoption,automaticCoverage:[],globalClosed:false,boundary:'Exact mounted descendant behavior. Shell/fixed-slot entries bind this same source/route/native proof; no parent pagination UI is invented.'};assertCoreDescendantProjection(spec,first.ids,result);outcomes.push(result);return result;
+   const result={key:spec.key,consumer:spec.consumer,route:fixture.route,namedCellBindings,nativeActorId:first.actorId,nativeCheckpointIds,pages,paginationMode:spec.paginationMode,pageSizeChanged:true,backAndReload,clamp,searchReset,localReloadReset,searchFragments,searchNamedCellBindings,searchNativeCheckpointIds:bounded?[first.id,after.id]:[],searchWrites:0,preferencePosts:posts,headerAndCellsPersisted,preferenceSemanticRestored,nativeRowsUnchanged:true,urlPagingClaimed:bounded,structuralSlotsPaged:false,renderedAdoption,automaticCoverage:[],globalClosed:false,boundary:'Exact mounted descendant behavior. Shell/fixed-slot entries bind this same source/route/native proof; no parent pagination UI is invented.'};assertCoreDescendantProjection(spec,first.ids,result);outcomes.push(result);return result;
   }finally{page.off('request',count);}
  });
  return {outcomes,automaticCoverage:[],globalClosed:false};

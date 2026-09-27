@@ -1,3 +1,4 @@
+import {assertCoreResidualSearchCompletion} from './fixtures/admin-core-residual-search.mjs';
 import {assertCoreRenderedAdoptionJoin} from './fixtures/admin-core-rendered-adoption.mjs';
 import {verifyCoreDownloadMediaCompletion} from './verify-admin-core-download-media-isolated.mts';
 import {assertCoreTrackingMediaCompletion} from "./fixtures/admin-core-tracking-media-adoption.mjs";
@@ -67,7 +68,13 @@ export function assertCoreMediaCompletionReceipts(handle: OwnedLocalHandle, brow
   assert.equal(native.status, "pass"); assert.ok(Array.isArray(native.records) && native.records.length > 0);
   const stateKind = recovery ? "media-recovery-state" : "media-library-state";
   const stateRecords = native.records.filter((row: MediaJoinRow) => row.kind === stateKind);
-  const ids = result.checkpoints.map((row: MediaJoinRow) => row.id);
+  const checkpointField = recovery ? "id" : "receiptId";
+  const ids = result.checkpoints.map((row: MediaJoinRow) => {
+    assert.deepEqual(Object.keys(row).sort(), [checkpointField, "label"].sort(), "Checkpoint identity must use the exact current cohort producer shape.");
+    const identity = row[checkpointField]; assert.ok(typeof identity === "string");
+    assert.match(identity, /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu);
+    return identity;
+  });
   assert.equal(new Set(ids).size, ids.length, "Repeated checkpoint identity is not new proof.");
   assert.deepEqual(ids, stateRecords.map((row: MediaJoinRow) => row.id), "Every Browser checkpoint must join the same native result in order.");
   assert.ok(ids.length > 0);
@@ -367,7 +374,8 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     const writes = await verifyCoreDomainWrites(handle, browser);
     const readOnly = browser.cohort === "domain-commands" ? await verifyCoreReadonlyReadback(handle, browser) : null;
     const downloadMedia=["template-controls","navigation-settings"].includes(browser.cohort ?? "") ? await verifyCoreDownloadMediaCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256) : null;
-    const result = { status: "pass", downloadMedia, authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, trackingDates, trackingMedia, trackingMediaApplicability, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const residualSearch = ["readonly-hubs", "media-library"].includes(browser.cohort ?? "") ? await assertCoreResidualSearchCompletion(browser, nativeCheckpoints, JSON.parse(readFileSync(join(artifactDir, "public-source-manifest.json"), "utf8"))) : null;
+    const result = { status: "pass", residualSearch, downloadMedia, authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, trackingDates, trackingMedia, trackingMediaApplicability, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }

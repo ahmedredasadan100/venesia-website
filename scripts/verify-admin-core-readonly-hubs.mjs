@@ -38,6 +38,7 @@ const handle={identity:{runId:'controlled-owned'},withDatabaseConnection:async c
 const loaded={exports:{}};
 new Function('require','module','exports',compiled)(name=>{
  if(name==='./lib/isolated-supabase.mts')return {assertOwnedLocalHandle:value=>{assert.equal(value,handle);owned++;if(fault==='expired-before'||(fault==='expired-after'&&owned===2))throw Error('expired owned handle');}};
+ if(name==='./verify-admin-core-form-permission-isolated.mts')return{readCoreFormPermissionFingerprint:async(h,input)=>{assert.equal(h,handle);assert.deepEqual(Object.keys(input).sort(),['correlationId','id','kind','phase']);assert.equal(input.id,input.correlationId);assert.equal(input.kind,'form-permission-fingerprint');assert.equal(input.phase,'after');return{publicDataSha256:'a'.repeat(64),publicTableInventorySha256:'b'.repeat(64)};}};
  assert.equal(name,'node:assert/strict');return require(name);
 },loaded,loaded.exports);
 const call=loaded.exports.readCoreReadonlyHubCheckpoint;
@@ -62,9 +63,10 @@ try{
  ['analytics',{period:'last_90_days',compare:'previous_period'},{period:'last_90_days',compare:'previous_period',storedReadModelCount:0}],
  ['analytics',{period:'last_30_days',compare:'none'},{period:'last_30_days',compare:'none',storedReadModelCount:1}],
  ]) await test('actual-projection-'+entity+'-'+JSON.stringify(fields),async()=>{reset();const input=request(entity,fields),result=await call(handle,input);assert.equal(result.id,input.id);assert.deepEqual(result.value,expected);assert.equal(owned,2);assert.equal(opened,1);assert.equal(closed,1);assert.equal(statements[0],'begin isolation level repeatable read read only');assert.equal(statements.at(-1),'commit');});
+ await test('integration-query-delegates-only-fixed-hash-fingerprint',async()=>{reset();const input=request('integration-search'),result=await call(handle,input);assert.deepEqual(result.value,{publicDataSha256:'a'.repeat(64),publicTableInventorySha256:'b'.repeat(64)});assert.equal(result.id,input.id);assert.equal(opened,0);});
  for(const [name,input] of [
  ['null',null],['array',[]],['bad-id',request('projects',{id:'no'})],['coerced-id',request('projects',{id:{toString:()=>randomUUID()}})],
- ['unknown-kind',request('projects',{kind:'other'})],['unknown-entity',request('admin_users')],['coerced-entity',request({toString:()=> 'projects'})],
+ ['integration-extra-selector',request('integration-search',{table:'vault.secrets'})],['unknown-kind',request('projects',{kind:'other'})],['unknown-entity',request('admin_users')],['coerced-entity',request({toString:()=> 'projects'})],
  ['sql',request('projects',{sql:'select secret'})],['bad-project',request('tracking',{projectId:0})],['string-project',request('tracking',{projectId:'1'})],
  ['unsafe-project',request('tracking',{projectId:9007199254740992})],['missing-project',request('tracking')],
  ['bad-period',request('analytics',{period:'all',compare:'none'})],['coerced-period',request('analytics',{period:{toString:()=> 'last_30_days'},compare:'none'})],

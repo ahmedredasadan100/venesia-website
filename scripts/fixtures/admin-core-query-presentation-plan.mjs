@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { createJiti } from 'jiti';
 import ts from 'typescript';
 
@@ -32,6 +33,7 @@ export async function loadCoreQueryPresentationPlan(){
  const registry=readFileSync(new URL('../../src/lib/admin/entity-list/data-engine/registry.ts',import.meta.url),'utf8');
  assert.deepEqual(registeredEntityKeys(registry),Object.keys(recipes).sort(),'Changed registry requires explicit recipe review.');
  const declarations=manifest.ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces.flatMap(s=>s.consumerAdoptionEvidence?.length?s.consumerAdoptionEvidence.map(child=>({...s,...child})):[s]).filter(s=>s.dataRegistryEntities?.length);
+ const contentRoutes=await jiti.import('../../src/lib/admin/content-routes.ts');
  const contentTypes=await jiti.import('../../src/lib/admin/content/content-types.ts'),audit=await jiti.import('../../src/lib/admin/audit/audit-actions.ts');
  const loginAction=audit.AUDIT_ACTION_OPTIONS.find(row=>row.value==='auth.login.success');assert.ok(loginAction);
  const booleanOptions=[{value:'yes',label:'مميز'},{value:'no',label:'غير مميز'}];
@@ -56,7 +58,8 @@ export async function loadCoreQueryPresentationPlan(){
   for(const type of entity==='projects'?['residential','commercial']:[null]){
    const key=type?entity+'-'+type:entity,level=entity.startsWith('project_locations_')?entity.slice('project_locations_'.length):null,kind=entity.startsWith('project_tracking_')?entity.slice('project_tracking_'.length):null;
    const route=type?'/admin/projects/'+type:level?location.projectLocationManagementPath(level):kind?null:declaration.routes[0];assert.ok(kind||(typeof route==='string'&&route.startsWith('/admin/')));
-   plan.push({key,entity,extraFilters:extraFilters[entity]??[],consumerId:declaration.id,table,labelColumn,sortField,contract,type,level,kind,route,viewKey:type?'projects-'+type:level?location.getProjectLocationManagementListViewKey(level):viewKey,columnVisibility:declaration.columnVisibility,rowActions:manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.entities.find(r=>r.entity===entity)?.actions??null,filter:filterKey?{key:filterKey,value:filterValue,label:filterLabel,optionLabel}:null,rowCount:2*Math.min(...contract.pageSizeOptions)+3,
+   const viewLink=Object.hasOwn(contract.rawFilterSchemas,'view')?coreQueryTrashLinkFromSource(readFileSync(new URL('../../src/app'+route+'/page.tsx',import.meta.url),'utf8'),route,contentRoutes.ADMIN_CONTENT_ROUTES):null;
+   plan.push({viewLink,key,entity,extraFilters:extraFilters[entity]??[],consumerId:declaration.id,table,labelColumn,sortField,contract,type,level,kind,route,viewKey:type?'projects-'+type:level?location.getProjectLocationManagementListViewKey(level):viewKey,columnVisibility:declaration.columnVisibility,rowActions:manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.entities.find(r=>r.entity===entity)?.actions??null,filter:filterKey?{key:filterKey,value:filterValue,label:filterLabel,optionLabel}:null,rowCount:2*Math.min(...contract.pageSizeOptions)+3,
     normalizeQuery(params,f){const locked=type?{type}:kind?{project_id:String(f.projectId),...(kind==='items'?{stage_id:String(f.stageId)}:kind==='updates'?{item_id:String(f.itemId)}:{})}:{};return queryOwner.normalizeAdminEntityListQueryWithRouteParams(contract,params,locked);},
     publicPathFor(row){return entity==='projects'?projects.getProjectHref({slug:row.slug}):entity==='pages'?row.path:null;},
     routeFor(f){return route??(kind==='stages'?tracking.trackingProjectPath(f.projectId):kind==='items'?tracking.trackingStagePath(f.projectId,f.stageId):tracking.trackingItemPath(f.projectId,f.itemId));}});
@@ -67,13 +70,15 @@ export async function loadCoreQueryPresentationPlan(){
 export const CORE_QUERY_SCENARIOS=['first','second','third','descending','filtered','empty','clamp','wide','preferences'];
 export function coreQueryScenario(spec,fixture,scenario){
  const extraFilterCase=scenario.startsWith('extra-filter-')?coreQueryExtraFilterCases(spec,fixture).find(row=>row.scenario===scenario):null;
- assert.ok(extraFilterCase||CORE_QUERY_SCENARIOS.includes(scenario)||CORE_QUERY_SEARCH_SCENARIOS.includes(scenario)||(spec.entity==='activity_log'&&Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,scenario)));assert.ok(/^qa-b1-[a-z0-9-]+$/.test(fixture.search));
+ assert.ok(extraFilterCase||CORE_QUERY_SCENARIOS.includes(scenario)||CORE_QUERY_SEARCH_SCENARIOS.includes(scenario)||CORE_QUERY_STALE_SCENARIOS.includes(scenario)||coreQueryViewScenarios(spec).includes(scenario)||(spec.entity==='activity_log'&&Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,scenario)));assert.ok(/^qa-b1-[a-z0-9-]+$/.test(fixture.search));
+ if(scenario==='view-trash-before'||scenario==='view-trash-after')return new URLSearchParams({view:'trash'});
  const size=Math.min(...spec.contract.pageSizeOptions),params=new URLSearchParams({q:scenario==='empty'?fixture.search+'-absent':fixture.search,sort:spec.sortField+'_'+(scenario==='descending'?'desc':'asc'),limit:String(size)});
  if(CORE_QUERY_SEARCH_SCENARIOS.includes(scenario)){
   const symbols={'search-literal-percent':'%','search-literal-underscore':'_','search-literal-star':'*','search-literal-quote':'"','search-literal-backslash':'\\'};
   if(Object.hasOwn(symbols,scenario))params.set('q',fixture.search+symbols[scenario]);
   else if(scenario==='search-short')params.set('q','q');else if(scenario==='search-cleared')params.delete('q');else assert.equal(scenario,'search-restored');
  }
+ if(scenario==='stale-held')params.set('q',fixture.search+'-held-older-read');
  if(extraFilterCase?.phase==='applied')params.set(extraFilterCase.key,extraFilterCase.value);
  if(spec.type)params.set('type',spec.type);
  if(spec.kind){params.set('project_id',String(fixture.projectId));if(spec.kind==='items')params.set('stage_id',String(fixture.stageId));if(spec.kind==='updates')params.set('item_id',String(fixture.itemId));}
@@ -167,4 +172,37 @@ export function assertCoreQueryExtraFilterReceipts(outcome,proofs,spec,fixture){
   used.push(proof.id);
  }
  return{consumerId:spec.consumerId,routeKey:spec.key,filterKeys:[...new Set(planned.map(row=>row.key))],nativeIds:used,automaticCoverage:[],globalClosed:false,boundary:'Actual fixed modal options, cancellation, reload and individual chip clear joined to native registered fixture projections. View links and unrepresented options remain explicit.'};
+}
+
+export const CORE_QUERY_STALE_SCENARIOS=['stale-held','stale-restored'];
+export function coreQueryStaleOwner(){const path='src/lib/admin/entity-list/data-engine/client-controller.ts',source=readFileSync(new URL('../../'+path,import.meta.url),'utf8');assert.ok(source.includes('signal: AbortSignal')&&source.includes('queryFn: ({ signal }) => loadResult(query, signal)'));return{path,sha256:createHash('sha256').update(source).digest('hex')};}
+export function coreQueryStaleRequestMatches(spec,fixture,url,origin){
+ const actual=new URL(url);if(actual.origin!==origin||actual.pathname!=='/api/admin/entity-lists/'+spec.entity)return false;
+ const expected=coreQueryScenario(spec,fixture,'stale-held');if(actual.searchParams.get('q')!==expected.get('q'))return false;
+ const allowed=new Set(['q','sort','page','limit',...Object.keys(spec.contract.rawFilterSchemas)]);assert.ok([...actual.searchParams.keys()].every(key=>allowed.has(key)));assert.deepEqual(spec.normalizeQuery(actual.searchParams,fixture),spec.normalizeQuery(expected,fixture));return true;
+}
+export function assertCoreQueryStaleReceipts(outcome,proofs,spec,fixture){
+ const observation=outcome.staleReadEvidence;assert.ok(observation);assert.equal(outcome.consumerId,spec.consumerId);assert.equal(outcome.routeKey,spec.key);assert.equal(spec.contract.mode,'server-page');assert.deepEqual(observation.sourceOwner,coreQueryStaleOwner());assert.deepEqual(observation.automaticCoverage,[]);assert.equal(observation.globalClosed,false);
+ const selected=proofs.filter(row=>CORE_QUERY_STALE_SCENARIOS.includes(row.scenario));assert.deepEqual(selected.map(row=>row.scenario),CORE_QUERY_STALE_SCENARIOS);assert.equal(new Set(selected.map(row=>row.id)).size,2);const first=proofs.find(row=>row.scenario==='first');assert.ok(first&&first.completeIds.length);
+ const[held,current]=selected;assert.equal(observation.heldNativeId,held.id);assert.equal(observation.currentNativeId,current.id);for(const proof of selected){assert.equal(proof.routeKey,spec.key);assert.equal(proof.actorId,outcome.nativeActorId);assert.equal(proof.ownedRunId,first.ownedRunId);assert.equal(proof.fixtureFingerprint,first.fixtureFingerprint);assert.equal(proof.query,coreQueryScenario(spec,fixture,proof.scenario).toString());const query=spec.normalizeQuery(new URLSearchParams(proof.query),fixture);assert.deepEqual(proof.searchProjection,{scenario:proof.scenario,normalizedSearch:query.search,columns:coreQuerySearchColumns(spec),scope:'full-registered-route',completeIds:proof.completeIds});}
+ assert.deepEqual(held.completeIds,[]);assert.deepEqual(current.completeIds,first.completeIds);const size=Math.min(...spec.contract.pageSizeOptions),expected=first.completeIds.slice(0,size);assert.deepEqual(observation.beforeReleaseIds,expected);assert.deepEqual(observation.afterReleaseIds,expected);assert.deepEqual(observation.heldResponseIds,[]);assert.equal(observation.heldResponseStatus,200);assert.equal(observation.strictRequestCount,1);assert.equal(observation.posts,0);assert.equal(observation.actualSearchInteraction,true);assert.equal(observation.currentQueryRetained,true);assert.equal(observation.method,'GET');assert.equal(observation.pathname,'/api/admin/entity-lists/'+spec.entity);
+ const events=observation.events;assert.deepEqual(Object.keys(events).sort(),['currentSettled','held','released','terminal']);for(const value of Object.values(events))assert.ok(Number.isSafeInteger(value)&&value>0);assert.equal(new Set(Object.values(events)).size,4);assert.ok(events.held<events.currentSettled&&events.currentSettled<events.released&&events.held<events.terminal);
+ if(observation.terminal==='aborted'){assert.equal(observation.failure,'net::ERR_ABORTED');assert.equal(observation.responseDelivered,false);}else{assert.equal(observation.terminal,'completed');assert.equal(observation.failure,null);assert.equal(observation.responseDelivered,true);assert.ok(events.terminal>events.released);}
+ return{consumerId:spec.consumerId,routeKey:spec.key,nativeIds:selected.map(row=>row.id),actorId:outcome.nativeActorId,terminal:observation.terminal,sourceOwner:observation.sourceOwner,automaticCoverage:[],globalClosed:false,boundary:'Actual old registered GET held after genuine HTTP/native projection, current query settled first, old read aborted or delivered late without replacing current native IDs. No synthetic response or whole-axis credit.'};
+}
+
+export function coreQueryTrashLinkFromSource(source,route,contentRoutes){
+ const file=ts.createSourceFile('selected-page.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),matches=[];function walk(node){if(ts.isJsxElement(node)&&node.openingElement.tagName.getText(file)==='AdminActionButton'&&node.children.filter(ts.isJsxText).map(row=>row.text.trim()).join('')==='المحذوفات')matches.push(node);ts.forEachChild(node,walk);}walk(file);assert.equal(matches.length,1);
+ const prop=matches[0].openingElement.attributes.properties.find(row=>ts.isJsxAttribute(row)&&row.name.text==='href');assert.ok(prop?.initializer);let href;
+ if(ts.isStringLiteral(prop.initializer))href=prop.initializer.text;else{const expression=prop.initializer.expression;assert.ok(ts.isTemplateExpression(expression)&&expression.head.text===''&&expression.templateSpans.length===1);const span=expression.templateSpans[0];assert.ok(ts.isPropertyAccessExpression(span.expression)&&span.expression.expression.getText(file)==='ADMIN_CONTENT_ROUTES');assert.ok(source.includes('import { ADMIN_CONTENT_ROUTES } from "../../../../lib/admin/content-routes"'));href=contentRoutes[span.expression.name.text]+span.literal.text;}
+ assert.equal(href,route+'?view=trash');return{href,label:'المحذوفات',pageSourceSha256:createHash('sha256').update(source).digest('hex')};
+}
+export function coreQueryViewScenarios(spec){if(!spec.viewLink)return[];assert.ok(['topics','categories','series'].includes(spec.entity));return['view-trash-before','view-trash-after','view-active-restored'];}
+export function assertCoreQueryViewReceipts(outcome,proofs,spec,fixture){
+ const scenarios=coreQueryViewScenarios(spec),selected=proofs.filter(row=>row.scenario.startsWith('view-'));assert.deepEqual(selected.map(row=>row.scenario),scenarios);const observation=outcome.viewLinkEvidence;
+ if(!scenarios.length){assert.equal(observation,null);return null;}
+ assert.ok(observation);assert.equal(outcome.consumerId,spec.consumerId);assert.equal(outcome.routeKey,spec.key);assert.deepEqual(observation.sourceLink,spec.viewLink);assert.deepEqual(observation.nativeIds,selected.map(row=>row.id));assert.equal(new Set(selected.map(row=>row.id)).size,3);const first=proofs.find(row=>row.scenario==='first');assert.ok(first);
+ for(const proof of selected){assert.equal(proof.actorId,outcome.nativeActorId);assert.equal(proof.ownedRunId,first.ownedRunId);assert.equal(proof.routeKey,spec.key);assert.equal(proof.fixtureFingerprint,first.fixtureFingerprint);assert.equal(proof.query,coreQueryScenario(spec,fixture,proof.scenario).toString());assert.deepEqual(proof.viewProjection.completeIds,proof.completeIds);assert.equal(proof.viewProjection.scope,proof.scenario==='view-active-restored'?'active-namespace-restored':'full-current-trash');assert.match(proof.viewProjection.domainAuditFingerprint,/^[a-f0-9]{32}:[a-f0-9]{32}$/u);}
+ assert.deepEqual(selected[0].completeIds,selected[1].completeIds);assert.deepEqual(selected[2].completeIds,first.completeIds);assert.ok(selected.every(row=>row.viewProjection.domainAuditFingerprint===selected[0].viewProjection.domainAuditFingerprint));assert.deepEqual(observation.trashCompleteIds,selected[0].completeIds);assert.deepEqual(observation.activeCompleteIds,first.completeIds);assert.equal(observation.clickedHref,spec.viewLink.href);for(const key of ['actualLinkClicked','actualTrashHeader','reloadPreserved','backRestoredPriorQuery','priorRowsRestored','canonicalDefaultsObserved'])assert.equal(observation[key],true);assert.equal(observation.posts,0);assert.equal(observation.activeControl,'browser-history-back');assert.deepEqual(observation.automaticCoverage,[]);assert.equal(observation.globalClosed,false);
+ return{consumerId:spec.consumerId,routeKey:spec.key,nativeIds:selected.map(row=>row.id),actorId:outcome.nativeActorId,observedTrashRows:selected[0].completeIds.length,automaticCoverage:[],globalClosed:false,boundary:'Exact current Trash link, default query/ordered first page, reload and browser Back to prior active query. Native full trash membership and complete domain/audit fingerprint joined; no invented active toggle or lifecycle mutation claim.'};
 }

@@ -1,3 +1,4 @@
+import {readCoreFormPermissionFingerprint} from './verify-admin-core-form-permission-isolated.mts';
 import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 
@@ -8,13 +9,17 @@ export async function readCoreReadonlyHubCheckpoint(handle: OwnedLocalHandle, in
   assert.ok(input && typeof input === 'object' && !Array.isArray(input));
   const request = input as Record<string, unknown>;
   assert.equal(typeof request.id, 'string'); assert.match(request.id as string, uuid); assert.equal(request.kind, 'readonly-hub-state');
-  assert.ok(typeof request.entity === 'string' && ['projects', 'tracking', 'dashboard', 'analytics'].includes(request.entity));
+  assert.ok(typeof request.entity === 'string' && ['projects', 'tracking', 'dashboard', 'analytics', 'integration-search'].includes(request.entity));
   const keys = request.entity === 'tracking' ? ['id', 'kind', 'entity', 'projectId'] : request.entity === 'analytics' ? ['id', 'kind', 'entity', 'period', 'compare'] : ['id', 'kind', 'entity'];
   assert.deepEqual(Object.keys(request).sort(), keys.sort());
   if (request.entity === 'tracking') assert.ok(Number.isSafeInteger(request.projectId) && Number(request.projectId) > 0);
   if (request.entity === 'analytics') {
     assert.ok(typeof request.period === 'string' && ['last_30_days', 'last_90_days'].includes(request.period));
     assert.ok(typeof request.compare === 'string' && ['none', 'previous_period', 'previous_year'].includes(request.compare));
+  }
+  if(request.entity==='integration-search'){
+    const proof=await readCoreFormPermissionFingerprint(handle,{id:request.id,kind:'form-permission-fingerprint',correlationId:request.id,phase:'after'});
+    return{id:request.id,kind:request.kind,entity:request.entity,status:'pass',ownedRunId:handle.identity.runId,value:{publicDataSha256:proof.publicDataSha256,publicTableInventorySha256:proof.publicTableInventorySha256},boundary:'Hash-only unchanged public rows/audit; fixed catalog query never calls providers or returns credentials.'};
   }
   const value = await handle.withDatabaseConnection(async connection => {
     await connection.query('begin isolation level repeatable read read only');

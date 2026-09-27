@@ -2,13 +2,13 @@ import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 import { readCoreFixedQaActor } from './verify-admin-core-domain-readback-isolated.mts';
 import { parseAdminEntityListRequestQuery, type AdminEntityListQueryContract } from '../src/lib/admin/entity-list/data-engine/contracts.ts';
-import { loadCoreQueryPresentationPlan, coreQueryScenario, CORE_ACTIVITY_DATE_SCENARIOS, assertCoreActivityDateReceipts, CORE_QUERY_SEARCH_SCENARIOS, coreQuerySearchColumns, assertCoreQuerySearchReceipts, coreQueryExtraFilterCases, assertCoreQueryExtraFilterReceipts } from './fixtures/admin-core-query-presentation-plan.mjs';
+import { loadCoreQueryPresentationPlan, coreQueryScenario, CORE_ACTIVITY_DATE_SCENARIOS, assertCoreActivityDateReceipts, CORE_QUERY_SEARCH_SCENARIOS, CORE_QUERY_STALE_SCENARIOS, assertCoreQueryStaleReceipts, coreQueryViewScenarios, assertCoreQueryViewReceipts, coreQuerySearchColumns, assertCoreQuerySearchReceipts, coreQueryExtraFilterCases, assertCoreQueryExtraFilterReceipts } from './fixtures/admin-core-query-presentation-plan.mjs';
 
 type Row=Record<string,unknown>;
 export type CoreQueryFixture={ search:string; ids:number[]; projectId?:number; stageId?:number; itemId?:number; filterOptions?:{category:{id:number;name:string};series?:{id:number;name:string}} };
 export type CoreQueryFixtures={ queryClosure:{ contexts:Record<string,CoreQueryFixture> } };
-type Plan=Array<{key:string;entity:string;consumerId:string;table:string;labelColumn:string;sortField:string;viewKey:string;type:string|null;level:string|null;kind:string|null;rowCount:number;filter:{key:string;value:string}|null;contract:AdminEntityListQueryContract<Record<string,unknown>,string>;publicPathFor(row:Record<string,unknown>):string|null;routeFor(fixture:CoreQueryFixture):string}>;
-type NativeProof={id:string;routeKey:string;scenario:string;actorId:number;ownedRunId:string;fixtureFingerprint:string;preference:unknown;query:string;completeIds:number[];dateFilterProjection:unknown;searchProjection:unknown;extraFilterProjection:unknown};
+type Plan=Array<{viewLink:{href:string;label:string;pageSourceSha256:string}|null;key:string;entity:string;consumerId:string;table:string;labelColumn:string;sortField:string;viewKey:string;type:string|null;level:string|null;kind:string|null;rowCount:number;filter:{key:string;value:string}|null;contract:AdminEntityListQueryContract<Record<string,unknown>,string>;publicPathFor(row:Record<string,unknown>):string|null;routeFor(fixture:CoreQueryFixture):string}>;
+type NativeProof={id:string;routeKey:string;scenario:string;actorId:number;ownedRunId:string;fixtureFingerprint:string;preference:unknown;query:string;completeIds:number[];dateFilterProjection:unknown;searchProjection:unknown;extraFilterProjection:unknown;viewProjection:unknown};
 const state=new WeakMap<OwnedLocalHandle,{fixtures:CoreQueryFixtures;plan:Plan;fingerprints:Map<string,string>;proofs:Map<string,NativeProof>}>();
 function positive(value:unknown){assert.ok(typeof value==='number'&&Number.isSafeInteger(value)&&value>0);return value;}
 function identifier(value:string){assert.match(value,/^[a-z][a-z0-9_]*$/);return '"'+value+'"';}
@@ -44,6 +44,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
  if(spec.kind==='items'){values.push(fixture.stageId);base.push(`stage_id=$${values.length}`);}
  if(spec.kind==='updates'){values.push(fixture.itemId);base.push(`item_id=$${values.length}`);}
  const fullPredicate=base.join(' and '),filtered=[...base];
+ const viewScenario=request.scenario.startsWith('view-'),viewTrash=viewScenario&&request.scenario!=='view-active-restored';if(viewTrash){assert.ok(['topics','categories','series'].includes(spec.entity));filtered.splice(0,filtered.length,'$1::text is not null','deleted_at is not null');}
  if(request.scenario==='empty')filtered.push('false');
  if(request.scenario==='filtered'||Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,request.scenario)){
   assert.ok(spec.filter);
@@ -56,7 +57,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    const value=query.filters[key];if(value){assert.equal(typeof value,'string');filteredValues.push(value+time);filtered.push('created_at '+operator+' $'+filteredValues.length+'::timestamptz');}
   }
  }
- const searchScenario=CORE_QUERY_SEARCH_SCENARIOS.includes(request.scenario);
+ const searchScenario=CORE_QUERY_SEARCH_SCENARIOS.includes(request.scenario)||CORE_QUERY_STALE_SCENARIOS.includes(request.scenario);
  if(searchScenario){
   // Keep the independently registered fixture fingerprint query unchanged.
   // Search clear/short uses the complete canonical route scope, not the namespace subset.
@@ -96,8 +97,18 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    assert.deepEqual(cohort.ids,[...fixture.ids].sort((a,b)=>a-b),'Native complete search set must equal the pre-registered fixture IDs.');
    const fingerprint=String(cohort.fingerprint),previous=current.fingerprints.get(spec.key);
    if(previous)assert.equal(fingerprint,previous,'Read-only query/row information journeys must not mutate their domain rows.');
-   const rows=(await connection.query(`select id,${label} label${spec.entity==='projects'?',slug':spec.entity==='pages'?',path':spec.entity==='topics'?',view_count':spec.entity==='activity_log'?',created_at':''} from public.${table} where ${filtered.join(' and ')} order by ${sort} ${direction} nulls last,id ${idDirection}`,filteredValues)).rows;
-   assert.ok(rows.length<=(searchScenario?5000:spec.rowCount),"Bounded isolated native route result exceeded its verification limit.");const ids=rows.map(row=>Number(row.id));
+   let rows=(await connection.query(`select id,${label} label${spec.entity==='projects'?',slug':spec.entity==='pages'?',path':spec.entity==='topics'?',view_count':spec.entity==='activity_log'?',created_at':''} from public.${table} where ${filtered.join(' and ')} order by ${sort} ${direction} nulls last,id ${idDirection}`,filteredValues)).rows;
+   if(viewTrash&&spec.entity==='categories'){
+    // Reuse the actual stable taxonomy tree reader. Independently reject any
+    // missing, duplicate or active member against raw native trash membership.
+    const rawById=new Map(rows.map(row=>[Number(row.id),row])),ordered:typeof rows=[];assert.equal(rawById.size,rows.length);assert.ok(rows.length<=5000);
+    for(let page=1;page<=Math.max(1,Math.ceil(rows.length/query.pageSize));page++){
+     const result=(await connection.query("select public.admin_list_categories($1,$2,'tree','asc','','all','trash') value",[page,query.pageSize])).rows[0].value as {rows:Row[];total_count:number;page:number};assert.equal(Number(result.total_count),rows.length);assert.equal(Number(result.page),page);assert.ok(Array.isArray(result.rows));for(const row of result.rows){assert.notEqual(row.deleted_at,null);const raw=rawById.get(Number(row.id));assert.ok(raw);ordered.push(raw);}
+    }
+    assert.equal(new Set(ordered.map(row=>Number(row.id))).size,rows.length);assert.deepEqual(ordered.map(row=>Number(row.id)).sort((a,b)=>a-b),[...rawById.keys()].sort((a,b)=>a-b));rows=ordered;
+   }
+   let viewProjection:Row|null=null;if(viewScenario){const domain=(await connection.query("select md5(coalesce(jsonb_agg(to_jsonb(t) order by id)::text,'[]')) fingerprint from public."+table+' t')).rows[0],audit=(await connection.query("select md5(coalesce(jsonb_agg(to_jsonb(a) order by id)::text,'[]')) fingerprint from public.admin_audit_logs a")).rows[0];viewProjection={scope:viewTrash?'full-current-trash':'active-namespace-restored',domainAuditFingerprint:String(domain.fingerprint)+':'+String(audit.fingerprint),completeIds:rows.map(row=>Number(row.id))};}
+   assert.ok(rows.length<=((searchScenario||viewTrash)?5000:spec.rowCount),"Bounded isolated native route result exceeded its verification limit.");const ids=rows.map(row=>Number(row.id));
    const searchProjection=searchScenario?{scenario:request.scenario,normalizedSearch:query.search,columns:coreQuerySearchColumns(spec),scope:'full-registered-route',completeIds:ids}:null;
    const extraFilterProjection=extraFilterCase?{key:extraFilterCase.key,value:extraFilterCase.phase==='applied'?extraFilterCase.value:null,phase:extraFilterCase.phase,scope:'registered-fixture-namespace',completeIds:ids}:null;
    let dateFilterProjection=null;
@@ -111,10 +122,10 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    const preferences=(await connection.query('select preferences from public.admin_user_preferences where admin_user_id=$1 and view_key=$2',[actorId,spec.viewKey])).rows;
    assert.ok(preferences.length<=1);
    await connection.query('commit');current.fingerprints.set(spec.key,fingerprint);
-   current.proofs.set(request.id,{id:request.id,routeKey:spec.key,scenario:request.scenario,actorId,ownedRunId:handle.identity.runId,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,query:params.toString(),completeIds:ids,dateFilterProjection,searchProjection,extraFilterProjection});
+   current.proofs.set(request.id,{id:request.id,routeKey:spec.key,scenario:request.scenario,actorId,ownedRunId:handle.identity.runId,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,query:params.toString(),completeIds:ids,dateFilterProjection,searchProjection,extraFilterProjection,viewProjection});
    return {status:"pass" as const,ownedRunId:handle.identity.runId,id:request.id,kind:request.kind,routeKey:spec.key,scenario:request.scenario,entity:spec.entity,consumerId:spec.consumerId,actorId,route:spec.routeFor(fixture),query:params.toString(),
     expectedIds:ids.slice(start,start+query.pageSize),completeIds:ids,rows:rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),label:String(row.label),publicPath:spec.publicPathFor(row),...(spec.entity==='topics'?{information:{viewCount:Number(row.view_count??0)}}:{})})),
-    pagination:{page,pageSize:query.pageSize,totalRows:rows.length,totalPages},dateFilterProjection,searchProjection,extraFilterProjection,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,
+    pagination:{page,pageSize:query.pageSize,totalRows:rows.length,totalPages},dateFilterProjection,searchProjection,extraFilterProjection,viewProjection,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,
     proofBoundary:'Native table order, complete isolated search set and same-run QA preference projection; no domain audit or unrelated capability proof is inferred.'};
   }catch(error){await connection.query('rollback');throw error;}
  });
@@ -134,12 +145,14 @@ export function verifyCoreQueryPresentationCompletion(handle:OwnedLocalHandle,in
   const receipts=evidence.filter(row=>row.id==='core-query-presentation-'+spec.key);assert.equal(receipts.length,1);assert.equal(receipts[0].status,'pass');
   for(const[key,value]of Object.entries(outcome))assert.deepEqual(receipts[0][key],value,'Outcome must match its final successful Browser receipt.');
   assert.ok(Array.isArray(outcome.nativeCheckpointIds));const ids=outcome.nativeCheckpointIds as string[];
-  const sequence:string[]=['first','empty',...CORE_QUERY_SEARCH_SCENARIOS,'second','third','clamp','wide','descending',...(spec.filter?['filtered']:[]),...(spec.entity==='activity_log'?Object.keys(CORE_ACTIVITY_DATE_SCENARIOS):[]),...coreQueryExtraFilterCases(spec,current.fixtures.queryClosure.contexts[spec.key]).map(row=>row.scenario),'preferences','preferences','first'];
+  const sequence:string[]=['first','empty',...CORE_QUERY_SEARCH_SCENARIOS,...CORE_QUERY_STALE_SCENARIOS,'second','third','clamp','wide','descending',...(spec.filter?['filtered']:[]),...(spec.entity==='activity_log'?Object.keys(CORE_ACTIVITY_DATE_SCENARIOS):[]),...coreQueryExtraFilterCases(spec,current.fixtures.queryClosure.contexts[spec.key]).map(row=>row.scenario),...coreQueryViewScenarios(spec),'preferences','preferences','first'];
   assert.equal(ids.length,sequence.length);assert.equal(new Set(ids).size,ids.length);
   const proofs:NativeProof[]=ids.map((id:string):NativeProof=>{const proof:NativeProof|undefined=current.proofs.get(id);assert.ok(proof,'Browser cannot invent a native checkpoint.');assert.equal(proof.routeKey,spec.key);assert.equal(proof.ownedRunId,handle.identity.runId);assert.equal(proof.actorId,outcome.nativeActorId);actors.add(proof.actorId);return proof;});
   assert.deepEqual(proofs.map(row=>row.scenario),sequence,'Every planned native scenario must be joined in its actual order.');
   assert.ok(proofs.every(row=>row.fixtureFingerprint===proofs[0].fixtureFingerprint));
   const searchBoundary=assertCoreQuerySearchReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
+  const staleRead=assertCoreQueryStaleReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
+  const viewLinks=assertCoreQueryViewReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
   const extraFilters=assertCoreQueryExtraFilterReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
   const datePicker=assertCoreActivityDateReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
   const column=outcome.optionalColumn as Row;assert.ok(column&&typeof column.key==='string');
@@ -150,7 +163,7 @@ export function verifyCoreQueryPresentationCompletion(handle:OwnedLocalHandle,in
   for(const key of ['querySearchEmptyNonempty','backAndReload','outOfRangeClamped','pageSizeChanged','domainFingerprintUnchanged'])assert.equal(outcome[key],true);
   assert.equal(outcome.pageUnion,spec.rowCount);assert.equal(column.persistedAndReloaded,true);assert.equal(column.semanticBaselineRestored,true);
   assert.equal(column.physicalInitialAbsenceRestored,baseline!==null);assert.ok(Array.isArray(outcome.rowEvidence)&&Array.isArray(outcome.remaining));
-  used.push(...ids);summaries.push({routeKey:spec.key,consumerId:spec.consumerId,nativeCheckpoints:proofs.length,actorId:outcome.nativeActorId,fixtureFingerprint:proofs[0].fixtureFingerprint,sortBoundary:outcome.sortBoundary,filterBoundary:outcome.filterBoundary,datePicker,searchBoundary,extraFilters,remaining:outcome.remaining});
+  used.push(...ids);summaries.push({routeKey:spec.key,consumerId:spec.consumerId,nativeCheckpoints:proofs.length,actorId:outcome.nativeActorId,fixtureFingerprint:proofs[0].fixtureFingerprint,sortBoundary:outcome.sortBoundary,filterBoundary:outcome.filterBoundary,datePicker,searchBoundary,staleRead,viewLinks,extraFilters,remaining:outcome.remaining});
  }
  assert.equal(actors.size,1,'All route contexts must use the same exact native QA account.');assert.equal(new Set(used).size,used.length);
  assert.deepEqual([...used].sort(),[...current.proofs.keys()].sort(),'No native query checkpoint may be orphaned or substituted.');

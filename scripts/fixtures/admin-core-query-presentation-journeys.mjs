@@ -1,8 +1,9 @@
+import {registerCorePageRoute} from './admin-core-form-permission-context.mjs';
 import assert from 'node:assert/strict';
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,validateCoreRenderedAdoptionBindings} from './admin-core-rendered-adoption.mjs';
 import { randomUUID } from 'node:crypto';
 import { expect } from 'playwright/test';
-import { loadCoreQueryPresentationPlan, CORE_QUERY_SEARCH_SCENARIOS, coreQueryExtraFilterCases } from './admin-core-query-presentation-plan.mjs';
+import { loadCoreQueryPresentationPlan, CORE_QUERY_SEARCH_SCENARIOS,coreQueryStaleOwner,coreQueryStaleRequestMatches,coreQueryViewScenarios, coreQueryExtraFilterCases } from './admin-core-query-presentation-plan.mjs';
 
 export function assertCoreQueryProjection(receipt,payload){
  assert.deepEqual(payload.rows.map(row=>Number(row.id)),receipt.expectedIds,'API must return the exact native ordered page.');
@@ -36,6 +37,35 @@ export function buildCoreQueryRenderedPlan(spec,route,requiredCases){
  if(modal)validateCoreRenderedAdoptionBindings({requiredCases,bindings,axis:'modal',pathname:route});
  return{bindings,modal,gridId:'query-'+spec.key+'-grid-scroll',modalFocusId:'query-'+spec.key+'-edit-focus',modalReturnId:'query-'+spec.key+'-edit-return',modalScrollId:'query-'+spec.key+'-edit-scroll'};
 }
+
+/** Holds one exact actual registered read. No request headers, bodies or
+ * fabricated responses are persisted; the original GET response is forwarded. */
+export async function observeCoreQueryStaleRead({page,origin,spec,fixture,search,held,current,assertPage,readIds}){
+ const pattern=origin+'/api/admin/entity-lists/'+spec.entity+'?*',events={},sourceOwner=coreQueryStaleOwner();let sequence=0,request=null,response=null,strictRequestCount=0,posts=0,terminal=null,failure=null,responseDelivered=false,handlerError=null,heldResponseIds=null,removeRoute=null;
+ let readyResolve,readyReject,releaseResolve,handlerResolve;const ready=new Promise((resolve,reject)=>{readyResolve=resolve;readyReject=reject;}),release=new Promise(resolve=>{releaseResolve=resolve;}),handlerDone=new Promise(resolve=>{handlerResolve=resolve;});
+ void ready.catch(()=>{}); const bounded=async(promise,label)=>{let timer;try{return await Promise.race([promise,new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Timed out: '+label)),60000);})]);}finally{clearTimeout(timer);}};
+ const count=value=>{if(value.method()==='POST'&&new URL(value.url()).origin===origin&&value.headers()['next-action'])posts++;};
+ const failed=value=>{if(value===request){terminal='aborted';failure=value.failure()?.errorText??null;events.terminal=++sequence;}};
+ const finished=value=>{if(value===request){terminal='completed';responseDelivered=true;events.terminal=++sequence;}};
+ const inFlight=new Set();const gateBody=async route=>{
+  let matches;try{matches=coreQueryStaleRequestMatches(spec,fixture,route.request().url(),origin);}catch(error){handlerError=error;readyReject(error);try{await route.abort('aborted');}finally{handlerResolve();}return;}
+  if(!matches){await route.fallback();return;}
+  try{strictRequestCount++;assert.equal(strictRequestCount,1);request=route.request();assert.equal(request.method(),'GET');response=await route.fetch();assert.equal(response.status(),200);assert.match(response.headers()['cache-control'],/private.*no-store/);assert.equal(response.headers()['x-admin-entity-list'],spec.entity);const payload=await response.json();assertCoreQueryProjection(held,payload);heldResponseIds=payload.rows.map(row=>Number(row.id));events.held=++sequence;readyResolve();await release;
+   try{await route.fulfill({response});}catch(error){if(!(terminal==='aborted'&&failure==='net::ERR_ABORTED'))throw error;}
+  }catch(error){handlerError=error;readyReject(error);try{await route.abort('aborted');}catch{/* Original error remains fatal; an already-terminal request needs no second abort. */}}finally{handlerResolve();}
+ };
+ const gate=route=>{const task=gateBody(route);inFlight.add(task);void task.then(()=>inFlight.delete(task),()=>inFlight.delete(task));return task;};
+ page.on('request',count);page.on('requestfailed',failed);page.on('requestfinished',finished);
+ try{
+  removeRoute=await registerCorePageRoute(page,pattern,gate);
+  await search.fill(new URLSearchParams(held.query).get('q'));await search.press('Enter');await bounded(ready,'actual older GET/native response');assert.equal(handlerError,null);
+  await search.fill(fixture.search);await search.press('Enter');await assertPage(spec,current);const beforeReleaseIds=await readIds();events.currentSettled=++sequence;
+  events.released=++sequence;releaseResolve();await bounded(handlerDone,'older GET completion');assert.equal(handlerError,null);await expect.poll(()=>terminal,{timeout:60000}).not.toBe(null);assert.ok(['aborted','completed'].includes(terminal));if(terminal==='aborted')assert.equal(failure,'net::ERR_ABORTED');
+  await assertPage(spec,current);await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await assertPage(spec,current);const afterReleaseIds=await readIds();assert.equal(posts,0);
+  return{sourceOwner,heldNativeId:held.id,currentNativeId:current.id,beforeReleaseIds,afterReleaseIds,heldResponseIds,heldResponseStatus:response.status(),strictRequestCount,posts,actualSearchInteraction:true,currentQueryRetained:true,method:'GET',pathname:new URL(request.url()).pathname,events,terminal,failure,responseDelivered,automaticCoverage:[],globalClosed:false};
+ }finally{releaseResolve();try{if(removeRoute)await removeRoute();if(request||handlerError)await bounded(handlerDone,'owned gate cleanup');const finished=await bounded(Promise.allSettled([...inFlight]),'all intercepted read callbacks');assert.ok(finished.every(row=>row.status==='fulfilled'),'Every owned read callback must finish before teardown.');}finally{page.off('request',count);page.off('requestfailed',failed);page.off('requestfinished',finished);if(response)await response.dispose();}}
+}
+
 export async function runCoreQueryPresentationJourneys(ctx){
  const {page,origin,fixtures,run,observe,nativeCheckpoint,actionResponse,assertActionAcknowledged,requiredCases}=ctx;
  const context=ctx.context??page.context();
@@ -77,6 +107,7 @@ export async function runCoreQueryPresentationJourneys(ctx){
    searchObservations.push({scenario,requested,normalizedSearch:receipt.searchProjection.normalizedSearch,nativeId:receipt.id,actualInputInteraction:true,actualClearButton:scenario==='search-cleared',registeredRouteScopeVerified:true});
   }
   const searchBoundary={observations:searchObservations,automaticCoverage:[],globalClosed:false,boundary:'Actual registered literal punctuation, contract-derived one-character search, clear and restored namespace joined to native route rows. Stale-response ordering remains separate pending proof.'};
+  const held=await checkpoint(spec,'stale-held'),current=await checkpoint(spec,'stale-restored');const staleReadEvidence=await observeCoreQueryStaleRead({page,origin,spec,fixture:fixtures.queryClosure.contexts[spec.key],search,held,current,assertPage,readIds:ids});
   const pages=[first];
   for(const [scenario,text]of [['second','2'],['third','3']]){
    const receipt=await checkpoint(spec,scenario);await page.locator('[data-admin-pagination-slot="page"]').filter({hasText:new RegExp('^'+text+'$')}).click();await assertPage(spec,receipt);pages.push(receipt);
@@ -130,6 +161,15 @@ export async function runCoreQueryPresentationJourneys(ctx){
   }
   const extraFilterEvidence={observations:extraFilterObservations,automaticCoverage:[],globalClosed:false,boundary:'Existing modal options only; each cancelled draft, accepted query, reload and chip clear independently compared with native rows. No full toolbar-axis credit.'};
 
+  let viewLinkEvidence=null;
+  if(coreQueryViewScenarios(spec).length){
+   const nativeIds=[],trash=await checkpoint(spec,'view-trash-before');nativeIds.push(trash.id);let posts=0;const count=request=>{if(request.method()==='POST'&&new URL(request.url()).origin===origin&&request.headers()['next-action'])posts++;};page.on('request',count);
+   try{const link=page.locator('a[href="'+spec.viewLink.href+'"]').filter({hasText:spec.viewLink.label});await expect(link).toHaveCount(1);const clickedHref=await link.getAttribute('href');assert.equal(clickedHref,spec.viewLink.href);await link.click();await assertPage(spec,trash);await expect(page.getByRole('heading',{name:'المحذوفات',exact:true})).toBeVisible();assert.equal(new URL(page.url()).searchParams.get('q'),null);
+    await page.reload({waitUntil:'domcontentloaded'});await assertPage(spec,trash);const after=await checkpoint(spec,'view-trash-after');nativeIds.push(after.id);await assertPage(spec,after);
+    await page.goBack({waitUntil:'domcontentloaded'});const active=await checkpoint(spec,'view-active-restored');nativeIds.push(active.id);await assertPage(spec,active);assert.deepEqual(active.completeIds,first.completeIds);assert.equal(posts,0);
+    viewLinkEvidence={sourceLink:spec.viewLink,nativeIds,trashCompleteIds:trash.completeIds,activeCompleteIds:active.completeIds,clickedHref,actualLinkClicked:true,actualTrashHeader:true,reloadPreserved:true,backRestoredPriorQuery:true,priorRowsRestored:true,canonicalDefaultsObserved:true,posts,activeControl:'browser-history-back',automaticCoverage:[],globalClosed:false};
+   }finally{page.off('request',count);}
+  }
   assert.equal(spec.columnVisibility,'shared_optional_columns');
   const beforeColumns=await page.locator('thead th[data-admin-column-key]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-admin-column-key')));
   const columnsTrigger=page.locator('[data-admin-toolbar-columns] button');await expect(columnsTrigger).toHaveCount(1);await columnsTrigger.click();
@@ -189,7 +229,7 @@ export async function runCoreQueryPresentationJourneys(ctx){
    }
   }
   const after=await checkpoint(spec,'first');assert.equal(after.fixtureFingerprint,first.fixtureFingerprint);assert.equal(after.actorId,first.actorId);
-  const outcome={renderedAdoption,nativeCheckpointIds:[...nativeIds.get(spec.key)],routeKey:spec.key,consumerId:spec.consumerId,entity:spec.entity,nativeActorId:first.actorId,querySearchEmptyNonempty:true,pageUnion:union.length,backAndReload:true,outOfRangeClamped:true,pageSizeChanged:true,sortBoundary,filterBoundary,dateFilterEvidence,searchBoundary,extraFilterEvidence,optionalColumn:{key:removed[0],persistedAndReloaded:true,semanticBaselineRestored:true,physicalInitialAbsenceRestored:first.preference!==null},rowEvidence,domainFingerprintUnchanged:true,remaining:['Other registered filters not listed above','No full capability-axis promotion from this receipt alone']};outcomes.push(outcome);return outcome;
+  const outcome={renderedAdoption,nativeCheckpointIds:[...nativeIds.get(spec.key)],routeKey:spec.key,consumerId:spec.consumerId,entity:spec.entity,nativeActorId:first.actorId,querySearchEmptyNonempty:true,pageUnion:union.length,backAndReload:true,outOfRangeClamped:true,pageSizeChanged:true,sortBoundary,filterBoundary,dateFilterEvidence,searchBoundary,staleReadEvidence,viewLinkEvidence,extraFilterEvidence,optionalColumn:{key:removed[0],persistedAndReloaded:true,semanticBaselineRestored:true,physicalInitialAbsenceRestored:first.preference!==null},rowEvidence,domainFingerprintUnchanged:true,remaining:['Other registered filters not listed above','No full capability-axis promotion from this receipt alone']};outcomes.push(outcome);return outcome;
  });
  return {status:outcomes.length===plan.length?'pass':'fail',outcomes,scope:'Actual registered query/presentation and bounded nonmutating row information, joined to same-run native fixture projections. Each missing sub-invariant remains explicit.'};
 }

@@ -1,3 +1,4 @@
+import {loadCoreResidualSearchContract,coreResidualSearchQueries,projectCoreResidualSearchRows,assertCoreResidualSearchFragments,bindCoreResidualSearchCells,assertCoreIntegrationSearchNative} from './admin-core-residual-search.mjs';
 import {observeCoreScrollbarAdoption} from "./admin-core-rendered-adoption.mjs";
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
@@ -155,9 +156,15 @@ export async function runCoreReadonlyHubJourneys(ctx) {
         boundary: 'Absent mutation controls are observed current Dashboard scope; no unavailable or empty database simulation.' });
     });
     await run('readonly-integrations-catalog-query-filter-empty-reset', [], async () => {
+      const searchBefore=await checkpoint('integration-search');
       await navigate(routes['settings-pages']); const section = main.locator('[aria-labelledby="available-integrations-heading"]'), cards = section.locator('article');
       await expect(cards).toHaveCount(plan.integrations.length, { timeout: 60_000 }); const originalUrl = page.url();
       const search = section.getByRole('searchbox', { name: 'البحث في التكاملات', exact: true });
+      const contract=await loadCoreResidualSearchContract('integrations'),searchRows=plan.integrations.map(row=>({id:row.key,text:contract.textFor(row)})),observations=[];
+      const actualIds=()=>cards.evaluateAll((nodes,definitions)=>nodes.map(node=>{const labels=Array.from(node.querySelectorAll('p')).map(p=>p.textContent?.trim());const matches=definitions.filter(row=>labels.includes(row.label));if(matches.length!==1)throw Error('Unknown or duplicate integration card');return matches[0].key;}),plan.integrations.map(row=>({key:row.key,label:row.label})));
+      for(const query of coreResidualSearchQueries(plan.integrations[0].label)){await search.fill(query.query);const ids=projectCoreResidualSearchRows(contract,searchRows,query.query);await expect.poll(actualIds).toEqual(ids);assert.equal(page.url(),originalUrl);observations.push({...query,ids:await actualIds(),uiExact:true,queryStateExact:true});}
+      const searchFragments=assertCoreResidualSearchFragments(contract,searchRows,plan.integrations[0].label,observations),searchNamedCellBindings=bindCoreResidualSearchCells(contract,ctx.requiredCases);
+      await page.reload({waitUntil:'domcontentloaded'});await expect(search).toHaveValue('');await expect(cards).toHaveCount(plan.integrations.length);assert.equal(page.url(),originalUrl);
       const first = plan.integrations[0]; await search.fill(first.label); await expect(cards).toHaveCount(1); await expect(cards).toContainText(first.label);
       await search.fill('no-owned-integration-' + randomUUID()); await expect(cards).toHaveCount(0);
       await expect(section.getByText('لا توجد تكاملات تطابق البحث الحالي', { exact: true })).toBeVisible();
@@ -182,7 +189,8 @@ export async function runCoreReadonlyHubJourneys(ctx) {
       await section.getByRole('button', { name: 'إعادة التعيين', exact: true }).click(); await expect(cards).toHaveCount(plan.integrations.length);
       assert.equal(page.url(), originalUrl, 'This fixed catalog owns local filters, not URL query state.');
       await expect(section.getByRole('button', { name: 'إعادة التعيين', exact: true })).toBeDisabled();
-      return outcome({ consumer: 'settings-pages', route: routes['settings-pages'], registryCards: plan.integrations.length, searchEmptyReset: true, category: category, status: selected,
+      const searchAfter=await checkpoint('integration-search');assertCoreIntegrationSearchNative(searchBefore,searchAfter);
+      return outcome({ searchFragments,searchNamedCellBindings,searchNativeCheckpointIds:[searchBefore.id,searchAfter.id],searchReloadResetsLocal:true,searchWrites:0,consumer: 'settings-pages', route: routes['settings-pages'], registryCards: plan.integrations.length, searchEmptyReset: true, category: category, status: selected,
         localQueryUrlUnchanged: true, boundary: 'Catalog controls only. Provider configuration, credentials, testing, authorization, sync and health are remaining work.' });
     });
     for (const report of plan.reports) await run('readonly-report-' + report.id + '-filter-query-contract', [], async () => {
