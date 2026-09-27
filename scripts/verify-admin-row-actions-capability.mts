@@ -4,6 +4,7 @@ import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
 import { buildAdminListSearchOrFilter } from "../src/lib/admin/admin-list-search.ts";
+import { loadNormalizedAdminEntityListPage } from "../src/lib/admin/entity-list/data-engine/adapter.ts";
 
 import {
   ADMIN_ROW_ACTION_MORE_ORDER,
@@ -6174,11 +6175,69 @@ check(
     read(sourceFile).includes("loadNormalizedAdminEntityListPage"),
   ) &&
     read(paths.dataAdapter).includes("for (let attempt = 0;") &&
-    read(paths.dataAdapter).includes("page <= totalPages") &&
     read(paths.dataAdapter).includes(
       "throw new AdminEntityListPageNormalizationError",
     ),
 );
+async function assertThinAdapterPageNormalization(
+  normalize: typeof loadNormalizedAdminEntityListPage,
+) {
+  for (const [requestedPage, rejectRange, totalRows, expectedPages] of [
+    [2, false, 23, [2]],
+    [999999, false, 23, [999999, 3]],
+    [999999, true, 23, [999999, 1, 3]],
+    [999999, true, 0, [999999, 1]],
+  ] as const) {
+    const reads: number[] = [];
+    const result = await normalize({
+      requestedPage,
+      pageSize: 10,
+      loadPage: async (page) => {
+        reads.push(page);
+        if (rejectRange && page === requestedPage) {
+          throw Object.assign(new Error("structured range rejection"), { code: "PGRST103" });
+        }
+        return { rows: totalRows ? [page] : [], totalRows };
+      },
+    });
+    const page = expectedPages[expectedPages.length - 1];
+    assert.deepEqual(reads, expectedPages);
+    assert.deepEqual(result, {
+      rows: totalRows ? [page] : [], totalRows, page,
+      totalPages: Math.max(1, Math.ceil(totalRows / 10)),
+    });
+  }
+  for (const [requestedPage, error] of [
+    [999999, Object.assign(new Error("permission rejection"), { code: "42501" })],
+    [999999, new Error("Requested range not satisfiable")],
+    [1, Object.assign(new Error("first page rejection"), { code: "PGRST103" })],
+  ] as const) {
+    let reads = 0;
+    await assert.rejects(normalize({
+      requestedPage, pageSize: 10,
+      loadPage: async () => { reads += 1; throw error; },
+    }), (actual) => actual === error);
+    assert.equal(reads, 1);
+  }
+  for (const maxReads of [1, 2, 3]) {
+    const reads: number[] = [];
+    await assert.rejects(normalize({
+      requestedPage: 999999, pageSize: 10, maxReads,
+      loadPage: async (page) => {
+        reads.push(page);
+        if (page !== 1) {
+          throw Object.assign(new Error("shrinking range rejection"), { code: "PGRST103" });
+        }
+        return { rows: [1], totalRows: 23 };
+      },
+    }), (error: unknown) => error instanceof Error &&
+      error.name === "AdminEntityListPageNormalizationError" &&
+      "attempts" in error && error.attempts === maxReads);
+    assert.deepEqual(reads, [999999, 1, 3].slice(0, maxReads));
+  }
+}
+await assertThinAdapterPageNormalization(loadNormalizedAdminEntityListPage);
+check("thin adapters use actual bounded normalization, preserve errors, and reject inconsistent results", true);
 check(
   "legacy collection query, URL, and pager owners are removed",
   !redirectsActionsSource.includes("listRedirects(") &&

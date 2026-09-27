@@ -8,7 +8,7 @@ type Row=Record<string,unknown>;
 export type CoreQueryFixture={ search:string; ids:number[]; projectId?:number; stageId?:number; itemId?:number; filterOptions?:{category:{id:number;name:string};series?:{id:number;name:string}} };
 export type CoreQueryFixtures={ queryClosure:{ contexts:Record<string,CoreQueryFixture> } };
 type Plan=Array<{viewLink:{href:string;label:string;pageSourceSha256:string}|null;key:string;entity:string;consumerId:string;table:string;labelColumn:string;sortField:string;viewKey:string;type:string|null;level:string|null;kind:string|null;rowCount:number;filter:{key:string;value:string}|null;contract:AdminEntityListQueryContract<Record<string,unknown>,string>;publicPathFor(row:Record<string,unknown>):string|null;routeFor(fixture:CoreQueryFixture):string}>;
-type NativeProof={id:string;routeKey:string;scenario:string;actorId:number;ownedRunId:string;fixtureFingerprint:string;preference:unknown;query:string;completeIds:number[];dateFilterProjection:unknown;searchProjection:unknown;extraFilterProjection:unknown;viewProjection:unknown};
+type NativeProof={id:string;routeKey:string;scenario:string;actorId:number;ownedRunId:string;fixtureFingerprint:string;preference:unknown;query:string;completeIds:number[];dateFilterProjection:unknown;searchProjection:unknown;extraFilterProjection:unknown;viewProjection:unknown;projectPublicationRows?:Row[]|null};
 const state=new WeakMap<OwnedLocalHandle,{fixtures:CoreQueryFixtures;plan:Plan;fingerprints:Map<string,string>;proofs:Map<string,NativeProof>}>();
 function positive(value:unknown){assert.ok(typeof value==='number'&&Number.isSafeInteger(value)&&value>0);return value;}
 function identifier(value:string){assert.match(value,/^[a-z][a-z0-9_]*$/);return '"'+value+'"';}
@@ -97,7 +97,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    assert.deepEqual(cohort.ids,[...fixture.ids].sort((a,b)=>a-b),'Native complete search set must equal the pre-registered fixture IDs.');
    const fingerprint=String(cohort.fingerprint),previous=current.fingerprints.get(spec.key);
    if(previous)assert.equal(fingerprint,previous,'Read-only query/row information journeys must not mutate their domain rows.');
-   let rows=(await connection.query(`select id,${label} label${spec.entity==='projects'?',slug':spec.entity==='pages'?',path':spec.entity==='topics'?',views_count':spec.entity==='activity_log'?',created_at':''} from public.${table} where ${filtered.join(' and ')} order by ${sort} ${direction} nulls last,id ${idDirection}`,filteredValues)).rows;
+   let rows=(await connection.query(`select id,${label} label${spec.entity==='projects'?',slug,publication_status':spec.entity==='pages'?',path':spec.entity==='topics'?',views_count':spec.entity==='activity_log'?',created_at':''} from public.${table} where ${filtered.join(' and ')} order by ${sort} ${direction} nulls last,id ${idDirection}`,filteredValues)).rows;
    if(viewTrash&&spec.entity==='categories'){
     // Reuse the actual stable taxonomy tree reader. Independently reject any
     // missing, duplicate or active member against raw native trash membership.
@@ -121,14 +121,30 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    const totalPages=Math.max(1,Math.ceil(rows.length/query.pageSize)),page=Math.min(query.page,totalPages),start=(page-1)*query.pageSize;
    const preferences=(await connection.query('select preferences from public.admin_user_preferences where admin_user_id=$1 and view_key=$2',[actorId,spec.viewKey])).rows;
    assert.ok(preferences.length<=1);
+   const projectPublicationRows=spec.entity==='projects'?rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),publicPath:spec.publicPathFor(row),publicationStatus:String(row.publication_status)})):null;
+   if(projectPublicationRows)for(const row of projectPublicationRows)assert.ok(['published','unpublished'].includes(row.publicationStatus),'Native Project publication state must be canonical.');
    await connection.query('commit');current.fingerprints.set(spec.key,fingerprint);
-   current.proofs.set(request.id,{id:request.id,routeKey:spec.key,scenario:request.scenario,actorId,ownedRunId:handle.identity.runId,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,query:params.toString(),completeIds:ids,dateFilterProjection,searchProjection,extraFilterProjection,viewProjection});
+   current.proofs.set(request.id,{id:request.id,routeKey:spec.key,scenario:request.scenario,actorId,ownedRunId:handle.identity.runId,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,query:params.toString(),completeIds:ids,dateFilterProjection,searchProjection,extraFilterProjection,viewProjection,projectPublicationRows});
    return {status:"pass" as const,ownedRunId:handle.identity.runId,id:request.id,kind:request.kind,routeKey:spec.key,scenario:request.scenario,entity:spec.entity,consumerId:spec.consumerId,actorId,route:spec.routeFor(fixture),query:params.toString(),
-    expectedIds:ids.slice(start,start+query.pageSize),completeIds:ids,rows:rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),label:String(row.label),publicPath:spec.publicPathFor(row),...(spec.entity==='topics'?{information:{viewCount:Number(row.views_count??0)}}:{})})),
+    expectedIds:ids.slice(start,start+query.pageSize),completeIds:ids,rows:rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),label:String(row.label),publicPath:spec.publicPathFor(row),...(spec.entity==='projects'?{publicationStatus:String(row.publication_status)}:{}),...(spec.entity==='topics'?{information:{viewCount:Number(row.views_count??0)}}:{})})),
     pagination:{page,pageSize:query.pageSize,totalRows:rows.length,totalPages},dateFilterProjection,searchProjection,extraFilterProjection,viewProjection,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,
     proofBoundary:'Native table order, complete isolated search set and same-run QA preference projection; no domain audit or unrelated capability proof is inferred.'};
   }catch(error){await connection.query('rollback');throw error;}
  });
+}
+
+export function assertCoreProjectCopyPublicLinkCompletion(spec:{entity:string},outcome:Row,proofs:NativeProof[]){
+ if(spec.entity!=='projects')return null;
+ const rows=proofs[0]?.projectPublicationRows;assert.ok(Array.isArray(rows)&&rows.length>0,'Private native Project publication projection is required.');
+ assert.deepEqual(proofs.at(-1)?.projectPublicationRows,rows,'Publication and path identities must remain unchanged after row actions.');
+ assert.equal(new Set(rows.map(row=>row.id)).size,rows.length);
+ for(const row of rows){assert.ok(Number.isSafeInteger(row.id)&&Number(row.id)>0);assert.ok(['published','unpublished'].includes(String(row.publicationStatus)));assert.ok(typeof row.publicPath==='string'&&row.publicPath.startsWith('/projects/'));}
+ const unpublished=rows.find(row=>row.publicationStatus==='unpublished'),published=rows.find(row=>row.publicationStatus==='published');assert.ok(unpublished&&published);
+ assert.ok(Array.isArray(outcome.rowEvidence));const copies=(outcome.rowEvidence as Row[]).filter(row=>row.kind==='copyPublicLink');assert.equal(copies.length,2,'Exactly the disabled and actual published copy observations are required.');
+ assert.deepEqual(copies[0],{kind:'copyPublicLink',nativeEntityId:unpublished.id,publicationStatus:'unpublished',mode:'disabled-current-publication-state',disabledReason:'انشر المشروع أولًا قبل نسخ الرابط العام.'});
+ const origin=copies[1].origin;assert.equal(typeof origin,'string');const url=new URL(String(origin));assert.ok(['http:','https:'].includes(url.protocol)&&!url.username&&!url.password);assert.equal(url.origin,origin);
+ assert.deepEqual(copies[1],{kind:'copyPublicLink',nativeEntityId:published.id,publicationStatus:'published',mode:'actual-clipboard-only-no-navigation',copiedPath:published.publicPath,origin});
+ return{status:'pass',unpublishedEntityId:unpublished.id,publishedEntityId:published.id,copiedPath:published.publicPath,domainPublicationUnchanged:true};
 }
 
 /** Same-handle aggregate join, after the Browser gate; no new query or inferred coverage. */
@@ -163,7 +179,8 @@ export function verifyCoreQueryPresentationCompletion(handle:OwnedLocalHandle,in
   for(const key of ['querySearchEmptyNonempty','backAndReload','outOfRangeClamped','pageSizeChanged','domainFingerprintUnchanged'])assert.equal(outcome[key],true);
   assert.equal(outcome.pageUnion,spec.rowCount);assert.equal(column.persistedAndReloaded,true);assert.equal(column.semanticBaselineRestored,true);
   assert.equal(column.physicalInitialAbsenceRestored,baseline!==null);assert.ok(Array.isArray(outcome.rowEvidence)&&Array.isArray(outcome.remaining));
-  used.push(...ids);summaries.push({routeKey:spec.key,consumerId:spec.consumerId,nativeCheckpoints:proofs.length,actorId:outcome.nativeActorId,fixtureFingerprint:proofs[0].fixtureFingerprint,sortBoundary:outcome.sortBoundary,filterBoundary:outcome.filterBoundary,datePicker,searchBoundary,staleRead,viewLinks,extraFilters,remaining:outcome.remaining});
+  const projectCopyPublicLink=assertCoreProjectCopyPublicLinkCompletion(spec,outcome,proofs);
+  used.push(...ids);summaries.push({routeKey:spec.key,consumerId:spec.consumerId,nativeCheckpoints:proofs.length,actorId:outcome.nativeActorId,fixtureFingerprint:proofs[0].fixtureFingerprint,sortBoundary:outcome.sortBoundary,filterBoundary:outcome.filterBoundary,datePicker,searchBoundary,staleRead,viewLinks,extraFilters,projectCopyPublicLink,remaining:outcome.remaining});
  }
  assert.equal(actors.size,1,'All route contexts must use the same exact native QA account.');assert.equal(new Set(used).size,used.length);
  assert.deepEqual([...used].sort(),[...current.proofs.keys()].sort(),'No native query checkpoint may be orphaned or substituted.');

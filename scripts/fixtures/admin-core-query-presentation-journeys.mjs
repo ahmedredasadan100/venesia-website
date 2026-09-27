@@ -53,6 +53,33 @@ export async function assertCoreQueryInformation(spec,row,info){
  }
  await expect(info).toContainText(row.label);return {kind:'information',nativeEntityId:row.id,nativeLabel:row.label};
 }
+export function coreQueryCopyPublicLinkRows(spec,rows){
+ assert.ok(Array.isArray(rows)&&rows.length>0,'Native first-page rows are required.');
+ if(spec.entity!=='projects')return[rows[0]];
+ assert.equal(new Set(rows.map(row=>row.id)).size,rows.length,'Native Project identities must be unique.');
+ for(const row of rows){assert.ok(Number.isSafeInteger(row.id)&&row.id>0);assert.ok(['published','unpublished'].includes(row.publicationStatus),'Native Project publication status is required.');assert.ok(typeof row.publicPath==='string'&&row.publicPath.startsWith('/projects/')&&!row.publicPath.startsWith('//'));}
+ const unpublished=rows.find(row=>row.publicationStatus==='unpublished'),published=rows.find(row=>row.publicationStatus==='published');
+ assert.ok(unpublished&&published,'Existing native first-page fixtures must cover both publication states without publishing a fixture.');
+ return[unpublished,published];
+}
+export async function assertCoreQueryCopyPublicLinkState(spec,row,menu){
+ await expect(menu).toBeVisible();await expect(menu).toHaveAttribute('data-admin-entity-id',String(row.id));
+ const copy=menu.locator('[data-admin-row-action-menu-item="copyPublicLink"]');await expect(copy).toHaveCount(1);
+ if(spec.entity==='projects'){
+  assert.ok(['published','unpublished'].includes(row.publicationStatus),'Native Project publication status is required.');
+  if(row.publicationStatus==='unpublished'){
+   const disabledReason='انشر المشروع أولًا قبل نسخ الرابط العام.';
+   await expect(copy).toBeDisabled();await expect(copy).toHaveAttribute('aria-disabled','true');await expect(copy).toHaveAttribute('title',disabledReason);
+   return{kind:'copyPublicLink',nativeEntityId:row.id,publicationStatus:row.publicationStatus,mode:'disabled-current-publication-state',disabledReason};
+  }
+ }
+ await expect(copy).toBeEnabled();
+ return{kind:'copyPublicLink',...(spec.entity==='projects'?{nativeEntityId:row.id,publicationStatus:row.publicationStatus}:{}),mode:'actual-clipboard-only-no-navigation'};
+}
+export function coreQueryCopiedLinkEvidence(observation,row,copied,origin){
+ const destination=new URL(copied,origin);assert.ok(['http:','https:'].includes(destination.protocol)&&!destination.username&&!destination.password);assert.equal(destination.pathname,row.publicPath);
+ return{...observation,copiedPath:destination.pathname,origin:destination.origin};
+}
 /** Current B1 context bindings come from its source-derived plan and canonical cells. */
 export function buildCoreQueryRenderedPlan(spec,route,requiredCases){
  assert.ok(typeof spec.key==='string'&&typeof spec.consumerId==='string');assert.ok(route.startsWith('/admin/'));
@@ -219,15 +246,19 @@ export async function runCoreQueryPresentationJourneys(ctx){
    const info=page.locator('[data-admin-row-actions-information][data-admin-entity-id="'+row.id+'"]');const informationEvidence=await assertCoreQueryInformation(spec,row,info);await page.keyboard.press('Escape');await expect(more).toBeFocused();rowEvidence.push({...informationEvidence,focusReturned:true});
   }
   if(spec.rowActions?.copyPublicLink==='adopted'){
-   assert.ok(typeof row.publicPath==='string'&&row.publicPath.startsWith('/'));
    await context.grantPermissions(['clipboard-read','clipboard-write'],{origin});
    try{
-    await rowRoot.locator('[data-admin-row-action="more"] button').click();
-    const copy=page.locator('[data-admin-row-actions-menu][data-admin-entity-id="'+row.id+'"]').locator('[data-admin-row-action-menu-item="copyPublicLink"]');
-    await expect(copy).toBeEnabled();await copy.click();
-    const copied=await page.evaluate(()=>navigator.clipboard.readText());const destination=new URL(copied,origin);
-    assert.ok(['http:','https:'].includes(destination.protocol)&&!destination.username&&!destination.password);assert.equal(destination.pathname,row.publicPath);
-    rowEvidence.push({kind:'copyPublicLink',copiedPath:destination.pathname,origin:destination.origin,mode:'actual-clipboard-only-no-navigation'});
+    for(const copyRow of coreQueryCopyPublicLinkRows(spec,first.rows)){
+     assert.ok(typeof copyRow.publicPath==='string'&&copyRow.publicPath.startsWith('/'));
+     const trigger=page.locator('tr[data-entity-row-id="'+copyRow.id+'"]').locator('[data-admin-row-action="more"] button');await trigger.click();
+     const menu=page.locator('[data-admin-row-actions-menu][data-admin-entity-id="'+copyRow.id+'"]');
+     const observation=await assertCoreQueryCopyPublicLinkState(spec,copyRow,menu);
+     if(observation.mode==='disabled-current-publication-state'){
+      await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(trigger).toBeFocused();rowEvidence.push(observation);continue;
+     }
+     await menu.locator('[data-admin-row-action-menu-item="copyPublicLink"]').click();
+     const copied=await page.evaluate(()=>navigator.clipboard.readText());rowEvidence.push(coreQueryCopiedLinkEvidence(observation,copyRow,copied,origin));
+    }
    }finally{await context.clearPermissions();}
   }
   for(const kind of ['preview','edit'])if(spec.rowActions?.[kind]==='adopted'){
