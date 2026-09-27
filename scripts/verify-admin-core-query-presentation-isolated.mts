@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 import { readCoreFixedQaActor } from './verify-admin-core-domain-readback-isolated.mts';
 import { parseAdminEntityListRequestQuery, type AdminEntityListQueryContract } from '../src/lib/admin/entity-list/data-engine/contracts.ts';
-import { loadCoreQueryPresentationPlan, coreQueryScenario, CORE_ACTIVITY_DATE_SCENARIOS, assertCoreActivityDateReceipts, CORE_QUERY_SEARCH_SCENARIOS, CORE_QUERY_STALE_SCENARIOS, assertCoreQueryStaleReceipts, coreQueryViewScenarios, assertCoreQueryViewReceipts, coreQuerySearchColumns, assertCoreQuerySearchReceipts, coreQueryExtraFilterCases, assertCoreQueryExtraFilterReceipts } from './fixtures/admin-core-query-presentation-plan.mjs';
+import { selectCoreQueryPresentationPlan, loadCoreQueryPresentationPlan, coreQueryScenario, CORE_ACTIVITY_DATE_SCENARIOS, assertCoreActivityDateReceipts, CORE_QUERY_SEARCH_SCENARIOS, CORE_QUERY_STALE_SCENARIOS, assertCoreQueryStaleReceipts, coreQueryViewScenarios, assertCoreQueryViewReceipts, coreQuerySearchColumns, assertCoreQuerySearchReceipts, coreQueryExtraFilterCases, assertCoreQueryExtraFilterReceipts, coreQueryPreferenceScenario, assertCoreQueryColumnSortReceipts } from './fixtures/admin-core-query-presentation-plan.mjs';
 
 type Row=Record<string,unknown>;
 export type CoreQueryFixture={ search:string; ids:number[]; projectId?:number; stageId?:number; itemId?:number; filterOptions?:{category:{id:number;name:string};series?:{id:number;name:string}} };
@@ -34,7 +34,9 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
  const spec=current.plan.find(row=>row.key===request.routeKey);assert.ok(spec,'Unknown registered route context.');
  const fixture=fixtures.queryClosure.contexts[spec.key],params=coreQueryScenario(spec,fixture,request.scenario);
  const query=parseAdminEntityListRequestQuery(spec.contract as AdminEntityListQueryContract<Record<string,unknown>,string>,params);
- const table=identifier(spec.table),label=identifier(spec.labelColumn),sort=identifier(spec.sortField);
+ const nativeSortField=request.scenario==='preferences-default'?query.sort.field:spec.sortField;
+ if(request.scenario==='preferences-default'){assert.equal(spec.entity,'project_tracking_updates');assert.ok(spec.contract.sortFields.includes(nativeSortField));assert.deepEqual(query.sort,spec.contract.defaultSort);}
+ const table=identifier(spec.table),label=identifier(spec.labelColumn),sort=identifier(nativeSortField);
  const base:string[]=[`${label} like $1`],values:unknown[]=[`%${fixture.search}%`];
  if(['topics','topic_categories','topic_series'].includes(spec.table))base.push('deleted_at is null');
  if(spec.entity==='topics_without_image')base.push("coalesce(image,'')=''");
@@ -154,14 +156,18 @@ export function verifyCoreQueryPresentationCompletion(handle:OwnedLocalHandle,in
  const result=browser.queryPresentation as Row;assert.ok(result&&result.status==='pass'&&Array.isArray(result.outcomes));assert.ok(Array.isArray(browser.evidence));
  const current=state.get(handle);assert.ok(current,'No native query checkpoints ran on this owned handle.');
  const outcomes=result.outcomes as Row[],evidence=browser.evidence as Row[];
- assert.deepEqual(outcomes.map(row=>row.routeKey).sort(),current.plan.map(row=>row.key).sort(),'Every current route context must complete exactly once.');
+ const selectedPlan=selectCoreQueryPresentationPlan(current.plan,browser.journeySelection??null) as Plan;
+ assert.deepEqual(outcomes.map(row=>row.routeKey).sort(),selectedPlan.map(row=>row.key).sort(),'Every selected current route context must complete exactly once.');
  const used:string[]=[],actors=new Set<number>(),summaries:Row[]=[];
- for(const spec of current.plan){
+ for(const spec of selectedPlan){
   const outcome=outcomes.find(row=>row.routeKey===spec.key)!;assert.equal(outcome.consumerId,spec.consumerId);assert.equal(outcome.entity,spec.entity);
   const receipts=evidence.filter(row=>row.id==='core-query-presentation-'+spec.key);assert.equal(receipts.length,1);assert.equal(receipts[0].status,'pass');
   for(const[key,value]of Object.entries(outcome))assert.deepEqual(receipts[0][key],value,'Outcome must match its final successful Browser receipt.');
   assert.ok(Array.isArray(outcome.nativeCheckpointIds));const ids=outcome.nativeCheckpointIds as string[];
-  const sequence:string[]=['first','empty',...CORE_QUERY_SEARCH_SCENARIOS,...CORE_QUERY_STALE_SCENARIOS,'second','third','clamp','wide','descending',...(spec.filter?['filtered']:[]),...(spec.entity==='activity_log'?Object.keys(CORE_ACTIVITY_DATE_SCENARIOS):[]),...coreQueryExtraFilterCases(spec,current.fixtures.queryClosure.contexts[spec.key]).map(row=>row.scenario),...coreQueryViewScenarios(spec),'preferences','preferences','first'];
+  const column=outcome.optionalColumn as Row;assert.ok(column&&typeof column.key==='string');
+  const transition=column.sortTransition as Row;assert.ok(transition);
+  const preferenceScenario=coreQueryPreferenceScenario(spec,column.key,transition.activeHeadersBefore);
+  const sequence:string[]=['first','empty',...CORE_QUERY_SEARCH_SCENARIOS,...CORE_QUERY_STALE_SCENARIOS,'second','third','clamp','wide','descending',...(spec.filter?['filtered']:[]),...(spec.entity==='activity_log'?Object.keys(CORE_ACTIVITY_DATE_SCENARIOS):[]),...coreQueryExtraFilterCases(spec,current.fixtures.queryClosure.contexts[spec.key]).map(row=>row.scenario),...coreQueryViewScenarios(spec),preferenceScenario,preferenceScenario,'first'];
   assert.equal(ids.length,sequence.length);assert.equal(new Set(ids).size,ids.length);
   const proofs:NativeProof[]=ids.map((id:string):NativeProof=>{const proof:NativeProof|undefined=current.proofs.get(id);assert.ok(proof,'Browser cannot invent a native checkpoint.');assert.equal(proof.routeKey,spec.key);assert.equal(proof.ownedRunId,handle.identity.runId);assert.equal(proof.actorId,outcome.nativeActorId);actors.add(proof.actorId);return proof;});
   assert.deepEqual(proofs.map(row=>row.scenario),sequence,'Every planned native scenario must be joined in its actual order.');
@@ -171,8 +177,8 @@ export function verifyCoreQueryPresentationCompletion(handle:OwnedLocalHandle,in
   const viewLinks=assertCoreQueryViewReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
   const extraFilters=assertCoreQueryExtraFilterReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
   const datePicker=assertCoreActivityDateReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
-  const column=outcome.optionalColumn as Row;assert.ok(column&&typeof column.key==='string');
-  const preferences=proofs.filter(row=>row.scenario==='preferences').map(row=>row.preference as Row);assert.ok(preferences.every(row=>row&&Array.isArray(row.visibleColumns)));
+  const columnSort=assertCoreQueryColumnSortReceipts(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key]);
+  const preferences=proofs.filter(row=>['preferences','preferences-default'].includes(row.scenario)).map(row=>row.preference as Row);assert.ok(preferences.every(row=>row&&Array.isArray(row.visibleColumns)));
   assert.equal((preferences[0].visibleColumns as string[]).includes(column.key),false);assert.equal((preferences[1].visibleColumns as string[]).includes(column.key),true);
   const baseline=proofs[0].preference as Row|null;
   if(baseline)assert.deepEqual([...(preferences[1].visibleColumns as string[])].sort(),[...(baseline.visibleColumns as string[])].sort());
@@ -180,7 +186,7 @@ export function verifyCoreQueryPresentationCompletion(handle:OwnedLocalHandle,in
   assert.equal(outcome.pageUnion,spec.rowCount);assert.equal(column.persistedAndReloaded,true);assert.equal(column.semanticBaselineRestored,true);
   assert.equal(column.physicalInitialAbsenceRestored,baseline!==null);assert.ok(Array.isArray(outcome.rowEvidence)&&Array.isArray(outcome.remaining));
   const projectCopyPublicLink=assertCoreProjectCopyPublicLinkCompletion(spec,outcome,proofs);
-  used.push(...ids);summaries.push({routeKey:spec.key,consumerId:spec.consumerId,nativeCheckpoints:proofs.length,actorId:outcome.nativeActorId,fixtureFingerprint:proofs[0].fixtureFingerprint,sortBoundary:outcome.sortBoundary,filterBoundary:outcome.filterBoundary,datePicker,searchBoundary,staleRead,viewLinks,extraFilters,projectCopyPublicLink,remaining:outcome.remaining});
+  used.push(...ids);summaries.push({routeKey:spec.key,consumerId:spec.consumerId,nativeCheckpoints:proofs.length,actorId:outcome.nativeActorId,fixtureFingerprint:proofs[0].fixtureFingerprint,sortBoundary:outcome.sortBoundary,filterBoundary:outcome.filterBoundary,datePicker,searchBoundary,staleRead,viewLinks,extraFilters,projectCopyPublicLink,columnSort,remaining:outcome.remaining});
  }
  assert.equal(actors.size,1,'All route contexts must use the same exact native QA account.');assert.equal(new Set(used).size,used.length);
  assert.deepEqual([...used].sort(),[...current.proofs.keys()].sort(),'No native query checkpoint may be orphaned or substituted.');

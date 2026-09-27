@@ -4,6 +4,28 @@ import { createHash } from 'node:crypto';
 import { createJiti } from 'jiti';
 import ts from 'typescript';
 
+/** Fixed measured Pages/Tracking follow-up; full query recipes remain the default. */
+export const CORE_QUERY_LAYOUT_SELECTION='query-layout-followup';
+export function selectCoreQueryPresentationPlan(plan,selection){
+ if(selection===null||selection===undefined)return plan;
+ assert.equal(selection,CORE_QUERY_LAYOUT_SELECTION);assert.ok(Array.isArray(plan));assert.equal(new Set(plan.map(row=>row.key)).size,plan.length);
+ const keys=['pages','project_tracking_stages','project_tracking_items','project_tracking_updates'];
+ const selected=plan.filter(row=>keys.includes(row.key));assert.deepEqual(selected.map(row=>row.key),keys,'Only exact canonical affected contexts, in original recipe order.');return selected;
+}
+/** Full independent historical inventory stays intact; this selection grants no capability credit. */
+export function assertCoreQuerySelectionReceipt(browser,plan,canonicalRequiredCases){
+ assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'query-presentation');assert.equal(browser.journeySelection,CORE_QUERY_LAYOUT_SELECTION);assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.deepEqual(browser.errors,[]);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
+ const identity=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.ok(rows.every(row=>typeof row.key==='string'&&row.key.length>0));assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const value={...row};delete value.status;delete value.evidence;return value;}).sort((a,b)=>a.key.localeCompare(b.key));};
+ assert.deepEqual(identity(browser.requiredCases),identity(canonicalRequiredCases));assert.ok(browser.requiredCases.every(row=>row.status==='open'&&row.evidence===null));
+ const selected=selectCoreQueryPresentationPlan(plan,CORE_QUERY_LAYOUT_SELECTION),ids=selected.map(row=>'core-query-presentation-'+row.key);
+ assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...ids]);assert.ok(browser.evidence.every(row=>row.status==='pass'&&Array.isArray(row.coverage)&&row.coverage.length===0));
+ const login=browser.evidence[0];assert.equal(login.authenticated,true);assert.equal(login.sessionArtifactWritten,false);assert.match(login.dashboardState,/^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
+ assert.equal(browser.queryPresentation.status,'pass');assert.deepEqual(browser.queryPresentation.outcomes.map(row=>row.routeKey),selected.map(row=>row.key));
+ for(const outcome of browser.queryPresentation.outcomes){const rows=browser.evidence.filter(row=>row.id==='core-query-presentation-'+outcome.routeKey);assert.equal(rows.length,1);for(const[key,value]of Object.entries(outcome))assert.deepEqual(rows[0][key],value);}
+ return{selection:CORE_QUERY_LAYOUT_SELECTION,selectedJourneyIds:ids,executedJourneyIds:[...ids],wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
+}
+
+
 // Fixed verification recipes, checked against the live Product registry and
 // manifest. This table grants no Product capability and is never imported by it.
 const recipes = {
@@ -67,12 +89,19 @@ export async function loadCoreQueryPresentationPlan(){
  }
  assert.deepEqual([...new Set(plan.map(r=>r.entity))].sort(),registeredEntityKeys(registry));return plan;
 }
-export const CORE_QUERY_SCENARIOS=['first','second','third','descending','filtered','empty','clamp','wide','preferences'];
+export const CORE_QUERY_SCENARIOS=['first','second','third','descending','filtered','empty','clamp','wide','preferences','preferences-default'];
 export function coreQueryScenario(spec,fixture,scenario){
  const extraFilterCase=scenario.startsWith('extra-filter-')?coreQueryExtraFilterCases(spec,fixture).find(row=>row.scenario===scenario):null;
  assert.ok(extraFilterCase||CORE_QUERY_SCENARIOS.includes(scenario)||CORE_QUERY_SEARCH_SCENARIOS.includes(scenario)||CORE_QUERY_STALE_SCENARIOS.includes(scenario)||coreQueryViewScenarios(spec).includes(scenario)||(spec.entity==='activity_log'&&Object.hasOwn(CORE_ACTIVITY_DATE_SCENARIOS,scenario)));assert.ok(/^qa-b1-[a-z0-9-]+$/.test(fixture.search));
  if(scenario==='view-trash-before'||scenario==='view-trash-after')return new URLSearchParams({view:'trash'});
  const size=Math.min(...spec.contract.pageSizeOptions),params=new URLSearchParams({q:scenario==='empty'?fixture.search+'-absent':fixture.search,sort:spec.sortField+'_'+(scenario==='descending'?'desc':'asc'),limit:String(size)});
+ if(scenario==='preferences-default'){
+  // Only the measured Updates recipe currently hides its active optional sort.
+  // A different consumer needs its actual onSortColumnHidden contract reviewed.
+  assert.equal(spec.entity,'project_tracking_updates');const sort=spec.contract.defaultSort;
+  assert.ok(spec.contract.sortFields.includes(sort.field));assert.ok(['asc','desc'].includes(sort.direction));
+  params.set('sort',sort.field+'_'+sort.direction);
+ }
  if(CORE_QUERY_SEARCH_SCENARIOS.includes(scenario)){
   const symbols={'search-literal-percent':'%','search-literal-underscore':'_','search-literal-star':'*','search-literal-quote':'"','search-literal-backslash':'\\'};
   if(Object.hasOwn(symbols,scenario))params.set('q',fixture.search+symbols[scenario]);
@@ -205,4 +234,27 @@ export function assertCoreQueryViewReceipts(outcome,proofs,spec,fixture){
  for(const proof of selected){assert.equal(proof.actorId,outcome.nativeActorId);assert.equal(proof.ownedRunId,first.ownedRunId);assert.equal(proof.routeKey,spec.key);assert.equal(proof.fixtureFingerprint,first.fixtureFingerprint);assert.equal(proof.query,coreQueryScenario(spec,fixture,proof.scenario).toString());assert.deepEqual(proof.viewProjection.completeIds,proof.completeIds);assert.equal(proof.viewProjection.scope,proof.scenario==='view-active-restored'?'active-namespace-restored':'full-current-trash');assert.match(proof.viewProjection.domainAuditFingerprint,/^[a-f0-9]{32}:[a-f0-9]{32}$/u);}
  assert.deepEqual(selected[0].completeIds,selected[1].completeIds);assert.deepEqual(selected[2].completeIds,first.completeIds);assert.ok(selected.every(row=>row.viewProjection.domainAuditFingerprint===selected[0].viewProjection.domainAuditFingerprint));assert.deepEqual(observation.trashCompleteIds,selected[0].completeIds);assert.deepEqual(observation.activeCompleteIds,first.completeIds);assert.equal(observation.clickedHref,spec.viewLink.href);for(const key of ['actualLinkClicked','actualTrashHeader','reloadPreserved','backRestoredPriorQuery','priorRowsRestored','canonicalDefaultsObserved'])assert.equal(observation[key],true);assert.equal(observation.posts,0);assert.equal(observation.activeControl,'browser-history-back');assert.deepEqual(observation.automaticCoverage,[]);assert.equal(observation.globalClosed,false);
  return{consumerId:spec.consumerId,routeKey:spec.key,nativeIds:selected.map(row=>row.id),actorId:outcome.nativeActorId,observedTrashRows:selected[0].completeIds.length,automaticCoverage:[],globalClosed:false,boundary:'Exact current Trash link, default query/ordered first page, reload and browser Back to prior active query. Native full trash membership and complete domain/audit fingerprint joined; no invented active toggle or lifecycle mutation claim.'};
+}
+
+/** Actual pre-click header state determines whether the removed column owned the sort. */
+export function coreQueryPreferenceScenario(spec,columnKey,activeHeaders){
+ assert.ok(typeof columnKey==='string'&&columnKey.length>0);assert.ok(Array.isArray(activeHeaders)&&activeHeaders.length<=1);
+ for(const header of activeHeaders){assert.deepEqual(Object.keys(header).sort(),['direction','key']);assert.ok(typeof header.key==='string'&&header.key.length>0);assert.equal(header.direction,'ascending','Preference probe begins at the first ascending query.');}
+ const removedActiveSort=activeHeaders.some(header=>header.key===columnKey);
+ if(removedActiveSort){assert.equal(spec.entity,'project_tracking_updates','An unreviewed active-column reset cannot inherit the Updates behavior.');return 'preferences-default';}
+ return 'preferences';
+}
+export function assertCoreQueryColumnSortReceipts(outcome,proofs,spec,fixture){
+ const column=outcome.optionalColumn,observation=column?.sortTransition;assert.ok(observation);
+ assert.deepEqual(Object.keys(observation).sort(),['activeHeadersBefore','beforeRowActionsQuery','firstNativeId','firstQueryReopenedBeforeRowActions','hiddenReloadQuery','nativeIds','nativeScenario','removedActiveSort','restoredReloadQuery']);
+ const scenario=coreQueryPreferenceScenario(spec,column.key,observation.activeHeadersBefore);
+ assert.equal(observation.removedActiveSort,scenario==='preferences-default');assert.equal(observation.nativeScenario,scenario);
+ const preferenceProofs=proofs.filter(row=>['preferences','preferences-default'].includes(row.scenario));assert.equal(preferenceProofs.length,2);
+ assert.deepEqual(preferenceProofs.map(row=>row.scenario),[scenario,scenario]);assert.deepEqual(observation.nativeIds,preferenceProofs.map(row=>row.id));
+ const first=proofs[0];assert.equal(first.scenario,'first');const params=coreQueryScenario(spec,fixture,scenario),expected=spec.normalizeQuery(params,fixture);
+ for(const proof of preferenceProofs){assert.equal(proof.query,params.toString());assert.equal(proof.routeKey,spec.key);assert.equal(proof.actorId,outcome.nativeActorId);assert.equal(proof.ownedRunId,first.ownedRunId);assert.equal(proof.fixtureFingerprint,first.fixtureFingerprint);}
+ assert.deepEqual(observation.hiddenReloadQuery,expected);assert.deepEqual(observation.restoredReloadQuery,expected);
+ assert.equal(observation.firstNativeId,first.id);assert.equal(observation.firstQueryReopenedBeforeRowActions,true);
+ assert.deepEqual(observation.beforeRowActionsQuery,spec.normalizeQuery(coreQueryScenario(spec,fixture,'first'),fixture));
+ return{removedActiveSort:observation.removedActiveSort,expectedSort:expected.sort,preferenceNativeIds:observation.nativeIds,firstQueryRestored:true};
 }

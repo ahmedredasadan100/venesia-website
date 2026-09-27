@@ -520,7 +520,7 @@ assert.match(
 assert.doesNotMatch(entityListTable, /insetInlineEnd:\s*actionsColumnWidth/u);
 assert.match(
   entityListTable,
-  /data-admin-grid-sticky="inline-end-adjacent"/u,
+  /pinAdjacentColumns\s*\?\s*"inline-end-adjacent"\s*:\s*undefined/u,
 );
 assert.match(
   entityListTable,

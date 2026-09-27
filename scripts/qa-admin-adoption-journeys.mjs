@@ -1,4 +1,5 @@
 import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, CORE_READONLY_QUERY_SELECTION, buildCoreReadonlyQueryProofPlan, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
+import { CORE_QUERY_LAYOUT_SELECTION, loadCoreQueryPresentationPlan, selectCoreQueryPresentationPlan, assertCoreQuerySelectionReceipt } from "./fixtures/admin-core-query-presentation-plan.mjs";
 import { CORE_TEMPLATE_FORM_CREATES_SELECTION, coreSelectedTemplateCreates, coreTemplateCreateJourneyId, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection, buildCorePreviewPublicImpactPlan, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
@@ -41,7 +42,7 @@ const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".l
 const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
   ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
-let selectedJourneyIds = journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION
+let selectedJourneyIds = journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION
   ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTemplateCreateJourneyId)
   : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
@@ -167,6 +168,8 @@ assert.equal(new URL(origin).hostname, "127.0.0.1", "Only the owned loopback app
 assert.ok(process.env.QA_ADMIN_USERNAME && process.env.QA_ADMIN_PASSWORD, "The owned lifecycle must supply its private local account.");
 const fixtures = JSON.parse(readFileSync(process.env.QA_ADMIN_FIXTURES, "utf8"));
 if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) selectedJourneyIds = buildCorePreviewPublicImpactPlan({fixtures,previewMatrix}).journeyIds;
+const querySelectionPlan = journeySelection === CORE_QUERY_LAYOUT_SELECTION ? await loadCoreQueryPresentationPlan() : null;
+if (querySelectionPlan) selectedJourneyIds = selectCoreQueryPresentationPlan(querySelectionPlan,journeySelection).map(row=>"core-query-presentation-"+row.key);
 let domainCommandTailPlan = null;
 if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) {
   const location = await jiti.import("../src/lib/admin/projects/location-management-contract.ts"), tracking = await jiti.import("../src/lib/admin/projects/tracking-contract.ts");
@@ -418,7 +421,7 @@ try {
    } else if (coreCohort === "query-presentation") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreQueryPresentationJourneys } = await import("./fixtures/admin-core-query-presentation-journeys.mjs");
-    queryPresentationResult = await runCoreQueryPresentationJourneys({page,context,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,requiredCases,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    queryPresentationResult = await runCoreQueryPresentationJourneys({page,context,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,requiredCases,journeySelection,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "media-recovery") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreMediaRecoveryJourneys } = await import("./fixtures/admin-core-media-recovery-journeys.mjs");
@@ -785,6 +788,7 @@ try {
   driverCompleted = true;
   if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) assertCorePreviewPublicImpactReceipt(receipt(), {fixtures,previewMatrix,canonicalRequiredCases:requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256});
   else if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases);
+  else if (journeySelection === CORE_QUERY_LAYOUT_SELECTION) assertCoreQuerySelectionReceipt(receipt(),querySelectionPlan,requiredCases);
   else if (journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION) assertCoreTemplateSelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   else if (journeySelection !== null) assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   checkpoint("driver", "complete");

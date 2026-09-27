@@ -4677,7 +4677,7 @@ check(
     ) &&
     entityListTableSource.includes("stickyEndOffsets.get(column.key) ?? 0") &&
     entityListTableSource.includes(
-      'data-admin-grid-sticky="inline-end-adjacent"',
+      'pinAdjacentColumns ? "inline-end-adjacent" : undefined',
     ) &&
     !pagesSource.includes("AdminDataGridActionsHeaderCell") &&
     !pagesSource.includes("flushInlineEnd"),

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,validateCoreRenderedAdoptionBindings} from './admin-core-rendered-adoption.mjs';
 import { randomUUID } from 'node:crypto';
 import { expect } from 'playwright/test';
-import { loadCoreQueryPresentationPlan, CORE_QUERY_SEARCH_SCENARIOS,coreQueryStaleOwner,coreQueryStaleRequestMatches,coreQueryViewScenarios, coreQueryExtraFilterCases } from './admin-core-query-presentation-plan.mjs';
+import { selectCoreQueryPresentationPlan, loadCoreQueryPresentationPlan, CORE_QUERY_SEARCH_SCENARIOS,coreQueryStaleOwner,coreQueryStaleRequestMatches,coreQueryViewScenarios, coreQueryExtraFilterCases, coreQueryPreferenceScenario } from './admin-core-query-presentation-plan.mjs';
 
 export function assertCoreQueryProjection(receipt,payload){
  assert.deepEqual(payload.rows.map(row=>Number(row.id)),receipt.expectedIds,'API must return the exact native ordered page.');
@@ -122,7 +122,8 @@ export async function runCoreQueryPresentationJourneys(ctx){
  const {page,origin,fixtures,run,observe,nativeCheckpoint,actionResponse,assertActionAcknowledged,requiredCases}=ctx;
  const context=ctx.context??page.context();
  assert.equal(new URL(origin).hostname,'127.0.0.1');assert.equal(typeof nativeCheckpoint,'function');
- const plan=await loadCoreQueryPresentationPlan();assert.deepEqual(Object.keys(fixtures.queryClosure.contexts).sort(),plan.map(row=>row.key).sort());
+ const completePlan=await loadCoreQueryPresentationPlan();assert.deepEqual(Object.keys(fixtures.queryClosure.contexts).sort(),completePlan.map(row=>row.key).sort());
+ const plan=selectCoreQueryPresentationPlan(completePlan,ctx.journeySelection??null);
  const outcomes=[],nativeIds=new Map();
  const checkpoint=async(spec,scenario)=>{
   const request={id:randomUUID(),kind:'query-presentation-state',routeKey:spec.key,scenario};
@@ -224,18 +225,24 @@ export async function runCoreQueryPresentationJourneys(ctx){
   }
   assert.equal(spec.columnVisibility,'shared_optional_columns');
   const beforeColumns=await page.locator('thead th[data-admin-column-key]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-admin-column-key')));
+  const activeHeadersBefore=await page.locator('thead th[data-admin-column-key][aria-sort="ascending"],thead th[data-admin-column-key][aria-sort="descending"]').evaluateAll(nodes=>nodes.map(node=>({key:node.getAttribute('data-admin-column-key'),direction:node.getAttribute('aria-sort')})));
   const columnsTrigger=page.locator('[data-admin-toolbar-columns] button');await expect(columnsTrigger).toHaveCount(1);await columnsTrigger.click();
   const menu=page.locator('[data-admin-column-menu]'),toggle=menu.locator('input[type="checkbox"]:checked:not(:disabled)').first();await expect(toggle).toHaveCount(1);
   const toggleName=await toggle.getAttribute('aria-label');assert.ok(toggleName?.startsWith('إخفاء عمود '));const showName=toggleName.replace('إخفاء عمود ','إظهار عمود ');
   const save=actionResponse();await toggle.click();assertActionAcknowledged(await save);await page.keyboard.press('Escape');
   const afterColumns=await page.locator('thead th[data-admin-column-key]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-admin-column-key')));
   const removed=beforeColumns.filter(key=>!afterColumns.includes(key));assert.equal(removed.length,1);
-  const changed=await checkpoint(spec,'preferences');assert.ok(changed.preference);assert.ok(!changed.preference.visibleColumns.includes(removed[0]));
-  await page.reload({waitUntil:'domcontentloaded'});await assertPage(spec,first);await expect(page.locator('thead th[data-admin-column-key="'+removed[0]+'"]')).toHaveCount(0);
+  const preferenceScenario=coreQueryPreferenceScenario(spec,removed[0],activeHeadersBefore);
+  const changed=await checkpoint(spec,preferenceScenario);assert.ok(changed.preference);assert.ok(!changed.preference.visibleColumns.includes(removed[0]));
+  await assertPage(spec,changed);await page.reload({waitUntil:'domcontentloaded'});await assertPage(spec,changed);
+  const hiddenReloadQuery=spec.normalizeQuery(new URL(page.url()).searchParams,fixtures.queryClosure.contexts[spec.key]);await expect(page.locator('thead th[data-admin-column-key="'+removed[0]+'"]')).toHaveCount(0);
   await columnsTrigger.click();const restore=actionResponse();await menu.getByRole('checkbox',{name:showName,exact:true}).click();assertActionAcknowledged(await restore);await page.keyboard.press('Escape');
-  await page.reload({waitUntil:'domcontentloaded'});await assertPage(spec,first);
+  const restored=await checkpoint(spec,preferenceScenario);assert.ok(restored.preference.visibleColumns.includes(removed[0]));
+  await assertPage(spec,restored);await page.reload({waitUntil:'domcontentloaded'});await assertPage(spec,restored);
+  const restoredReloadQuery=spec.normalizeQuery(new URL(page.url()).searchParams,fixtures.queryClosure.contexts[spec.key]);
   assert.deepEqual(await page.locator('thead th[data-admin-column-key]').evaluateAll(nodes=>nodes.map(node=>node.getAttribute('data-admin-column-key'))),beforeColumns);
-  const restored=await checkpoint(spec,'preferences');assert.ok(restored.preference.visibleColumns.includes(removed[0]));
+  await open(first);await assertPage(spec,first);
+  const sortTransition={activeHeadersBefore,removedActiveSort:preferenceScenario==='preferences-default',nativeScenario:preferenceScenario,nativeIds:[changed.id,restored.id],hiddenReloadQuery,restoredReloadQuery,firstNativeId:first.id,firstQueryReopenedBeforeRowActions:true,beforeRowActionsQuery:spec.normalizeQuery(new URL(page.url()).searchParams,fixtures.queryClosure.contexts[spec.key])};
   // Mandatory columns may be omitted by the preference serializer. Compare the
   // exact persisted baseline only when it existed; absent rows are restored to
   // equivalent rendered preferences through the Product's save owner.
@@ -285,7 +292,7 @@ export async function runCoreQueryPresentationJourneys(ctx){
    }
   }
   const after=await checkpoint(spec,'first');assert.equal(after.fixtureFingerprint,first.fixtureFingerprint);assert.equal(after.actorId,first.actorId);
-  const outcome={renderedAdoption,nativeCheckpointIds:[...nativeIds.get(spec.key)],routeKey:spec.key,consumerId:spec.consumerId,entity:spec.entity,nativeActorId:first.actorId,querySearchEmptyNonempty:true,pageUnion:union.length,backAndReload:true,outOfRangeClamped:true,pageSizeChanged:true,sortBoundary,filterBoundary,dateFilterEvidence,searchBoundary,staleReadEvidence,viewLinkEvidence,extraFilterEvidence,optionalColumn:{key:removed[0],persistedAndReloaded:true,semanticBaselineRestored:true,physicalInitialAbsenceRestored:first.preference!==null},rowEvidence,domainFingerprintUnchanged:true,remaining:['Other registered filters not listed above','No full capability-axis promotion from this receipt alone']};outcomes.push(outcome);return outcome;
+  const outcome={renderedAdoption,nativeCheckpointIds:[...nativeIds.get(spec.key)],routeKey:spec.key,consumerId:spec.consumerId,entity:spec.entity,nativeActorId:first.actorId,querySearchEmptyNonempty:true,pageUnion:union.length,backAndReload:true,outOfRangeClamped:true,pageSizeChanged:true,sortBoundary,filterBoundary,dateFilterEvidence,searchBoundary,staleReadEvidence,viewLinkEvidence,extraFilterEvidence,optionalColumn:{key:removed[0],sortTransition,persistedAndReloaded:true,semanticBaselineRestored:true,physicalInitialAbsenceRestored:first.preference!==null},rowEvidence,domainFingerprintUnchanged:true,remaining:['Other registered filters not listed above','No full capability-axis promotion from this receipt alone']};outcomes.push(outcome);return outcome;
  });
  return {status:outcomes.length===plan.length?'pass':'fail',outcomes,scope:'Actual registered query/presentation and bounded nonmutating row information, joined to same-run native fixture projections. Each missing sub-invariant remains explicit.'};
 }
