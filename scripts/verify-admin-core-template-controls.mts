@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import ts from "typescript";
 import { createJiti } from "jiti";
-import { buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_PHASES, TEMPLATE_CONTROL_RECIPES, TEMPLATE_CONTROL_VALUES as v, validateTemplateControlsRequest, assertTemplateControlsProjection } from "./fixtures/admin-core-template-controls-contract.mjs";
+import { TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS, assertCoreTemplateFeedbackAdapter, assertCoreTemplateFeedbackCompletion, buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_PHASES, TEMPLATE_CONTROL_RECIPES, TEMPLATE_CONTROL_VALUES as v, validateTemplateControlsRequest, assertTemplateControlsProjection } from "./fixtures/admin-core-template-controls-contract.mjs";
 const root=resolve(import.meta.dirname,".."),jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false,alias:{"server-only":resolve(root,"node_modules/next/dist/compiled/server-only/empty.js")}});
 const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import<typeof import("../src/lib/admin/form-system/adoption-manifest.ts")>(resolve(root,"src/lib/admin/form-system/adoption-manifest.ts"));
 const fixtures={templates:Object.keys(TEMPLATE_CONTROL_RECIPES).map((kind,index)=>({kind,id:index+1,name:kind,slug:"qa-"+kind})),category:{slug:"qa-category"},series:{slug:"qa-series"},article:{id:41},news:{id:42}};
@@ -80,6 +80,66 @@ for(const [name,mutate]of [
 ] as const)test("Persistence corruption rejected: "+name,()=>{const changed=structuredClone(rows);mutate(changed);assert.throws(()=>{for(const[k,row]of Object.entries(changed))assertTemplateControlsProjection(k,row,fixtures);});});
 const browser=readFileSync(resolve(root,"scripts/fixtures/admin-core-template-controls-journeys.mjs"),"utf8");
 test("Concrete Browser recipe never writes hidden fields or starts a route interceptor",()=>{assert.doesNotMatch(browser,/page\.(route|unroute)|\.evaluate\([^)]*=>\s*[^)]*\.value\s*=/u);assert.doesNotMatch(browser,/force:\s*true|page\.request|service_role/u);assert.match(browser,/nativeFinalityRequired: true/u);});
+function feedbackFixture(){
+ const sourceSha256='a'.repeat(64),ownedRunId='owned-fixture';
+ const outcomes=Object.keys(TEMPLATE_CONTROL_RECIPES).map((kind,kindIndex)=>{
+  const templateId=kindIndex+1;
+  const feedbackAdapter={kind,templateId,channel:'block-editor:/admin/pages-blocks/blocks/'+kind,routePathname:'/admin/pages-blocks/blocks/'+kind+'/'+templateId,sourceSha256,actualAcceptedSaveVisible:true,actualAcceptedVariant:'success',additionalActionPosts:0,adapterOnly:true,backendFailureClaim:false,automaticCoverage:[],globalClosed:false,nativeBefore:kind+':saved',nativeAfter:kind+':reloaded',scenarios:TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS.map(spec=>({id:spec.id,variant:spec.variant,messageText:spec.text,visibleCount:1,dismissButtonVisible:true,dismissed:true,savedRemoved:true,noticeRemoved:true,cacheWarningRemoved:true,unrelatedQueryPreserved:true,samePathAndHash:true,absentAfterReload:true}))};return{kind,templateId,feedbackAdapter};
+ });
+ const records=outcomes.flatMap(({kind,templateId})=>TEMPLATE_CONTROL_PHASES.map((phase,index)=>({id:kind+':'+phase,kind:'template-controls-state',recipe:kind,phase,status:'pass',templateId,actorBound:true,assignmentGraphUnchanged:true,rowHash:'b'.repeat(64),otherRowsHash:'c'.repeat(64),auditCount:index===3?1:0})));
+ const evidence=outcomes.map(({kind,feedbackAdapter})=>({id:'core-template-controls-'+kind,status:'pass',feedbackAdapter}));
+ return{browser:{cohort:'template-controls',sourceSha256,templateControls:{outcomes},evidence,errors:[] as Array<{id:string}>},native:{status:'pass',ownedRunId,records},ownedRunId};
+}
+test('Specialized Feedback seven exact adapters join existing35 native phases',()=>{const x=feedbackFixture();assert.equal(assertCoreTemplateFeedbackCompletion(x.browser,x.native,x.ownedRunId).adapterObservations,28);});
+for(const[name,mutate]of Object.entries({
+ 'missing-kind':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes.pop(),
+ 'duplicate-kind':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes[1]=x.browser.templateControls.outcomes[0],
+ 'wrong-source':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes[0].feedbackAdapter.sourceSha256='f'.repeat(64),
+ 'foreign-native-run':(x:ReturnType<typeof feedbackFixture>):unknown=>x.native.ownedRunId='foreign',
+ 'wrong-channel':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes[0].feedbackAdapter.channel='global',
+ 'missing-warning':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes[0].feedbackAdapter.scenarios.pop(),
+ 'wrong-warning':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes[0].feedbackAdapter.scenarios[1].variant='success',
+ 'dismiss-not-cleared':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes[0].feedbackAdapter.scenarios[0].cacheWarningRemoved=false,
+ 'additional-action':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes[0].feedbackAdapter.additionalActionPosts=1,
+ 'changed-native-row':(x:ReturnType<typeof feedbackFixture>):unknown=>x.native.records.find((r)=>r.phase==='reloaded')!.rowHash='d'.repeat(64),
+ 'phantom-audit':(x:ReturnType<typeof feedbackFixture>):unknown=>x.native.records.find((r)=>r.phase==='reloaded')!.auditCount=1,
+ 'missing-native':(x:ReturnType<typeof feedbackFixture>):unknown=>x.native.records.pop(),
+ 'duplicate-native':(x:ReturnType<typeof feedbackFixture>):unknown=>x.native.records[1]=x.native.records[0],
+ 'failed-selected-journey':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.evidence[0].status='fail',
+ 'backend-failure-inferred':(x:ReturnType<typeof feedbackFixture>):unknown=>x.browser.templateControls.outcomes[0].feedbackAdapter.backendFailureClaim=true,
+})){test('Specialized Feedback rejects '+name,()=>{const x=feedbackFixture();mutate(x);assert.throws(()=>assertCoreTemplateFeedbackCompletion(x.browser,x.native,x.ownedRunId));});}
+test('Specialized adapter scenarios stay isolated and have no automatic coverage',()=>{for(const row of feedbackFixture().browser.templateControls.outcomes)assertCoreTemplateFeedbackAdapter(row.feedbackAdapter,row.kind,row.templateId,'a'.repeat(64));});
+
+// Execute the actual template collector branch and its final result property. No database/Browser runtime.
+const templateCollectorSource=readFileSync(resolve(root,'scripts/verify-admin-adoption-readback-isolated.mts'),'utf8');
+function templateCollectorWiring(source:string){
+ const file=ts.createSourceFile('readback.mts',source,ts.ScriptTarget.Latest,true),branches:ts.IfStatement[]=[],properties:ts.ObjectLiteralElementLike[]=[];
+ const visit=(node:ts.Node)=>{if(ts.isIfStatement(node)&&node.expression.getText(file)==='browser.cohort==="template-controls"')branches.push(node);if(ts.isVariableDeclaration(node)&&node.name.getText(file)==='result'&&node.initializer&&ts.isObjectLiteralExpression(node.initializer)){for(const property of node.initializer.properties)if(property.name?.getText(file)==='nativeCheckpoints')properties.push(property);}ts.forEachChild(node,visit);};visit(file);
+ assert.equal(branches.length,1);assert.equal(properties.length,1);const branch=branches[0].getText(file),property=properties[0].getText(file);
+ return{branch,property};
+}
+function executeTemplateCollector(source:string,change?:(x:ReturnType<typeof feedbackFixture>)=>void){
+ const x=feedbackFixture();change?.(x);const pendingProof={nativeBlockedStatementObservedTwice:true,sameStatementIdentity:true,fieldsDisabledAndInert:true,keyboardRepeatDispatchedNoExtraAction:true,ownedLockReleased:true,actionRequests:1};
+ const browserInput={...x.browser,templateControls:{planned:7,completed:7,outcomes:x.browser.templateControls.outcomes.map(row=>({...row,pendingProof}))}};
+ const wiring=templateCollectorWiring(source);let reads=0,joinedNative:unknown=null;
+ const sourceJs=ts.transpileModule('let nativeCheckpoints=null,templateControls=null;'+wiring.branch+';const result={'+wiring.property+',templateControls};return result;',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+ const execute=new Function('browser','handle','assert','assertCoreTemplateControlsCompleted','readFileSync','join','artifactDir','assertCoreTemplateFeedbackCompletion',sourceJs);
+ const result=execute(browserInput,{identity:{runId:x.ownedRunId}},assert,()=>({recipes:7}),(file:string)=>{if(file==='/owned/core-native-control-readback.json'){reads++;return JSON.stringify(x.native);}assert.equal(file,'/owned/core-native-write-faults.json');return JSON.stringify({status:'closed',activeLocks:0});},(...parts:string[])=>parts.join('/'),'/owned',(b:unknown,n:unknown,id:string)=>{joinedNative=n;return assertCoreTemplateFeedbackCompletion(b,n,id);});
+ assert.equal(reads,1,'The template branch captures one owned native envelope.');assert.equal(result.nativeCheckpoints,joinedNative,'The final receipt must preserve the same parsed envelope passed to the strict join.');assert.deepEqual(result.nativeCheckpoints,x.native);assert.equal(result.templateControls.feedbackAdapter.adapterObservations,28);return result;
+}
+test('Actual template collector parses and persists same owned native envelope',()=>executeTemplateCollector(templateCollectorSource));
+for(const[name,change]of Object.entries({
+ 'failed-native-status':(x:ReturnType<typeof feedbackFixture>)=>{x.native.status='fail';},
+ 'foreign-owned-run':(x:ReturnType<typeof feedbackFixture>)=>{x.native.ownedRunId='foreign';},
+ 'missing-native-phase':(x:ReturnType<typeof feedbackFixture>)=>{x.native.records.pop();},
+ 'detached-native-source':(x:ReturnType<typeof feedbackFixture>)=>{x.browser.templateControls.outcomes[0].feedbackAdapter.sourceSha256='0'.repeat(64);},
+}))test('Actual template collector rejects '+name,()=>assert.throws(()=>executeTemplateCollector(templateCollectorSource,change)));
+const templateNativeAssignment='nativeCheckpoints=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));';
+function mutateTemplateBranch(source:string,change:(branch:string)=>string){const branch=templateCollectorWiring(source).branch;const changed=change(branch);assert.notEqual(changed,branch);return source.replace(branch,()=>changed);}
+test('Original null template envelope wiring is rejected',()=>assert.throws(()=>executeTemplateCollector(mutateTemplateBranch(templateCollectorSource,branch=>branch.replace(templateNativeAssignment,'').replace('assert.equal(nativeCheckpoints.status,"pass");','').replace('assert.equal(nativeCheckpoints.ownedRunId,handle.identity.runId);','')))));
+test('Template collector detached final envelope is rejected',()=>{const wiring=templateCollectorWiring(templateCollectorSource);assert.equal(wiring.property,'nativeCheckpoints');assert.throws(()=>executeTemplateCollector(templateCollectorSource.replace(/readOnly, nativeCheckpoints, draftRestoration/u,'readOnly, nativeCheckpoints:null, draftRestoration')));});
+test('Template collector parses owned envelope before strict feedback join',()=>{const wiring=templateCollectorWiring(templateCollectorSource);assert.equal(wiring.branch.split(templateNativeAssignment).length,2);assert.ok(wiring.branch.indexOf(templateNativeAssignment)<wiring.branch.indexOf('assertCoreTemplateFeedbackCompletion'));assert.ok(wiring.branch.includes('assert.equal(nativeCheckpoints.status,"pass");'));assert.ok(wiring.branch.includes('assert.equal(nativeCheckpoints.ownedRunId,handle.identity.runId);'));});
+
 console.log(JSON.stringify({status:"pass",controls:cases.length,cases,runtimeExecuted:false,globalClosed:false}));
 
 

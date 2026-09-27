@@ -1,4 +1,4 @@
-import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
+import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
 import { CORE_TEMPLATE_FORM_CREATES_SELECTION, coreSelectedTemplateCreates, coreTemplateCreateJourneyId, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection, buildCorePreviewPublicImpactPlan, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
@@ -41,7 +41,7 @@ const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".l
 const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
   ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
-let selectedJourneyIds = journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION ? [] : journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION
+let selectedJourneyIds = journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION) ? [] : journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION
   ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTemplateCreateJourneyId)
   : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
@@ -88,14 +88,17 @@ async function observe(step, task) {
 }
 // These are retained historical cells in this existing closure ledger, not new capabilities.
 function retainedTrackingMediaCases() {
- return ["stages","items"].map(child=>({key:"collection:project-tracking-"+child+":capability:media",consumer:"project-tracking-"+child,boundary:"collection",axis:"media",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
+ const tracking=["stages","items"].map(child=>({key:"collection:project-tracking-"+child+":capability:media",consumer:"project-tracking-"+child,boundary:"collection",axis:"media",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
+ const readonly=["activity-log","topics-without-image-report"].map(consumer=>({key:"collection:"+consumer+":capability:feedback",consumer,boundary:"collection",axis:"feedback",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
+ const confirmation=["media-hub-template-library","media-sidebar-template-library"].map(consumer=>({key:"collection:"+consumer+":capability:confirmation",consumer,boundary:"collection",axis:"confirmation",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
+ return [...tracking,...readonly,...confirmation];
 }
 function assertHistoricalCoreCaseIdentity(cases) {
  assert.equal(cases.length,959,"The bounded closure ledger must retain every historical case.");
  assert.equal(new Set(cases.map(row=>row.key)).size,cases.length,"Duplicate historical case identity.");
  assert.equal(createHash("sha256").update(JSON.stringify(cases.map(row=>row.key).sort())).digest("hex"),"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71","Historical required-case identity changed; an applicability correction cannot remove or replace any cell.");
  const retained=retainedTrackingMediaCases();
- assert.deepEqual(cases.filter(row=>row.declaration==="not_applicable").map(row=>row.key).sort(),retained.map(row=>row.key).sort(),"Only the two source-bound Tracking Media corrections may be retained as not applicable.");
+ assert.deepEqual(cases.filter(row=>row.declaration==="not_applicable").map(row=>row.key).sort(),retained.map(row=>row.key).sort(),"Only the exact reviewed Tracking Media, readonly Feedback and Media summary Confirmation corrections may be retained as not applicable.");
  for(const row of retained){const actual=cases.find(cell=>cell.key===row.key);for(const[key,value]of Object.entries(row))assert.equal(actual[key],value);}
  return {historicalRequiredCases:cases.length,currentApplicableCases:cases.filter(row=>row.declaration!=="not_applicable").length,retainedNotApplicableCases:retained.length,historicalIdentitySha256:"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",dispositions:retained,automaticCoverage:[],globalClosed:false};
 }
@@ -148,8 +151,8 @@ for (const consumer of inventory) {
   }
 }
 for (const retained of retainedTrackingMediaCases()) {
- const consumer=inventory.filter(row=>row.boundary===retained.boundary&&row.id===retained.consumer);assert.equal(consumer.length,1);assert.equal(consumer[0].applicability.media.state,"not_applicable");
- assert.equal(requiredCases.some(row=>row.key===retained.key),false);requiredCases.push({...retained,rationale:consumer[0].applicability.media.rationale});
+ const consumer=inventory.filter(row=>row.boundary===retained.boundary&&row.id===retained.consumer);assert.equal(consumer.length,1);assert.equal(consumer[0].applicability[retained.axis].state,"not_applicable");
+ assert.equal(requiredCases.some(row=>row.key===retained.key),false);requiredCases.push({...retained,rationale:consumer[0].applicability[retained.axis].rationale});
 }
 for (const preview of collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION) requiredCases.push({ key: "preview:" + preview.id, consumer: preview.id, boundary: "preview", scenario: "actual_destination" });
 const historicalCoverageAccounting = assertHistoricalCoreCaseIdentity(requiredCases);
@@ -165,9 +168,9 @@ assert.ok(process.env.QA_ADMIN_USERNAME && process.env.QA_ADMIN_PASSWORD, "The o
 const fixtures = JSON.parse(readFileSync(process.env.QA_ADMIN_FIXTURES, "utf8"));
 if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) selectedJourneyIds = buildCorePreviewPublicImpactPlan({fixtures,previewMatrix}).journeyIds;
 let domainCommandTailPlan = null;
-if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION) {
+if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION) {
   const location = await jiti.import("../src/lib/admin/projects/location-management-contract.ts"), tracking = await jiti.import("../src/lib/admin/projects/tracking-contract.ts");
-  domainCommandTailPlan = buildCoreDomainCommandTailPlan({rowActions:collections.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures,paths:{...location,...tracking}});
+  domainCommandTailPlan = (journeySelection === CORE_TRACKING_PERMISSION_SELECTION ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:collections.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures,paths:{...location,...tracking}});
   selectedJourneyIds = domainCommandTailPlan.journeyIds;
 }
 const allowedStorage = JSON.parse(process.env.QA_ADMIN_STORAGE_PUBLIC_PREFIXES || "[]");
@@ -402,6 +405,8 @@ try {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreProjectControlsJourneys}=await import("./fixtures/admin-core-project-controls-journeys.mjs");
     projectControlsResult=await runCoreProjectControlsJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    const {runCoreProjectVisibilityGuardJourneys}=await import("./fixtures/admin-core-domain-command-journeys.mjs");
+    projectControlsResult.visibility=await runCoreProjectVisibilityGuardJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,databaseReadback});
    } else if (coreCohort === "topic-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreTopicControlsJourneys}=await import("./fixtures/admin-core-topic-controls-journeys.mjs");
@@ -477,14 +482,15 @@ try {
     await runCoreDomainTerminalJourneys(terminalContext);
     coreFormPermission.close();coreFormPermission=null;
     }
-    const emptyTrashResult = await runCoreEmptyTrashSuccessJourneys(terminalContext);
+    const emptyTrashResult = journeySelection === CORE_TRACKING_PERMISSION_SELECTION ? null : await runCoreEmptyTrashSuccessJourneys(terminalContext);
     if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION) {
+      assert.ok(emptyTrashResult, "Selected EmptyTrash completion is required before dependent readonly proof.");
       assert.equal(emptyTrashResult.outcomes.length, domainCommandTailPlan.trash.length, "All selected EmptyTrash journeys must pass before dependent readonly proof.");
       const { runCoreReadonlyJourneys } = await import("./fixtures/admin-core-readonly-journeys.mjs");
       await runCoreReadonlyJourneys({ page, context, origin, fixtures, run, observe, readOnlyReadback });
     }
     const { runCoreDomainPermissionJourneys } = await import("./fixtures/admin-core-domain-permission-journeys.mjs");
-    await runCoreDomainPermissionJourneys({ browser, context, origin, output, fixtures, run, observe, ownedNetworkOnly, revokeSession });
+    await runCoreDomainPermissionJourneys({ browser, context, origin, output, fixtures, run, observe, ownedNetworkOnly, revokeSession, journeySelection });
    }
   } else {
   const suffix = Date.now().toString(36);
@@ -772,7 +778,7 @@ try {
   assert.deepEqual(externalRequests, [], "The browser attempted an unowned network destination.");
   driverCompleted = true;
   if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) assertCorePreviewPublicImpactReceipt(receipt(), {fixtures,previewMatrix,canonicalRequiredCases:requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256});
-  else if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION) assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases);
+  else if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION) assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases);
   else if (journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION) assertCoreTemplateSelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   else if (journeySelection !== null) assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   checkpoint("driver", "complete");

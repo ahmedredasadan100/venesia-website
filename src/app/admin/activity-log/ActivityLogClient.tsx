@@ -13,7 +13,6 @@ import {
   AdminPageHeader,
   AdminTablePagination,
 } from "../../../components/admin/ui";
-import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-feedback";
 import {
   AUDIT_ACTION_LABELS,
   type AuditAction,
@@ -345,7 +344,6 @@ export default function ActivityLogClient({
             enableColumnManagement
             enableSelection={false}
             scrollLabel="جدول سجل النشاط"
-            mapResultToFeedback={mapAdminActionResultToFeedback}
             sort={{
               key: controller.query.sort.field,
               direction: controller.query.sort.direction,

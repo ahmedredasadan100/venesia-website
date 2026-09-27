@@ -1,3 +1,4 @@
+import {selectCoreDomainPermissionPlan} from './admin-core-domain-terminal-journeys.mjs';
 import {createCoreDomainVisibilityControl} from './admin-core-domain-visibility-control.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -40,7 +41,7 @@ export async function runCoreDomainPermissionJourneys(ctx) {
   const manifest = await jiti.import('../../src/lib/admin/interaction-system/adoption-manifest.ts');
   const location = await jiti.import('../../src/lib/admin/projects/location-management-contract.ts');
   const tracking = await jiti.import('../../src/lib/admin/projects/tracking-contract.ts');
-  const plan = buildCoreDomainCommandPlan({ rowActions: manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION, fixtures, paths: { ...location, ...tracking } });
+  const plan = selectCoreDomainPermissionPlan(buildCoreDomainCommandPlan({ rowActions: manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION, fixtures, paths: { ...location, ...tracking } }), ctx.journeySelection ?? null);
   const signedState = await context.storageState();
   assert.ok(signedState.cookies.some(cookie => cookie.name === 'venesia_admin_session' && cookie.httpOnly && cookie.value.length > 0));
   // The cookie is kept only in process memory and is never written to a receipt.
@@ -83,21 +84,32 @@ export async function runCoreDomainPermissionJourneys(ctx) {
         const actual = await response;
         const denial = classifyCorePermissionDenial(actual.status(), await actual.allHeaders(), origin);
         assert.ok(denial, 'The actual command HTTP response must identify the existing login-denial destination.');
+        // Retain the actual denied-command native pair even if a later UI assertion fails.
+        const after = await checkpoint(output, recipe, startedAt);
+        assert.deepEqual(after.rows, before.rows, 'A revoked-session command changed persisted state or revision.');
+        assert.deepEqual(after.audit, before.audit, 'A revoked-session command appended or changed domain audit.');
         await expect.poll(async () => {
           if (new URL(page.url()).pathname === '/admin/login') return 'login';
           if (await page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').count()) return 'retained-rejected-or-unknown';
           return 'pending';
         }, { timeout: 30_000 }).not.toBe('pending');
         assert.equal(posts, 1, 'Exactly one real denied command may leave the mounted target.');
-        const after = await checkpoint(output, recipe, startedAt);
-        assert.deepEqual(after.rows, before.rows, 'A revoked-session command changed persisted state or revision.');
-        assert.deepEqual(after.audit, before.audit, 'A revoked-session command appended or changed domain audit.');
+
         const outcome = { entity: recipe.entity, id: recipe.id, mountedBeforeRevocation: true, retainedOriginalSignedCookie: true,
           confirmationCancelled: Boolean(confirmationRequired), deniedRealCommandPosts: posts, denial,
           nativeBefore: before.id, nativeAfter: after.id, persistedStateRevisionAndAuditUnchanged: true,
           visibleOutcome: new URL(page.url()).pathname === '/admin/login' ? 'login-navigation' : 'existing-rejected-or-unknown-feedback',
           boundary: 'Actual Auth/Proxy HTTP rejection of an already-mounted command; no claim that the domain Action ran or that role authorization policies changed.' };
         outcomes.push(outcome); return outcome;
+      } catch (error) {
+        // The driver's generic failure image belongs to its control page; capture this mounted target.
+        const diagnostic={entity:recipe.entity,path:new URL(page.url()).pathname,expectedPath:new URL(recipe.path,origin).pathname,commandPosts:posts,
+          loginFields:await page.locator('input[name="username"]').count(),feedbackEntries:await page.locator('[data-admin-feedback-entry]').count(),
+          deniedFeedbackEntries:await page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').count(),
+          beforeNativeId:before.id,proofBoundary:'Failure diagnostics only; neither screenshot nor selector counts establish persistence or acceptance.'};
+        writeFileSync(join(output,'permission-target-'+recipe.entity+'-failure.json'),JSON.stringify(diagnostic,null,2));
+        await page.screenshot({path:join(output,'permission-target-'+recipe.entity+'-failure.png'),fullPage:true});
+        throw error;
       } finally { page.off('request', requests); }
     });
     return { outcomes, expectedDomains: plan.map(row => row.entity), sessionState: 'revoked',

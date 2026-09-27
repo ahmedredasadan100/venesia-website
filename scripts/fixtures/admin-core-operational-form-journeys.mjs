@@ -116,6 +116,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     const dialog=page.getByRole("dialog").filter({has:page.locator("form[data-admin-form-runtime]")});
     renderedAdoption.push(await observeCoreModalPendingDismissal({...renderedBase(surface),id:"operational-"+renderedRecipe.kind+"-"+surface+"-pending",dialog,form:form()}));
   }
+  let reopenCurrent;
   async function openCreate(path, label) {
     await navigate(path);
     const trigger = page.getByRole("button", { name: label, exact: true });
@@ -123,6 +124,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     await expect(trigger.first()).toBeVisible(); await trigger.first().click();
     await expect(form()).toHaveCount(1);
     await observeOpenedForm(trigger.first(),renderedRecipe.surfaces[0]);
+    reopenCurrent=async()=>{await trigger.first().click();await expect(form()).toHaveCount(1);};
   }
   async function openEdit(path, label) {
     await navigate(path + "?q=" + encodeURIComponent(label));
@@ -132,6 +134,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     await row(label).locator('[data-admin-row-action="edit"] button').click();
     await expect(form()).toHaveCount(1);
     await observeOpenedForm(row(label).locator('[data-admin-row-action="edit"] button'),renderedRecipe.surfaces.at(-1));
+    reopenCurrent=async()=>{await row(label).locator('[data-admin-row-action="edit"] button').click();await expect(form()).toHaveCount(1);};
     return id;
   }
   async function closeUnchanged() {
@@ -148,7 +151,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     await expect(form().getByRole("button", { name: "إلغاء", exact: true })).toBeFocused();
     await equal(values);
   }
-  async function restoreDraft(recipe, surface, values, assertPrivate = null) {
+  async function restoreDraft(recipe, surface, values, assertPrivate = null, refillPrivate = null) {
     if (["profile","stage","item","update"].includes(recipe.kind)) mediaApplicabilityEvidence.push(await observeCoreTrackingMediaApplicability({form:form(),kind:recipe.kind,surface,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,fixtures}));
     const retainedUrl = page.url();
     await ctx.permissionReplay.restoreDraft({
@@ -157,6 +160,9 @@ export async function runCoreOperationalFormJourneys(ctx) {
       assertDraft: async () => { await equal(values); if (assertPrivate) await assertPrivate(); },
       cancelDirty: async () => { await dirtyCancel(values); assert.equal(page.url(), retainedUrl, "Dirty-close cancellation must retain the current Form URL."); },
       dirtyNavigation: "close",
+      discardDirty:{trigger:form().getByRole('button',{name:'إلغاء',exact:true}),destination:{kind:'closed',pathname:new URL(retainedUrl).pathname},reopenAndRefill:async()=>{
+        assert.equal(typeof reopenCurrent,'function');await reopenCurrent();for(const[name,value]of Object.entries(values)){if(await input(name).evaluate(node=>node.tagName==='SELECT'))await select(name,String(value));else await input(name).fill(String(value));}if(refillPrivate)await refillPrivate();
+      }},
       observePending:()=>observePendingForm(surface),
     });
   }
@@ -258,7 +264,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
       const createMedia=kind==="update"?await authorCoreTrackingMedia({page,origin,form:form(),phase:"create"}):null;
       const createDates = await trackingDates(recipe, kind + "-create", values);
       await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
-      await restoreDraft(recipe, kind + "-create", values,createMedia?()=>assertCoreTrackingMediaUI(form(),createMedia):null);
+      await restoreDraft(recipe, kind + "-create", values,createMedia?()=>assertCoreTrackingMediaUI(form(),createMedia):null,createMedia?async()=>{await authorCoreTrackingMedia({page,origin,form:form(),phase:'create'});}:null);
       const id = await permissionIntent(recipe, kind + "-create", async () => {
         await accepted(); const createdId = await openEdit(config.path, createdLabel); await equal(values); createDates.reloaded = true; if(createMedia){await assertCoreTrackingMediaUI(form(),createMedia);createMedia.reloaded=true;}
         const descriptor = audit(config.table, createdId, config.entity, "project_children.create", createdLabel, {});
@@ -271,7 +277,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
       const editDates = await trackingDates(recipe, kind + "-edit", values);
       await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
       const expected = nativeValues(values);
-      await restoreDraft(recipe, kind + "-edit", values,editMedia?()=>assertCoreTrackingMediaUI(form(),editMedia):null);
+      await restoreDraft(recipe, kind + "-edit", values,editMedia?()=>assertCoreTrackingMediaUI(form(),editMedia):null,editMedia?async()=>{await authorCoreTrackingMedia({page,origin,form:form(),phase:'edit',prior:createMedia});}:null);
       await permissionIntent(recipe, kind + "-edit", async () => {
         await accepted(); assert.equal(await openEdit(config.path, editedLabel), id); await equal(values); editDates.reloaded = true; if(editMedia){await assertCoreTrackingMediaUI(form(),editMedia);editMedia.reloaded=true;} await closeUnchanged();
         return { nativeWrites: [audit(config.table, id, config.entity, "project_children.update", editedLabel, expected,editMedia?{expectedTrackingMedia:editMedia.expectedMedia,auditMetadata:{media_count:editMedia.expectedMedia.length}}:{})] };
@@ -291,7 +297,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     await restoreDraft(recipe, "user-create", values, async () => {
       assert.ok((await input("password").inputValue()) === password, "Private User create password must survive draft restoration.");
       assert.ok((await input("confirmPassword").inputValue()) === password, "Private User create confirmation must survive draft restoration.");
-    });
+    },async()=>{await input('password').fill(password);await input('confirmPassword').fill(password);});
     const id = await permissionIntent(recipe, "user-create", async () => {
       await accepted(); const createdId = await openEdit(path, username); await equal(values);
       const descriptor = audit("admin_users", createdId, "admin_user", "admin_user.created", username, {});
@@ -399,7 +405,7 @@ export function assertCoreTrackingMediaApplicability(input) {
     return {key,consumer,boundary:"collection",axis:"media",disposition:"PROVEN_NOT_APPLICABLE",priorDeclaration:"adopted",currentDeclaration:"not_applicable",nativeIds,sourceBindings,reason:"Exact child route mounts scalar Forms; Update Media remains a separate applicable consumer.",automaticCoverage:[]};
   });
   const updates=declarations.filter(row=>row.id==="project-tracking-updates");assert.equal(updates.length,1);assert.equal(updates[0].applicability.decisions.media.state,"adopted");
-  const accounting=browser.coverageAccounting;assert.ok(accounting);assert.equal(accounting.historicalRequiredCases,browser.requiredCases.length);assert.equal(accounting.currentApplicableCases,browser.requiredCases.filter(row=>row.declaration!=="not_applicable").length);assert.equal(accounting.retainedNotApplicableCases,dispositions.length);assert.deepEqual(accounting.dispositions.map(row=>row.key).sort(),dispositions.map(row=>row.key).sort());
+  const accounting=browser.coverageAccounting;assert.ok(accounting);assert.equal(accounting.historicalRequiredCases,browser.requiredCases.length);assert.equal(accounting.currentApplicableCases,browser.requiredCases.filter(row=>row.declaration!=="not_applicable").length);const pending=browser.requiredCases.filter(row=>row.declaration==="not_applicable");assert.equal(accounting.retainedNotApplicableCases,pending.length);assert.deepEqual(accounting.dispositions.map(row=>row.key).sort(),pending.map(row=>row.key).sort());for(const disposition of dispositions)assert.equal(accounting.dispositions.filter(row=>row.key===disposition.key&&row.axis==="media"&&row.disposition==="NOT_APPLICABLE_PENDING_PROOF").length,1);
   return {status:"pass",dispositions,mounted,nativeSaveCount:saved.qualified.length,positiveControl:{consumer:"project-tracking-updates",nativeIds:mounted.filter(row=>row.kind==="update").map(row=>row.nativeId),mediaApplicable:true},historicalRequiredCases:accounting.historicalRequiredCases,currentApplicableCases:accounting.currentApplicableCases,retainedNotApplicableCases:dispositions.length,automaticCoverage:[],globalClosed:false,boundary:"Two historical Media applicability dispositions only, requiring exact mounted child fields and the existing same-run native accepted-save join. No Stage/Item Media behavior or other capability is removed or credited."};
 }
 

@@ -2,7 +2,7 @@ import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreMo
 import {exerciseCoreDownloadField,CORE_DOWNLOAD_MEDIA_HREF} from './admin-core-download-media-adoption.mjs';
 import { runCoreDescendantPresentationJourneys } from './admin-core-descendant-presentation-journeys.mjs';
 import assert from "node:assert/strict";
-import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
+import { observeCoreAcceptedFormFeedback, observeCoreVisibleAcceptedFeedback, runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
@@ -77,6 +77,25 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     const dialog=page.getByRole("dialog",{name:"إضافة صفحة جديدة",exact:true});
     renderedAdoption.push(await observeCoreModalPendingDismissal({...renderedBase("pages-quick-create","create",["pages"],"modal"),id:"navigation-page-create-pending",dialog,form}));
   }
+  const rowActionObservations=[];
+  async function inspectRow({type,id,label,information,preview}) {
+    const row=rowById(type,id),path=new URL(page.url()).pathname,posts=[];
+    await expect(row).toHaveCount(1);await expect(row).toBeVisible();
+    const listener=request=>{if(request.method()==='POST'&&new URL(request.url()).origin===origin)posts.push(request);};page.on('request',listener);
+    try {
+      const previewOwner=row.locator('[data-admin-row-action="preview"]');
+      if(preview.access==='disabled') {await expect(previewOwner.locator('button')).toBeDisabled();await expect(previewOwner.locator('button')).toHaveAttribute('title',preview.reason);await expect(previewOwner.locator('a')).toHaveCount(0);}
+      else {const anchor=previewOwner.locator('a');await expect(anchor).toHaveAttribute('href',preview.href);await expect(anchor).toHaveAttribute('target','_blank');await expect(anchor).toHaveAttribute('rel','noreferrer');}
+      const trigger=row.locator('[data-admin-row-action="more"] button');await trigger.click();
+      const menu=page.locator('[data-admin-row-actions-menu]');await expect(menu).toHaveAttribute('data-admin-entity-type',type);await expect(menu).toHaveAttribute('data-admin-entity-id',String(id));
+      await expect(menu.locator('[data-admin-row-action-menu-item="copyPublicLink"]')).toHaveCount(0);
+      await menu.locator('[data-admin-row-action-menu-item="information"]').click();
+      const info=page.locator('[data-admin-row-actions-information]');await expect(info).toHaveAttribute('data-admin-entity-type',type);await expect(info).toHaveAttribute('data-admin-entity-id',String(id));await expect(info).toHaveAttribute('aria-label','معلومات '+label);
+      for(const [key,value]of Object.entries(information)){const field=info.locator('dl > div').filter({has:page.locator('dt').filter({hasText:new RegExp('^'+key+'$','u')})});await expect(field).toHaveCount(1);await expect(field.locator('dd')).toHaveText(value);}
+      await info.getByRole('button',{name:'رجوع',exact:true}).click();await expect(menu).toBeVisible();await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(new URL(page.url()).pathname,path);assert.equal(posts.length,0);
+      return{type,id:String(id),label,routePathname:path,information,preview,copyHidden:true,informationReturnedFocus:true,actionRequests:0,externalDestinationFollowed:false};
+    } finally {page.off('request',listener);}
+  }
   let pageId, menuId, itemIds;
   await runCoreDescendantPresentationJourneys(ctx,"navigation");
   await run("core-navigation-page-create-rejection-retry-reload", plan.pageCoverage, async () => {
@@ -94,19 +113,22 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await checkpoint("page", "rejected");
     await form.locator('[name="path"]').fill(r.page.path);
     await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-navigation-page-create-accepted-save",journeyId:"core-navigation-page-create-rejection-retry-reload",formConsumer:"pages-quick-create",surface:"create"},form,submit:form.getByRole("button",{name:"إنشاء وفتح المحرر",exact:true}),dirtyNavigation:"close",observePending:()=>observePageCreatePending(form),
+      discardDirty:{trigger:form.getByRole('button',{name:'إلغاء',exact:true}),destination:{kind:'closed',pathname:'/admin/pages-blocks/pages'},reopenAndRefill:async()=>{await page.getByRole('button',{name:'إضافة صفحة',exact:true}).click();await form.locator('[name="title"]').fill(r.page.title);await form.locator('[name="path"]').fill(r.page.path);}},
       assertDraft:async()=>{await expect(form.locator('[name="title"]')).toHaveValue(r.page.title);await expect(form.locator('[name="path"]')).toHaveValue(r.page.path);},
       cancelDirty:async()=>{const original=page.url(),trigger=form.getByRole("button",{name:"إلغاء",exact:true});await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();renderedAdoption.push(await observeCoreModalFocusAdoption({...renderedBase("pages-quick-create","create",["pages"],"modal"),id:"navigation-page-create-dirty-focus",dialog,state:"dirty-confirmation",escape:"not-exercised"}));await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form).toBeVisible();},
     });
+    let acceptedFeedback;
     await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId:"core-navigation-page-create-accepted-save",formConsumer:"pages-quick-create",surface:"create"},permissionEvidence,perform:async()=>{
+    acceptedFeedback=await observeCoreAcceptedFormFeedback({form,consumer:"pages-quick-create",surface:"create",entityKey:"page-quick-create",routePrefix:"/admin/pages-blocks/pages",requiredCases,perform:async()=>{
     await action(() => form.getByRole("button", { name: "إنشاء وفتح المحرر", exact: true }).click());
     await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/pages\/\d+$/u.test(url.pathname));
-    pageId = Number(new URL(page.url()).pathname.split("/").at(-1));
+    pageId = Number(new URL(page.url()).pathname.split("/").at(-1));return{entityId:pageId,routePathname:new URL(page.url()).pathname};}});
     await goto(`/admin/pages-blocks/pages/${pageId}`); await expect(page.getByRole("heading", { name: `إدارة صفحة ${r.page.title}`, exact: true })).toBeVisible();
     assert.equal((await checkpoint("page", "created")).pageId, pageId);
       return {nativeWrites:[{table:"pages",id:pageId,expected:{title:r.page.title,path:r.page.path,slug:r.page.slug,status:"unpublished",page_type:"static"},auditEntityType:"page",auditEntityLabel:r.page.title,auditActions:["page.create"]}]};
     }});
     completed.push("page-create");
-    return {consumer:"pages-quick-create",surface:"create",permissionEvidence:[...permissionEvidence],renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
+    return {acceptedFeedback,consumer:"pages-quick-create",surface:"create",permissionEvidence:[...permissionEvidence],renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   assert.ok(pageId, "Page creation must finish before dependent metadata work.");
   await run("core-navigation-page-seo-validation-save-reload", [], async () => {
@@ -136,16 +158,21 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await action(() => form.getByRole("button", { name: "إنشاء وفتح القائمة", exact: true }).click());
     await expect(form.locator('[name="slug"]')).toHaveAttribute("aria-invalid", "true"); await expect(form.locator('[name="name"]')).toHaveValue(r.menu.name); await expect(form.locator('[name="slug"]')).toHaveValue(f.duplicateMenuSlug);
     await checkpoint("menu", "rejected"); await form.locator('[name="slug"]').fill(r.menu.slug);
+    const acceptedFeedback=await observeCoreAcceptedFormFeedback({form,consumer:"menu-quick-create",surface:"menu-create",entityKey:"menu-quick-create",routePrefix:"/admin/pages-blocks/menus",requiredCases,perform:async()=>{
     await action(() => form.getByRole("button", { name: "إنشاء وفتح القائمة", exact: true }).click());
-    await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/menus\/\d+$/u.test(url.pathname)); menuId = Number(new URL(page.url()).pathname.split("/").at(-1));
+    await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/menus\/\d+$/u.test(url.pathname)); menuId = Number(new URL(page.url()).pathname.split("/").at(-1));return{entityId:menuId,routePathname:new URL(page.url()).pathname};}});
     await goto(`/admin/pages-blocks/menus/${menuId}`); await tab("menu-settings"); await expect(page.locator('input[name="name"]')).toHaveValue(r.menu.name);
-    assert.equal((await checkpoint("menu", "created")).menuId, menuId); completed.push("menu-create");
-    return {renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
+    const acceptedNative=await checkpoint("menu", "created");assert.equal(acceptedNative.menuId, menuId); completed.push("menu-create");
+    return {acceptedFeedback,acceptedNativeId:acceptedNative.id,renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   assert.ok(menuId, "Menu creation must finish before dependent graph work.");
   await run("core-navigation-menu-metadata-item-graph-commands", [], async () => {
     renderedAdoption=[];renderedOpened=new Set();
-    const path = `/admin/pages-blocks/menus/${menuId}`;
+    const path = '/admin/pages-blocks/menus/'+menuId;
+    await goto('/admin/pages-blocks/menus');
+    const menuObservation=await inspectRow({type:'menu',id:menuId,label:r.menu.name,information:{Slug:r.menu.slug,'الموقع':'Custom','عدد العناصر':'0','الحالة':'ظاهرة'},preview:{access:'disabled',reason:'القائمة لا تملك مسار معاينة عامًا خاصًا بها.'}});
+    const menuEdit=rowById('menu',menuId).locator('[data-admin-row-action="edit"] a');await expect(menuEdit).toHaveAttribute('href',path);await menuEdit.click();await expect(page).toHaveURL(origin+path);await tab('menu-settings');await expect(page.locator('input[name="name"]')).toHaveValue(r.menu.name);
+    rowActionObservations.push({...menuObservation,edit:{mode:'navigation',pathname:path,opened:true},nativeCheckpointId:(await checkpoint('menu','created-row-inspected')).id});
     await goto(path); await tab("menu-settings"); await page.locator('input[name="name"]').fill(r.menu.editedName);
     await action(() => page.getByRole("button", { name: "حفظ بيانات القائمة", exact: true }).click()); await expect(page).toHaveURL(url => url.pathname === "/admin/pages-blocks/menus"); await checkpoint("menu", "metadata-saved");
     const add = async (label, parent, href, phase) => {
@@ -157,11 +184,16 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       await goto(path); await expect(rowByLabel(label)).toBeVisible(); itemIds = (await checkpoint("menu", phase)).itemIds;
     };
     await add(r.menu.a, null, null, "item-a"); await add(r.menu.b, null, null, "item-b"); await add(r.menu.c, r.menu.a, r.menu.href, "item-c");
+    const parentObservation=await inspectRow({type:'menu_item',id:itemIds.a,label:r.menu.a,information:{'الرابط':'#','الحالة':'ظاهر'},preview:{access:'disabled',reason:'لا يملك العنصر مسارًا عامًا مستقلاً يمكن معاينته من هنا.'}});
+    const childObservation=await inspectRow({type:'menu_item',id:itemIds.c,label:r.menu.c,information:{'الرابط':r.menu.href,'الحالة':'ظاهر'},preview:{access:'allowed',href:r.menu.href}});
+    const itemInspection=await checkpoint('menu','items-inspected');
+    rowActionObservations.push({...parentObservation,nativeCheckpointId:itemInspection.id});
     let cycleFeedbackVariant;
     const edit = async (id, change, phase, negative = false) => {
       await goto(path); const row = rowById("menu_item", id); await row.locator('[data-admin-row-action="edit"] button').click();
       const dialog = page.getByRole("dialog", { name: "تعديل عنصر القائمة", exact: true });
       await observeNavigationOpening({id:"navigation-menu-item-edit",consumer:"menu-builder",surface:"item-edit",collections:["menu-items","menu-editor-shell"],dialog,target:dialog.getByRole("button",{name:"حفظ",exact:true})});
+      if(phase==='item-edited'){await expect(dialog.locator('[name="label"]')).toHaveValue(r.menu.c);await expect(dialog.locator('[name="menu_link_link_href"]')).toHaveValue(r.menu.href);rowActionObservations.push({...childObservation,edit:{mode:'dialog',opened:true},nativeCheckpointId:itemInspection.id});}
       await change(dialog);
       await action(() => dialog.getByRole("button", { name: "حفظ", exact: true }).click()); await expect(page).toHaveURL(url => url.searchParams.has("message")); await goto(new URL(page.url()).pathname + new URL(page.url()).search); await expect(dialog).toBeHidden();
       if (negative) { const rejection = page.locator('[data-admin-feedback-entry]').filter({ hasText: "menu_item_cycle_forbidden" }); await expect(rejection).toBeVisible(); cycleFeedbackVariant = await rejection.getAttribute("data-admin-feedback-variant"); }
@@ -184,16 +216,16 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await edit(itemIds.b, dialog => select(dialog, "Parent", r.menu.editedC), "cycle-rejected", true);
     await goto(path); await more(rowById("menu_item", itemIds.b), "delete"); await expect(confirm()).toBeVisible(); await cancel().click(); await expect(confirm()).toBeHidden(); await checkpoint("menu", "delete-cancelled");
     await more(rowById("menu_item", itemIds.b), "delete"); await action(() => confirm().click()); await expect(rowById("menu_item", itemIds.b)).toHaveCount(0); await expect(rowById("menu_item", itemIds.c)).toHaveCount(0); await checkpoint("menu", "subtree-deleted"); assert.equal(cycleFeedbackVariant, "danger", "A rejected cycle must not be displayed as a successful save."); completed.push("menu-graph");
-    return {renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
+    return {rowActionObservations:rowActionObservations.filter(row=>row.type!=="footer_manual_link"),renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   await run("core-navigation-menu-visibility-duplicate-delete", [], async () => {
-    await goto("/admin/pages-blocks/menus"); await action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click());
-    await expect(rowById("menu", menuId).getByRole("button", { name: `إظهار ${r.menu.editedName}`, exact: true })).toBeVisible(); await checkpoint("menu", "menu-hidden");
+    await goto("/admin/pages-blocks/menus"); const acceptedFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"menu-builder:list",perform:()=>action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click())});
+    await expect(rowById("menu", menuId).getByRole("button", { name: `إظهار ${r.menu.editedName}`, exact: true })).toBeVisible(); const acceptedNative=await checkpoint("menu", "menu-hidden");
     await more(rowById("menu", menuId), "duplicate"); await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/menus\/\d+$/u.test(url.pathname) && !url.pathname.endsWith(`/${menuId}`));
     const duplicateId = Number(new URL(page.url()).pathname.split("/").at(-1)); assert.equal((await checkpoint("menu", "duplicated")).duplicateMenuId, duplicateId);
     await goto("/admin/pages-blocks/menus"); await more(rowById("menu", duplicateId), "delete"); await cancel().click(); await expect(confirm()).toBeHidden(); await checkpoint("menu", "duplicate-delete-cancelled");
     await more(rowById("menu", duplicateId), "delete"); await action(() => confirm().click()); await expect(rowById("menu", duplicateId)).toHaveCount(0); await checkpoint("menu", "duplicate-deleted");
-    await goto("/admin/pages-blocks/menus"); await action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click()); await expect(rowById("menu", menuId).getByRole("button", { name: `إخفاء ${r.menu.editedName}`, exact: true })).toBeVisible(); await checkpoint("menu", "menu-shown"); completed.push("menu-list");
+    await goto("/admin/pages-blocks/menus"); await action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click()); await expect(rowById("menu", menuId).getByRole("button", { name: `إخفاء ${r.menu.editedName}`, exact: true })).toBeVisible(); await checkpoint("menu", "menu-shown"); completed.push("menu-list");return{acceptedFeedback,acceptedNativeId:acceptedNative.id,menuId};
   });
   assert.ok(completed.includes("menu-list") && completed.includes("page-seo"), "Footer references only a completed owned Menu recipe.");
   await run("core-navigation-footer-aggregate-slots-manual-links-rejection-retry", [], async () => {
@@ -231,6 +263,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await more(rowByLabel(r.footer.links[2]), "delete"); await confirm().click(); await expect(rowByLabel(r.footer.links[2])).toHaveCount(0);
     await tab("column-1"); await page.getByRole("button", { name: "تحريك للخلف", exact: true }).click();
     await expect(rowByLabel(r.footer.editedLink)).toBeVisible(); await checkpoint("footer", "draft-final");
+    await rowByLabel(r.footer.editedLink).locator('[data-admin-row-action="visibility"] button').click();await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إظهار '+r.footer.editedLink,exact:true})).toBeVisible();await checkpoint('footer','visibility-draft');
     await tab("social-legal");
     const labels = panel().getByLabel("التسمية", { exact: true }); const existing = await labels.count(); assert.ok(existing > 0 && existing < 30);
     for (let i = 0; i < existing; i++) await page.getByRole("button", { name: "حذف", exact: true }).first().click();
@@ -241,12 +274,52 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await select(page, "المنصة", "Facebook"); await panel().getByLabel("التسمية", { exact: true }).fill(r.footer.socialLabel); await panel().getByLabel("الرابط", { exact: true }).fill(r.footer.socialHref);
     await action(() => page.getByRole("button", { name: "حفظ الفوتر", exact: true }).click()); await expect(feedback()).toContainText("تم حفظ إعدادات الفوتر بنجاح."); await checkpoint("footer", "saved");
     await goto("/admin/pages-blocks/footer"); await tab("column-1"); await expect(rowByLabel(r.footer.editedLink)).toBeVisible(); await expect(rowByLabel(r.footer.links[0])).toBeVisible(); await expect(rowByLabel(r.footer.links[2])).toHaveCount(0);
+    await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إظهار '+r.footer.editedLink,exact:true})).toBeVisible();
     await rowByLabel(r.footer.editedLink).locator('[data-admin-row-action="edit"] button').click();
     await expect(linkModal().getByText(CORE_DOWNLOAD_MEDIA_HREF,{exact:true})).toBeVisible();await expect(linkModal().getByText('تنزيل',{exact:true})).toBeVisible();
     await linkModal().getByRole('button',{name:'إلغاء',exact:true}).click();await expect(linkModal()).toBeHidden();
-    await tab("column-2"); await expect(panel().getByLabel("النص / Tagline", { exact: true })).toHaveValue(r.footer.body); await tab("social-legal"); await expect(panel().getByLabel("Copyright", { exact: true })).toHaveValue(r.footer.copyright); await checkpoint("footer", "reloaded"); completed.push("footer-aggregate");
-    return {renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
+    await tab("column-2"); await expect(panel().getByLabel("النص / Tagline", { exact: true })).toHaveValue(r.footer.body); await tab("social-legal"); await expect(panel().getByLabel("Copyright", { exact: true })).toHaveValue(r.footer.copyright); const hiddenReload=await checkpoint("footer", "reloaded");await tab('column-1');
+    const footerObservation=await inspectRow({type:'footer_manual_link',id:'0:'+r.footer.editedLink,label:r.footer.editedLink,information:{'الرابط':CORE_DOWNLOAD_MEDIA_HREF,'الهدف':'نفس النافذة','الحالة':'مخفي'},preview:{access:'allowed',href:CORE_DOWNLOAD_MEDIA_HREF}});
+    rowActionObservations.push({...footerObservation,edit:{mode:'dialog-reloaded',opened:true},nativeCheckpointId:hiddenReload.id});
+    await tab('column-1');await rowByLabel(r.footer.editedLink).locator('[data-admin-row-action="visibility"] button').click();await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إخفاء '+r.footer.editedLink,exact:true})).toBeVisible();await checkpoint('footer','visibility-shown-draft');
+    await action(()=>page.getByRole('button',{name:'حفظ الفوتر',exact:true}).click());await expect(feedback()).toContainText('تم حفظ إعدادات الفوتر بنجاح.');await checkpoint('footer','shown-saved');
+    await goto('/admin/pages-blocks/footer');await tab('column-1');await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إخفاء '+r.footer.editedLink,exact:true})).toBeVisible();await checkpoint('footer','shown-reloaded');completed.push("footer-aggregate");
+    return {rowActionObservations:rowActionObservations.filter(row=>row.type==='footer_manual_link'),manualVisibility:{hiddenSavedReloaded:true,shownSavedReloaded:true,extraAcceptedSaves:1,nativePhases:['visibility-draft','saved','reloaded','visibility-shown-draft','shown-saved','shown-reloaded']},renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
-  assert.equal(completed.length, 6);
+  await run('core-navigation-footer-default-restore-confirm-reject-retry', [], async () => {
+    assert.ok(completed.includes('footer-aggregate')); assert.deepEqual(f.footerRestore,{key:'footer.slots'});
+    await goto('/admin/pages-blocks/footer');
+    const dialog=()=>page.getByRole('dialog',{name:'استعادة الفوتر الافتراضي',exact:true});
+    const open=()=>page.getByRole('button',{name:'استعادة الافتراضي',exact:true}).click();
+    const posts=[],listener=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)posts.push(request);};
+    page.on('request',listener);
+    try {
+      await open(); await expect(dialog()).toBeVisible(); await dialog().locator('[data-admin-confirm-cancel]').click();
+      await expect(dialog()).toHaveCount(0); assert.equal(posts.length,0); await checkpoint('footer','restore-cancelled');
+      const pending=async cancelled=>{
+        const token=randomUUID(),fault=async operation=>{const request={id:randomUUID(),kind:'domain-write-fault-'+operation,entity:'footer_restore',token};const result=await nativeCheckpoint(request);for(const key of Object.keys(request))assert.equal(result[key],request[key]);assert.equal(result.status,'pass');return result;};
+        let armed=false,responsePromise;const start=posts.length;
+        try {
+          await fault('arm'); armed=true;
+          responsePromise=page.waitForResponse(response=>response.request().method()==='POST'&&response.request().headers()['next-action']&&new URL(response.url()).origin===origin);void responsePromise.catch(()=>{});
+          await dialog().locator('[data-admin-confirm-submit]').click();
+          const first=await fault('observe-blocked');assert.equal(first.observedOneStatement,true);
+          await expect(dialog().locator('[data-admin-confirm-submit]')).toBeDisabled();await expect(dialog().locator('[data-admin-confirm-cancel]')).toBeDisabled();
+          await page.keyboard.press('Escape');await expect(dialog()).toBeVisible();await page.keyboard.press('Enter');await page.keyboard.press('Enter');
+          const second=await fault('observe-blocked');for(const key of ['backendPid','backendStartedAt','queryStartedAt','queryFingerprint','holderPid'])assert.equal(second[key],first[key]);assert.equal(posts.length,start+1);
+          if(cancelled)assert.equal((await fault('cancel')).cancelledOneStatement,true);
+          const released=await fault('release');armed=false;assert.equal(released.ownedLockRolledBack,true);assert.equal(released.cancellationObserved,cancelled);
+          const response=await responsePromise;if(cancelled)assert.equal(response.status(),500);else assert.ok(response.status()<400);return{token,actionRequests:posts.length-start,sameNativeStatementObservedTwice:true,actualStatementCancelled:cancelled,ownedLockReleased:true};
+        } finally { try{if(armed)await fault('release');}finally{if(responsePromise)await Promise.allSettled([responsePromise]);} }
+      };
+      await open();const rejection=await pending(true);
+      await expect(dialog()).toBeVisible();await expect(dialog().locator('[data-admin-confirm-submit]')).toBeEnabled();
+      await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible();await checkpoint('footer','restore-rejected');
+      const retry=await pending(false);await expect(dialog()).toHaveCount(0);await expect(feedback()).toContainText('تمت استعادة تخطيط الفوتر الافتراضي بنجاح.');await checkpoint('footer','restored');
+      await goto('/admin/pages-blocks/footer');await checkpoint('footer','restore-reloaded');assert.equal(posts.length,2);
+      completed.push('footer-default-restore');return{confirmationCancelled:true,cancelledActionRequests:0,rejection,retry,actionRequests:2,explicitRetry:true,nativePhases:['restore-cancelled','restore-rejected','restored','restore-reloaded'],otherThreeRowsAndTimestampsUnchanged:true,automaticCoverage:[],globalClosed:false};
+    } finally {page.off('request',listener);}
+  });
+  assert.equal(completed.length, 7);
   return { status: "pass", completed, plan, checkpoints, permissionEvidence, downloadMedia, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAdminFeedback } from "../AdminFeedbackProvider";
 import AdminNotice from "../AdminNotice";
 import AdminActionButton from "../ui/AdminActionButton";
-import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
+import { mapAdminActionResultToFeedback, type AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminInstantMutationBulkInteraction } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
@@ -105,7 +105,7 @@ export type AdminEntityListProps<
    * cache patches before revalidation.
    */
   onSuccessfulMutation?: (result?: AdminActionResult) => void | Promise<void>;
-  mapResultToFeedback: AdminEntityFeedbackMapper;
+  mapResultToFeedback?: AdminEntityFeedbackMapper;
   sort?: AdminEntitySortState<TSortKey> | null;
   sortMode?: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>["sortMode"];
   onSortColumnHidden?: () => void;
@@ -279,7 +279,7 @@ function AdminEntityListInner<
     getBulkConfirmation,
     bulkAdditionalControls,
     onSuccessfulMutation,
-    mapResultToFeedback,
+    mapResultToFeedback = mapAdminActionResultToFeedback,
     sort,
     sortMode,
     onSortColumnHidden,

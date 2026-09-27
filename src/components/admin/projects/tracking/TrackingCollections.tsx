@@ -25,6 +25,7 @@ import {
 } from "../../ui";
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import {
+  adminActionFailure,
   withAdminActionSettledResult,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
@@ -199,6 +200,19 @@ function toInstantMutationResult(result: AdminActionResult) {
   };
 }
 
+/** Visibility commands publish through the existing Collection Feedback owner. */
+function publishTrackingVisibilityFailure(
+  result: AdminActionResult | null,
+  error: unknown,
+  onMutationResult?: (result: AdminActionResult) => void,
+) {
+  if (!onMutationResult) throw error;
+  onMutationResult(result ?? adminActionFailure(
+    "تعذر تنفيذ الإجراء",
+    "تعذر استلام نتيجة الإجراء. حدّث القائمة للتحقق من الحالة قبل إعادة المحاولة.",
+  ));
+}
+
 function reorderOptimisticRows<Row extends { id: number; sort_order: number }>(
   rows: Row[],
   orderedIds: readonly number[],
@@ -368,11 +382,11 @@ export function TrackingStagesCollection({
             settledResult,
           );
         }
-        if (actionResult) onMutationResult?.(actionResult);
       } catch (error) {
-        if (actionResult) onMutationResult?.(actionResult);
-        throw error;
+        publishTrackingVisibilityFailure(actionResult, error, onMutationResult);
+        return;
       }
+      if (actionResult) onMutationResult?.(actionResult);
     },
     [controller.query.filters.visibility, instant, projectId],
   );
@@ -908,11 +922,11 @@ export function TrackingItemsCollection({
             settledResult,
           );
         }
-        if (actionResult) onMutationResult?.(actionResult);
       } catch (error) {
-        if (actionResult) onMutationResult?.(actionResult);
-        throw error;
+        publishTrackingVisibilityFailure(actionResult, error, onMutationResult);
+        return;
       }
+      if (actionResult) onMutationResult?.(actionResult);
     },
     [controller.query.filters.visibility, instant, projectId, stageId],
   );
@@ -1418,11 +1432,11 @@ export function TrackingUpdatesCollection({
             settledResult,
           );
         }
-        if (actionResult) onMutationResult?.(actionResult);
       } catch (error) {
-        if (actionResult) onMutationResult?.(actionResult);
-        throw error;
+        publishTrackingVisibilityFailure(actionResult, error, onMutationResult);
+        return;
       }
+      if (actionResult) onMutationResult?.(actionResult);
     },
     [controller.query.filters.publication, instant, itemId, projectId],
   );

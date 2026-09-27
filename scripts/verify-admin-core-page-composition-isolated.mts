@@ -72,15 +72,19 @@ export async function readCorePageCompositionCheckpoint(handle: OwnedLocalHandle
         [request.pageId, request.startedAt])).rows;
       assert.ok(audit.length <= 256);
       for (const entry of audit) assert.equal(Number(entry.actor_admin_user_id), qaActorId, "Composition audit must belong to the canonical QA actor.");
-      const templates = [];
+      const templates = [], templateCopies = [];
       for (const reference of request.templateRefs) {
         const rows = (await connection.query(
-          "select id,name,slug,status,md5(config::text) config_hash from public." + templateTables[reference.kind] + " where id=$1 and slug like $2",
+          "select id,name,slug,status,md5(config::text) config_hash,to_jsonb(t) source_row from public." + templateTables[reference.kind] + " t where id=$1 and slug like $2",
           [reference.id, "qa-admin-page-interaction-" + reference.kind + "-%"])).rows;
         assert.equal(rows.length, 1, "The reserved QA template must remain in its existing library.");
         templates.push({ kind: reference.kind, ...rows[0] });
+        const copies = (await connection.query("select to_jsonb(t) source_row from public." + templateTables[reference.kind] + " t where slug like $1 order by id limit 2", [String(rows[0].slug) + "-copy-%"])).rows;
+        assert.ok(copies.length <= 1, "Each reserved source permits one observed UI copy only; duplicate dispatch fails closed.");
+        templateCopies.push(...copies.map(copy => ({ kind: reference.kind, sourceTemplateId: reference.id, row: copy.source_row })));
+
       }
-      const composition={assignments,layouts,regions,audit,templates};
+      const composition={assignments,layouts,regions,audit,templates,templateCopies};
       const seoObservation=request.seoPhase ? await captureCorePageSeoState(connection,handle,request.pageId,qaActorId,composition) : undefined;
       await connection.query("commit"); committed = true;
       return { qaActorId, page, ...composition, ...(seoObservation ? {seo:acceptCorePageSeoCheckpoint(handle,request.seoPhase!,request.startedAt,seoObservation)} : {}) };

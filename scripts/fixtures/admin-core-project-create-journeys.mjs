@@ -132,6 +132,7 @@ export async function runCoreProjectCreateJourneys(ctx) {
       slug: `qa-core-created-${recipe.kind}-${suffix}`, type: recipe.kind,
       general_description: source.general_description, short_description: source.short_description,
     };
+    const authorDraft=async()=>{
     await tab("basic");
     for (const name of ["arabic_name", "english_name", "code", "slug", "general_description", "short_description"]) await field(name).fill(values[name]);
     for (const name of ["hero_image", "small_box_image", "image"]) {
@@ -164,6 +165,8 @@ export async function runCoreProjectCreateJourneys(ctx) {
     values.delivery_body = await writeRichText("delivery_body", `Authored ${recipe.kind} delivery specification ${suffix}.`);
     await tab("basic");
     await assertValues(values);
+    };
+    await authorDraft();
     await dirtyCancel(values);
     await field("arabic_name").fill("");
     await acknowledge();
@@ -185,6 +188,7 @@ export async function runCoreProjectCreateJourneys(ctx) {
       },
       cancelDirty: async () => { await dirtyCancel(values); },
       dirtyNavigation: "close",
+      discardDirty:{trigger:form().locator('[data-admin-form-action="close"]'),destination:{kind:'navigated',pathname:'/admin/projects/'+recipe.kind},reopenAndRefill:async()=>{await navigate('/admin/projects/new?type='+recipe.kind);await authorDraft();}},
     });
     const result = await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId,formConsumer:recipe.consumer,surface:recipe.surface},permissionEvidence,perform:async()=>{
     await acknowledge();

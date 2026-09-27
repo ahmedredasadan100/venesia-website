@@ -34,7 +34,7 @@ export function createCoreFormPermissionContext({ page, origin, output, sourceSh
     begin:collector.begin,
     close:()=>{assert.equal(draftActive,false,"Cannot close an active restoration attempt.");draftClosed=true;collector.close();persistDraftReceipts();},
     restoreDraft:async options=>{
-      assert.deepEqual(Object.keys(options).filter(key=>!["mapping","form","submit","assertDraft","cancelDirty","dirtyNavigation","dirtyNavigationLimit","observePending"].includes(key)),[]);
+      assert.deepEqual(Object.keys(options).filter(key=>!["mapping","form","submit","assertDraft","cancelDirty","dirtyNavigation","dirtyNavigationLimit","observePending","discardDirty"].includes(key)),[]);
       assert.equal(draftClosed,false,"Restoration context is closed.");assert.equal(draftActive,false,"Only one restoration attempt may be active.");
       const cells=requiredCases.filter(row=>row.boundary==="form"&&row.consumer===options.mapping?.formConsumer&&row.surface===options.mapping?.surface&&row.scenario==="rollback");assert.equal(cells.length,1);
       const key=cells[0].key;assert.equal(draftAttempts.has(key),false,"A direct Form restoration cell may be attempted only once in this cohort.");draftAttempts.add(key);draftActive=true;

@@ -1,4 +1,4 @@
-import { validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
+import { observeCoreVisibleAcceptedFeedback, validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
 import { buildCoreReadonlyJourneyPlan } from "./admin-core-readonly-journeys.mjs";
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
@@ -36,7 +36,33 @@ export function buildCoreTerminalCommandPlan({ rowActions, fixtures, paths }) {
   return plan;
 }
 
+/** PostgreSQL bigint audit IDs enter this fixed browser producer as decimal strings. */
+export function normalizeCoreTerminalAuditId(value) {
+  assert.ok(typeof value === 'number' || (typeof value === 'string' && /^[1-9][0-9]*$/u.test(value)), 'Audit identity must be a positive decimal integer.');
+  const id = Number(value);
+  assert.ok(Number.isSafeInteger(id) && id > 0, 'Audit identity must fit the strict native readback contract.');
+  return id;
+}
+
 export const CORE_DOMAIN_COMMAND_TAIL_SELECTION = 'domain-command-tail';
+export const CORE_TRACKING_PERMISSION_SELECTION = 'tracking-permissions';
+/** Fixed affected subset of the existing canonical domain command plan.
+ * @param {string|null|undefined} selection
+ */
+export function selectCoreDomainPermissionPlan(plan, selection = null) {
+  if (selection === null || selection === undefined) return plan;
+  validateCoreJourneySelection({scope:'core-closure',cohort:'domain-commands',selection});
+  if (selection === CORE_DOMAIN_COMMAND_TAIL_SELECTION) return plan;
+  assert.equal(selection, CORE_TRACKING_PERMISSION_SELECTION);
+  const selected = plan.filter(recipe => recipe.entity.startsWith('project_tracking_'));
+  assert.deepEqual(selected.map(recipe=>recipe.entity), ['project_tracking_stages','project_tracking_items','project_tracking_updates']);
+  return selected;
+}
+export function buildCoreTrackingPermissionPlan(input) {
+  const permissions = selectCoreDomainPermissionPlan(buildCoreDomainCommandPlan(input), CORE_TRACKING_PERMISSION_SELECTION);
+  return {selection:CORE_TRACKING_PERMISSION_SELECTION,trash:[],readonly:[],permissions,journeyIds:permissions.map(recipe=>'domain-'+recipe.entity+'-mounted-revoked-session-rejection')};
+}
+
 export function buildCoreDomainCommandTailPlan(input) {
   const trash = buildCoreTerminalCommandPlan(input).filter(recipe => trashEntities.has(recipe.entity));
   assert.deepEqual(trash.map(recipe=>recipe.entity).sort(), [...trashEntities].sort());
@@ -51,7 +77,10 @@ export function buildCoreDomainCommandTailPlan(input) {
  * @param {{native:{status:string,ownedRunId:string,records:Array<object>},ownedRunId:string,sourceSha256:string,expectedActorId:number}|null} nativeContext
  */
 export function assertCoreDomainCommandTailReceipt(browser, plan, canonicalRequiredCases, nativeContext = null) {
-  assert.equal(validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection}),CORE_DOMAIN_COMMAND_TAIL_SELECTION);
+  const selection=validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection});
+  assert.ok(selection===CORE_DOMAIN_COMMAND_TAIL_SELECTION||selection===CORE_TRACKING_PERMISSION_SELECTION);
+  assert.equal(plan.selection ?? CORE_DOMAIN_COMMAND_TAIL_SELECTION, selection, "The fixed plan must bind the selected journey family.");
+  if(selection===CORE_TRACKING_PERMISSION_SELECTION){assert.deepEqual(plan.trash,[]);assert.deepEqual(plan.readonly,[]);assert.deepEqual(plan.permissions.map(recipe=>recipe.entity),['project_tracking_stages','project_tracking_items','project_tracking_updates']);}
   assert.ok(plan && Array.isArray(plan.trash) && Array.isArray(plan.permissions));
   const ids=[...plan.trash.map(recipe=>'terminal-'+recipe.entity+'-global-empty-trash'),...plan.readonly.map(recipe=>'core-readonly-'+recipe.entity+'-query-failure-retry-auth'),...plan.permissions.map(recipe=>'domain-'+recipe.entity+'-mounted-revoked-session-rejection')];
   assert.deepEqual(plan.journeyIds,ids);assert.equal(new Set(ids).size,ids.length);
@@ -114,7 +143,7 @@ export function assertCoreDomainCommandTailReceipt(browser, plan, canonicalRequi
       assert.equal(before.rows.length,1);assert.equal(Number(before.rows[0].id),recipe.id);assert.deepEqual(after.rows,before.rows);assert.deepEqual(after.audit,before.audit);
     }
   }
-  return{selection:CORE_DOMAIN_COMMAND_TAIL_SELECTION,selectedJourneyIds:ids,executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,globalClosed:false,automaticCoverage:[]};
+  return{selection,selectedJourneyIds:ids,executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,globalClosed:false,automaticCoverage:[]};
 }
 
 async function terminalTools(ctx) {
@@ -196,10 +225,11 @@ async function terminalTools(ctx) {
     await expect(page.locator(moreSelector(recipe.id))).toHaveCount(1, { timeout: 60_000 });
     const before = await ids(); assert.ok(before.length < 10, 'The authored clone source query must fit one visible page.');
     const item = await menu(recipe, recipe.id, 'duplicate'); await expect(item).toBeEnabled();
-    await heldCommand(() => item.click(), async () => {
+    if(recipe.entity==='projects')assert.match(recipe.path,new RegExp('^/admin/projects/(residential|commercial)$','u'));const channel=({projects:'entity-list:'+recipe.path.split('/').at(-1)+'-projects-table',topics:'entity-list:content-topics-table',categories:'entity-list:content-categories-table',series:'entity-list:content-series-table',pages:'entity-list:pages-table'})[recipe.entity];assert.ok(channel);
+    const acceptedFeedback=await observeCoreVisibleAcceptedFeedback({page,channel,perform:()=>heldCommand(() => item.click(), async () => {
       const disabled = await menu(recipe, recipe.id, 'duplicate'); await expect(disabled).toBeDisabled();
       await disabled.evaluate(button => button.click()); await page.keyboard.press('Escape');
-    });
+    })});
     await observe('terminal-clone-reload', () => page.reload({ waitUntil: 'domcontentloaded' }));
     await expect.poll(async () => (await ids()).filter(id => !before.includes(id)).length, { timeout: 60_000 }).toBe(1);
     const id = (await ids()).find(value => !before.includes(value));
@@ -207,7 +237,7 @@ async function terminalTools(ctx) {
     const persisted = await probe(recipe, [id], startedAt); assert.equal(persisted.rows.length, 1); assert.equal(Number(persisted.rows[0].id), id);
     const duplicateAction = recipe.entity === 'pages' ? 'page_composition.duplicate_page' : recipe.audit + '.duplicate';
     assert.equal(persisted.audit.filter(row => row.action === duplicateAction).length, 1);
-    return { id, duplicateAction, native: persisted.id };
+    return { id, duplicateAction, native: persisted.id,acceptedFeedback };
   }
   async function emptyCancel(recipe) {
     await navigate(recipe, true);
@@ -377,7 +407,7 @@ export async function runCoreEmptyTrashSuccessJourneys(ctx) {
     assert.deepEqual(after.audit.map(row => row.action).sort(), [...copies.flatMap(() => [recipe.audit + '.duplicate', recipe.audit + '.delete']), recipe.audit + '.permanent_delete'].sort());
     for (const id of copies) databaseReadback.push({ table: recipe.table, id, deleted: true, expected: {}, auditEntityTypes: [recipe.audit],
       auditActions: [recipe.audit + '.duplicate', recipe.audit + '.delete', recipe.audit + '.permanent_delete'], auditSince: startedAt,
-      aggregateAuditIds: [permanent[0].id] });
+      aggregateAuditIds: [normalizeCoreTerminalAuditId(permanent[0].id)] });
     const outcome = { entity: recipe.entity, ownedIds: copies, nativeCompleteTrash: changed.id, initialTwoRowTrash: complete.id, cancellation: cancelled,
       staleCountRejected: true, nativeBeforeRejection: beforeRejection.id, nativeAfterRejection: afterRejection.id, freshCountRetrySucceeded: true,
       nativeEmptyTrash: afterSet.id, nativeRowsAndAudit: after.id, globalCommandReallyExecuted: true, expectedCount: copies.length };

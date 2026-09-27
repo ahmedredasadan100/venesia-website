@@ -1,3 +1,4 @@
+import {observeCoreVisibleAcceptedFeedback} from "./admin-core-domain-form-journeys.mjs";
 import { exerciseCoreImageField } from "./admin-core-direct-image-adoption.mjs";
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
 import { runCoreDescendantPresentationJourneys } from './admin-core-descendant-presentation-journeys.mjs';
@@ -40,7 +41,7 @@ export function buildCorePageCompositionPlan({ fixtures, manifest, collections, 
 export function assertPageCompositionUnchanged(before, after) {
   assert.equal(before.ownedRunId, after.ownedRunId); assert.equal(before.pageId, after.pageId);
   assert.equal(number(before.qaActorId), number(after.qaActorId), "The canonical QA actor must remain unchanged.");
-  for (const key of ["page", "assignments", "layouts", "regions", "audit", "templates"]) assert.deepEqual(after[key], before[key], "Unexpected composition change after cancel/rejection: " + key);
+  for (const key of ["page", "assignments", "layouts", "regions", "audit", "templates", "templateCopies"]) assert.deepEqual(after[key], before[key], "Unexpected composition change after cancel/rejection: " + key);
 }
 
 export function assertPageCompositionAudit(before, after, operation) {
@@ -58,6 +59,80 @@ export function assertPageCompositionAudit(before, after, operation) {
   return row.id;
 }
 
+
+/** Existing RPC normalizes all ordinary assignment orders in each slot. */
+function assertAssignmentOrderNormalization(beforeRows, afterRows, inserted) {
+  const before=beforeRows.filter(row=>row.kind!=="hero"),slots=[...new Set(before.map(row=>row.slot))];
+  for(const slot of slots){
+    const rows=before.filter(row=>row.slot===slot);
+    assert.equal(new Set(rows.map(row=>row.sort_order)).size,rows.length,"This fixed QA recipe requires distinct pre-intent orders; SQL tie collation is not inferred.");
+    if(inserted?.slot===slot)rows.push(inserted);
+    rows.sort((a,b)=>a.sort_order-b.sort_order);
+    assert.equal(new Set(rows.map(row=>row.sort_order)).size,rows.length,"The inserted copy must have its own pre-normalization order.");
+    rows.forEach((row,index)=>assert.equal(afterRows.find(value=>identity(value)===identity(row))?.sort_order,(index+1)*10));
+  }
+  for(const hero of beforeRows.filter(row=>row.kind==="hero"))assert.deepEqual(afterRows.find(row=>identity(row)===identity(hero)),hero);
+  const times=afterRows.filter(row=>row.kind!=="hero").map(row=>row.updated_at);assert.ok(times.every(value=>typeof value==="string"&&value.length>0));assert.equal(new Set(times).size,1,"One RPC timestamps every ordinary assignment consistently.");
+}
+/** Existing composition snapshots, exact actual UI intent; no capability promotion. */
+export function assertPageAssignmentVisibility(before,after,assignmentKey,visible) {
+  assert.equal(typeof visible,"boolean");
+  for(const key of ["page","layouts","regions","templates","templateCopies"])assert.deepEqual(after[key],before[key]);
+  assert.equal(after.assignments.length,before.assignments.length);
+  const target=before.assignments.find(row=>identity(row)===assignmentKey);assert.ok(target&&target.kind!=="hero");assert.notEqual(target.is_visible,visible);
+  for(const expected of before.assignments){const actual=after.assignments.find(row=>identity(row)===identity(expected));assert.ok(actual);assert.deepEqual(Object.keys(actual).sort(),Object.keys(expected).sort());
+    for(const key of Object.keys(expected).filter(key=>!["sort_order","updated_at"].includes(key)))assert.deepEqual(actual[key],key==="is_visible"&&identity(expected)===assignmentKey?visible:expected[key]);}
+  assertAssignmentOrderNormalization(before.assignments,after.assignments);
+  return assertPageCompositionAudit(before,after,"bulk");
+}
+export function assertPageAssignmentDuplicate(before,after,assignmentKey) {
+  for(const key of ["page","layouts","regions","templates"])assert.deepEqual(after[key],before[key]);
+  const source=before.assignments.find(row=>identity(row)===assignmentKey);assert.ok(source&&source.kind!=="hero");
+  const prior=new Set(before.assignments.map(identity)),added=after.assignments.filter(row=>!prior.has(identity(row)));assert.equal(added.length,1);assert.equal(after.assignments.length,before.assignments.length+1);
+  const clone=added[0];assert.equal(clone.kind,source.kind);assert.equal(number(clone.page_id),before.pageId);assert.notEqual(number(clone.template_id),number(source.template_id));assert.equal(clone.slot,source.slot);assert.equal(clone.is_visible,false);
+  for(const row of before.assignments){const retained=after.assignments.find(candidate=>identity(candidate)===identity(row));assert.ok(retained);assert.deepEqual(Object.keys(retained).sort(),Object.keys(row).sort());for(const key of Object.keys(row).filter(key=>!["sort_order","updated_at"].includes(key)))assert.deepEqual(retained[key],row[key]);}
+  assertAssignmentOrderNormalization(before.assignments,after.assignments,{...clone,sort_order:source.sort_order+1});
+  assert.equal(after.templateCopies.length,before.templateCopies.length+1);assert.deepEqual(after.templateCopies.filter(row=>!(row.kind===source.kind.replaceAll("_","-")&&number(row.row.id)===number(clone.template_id))),before.templateCopies);
+  const original=before.templates.find(row=>row.kind===source.kind.replaceAll("_","-")&&number(row.id)===number(source.template_id));assert.ok(original?.source_row);
+  const copy=after.templateCopies.find(row=>row.kind===original.kind&&number(row.row.id)===number(clone.template_id));assert.ok(copy);assert.equal(number(copy.sourceTemplateId),number(source.template_id));
+  const allowed=new Set(["id","name","slug","created_at","updated_at","status","is_visible"]);assert.deepEqual(Object.keys(copy.row).sort(),Object.keys(original.source_row).sort());for(const[key,value]of Object.entries(original.source_row))if(!allowed.has(key))assert.deepEqual(copy.row[key],value,"Copied authored field changed: "+key);
+  assert.equal(copy.row.name,original.source_row.name+" — نسخة");assert.equal(copy.row.slug,original.source_row.slug+"-copy-"+copy.row.id);if(Object.hasOwn(copy.row,"status"))assert.equal(copy.row.status,"draft");if(Object.hasOwn(copy.row,"is_visible"))assert.equal(copy.row.is_visible,false);assert.ok(Number.isFinite(Date.parse(copy.row.created_at)));assert.equal(copy.row.created_at,copy.row.updated_at);
+  return{assignment:clone,template:copy.row,auditId:assertPageCompositionAudit(before,after,"duplicate_assignment")};
+}
+
+/** One actual ordinary assignment, joined to its six current native snapshots. */
+export function assertCorePageAssignmentRowActionsJoin(browser,native,context) {
+  const {fixtures,formManifest,collectionManifest,kinds,positionCapabilities,getAssignablePositions,ownedRunId,actorId,sourceSha256}=context;
+  assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'page-composition');assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.deepEqual(browser.errors,[]);assert.equal(browser.globalClosed,false);
+  assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.ok(typeof ownedRunId==='string'&&ownedRunId);number(actorId);
+  assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);assert.ok(Array.isArray(native.records));assert.equal(new Set(native.records.map(row=>row.id)).size,native.records.length);
+  assert.ok(browser.evidence.every(row=>row.status==='pass'));assert.equal(new Set(browser.evidence.map(row=>row.id)).size,browser.evidence.length);
+  const logins=browser.evidence.filter(row=>row.id==='existing-auth-login');assert.equal(logins.length,1);assert.equal(logins[0].authenticated,true);assert.equal(logins[0].sessionArtifactWritten,false);assert.match(logins[0].dashboardState,/^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
+  const initial=native.records.find(row=>row.kind==='page-composition-state');assert.ok(initial);
+  assert.equal(initial.ownedRunId,ownedRunId);assert.equal(number(initial.qaActorId),actorId);assert.equal(initial.pageId,fixtures.pages.pageId);
+  const plan=buildCorePageCompositionPlan({fixtures,manifest:formManifest,collections:collectionManifest.surfaces,kinds,positionCapabilities,getAssignablePositions,
+    regions:initial.regions.filter(row=>number(row.layout_id)===number(initial.page.layout_id)),requiredCases:browser.requiredCases});
+  const template=plan.assignments[0];assert.ok(template);
+  const matches=browser.evidence.filter(row=>row.rowActionsEvidence!=null);assert.equal(matches.length,1,'Only the first manageable ordinary assignment owns this proof.');
+  const row=matches[0],proof=row.rowActionsEvidence;assert.equal(row.id,'core-page-composition-assignment-'+template.kind);assert.equal(row.consumer,consumer);assert.deepEqual(row.coverage,[]);assert.deepEqual(row.automaticCoverage,[]);
+  assert.equal(proof.kind,template.kind);assert.equal(proof.sourceTemplateId,template.id);assert.equal(row.templateId,template.id);assert.equal(number(row.assignmentId),number(proof.sourceAssignmentId));assert.deepEqual(proof.automaticCoverage,[]);assert.equal(proof.globalClosed,false);
+  assert.deepEqual(proof.observations,['actual_information_back_and_focus','actual_edit_navigation_and_return','actual_current_public_link_opened','actual_visibility_cycle_reload_native','actual_duplicate_template_assignment_audit_handoff','unpublished_copy_visibility_disabled']);
+  assert.ok(Array.isArray(proof.nativeIds));assert.equal(proof.nativeIds.length,6);assert.equal(new Set(proof.nativeIds).size,6);
+  const indices=proof.nativeIds.map(id=>native.records.findIndex(record=>record.id===id));assert.ok(indices.every(index=>index>=0));assert.deepEqual(indices,indices.map((_,index)=>indices[0]+index),'Six row-action snapshots must retain actual broker order with no skipped observation.');
+  const states=indices.map(index=>native.records[index]);
+  for(const state of states){assert.equal(state.kind,'page-composition-state');assert.equal(state.status,'pass');assert.equal(state.ownedRunId,ownedRunId);assert.equal(number(state.qaActorId),actorId);assert.equal(state.pageId,fixtures.pages.pageId);assert.equal(number(state.page.id),fixtures.pages.pageId);assert.equal(state.page.slug,fixtures.pages.slug);assert.ok(Number.isFinite(Date.parse(state.startedAt)));assert.equal(state.startedAt,states[0].startedAt);assert.equal(state.seo,undefined);for(const entry of state.audit)assert.equal(number(entry.actor_admin_user_id),actorId);}
+  const [before,readonly,hidden,shown,duplicate,reloaded]=states,key=template.kind.replaceAll('-','_')+':'+proof.sourceAssignmentId;
+  const assignment=before.assignments.find(value=>identity(value)===key);assert.ok(assignment);assert.equal(number(assignment.template_id),template.id);assert.equal(assignment.is_visible,true);
+  assertPageCompositionUnchanged(before,readonly);
+  const audits=[assertPageAssignmentVisibility(readonly,hidden,key,false),assertPageAssignmentVisibility(hidden,shown,key,true)];
+  const copied=assertPageAssignmentDuplicate(shown,duplicate,key);audits.push(copied.auditId);assertPageCompositionUnchanged(duplicate,reloaded);
+  assert.equal(number(copied.assignment.id),proof.copyAssignmentId);assert.equal(number(copied.template.id),proof.copyTemplateId);assert.notEqual(proof.copyAssignmentId,proof.sourceAssignmentId);assert.notEqual(proof.copyTemplateId,proof.sourceTemplateId);
+  assert.equal(new Set(audits.map(String)).size,3);
+  return{status:'pass',kind:template.kind,pageId:fixtures.pages.pageId,sourceAssignmentId:proof.sourceAssignmentId,sourceTemplateId:template.id,copyAssignmentId:proof.copyAssignmentId,copyTemplateId:proof.copyTemplateId,
+    ownedRunId,actorId,sourceSha256,nativeIds:[...proof.nativeIds],atomicAuditIds:audits,visibilityWrites:2,duplicateWrites:1,readOnlyTransitions:2,automaticCoverage:[],globalClosed:false,
+    boundary:'Only the first actual manageable ordinary assignment and its six joined observations; no all-kind, Hero, generic Preview matrix or full-axis claim.'};
+}
+
 export async function runCorePageCompositionJourneys(ctx) {
   const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, requiredCases, compositionCheckpoint } = ctx;
   assert.equal(new URL(origin).origin, origin); assert.equal(new URL(origin).hostname, "127.0.0.1");
@@ -67,7 +142,7 @@ export async function runCorePageCompositionJourneys(ctx) {
   const { ADMIN_COLLECTION_SURFACE_ADOPTION } = await jiti.import("../../src/lib/admin/interaction-system/adoption-manifest.ts");
   const { REGISTERED_SLOT_MODULE_KINDS: kinds } = await jiti.import("../../src/lib/page-composition/slot-module-registry.ts");
   const { MODULE_POSITION_CAPABILITIES: positionCapabilities, getAssignablePositions, comparePageAssignmentOrder } = await jiti.import("../../src/lib/page-composition/page-assignment-contract.ts");
-  const { moduleKindLabel } = await jiti.import("../../src/lib/page-blocks/admin-utils.ts");
+  const { moduleKindLabel, moduleEditHref, MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM } = await jiti.import("../../src/lib/page-blocks/admin-utils.ts");
   const pageId = number(fixtures.pages.pageId), startedAt = new Date().toISOString();
   const layoutKey = "qa-core-layout-" + Date.now().toString(36);
   const templateRefs = kinds.map(kind => {
@@ -81,7 +156,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     assert.equal(value?.id, request.id); assert.equal(value.kind, request.kind); assert.equal(value.status, "pass");
     assert.equal(value.pageId, pageId); assert.equal(value.startedAt, startedAt);
     assert.ok(typeof value.ownedRunId === "string" && value.ownedRunId.length > 0);
-    for (const key of ["assignments", "layouts", "regions", "audit", "templates"]) assert.ok(Array.isArray(value[key]));
+    for (const key of ["assignments", "layouts", "regions", "audit", "templates", "templateCopies"]) assert.ok(Array.isArray(value[key]));
     assert.equal(number(value.page.id), pageId); number(value.qaActorId);
     if(seoPhase){assert.equal(value.seo?.phase,seoPhase);assert.equal(value.seo?.status,"pass");}
     checkpoints.push({ label, receiptId: value.id });
@@ -159,6 +234,26 @@ export async function runCorePageCompositionJourneys(ctx) {
     await expect(confirmation).toBeVisible(); await expect(confirmation).toContainText(template.name);
     return confirmation;
   }
+
+  async function assignmentRowActions(template,assignment,state) {
+    const key=identity(assignment),before=state,observations=[],receiptIds=[before.id],row=()=>assignedRow(template);
+    await row().locator('[data-admin-row-action="more"] button').click();await page.locator('[data-admin-row-action-menu-item="information"]').click();
+    const information=page.locator('[data-admin-row-actions-information]');await expect(information).toHaveAttribute('data-admin-entity-type','page_module_assignment');await expect(information).toHaveAttribute('data-admin-entity-id',template.kind+':'+assignment.id);await expect(information).toContainText('معلومات '+template.name);await expect(information).toContainText(moduleKindLabel(template.kind));
+    if(template.kind!=='breadcrumb')await expect(information).toContainText(template.slug);
+    await information.getByRole('button',{name:'رجوع',exact:true}).click();await expect(page.locator('[data-admin-row-action-menu-item="information"]')).toBeFocused();await page.keyboard.press('Escape');await expect(row().locator('[data-admin-row-action="more"] button')).toBeFocused();observations.push('actual_information_back_and_focus');
+    const edit=row().locator('[data-admin-row-action="edit"] a'),href=await edit.getAttribute('href');assert.ok(href);const editUrl=new URL(href,origin),expectedEdit=new URL(moduleEditHref(template.kind,template.id,{returnPageId:pageId}),origin);assert.equal(editUrl.origin,origin);assert.equal(editUrl.pathname,expectedEdit.pathname);assert.equal(expectedEdit.searchParams.get(MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM),String(pageId));assert.equal(editUrl.searchParams.get(MODULE_EDITOR_RETURN_PAGE_QUERY_PARAM),String(pageId));
+    await edit.click();await expect(page).toHaveURL(url=>url.origin===origin&&url.pathname===expectedEdit.pathname);await navigate();await expect(row()).toHaveCount(1);observations.push('actual_edit_navigation_and_return');
+    const preview=row().locator('[data-admin-row-action="preview"] a');await expect(preview).toHaveCount(1);const previewHref=await preview.getAttribute('href');assert.ok(previewHref);const previewUrl=new URL(previewHref,origin);assert.equal(previewUrl.origin,origin);assert.equal(previewUrl.pathname,before.page.path);await expect(preview).toHaveAttribute('target','_blank');
+    const popupPromise=page.waitForEvent('popup');await preview.click();const popup=await popupPromise;try{await popup.waitForURL(url=>url.origin===origin&&url.pathname===previewUrl.pathname);observations.push('actual_current_public_link_opened');}finally{await popup.close();}
+    let after=await snapshot(template.kind+'-row-readonly');receiptIds.push(after.id);assertPageCompositionUnchanged(before,after);
+    const toggle=()=>row().locator('[data-admin-row-action="visibility"] button');await expect(toggle()).toHaveCount(1);await expect(toggle()).toHaveAttribute('aria-pressed','true');
+    for(const visible of [false,true]){const prior=after;await action('composition-row-visibility-'+visible,()=>toggle().click());await expect(toggle()).toHaveAttribute('aria-pressed',String(visible));await reload();await expect(toggle()).toHaveAttribute('aria-pressed',String(visible));after=await snapshot(template.kind+'-visibility-'+visible);receiptIds.push(after.id);assertPageAssignmentVisibility(prior,after,key,visible);}observations.push('actual_visibility_cycle_reload_native');
+    const preCopy=after;await row().locator('[data-admin-row-action="more"] button').click();await action('composition-row-duplicate',()=>page.locator('[data-admin-row-action-menu-item="duplicate"]').click());
+    await expect(page).not.toHaveURL(url=>url.pathname===fixtures.pages.editorPath,{timeout:60_000});after=await snapshot(template.kind+'-duplicated');receiptIds.push(after.id);const copied=assertPageAssignmentDuplicate(preCopy,after,key),copyPath=new URL(moduleEditHref(template.kind,number(copied.template.id),{returnPageId:pageId}),origin).pathname;await expect(page).toHaveURL(url=>url.origin===origin&&url.pathname===copyPath);await navigate();
+    const copyRow=table().locator('article').filter({has:page.getByRole('link',{name:copied.template.name,exact:true})});await expect(copyRow).toHaveCount(1);await expect(copyRow.locator('[data-admin-row-action="visibility"] button')).toBeDisabled();await reload();await expect(copyRow).toHaveCount(1);const reloaded=await snapshot(template.kind+'-duplicate-reloaded');receiptIds.push(reloaded.id);assertPageCompositionUnchanged(after,reloaded);observations.push('actual_duplicate_template_assignment_audit_handoff','unpublished_copy_visibility_disabled');
+    return{state:reloaded,evidence:{sourceAssignmentId:number(assignment.id),sourceTemplateId:template.id,kind:template.kind,copyAssignmentId:number(copied.assignment.id),copyTemplateId:number(copied.template.id),observations,nativeIds:receiptIds,automaticCoverage:[],globalClosed:false,boundary:'One current ordinary manageable assignment exercises the shared exposed actions. Public-link destination only, not a Preview publication-matrix claim; no Hero duplicate or every-kind claim.'}};
+  }
+
   const ordered = (state, slot) => state.assignments.filter(row => row.kind !== "hero" && row.slot === slot).sort((a, b) =>
     comparePageAssignmentOrder({ sortOrder: a.sort_order, moduleKind: a.kind.replaceAll("_", "-"), assignmentId: number(a.id) },
       { sortOrder: b.sort_order, moduleKind: b.kind.replaceAll("_", "-"), assignmentId: number(b.id) }));
@@ -192,7 +287,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     await expect(dialog()).toHaveCount(0);
     assertPageCompositionUnchanged(before, await snapshot(template.kind + "-add-cancel"));
     await openAssignment(template, slot, sortOrder);
-    await action("composition-add", () => dialog().getByRole("button", { name: "ربط الموديول", exact: true }).click());
+    const acceptedFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"page-composition:"+pageId,perform:()=>action("composition-add", () => dialog().getByRole("button", { name: "ربط الموديول", exact: true }).click())});
     await expect(dialog()).toHaveCount(0, { timeout: 60_000 });
     await expect(assignedRow(template)).toHaveCount(1); await reload(); await expect(assignedRow(template)).toHaveCount(1);
     let after = await snapshot(template.kind + "-added");
@@ -222,6 +317,8 @@ export async function runCorePageCompositionJourneys(ctx) {
     after = await snapshot(template.kind + "-positioned");
     assert.equal(after.assignments.find(row => identity(row) === assignmentKey).slot, destination);
     auditIds.push(assertPageCompositionAudit(before, after, "save_assignment"));
+    let rowActionsEvidence=null;
+    if(template.kind===plan.assignments[0].kind){const exercised=await assignmentRowActions(template,assignment,after);after=exercised.state;rowActionsEvidence=exercised.evidence;}
     const confirmation = await removal(template);
     await observeRemovalModal(confirmation,template);
     await confirmation.locator("[data-admin-confirm-cancel]").click(); await expect(confirmation).toHaveCount(0);
@@ -235,7 +332,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     assert.equal(after.assignments.some(row => identity(row) === assignmentKey), false);
     assert.equal(after.assignments.length, before.assignments.length - 1); assert.deepEqual(after.templates, before.templates);
     auditIds.push(assertPageCompositionAudit(before, after, "bulk"));
-    return result("assignment-" + template.kind, { templateId: template.id, assignmentId: number(assignment.id), auditIds,
+    return result("assignment-" + template.kind, { acceptedFeedback, templateId: template.id, assignmentId: number(assignment.id), auditIds, rowActionsEvidence,
       verified: ["compatible_picker", "existing_template_excluded", "add_cancel_no_write", "add_reload_native", "keyboard_reorder_native", "position_change_reload_native", "remove_cancel_no_write", "remove_confirm_template_retained"] });
   });
 

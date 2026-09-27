@@ -1,3 +1,4 @@
+import {normalizeCoreTerminalAuditId} from './fixtures/admin-core-domain-terminal-journeys.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -70,6 +71,10 @@ async function rejectedBeforeSql(value: unknown) {
   const before = sqlReads; await assert.rejects(owner.verifyCoreDomainWrites(handle, browser([value]))); assert.equal(sqlReads, before);
 }
 try {
+  await test('Terminal audit producer accepts only positive safe integers and decimal bigint strings',async()=>{
+    for(const value of [1,'1',57,'57','64','71',Number.MAX_SAFE_INTEGER,String(Number.MAX_SAFE_INTEGER)])assert.equal(normalizeCoreTerminalAuditId(value),Number(value));
+    for(const value of [null,undefined,true,false,{},[],0,'0',-1,'-1',1.5,'1.5',' 57','57 ','+57','5e1','0x39','057','',NaN,Infinity,9007199254740992,'9007199254740992'])assert.throws(()=>normalizeCoreTerminalAuditId(value));
+  });
   await db.exec(`
     create table public.admin_users(id bigint primary key,username text,email text,role text,is_active boolean);
     insert into public.admin_users values(7,'qa_admin_interaction','qa-admin-interaction@example.invalid','admin',true);
@@ -256,10 +261,11 @@ try {
     await owner.verifyCoreDomainWrites(handle, browser([{ table: 'projects', id: 30, expected: { latitude: 30.123456, longitude: 31.654321, map_zoom: 12 }, auditEntityLabel: 'Project name' }]));
   });
   await test('Deleted row proof requires the exact target-containing aggregate audit', async () => {
-    const write = { table: 'topics', id: 40, deleted: true, expected: {}, auditEntityLabel: null, auditActions: ['topic.permanent_delete'], exactAuditCount: 1, aggregateAuditIds: [8] };
+    const write = { table: 'topics', id: 40, deleted: true, expected: {}, auditEntityLabel: null, auditActions: ['topic.permanent_delete'], exactAuditCount: 1, aggregateAuditIds: [normalizeCoreTerminalAuditId('8')] };
     await owner.verifyCoreDomainWrites(handle, browser([write]));
     await assert.rejects(owner.verifyCoreDomainWrites(handle, browser([{ ...write, id: 42 }])));
     await assert.rejects(owner.verifyCoreDomainWrites(handle, browser([{ ...write, aggregateAuditIds: [99] }])));
+    await rejectedBeforeSql({ ...write, aggregateAuditIds: ['8'] });
     await rejectedBeforeSql({ ...write, expected: { title: 'Cannot exist' } });
   });
   await test('Failed Browser cohort is denied full pass; partial projections preserve its failure and all readback invariants', async () => {

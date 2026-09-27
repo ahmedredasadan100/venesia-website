@@ -1,3 +1,5 @@
+import {readFileSync} from "node:fs";
+import {createHash} from "node:crypto";
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,observeCoreModalPendingDismissal} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import { createJiti } from "jiti";
@@ -21,7 +23,7 @@ const locationSurface = { governorate: "governorate", city: "city", main_area: "
 export function validateCoreJourneySelection({ scope, cohort, selection }) {
   if (selection === undefined || selection === null) return null;
   assert.equal(scope, "core-closure");
-  if (selection === "domain-command-tail") assert.equal(cohort, "domain-commands");
+  if (selection === "domain-command-tail" || selection === "tracking-permissions") assert.equal(cohort, "domain-commands");
   else if (selection === "template-form-creates") assert.equal(cohort, "recovery-templates");
   else { assert.equal(cohort, "domain-forms"); assert.equal(selection, "text-topic-forms", "Unknown affected journey selection."); }
   return selection;
@@ -250,6 +252,10 @@ export async function runCoreDomainFormJourneys(ctx) {
     await page.getByRole("option", { name: label, exact: true }).click();
     await expect(source).toHaveValue(String(value));
   }
+  async function acceptedClose(form, destinationPathname, refill) {
+    const original=page.url(),trigger=form.locator('[data-admin-form-action="close"]'),target=new URL(destinationPathname,origin);assert.equal(target.origin,origin);
+    return{trigger,destination:{kind:'navigated',pathname:target.pathname},reopenAndRefill:async()=>{await navigate(new URL(original).pathname+new URL(original).search);await refill();}};
+  }
   async function valuesEqual(form, fields) {
     for (const [name, value] of Object.entries(fields)) await expect(control(form, name)).toHaveValue(String(value));
   }
@@ -330,7 +336,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     const createFields = { name, slug, ...(recipe.kind === "series" ? { category_id: fixtures.category.id } : {}) };
     await dirtyCloseCancel(form, createFields);
     await rejectRequired(form, "name", createFields);
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-form-create",journeyId:"core-"+recipe.kind+"-form-create-edit",formConsumer:recipe.id,surface:"create"},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close'});
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-form-create",journeyId:"core-"+recipe.kind+"-form-create-edit",formConsumer:recipe.id,surface:"create"},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/'+plural,async()=>{await control(form,'name').fill(name);await control(form,'slug').fill(slug);if(recipe.kind==='series')await selectValue(form,'category_id',fixtures.category.id);})});
     const id = await permissionIntent(recipe, "create", "core-" + recipe.kind + "-form-create", async () => {
       await accepted(form);
       await expect(page).toHaveURL(url => new RegExp("^/admin/content/" + plural + "/[0-9]+$", "u").test(url.pathname));
@@ -345,7 +351,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     const editFields = { name: edited, ...(recipe.kind === "series" ? { category_id: fixtures.category.id } : {}) };
     await dirtyCloseCancel(form, editFields);
     await rejectRequired(form, "name", editFields);
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-form-edit",journeyId:"core-"+recipe.kind+"-form-create-edit",formConsumer:recipe.id,surface:"edit"},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields),dirtyNavigation:'close'});
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-form-edit",journeyId:"core-"+recipe.kind+"-form-create-edit",formConsumer:recipe.id,surface:"edit"},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/'+plural,async()=>{await control(form,'name').fill(edited);if(recipe.kind==='series')await selectValue(form,'category_id',fixtures.category.id);})});
     await permissionIntent(recipe, "edit", "core-" + recipe.kind + "-form-edit", async () => {
       await accepted(form);
       await reloadValues(editFields);
@@ -392,7 +398,11 @@ export async function runCoreDomainFormJourneys(ctx) {
     const payloadAudit = recipe.kind === "video"
       ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "video" }, { column: "media_payload", path: ["duration"], value: "2:34" }] }
       : recipe.kind === "gallery" ? { expectedJson: [{ column: "media_payload", path: ["kind"], value: "gallery" }] } : {};
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-content-create",journeyId:"core-"+recipe.kind+"-content-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close'});
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-"+recipe.kind+"-content-create",journeyId:"core-"+recipe.kind+"-content-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,createFields),cancelDirty:()=>dirtyCloseCancel(form,createFields),dirtyNavigation:'close',discardDirty:await acceptedClose(form,'/admin/content/topics',async()=>{
+      await form.locator('[data-admin-tab-id="basic"]').click();await control(form,'title').fill(title);await control(form,'slug').fill(slug);await control(form,'excerpt').fill(excerpt);await selectValue(form,'category_id',fixtures.category.id);
+      if(markdown){const editor=form.getByRole('textbox',{name:'نص المقال',exact:true});await editor.fill(body);await form.getByRole('button',{name:'فقرة',exact:true}).click();await expect(control(form,'content')).toHaveValue(body);}
+      if(recipe.kind==='video')await control(form,'video_duration').fill('2:34');
+    })});
     const id = await permissionIntent(recipe, recipe.surfaces[0], "core-" + recipe.kind + "-content-create", async () => {
       await accepted(form);
       await expect(page).toHaveURL(url => /^\/admin\/content\/topics\/[0-9]+$/u.test(url.pathname));
@@ -456,7 +466,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     await dirtyCloseCancel(form, fields, true);
     await rejectRequired(form, "name_ar", fields);
     let row;
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-create",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,fields),cancelDirty:()=>dirtyCloseCancel(form,fields,true),dirtyNavigation:'close',observePending:()=>observeLocationPending(form,recipe.surfaces[0])});
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-create",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[0]},form,submit:save(form),assertDraft:()=>valuesEqual(form,fields),cancelDirty:()=>dirtyCloseCancel(form,fields,true),dirtyNavigation:'close',observePending:()=>observeLocationPending(form,recipe.surfaces[0]),discardDirty:{trigger:form.getByRole('button',{name:'إلغاء',exact:true}),destination:{kind:'closed',pathname:path},reopenAndRefill:async()=>{await page.getByRole('button',{name:'إضافة '+recipe.config.singularLabel,exact:true}).click();for(const key of ['name_ar','name_en','sort_order'])await control(form,key).fill(String(fields[key]));if(recipe.parentId)await selectValue(form,'parent_id',recipe.parentId);}}});
     const id = await permissionIntent(recipe, recipe.surfaces[0], "core-location-" + recipe.level + "-form-create", async () => {
       await acknowledge(form);
       await expect(form).toHaveCount(0, { timeout: 60_000 });
@@ -477,7 +487,7 @@ export async function runCoreDomainFormJourneys(ctx) {
     for (const key of ["name_ar", "name_en", "sort_order"]) await control(form, key).fill(String(editFields[key]));
     await dirtyCloseCancel(form, editFields, true);
     await rejectRequired(form, "name_ar", editFields);
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-edit",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[1]},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields,true),dirtyNavigation:'close',observePending:()=>observeLocationPending(form,recipe.surfaces[1])});
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-location-"+recipe.level+"-form-edit",journeyId:"core-location-"+recipe.level+"-form-create-edit",formConsumer:recipe.id,surface:recipe.surfaces[1]},form,submit:save(form),assertDraft:()=>valuesEqual(form,editFields),cancelDirty:()=>dirtyCloseCancel(form,editFields,true),dirtyNavigation:'close',observePending:()=>observeLocationPending(form,recipe.surfaces[1]),discardDirty:{trigger:form.getByRole('button',{name:'إلغاء',exact:true}),destination:{kind:'closed',pathname:path},reopenAndRefill:async()=>{await row.locator('[data-admin-row-action="edit"]').getByRole('button').click();for(const key of ['name_ar','name_en','sort_order'])await control(form,key).fill(String(editFields[key]));}}});
     await permissionIntent(recipe, recipe.surfaces[1], "core-location-" + recipe.level + "-form-edit", async () => {
       await acknowledge(form);
       await expect(form).toHaveCount(0, { timeout: 60_000 });
@@ -496,4 +506,58 @@ export async function runCoreDomainFormJourneys(ctx) {
     return details(recipe, id, Object.keys(editFields), { actualLevel: recipe.level, parentId: recipe.parentId });
   });
   return { planned: plan.taxonomy.length + plan.topics.length + plan.projectEdits.length + plan.locations.length, completed: completed.length, results: completed, pending: plan.pending, permissionEvidence, permissionCandidateKeys: [...new Set(permissionEvidence.map(item => item.candidateRequiredCase))], proofBoundary: ownedBoundary };
+}
+
+// Publication and rendered handoff are separate observations: the saved event
+// alone cannot prove that the persistent Feedback viewport displayed the result.
+export function assertCoreFormFeedbackPublicationSource(source){
+ const begin=source.indexOf('    if (state.status === "idle" || handledResultRef.current === state) return;');assert.ok(begin>=0);
+ const effect=source.slice(begin,source.indexOf('  }, [',begin));
+ const publication=effect.indexOf('publishFeedback(nextFeedback, {'),error=effect.indexOf('if (state.status === "error")'),saved=effect.indexOf('new CustomEvent("admin-form-saved"'),success=effect.indexOf('onSuccess?.(state)'),navigation=effect.indexOf('router.replace(editHref');
+ assert.ok(publication>=0&&error>publication&&saved>error&&success>saved&&navigation>success);
+ assert.ok(effect.slice(error,saved).includes('return;'));
+ const mapper=source.slice(source.indexOf('function formFeedback('),source.indexOf('function formFeedback(')+1300);
+ assert.ok(mapper.includes('state.status === "success"')&&mapper.includes('state.status === "warning"')&&mapper.includes('dismissible: true'));
+ return{path:'src/components/admin/ui/AdminFormRuntime.tsx',sha256:createHash('sha256').update(source).digest('hex'),publicationBeforeSavedEvent:true,savedEventBeforeHandoff:true};
+}
+export function assertCoreAcceptedFormFeedback(proof,{consumer,surface,entityId,entityKey,routePrefix,requiredCases,sourceSha256,sourceBinding}){
+ assert.equal(requiredCases.filter(row=>row.boundary==='form'&&row.consumer===consumer&&row.surface===surface&&row.scenario==='save_reload').length,1);
+ assert.equal(proof.consumer,consumer);assert.equal(proof.surface,surface);assert.equal(proof.entityId,entityId);assert.ok(Number.isSafeInteger(entityId)&&entityId>0);
+ assert.equal(proof.sourceSha256,sourceSha256);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.deepEqual(proof.sourceBinding,sourceBinding);
+ assert.equal(proof.events.length,1);assert.deepEqual(proof.events[0],{type:'admin-form-saved',entityId,targetIsForm:true,formConnected:true});
+ assert.equal(proof.mode,'create');assert.equal(proof.entityKey,entityKey);assert.equal(proof.routePathname,routePrefix+'/'+entityId);assert.equal(proof.channel,'form:'+proof.entityKey);
+ assert.equal(proof.publicationOrderObserved,true);assert.equal(proof.renderedRegionObserved,true);assert.equal(proof.postUnmountPersistenceRequired,true);assert.equal(proof.globalClosed,false);assert.deepEqual(proof.automaticCoverage,[]);
+ assertCoreVisibleAcceptedFeedback(proof.visibleFeedback,proof.channel,sourceSha256);
+ assert.equal(proof.visibleFeedback.routePathname,proof.routePathname);assert.equal(proof.visibleFeedback.createFormDetached,true);assert.equal(proof.visibleFeedback.placement,'global');assert.equal(proof.visibleFeedback.lifecycle,'manual');assert.equal(proof.visibleFeedback.dismissed,true);
+ return proof;
+}
+export async function observeCoreAcceptedFormFeedback({form,consumer,surface,entityKey,routePrefix,requiredCases,perform}){
+ await expect(form).toHaveCount(1);await expect(form).toBeVisible();await expect(form).toHaveAttribute('data-admin-form-mode','create');await expect(form).toHaveAttribute('data-admin-form-entity',entityKey);
+ const sourceBinding=assertCoreFormFeedbackPublicationSource(readFileSync(new URL('../../src/components/admin/ui/AdminFormRuntime.tsx',import.meta.url),'utf8'));
+ const observer=await form.evaluateHandle(node=>{const events=[];const handler=event=>{events.push({type:event.type,entityId:Number(event.detail?.entityId),targetIsForm:event.target===node,formConnected:node.isConnected});};node.addEventListener('admin-form-saved',handler);return{events,entityKey:node.getAttribute('data-admin-form-entity'),mode:node.getAttribute('data-admin-form-mode'),isConnected:()=>node.isConnected,dispose:()=>node.removeEventListener('admin-form-saved',handler)};});
+ try{
+  const page=form.page(),channel='form:'+entityKey;let accepted;
+  const rendered=await observeCoreVisibleAcceptedFeedback({page,channel,perform:async()=>{
+   accepted=await perform();assert.ok(Number.isSafeInteger(accepted.entityId)&&accepted.entityId>0);assert.equal(accepted.routePathname,routePrefix+'/'+accepted.entityId);
+   await expect(page).toHaveURL(url=>url.pathname===accepted.routePathname);
+   await expect.poll(()=>observer.evaluate(value=>value.isConnected())).toBe(false);
+  }});
+  const entry=page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="'+channel+'"]');
+  await expect(page.locator('[data-admin-feedback-viewport][data-admin-feedback-placement="global"]').filter({has:entry})).toBeVisible();
+  await expect(entry.locator('[data-admin-notice-lifecycle="manual"]')).toBeVisible();
+  await entry.getByRole('button',{name:'إغلاق الإشعار',exact:true}).click();await expect(entry).toHaveCount(0);
+  const visibleFeedback={...rendered,routePathname:new URL(page.url()).pathname,createFormDetached:true,placement:'global',lifecycle:'manual',dismissed:true};
+  const observed=await observer.evaluate(value=>({events:value.events,entityKey:value.entityKey,mode:value.mode}));
+  const proof={...observed,consumer,surface,entityId:accepted.entityId,channel:'form:'+observed.entityKey,routePathname:accepted.routePathname,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,sourceBinding,publicationOrderObserved:true,renderedRegionObserved:true,postUnmountPersistenceRequired:true,visibleFeedback,automaticCoverage:[],globalClosed:false};
+  return assertCoreAcceptedFormFeedback(proof,{consumer,surface,entityId:accepted.entityId,entityKey,routePrefix,requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,sourceBinding});
+ }finally{await observer.evaluate(value=>value.dispose());await observer.dispose();}
+}
+export function assertCoreVisibleAcceptedFeedback(proof,channel,sourceSha256){
+ assert.equal(proof.channel,channel);assert.equal(proof.sourceSha256,sourceSha256);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.ok(['success','warning'].includes(proof.variant));assert.equal(proof.visibleCount,1);assert.equal(proof.nonemptyMessage,true);assert.equal(proof.priorEntryDetached,true);assert.equal(proof.renderedRegionObserved,true);assert.equal(proof.observedBeforeReload,true);assert.deepEqual(proof.automaticCoverage,[]);assert.equal(proof.globalClosed,false);return proof;
+}
+export async function observeCoreVisibleAcceptedFeedback({page,channel,perform}){
+ const entry=page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="'+channel+'"]');const priorCount=await entry.count();assert.ok(priorCount<=1);const previous=priorCount===1?await entry.elementHandle():null;
+ try{await perform();await expect(entry).toHaveCount(1);await expect(entry).toBeVisible();await expect(entry).toHaveAttribute('data-admin-feedback-variant',/^(success|warning)$/u);if(previous)await expect.poll(()=>previous.evaluate(node=>node.isConnected)).toBe(false);assert.ok((await entry.innerText()).trim().length>0);
+  return assertCoreVisibleAcceptedFeedback({channel,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,variant:await entry.getAttribute('data-admin-feedback-variant'),visibleCount:1,nonemptyMessage:true,priorEntryDetached:true,renderedRegionObserved:true,observedBeforeReload:true,automaticCoverage:[],globalClosed:false},channel,process.env.QA_ADMIN_SOURCE_SHA256);
+ }finally{await previous?.dispose();}
 }

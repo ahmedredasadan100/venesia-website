@@ -1,3 +1,4 @@
+import {observeCoreVisibleAcceptedFeedback} from "./admin-core-domain-form-journeys.mjs";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
@@ -90,7 +91,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
   const search = owner => owner.getByPlaceholder("ابحث بالاسم أو المسار أو الوصف البديل…", { exact: true });
   const imageField = () => page.locator('[data-admin-media-image-field="image"]');
   const assetButton = (owner, name) => owner.locator("button[aria-pressed]").filter({ has: page.getByText(name, { exact: true }) });
-  const specimens = [], completed = [], checkpoints = [], verifiedActions = new Set();
+  const specimens = [], completed = [], checkpoints = [], verifiedActions = new Set(), acceptedFeedback=[];
   let pendingCancellation;
   async function snapshot(label) {
     const request = { id: randomUUID(), kind: "media-recovery-state" };
@@ -171,13 +172,15 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
     const before = await snapshot(action + "-before"), row = card(target); await expect(row).toHaveCount(1);
     assert.ok(target.allowedActions.includes(action));
     const button = row.getByRole("button", { name: labels[action], exact: true });
+    let actionFeedback;
     if (confirmations.has(action)) {
       await button.click();
       let dialog = page.getByRole("dialog", { name: labels[action] + "؟", exact: true });
       await dialog.locator("[data-admin-confirm-cancel]").click(); await expect(dialog).toHaveCount(0);
       assertCoreRecoveryDomainUnchanged(before, await snapshot(action + "-cancel"), true);
       await button.click(); dialog = page.getByRole("dialog", { name: labels[action] + "؟", exact: true });
-      const result = await api("POST", () => dialog.locator("[data-admin-confirm-submit]").click(), { action, status: expectedStatus });
+      let result;const perform=async()=>{result=await api("POST", () => dialog.locator("[data-admin-confirm-submit]").click(), { action, status: expectedStatus });};
+      if(expectedStatus===200)actionFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"media-settings-recovery",perform});else await perform();
       if (expectedStatus === 200) {
         assert.equal(result.ok, true); assert.equal(result.auditWarning, null); await expect(dialog).toHaveCount(0);
       } else {
@@ -187,14 +190,14 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
         await dialog.locator("[data-admin-confirm-cancel]").click();
       }
     } else {
-      const result = await api("POST", () => button.click(), { action });
+      let result;actionFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"media-settings-recovery",perform:async()=>{result=await api("POST", () => button.click(), { action });}});
       assert.equal(result.ok, true); assert.equal(result.mutated, false); assert.equal(result.auditWarning, null);
       assert.deepEqual(result.verification.uncertainties, []);
     }
     const after = await snapshot(action + "-after");
     assertCoreRecoveryAudit(before, after, target, action, outcome);
     if (outcome !== "mutated") assertCoreRecoveryDomainUnchanged(before, after);
-    if (expectedStatus === 200) verifiedActions.add(action);
+    if (expectedStatus === 200) {verifiedActions.add(action);acceptedFeedback.push({action,targetId:target.id,nativeBefore:before.id,nativeAfter:after.id,feedback:actionFeedback});}
     return after;
   }
   async function faulted(scenario, trigger) {
@@ -425,6 +428,6 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       return done("permission", { actualCookieFreeAuthBoundary: true, unchangedAllPublicAndStorage: true, uiDenialClaim: false });
     });
   } finally { for (const specimen of specimens) specimen.body.fill(0); }
-  return { completed, checkpoints, relatedRequiredCases, automaticCoverage: [], globalClosed: false,
+  return { acceptedFeedback, completed, checkpoints, relatedRequiredCases, automaticCoverage: [], globalClosed: false,
     open: ["Active expired lease, queue truncation and missing-schema branches are not proved by these cases."] };
 }

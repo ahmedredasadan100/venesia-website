@@ -17,7 +17,6 @@ import {
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
-import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import {
   adminContentTopicPath,
 } from "../../../../lib/admin/content-routes";
@@ -350,7 +349,6 @@ export default function TopicsWithoutImageReportClient({
           enableColumnManagement
           enableSelection={false}
           scrollLabel="جدول الموضوعات بلا صورة"
-          mapResultToFeedback={mapAdminActionResultToFeedback}
           sort={{
             key: controller.query.sort.field,
             direction: controller.query.sort.direction,

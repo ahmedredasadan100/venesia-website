@@ -1,3 +1,4 @@
+import {PROJECT_CONTROL_KINDS,projectControlSlug} from './admin-core-project-controls-contract.mjs';
 import {createCoreDomainVisibilityControl} from './admin-core-domain-visibility-control.mjs';
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
@@ -70,9 +71,83 @@ export function coreDomainVisibilityRequiresConfirmation(recipe,pressed){
  const current=recipes[recipe.entity];assert.equal(Boolean(recipe.confirmVisibility),Boolean(current.confirmVisibility));assert.equal(Boolean(recipe.confirmVisibleOnly),Boolean(current.confirmVisibleOnly));
  return Boolean(current.confirmVisibility)||(Boolean(current.confirmVisibleOnly)&&pressed==='true');
 }
+/** Two route contexts of the existing Projects declaration, not new entities. */
+export function buildCoreProjectVisibilityGuardPlan({rowActions,fixtures}) {
+  const declarations=rowActions.entities.filter(row=>row.entity==='projects');assert.equal(declarations.length,1);
+  const declaration=declarations[0];assert.equal(declaration.actions.visibility,'adopted');
+  assert.equal(declaration.consumerSourceFile,'src/app/admin/projects/projects-table/ReferenceProjectsTable.tsx');
+  assert.ok(Array.isArray(fixtures.projectControls?.projects));assert.equal(fixtures.projectControls.projects.length,PROJECT_CONTROL_KINDS.length);
+  const plan=PROJECT_CONTROL_KINDS.map(projectKind=>{
+    const fixture=projectKind==='residential'?fixtures.project:fixtures.commercialProject;
+    assert.ok(fixture);assert.ok(Number.isSafeInteger(fixture.id)&&fixture.id>0);assert.ok(typeof fixture.title==='string'&&fixture.title.trim());
+    assert.equal(fixture.slug,projectControlSlug(projectKind));assert.equal(fixture.listPath,'/admin/projects/'+projectKind);
+    const owned=fixtures.projectControls.projects.filter(row=>row.kind===projectKind);assert.equal(owned.length,1);
+    assert.equal(owned[0].id,fixture.id);assert.equal(owned[0].slug,fixture.slug);assert.equal(owned[0].editPath,'/admin/projects/'+fixture.id);
+    return {entity:'projects',...recipes.projects,id:fixture.id,label:fixture.title,path:fixture.listPath,projectKind,initialState:'false',
+      journeyId:'domain-projects-'+projectKind+'-hide-confirmation-reload-audit',
+      declaredMutations:Object.entries(declaration.actions).filter(([kind,state])=>['visibility','featured','duplicate','archive','delete'].includes(kind)&&state==='adopted').map(([kind])=>kind),
+      declaredConfirmations:declaration.confirmationActions};
+  });
+  assert.equal(new Set(plan.map(row=>row.id)).size,plan.length);return plan;
+}
+
+/** Cancel only the current guarded transition, before installing a request hold. */
+export async function cancelCoreDomainVisibilityGuard({recipe,visibility,dialog,pressed,postCount,index}) {
+  assert.ok(index===0||index===1);assert.equal(await visibility.readState(),pressed);
+  if(!coreDomainVisibilityRequiresConfirmation(recipe,pressed))return null;
+  const before=postCount();assert.ok(Number.isSafeInteger(before)&&before>=0);
+  await visibility.invoke();await expect(dialog).toHaveCount(1);
+  await dialog.locator('[data-admin-confirm-cancel]').click();await expect(dialog).toHaveCount(0);
+  await visibility.expectReturnedFocus();await visibility.expectState(pressed);await visibility.expectEnabled();
+  assert.equal(postCount(),before,'Cancelled confirmation must not dispatch a command.');
+  return {index,state:pressed,postsBefore:before,postsAfter:postCount(),returnedFocus:true};
+}
+
+/** Joined existing owned writes; editor saves and visibility commands stay distinct. */
+export function assertCoreProjectVisibilityGuardReceipt({browser,rowActions,fixtures,sourceSha256,expectedActorId,writes}) {
+  const plan=buildCoreProjectVisibilityGuardPlan({rowActions,fixtures});
+  assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'project-controls');assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);
+  assert.deepEqual(browser.errors,[]);assert.equal(browser.globalClosed,false);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);
+  assert.ok(Number.isSafeInteger(expectedActorId)&&expectedActorId>0);
+  const result=browser.projectControls.visibility;assert.ok(result);assert.deepEqual(result.automaticCoverage,[]);assert.equal(result.globalClosed,false);
+  assert.equal(result.outcomes.length,plan.length);assert.equal(browser.databaseReadback.length,plan.length);assert.equal(writes.length,plan.length);
+  const ids=plan.map(recipe=>recipe.journeyId),editorIds=PROJECT_CONTROL_KINDS.map(kind=>'core-project-controls-'+kind);
+  assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...editorIds,...ids]);
+  assert.ok(browser.evidence.every(row=>row.status==='pass'&&Array.isArray(row.coverage)&&row.coverage.length===0));
+  const login=browser.evidence[0];assert.equal(login.authenticated,true);assert.equal(login.sessionArtifactWritten,false);assert.match(login.dashboardState,/^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
+  const auditIds=[];
+  for(const[index,recipe]of plan.entries()){
+    const outcome=result.outcomes[index],evidence=browser.evidence[1+editorIds.length+index];
+    assert.equal(outcome.id,recipe.id);assert.equal(evidence.entityId,recipe.id);assert.equal(outcome.projectKind,recipe.projectKind);assert.equal(outcome.path,recipe.path);
+    assert.equal(evidence.projectKind,recipe.projectKind);assert.equal(evidence.path,recipe.path);
+    for(const row of[outcome,evidence]){
+      assert.equal(row.entity,'projects');assert.equal(row.table,'projects');assert.equal(row.finalState,'unpublished');assert.equal(row.realRequests,2);assert.equal(row.freshReloads,2);
+      for(const key of['visibleStateChangeAndRestore','confirmationCancelled','pendingDuplicateBlocked','nativeAuditReadbackRequired'])assert.equal(row[key],true);
+      assert.equal(row.preDispatchFailureRollbackAndRetry,false);assert.deepEqual(row.coveredCommands,['visibility']);
+      assert.deepEqual(row.confirmationCancellations,[{index:1,state:'true',postsBefore:1,postsAfter:1,returnedFocus:true}]);
+    }
+    const expected=browser.databaseReadback[index],native=writes[index];
+    assert.equal(expected.table,'projects');assert.equal(expected.id,recipe.id);assert.deepEqual(expected.expected,{publication_status:'unpublished'});
+    assert.equal(expected.auditEntityType,'project');assert.equal(expected.auditEntityLabel,recipe.label);assert.deepEqual(expected.auditActions,['project.publish','project.unpublish']);assert.equal(expected.exactAuditCount,2);
+    assert.ok(Number.isFinite(Date.parse(outcome.startedAt)));assert.equal(expected.auditSince,outcome.startedAt);
+    assert.equal(native.table,'projects');assert.equal(native.id,recipe.id);assert.equal(native.deleted,false);assert.deepEqual(native.actual,{publication_status:'unpublished'});assert.equal(native.auditSince,outcome.startedAt);assert.equal(native.expectedActorId,expectedActorId);
+    assert.deepEqual(native.audit.map(row=>row.action),['project.publish','project.unpublish']);
+    for(const audit of native.audit){assert.equal(audit.entity_type,'project');assert.equal(Number(audit.entity_id),recipe.id);assert.equal(audit.entity_label,recipe.label);assert.equal(Number(audit.actor_admin_user_id),expectedActorId);assert.ok(Number.isSafeInteger(Number(audit.id))&&Number(audit.id)>0);auditIds.push(Number(audit.id));}
+  }
+  assert.equal(new Set(auditIds).size,auditIds.length);
+  return {status:'pass',contexts:plan.map(row=>row.projectKind),visibilityWrites:4,visibilityAudits:4,cancellations:2,successfulCommandsPerContext:2,automaticCoverage:[],globalClosed:false,
+    boundary:'Two guarded hide cancellations and two visibility commands per current Project route; the four editor writes and eighteen editor checkpoints are verified separately.'};
+}
+
+export async function runCoreProjectVisibilityGuardJourneys(ctx) {
+  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});
+  const manifest=await jiti.import('../../src/lib/admin/interaction-system/adoption-manifest.ts');
+  const plan=buildCoreProjectVisibilityGuardPlan({rowActions:manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:ctx.fixtures});
+  return {...await runCoreVisibilityPlan(ctx,plan),proofBoundary:'Only the two current Project route contexts; no other command family or whole capability is promoted.',automaticCoverage:[],globalClosed:false};
+}
+
 export async function runCoreDomainCommandJourneys(ctx) {
-  const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback } = ctx;
-  assert.equal(new URL(origin).hostname, '127.0.0.1');
+  const { fixtures } = ctx;
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const manifest = await jiti.import('../../src/lib/admin/interaction-system/adoption-manifest.ts');
   const location = await jiti.import('../../src/lib/admin/projects/location-management-contract.ts');
@@ -80,14 +155,20 @@ export async function runCoreDomainCommandJourneys(ctx) {
   const plan = buildCoreDomainCommandPlan({ rowActions: manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION, fixtures,
     paths: { projectLocationManagementPath: location.projectLocationManagementPath, trackingProjectPath: tracking.trackingProjectPath,
       trackingStagePath: tracking.trackingStagePath, trackingItemPath: tracking.trackingItemPath } });
+  return runCoreVisibilityPlan(ctx,plan);
+}
+async function runCoreVisibilityPlan(ctx,plan) {
+  const {page,origin,run,observe,actionResponse,assertActionAcknowledged,databaseReadback}=ctx;
+  assert.equal(new URL(origin).hostname,'127.0.0.1');
   const outcomes = [];
-  for (const recipe of plan) await run('domain-' + recipe.entity + '-visibility-command-reload-audit', [], async () => {
+  for (const recipe of plan) await run(recipe.journeyId ?? ('domain-' + recipe.entity + '-visibility-command-reload-audit'), [], async () => {
     const startedAt = new Date().toISOString();
     await observe('domain-open-' + recipe.entity, () => page.goto(origin + recipe.path + '?q=' + encodeURIComponent(recipe.label), { waitUntil: 'domcontentloaded' }));
     const visibility = createCoreDomainVisibilityControl({page,recipe});
     await visibility.expectEnabled();
     const original = await visibility.readState();
     assert.ok(original === 'true' || original === 'false');
+    if(recipe.initialState!==undefined)assert.equal(original,recipe.initialState);
     const originalState = recipe.values[original === 'true' ? 0 : 1];
     const dialog = page.locator('[data-admin-confirm-dialog]');
     const posts = [];
@@ -95,16 +176,9 @@ export async function runCoreDomainCommandJourneys(ctx) {
       if (request.method() === 'POST' && request.headers()['next-action'] && new URL(request.url()).pathname === recipe.path) posts.push(request.url());
     };
     page.on('request', trackPost);
+    const confirmationCancellations=[];
     let confirmationCancelled = false, rollbackRetried = false, pendingDedup = false;
     try {
-      if (coreDomainVisibilityRequiresConfirmation(recipe,original)) {
-        await observe('domain-confirmation-cancel', async () => {
-          await visibility.invoke(); await expect(dialog).toHaveCount(1);
-          await dialog.locator('[data-admin-confirm-cancel]').click(); await expect(dialog).toHaveCount(0);
-          await visibility.expectReturnedFocus(); await visibility.expectState(original);
-          assert.equal(posts.length, 0, 'Cancelled confirmation must not dispatch a command.'); confirmationCancelled = true;
-        });
-      }
       if (recipe.preDispatchFailure) {
         let aborted = 0;
         const rejectBeforeDispatch = async route => {
@@ -125,7 +199,10 @@ export async function runCoreDomainCommandJourneys(ctx) {
       for (const [index, expected] of [[0, original === 'true' ? 'false' : 'true'], [1, original]]) {
         // The first actual request is held before dispatch so pending ownership
         // and disabled duplicate activation are observed without fake responses.
-        const confirmationRequired=coreDomainVisibilityRequiresConfirmation(recipe,index===0?original:(original==='true'?'false':'true'));
+        const pressed=index===0?original:(original==='true'?'false':'true');
+        const confirmationRequired=coreDomainVisibilityRequiresConfirmation(recipe,pressed);
+        const cancellation=await observe('domain-confirmation-cancel-'+index,()=>cancelCoreDomainVisibilityGuard({recipe,visibility,dialog,pressed,postCount:()=>posts.length,index}));
+        if(cancellation){confirmationCancellations.push(cancellation);confirmationCancelled=true;}
         let release, signalHeld, signalContinued, intercepted = 0;
         const gate = new Promise(resolve => { release = resolve; });
         const held = new Promise(resolve => { signalHeld = resolve; });
@@ -173,7 +250,8 @@ export async function runCoreDomainCommandJourneys(ctx) {
         auditSince: startedAt, exactAuditCount: 2,
         ...(recipe.entity === 'topics' ? { exactCommandReceiptCount: 0 } : {}) });
       const outcome = { entity: recipe.entity, table: recipe.table, id: recipe.id, startedAt, finalState: originalState,
-        visibleStateChangeAndRestore: true, realRequests: posts.length, freshReloads: 2, confirmationCancelled,
+        visibleStateChangeAndRestore: true, realRequests: posts.length, freshReloads: 2, confirmationCancelled, confirmationCancellations,
+        ...(recipe.projectKind?{projectKind:recipe.projectKind,path:recipe.path}:{}),
         pendingDuplicateBlocked: pendingDedup, preDispatchFailureRollbackAndRetry: rollbackRetried,
         coveredCommands: ['visibility'], remainingDeclaredCommands: recipe.declaredMutations.filter(kind => kind !== 'visibility'),
         nativeAuditReadbackRequired: true,

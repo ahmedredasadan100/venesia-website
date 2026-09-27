@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
-import { buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_VALUES as values } from "./admin-core-template-controls-contract.mjs";
+import { buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_VALUES as values, TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS, assertCoreTemplateFeedbackAdapter } from "./admin-core-template-controls-contract.mjs";
 
 /** Only finite owned templates. No generic capability/axis is promoted here. */
 export async function runCoreTemplateControlsJourneys(ctx) {
@@ -294,6 +294,25 @@ export async function runCoreTemplateControlsJourneys(ctx) {
       await tab(form, "presentation"); await expect(form.locator('select[name="collection_layout"]')).toHaveValue("list");
     }
   }
+  async function feedbackAdapterProof(recipe,nativeBefore){
+    const channel='block-editor:/admin/pages-blocks/blocks/'+recipe.kind,routePathname='/admin/pages-blocks/blocks/'+recipe.kind+'/'+recipe.template.id;
+    const entry=()=>page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="'+channel+'"]');
+    await expect(entry()).toHaveCount(1);await expect(entry()).toBeVisible();const actualAcceptedVariant=await entry().getAttribute('data-admin-feedback-variant');assert.ok(['success','warning'].includes(actualAcceptedVariant));
+    const original=new URL(page.url());assert.equal(original.pathname,routePathname);const clean=new URL(original);for(const key of ['saved','notice','cache_warning'])clean.searchParams.delete(key);
+    let additionalActionPosts=0;const count=req=>{if(new URL(req.url()).origin===origin&&req.method()==='POST'&&req.headers()['next-action'])additionalActionPosts++;};page.on('request',count);
+    const scenarios=[];
+    try{for(const spec of TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS){
+      const target=new URL(clean);for(const[key,value]of Object.entries(spec.query))target.searchParams.set(key,value);
+      await observe('template-feedback-adapter-'+recipe.kind+'-'+spec.id,()=>page.goto(target.href,{waitUntil:'domcontentloaded'}));
+      await expect(entry()).toHaveCount(1);await expect(entry()).toBeVisible();await expect(entry()).toHaveAttribute('data-admin-feedback-variant',spec.variant);await expect(entry()).toContainText(spec.text);
+      const dismiss=entry().getByRole('button',{name:'إغلاق الإشعار',exact:true});await expect(dismiss).toBeVisible();await dismiss.click();await expect(entry()).toHaveCount(0);
+      const after=new URL(page.url());for(const key of ['saved','notice','cache_warning'])assert.equal(after.searchParams.has(key),false);assert.equal(after.pathname,clean.pathname);assert.equal(after.hash,clean.hash);assert.equal(after.search,clean.search);
+      await observe('template-feedback-dismissed-reload',()=>page.reload({waitUntil:'domcontentloaded'}));await expect(entry()).toHaveCount(0);
+      scenarios.push({id:spec.id,variant:spec.variant,visibleCount:1,messageText:spec.text,dismissButtonVisible:true,dismissed:true,savedRemoved:true,noticeRemoved:true,cacheWarningRemoved:true,unrelatedQueryPreserved:true,samePathAndHash:true,absentAfterReload:true});
+    }}finally{page.off('request',count);}
+    const proof={kind:recipe.kind,templateId:recipe.template.id,channel,routePathname,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,actualAcceptedSaveVisible:true,actualAcceptedVariant,scenarios,additionalActionPosts,adapterOnly:true,backendFailureClaim:false,nativeBefore:nativeBefore.id,nativeAfter:null,automaticCoverage:[],globalClosed:false};
+    return assertCoreTemplateFeedbackAdapter(proof,recipe.kind,recipe.template.id,process.env.QA_ADMIN_SOURCE_SHA256);
+  }
   for (const recipe of plan.recipes) await run("core-template-controls-" + recipe.kind, [], async () => {
     currentRecipe=recipe;renderedAdoption=[];renderedSeen=new Set();
     const path = "/admin/pages-blocks/blocks/" + recipe.kind + "/" + recipe.template.id;
@@ -321,11 +340,12 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     const viewports = await viewportProof(form);
     const pendingProof = await observe("template-controls-native-pending", () => saveWithNativePending(recipe, form));
     await expect(page).toHaveURL(url => url.pathname === path && url.searchParams.get("saved") === "1", { timeout: 60_000 });
-    await expect(save(formFor(recipe.template.id))).toBeEnabled(); await checkpoint(recipe.kind, "saved");
+    await expect(save(formFor(recipe.template.id))).toBeEnabled(); const savedNative=await checkpoint(recipe.kind, "saved");
+    const feedbackAdapter=await feedbackAdapterProof(recipe,savedNative);
     await observe("template-controls-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
     const reloaded = formFor(recipe.template.id); await tab(reloaded, "content"); await checkReload(recipe, reloaded);
-    await checkpoint(recipe.kind, "reloaded");
-    const result = { renderedAdoption, consumer: recipe.consumer, surface: recipe.surface, kind: recipe.kind, observations: recipe.controls, viewports, pendingProof, downloadMedia,
+    const reloadedNative=await checkpoint(recipe.kind, "reloaded"); feedbackAdapter.nativeAfter=reloadedNative.id;
+    const result = { feedbackAdapter,templateId:recipe.template.id,renderedAdoption, consumer: recipe.consumer, surface: recipe.surface, kind: recipe.kind, observations: recipe.controls, viewports, pendingProof, downloadMedia,
       nativeCheckpoints: 5, genericCoverage: [], completeAxisCoverage: [], globalClosed: false };
     outcomes.push(result); return result;
   });

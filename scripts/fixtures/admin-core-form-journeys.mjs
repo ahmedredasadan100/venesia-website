@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { observeCoreScrollbarAdoption, observeCoreModalFocusAdoption, observeCoreModalPendingDismissal, observeCoreModalCleanReturn } from "./admin-core-rendered-adoption.mjs";
-import { runCoreFormPermissionIntent, validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
+import { observeCoreAcceptedFormFeedback, runCoreFormPermissionIntent, validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -34,7 +34,7 @@ export function selectCoreTemplateFormPlan(plan, selection) {
 }
 /** Fixed selection never changes the canonical universe or promotes an unexecuted editor/recovery. */
 /**
- * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,nativeBefore:string,nativeAfter:string}>}|null} draftRestoration
+ * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,nativeBefore:string,nativeAfter:string,acceptedDiscard?:{nativeBefore:string,nativeAfter:string}}>}|null} draftRestoration
  * @param {{native:{status:string,ownedRunId:string,records:Array<object>},ownedRunId:string,sourceSha256:string,expectedActorId:number}|null} nativeContext
  */
 export function assertCoreTemplateSelectionReceipt(browser, manifest, canonicalRequiredCases, draftRestoration = null, nativeContext = null) {
@@ -87,7 +87,7 @@ export function assertCoreTemplateSelectionReceipt(browser, manifest, canonicalR
     assert.match(sourceSha256,/^[a-f0-9]{64}$/u); assert.equal(browser.sourceSha256,sourceSha256); assert.ok(Number.isSafeInteger(expectedActorId) && expectedActorId>0);
     assert.equal(new Set(native.records.map(row=>row.id)).size,native.records.length); const claimed=new Set();
     const claim=(id,kind)=>{ assert.equal(typeof id,"string"); assert.equal(claimed.has(id),false); const matches=native.records.filter(row=>row.id===id); assert.equal(matches.length,1); assert.equal(matches[0].kind,kind); claimed.add(id); return matches[0]; };
-    for (const proof of draftRestoration.qualified) { claim(proof.nativeBefore,"form-permission-fingerprint"); claim(proof.nativeAfter,"form-permission-fingerprint"); }
+    for (const proof of draftRestoration.qualified) { claim(proof.nativeBefore,"form-permission-fingerprint"); claim(proof.nativeAfter,"form-permission-fingerprint"); if(proof.acceptedDiscard){claim(proof.acceptedDiscard.nativeBefore,"form-permission-fingerprint");claim(proof.acceptedDiscard.nativeAfter,"form-permission-fingerprint");} }
     for (const [index, recipe] of selected.entries()) {
       const row=browser.evidence[index+1], proofs=row.permissionEvidence; assert.equal(proofs.length,1); const proof=proofs[0];
       assert.equal(proof.status,"pass"); assert.equal(proof.caseId,ids[index]); assert.equal(proof.formConsumer,recipe.entry.id); assert.equal(proof.surface,recipe.surface);
@@ -275,6 +275,10 @@ export async function runCoreTemplateFormJourneys(ctx) {
     });
     const caseId = `core-template-${recipe.kind}-existing-edit`;
     const permissionReplay = sharedRuntime && recipe.entry.registryModuleKind ? ctx.permissionReplay : undefined;
+    if(sharedRuntime && recipe.entry.registryModuleKind){
+      const original=page.url(),trigger=page.locator('a[href="'+pathFor(recipe.kind)+'"]').first();
+      await ctx.permissionReplay.restoreDraft({mapping:{caseId,journeyId:caseId,formConsumer:recipe.entry.id,surface:recipe.surface},form,submit:submit(form),dirtyNavigation:'navigation',assertDraft:async()=>{await expect(field(form,'name')).toHaveValue(name);await assertFields(form,authored);},cancelDirty:()=>cancelDirtyNavigation(form,recipe,name),discardDirty:{trigger,destination:{kind:'navigated',pathname:pathFor(recipe.kind)},reopenAndRefill:async()=>{await navigate(new URL(original).pathname+new URL(original).search);await contentTab(form,recipe);await field(form,'name').fill(name);for(const value of authored)await field(form,value.name).fill(String(value.value));}}});
+    }
     const value = await runCoreFormPermissionIntent({ permissionReplay, mapping: {caseId,formConsumer:recipe.entry.id,surface:recipe.surface}, permissionEvidence, perform: async () => {
     await acknowledge(form);
     await observe("template-canonical-save-outcome", async () => {
@@ -361,11 +365,17 @@ export async function runCoreTemplateFormJourneys(ctx) {
       const caseId = `core-template-${recipe.kind}-create-reject-retry`;
       await ctx.permissionReplay.restoreDraft({
         mapping:{caseId,journeyId:caseId,formConsumer:recipe.entry.id,surface:recipe.surface},form,submit:submit(form),dirtyNavigation:"close",
+        discardDirty:{trigger:form.getByRole('button',{name:'إلغاء',exact:true}),destination:{kind:'closed',pathname:pathFor(recipe.kind)},reopenAndRefill:async()=>{
+          await page.getByRole('button',{name:recipe.kind==='hero'?'إضافة هيرو':'إضافة بلوك',exact:true}).click();await expect(form).toBeVisible();
+          await field(form,'name').fill(name);if(recipe.kind!=='breadcrumb')await field(form,'slug').fill(slug);for(const value of createAuthored)await field(form,value.name).fill(String(value.value));
+        }},
         observePending:async()=>{renderedAdoption.push(await observeCoreModalPendingDismissal({...observationBase,id:'template-'+recipe.kind+'-pending-dismissal',dialog:modal,form}));},
         assertDraft:async()=>{await expect(field(form,"name")).toHaveValue(name);if(recipe.kind!=="breadcrumb")await expect(field(form,"slug")).toHaveValue(slug);await assertFields(form,createAuthored);},
         cancelDirty:async()=>{const original=page.url(),trigger=form.getByRole("button",{name:"إلغاء",exact:true});await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form).toBeVisible();},
       });
+      let acceptedFeedback;
       const id = await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId,formConsumer:recipe.entry.id,surface:recipe.surface},permissionEvidence,perform:async()=>{
+      acceptedFeedback=await observeCoreAcceptedFormFeedback({form,consumer:recipe.entry.id,surface:recipe.surface,entityKey:recipe.kind==="hero"?"hero-template-quick-create":recipe.kind+"-block-quick-create",routePrefix:pathFor(recipe.kind),requiredCases,perform:async()=>{
       await acknowledge(form);
       await observe("template-create-to-edit-handoff", async () => {
         const expectedPath = new RegExp(`^${pathFor(recipe.kind)}/[0-9]+$`, "u");
@@ -378,7 +388,8 @@ export async function runCoreTemplateFormJourneys(ctx) {
         }, { timeout: 60_000 }).not.toBe("pending");
         assert.match(new URL(page.url()).pathname, expectedPath, `Quick-create rejected after valid retry: ${(await form.getByRole("alert").allTextContents()).join(" ")}`);
       });
-      const id = Number(new URL(page.url()).pathname.split("/").at(-1));
+      return{entityId:Number(new URL(page.url()).pathname.split("/").at(-1)),routePathname:new URL(page.url()).pathname};}});
+      const id = acceptedFeedback.entityId;
       await observe("template-created-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
       const createdForm=editorForm(id);
       await expect(field(createdForm,"name")).toHaveValue(name);
@@ -393,7 +404,7 @@ export async function runCoreTemplateFormJourneys(ctx) {
       }});
       const details = await editAndRead(recipe, id, `${name} saved`);
       outcomes.push(details);
-      return { ...details, renderedAdoption, createServerValidation: "trimmed_required_name", createInputPreserved: true, createRetryHandoff: true, createDirtyCloseCancel: true, permissionEvidence: permissionEvidence.filter(row=>row.caseId===caseId) };
+      return { ...details,acceptedFeedback, renderedAdoption, createServerValidation: "trimmed_required_name", createInputPreserved: true, createRetryHandoff: true, createDirtyCloseCancel: true, permissionEvidence: permissionEvidence.filter(row=>row.caseId===caseId) };
     });
   }
   return { planned: plan.editors.length + plan.creates.length, completed: outcomes.length, outcomes, boundary: "Selected template-domain lifecycle; no template-command or complete capability-axis promotion." };
