@@ -22,7 +22,7 @@ export async function runCoreReadonlyJourneys(ctx) {
     const correlationId=selected?randomUUID():null,activityFixture=selected&&spec.entity==='activity_log'?fixtures.readonlyClosure.activityFixture:null;
     if(activityFixture)assertCoreReadonlyActivityFixture(activityFixture);
     const checkpoint=async phase=>{const input={id:randomUUID(),kind:'form-permission-fingerprint',correlationId,phase},result=await ctx.nativeCheckpoint(input);for(const key of Object.keys(input))assert.equal(result[key],input[key]);assert.equal(result.status,'pass');return result;};
-    let nativeBefore=null,mutationFeedbackAbsence=null;const unsafeMethods=[];
+    let nativeBefore=null,mutationFeedbackAbsence=null,confirmationAbsence=null,confirmationObserver=null;const unsafeMethods=[];
     const onRequest=request=>{const method=request.method();if(!['GET','HEAD'].includes(method))unsafeMethods.push(method);};
     // The authorized login has already completed; only this journey's window is observed.
     if(selected){nativeBefore=await checkpoint('before');context.on('request',onRequest);}
@@ -46,20 +46,29 @@ export async function runCoreReadonlyJourneys(ctx) {
       assert.ok(denied>0&&denied<=3,"Current shared query owner permits the first attempt plus two retries.");
       await expect(page.getByRole("row").filter({hasText:spec.label}).first()).toBeVisible();await expect(error).toContainText("النتائج السابقة");
       if(mark)await mark("query-error-visible");
+      if(confirmationObserver)assert.equal(await confirmationObserver.evaluate(value=>value.mark("query-error-visible")),0);
     }finally{await removeFailedRoute();}
     const retried=page.waitForResponse(value=>matches(value,missing));await page.locator("[data-admin-entity-list-query-error]").getByRole("button",{name:"إعادة المحاولة",exact:true}).click();
     const retry=await retried;assert.equal(retry.status(),200);const empty=await retry.json();assert.equal(empty.pagination.totalRows,0);assert.deepEqual(empty.rows,[]);
     await expect(page.locator("[data-admin-entity-list-query-error]")).toHaveCount(0);await expect(page.getByRole("row").filter({hasText:spec.label})).toHaveCount(0);
       if(mark)await mark("retry-success-visible");
+      if(confirmationObserver)assert.equal(await confirmationObserver.evaluate(value=>value.mark("retry-success-visible")),0);
     };
-    if(selected)mutationFeedbackAbsence=await observeCoreMutationFeedbackAbsence({page,perform:queryFailureAndRetry});
+    if(selected){
+      confirmationObserver=await page.evaluateHandle(createCoreReadonlyConfirmationObserver);
+      try{mutationFeedbackAbsence=await observeCoreMutationFeedbackAbsence({page,perform:queryFailureAndRetry});
+        assert.equal(new URL(page.url()).pathname,spec.path);
+        confirmationAbsence={...await confirmationObserver.evaluate(value=>value.finish()),sourceSha256,routePathname:spec.path,scope:'mounted-query-error-and-retry',observedBeforeReload:true,automaticCoverage:[],globalClosed:false};
+      }finally{try{await confirmationObserver.evaluate(value=>value.disconnect());}finally{await confirmationObserver.dispose();confirmationObserver=null;}}
+    }
     else await queryFailureAndRetry(null);
     const invalid=await context.request.get(origin+endpoint+"?page=0",{maxRedirects:0});assert.equal(invalid.status(),400);assert.equal((await invalid.json()).error.code,"invalid_query");
     const anonymous=await request.newContext({baseURL:origin});try{const deniedRead=await anonymous.get(endpoint,{maxRedirects:0});assert.equal(deniedRead.status(),401);assert.deepEqual(await deniedRead.json(),{error:"Unauthorized"});}finally{await anonymous.dispose();}
     await search.fill(spec.label);await expect(page.getByRole("row").filter({hasText:spec.label}).first()).toBeVisible();
     await observe("readonly-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await expect(search).toHaveValue(spec.label);await expect(page.getByRole("row").filter({hasText:spec.label}).first()).toBeVisible();
     let readonlyProof;
-    if(selected){const nativeAfter=await checkpoint('after');assert.deepEqual(unsafeMethods,[]);readonlyProof={sourceSha256,routePathname:spec.path,nativeBefore:nativeBefore.id,nativeAfter:nativeAfter.id,correlationId,requestWindow:'after-login-through-readonly-reload',...(activityFixture?{activityFixture}:{}),unsafeRequestMethods:[...unsafeMethods],mutationFeedbackAbsence,allPublicRowsAndAuditUnchanged:true,automaticCoverage:[],globalClosed:false};assertCoreReadonlyNoWritePair({entity:spec.entity,readonlyProof},nativeBefore,nativeAfter,nativeBefore.ownedRunId,sourceSha256);}
+    if(selected){confirmationAbsence.reloadCount=await page.locator("[data-admin-confirm-dialog-root],[data-admin-confirm-dialog],[data-admin-confirm-submit]").count();assertCoreReadonlyConfirmationAbsence(confirmationAbsence,sourceSha256,spec.path);}
+    if(selected){const nativeAfter=await checkpoint('after');assert.deepEqual(unsafeMethods,[]);readonlyProof={sourceSha256,routePathname:spec.path,nativeBefore:nativeBefore.id,nativeAfter:nativeAfter.id,correlationId,requestWindow:'after-login-through-readonly-reload',...(activityFixture?{activityFixture}:{}),unsafeRequestMethods:[...unsafeMethods],mutationFeedbackAbsence,confirmationAbsence,allPublicRowsAndAuditUnchanged:true,automaticCoverage:[],globalClosed:false};assertCoreReadonlyNoWritePair({entity:spec.entity,readonlyProof},nativeBefore,nativeAfter,nativeBefore.ownedRunId,sourceSha256);}
     readOnlyReadback.push({entity:spec.entity,rows});
     return {entity:spec.entity,authenticatedProjectionRows:rows.length,transportFailures:denied,previousRowsPreserved:true,explicitRetrySucceeded:true,invalidQueryRejected:true,anonymousApiRejected:true,reloaded:true,nativeReadbackRequired:true,mutatingCommands:"not-applicable-registered-read-owner",...(selected?{readonlyProof}:{})};
     }finally{if(selected)context.off("request",onRequest);}
@@ -82,7 +91,7 @@ export function assertCoreReadonlyNoWritePair(row,before,after,ownedRunId,source
  }
  assert.equal(proof.nativeBefore,before.id);assert.equal(proof.nativeAfter,after.id);
  for(const key of ['publicTableCount','publicTableInventorySha256','publicDataSha256'])assert.equal(after[key],before[key]);
- assertCoreMutationFeedbackAbsence(proof.mutationFeedbackAbsence,sourceSha256);return proof;
+ assertCoreMutationFeedbackAbsence(proof.mutationFeedbackAbsence,sourceSha256);assertCoreReadonlyConfirmationAbsence(proof.confirmationAbsence,sourceSha256,routes[row.entity]);return proof;
 }
 /** Final fixed SQL projections are required in addition to the broker's no-write pairs. */
 export function assertCoreReadonlyQueryProofCompletion(browser,native,readOnly,ownedRunId,sourceSha256,canonicalRequiredCases,readonlyPlan){
@@ -95,6 +104,7 @@ export function assertCoreReadonlyQueryProofCompletion(browser,native,readOnly,o
  const identity=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const result={...row};delete result.status;delete result.evidence;return result;}).sort((a,b)=>a.key.localeCompare(b.key));};
  assert.deepEqual(identity(browser.requiredCases),identity(canonicalRequiredCases));assert.ok(browser.requiredCases.every(row=>row.status==='open'&&row.evidence===null));
  const pendingCells=['activity-log','topics-without-image-report'].map(consumer=>{const key='collection:'+consumer+':capability:feedback',found=browser.requiredCases.filter(row=>row.key===key);assert.equal(found.length,1);assert.equal(found[0].declaration,'not_applicable');assert.equal(found[0].disposition,'NOT_APPLICABLE_PENDING_PROOF');return key;});
+ const pendingConfirmationCells=['activity-log','topics-without-image-report'].map(consumer=>{const key='collection:'+consumer+':capability:confirmation',found=browser.requiredCases.filter(row=>row.key===key);assert.equal(found.length,1);assert.equal(found[0].declaration,'not_applicable');assert.equal(found[0].disposition,'NOT_APPLICABLE_PENDING_PROOF');return key;});
  assert.deepEqual(browser.databaseReadback,[]);assert.deepEqual(browser.menuIntegrityReadback,[]);assert.ok(browser.previewMatrix.every(row=>row.status==='open'&&row.evidence===null));
  assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);assert.equal(native.records.length,4);assert.equal(new Set(native.records.map(row=>row.id)).size,4);assert.equal(new Set(native.records.filter(row=>row.phase==='before').map(row=>row.correlationId)).size,2);
  assert.equal(readOnly.status,'pass');assert.deepEqual(readOnly.evidence.map(row=>row.entity),entities);assert.deepEqual(browser.readOnlyReadback.map(row=>row.entity),entities);
@@ -110,7 +120,7 @@ export function assertCoreReadonlyQueryProofCompletion(browser,native,readOnly,o
   assert.equal(actual.nativeProjectionMatched,true);assert.deepEqual(actual.actual,[...projection.rows].sort((a,b)=>Number(a.id)-Number(b.id)));
   return{entity,rows:actual.actual.length,nativeProjectionMatched:true};
  });
- return{status:'readonly-query-proof-joined',selection:'readonly-query-proof',selectedJourneyIds:ids,sourceSha256,ownedRunId,nativeCheckpointIds:native.records.map(row=>row.id),projections,pendingCells,activityFixture,zeroWrites:true,mutationFeedbackAbsentInQueryWindow:true,queryErrorAndRetryPreserved:true,wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
+ return{status:'readonly-query-proof-joined',selection:'readonly-query-proof',selectedJourneyIds:ids,sourceSha256,ownedRunId,nativeCheckpointIds:native.records.map(row=>row.id),projections,pendingCells,pendingConfirmationCells,activityFixture,zeroWrites:true,confirmationAbsentInMountedQueryWindow:true,mutationFeedbackAbsentInQueryWindow:true,queryErrorAndRetryPreserved:true,wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
 }
 
 export function assertCoreReadonlyActivityFixture(fixture,ownedRunId=fixture?.ownedRunId){
@@ -120,4 +130,18 @@ export function assertCoreReadonlyActivityFixture(fixture,ownedRunId=fixture?.ow
 }
 export function assertCoreReadonlyActivityProjection(rows,fixture){
  assertCoreReadonlyActivityFixture(fixture);assert.deepEqual(rows,[{id:fixture.id,actor_admin_user_id:fixture.actorId,action:'qa.readonly.fixture',entity_type:'topic',entity_id:fixture.entityId,entity_label:fixture.entityLabel}]);return rows;
+}
+
+/** Observe existing Confirmation owner markers; query notices are not confirmation intents. */
+export function createCoreReadonlyConfirmationObserver(){
+ const attributes=['data-admin-confirm-dialog-root','data-admin-confirm-dialog','data-admin-confirm-submit'],selector=attributes.map(key=>'['+key+']').join(','),initialCount=document.querySelectorAll(selector).length;
+ let observedEntries=0;const checkpoints=[],countNode=node=>node?.nodeType===1?Number(node.matches(selector))+node.querySelectorAll(selector).length:0;
+ const inspect=records=>{for(const record of records){if(record.type==='childList')for(const node of [...record.addedNodes,...record.removedNodes])observedEntries+=countNode(node);else if(record.type==='attributes'&&attributes.includes(record.attributeName))observedEntries+=Math.max(countNode(record.target),Number(record.oldValue!==null));}};
+ const observer=new MutationObserver(inspect);observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeOldValue:true,attributeFilter:attributes});
+ return{mark(label){inspect(observer.takeRecords());const count=document.querySelectorAll(selector).length;checkpoints.push({label,count});return count;},finish(){inspect(observer.takeRecords());const finalCount=document.querySelectorAll(selector).length;observer.disconnect();return{initialCount,finalCount,observedEntries,checkpoints,disconnected:true};},disconnect(){observer.disconnect();}};
+}
+export function assertCoreReadonlyConfirmationAbsence(proof,sourceSha256,routePathname){
+ assert.ok(proof);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(proof.sourceSha256,sourceSha256);assert.ok(['/admin/activity-log','/admin/reports/topics-without-image'].includes(routePathname));assert.equal(proof.routePathname,routePathname);
+ for(const key of ['initialCount','finalCount','observedEntries','reloadCount'])assert.equal(proof[key],0);
+ assert.deepEqual(proof.checkpoints,[{label:'query-error-visible',count:0},{label:'retry-success-visible',count:0}]);assert.equal(proof.disconnected,true);assert.equal(proof.observedBeforeReload,true);assert.equal(proof.scope,'mounted-query-error-and-retry');assert.deepEqual(proof.automaticCoverage,[]);assert.equal(proof.globalClosed,false);return proof;
 }

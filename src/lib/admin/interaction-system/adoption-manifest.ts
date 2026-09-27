@@ -212,6 +212,7 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       owner: "AdminEntityList",
       sourceFiles: [
         "src/components/admin/entity-list/AdminEntityList.tsx",
+        "src/components/admin/entity-list/AdminEntityListSurface.tsx",
         "src/components/admin/ui/AdminBulkActionBar.tsx",
         "src/lib/admin/entity-list/index.ts",
         "src/lib/admin/entity-list/data-engine/client-controller.ts",
@@ -2488,6 +2489,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
         },
       ),
       feedbackOwner: "not_applicable",
+      confirmationOwner: "not_applicable",
       workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/activity-log"],
@@ -3755,6 +3757,7 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
         },
       ),
       feedbackOwner: "not_applicable",
+      confirmationOwner: "not_applicable",
       workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/reports/topics-without-image"],

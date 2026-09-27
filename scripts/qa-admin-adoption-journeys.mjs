@@ -92,14 +92,15 @@ function retainedTrackingMediaCases() {
  const tracking=["stages","items"].map(child=>({key:"collection:project-tracking-"+child+":capability:media",consumer:"project-tracking-"+child,boundary:"collection",axis:"media",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
  const readonly=["activity-log","topics-without-image-report"].map(consumer=>({key:"collection:"+consumer+":capability:feedback",consumer,boundary:"collection",axis:"feedback",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
  const confirmation=["media-hub-template-library","media-sidebar-template-library"].map(consumer=>({key:"collection:"+consumer+":capability:confirmation",consumer,boundary:"collection",axis:"confirmation",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
- return [...tracking,...readonly,...confirmation];
+ const readonlyConfirmation=["activity-log","topics-without-image-report"].map(consumer=>({key:"collection:"+consumer+":capability:confirmation",consumer,boundary:"collection",axis:"confirmation",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
+ return [...tracking,...readonly,...confirmation,...readonlyConfirmation];
 }
 function assertHistoricalCoreCaseIdentity(cases) {
  assert.equal(cases.length,959,"The bounded closure ledger must retain every historical case.");
  assert.equal(new Set(cases.map(row=>row.key)).size,cases.length,"Duplicate historical case identity.");
  assert.equal(createHash("sha256").update(JSON.stringify(cases.map(row=>row.key).sort())).digest("hex"),"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71","Historical required-case identity changed; an applicability correction cannot remove or replace any cell.");
  const retained=retainedTrackingMediaCases();
- assert.deepEqual(cases.filter(row=>row.declaration==="not_applicable").map(row=>row.key).sort(),retained.map(row=>row.key).sort(),"Only the exact reviewed Tracking Media, readonly Feedback and Media summary Confirmation corrections may be retained as not applicable.");
+ assert.deepEqual(cases.filter(row=>row.declaration==="not_applicable").map(row=>row.key).sort(),retained.map(row=>row.key).sort(),"Only the exact reviewed Tracking Media, readonly Feedback, readonly Confirmation and Media summary Confirmation corrections may be retained as not applicable.");
  for(const row of retained){const actual=cases.find(cell=>cell.key===row.key);for(const[key,value]of Object.entries(row))assert.equal(actual[key],value);}
  return {historicalRequiredCases:cases.length,currentApplicableCases:cases.filter(row=>row.declaration!=="not_applicable").length,retainedNotApplicableCases:retained.length,historicalIdentitySha256:"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",dispositions:retained,automaticCoverage:[],globalClosed:false};
 }

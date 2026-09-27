@@ -671,6 +671,45 @@ function graphWithoutOwnerSources(
   );
 }
 
+/** The shared hook returns context; only its provenance-bound request is a guarded intent. */
+function graphRequestsFloatingConfirmation(graph: ExecutableSourceGraph, sourceOverrides?: SourceOverrides) {
+ for(const [sourceFile,parsed] of graph){
+  if(!parsed.text.includes("openConfirmation"))continue;
+  const options:ts.CompilerOptions={noLib:true,noResolve:true,jsx:ts.JsxEmit.Preserve};const host=ts.createCompilerHost(options);
+  host.getSourceFile=(file)=>normalizeSourcePath(file)===normalizeSourcePath(sourceFile)?parsed:undefined;
+  const checker=ts.createProgram([sourceFile],options,host).getTypeChecker();
+  const unwrap=(node:ts.Expression):ts.Expression=>ts.isParenthesizedExpression(node)||ts.isAsExpression(node)||ts.isNonNullExpression(node)?unwrap(node.expression):node;
+  const importedHook=(name:ts.Identifier)=>{
+   const declaration=checker.getSymbolAtLocation(name)?.declarations?.[0];if(!declaration||!ts.isImportSpecifier(declaration)||declaration.isTypeOnly)return false;
+   const statement=declaration.parent.parent.parent;if(!ts.isImportDeclaration(statement)||statement.importClause?.isTypeOnly)return false;
+   const probe=parseTypeScriptSource(sourceFile,statement.getText(parsed)+";export function provenanceProbe(){return "+declaration.name.text+"();}");
+   return graphUsesExecutableBinding({root:ROOT,graph:new Map([[sourceFile,probe]]),bindings:[{sourceFile:"src/components/admin/entity-list/AdminFloatingLayerContext.tsx",exportNames:["useAdminFloatingLayer"]}],sourceOverrides});
+  };
+  const hookResult=(expression:ts.Expression,seen=new Set<ts.Symbol>()):boolean=>{
+   const value=unwrap(expression);if(ts.isCallExpression(value)&&ts.isIdentifier(value.expression))return importedHook(value.expression);
+   if(!ts.isIdentifier(value))return false;const symbol=checker.getSymbolAtLocation(value);if(!symbol||seen.has(symbol))return false;seen.add(symbol);
+   const declaration=symbol.declarations?.[0];return Boolean(declaration&&ts.isVariableDeclaration(declaration)&&declaration.initializer&&hookResult(declaration.initializer,seen));
+  };
+  const memberRequest=(expression:ts.Expression):boolean=>{const value=unwrap(expression);return ts.isPropertyAccessExpression(value)?value.name.text==="openConfirmation"&&hookResult(value.expression):ts.isElementAccessExpression(value)&&Boolean(value.argumentExpression&&ts.isStringLiteral(value.argumentExpression)&&value.argumentExpression.text==="openConfirmation"&&hookResult(value.expression));};
+  const requestIsExecutable=(call:ts.CallExpression)=>{
+   let marker="__confirmationRequestBinding";while(parsed.text.includes(marker))marker+="_";
+   let importPath=normalizeSourcePath(relative(dirname(sourceFile),"src/components/admin/ui/AdminConfirmDialog.tsx"));if(!importPath.startsWith("."))importPath="./"+importPath;
+   const projected='import '+marker+' from '+JSON.stringify(importPath)+';\n'+parsed.text.slice(0,call.expression.getStart(parsed))+marker+parsed.text.slice(call.expression.end);
+   const probe=parseTypeScriptSource(sourceFile,projected);
+   return graphUsesExecutableBinding({root:ROOT,graph:new Map([[sourceFile,probe]]),bindings:ADMIN_CURRENT_SHARED_CAPABILITY_SET.confirmation.executableBindings,sourceOverrides});
+  };
+  let found=false;const visit=(node:ts.Node)=>{if(found)return;if(ts.isCallExpression(node)){
+   if(memberRequest(node.expression))found=true;
+   else if(ts.isIdentifier(node.expression)){const declaration=checker.getSymbolAtLocation(node.expression)?.declarations?.[0];
+    if(declaration&&ts.isBindingElement(declaration)&&ts.isObjectBindingPattern(declaration.parent)&&ts.isVariableDeclaration(declaration.parent.parent)){const key=declaration.propertyName??declaration.name,owner=declaration.parent.parent;found=(ts.isIdentifier(key)||ts.isStringLiteral(key))&&key.text==="openConfirmation"&&Boolean(owner.initializer&&hookResult(owner.initializer));}
+    else if(declaration&&ts.isVariableDeclaration(declaration)&&declaration.initializer)found=memberRequest(declaration.initializer);
+   }
+   if(found&&!requestIsExecutable(node))found=false;
+  }ts.forEachChild(node,visit);};visit(parsed);if(found)return true;
+ }
+ return false;
+}
+
 function resolvedDecision(
   capability: AdminConsumerCapabilityKey,
   state: AdminConsumerCapabilityAdoptionState,
@@ -886,6 +925,7 @@ function collectConsumerCapabilityAuditFailures(
       });
     const hasConsumerBoundaryBinding =
       consumerDirectlyOwnsBinding ||
+      (capability === "confirmation" && graphRequestsFloatingConfirmation(consumerOwnedGraph, sourceOverrides)) ||
       graphUsesExecutableBinding({
         root: ROOT,
         graph: consumerOwnedGraph,
@@ -2418,6 +2458,30 @@ function formConsumerFixture(input: {
   } as ConsumerCapabilityAuditRecord;
 }
 
+// Read-only consumers have no guarded intent; their shared defaults must not invent one.
+for(const id of ["activity-log","topics-without-image-report"]){
+ const consumer=consumerCapabilityAuditRecords.find(row=>row.boundary==="collection"&&row.id===id);assert.ok(consumer?.collectionSurface);
+ check(id+" declares Confirmation outside its read-only contract",consumer.collectionSurface.confirmationOwner==="not_applicable"&&resolveConsumerCapabilityAudit(consumer).confirmation.state==="not_applicable");
+ const inherited={...consumer,collectionSurface:{...consumer.collectionSurface,confirmationOwner:"AdminConfirmDialog"}} as ConsumerCapabilityAuditRecord;
+ check(id+" inherited full-collection Confirmation is detected as false adoption",resolveConsumerCapabilityAudit(inherited).confirmation.state==="adopted");
+ const actions=ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION.entities.filter(row=>consumer.collectionSurface!.dataRegistryEntities.some(entity=>entity===row.entity));
+ check(id+" has no declared guarded Row Action",actions.every(row=>row.confirmationActions.length===0));
+}
+for(const id of ["activity-log","topics-without-image-report"]){
+ const consumer=consumerCapabilityAuditRecords.find(row=>row.boundary==="collection"&&row.id===id)!;
+ check(id+" shared Collection surface does not claim consumer Confirmation",!collectConsumerCapabilityAuditFailures(consumer,"source_proof").some(f=>f.startsWith("confirmation:")));
+ const file=consumer.collectionSurface!.presentationSourceFiles[0],prefix=id==="activity-log"?"../../../":"../../../../";
+ const surface='import {AdminEntityListSurface} from "'+prefix+'components/admin/entity-list";';
+ const probes:Record<string,string>={direct:'import AdminConfirmDialog from "'+prefix+'components/admin/ui/AdminConfirmDialog";export default function Probe(){return <AdminConfirmDialog open={true}/>;}',request:'import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();return <button onClick={()=>layer.openConfirmation({title:"Owned",onConfirm:()=>{}})}>Confirm</button>;}',local:'export default function Probe(){return <button onClick={()=>window.confirm("Owned")}>Confirm</button>;}',surface:surface+'export default function Probe(){return <AdminEntityListSurface><p>Read only</p></AdminEntityListSurface>;}'};
+ probes.destructured='import {useAdminFloatingLayer as useLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const {openConfirmation:confirm}=useLayer();return <button onClick={()=>confirm({title:"Owned"})}>Confirm</button>;}';
+ probes.menu='import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();return <button onClick={()=>layer.toggleLayer("columns")}>Menu</button>;}';
+ probes.foreign='import {useMemo as useAdminFloatingLayer} from "react";export default function Probe(){const layer=useAdminFloatingLayer(()=>({openConfirmation:()=>{}}),[]);return <button onClick={()=>layer.openConfirmation()}>Unrelated</button>;}';
+ probes.shadow='import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();layer.toggleLayer("columns");function child(layer:{openConfirmation:()=>void}){layer.openConfirmation();}return <button onClick={()=>child({openConfirmation:()=>{}})}>Unrelated</button>;}';
+ probes.dead='import {useAdminFloatingLayer} from "'+prefix+'components/admin/entity-list/AdminFloatingLayerContext";export default function Probe(){const layer=useAdminFloatingLayer();if(false){layer.openConfirmation({title:"Never"});}return <p>Read only</p>;}';
+ for(const[mode,source]of Object.entries(probes)){const failures=collectConsumerCapabilityAuditFailures(consumer,"source_proof",new Map([[file,source]]));check(id+" Confirmation boundary "+mode,["surface","menu","foreign","shadow","dead"].includes(mode)?!failures.some(f=>f.startsWith("confirmation:")):failures.includes(mode==="local"?"confirmation:local_implementation":"confirmation:hidden_adoption"));}
+}
+const guardedConfirmationConsumer=consumerCapabilityAuditRecords.find(row=>row.boundary==="collection"&&row.collectionSurface?.confirmationOwner==="AdminConfirmDialog");assert.ok(guardedConfirmationConsumer);
+check("Existing guarded Collection keeps Confirmation adoption",resolveConsumerCapabilityAudit(guardedConfirmationConsumer).confirmation.state==="adopted");
 const collectionCapabilityFixtureConsumer = consumerCapabilityAuditRecords.find(
   (consumer) => consumer.boundary === "collection" && consumer.collectionSurface,
 );
