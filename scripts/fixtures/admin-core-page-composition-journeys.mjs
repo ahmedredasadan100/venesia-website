@@ -114,7 +114,7 @@ export function assertCorePageAssignmentRowActionsJoin(browser,native,context) {
     regions:initial.regions.filter(row=>number(row.layout_id)===number(initial.page.layout_id)),requiredCases:browser.requiredCases});
   const template=plan.assignments[0];assert.ok(template);
   const matches=browser.evidence.filter(row=>row.rowActionsEvidence!=null);assert.equal(matches.length,1,'Only the first manageable ordinary assignment owns this proof.');
-  const row=matches[0],proof=row.rowActionsEvidence;assert.equal(row.id,'core-page-composition-assignment-'+template.kind);assert.equal(row.consumer,consumer);assert.deepEqual(row.coverage,[]);assert.deepEqual(row.automaticCoverage,[]);
+  const row=matches[0],proof=row.rowActionsEvidence;assert.equal(row.id,'core-page-composition-'+template.kind+'-assignment');assert.equal(row.consumer,consumer);assert.deepEqual(row.coverage,[]);assert.deepEqual(row.automaticCoverage,[]);
   assert.equal(proof.kind,template.kind);assert.equal(proof.sourceTemplateId,template.id);assert.equal(row.templateId,template.id);assert.equal(number(row.assignmentId),number(proof.sourceAssignmentId));assert.deepEqual(proof.automaticCoverage,[]);assert.equal(proof.globalClosed,false);
   assert.deepEqual(proof.observations,['actual_information_back_and_focus','actual_edit_navigation_and_return','actual_current_public_link_opened','actual_visibility_cycle_reload_native','actual_duplicate_template_assignment_audit_handoff','unpublished_copy_visibility_disabled']);
   assert.ok(Array.isArray(proof.nativeIds));assert.equal(proof.nativeIds.length,6);assert.equal(new Set(proof.nativeIds).size,6);

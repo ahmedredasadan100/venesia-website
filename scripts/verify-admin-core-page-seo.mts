@@ -83,6 +83,23 @@ form.set("canonical_url",PAGE_SEO_RECIPE.canonical_url);await actionGuard(form);
 const {REGISTERED_SLOT_MODULE_KINDS:assignmentKinds}=await jiti.import<typeof import('../src/lib/page-composition/slot-module-registry.ts')>(resolve(root,'src/lib/page-composition/slot-module-registry.ts'));
 const assignmentPositions=await jiti.import<typeof import('../src/lib/page-composition/page-assignment-contract.ts')>(resolve(root,'src/lib/page-composition/page-assignment-contract.ts'));
 const assignmentHelpers=await import('./fixtures/admin-core-page-composition-journeys.mjs');
+
+// Derive the identity from the current assignment producer; do not mirror its spelling only in a fixture.
+function actualAssignmentJourneyId(kind:string):string {
+ const source=readFileSync(resolve(root,'scripts/fixtures/admin-core-page-composition-journeys.mjs'),'utf8');
+ const tree=ts.createSourceFile('assignment-producer.mjs',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+ const owner=tree.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='runCorePageCompositionJourneys');assert.ok(owner);
+ const expressions:ts.Expression[]=[];
+ const visit=(node:ts.Node)=>{
+  if(ts.isForOfStatement(node)&&ts.isPropertyAccessExpression(node.expression)&&ts.isIdentifier(node.expression.expression)&&node.expression.expression.text==='plan'&&node.expression.name.text==='assignments'){
+   const statement=node.statement;assert.ok(ts.isExpressionStatement(statement)&&ts.isAwaitExpression(statement.expression)&&ts.isCallExpression(statement.expression.expression));
+   const call=statement.expression.expression;assert.ok(ts.isIdentifier(call.expression)&&call.expression.text==='run');assert.ok(call.arguments[0]);expressions.push(call.arguments[0]);
+  }
+  ts.forEachChild(node,visit);
+ };visit(owner);assert.equal(expressions.length,1,'One actual ordinary-assignment journey producer is required.');
+ const value=new Function('template','return ('+expressions[0].getText(tree)+');')({kind}) as unknown;assert.equal(typeof value,'string');return value as string;
+}
+
 function assignmentFixture(){
  const epoch='2026-09-27T00:00:00.000Z',actor=51,pageId=41,run='owned-assignment',slug='qa-admin-page-interaction';
  const templateFixtures=assignmentKinds.map((kind,index)=>({kind,id:100+index,name:'QA '+kind+' Unused 3',slug:slug+'-'+kind+'-3',assigned:false}));
@@ -103,11 +120,13 @@ function assignmentFixture(){
  const observations=['actual_information_back_and_focus','actual_edit_navigation_and_return','actual_current_public_link_opened','actual_visibility_cycle_reload_native','actual_duplicate_template_assignment_audit_handoff','unpublished_copy_visibility_disabled'];
  const rowActionsEvidence={kind:sourceTemplate.kind,sourceAssignmentId:11,sourceTemplateId:sourceTemplate.id,copyAssignmentId:21,copyTemplateId:999,observations,nativeIds:states.map(row=>row.id),automaticCoverage:[],globalClosed:false};
  const browser={scope:'core-closure',cohort:'page-composition',status:'pass',driverCompleted:true,inventoryOnly:false,errors:[],globalClosed:false,sourceSha256:'e'.repeat(64),requiredCases:[{key:'form:page-composition-and-seo:capability:modal',boundary:'form',consumer:'page-composition-and-seo'}],
-  evidence:[{id:'existing-auth-login',status:'pass',coverage:[],authenticated:true,sessionArtifactWritten:false,dashboardState:'Dashboard جاهزة'},{id:'core-page-composition-assignment-'+sourceTemplate.kind,status:'pass',consumer:'page-composition-and-seo',coverage:[],automaticCoverage:[],templateId:sourceTemplate.id,assignmentId:11,rowActionsEvidence}]};
+  evidence:[{id:'existing-auth-login',status:'pass',coverage:[],authenticated:true,sessionArtifactWritten:false,dashboardState:'Dashboard جاهزة'},{id:'core-page-composition-'+sourceTemplate.kind+'-assignment',status:'pass',consumer:'page-composition-and-seo',coverage:[],automaticCoverage:[],templateId:sourceTemplate.id,assignmentId:11,rowActionsEvidence}]};
  const context={fixtures:{pages:{pageId,slug,editorPath:'/admin/pages-blocks/pages/'+pageId,templates:templateFixtures}},formManifest:manifest,collectionManifest,kinds:assignmentKinds,positionCapabilities:assignmentPositions.MODULE_POSITION_CAPABILITIES,getAssignablePositions:assignmentPositions.getAssignablePositions,ownedRunId:run,actorId:actor,sourceSha256:browser.sourceSha256};
  return{browser,native:{status:'pass',ownedRunId:run,records:states},context,states};
 }
 function assignmentJoin(value:ReturnType<typeof assignmentFixture>){return assignmentHelpers.assertCorePageAssignmentRowActionsJoin(value.browser,value.native,value.context);}
+test('Actual assignment producer ID joins the existing private row proof',()=>{const value=assignmentFixture();value.browser.evidence[1].id=actualAssignmentJourneyId(value.browser.evidence[1].rowActionsEvidence!.kind);assignmentJoin(value);});
+test('Page assignment join rejects the formerly mirrored identity',()=>{const value=assignmentFixture();value.browser.evidence[1].id='core-page-composition-assignment-'+value.browser.evidence[1].rowActionsEvidence!.kind;assert.throws(()=>assignmentJoin(value));});
 test('Actual Page assignment row proof joins exactly six states and three atomic intents',()=>{const result=assignmentJoin(assignmentFixture());assert.equal(result.visibilityWrites,2);assert.equal(result.duplicateWrites,1);assert.equal(result.nativeIds.length,6);assert.equal(result.atomicAuditIds.length,3);assert.equal(result.globalClosed,false);assert.deepEqual(result.automaticCoverage,[]);});
 for(const mode of ['failed-browser','source-drift','foreign-run','foreign-actor','missing-login','false-login','duplicate-login','missing-proof','duplicate-proof','wrong-kind','wrong-template','wrong-assignment','missing-observation','missing-native','duplicate-native','reordered-native','skipped-native','failed-native','phase-run-drift','phase-actor-drift','different-start','readonly-write','hidden-still-visible','other-row-visibility','wrong-normalization','hero-timestamp','show-still-hidden','copy-published','copy-field-drift','copy-wrong-parent','extra-copy','missing-audit','foreign-audit','nonatomic-audit','audit-history-drift','reload-write','wrong-copy-id','coverage-promotion','global-promotion'])test('Page assignment joined evidence rejects '+mode,()=>{
  const value=assignmentFixture(),{browser,native,context,states}=value,proof=browser.evidence[1].rowActionsEvidence!;

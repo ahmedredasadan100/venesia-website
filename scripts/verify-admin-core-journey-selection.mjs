@@ -100,6 +100,23 @@ function extractCollectorWriteReadStatements(text){
  return ts.transpileModule(writes.node.getText(ast)+'\n'+readOnly.node.getText(ast),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
 }
 
+async function verifyCollectorDomainTailSelection(text,{rejectActor=false}={}){
+ const ast=ts.createSourceFile('actual-collector.mts',text,ts.ScriptTarget.Latest,true),declarations=[];
+ function visit(node){if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&['selectedJourneys','writes'].includes(node.name.text))declarations.push(node);ts.forEachChild(node,visit);}const owners=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text==="verifyAdminAdoptionReadback");assert.equal(owners.length,1);visit(owners[0]);
+ const one=name=>{const rows=declarations.filter(node=>node.name.text===name);assert.equal(rows.length,1,'Exact current '+name+' declaration');return rows[0];};
+ const selected=one('selectedJourneys'),writes=one('writes');assert.ok(selected.getStart(ast)<writes.getStart(ast),'Selected native guard must run before final write readback.');
+ assert.ok(writes.initializer&&ts.isAwaitExpression(writes.initializer)&&ts.isCallExpression(writes.initializer.expression));assert.equal(writes.initializer.expression.expression.getText(ast),'verifyCoreDomainWrites');
+ const browser={},domainTailPlan={},canonicalRequiredCases=[],domainTailNative={},handle={identity:{runId:'owned-run'}},sourceSha256='a'.repeat(64),calls=[],receipt={selection:'domain-command-tail'};
+ const ports={isQueryLayout:false,isDomainTail:true,isPreviewImpact:false,isTemplateCreates:false,browser,domainTailPlan,canonicalRequiredCases,domainTailNative,handle,artifactDir:'owned-artifacts',
+  join:(dir,name)=>{assert.equal(dir,'owned-artifacts');assert.equal(name,'public-source-manifest.json');return 'owned-source';},
+  readFileSync:(name,encoding)=>{assert.equal(name,'owned-source');assert.equal(encoding,'utf8');calls.push('source');return JSON.stringify({sourceSha256});},
+  readCoreFixedQaActor:async value=>{assert.equal(value,handle);calls.push('actor');if(rejectActor)throw Error('independent-actor-rejection');return 7;},
+  assertCoreDomainCommandTailReceipt:(actualBrowser,actualPlan,actualCases,context)=>{assert.equal(actualBrowser,browser);assert.equal(actualPlan,domainTailPlan);assert.equal(actualCases,canonicalRequiredCases);assert.equal(context.native,domainTailNative);assert.deepEqual(context,{native:domainTailNative,ownedRunId:handle.identity.runId,sourceSha256,expectedActorId:7});calls.push('selection');return receipt;}
+ };
+ const code=ts.transpileModule('async function run(){return ('+selected.initializer.getText(ast)+');}',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+ const result=await new Function(...Object.keys(ports),code+';return run();')(...Object.values(ports));assert.equal(result,receipt);assert.deepEqual(calls,['source','actor','selection']);return{status:'pass',calls};
+}
+
 async function verifyDomainCommandTailSelection(rowActions, paths, requiredCases, source, owner, collector) {
  const selector=domainTailSelection.CORE_DOMAIN_COMMAND_TAIL_SELECTION;
  const closure=offset=>({locations:['governorate','city','main_area','sub_area'].map((level,index)=>({entity:'project_locations_'+level,level,id:offset+index+20,label:'Location '+level})),tracking:{projectId:5,stage:{id:offset+30,label:'Stage'},item:{id:offset+31,label:'Item'},update:{id:offset+32,label:'Update'}},redirect:{id:offset+40,label:'/owned'},adminUser:{id:offset+41,label:'Disposable'}});
@@ -144,7 +161,19 @@ async function verifyDomainCommandTailSelection(rowActions, paths, requiredCases
  await test('Actual selected tail dispatch runs only existing readonly, EmptyTrash and mounted revocation owners',async()=>assert.deepEqual(await dispatch(selector),['runCoreEmptyTrashSuccessJourneys','runCoreReadonlyJourneys','runCoreDomainPermissionJourneys']));
  await test('Selected failed EmptyTrash cannot proceed to dependent readonly/permission success',async()=>{const calls=[];await assert.rejects(dispatch(selector,2,calls),/All selected EmptyTrash journeys/);assert.deepEqual(calls,['runCoreEmptyTrashSuccessJourneys']);});
  await test('Actual default command dispatch retains all existing groups and closes its permission context',async()=>assert.deepEqual(await dispatch(null),['runCoreDomainPersistenceFailureJourneys','runCoreDomainCommandJourneys','runCoreReadonlyJourneys','permission-context','runCoreDomainTerminalJourneys','close','runCoreEmptyTrashSuccessJourneys','runCoreDomainPermissionJourneys']));
- await test('Existing gate/collector enforce fixed selector and preserve native writes and the two required readonly projections',()=>{assert.ok(owner.includes('| "domain-command-tail"'));assert.ok(owner.includes('validateCoreJourneySelection({ scope: request.adoptionScope'));assert.ok(source.includes('assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases)'));const a=collector.indexOf('const selectedJourneys = isDomainTail ? assertCoreDomainCommandTailReceipt'),b=collector.indexOf('const writes = await verifyCoreDomainWrites');assert.ok(a>=0&&b>a);assert.ok(collector.includes('browser.cohort === "domain-commands" && !isTrackingPermissions ? await verifyCoreReadonlyReadback'));assert.ok(collector.includes('!isPreviewImpact && !isDomainTail'));assert.ok(collector.includes('expectedActorId:await readCoreFixedQaActor(handle)'));});
+ await test('Existing gate/collector enforce fixed selector and preserve native writes and the two required readonly projections',async()=>{assert.ok(owner.includes('| "domain-command-tail"'));assert.ok(owner.includes('validateCoreJourneySelection({ scope: request.adoptionScope'));assert.ok(source.includes('assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases)'));await verifyCollectorDomainTailSelection(collector);assert.ok(collector.includes('browser.cohort === "domain-commands" && !isTrackingPermissions ? await verifyCoreReadonlyReadback'));assert.ok(collector.includes('!isPreviewImpact && !isDomainTail'));assert.ok(collector.includes('expectedActorId:await readCoreFixedQaActor(handle)'));});
+
+ await test('Actual domain-tail collector propagates independent actor lookup rejection before receipt admission',async()=>assert.rejects(verifyCollectorDomainTailSelection(collector,{rejectActor:true}),/independent-actor-rejection/u));
+ for(const [name,from,to]of[
+  ['missing-selection','const selectedJourneys =','const unrelatedJourneys ='],
+  ['missing-final-write-owner','const writes = await verifyCoreDomainWrites','const writes = await unrelatedWrites'],
+  ['bypassed-tail',' : isDomainTail ? assertCoreDomainCommandTailReceipt', ' : false ? assertCoreDomainCommandTailReceipt'],
+  ['foreign-browser','assertCoreDomainCommandTailReceipt(browser, domainTailPlan','assertCoreDomainCommandTailReceipt({}, domainTailPlan'],
+  ['foreign-native','native:domainTailNative,ownedRunId','native:{},ownedRunId'],
+  ['hardcoded-actor','expectedActorId:await readCoreFixedQaActor(handle)','expectedActorId:7'],
+  ['foreign-actor','expectedActorId:await readCoreFixedQaActor(handle)','expectedActorId:(await readCoreFixedQaActor(handle))+1'],
+  ['foreign-source','sourceSha256:JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256','sourceSha256:"foreign"']
+ ])await test('Actual selected collector guard rejects '+name,async()=>{const changed=collector.replace(from,to);assert.notEqual(changed,collector);await assert.rejects(verifyCollectorDomainTailSelection(changed));});
  await test('Actual final native collector preserves same-handle readonly join and propagates its rejection',async()=>{
   const body=extractCollectorWriteReadStatements(collector),handle={},browser=fixture().browser,calls=[];
   const execute=code=>new Function('handle','browser','verifyCoreDomainWrites','verifyCoreReadonlyReadback','const isTrackingPermissions=false;return (async()=>{'+code+';return {writes,readOnly};})()')(handle,browser,async(h,b)=>{assert.equal(h,handle);assert.equal(b,browser);calls.push('writes');return[];},async(h,b)=>{assert.equal(h,handle);assert.equal(b,browser);calls.push('readonly');return{status:'pass',evidence:plan.readonly.map(row=>({entity:row.entity}))};});
