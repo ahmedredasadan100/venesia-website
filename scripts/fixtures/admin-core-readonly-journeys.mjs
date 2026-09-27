@@ -2,14 +2,18 @@ import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs"
 import assert from "node:assert/strict";
 import { request, expect } from "playwright/test";
 
-export async function runCoreReadonlyJourneys(ctx) {
-  const {page,context,origin,fixtures,run,observe,readOnlyReadback}=ctx;
-  assert.equal(new URL(origin).hostname,"127.0.0.1");assert.ok(Array.isArray(readOnlyReadback));
+export function buildCoreReadonlyJourneyPlan(fixtures) {
   assert.ok(fixtures.readonlyClosure?.id&&fixtures.topic?.title);
-  const plan=[
+  return [
     {entity:"activity_log",path:"/admin/activity-log",placeholder:"بحث في المستخدم أو الكيان...",label:fixtures.topic.title,fields:["id","actor_admin_user_id","action","entity_type","entity_id","entity_label"]},
     {entity:"topics_without_image",path:"/admin/reports/topics-without-image",placeholder:"بحث بالعنوان أو slug",label:fixtures.readonlyClosure.title,fields:["id","title","slug","status","contentType"]},
   ];
+}
+
+export async function runCoreReadonlyJourneys(ctx) {
+  const {page,context,origin,fixtures,run,observe,readOnlyReadback}=ctx;
+  assert.equal(new URL(origin).hostname,"127.0.0.1");assert.ok(Array.isArray(readOnlyReadback));
+  const plan=buildCoreReadonlyJourneyPlan(fixtures);
   for(const spec of plan)await run("core-readonly-"+spec.entity+"-query-failure-retry-auth",[],async()=>{
     const endpoint="/api/admin/entity-lists/"+spec.entity,missing="qa-core-absent-"+spec.entity+"-"+Date.now();
     await observe("readonly-open",()=>page.goto(origin+spec.path,{waitUntil:"domcontentloaded"}));

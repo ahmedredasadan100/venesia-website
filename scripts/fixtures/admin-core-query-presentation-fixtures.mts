@@ -29,7 +29,7 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
   const search=namespace+'-'+spec.key.replaceAll('_','-')+'-rows',ids:number[]=[];
   assert.equal((await handle.query(`select count(*)::int count from public.${spec.table} where "${spec.labelColumn}" like $1`,['%'+search+'%'])).rows[0].count,0);
   const count=spec.rowCount,stamp=(index:number)=>new Date(Date.UTC(2026,0,3,0,Math.floor(index/2))).toISOString();
-  const label=(index:number)=>search+' '+String(Math.floor(index/2)).padStart(3,'0'),slug=(index:number)=>search+'-'+String(index).padStart(3,'0');
+  const label=(index:number)=>search+' '+String(spec.level?index:Math.floor(index/2)).padStart(3,'0'),slug=(index:number)=>search+'-'+String(index).padStart(3,'0');
   for(let chunk=0;chunk<(spec.entity==='projects'?count:1);chunk++){
   await handle.withDatabaseConnection(async db=>{
    await db.query('begin');

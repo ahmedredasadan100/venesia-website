@@ -1,3 +1,5 @@
+import { validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
+import { buildCoreReadonlyJourneyPlan } from "./admin-core-readonly-journeys.mjs";
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -32,6 +34,87 @@ export function buildCoreTerminalCommandPlan({ rowActions, fixtures, paths }) {
     assert.notEqual(row.id, priorPlan.find(prior => prior.entity === row.entity).id, 'Terminal rows must be distinct before any destructive command.');
   }
   return plan;
+}
+
+export const CORE_DOMAIN_COMMAND_TAIL_SELECTION = 'domain-command-tail';
+export function buildCoreDomainCommandTailPlan(input) {
+  const trash = buildCoreTerminalCommandPlan(input).filter(recipe => trashEntities.has(recipe.entity));
+  assert.deepEqual(trash.map(recipe=>recipe.entity).sort(), [...trashEntities].sort());
+  const permissions = buildCoreDomainCommandPlan(input);
+  const readonly = buildCoreReadonlyJourneyPlan(input.fixtures);
+  const journeyIds = [...trash.map(recipe=>'terminal-'+recipe.entity+'-global-empty-trash'), ...readonly.map(recipe=>'core-readonly-'+recipe.entity+'-query-failure-retry-auth'), ...permissions.map(recipe=>'domain-'+recipe.entity+'-mounted-revoked-session-rejection')];
+  assert.equal(new Set(journeyIds).size, journeyIds.length);
+  return {readonly, trash, permissions, journeyIds};
+}
+/** Fixed affected tail; every borrowed prefix, native phase or coverage claim is rejected. */
+/**
+ * @param {{native:{status:string,ownedRunId:string,records:Array<object>},ownedRunId:string,sourceSha256:string,expectedActorId:number}|null} nativeContext
+ */
+export function assertCoreDomainCommandTailReceipt(browser, plan, canonicalRequiredCases, nativeContext = null) {
+  assert.equal(validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection}),CORE_DOMAIN_COMMAND_TAIL_SELECTION);
+  assert.ok(plan && Array.isArray(plan.trash) && Array.isArray(plan.permissions));
+  const ids=[...plan.trash.map(recipe=>'terminal-'+recipe.entity+'-global-empty-trash'),...plan.readonly.map(recipe=>'core-readonly-'+recipe.entity+'-query-failure-retry-auth'),...plan.permissions.map(recipe=>'domain-'+recipe.entity+'-mounted-revoked-session-rejection')];
+  assert.deepEqual(plan.journeyIds,ids);assert.equal(new Set(ids).size,ids.length);
+  const identities=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.ok(rows.every(row=>typeof row.key==='string'&&row.key));assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const copy={...row};delete copy.status;delete copy.evidence;return copy;}).sort((a,b)=>a.key.localeCompare(b.key));};
+  assert.deepEqual(identities(browser.requiredCases),identities(canonicalRequiredCases));
+  assert.ok(browser.requiredCases.every(row=>row.status==='open'&&row.evidence===null),'Tail evidence does not automatically classify capability/lifecycle cells.');
+  assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.deepEqual(browser.errors,[]);
+  assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
+  assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);
+  assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...ids]);assert.ok(browser.evidence.every(row=>row.status==='pass'&&Array.isArray(row.coverage)&&row.coverage.length===0));
+  assert.equal(browser.evidence[0].authenticated,true);assert.equal(browser.evidence[0].sessionArtifactWritten,false);
+  assert.match(browser.evidence[0].dashboardState,/^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
+  assert.deepEqual(browser.readOnlyReadback.map(row=>row.entity),plan.readonly.map(row=>row.entity));assert.deepEqual(browser.menuIntegrityReadback,[]);
+  for(const[index,recipe]of plan.readonly.entries()){
+    const row=browser.evidence[plan.trash.length+index+1],projection=browser.readOnlyReadback[index];assert.equal(row.entity,recipe.entity);assert.equal(row.authenticatedProjectionRows,projection.rows.length);assert.ok(projection.rows.length>0&&projection.rows.length<=50);for(const value of projection.rows)assert.deepEqual(Object.keys(value).sort(),[...recipe.fields].sort());
+    for(const key of ['previousRowsPreserved','explicitRetrySucceeded','invalidQueryRejected','anonymousApiRejected','reloaded','nativeReadbackRequired'])assert.equal(row[key],true);assert.ok(Number.isSafeInteger(row.transportFailures)&&row.transportFailures>0&&row.transportFailures<=3);assert.equal(row.mutatingCommands,'not-applicable-registered-read-owner');
+  }
+  assert.ok(browser.previewMatrix.every(row=>row.status==='open'&&row.evidence===null));
+  const deleted=[];
+  for(const[index,recipe]of plan.trash.entries()){
+    const row=browser.evidence[index+1];assert.equal(row.entity,recipe.entity);assert.equal(row.expectedCount,3);
+    assert.ok(Array.isArray(row.ownedIds)&&row.ownedIds.length===row.expectedCount&&row.ownedIds.every(id=>Number.isSafeInteger(id)&&id>0&&id!==recipe.id));assert.equal(new Set(row.ownedIds).size,row.ownedIds.length);
+    for(const key of ['staleCountRejected','freshCountRetrySucceeded','globalCommandReallyExecuted'])assert.equal(row[key],true);
+    assert.equal(row.cancellation.completeTrashCount,2);assert.equal(row.cancellation.confirmationCancelled,true);assert.equal(row.cancellation.globalTrashSetPreserved,true);
+    for(const id of row.ownedIds){const found=browser.databaseReadback.filter(write=>write.table===recipe.table&&write.id===id);assert.equal(found.length,1);const write=found[0];assert.equal(write.deleted,true);assert.deepEqual(write.expected,{});assert.deepEqual(write.auditEntityTypes,[recipe.audit]);assert.deepEqual(write.auditActions,[recipe.audit+'.duplicate',recipe.audit+'.delete',recipe.audit+'.permanent_delete']);assert.ok(Number.isFinite(Date.parse(write.auditSince)));assert.ok(Array.isArray(write.aggregateAuditIds)&&write.aggregateAuditIds.length===1);deleted.push(write);}
+  }
+  assert.equal(browser.databaseReadback.length,deleted.length);
+  for(const[index,recipe]of plan.permissions.entries()){
+    const row=browser.evidence[plan.readonly.length+plan.trash.length+index+1];assert.equal(row.entity,recipe.entity);assert.equal(row.entityId,recipe.id);
+    for(const key of ['mountedBeforeRevocation','retainedOriginalSignedCookie','persistedStateRevisionAndAuditUnchanged'])assert.equal(row[key],true);
+    assert.equal(typeof row.confirmationCancelled,'boolean');assert.equal(row.deniedRealCommandPosts,1);assert.equal(row.denial.destination,'/admin/login');assert.equal(row.denial.contract,'existing-proxy-revoked-session-rejection');assert.ok([200,301,302,303,307,308].includes(row.denial.status));
+    assert.ok(['login-navigation','existing-rejected-or-unknown-feedback'].includes(row.visibleOutcome));
+  }
+  if(nativeContext!==null){
+    const {native,ownedRunId,sourceSha256,expectedActorId}=nativeContext;
+    assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);assert.ok(typeof ownedRunId==='string'&&ownedRunId);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.ok(Number.isSafeInteger(expectedActorId)&&expectedActorId>0);
+    assert.ok(Array.isArray(native.records));assert.equal(new Set(native.records.map(row=>row.id)).size,native.records.length);
+    // These are the existing global-trash recipe's actual fixed checkpoints:
+    // initial set; clone/delete reads; count/cancel sets; third clone; stale CAS;
+    // final empty set and audit. They are not a second operation registry.
+    const phaseKinds=['trash','state','state','state','state','trash','trash','trash','state','trash','state','state','trash','state'];
+    assert.equal(native.records.length,plan.trash.length*phaseKinds.length+plan.permissions.length*2);
+    const sorted=values=>values.map(Number).sort((a,b)=>a-b);
+    const check=(record,entity,kind)=>{assert.equal(record.entity,entity);assert.equal(record.kind,kind);assert.equal(record.status,'pass');assert.match(record.id,/^[a-f0-9-]{36}$/iu);assert.ok(Number.isFinite(Date.parse(record.observedAt)));if(kind==='terminal-domain-state'){assert.equal(record.expectedActorId,expectedActorId);assert.ok(Array.isArray(record.rows)&&Array.isArray(record.audit));for(const audit of record.audit)assert.equal(Number(audit.actor_admin_user_id),expectedActorId);}else assert.ok(Array.isArray(record.ids));};
+    for(const[index,recipe]of plan.trash.entries()){
+      const row=browser.evidence[index+1],records=native.records.slice(index*phaseKinds.length,(index+1)*phaseKinds.length),copies=row.ownedIds;
+      for(const[position,kind]of phaseKinds.entries())check(records[position],recipe.entity,kind==='trash'?'terminal-trash-set':'terminal-domain-state');
+      for(const[position,wanted]of [[0,[]],[5,copies.slice(0,2)],[6,copies.slice(0,2)],[7,copies.slice(0,2)],[9,copies],[12,[]]])assert.deepEqual(sorted(records[position].ids),sorted(wanted));
+      for(const[position,id,deleted]of [[1,copies[0],false],[2,copies[0],true],[3,copies[1],false],[4,copies[1],true],[8,copies[2],false]]){assert.equal(records[position].rows.length,1);assert.equal(Number(records[position].rows[0].id),id);assert.equal(Boolean(records[position].rows[0].deleted_at),deleted);}
+      assert.deepEqual(sorted(records[10].rows.map(item=>item.id)),sorted(copies));assert.ok(records[10].rows.every(item=>item.deleted_at));
+      assert.deepEqual(records[11].rows,records[10].rows);assert.deepEqual(records[11].audit,records[10].audit);assert.deepEqual(records[13].rows,[]);
+      for(const[key,position]of Object.entries({initialTwoRowTrash:5,nativeCompleteTrash:9,nativeBeforeRejection:10,nativeAfterRejection:11,nativeEmptyTrash:12,nativeRowsAndAudit:13}))assert.equal(row[key],records[position].id);
+      const audit=records[13].audit;assert.deepEqual(audit.map(item=>item.action).sort(),[...copies.flatMap(()=>[recipe.audit+'.duplicate',recipe.audit+'.delete']),recipe.audit+'.permanent_delete'].sort());
+      const permanent=audit.filter(item=>item.action===recipe.audit+'.permanent_delete');assert.equal(permanent.length,1);const aggregateKey=recipe.entity==='topics'?'topic_ids':recipe.entity==='categories'?'category_ids':'series_ids';assert.deepEqual(sorted(permanent[0].metadata[aggregateKey]),sorted(copies));
+      for(const id of copies){for(const action of ['duplicate','delete'])assert.equal(audit.filter(item=>Number(item.entity_id)===id&&item.action===recipe.audit+'.'+action).length,1);const write=deleted.find(item=>item.table===recipe.table&&item.id===id);assert.deepEqual(write.aggregateAuditIds.map(String),[String(permanent[0].id)]);}
+    }
+    for(const[index,recipe]of plan.permissions.entries()){
+      const row=browser.evidence[plan.readonly.length+plan.trash.length+index+1],offset=plan.trash.length*phaseKinds.length+index*2,before=native.records[offset],after=native.records[offset+1];
+      check(before,recipe.entity,'terminal-domain-state');check(after,recipe.entity,'terminal-domain-state');assert.equal(row.nativeBefore,before.id);assert.equal(row.nativeAfter,after.id);
+      assert.equal(before.rows.length,1);assert.equal(Number(before.rows[0].id),recipe.id);assert.deepEqual(after.rows,before.rows);assert.deepEqual(after.audit,before.audit);
+    }
+  }
+  return{selection:CORE_DOMAIN_COMMAND_TAIL_SELECTION,selectedJourneyIds:ids,executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,globalClosed:false,automaticCoverage:[]};
 }
 
 async function terminalTools(ctx) {

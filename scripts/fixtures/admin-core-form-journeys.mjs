@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { observeCoreScrollbarAdoption, observeCoreModalFocusAdoption, observeCoreModalPendingDismissal, observeCoreModalCleanReturn } from "./admin-core-rendered-adoption.mjs";
-import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
+import { runCoreFormPermissionIntent, validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -17,6 +17,113 @@ const recipes = {
   "media-sidebar": { table: "media_sidebar_module_templates", fields: [["limit", ["limit"], 7]] },
   "media-hub": { table: "media_hub_module_templates", fields: [["title", ["presentation", "title"]], ["presentation_description", ["presentation", "description"]]] },
 };
+
+export const CORE_TEMPLATE_FORM_CREATES_SELECTION = "template-form-creates";
+export function coreTemplateCreateJourneyId(recipe) { return `core-template-${recipe.kind}-create-reject-retry`; }
+export function coreSelectedTemplateCreates(manifest) {
+  const entries = manifest.filter(entry => entry.id === "block-template-create-modals"); assert.equal(entries.length, 1);
+  const entry = entries[0], kinds = Object.keys(recipes).filter(kind => !["media-sidebar", "media-hub"].includes(kind));
+  assert.deepEqual([...entry.surfaces].sort(), kinds.map(kind => `${kind}:create`).sort(), "Selection must match all current declared quick-create surfaces exactly.");
+  return entry.surfaces.map(surface => { const kind = surface.split(":")[0]; return { entry, kind, surface, ...recipes[kind] }; });
+}
+export function selectCoreTemplateFormPlan(plan, selection) {
+  if (selection === null || selection === undefined) return plan;
+  validateCoreJourneySelection({ scope: "core-closure", cohort: "recovery-templates", selection });
+  assert.equal(selection, CORE_TEMPLATE_FORM_CREATES_SELECTION);
+  return { ...plan, editors: [] };
+}
+/** Fixed selection never changes the canonical universe or promotes an unexecuted editor/recovery. */
+/**
+ * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,nativeBefore:string,nativeAfter:string}>}|null} draftRestoration
+ * @param {{native:{status:string,ownedRunId:string,records:Array<object>},ownedRunId:string,sourceSha256:string,expectedActorId:number}|null} nativeContext
+ */
+export function assertCoreTemplateSelectionReceipt(browser, manifest, canonicalRequiredCases, draftRestoration = null, nativeContext = null) {
+  assert.equal(validateCoreJourneySelection({ scope: browser.scope, cohort: browser.cohort, selection: browser.journeySelection }), CORE_TEMPLATE_FORM_CREATES_SELECTION);
+  const identities = rows => {
+    assert.ok(Array.isArray(rows) && rows.length > 0); assert.ok(rows.every(row => typeof row.key === "string" && row.key.length > 0));
+    assert.equal(new Set(rows.map(row => row.key)).size, rows.length);
+    return rows.map(row => { const identity = { ...row }; delete identity.status; delete identity.evidence; return identity; }).sort((a,b) => a.key.localeCompare(b.key));
+  };
+  assert.deepEqual(identities(browser.requiredCases), identities(canonicalRequiredCases));
+  const selected = coreSelectedTemplateCreates(manifest), ids = selected.map(coreTemplateCreateJourneyId), allowed = new Set();
+  assert.equal(browser.status, "pass"); assert.equal(browser.driverCompleted, true); assert.equal(browser.inventoryOnly, false); assert.deepEqual(browser.errors, []);
+  assert.equal(browser.globalClosed, false); assert.equal(browser.wholeCohortExecuted, false);
+  assert.deepEqual(browser.selectedJourneyIds, ids); assert.deepEqual(browser.executedJourneyIds, ids);
+  assert.deepEqual(browser.evidence.map(row => row.id), ["existing-auth-login", ...ids]); assert.ok(browser.evidence.every(row => row.status === "pass"));
+  assert.deepEqual(browser.evidence[0].coverage, []);
+  assert.equal(browser.evidence[0].authenticated, true); assert.equal(browser.evidence[0].sessionArtifactWritten, false);
+  assert.match(browser.evidence[0].dashboardState, /^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
+  const physical = new Set();
+  for (const [index, recipe] of selected.entries()) {
+    const row = browser.evidence[index+1]; assert.equal(row.kind, recipe.kind); assert.equal(row.consumer, recipe.entry.id); assert.equal(row.surface, recipe.surface);
+    assert.ok(Number.isSafeInteger(row.entityId) && row.entityId > 0);
+    const identity = `${recipe.table}:${row.entityId}`; assert.equal(physical.has(identity), false); physical.add(identity);
+    for (const key of ["createInputPreserved","createRetryHandoff","createDirtyCloseCancel","metadataReloadVerified","retrySaved"]) assert.equal(row[key], true);
+    assert.equal(row.createServerValidation, "trimmed_required_name");
+    assert.deepEqual(row.authoredConfigReloadVerified, recipe.fields.map(field => field[1]));
+    const keys = ["save_reload","failure_preserves_input","retry"].map(scenario => {
+      const cells = browser.requiredCases.filter(cell => cell.boundary === "form" && cell.consumer === recipe.entry.id && cell.surface === recipe.surface && cell.scenario === scenario);
+      assert.equal(cells.length, 1); assert.equal(cells[0].status, "behavior_verified"); assert.equal(cells[0].evidence, ids[index]); allowed.add(cells[0].key); return cells[0].key;
+    }); assert.deepEqual(row.coverage, keys);
+    const writes = browser.databaseReadback.filter(write => write.table === recipe.table && write.id === row.entityId); assert.equal(writes.length, 2);
+    assert.ok(writes.every(write => write.auditEntityType === "content_block_template"));
+    assert.deepEqual(writes.map(write => write.auditActions), [["content_block_template.create"],["content_block_template.update"]]);
+    assert.deepEqual(writes[0].expected, {}); assert.deepEqual(writes[0].expectedJson, []);
+    assert.equal(typeof writes[0].auditEntityLabel, "string"); assert.ok(writes[0].auditEntityLabel.trim());
+    assert.equal(writes[1].expected.name, `${writes[0].auditEntityLabel} saved`); assert.equal(writes[1].auditEntityLabel, writes[1].expected.name);
+    assert.deepEqual(writes[1].expectedJson.map(p => ({ column:p.column,path:p.path })), recipe.fields.map(field => ({column:"config",path:field[1]})));
+    assert.ok(writes[1].expectedJson.every(p => typeof p.value === "string" && p.value.trim()));
+    for (const write of writes) if (recipe.kind !== "content") assert.equal(write.auditMetadata.blockType, recipe.kind);
+  }
+  assert.equal(browser.databaseReadback.length, selected.length*2);
+  for (const cell of browser.requiredCases) if (!allowed.has(cell.key)) { assert.equal(cell.status, "open"); assert.equal(cell.evidence, null); }
+  if (draftRestoration !== null) {
+    assert.equal(draftRestoration.globalClosed, false); assert.deepEqual(draftRestoration.automaticCoverage, []);
+    assert.deepEqual(draftRestoration.qualified.map(row => row.journeyId), ids);
+  }
+  if (nativeContext !== null) {
+    assert.ok(draftRestoration); const { native, ownedRunId, sourceSha256, expectedActorId } = nativeContext;
+    assert.equal(native.status,"pass"); assert.equal(native.ownedRunId,ownedRunId); assert.ok(typeof ownedRunId === "string" && ownedRunId);
+    assert.match(sourceSha256,/^[a-f0-9]{64}$/u); assert.equal(browser.sourceSha256,sourceSha256); assert.ok(Number.isSafeInteger(expectedActorId) && expectedActorId>0);
+    assert.equal(new Set(native.records.map(row=>row.id)).size,native.records.length); const claimed=new Set();
+    const claim=(id,kind)=>{ assert.equal(typeof id,"string"); assert.equal(claimed.has(id),false); const matches=native.records.filter(row=>row.id===id); assert.equal(matches.length,1); assert.equal(matches[0].kind,kind); claimed.add(id); return matches[0]; };
+    for (const proof of draftRestoration.qualified) { claim(proof.nativeBefore,"form-permission-fingerprint"); claim(proof.nativeAfter,"form-permission-fingerprint"); }
+    for (const [index, recipe] of selected.entries()) {
+      const row=browser.evidence[index+1], proofs=row.permissionEvidence; assert.equal(proofs.length,1); const proof=proofs[0];
+      assert.equal(proof.status,"pass"); assert.equal(proof.caseId,ids[index]); assert.equal(proof.formConsumer,recipe.entry.id); assert.equal(proof.surface,recipe.surface);
+      const permissionCells=browser.requiredCases.filter(cell=>cell.boundary==="form"&&cell.consumer===recipe.entry.id&&cell.surface===recipe.surface&&cell.scenario==="permission_denied"); assert.equal(permissionCells.length,1); assert.equal(proof.candidateRequiredCase,permissionCells[0].key);
+      assert.equal(proof.sourceSha256,sourceSha256); assert.equal(proof.ownedRunId,ownedRunId); assert.equal(proof.originalProjectionCount,1);
+      for(const key of ["originalUiSuccessVerified","originalNativeSaveVerified","replayCookieFree","publicDomainAuditDependentsUnchanged"])assert.equal(proof[key],true);
+      assert.equal(proof.replayCount,1); assert.equal(proof.replayRedirectsFollowed,0); assert.deepEqual(proof.automaticCoverage,[]); assert.equal(proof.bodyOrCookieArtifactsWritten,false);
+      assert.equal(proof.routePathname, `/admin/pages-blocks/blocks/${recipe.kind}`); assert.match(proof.actionSha256,/^[a-f0-9]{64}$/u);
+      assert.ok(Number.isSafeInteger(proof.originalActionHttpStatus) && proof.originalActionHttpStatus >= 200 && proof.originalActionHttpStatus < 400);
+      assert.equal(proof.denial.actionBodyExecutionProven,false);
+      if(proof.denial.kind === "http-unauthorized") {
+        assert.equal(proof.denial.httpStatus,401); assert.equal(proof.denial.enforcementLayer,"not-determined-by-http"); assert.equal(Object.hasOwn(proof.denial,"destination"),false);
+      } else {
+        assert.equal(proof.denial.kind,"owned-admin-login-denial"); assert.ok([200,301,302,303,307,308].includes(proof.denial.httpStatus));
+        assert.equal(proof.denial.destination,"/admin/login"); assert.equal(proof.denial.enforcementLayer,"admin-http-boundary-proxy-or-action-redirect");
+      }
+      const save=claim(proof.originalNativeSaveReceipt,"form-save-native"); assert.ok(native.records.findIndex(record=>record.id===draftRestoration.qualified[index].nativeAfter)<native.records.indexOf(save)); assert.equal(save.status,"partial-not-global-pass"); assert.equal(save.globalClosed,false);
+      for(const key of ["caseId","formConsumer","surface"])assert.equal(save[key],proof[key]); assert.equal(save.writes.length,1);
+      const write=save.writes[0]; assert.equal(write.table,recipe.table); assert.equal(write.id,row.entityId); assert.equal(write.deleted,false); assert.equal(write.expectedActorId,expectedActorId);
+      const expected=browser.databaseReadback.find(item=>item.table===recipe.table&&item.id===row.entityId); assert.equal(write.actual.name,expected.auditEntityLabel);
+      assert.deepEqual(Object.keys(write.actual).sort(),(recipe.kind==="breadcrumb"?["name"]:["name","slug"]).sort());
+      if(recipe.kind!=="breadcrumb") { assert.equal(typeof write.actual.slug,"string"); assert.ok(write.actual.slug.trim()); }
+      const createFields=recipe.fields.filter(([name])=>recipe.kind==="feed"?name==="widget_title":recipe.kind==="cards"?["item_0_title","item_0_body"].includes(name):false);
+      assert.deepEqual(write.json.map(p=>({column:p.column,path:p.path})),createFields.map(field=>({column:"config",path:field[1]}))); assert.ok(write.json.every(p=>typeof p.actual==="string"&&p.actual.trim()));
+      assert.ok(write.audit.length>0); for(const audit of write.audit){assert.equal(Number(audit.actor_admin_user_id),expectedActorId);assert.equal(audit.entity_type,"content_block_template");assert.equal(Number(audit.entity_id),row.entityId);}
+      assert.ok(write.audit.some(audit=>audit.action==="content_block_template.create"&&audit.entity_label===write.actual.name));
+      const before=claim(proof.nativeBefore,"form-permission-fingerprint"),after=claim(proof.nativeAfter,"form-permission-fingerprint");
+      assert.equal(before.phase,"before"); assert.equal(after.phase,"after"); assert.equal(before.correlationId,after.correlationId);
+      for(const value of [before,after]){assert.equal(value.status,"pass");assert.equal(value.ownedRunId,ownedRunId);assert.equal(value.adminAuditIncluded,true);assert.equal(value.adminUsersIncluded,true);assert.ok(value.publicTableCount>0);for(const key of ["publicTableInventorySha256","publicDataSha256"])assert.match(value[key],/^[a-f0-9]{64}$/u);}
+      for(const key of ["publicTableCount","publicTableInventorySha256","publicDataSha256"])assert.equal(before[key],after[key]);
+      assert.ok(native.records.indexOf(save)<native.records.indexOf(before)); assert.ok(native.records.indexOf(before)<native.records.indexOf(after));
+    }
+    assert.equal(claimed.size,native.records.length,"No recovery, unrelated or unjoined native checkpoint may be borrowed by this selection.");
+  }
+  return {selection:CORE_TEMPLATE_FORM_CREATES_SELECTION,selectedJourneyIds:ids,executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,globalClosed:false};
+}
 
 export function buildCoreTemplateFormPlan({ formManifest, fixtures, requiredCases }) {
   assert.ok(Array.isArray(formManifest) && Array.isArray(requiredCases));
@@ -68,7 +175,7 @@ export async function runCoreTemplateFormJourneys(ctx) {
   assert.ok(Array.isArray(databaseReadback));
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
-  const plan = buildCoreTemplateFormPlan({ formManifest: ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, fixtures, requiredCases });
+  const plan = selectCoreTemplateFormPlan(buildCoreTemplateFormPlan({ formManifest: ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, fixtures, requiredCases }), ctx.journeySelection);
   const suffix = Date.now().toString(36);
   const pathFor = (kind, id = "") => `/admin/pages-blocks/blocks/${kind}${id ? `/${id}` : ""}`;
   const field = (form, name) => form.locator(`[name="${name}"]:not([type="hidden"])`);

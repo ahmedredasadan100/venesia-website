@@ -1,3 +1,5 @@
+import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
+import { CORE_TEMPLATE_FORM_CREATES_SELECTION, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import {assertCoreResidualSearchCompletion} from './fixtures/admin-core-residual-search.mjs';
 import {assertCoreRenderedAdoptionJoin} from './fixtures/admin-core-rendered-adoption.mjs';
 import {verifyCoreDownloadMediaCompletion} from './verify-admin-core-download-media-isolated.mts';
@@ -222,7 +224,21 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       const source = JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
       previewImpactContext = {fixtures,previewMatrix,canonicalRequiredCases,sourceSha256:source.sourceSha256};
     }
-    const selectedJourneys = isPreviewImpact ? assertCorePreviewPublicImpactReceipt(browser, previewImpactContext!) : assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases);
+    const isTemplateCreates = browser.journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION;
+    const isDomainTail = browser.journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION;
+    let domainTailPlan = null;
+    if (isDomainTail) {
+      const jiti = createJiti(import.meta.url,{fsCache:false,moduleCache:false});
+      const {ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION} = await jiti.import<typeof import("../src/lib/admin/interaction-system/adoption-manifest.ts")>("../src/lib/admin/interaction-system/adoption-manifest.ts");
+      const location = await jiti.import<typeof import("../src/lib/admin/projects/location-management-contract.ts")>("../src/lib/admin/projects/location-management-contract.ts"), tracking = await jiti.import<typeof import("../src/lib/admin/projects/tracking-contract.ts")>("../src/lib/admin/projects/tracking-contract.ts");
+      domainTailPlan = buildCoreDomainCommandTailPlan({rowActions:ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),paths:{...location,...tracking}});
+    }
+    const selectedJourneys = isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
+      native:JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),ownedRunId:handle.identity.runId,
+      sourceSha256:JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,expectedActorId:await readCoreFixedQaActor(handle),
+    }) : isPreviewImpact ? assertCorePreviewPublicImpactReceipt(browser, previewImpactContext!) : isTemplateCreates
+      ? assertCoreTemplateSelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases)
+      : assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases);
     const previewStates = browser.cohort === "preview-recovery-templates" ? await verifyCorePreviewStateReadback(handle, artifactDir, "after") : null;
     let publicPreviewImpact = null;
     if (isPreviewImpact) {
@@ -247,7 +263,14 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(draftNative.status,"pass");
       draftRestoration=assertCoreFormDraftRestorationJoin({artifact:draftArtifact,browser,native:draftNative,ownedRunId:handle.identity.runId,sourceSha256:(browser as unknown as {sourceSha256:string}).sourceSha256});
     }
-    if (selectedJourneys && !isPreviewImpact) { assert.ok(draftRestoration); assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration); }
+    if (selectedJourneys && !isPreviewImpact && !isDomainTail) {
+      assert.ok(draftRestoration);
+      if (isTemplateCreates) assertCoreTemplateSelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration, {
+        native: JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),
+        ownedRunId: handle.identity.runId, sourceSha256: JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256, expectedActorId: await readCoreFixedQaActor(handle),
+      });
+      else assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration);
+    }
     const companyImages=browser.cohort==="domain-forms"&&!browser.journeySelection?assertCoreCompanyImageCompletion(browser,JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),handle.identity.runId):null;
     let nativeCheckpoints = null;
     let descendantPresentation = null;

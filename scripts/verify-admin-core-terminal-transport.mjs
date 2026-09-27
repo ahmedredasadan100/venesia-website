@@ -1,3 +1,4 @@
+import { verifyAdminEntityTrashFeedback } from './fixtures/admin-entity-trash-feedback-controls.mjs';
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {readFileSync,mkdirSync,writeFileSync} from 'node:fs';
@@ -35,3 +36,6 @@ try{
  await context.unrouteAll({behavior:'wait'});await context.close();assert.deepEqual(errors,[]);
  const result={status:'pass',checks,writes,unhandledErrors:errors,boundary:'Exact held transport helper with installed Chromium and owned loopback HTTP. Application delete/native/permission still require isolated cohort.'};mkdirSync('.tmp-qa/core-terminal-transport',{recursive:true});writeFileSync('.tmp-qa/core-terminal-transport/controls.json',JSON.stringify(result,null,2));console.log(JSON.stringify(result));
 }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}
+
+const trashFeedback = await verifyAdminEntityTrashFeedback();
+console.log(JSON.stringify({ terminalTrashFeedback: trashFeedback }));

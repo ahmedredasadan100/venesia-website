@@ -1,3 +1,5 @@
+import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
+import { CORE_TEMPLATE_FORM_CREATES_SELECTION, coreSelectedTemplateCreates, coreTemplateCreateJourneyId, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection, buildCorePreviewPublicImpactPlan, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { registerCorePageRoute } from "./fixtures/admin-core-form-permission-context.mjs";
@@ -39,7 +41,9 @@ const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".l
 const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
   ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
-let selectedJourneyIds = journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION ? [] : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
+let selectedJourneyIds = journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION ? [] : journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION
+  ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTemplateCreateJourneyId)
+  : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
 let driverCompleted = false, activeCase = "bootstrap";
 let specializedSettingsResult = null;
@@ -160,6 +164,12 @@ assert.equal(new URL(origin).hostname, "127.0.0.1", "Only the owned loopback app
 assert.ok(process.env.QA_ADMIN_USERNAME && process.env.QA_ADMIN_PASSWORD, "The owned lifecycle must supply its private local account.");
 const fixtures = JSON.parse(readFileSync(process.env.QA_ADMIN_FIXTURES, "utf8"));
 if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) selectedJourneyIds = buildCorePreviewPublicImpactPlan({fixtures,previewMatrix}).journeyIds;
+let domainCommandTailPlan = null;
+if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION) {
+  const location = await jiti.import("../src/lib/admin/projects/location-management-contract.ts"), tracking = await jiti.import("../src/lib/admin/projects/tracking-contract.ts");
+  domainCommandTailPlan = buildCoreDomainCommandTailPlan({rowActions:collections.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures,paths:{...location,...tracking}});
+  selectedJourneyIds = domainCommandTailPlan.journeyIds;
+}
 const allowedStorage = JSON.parse(process.env.QA_ADMIN_STORAGE_PUBLIC_PREFIXES || "[]");
 assert.ok(allowedStorage.every(value => new URL(value).hostname === "127.0.0.1"));
 const browser = await observe("browser-launch", () => chromium.launch({ headless: true }));
@@ -353,14 +363,16 @@ try {
       await expect(dashboardHeading).toBeVisible({ timeout: 60_000 });
     });
     }
+    if (journeySelection === null) {
     const { runCoreCreateRecoveryJourney } = await import("./fixtures/admin-core-create-recovery-journeys.mjs");
     await runCoreCreateRecoveryJourney({ page, context, origin, output, run, observe, saveForm, saveButton, feedback, databaseReadback });
     const { runCoreCommandRecoveryJourney } = await import("./fixtures/admin-core-command-recovery-journeys.mjs");
     await runCoreCommandRecoveryJourney({ page, origin, output, fixtures, run, observe, feedback, databaseReadback });
+    }
     const { createCoreFormPermissionContext } = await import("./fixtures/admin-core-form-permission-context.mjs");
     coreFormPermission = createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
     const { runCoreTemplateFormJourneys } = await import("./fixtures/admin-core-form-journeys.mjs");
-    await runCoreTemplateFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
+    await runCoreTemplateFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, journeySelection, permissionReplay:coreFormPermission });
     coreFormPermission.close();coreFormPermission=null;
    } else if (coreCohort === "domain-forms") {
     const { createCoreFormPermissionContext } = await import("./fixtures/admin-core-form-permission-context.mjs");
@@ -447,19 +459,30 @@ try {
     const { runCorePageCompositionJourneys } = await import("./fixtures/admin-core-page-composition-journeys.mjs");
     await runCorePageCompositionJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,requiredCases,compositionCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else {
+    if (journeySelection === null) {
     const { runCoreDomainPersistenceFailureJourneys } = await import("./fixtures/admin-core-domain-persistence-failure-journeys.mjs");
     await runCoreDomainPersistenceFailureJourneys({ page, origin, output, fixtures, run, observe, actionResponse, assertActionAcknowledged });
     const { runCoreDomainCommandJourneys } = await import("./fixtures/admin-core-domain-command-journeys.mjs");
     await runCoreDomainCommandJourneys({ page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback });
     const { runCoreReadonlyJourneys } = await import("./fixtures/admin-core-readonly-journeys.mjs");
     await runCoreReadonlyJourneys({ page, context, origin, fixtures, run, observe, readOnlyReadback });
+    }
     const { runCoreDomainTerminalJourneys, runCoreEmptyTrashSuccessJourneys } = await import("./fixtures/admin-core-domain-terminal-journeys.mjs");
+    if (journeySelection === null) {
     const { createCoreFormPermissionContext } = await import("./fixtures/admin-core-form-permission-context.mjs");
     coreFormPermission=createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
+    }
     const terminalContext = { page, context, origin, output, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, permissionReplay:coreFormPermission };
+    if (journeySelection === null) {
     await runCoreDomainTerminalJourneys(terminalContext);
     coreFormPermission.close();coreFormPermission=null;
-    await runCoreEmptyTrashSuccessJourneys(terminalContext);
+    }
+    const emptyTrashResult = await runCoreEmptyTrashSuccessJourneys(terminalContext);
+    if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION) {
+      assert.equal(emptyTrashResult.outcomes.length, domainCommandTailPlan.trash.length, "All selected EmptyTrash journeys must pass before dependent readonly proof.");
+      const { runCoreReadonlyJourneys } = await import("./fixtures/admin-core-readonly-journeys.mjs");
+      await runCoreReadonlyJourneys({ page, context, origin, fixtures, run, observe, readOnlyReadback });
+    }
     const { runCoreDomainPermissionJourneys } = await import("./fixtures/admin-core-domain-permission-journeys.mjs");
     await runCoreDomainPermissionJourneys({ browser, context, origin, output, fixtures, run, observe, ownedNetworkOnly, revokeSession });
    }
@@ -749,6 +772,8 @@ try {
   assert.deepEqual(externalRequests, [], "The browser attempted an unowned network destination.");
   driverCompleted = true;
   if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) assertCorePreviewPublicImpactReceipt(receipt(), {fixtures,previewMatrix,canonicalRequiredCases:requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256});
+  else if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION) assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases);
+  else if (journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION) assertCoreTemplateSelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   else if (journeySelection !== null) assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   checkpoint("driver", "complete");
 } catch (error) {

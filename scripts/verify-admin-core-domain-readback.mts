@@ -22,8 +22,10 @@ const renewalNodes: ts.ArrowFunction[]=[];
 const visitRenewal=(node: ts.Node)=>{if(ts.isPropertyAssignment(node)&&node.name.getText(lifecycleFile)==='renewDatabaseControlConnection'&&ts.isArrowFunction(node.initializer))renewalNodes.push(node.initializer);ts.forEachChild(node,visitRenewal);};
 visitRenewal(lifecycleFile);assert.equal(renewalNodes.length,1);
 const renewalCode=ts.transpileModule('const renewal='+renewalNodes[0].getText(lifecycleFile)+';',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
-const actualPublicJobRefusal=new Function('cliContext','requireThat','controlMaintenance','scopedConnections','publicJob',renewalCode+'return renewal;')(
- {assertOwned:async()=>assert.ok(active)},(condition:unknown,code:string)=>assert.ok(condition,code),false,new Set(),Promise.resolve());
+const actualRenewalRefusal=(controlQueries=0,pendingScopedConnections=0,publicJob:Promise<void>|null=Promise.resolve(),code=renewalCode) =>
+ new Function('cliContext','requireThat','controlMaintenance','controlQueries','pendingScopedConnections','scopedConnections','publicJob',code+'return renewal;')(
+  {assertOwned:async()=>assert.ok(active)},(condition:unknown,code:string)=>assert.ok(condition,code),false,controlQueries,pendingScopedConnections,new Set(),publicJob);
+const actualPublicJobRefusal=actualRenewalRefusal();
 const handle = {
   renewDatabaseControlConnection: async () => {
     renewalAttempts++;if(activeBrowser)await actualPublicJobRefusal();
@@ -309,6 +311,18 @@ try {
   await test('The actual lifecycle renewal implementation refuses an active publicJob before any control query', async () => {
     const before=sqlReads;await assert.rejects(actualPublicJobRefusal(),/CONTROL_CONNECTION_NOT_IDLE/);assert.equal(sqlReads,before);
   });
+  for (const [label,queries,scopes] of [['active control query',1,0],['pending scoped connection',0,1]] as const) {
+    await test('The actual renewal implementation refuses '+label+' independently of publicJob',async()=>{
+      const before=sqlReads;
+      await assert.rejects(actualRenewalRefusal(queries,scopes,null)(),/CONTROL_CONNECTION_NOT_IDLE/);
+      assert.equal(sqlReads,before);
+      const guard=queries?'controlQueries === 0 &&':'pendingScopedConnections === 0 &&';
+      assert.ok(renewalCode.includes(guard));
+      const missingGuard=actualRenewalRefusal(queries,scopes,null,renewalCode.replace(guard,''));
+      await assert.rejects(assert.rejects(missingGuard(),/CONTROL_CONNECTION_NOT_IDLE/),assert.AssertionError);
+      assert.equal(sqlReads,before);
+    });
+  }
   await test('Both post-gate readers still reject an active Browser job before reading', async () => {
     activeBrowser=true;const before=sqlReads;
     try {await assert.rejects(owner.verifyCoreDomainWrites(handle,browser([base()])),/CONTROL_CONNECTION_NOT_IDLE/);await assert.rejects(owner.verifyCoreExecutedWriteProjections(handle,browser([base()],'failed')),/CONTROL_CONNECTION_NOT_IDLE/);}

@@ -17,11 +17,13 @@ const familyIds = ["topic-category-create-edit", "topic-series-create-edit", "to
 const lifecycle = ["save_reload", "failure_preserves_input", "retry"];
 const locationSurface = { governorate: "governorate", city: "city", main_area: "district", sub_area: "sub-district" };
 
-/** One fixed affected-journey selector; omission preserves the existing full cohort. */
+/** Fixed affected-journey selectors; omission preserves each existing full cohort. */
 export function validateCoreJourneySelection({ scope, cohort, selection }) {
   if (selection === undefined || selection === null) return null;
-  assert.equal(scope, "core-closure"); assert.equal(cohort, "domain-forms");
-  assert.equal(selection, "text-topic-forms", "Unknown affected journey selection.");
+  assert.equal(scope, "core-closure");
+  if (selection === "domain-command-tail") assert.equal(cohort, "domain-commands");
+  else if (selection === "template-form-creates") assert.equal(cohort, "recovery-templates");
+  else { assert.equal(cohort, "domain-forms"); assert.equal(selection, "text-topic-forms", "Unknown affected journey selection."); }
   return selection;
 }
 function isTextTopic(recipe) { return !["video", "gallery"].includes(recipe.kind); }

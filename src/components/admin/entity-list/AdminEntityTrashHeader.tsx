@@ -36,7 +36,7 @@ export default function AdminEntityTrashHeader({
   function publish(result: AdminActionResult) {
     publishFeedback(mapResultToFeedback(result), {
       channel: feedbackChannel,
-      placement: "inline",
+      placement: "global",
       critical: !result.ok,
       reveal: true,
     });
