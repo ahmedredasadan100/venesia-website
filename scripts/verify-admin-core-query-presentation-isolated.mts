@@ -5,7 +5,7 @@ import { parseAdminEntityListRequestQuery, type AdminEntityListQueryContract } f
 import { loadCoreQueryPresentationPlan, coreQueryScenario, CORE_ACTIVITY_DATE_SCENARIOS, assertCoreActivityDateReceipts, CORE_QUERY_SEARCH_SCENARIOS, coreQuerySearchColumns, assertCoreQuerySearchReceipts, coreQueryExtraFilterCases, assertCoreQueryExtraFilterReceipts } from './fixtures/admin-core-query-presentation-plan.mjs';
 
 type Row=Record<string,unknown>;
-export type CoreQueryFixture={ search:string; ids:number[]; projectId?:number; stageId?:number; itemId?:number; filterOptions?:{category:{id:number;name:string}} };
+export type CoreQueryFixture={ search:string; ids:number[]; projectId?:number; stageId?:number; itemId?:number; filterOptions?:{category:{id:number;name:string};series?:{id:number;name:string}} };
 export type CoreQueryFixtures={ queryClosure:{ contexts:Record<string,CoreQueryFixture> } };
 type Plan=Array<{key:string;entity:string;consumerId:string;table:string;labelColumn:string;sortField:string;viewKey:string;type:string|null;level:string|null;kind:string|null;rowCount:number;filter:{key:string;value:string}|null;contract:AdminEntityListQueryContract<Record<string,unknown>,string>;publicPathFor(row:Record<string,unknown>):string|null;routeFor(fixture:CoreQueryFixture):string}>;
 type NativeProof={id:string;routeKey:string;scenario:string;actorId:number;ownedRunId:string;fixtureFingerprint:string;preference:unknown;query:string;completeIds:number[];dateFilterProjection:unknown;searchProjection:unknown;extraFilterProjection:unknown};
@@ -75,7 +75,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
   if(key==='category'){
    assert.ok(['topics','series'].includes(spec.entity));filteredValues.push(Number(value));const parameter='$'+filteredValues.length;
    filtered.push('category_id in (with recursive selected(id) as (select id from public.topic_categories where id='+parameter+' and deleted_at is null union select child.id from public.topic_categories child join selected parent on child.parent_id=parent.id where child.deleted_at is null) select id from selected)');
-  }else if(spec.entity==='topics'&&key==='series'){assert.equal(value,'any');filtered.push('series_id is not null');}
+  }else if(spec.entity==='topics'&&key==='series'){if(value==='any')filtered.push('series_id is not null');else{assert.match(value,/^[1-9]\d{0,8}$/u);assert.equal(Number(value),fixture.filterOptions?.series?.id);filteredValues.push(Number(value));filtered.push('series_id=$'+filteredValues.length);}}
   else if(spec.entity==='topics'&&key==='image'){assert.equal(value,'without');filtered.push("coalesce(image,'')=''");}
   else{
    const columns:Record<string,Record<string,string>>={topics:{content_type:'content_type',featured:'is_featured'},projects:{featured:'featured'},redirects:{type:'redirect_type'},activity_log:{actor:'actor_username',action:'action'},topics_without_image:{status:'status'},admin_users:{role:'role'},project_tracking_items:{status:'status'}};

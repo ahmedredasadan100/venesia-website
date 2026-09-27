@@ -1,9 +1,24 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
+import {resolve} from 'node:path';
 import {expect} from 'playwright/test';
-import {loadCoreTemplatePresentationPlan} from './admin-core-template-library-presentation-plan.mjs';
+import {loadCoreTemplatePresentationPlan,assertCoreTemplateSearchIds,assertCoreTemplateSearchObservation} from './admin-core-template-library-presentation-plan.mjs';
 import {observeCoreScrollbarAdoption} from './admin-core-rendered-adoption.mjs';
 const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+
+
+export function selectCoreLinkPreviewAction(manifest,worker){
+ assert.ok(manifest&&manifest.node&&typeof worker==='string');const matches=Object.entries(manifest.node).filter(([,row])=>row.filename==='src/lib/admin/links/actions.ts'&&row.exportedName==='resolveAdminLinkAjax'&&Object.hasOwn(row.workers??{},worker));
+ assert.equal(matches.length,1,'Only the actual compiled resolver export for this exact edit worker may be admitted.');assert.match(matches[0][0],/^[a-f0-9]{40,64}$/u);return matches[0][0];
+}
+export function assertCoreReadOnlyEditRequests(requests,{origin,pathname,actionId,expectedValues}){
+ assert.ok(Array.isArray(requests)&&Array.isArray(expectedValues));if(expectedValues.length)assert.match(actionId,/^[a-f0-9]{40,64}$/u);else assert.equal(actionId,null);const expected=expectedValues.map(value=>JSON.stringify([value])).sort(),actual=[];
+ for(const request of requests){assert.equal(request.method,'POST');const url=new URL(request.url);assert.equal(url.origin,origin);assert.equal(url.pathname,pathname);assert.equal(request.actionId,actionId);assert.match(request.contentType,/^text\/plain(?:;|$)/iu);assert.ok(typeof request.body==='string'&&request.body.length<=16384);actual.push(JSON.stringify(JSON.parse(request.body)));}
+ assert.deepEqual(actual.sort(),expected,'No extra, missing, duplicate, foreign Action or mutated payload is a read-only resolver call.');
+ return{owner:'src/lib/admin/links/actions.ts#resolveAdminLinkAjax',count:requests.length,payloadSha256:expected.map(value=>createHash('sha256').update(value).digest('hex')),actionIdSha256:actionId===null?null:createHash('sha256').update(actionId).digest('hex')};
+}
+
 
 /** Read/presentation extension of the existing nine library recipes. No
  * mutation receipt, full capability axis or whole-cohort pass is inferred. */
@@ -22,7 +37,7 @@ export async function runCoreTemplateLibraryPresentationJourneys(ctx){
   const fixture=fixtures.templateLibraryPresentation.contexts[spec.kind],nativeCheckpointIds=[];
   const checkpoint=async phase=>{const request={id:randomUUID(),kind:'template-library-presentation-state',moduleKind:spec.kind,phase};const result=await nativeCheckpoint(request);for(const key of Object.keys(request))assert.equal(result[key],request[key]);assert.equal(result.status,'pass');assert.ok(result.ownedRunId);assert.ok(Number.isSafeInteger(result.actorId)&&result.actorId>0);nativeCheckpointIds.push(result.id);return result;};
   const first=await checkpoint('before');assert.deepEqual(first.orderedIds,fixture.ids);assert.equal(first.rows.length,spec.rowCount);assert.deepEqual(first.sorts.map(sort=>sort.key),spec.sorts.map(sort=>sort.key));
-  let posts=0;const count=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)posts++;};page.on('request',count);
+  let posts=0,editing=false;const editRequests=[],editResponses=new Map();const responseObserved=response=>{if(editRequests.some(entry=>entry.request===response.request()))editResponses.set(response.request(),response);};const count=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin){if(editing)editRequests.push({request,method:request.method(),url:request.url(),actionId:request.headers()['next-action'],contentType:request.headers()['content-type']??'',body:request.postData()});else posts++;}};page.on('request',count);page.on('response',responseObserved);
   try{
    const base=new URLSearchParams({q:fixture.search});await go(spec,base);await expect(grid).toHaveCount(1);await assertIds(first.orderedIds.slice(0,spec.pageSize));
    const renderedAdoption=[];
@@ -30,6 +45,20 @@ export async function runCoreTemplateLibraryPresentationJourneys(ctx){
     const cells=rows.first().locator(':scope > *'),target=cells.nth((await cells.count())-2);
     renderedAdoption.push(await observeCoreScrollbarAdoption({page,origin,requiredCases,bindings:[{boundary:'collection',consumer:spec.consumer,surface:spec.route}],container:grid,target,axis:'x',containment:'overscroll-contain',id:'template-library-'+spec.kind+'-scrollbar'}));
    }
+   const searchEvidence={mode:first.search.mode,minLength:first.search.minLength,sourceHashes:first.search.sourceHashes,cases:[],posts:0,automaticCoverage:[],globalClosed:false};
+   const searchInput=page.locator('input[type="search"][role="combobox"]');await expect(searchInput).toHaveCount(1);const searchLimit=Math.max(...spec.pageSizeOptions);await limit(searchLimit);
+   for(const scenario of first.search.cases){
+    if(scenario.id==='clear')await searchInput.locator('..').getByRole('button',{name:'مسح',exact:true}).click();else{await searchInput.fill(scenario.query);await searchInput.press('Enter');}
+    await expect(searchInput).toHaveValue(scenario.query);await expect.poll(()=>new URL(page.url()).searchParams.get('q'),{timeout:60000}).toBe(scenario.query||null);await expect.poll(()=>new URL(page.url()).searchParams.get('page')).toBe(null);
+    const firstPageParam=new URL(page.url()).searchParams.get('page'),count=scenario.groups.flat().length,searchPages=[];
+    for(let index=0;index<Math.max(1,Math.ceil(count/searchLimit));index++){
+     if(index){await page.locator('[data-admin-pagination-slot="page"]').filter({hasText:new RegExp('^'+(index+1)+'$')}).click();await expect.poll(()=>new URL(page.url()).searchParams.get('page')).toBe(String(index+1));}
+     const expectedCount=Math.min(searchLimit,count-index*searchLimit);await expect.poll(async()=>{try{assertCoreTemplateSearchIds(scenario.groups,await visibleIds(),{offset:index*searchLimit,count:expectedCount});return true;}catch{return false;}},{timeout:60000}).toBe(true);searchPages.push(await visibleIds());
+    }
+    assertCoreTemplateSearchIds(scenario.groups,searchPages.flat());const params=new URL(page.url()).searchParams;
+    searchEvidence.cases.push({id:scenario.id,query:scenario.query,inputValue:await searchInput.inputValue(),queryParam:params.get('q'),firstPageParam,limit:Number(params.get('limit')),unrelatedParams:[...params].filter(([key])=>!['q','page','limit'].includes(key)),clearClicked:scenario.id==='clear',enterPressed:scenario.id!=='clear',pages:searchPages});
+   }
+   searchEvidence.posts=posts;assert.equal(posts,0,'Actual literal, one-character, clear and restore search must perform no Server Action.');await go(spec,base);await assertIds(first.orderedIds.slice(0,spec.pageSize));
    const pages=[await visibleIds()];
    for(let index=2;index<=Math.ceil(spec.rowCount/spec.pageSize);index++){
     await page.locator('[data-admin-pagination-slot="page"]').filter({hasText:new RegExp('^'+index+'$')}).click();await assertIds(first.orderedIds.slice((index-1)*spec.pageSize,index*spec.pageSize));pages.push(await visibleIds());
@@ -67,11 +96,19 @@ export async function runCoreTemplateLibraryPresentationJourneys(ctx){
    if(spec.kind==='content')await expect(info).toContainText(nativeRow.formattedUpdatedAt);if(spec.kind==='hero'){assert.equal(nativeRow.assignedPageCount,0);await expect(info).toContainText('الصفحات المربوطة');await expect(info).toContainText('0');}
    await page.keyboard.press('Escape');await expect(info).toHaveCount(0);await expect(more).toBeFocused();
    const edit=row.locator('[data-admin-row-action="edit"] a[href]');await expect(edit).toHaveCount(1);const target=new URL(await edit.getAttribute('href'),origin);assert.equal(target.origin,origin);assert.equal(target.pathname,spec.route+'/'+nativeRow.id);
-   await edit.click();await expect.poll(()=>new URL(page.url()).pathname,{timeout:60000}).toBe(target.pathname);await expect(page.locator('main [name="name"]')).toHaveValue(nativeRow.name,{timeout:60000});assert.equal(posts,2);await go(spec,base);await assertIds(pages[0]);
-   const after=await checkpoint('after');assert.equal(after.fingerprint,first.fingerprint);assert.equal(posts,2);
-   const result={moduleKind:spec.kind,consumer:spec.consumer,nativeActorId:first.actorId,nativeCheckpointIds,pages,sorts,preferencePosts:posts,backAndReload:true,pageSizeChanged:true,outOfRangeClamped:true,optionalHeaderAndCellsRestored:true,informationNativeFields:true,ownedEditNavigation:true,domainAndAuditUnchanged:true,copyPublicLink:'hidden-by-current-contract',renderedAdoption,automaticCoverage:[],globalClosed:false,
+   // Read only the compiled export projection; never persist the manifest's encryption key.
+   const actionId=nativeRow.linkPreviewValues.length?selectCoreLinkPreviewAction(JSON.parse(readFileSync(resolve(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')),'app'+spec.route+'/[id]/page'):null;editing=true;
+   await edit.click();await expect.poll(()=>new URL(page.url()).pathname,{timeout:60000}).toBe(target.pathname);await expect(page.locator('main [name="name"]')).toHaveValue(nativeRow.name,{timeout:60000});
+   await expect.poll(()=>editRequests.length,{timeout:60000}).toBe(nativeRow.linkPreviewValues.length);
+   await expect.poll(()=>editRequests.every(entry=>editResponses.has(entry.request)),{timeout:60000}).toBe(true);
+   for(const entry of editRequests)assertActionAcknowledged(editResponses.get(entry.request));
+   assert.equal(posts,2);await go(spec,base);await assertIds(pages[0]);
+   const after=await checkpoint('after');assert.equal(after.fingerprint,first.fingerprint);assert.equal(posts,2);editing=false;
+   searchEvidence.binding={beforeCheckpointId:first.id,afterCheckpointId:after.id,actorId:first.actorId,ownedRunId:first.ownedRunId,moduleKind:spec.kind,consumer:spec.consumer};assertCoreTemplateSearchObservation(spec,first.search,searchEvidence,searchEvidence.binding);
+   const readOnlyEdit=assertCoreReadOnlyEditRequests(editRequests,{origin,pathname:target.pathname,actionId,expectedValues:nativeRow.linkPreviewValues});
+   const result={moduleKind:spec.kind,consumer:spec.consumer,nativeActorId:first.actorId,nativeCheckpointIds,searchEvidence,pages,sorts,preferencePosts:posts,readOnlyEdit,backAndReload:true,pageSizeChanged:true,outOfRangeClamped:true,optionalHeaderAndCellsRestored:true,informationNativeFields:true,ownedEditNavigation:true,domainAndAuditUnchanged:true,copyPublicLink:'hidden-by-current-contract',renderedAdoption,automaticCoverage:[],globalClosed:false,
     boundary:'All current visible sort keys and selected declared pagination/column/information/edit behavior; exact original preferences require the separate native finally cleanup. No automatic full-axis or whole-cohort credit.'};results.push(result);return result;
-  }finally{page.off('request',count);}
+  }finally{page.off('request',count);page.off('response',responseObserved);}
  });
  return{outcomes:results,automaticCoverage:[],globalClosed:false};
 }

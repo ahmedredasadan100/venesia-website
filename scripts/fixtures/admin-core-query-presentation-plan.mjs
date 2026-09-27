@@ -36,7 +36,7 @@ export async function loadCoreQueryPresentationPlan(){
  const loginAction=audit.AUDIT_ACTION_OPTIONS.find(row=>row.value==='auth.login.success');assert.ok(loginAction);
  const booleanOptions=[{value:'yes',label:'مميز'},{value:'no',label:'غير مميز'}];
  const extraFilters={
-  topics:[{id:'content-type',key:'content_type',label:'نوع المحتوى',options:contentTypes.CONTENT_TYPE_OPTIONS},{id:'category',key:'category',label:'التصنيف',dynamicCategory:true},{id:'series',key:'series',label:'السلسلة',options:[{value:'any',label:'مرتبط بأي سلسلة'}]},{id:'featured',key:'featured',label:'التمييز',options:booleanOptions},{id:'image',key:'image',label:'الصورة',options:[{value:'without',label:'بدون صورة'}]}],
+  topics:[{id:'content-type',key:'content_type',label:'نوع المحتوى',options:contentTypes.CONTENT_TYPE_OPTIONS},{id:'category',key:'category',label:'التصنيف',dynamicCategory:true},{id:'series',key:'series',label:'السلسلة',dynamicSeries:true,options:[{value:'any',label:'مرتبط بأي سلسلة'}]},{id:'featured',key:'featured',label:'التمييز',options:booleanOptions},{id:'image',key:'image',label:'الصورة',options:[{value:'without',label:'بدون صورة'}]}],
   series:[{id:'series-category-filter',key:'category',label:'التصنيف',dynamicCategory:true}],
   projects:[{id:'project-featured',key:'featured',label:'التمييز',options:booleanOptions}],
   redirects:[{id:'redirect-type-filter',key:'type',label:'نوع التحويل',options:[{value:'301',label:'301 دائم'},{value:'302',label:'302 مؤقت'}]}],
@@ -136,7 +136,8 @@ export function coreQueryExtraFilterCases(spec,fixture){
  const cases=[];
  for(const filter of spec.extraFilters??[]){
   assert.ok(Object.hasOwn(spec.contract.rawFilterSchemas,filter.key));
-  const options=filter.dynamicCategory?[{value:String(fixture.filterOptions?.category?.id),label:fixture.filterOptions?.category?.name}]:filter.options;
+  const seriesOption=filter.dynamicSeries?fixture.filterOptions?.series:null;if(filter.dynamicSeries){assert.equal(filter.key,'series');assert.equal(spec.entity,'topics');assert.ok(Number.isSafeInteger(seriesOption?.id)&&seriesOption.id>0);assert.ok(typeof seriesOption.name==='string'&&seriesOption.name.length>0);}
+  const options=filter.dynamicCategory?[{value:String(fixture.filterOptions?.category?.id),label:fixture.filterOptions?.category?.name}]:filter.dynamicSeries?[...filter.options,{value:String(seriesOption.id),label:seriesOption.name}]:filter.options;
   if(filter.dynamicCategory){assert.ok(Number.isSafeInteger(fixture.filterOptions?.category?.id)&&fixture.filterOptions.category.id>0);assert.ok(typeof fixture.filterOptions.category.name==='string'&&fixture.filterOptions.category.name.length>0);}
   assert.ok(Array.isArray(options)&&options.length>0);
   for(const[ordinal,option]of options.entries()){

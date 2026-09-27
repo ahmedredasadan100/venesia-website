@@ -1,8 +1,9 @@
+import{verifyCoreMaintenanceTransportControl}from'./fixtures/admin-core-auth-transport-controls.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createJiti } from 'jiti';
 import { CORE_AUTH_ENTRY_PHASES,assertCoreAuthEntryTransition,validateCoreAuthEntryRequest } from './verify-admin-core-auth-entry-isolated.mts';
-import { buildCoreAuthEntryPlan,assertCoreAuthCookieMetadata } from './fixtures/admin-core-auth-entry-journeys.mjs';
+import { buildCoreAuthEntryPlan,assertCoreAuthCookieMetadata,coreAuthEntryBrowserOptions } from './fixtures/admin-core-auth-entry-journeys.mjs';
 const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import<{ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:Array<Record<string,unknown>>}>('../src/lib/admin/form-system/adoption-manifest.ts');
 const cases:string[]=[];const pass=(name:string,fn:()=>void)=>{fn();cases.push(name);};
 pass('Actual Auth manifest derives its two existing session entry surfaces',()=>assert.equal(buildCoreAuthEntryPlan(manifest).surfaces.length,2));
@@ -32,4 +33,6 @@ pass('Read-only reload cannot mutate timestamps',()=>assert.throws(()=>assertCor
 const cookie={name:'venesia_admin_session',domain:'127.0.0.1',path:'/',httpOnly:true,secure:false,sameSite:'Lax',expires:44200};
 pass('Current local cookie security and bounded TTL accepted',()=>assertCoreAuthCookieMetadata(cookie,'http://127.0.0.1:3000',43200,1000,1001));
 for(const patch of [{domain:'foreign.invalid'},{path:'/other'},{httpOnly:false},{sameSite:'None'},{secure:true},{expires:999999}])pass('Wrong cookie metadata rejected '+Object.keys(patch)[0],()=>assert.throws(()=>assertCoreAuthCookieMetadata({...cookie,...patch},'http://127.0.0.1:3000',43200,1000,1001)));
-console.log(JSON.stringify({status:'pass',controls:cases.length,cases,runtimeExecuted:false,globalClosed:false}));
+pass('Only Maintenance transport fixture blocks service workers',()=>{assert.deepEqual(coreAuthEntryBrowserOptions('maintenance-login'),{serviceWorkers:'block'});assert.deepEqual(coreAuthEntryBrowserOptions('admin-login'),{});assert.throws(()=>coreAuthEntryBrowserOptions('other'));});
+const mounted=await verifyCoreMaintenanceTransportControl();
+console.log(JSON.stringify({status:'pass',controls:cases.length+mounted.controls,canonicalControls:cases.length,mountedControls:mounted.controls,cases,mounted,actualAuthenticatedRuntimeExecuted:false,globalClosed:false}));

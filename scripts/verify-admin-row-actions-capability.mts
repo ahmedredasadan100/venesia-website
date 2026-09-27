@@ -60,6 +60,7 @@ import {
   graphUsesExecutableBinding,
   parseTypeScriptSource,
   type ExecutableSourceGraph,
+  type ExecutableBinding,
   type SourceOverrides,
 } from "./lib/typescript-executable-graph.mts";
 
@@ -168,6 +169,7 @@ type ConsumerCapabilityAuditRecord = {
   sourceFiles: readonly string[];
   declaration: AdminConsumerCapabilityAuditDeclaration;
   collectionSurface?: AdminCollectionSurfaceInventoryEntry;
+  presentationEntryBindings?: readonly ExecutableBinding[];
   formEntry?: AdminFormAdoptionEntry;
 };
 
@@ -615,13 +617,21 @@ function formBaseCapabilities(entry: AdminFormAdoptionEntry) {
   return capabilities;
 }
 
+// A grouped consumer is the export actually mounted by its registered page.
+// Import selection and module side effects already belong to the existing graph owner.
+function consumerGraphEntrySources(consumer: ConsumerCapabilityAuditRecord) {
+ return consumer.presentationEntryBindings?.length
+   ? consumer.collectionSurface!.pageSourceFiles
+   : consumer.sourceFiles;
+}
+
 function consumerExecutableGraph(
   consumer: ConsumerCapabilityAuditRecord,
   sourceOverrides?: SourceOverrides,
 ) {
   return collectExecutableSourceGraph({
     root: ROOT,
-    entrySourceFiles: consumer.sourceFiles,
+    entrySourceFiles: consumerGraphEntrySources(consumer),
     sourceOverrides,
     symbolAware: true,
   });
@@ -642,7 +652,7 @@ function consumerOwnershipGraph(
 ) {
   return collectExecutableSourceGraph({
     root: ROOT,
-    entrySourceFiles: consumer.sourceFiles,
+    entrySourceFiles: consumerGraphEntrySources(consumer),
     sourceOverrides,
     traversalBoundarySourceFiles: canonicalCapabilityOwnerSourceFiles,
     symbolAware: true,
@@ -845,6 +855,11 @@ function collectConsumerCapabilityAuditFailures(
 
   const fullGraph = consumerExecutableGraph(consumer, sourceOverrides);
   const ownershipGraph = consumerOwnershipGraph(consumer, sourceOverrides);
+  for (const binding of consumer.presentationEntryBindings ?? []) {
+    if (!graphUsesExecutableBinding({ root: ROOT, graph: fullGraph, bindings: [binding], sourceOverrides })) {
+      failures.push("presentation:missing_registered_entry_binding");
+    }
+  }
 
   for (const capability of currentSharedCapabilityKeys) {
     const decision = decisions[capability];
@@ -963,6 +978,7 @@ function collectionCapabilityAuditRecords(
         id: consumer.id,
         boundary: "collection" as const,
         sourceFiles: [consumer.pageSourceFile, consumer.presentationOwner],
+        presentationEntryBindings: consumer.executableBindings.filter(binding => normalizeSourcePath(binding.sourceFile) === normalizeSourcePath(consumer.presentationOwner)),
         declaration: consumer.applicability,
         collectionSurface,
       };
@@ -2420,6 +2436,7 @@ function collectionConsumerFixture(input: {
     ...baseConsumer,
     id: input.id,
     sourceFiles: [input.pageSourceFile, input.presentationSourceFile],
+    presentationEntryBindings: undefined,
     declaration: input.declaration,
     collectionSurface: {
       ...baseConsumer.collectionSurface,
@@ -2429,6 +2446,32 @@ function collectionConsumerFixture(input: {
       capabilityAudit: input.declaration,
     },
   } as ConsumerCapabilityAuditRecord;
+}
+
+
+// Exact page-selected exports must not borrow sibling capabilities from one module.
+const selectedPresentationPage="src/fixtures/governance/selected-presentation-page.tsx";
+const selectedPresentationFile="src/fixtures/governance/selected-presentation.tsx";
+const selectedPresentationChild="src/fixtures/governance/selected-presentation-child.tsx";
+const selectedPresentationMediaImport='import AdminMediaImageField from "../../components/admin/media/AdminMediaImageField";';
+const selectedPresentationDeclaration={...collectionCapabilityFixtureConsumer.declaration,decisions:{...collectionCapabilityFixtureConsumer.declaration.decisions,media:{state:"not_applicable",rationale:"The selected sibling exposes no Media."}}} as AdminConsumerCapabilityAuditDeclaration;
+const selectedPresentationConsumer={...collectionConsumerFixture({id:"selected-presentation-fixture",pageSourceFile:selectedPresentationPage,presentationSourceFile:selectedPresentationFile,declaration:selectedPresentationDeclaration}),presentationEntryBindings:[{sourceFile:selectedPresentationFile,exportNames:["Chosen"]}]};
+function selectedPresentationFailures(mode:"sibling"|"direct"|"indirect"|"side-effect"|"missing-entry") {
+ const page=mode==="missing-entry"?'export default function Page(){return null;}':'import {Chosen,Sibling} from "./selected-presentation";export default function Page(){return <Chosen/>;}';
+ const chosen=mode==="direct"?'return <AdminMediaImageField name="media" label="Media"/>;':mode==="indirect"?'return <Child/>;':'return null;';
+ const shared=selectedPresentationMediaImport+(mode==="indirect"?'import {Child} from "./selected-presentation-child";':'')+'export function Chosen(){'+chosen+'}export function Sibling(){return <AdminMediaImageField name="media" label="Media"/>;}'+(mode==="side-effect"?'AdminMediaImageField({name:"media",label:"Media"});':'');
+ const overrides=new Map([[selectedPresentationPage,page],[selectedPresentationFile,shared],[selectedPresentationChild,selectedPresentationMediaImport+'export function Child(){return <AdminMediaImageField name="media" label="Media"/>;}']]);
+ return collectConsumerCapabilityAuditFailures(selectedPresentationConsumer,"source_proof",overrides);
+}
+check("page-selected export excludes an unused Media sibling without hiding its registered entry",!selectedPresentationFailures("sibling").some(failure=>failure.startsWith("media:")||failure.startsWith("presentation:")));
+for(const mode of ["direct","indirect","side-effect"] as const)check("page-selected export preserves "+mode+" Media ownership",selectedPresentationFailures(mode).includes("media:hidden_adoption"));
+check("page-selected export must execute its exact registered binding",selectedPresentationFailures("missing-entry").includes("presentation:missing_registered_entry_binding"));
+for(const id of ["project-tracking-stages","project-tracking-items"]){
+ const consumer=consumerCapabilityAuditRecords.find(row=>row.id===id&&row.boundary==="collection")!;assert.ok(consumer);
+ const file="src/components/admin/projects/tracking/TrackingForms.tsx",text=read(file),name=id.endsWith("stages")?"TrackingStageFormModal":"TrackingItemFormModal",parsed=parseTypeScriptSource(file,text),node=parsed.statements.find(row=>ts.isFunctionDeclaration(row)&&row.name?.text===name);assert.ok(node);
+ const original=node.getText(parsed),mutated=original.replace("<ModalActions pending={pending}",'<AdminMediaGalleryField name="injected_media" label="Media"/><ModalActions pending={pending}');assert.notEqual(mutated,original);
+ const failures=collectConsumerCapabilityAuditFailures(consumer,"source_proof",new Map([[file,text.replace(original,mutated)]]));
+ check("actual "+id+" rejects Media introduced into its own child Form",failures.includes("media:hidden_adoption"));
 }
 
 const transitiveFixtureRoot = "src/fixtures/governance/consumer.tsx";

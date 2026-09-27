@@ -1,3 +1,4 @@
+import {CORE_DOWNLOAD_MEDIA_HREF} from './fixtures/admin-core-download-media-adoption.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -39,10 +40,11 @@ const link=(prefix:string,href:string,target:string)=>({[prefix+"_link_kind"]:"e
 const title={title:v.title,show_title:"true",title_bold:"false",title_alignment:"center"};
 const cardFields:Record<string,unknown>={...title,columns:4};
 for(const[i,item]of [v.cards[1],v.cards[0]].entries())Object.assign(cardFields,Object.fromEntries(Object.entries(item).map(([key,value])=>["item_"+i+"_"+key,value])),link("item_"+i,v.hrefs[1-i],i?"_blank":"_self"));
+Object.assign(cardFields,link("item_0",CORE_DOWNLOAD_MEDIA_HREF,"_blank"),{item_0_link_kind:"download"});
 const rows:Record<string,Record<string,unknown>>={
  cards:{config:cards(form(cardFields))},
- breadcrumb:{config:breadcrumb(form({source:"manual",show_home:"false",current_label_override:v.title,manual_item_0_label:v.breadcrumbs[1],manual_item_1_label:v.breadcrumbs[0],...link("manual_item_0",v.hrefs[1],"_self"),...link("manual_item_1",v.hrefs[0],"_blank")}))},
- cta:{config:cta(form({...title,background_style:"gradient",primary_cta_label:v.primaryLabel,...link("primary_cta",v.hrefs[1],"_self"),secondary_cta_label:"",secondary_cta_link_kind:"none"}))},
+ breadcrumb:{config:breadcrumb(form({source:"manual",show_home:"false",current_label_override:v.title,manual_item_0_label:v.breadcrumbs[1],manual_item_1_label:v.breadcrumbs[0],...link("manual_item_0",CORE_DOWNLOAD_MEDIA_HREF,"_blank"),manual_item_0_link_kind:"download",...link("manual_item_1",v.hrefs[0],"_blank")}))},
+ cta:{config:cta(form({...title,background_style:"gradient",primary_cta_label:v.primaryLabel,...link("primary_cta",CORE_DOWNLOAD_MEDIA_HREF,"_blank"),primary_cta_link_kind:"download",secondary_cta_label:"",secondary_cta_link_kind:"none"}))},
 };
 for(const kind of ["cards","breadcrumb","cta"])test("Actual "+kind+" Action config builder matches exact authored projection",()=>assertTemplateControlsProjection(kind,JSON.parse(JSON.stringify(rows[kind])),fixtures));
 test("Cards empty aggregate rejected by actual builder",()=>assert.throws(()=>cards(new FormData())));

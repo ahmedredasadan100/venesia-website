@@ -1,3 +1,4 @@
+import {observeCoreScrollbarAdoption} from "./admin-core-rendered-adoption.mjs";
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -42,7 +43,7 @@ export function buildCoreReadonlyHubPlan({ collectionAdoption, formManifest, rep
 
 /** No external provider calls or credentials; selected real owner controls only. */
 export async function runCoreReadonlyHubJourneys(ctx) {
-  const { page, origin, fixtures, run, observe, nativeCheckpoint, actionResponse, assertActionAcknowledged } = ctx;
+  const { page, origin, fixtures, run, observe, nativeCheckpoint, actionResponse, assertActionAcknowledged, requiredCases } = ctx;
   assert.equal(new URL(origin).hostname, '127.0.0.1'); assert.equal(typeof nativeCheckpoint, 'function');
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const [collection, forms, reports, integrations, locations] = await Promise.all([
@@ -75,6 +76,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
     assert.equal(await link.getAttribute('href'), path); await link.click();
     await expect.poll(() => new URL(page.url()).pathname, { timeout: 60_000 }).toBe(new URL(path, origin).pathname);
   }
+  async function observeReadonlyGrid(consumer,container,target){return observeCoreScrollbarAdoption({page,origin,requiredCases,bindings:[{boundary:'collection',consumer,surface:new URL(page.url()).pathname}],id:'readonly-'+consumer+'-scroll',container,target,axis:'x',containment:'overscroll-contain'});}
   function outcome(value) { outcomes.push(value); return value; }
   async function listbox(label, option) {
     await page.getByRole('combobox', { name: label, exact: true }).click();
@@ -141,6 +143,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
       const ids = await region.locator('[data-admin-row-action="more"][data-admin-entity-id]').evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('data-admin-entity-id'))));
       assert.deepEqual(ids, native.value.map(row => row.id));
       for (const row of native.value) await expect(region.getByText(row.title, { exact: true })).toBeVisible();
+      const renderedAdoption=[await observeReadonlyGrid('dashboard-recent-content',region,region.locator('article').first().locator(':scope > div').nth(4))];
       const row = native.value[0], trigger = region.locator('[data-admin-row-action="more"][data-admin-entity-id="' + row.id + '"] button'); await trigger.click();
       const menu = page.locator('[data-admin-row-actions-menu][data-admin-entity-type="dashboard_recent_topic"]');
       assert.deepEqual(await menu.locator('[data-admin-row-action-menu-item]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-admin-row-action-menu-item'))), ['information']);
@@ -148,7 +151,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
       const information = page.locator('[data-admin-row-actions-information][data-admin-entity-type="dashboard_recent_topic"]'); await expect(information).toContainText(row.title);
       await information.getByRole('button', { name: 'رجوع', exact: true }).click(); await expect(menu).toBeVisible(); await page.keyboard.press('Escape'); await expect(trigger).toBeFocused();
       const path = '/admin/content/topics/' + row.id; await clickLocal(region.locator('a[href="' + path + '"]'), path);
-      return outcome({ consumer: 'dashboard-recent-content', native: native.id, ids, exactCurrentRecentProjection: true, informationBackEscapeFocus: true, mutatingControlsAbsent: true,
+      return outcome({ consumer: 'dashboard-recent-content', renderedAdoption, native: native.id, ids, exactCurrentRecentProjection: true, informationBackEscapeFocus: true, mutatingControlsAbsent: true,
         boundary: 'Absent mutation controls are observed current Dashboard scope; no unavailable or empty database simulation.' });
     });
     await run('readonly-integrations-catalog-query-filter-empty-reset', [], async () => {
@@ -228,6 +231,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
     assert.ok(['http:', 'https:'].includes(configuredSitemap.protocol) && configuredSitemap.pathname.endsWith('/sitemap.xml'));
     // The canonical origin is displayed metadata. The existing check reads owned DB rows and validates strings; never navigate this link.
     await run('readonly-sitemap-local-check-pending-settlement', [], async () => {
+      const region=main.getByRole('region',{name:'Effective Source Contract',exact:true}),renderedAdoption=[await observeReadonlyGrid('sitemap-monitor',region,region.locator('article').first().locator(':scope > div').last())];
       const button = main.getByRole('button', { name: 'تشغيل الفحص الكامل', exact: true }); await expect(button).toBeEnabled();
       const acknowledgement = actionResponse(); acknowledgement.catch(() => {}); sitemapAllowed = true;
       const clicked = button.click(); clicked.catch(() => {});
@@ -236,7 +240,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
       await expect(main.getByRole('link', { name: 'فتح /sitemap.xml', exact: true })).toHaveAttribute('href', sitemapHref);
       const checkCount = main.getByText('Checks', { exact: true }).locator('..').locator('p').last();
       await expect(checkCount).toHaveText(/^[1-9][0-9]*$/);
-      assert.equal(writes, 1); return outcome({ consumer: 'sitemap-monitor', localReadOnlyCheckAcknowledged: true, pendingSettled: true,
+      assert.equal(writes, 1); return outcome({ consumer: 'sitemap-monitor', renderedAdoption, localReadOnlyCheckAcknowledged: true, pendingSettled: true,
         configuredCanonicalSitemap: configuredSitemap.href, canonicalLinkUnchanged: true, canonicalLinkNavigated: false, externalUrlProbe: false,
         boundary: 'Existing string/owned-DB diagnostics only, even when canonical origin is Production metadata; no endpoint request, diagnostic-health or public-route proof.' });
     });

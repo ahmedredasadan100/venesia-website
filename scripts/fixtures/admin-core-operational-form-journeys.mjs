@@ -2,7 +2,8 @@ import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreMo
 import assert from "node:assert/strict";
 import {authorCoreTrackingMedia,assertCoreTrackingMediaUI} from "./admin-core-tracking-media-adoption.mjs";
 import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -46,7 +47,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const plan = buildCoreOperationalFormPlan({ manifest, requiredCases, fixtures });
-  const suffix = Date.now().toString(36), results = [], permissionEvidence = [], dateEvidence = [];
+  const suffix = Date.now().toString(36), results = [], permissionEvidence = [], dateEvidence = [], mediaApplicabilityEvidence = [];
   let renderedRecipe, renderedSurface, renderedAdoption=[], renderedOpened=new Set(), renderedDirty=new Set();
   const permissionIntent = (recipe, surface, perform) => runCoreFormPermissionIntent({ permissionReplay: ctx.permissionReplay, mapping: { caseId: "core-operational-" + recipe.kind + "-" + surface, formConsumer: recipe.consumer, surface }, perform, permissionEvidence });
   const form = () => page.locator("form[data-admin-form-runtime]");
@@ -148,6 +149,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     await equal(values);
   }
   async function restoreDraft(recipe, surface, values, assertPrivate = null) {
+    if (["profile","stage","item","update"].includes(recipe.kind)) mediaApplicabilityEvidence.push(await observeCoreTrackingMediaApplicability({form:form(),kind:recipe.kind,surface,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,fixtures}));
     const retainedUrl = page.url();
     await ctx.permissionReplay.restoreDraft({
       mapping: { caseId: "core-operational-" + recipe.kind + "-" + surface, journeyId: "core-operational-" + recipe.kind + "-form-roundtrip", formConsumer: recipe.consumer, surface },
@@ -191,6 +193,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     const result = { renderedAdoption, consumer: recipe.consumer, surfaces: recipe.surfaces, ids, fields,
       verified: ["structured_validation_rejection", "field_preservation", "dirty_close_cancel", "retry", "save_reload"], proofBoundary, ...extra };
     result.permissionEvidence = permissionEvidence.filter(row => row.formConsumer === recipe.consumer && recipe.surfaces.includes(row.surface));
+    if (recipe.consumer === "project-tracking-create-edit") result.mediaApplicabilityEvidence = mediaApplicabilityEvidence.filter(row=>recipe.surfaces.includes(row.surface));
     if (recipe.consumer === "project-tracking-create-edit") result.dateEvidence = dateEvidence.filter(row => recipe.surfaces.includes(row.surface)).map(bindTrackingDates);
     results.push(result); return result;
   }
@@ -336,6 +339,68 @@ export async function runCoreOperationalFormJourneys(ctx) {
     return { renderedAdoption, consumer: "users-and-roles", surface: "identity-collection", verified: ["current_user_visibility_disabled", "current_user_delete_disabled", "current_user_edit_status_disabled", "self_password_controls_absent"], proofBoundary: "Read-only current authenticated synthetic identity UI restrictions; no denied server-command or complete Auth capability claim." };
   });
   return { planned: plan.recipes.length, completed: results.length, results, permissionEvidence, permissionCandidateKeys: permissionEvidence.map(row => row.candidateRequiredCase) };
+}
+
+/** Source hashes bind the exact mounted child owners; no Update route is inherited. */
+export function coreTrackingMediaSourceBindings() {
+  return Object.fromEntries([
+    "src/components/admin/projects/tracking/TrackingCollections.tsx",
+    "src/components/admin/projects/tracking/TrackingForms.tsx",
+    "src/components/admin/projects/tracking/TrackingVideoFields.tsx",
+    "src/components/admin/media/AdminMediaGalleryField.tsx",
+    "src/components/admin/media/AdminMediaImageField.tsx",
+  ].map(file=>[file,createHash("sha256").update(readFileSync(new URL("../../"+file,import.meta.url))).digest("hex")]));
+}
+export function coreTrackingNonMediaFields(kind,surface) {
+  const fields={profile:["project_id","contractor_name","project_receipt_date","license_receipt_date"],stage:["project_id","name","description","start_date","planned_duration_value","planned_duration_unit","is_visible"],item:["project_id","stage_id","name","description","status","start_date","completion_date","is_visible"]}[kind];
+  assert.ok(fields,"Only exact non-Media Tracking descendants have this negative field contract.");
+  assert.ok(kind==="profile"?surface==="tracking-profile":[kind+"-create",kind+"-edit"].includes(surface));
+  return [...fields,...(surface===kind+"-edit"?[kind+"_id"]:[])].sort();
+}
+export function coreTrackingNonMediaControlInventory(kind,surface) {
+ return coreTrackingNonMediaFields(kind,surface).map(name=>({name,tag:name==="description"?"TEXTAREA":["status","planned_duration_unit"].includes(name)?"SELECT":"INPUT",type:name.endsWith("_id")?"hidden":name==="description"?"textarea":["status","planned_duration_unit"].includes(name)?"select-one":name.endsWith("_date")?"date":name==="planned_duration_value"?"number":name==="is_visible"?"checkbox":"text"}));
+}
+export async function observeCoreTrackingMediaApplicability({form,kind,surface,sourceSha256,fixtures}) {
+  assert.ok(["profile","stage","item","update"].includes(kind));
+  assert.match(sourceSha256,/^[a-f0-9]{64}$/u);await expect(form).toHaveCount(1);await expect(form).toBeVisible();
+  const pathname=new URL(form.page().url()).pathname;
+  const expectedPath=kind==="profile"?"/admin/projects/"+fixtures.project.id+"/tracking":kind==="stage"?"/admin/projects/"+fixtures.commandClosure.tracking.projectId+"/tracking":kind==="item"?"/admin/projects/"+fixtures.commandClosure.tracking.projectId+"/tracking/stages/"+fixtures.commandClosure.tracking.stage.id:"/admin/projects/"+fixtures.commandClosure.tracking.projectId+"/tracking/items/"+fixtures.commandClosure.tracking.item.id;
+  assert.equal(pathname,expectedPath);
+  const formId=await form.getAttribute("id"),expectedId=kind==="profile"?"project-tracking-profile-"+fixtures.project.id:"tracking-"+kind+"-"+(surface.endsWith("-create")?"create":"edit");assert.equal(formId,expectedId);
+  // Only names/types are serialized. No draft value, credential, body or digest is recorded.
+  const fields=await form.locator("input[name],textarea[name],select[name]").evaluateAll(nodes=>nodes.filter(node=>!node.name.startsWith("$ACTION_")).map(node=>({name:node.name,tag:node.tagName,type:node.type})).sort((a,b)=>a.name.localeCompare(b.name)));
+  const gallery=await form.locator("[data-admin-media-gallery-mode]").count(),video=await form.locator("[data-project-tracking-video-fields]").count(),image=await form.locator("[data-admin-media-image-field]").count(),fileInputs=await form.locator('input[type="file"]').count();
+  if(kind==="update"){assert.equal(gallery,1);assert.equal(video,1);for(const name of ["image_urls","videos_json"])assert.equal(fields.filter(row=>row.name===name).length,1);}
+  else {assert.deepEqual(fields,coreTrackingNonMediaControlInventory(kind,surface));assert.equal(gallery,0);assert.equal(video,0);assert.equal(fileInputs,0);assert.equal(image,0);}
+  return {kind,surface,caseId:"core-operational-"+kind+"-"+surface,formId,routePathname:pathname,fields,gallery,video,image,fileInputs,sourceSha256,sourceBindings:coreTrackingMediaSourceBindings(),mountedVisible:true,valuesRecorded:false,automaticCoverage:[],globalClosed:false};
+}
+/** Same seven accepted native saves; source and mounted absence change disposition, never behavior coverage. */
+export function assertCoreTrackingMediaApplicability(input) {
+  const {browser,fixtures,collectionManifest}=input;
+  const saved=assertCoreTrackingDateReceipts(input),sourceBindings=coreTrackingMediaSourceBindings(),declarations=collectionManifest.surfaces.flatMap(row=>row.consumerAdoptionEvidence?.length?row.consumerAdoptionEvidence:[row]);
+  const mounted=[];
+  for(const kind of ["profile","stage","item","update"]){
+    const journey=browser.evidence.find(row=>row.id==="core-operational-"+kind+"-form-roundtrip"),surfaces=kind==="profile"?["tracking-profile"]:[kind+"-create",kind+"-edit"];
+    assert.deepEqual(journey.mediaApplicabilityEvidence.map(row=>row.surface),surfaces);
+    for(const proof of journey.mediaApplicabilityEvidence){
+      const bound=saved.qualified.filter(row=>row.caseId===proof.caseId);assert.equal(bound.length,1);assert.equal(bound[0].surface,proof.surface);assert.equal(proof.kind,kind);assert.equal(proof.sourceSha256,input.sourceSha256);assert.deepEqual(proof.sourceBindings,sourceBindings);assert.equal(proof.mountedVisible,true);assert.equal(proof.valuesRecorded,false);assert.deepEqual(proof.automaticCoverage,[]);assert.equal(proof.globalClosed,false);
+      const path=kind==="profile"?"/admin/projects/"+fixtures.project.id+"/tracking":kind==="stage"?"/admin/projects/"+fixtures.commandClosure.tracking.projectId+"/tracking":kind==="item"?"/admin/projects/"+fixtures.commandClosure.tracking.projectId+"/tracking/stages/"+fixtures.commandClosure.tracking.stage.id:"/admin/projects/"+fixtures.commandClosure.tracking.projectId+"/tracking/items/"+fixtures.commandClosure.tracking.item.id;
+      assert.equal(proof.routePathname,path);assert.equal(proof.formId,kind==="profile"?"project-tracking-profile-"+fixtures.project.id:"tracking-"+kind+"-"+(proof.surface.endsWith("-create")?"create":"edit"));
+      assert.ok(proof.fields.every(row=>Object.keys(row).sort().join(",")==="name,tag,type"));
+      if(kind==="update"){assert.equal(proof.gallery,1);assert.equal(proof.video,1);for(const name of ["image_urls","videos_json"])assert.equal(proof.fields.filter(row=>row.name===name).length,1);}
+      else {assert.deepEqual(proof.fields,coreTrackingNonMediaControlInventory(kind,proof.surface));assert.equal(proof.gallery,0);assert.equal(proof.video,0);assert.equal(proof.fileInputs,0);assert.equal(proof.image,0);assert.ok(proof.fields.every(row=>["INPUT","TEXTAREA","SELECT"].includes(row.tag)&&["hidden","text","textarea","date","number","checkbox","select-one"].includes(row.type)));}
+      mounted.push({...bound[0],kind,surface:proof.surface,sourceBindings});
+    }
+  }
+  const dispositions=[['stage','stages'],['item','items']].map(([kind,plural])=>{
+    const consumer="project-tracking-"+plural,key="collection:"+consumer+":capability:media",manifest=declarations.filter(row=>row.id===consumer);assert.equal(manifest.length,1);assert.equal(manifest[0].applicability.decisions.media.state,"not_applicable");
+    const cells=browser.requiredCases.filter(row=>row.key===key);assert.equal(cells.length,1);assert.equal(cells[0].declaration,"not_applicable");assert.equal(cells[0].historicalDeclaration,"adopted");assert.equal(cells[0].disposition,"NOT_APPLICABLE_PENDING_PROOF");assert.equal(cells[0].status,"open");assert.equal(cells[0].evidence,null);
+    const nativeIds=mounted.filter(row=>row.kind===kind||(kind==="stage"&&row.kind==="profile")).map(row=>row.nativeId);
+    return {key,consumer,boundary:"collection",axis:"media",disposition:"PROVEN_NOT_APPLICABLE",priorDeclaration:"adopted",currentDeclaration:"not_applicable",nativeIds,sourceBindings,reason:"Exact child route mounts scalar Forms; Update Media remains a separate applicable consumer.",automaticCoverage:[]};
+  });
+  const updates=declarations.filter(row=>row.id==="project-tracking-updates");assert.equal(updates.length,1);assert.equal(updates[0].applicability.decisions.media.state,"adopted");
+  const accounting=browser.coverageAccounting;assert.ok(accounting);assert.equal(accounting.historicalRequiredCases,browser.requiredCases.length);assert.equal(accounting.currentApplicableCases,browser.requiredCases.filter(row=>row.declaration!=="not_applicable").length);assert.equal(accounting.retainedNotApplicableCases,dispositions.length);assert.deepEqual(accounting.dispositions.map(row=>row.key).sort(),dispositions.map(row=>row.key).sort());
+  return {status:"pass",dispositions,mounted,nativeSaveCount:saved.qualified.length,positiveControl:{consumer:"project-tracking-updates",nativeIds:mounted.filter(row=>row.kind==="update").map(row=>row.nativeId),mediaApplicable:true},historicalRequiredCases:accounting.historicalRequiredCases,currentApplicableCases:accounting.currentApplicableCases,retainedNotApplicableCases:dispositions.length,automaticCoverage:[],globalClosed:false,boundary:"Two historical Media applicability dispositions only, requiring exact mounted child fields and the existing same-run native accepted-save join. No Stage/Item Media behavior or other capability is removed or credited."};
 }
 
 /** Fixed test field inventory, source-checked against the canonical TrackingForms owner. */

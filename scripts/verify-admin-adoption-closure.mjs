@@ -17,6 +17,7 @@ const context = patch => ({ requiredCases: [{key:"current-applicable-cell"}], ev
   journeySelection:null,selectedJourneyIds:[],executedJourneyIds:[],specializedSettingsResult:null,mediaResult:null,navigationSettingsResult:null,authEntryResult:null,mediaRecoveryResult:null,queryPresentationResult:null,templateControlsResult:null,topicControlsResult:null,projectControlsResult:null,presentationControlsResult:null,domainBulkResult:null,publicPreviewImpactResult:null,sourceHashes:{},process:{env:{}},startedAt:"2026-09-26T00:00:00.000Z",databaseReadback:[],readOnlyReadback:[],menuIntegrityReadback:[],previewNonApplicability:[],...patch });
 const evaluate = patch => vm.runInNewContext(collector + "; receipt()",context(patch));
 const checks = [
+ ["retained-not-applicable-cell-cannot-behavior-pass",{requiredCases:[{key:"current-applicable-cell",declaration:"not_applicable",disposition:"NOT_APPLICABLE_PENDING_PROOF"}]},false],
  ["complete-real-inventories-and-preview",{},true],
  ["running-driver-cannot-close",{driverCompleted:false},false],
  ["recorded-error-cannot-close",{errors:[{id:"failed-step"}]},false],

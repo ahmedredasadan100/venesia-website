@@ -74,7 +74,7 @@ export async function runCoreTopicControlsJourneys(ctx) {
     // Selection is staged in the picker until explicit confirmation; no resource is mutated.
     if(!renderedPickerObserved){
       const container=dialog.locator('[data-media-picker-scroll]'),target=dialog.getByText('يُعاد التحقق من الارتباطات تلقائيًا قبل أي حذف.',{exact:true});
-      renderedAdoption.push(await observeCoreScrollbarAdoption({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:currentRecipe.consumer,surface:currentRecipe.surface}],id:'topic-'+currentRecipe.kind+'-media-scroll',container,target,axis:'y',containment:'overscroll-contain'}));renderedPickerObserved=true;
+      renderedAdoption.push(await observeCoreScrollbarAdoption({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:currentRecipe.consumer,surface:currentRecipe.surface},{boundary:'collection',consumer:'content-editor-pages',surface:new URL(page.url()).pathname}],id:'topic-'+currentRecipe.kind+'-media-scroll',container,target,axis:'y',containment:'overscroll-contain'}));renderedPickerObserved=true;
     }
     await dialog.getByRole("button", { name: cancel ? "إلغاء" : "تأكيد الاختيار", exact: true }).click();
     await expect(dialog).toHaveCount(0); await expect(trigger).toBeFocused();

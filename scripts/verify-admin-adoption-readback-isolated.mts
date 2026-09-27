@@ -1,15 +1,17 @@
+import {assertCoreRenderedAdoptionJoin} from './fixtures/admin-core-rendered-adoption.mjs';
+import {verifyCoreDownloadMediaCompletion} from './verify-admin-core-download-media-isolated.mts';
 import {assertCoreTrackingMediaCompletion} from "./fixtures/admin-core-tracking-media-adoption.mjs";
 import { assertCoreCompanyImageCompletion } from "./fixtures/admin-core-direct-image-adoption.mjs";
 import { verifyCoreDescendantPresentationCompletion, partitionCoreDescendantNativeCheckpoints } from './verify-admin-core-descendant-presentation-isolated.mts';
-import { assertCoreTrackingDateReceipts } from "./fixtures/admin-core-operational-form-journeys.mjs";
+import { assertCoreTrackingDateReceipts, assertCoreTrackingMediaApplicability } from "./fixtures/admin-core-operational-form-journeys.mjs";
 import { verifyCoreTemplatePresentationCompletion } from './verify-admin-core-template-library-presentation-isolated.mts';
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { assertCorePresentationControlsCompleted } from "./verify-admin-core-presentation-controls-isolated.mts";
-import { PRESENTATION_CONTROL_PHASES } from "./fixtures/admin-core-presentation-controls-contract.mjs";
+import { assertCorePresentationControlsCompleted, assertCoreContentScrollCompleted } from "./verify-admin-core-presentation-controls-isolated.mts";
+import { PRESENTATION_CONTROL_PHASES, partitionContentScrollNativeRecords } from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import { assertCoreProjectControlsCompleted } from "./verify-admin-core-project-controls-isolated.mts";
 import { PROJECT_CONTROL_PHASES } from "./fixtures/admin-core-project-controls-contract.mjs";
 import { assertCoreTopicControlsCompleted } from "./verify-admin-core-topic-controls-isolated.mts";
@@ -165,11 +167,21 @@ export function assertCoreNavigationPermissionReceipts(handle: OwnedLocalHandle,
 }
 
 type ExpectedRead = { table: string; id: number; expected: Record<string, unknown> };
+/** Independent current inventory retains every historical identity before any native disposition. */
+export function assertCoreHistoricalCoverageAccounting(browser: Record<string, unknown>, canonical: Record<string, unknown>) {
+  const required=(value:unknown)=>{assert.ok(Array.isArray(value));return value as Array<Record<string,unknown>>;};
+  const identities=(value:unknown)=>required(value).map(row=>{const copy={...row};delete copy.status;delete copy.evidence;return copy;}).sort((a,b)=>String(a.key).localeCompare(String(b.key)));
+  assert.deepEqual(identities(browser.requiredCases),identities(canonical.requiredCases),"No historical identity, declaration, or retained disposition may disappear, duplicate, or change.");
+  assert.deepEqual(browser.coverageAccounting,canonical.coverageAccounting,"Historical accounting must match the independent frozen canonical inventory.");
+  for(const row of required(browser.requiredCases).filter(row=>row.declaration==="not_applicable")){assert.equal(row.status,"open");assert.equal(row.evidence,null);assert.equal(row.disposition,"NOT_APPLICABLE_PENDING_PROOF");}
+  return canonical.coverageAccounting;
+}
+
 /** Complete selected authenticated journeys through the existing owned SQL handle. */
 export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, artifactDir: string) {
   assertOwnedLocalHandle(handle);
   const browser = JSON.parse(readFileSync(join(artifactDir, "admin-adoption-browser.json"), "utf8")) as {
-    status: string; scope?: string; cohort?: string; journeySelection?: string | null; startedAt: string; databaseReadback: ExpectedRead[]; readOnlyReadback: unknown[];
+    status: string; sourceSha256: string; scope?: string; cohort?: string; journeySelection?: string | null; startedAt: string; databaseReadback: ExpectedRead[]; readOnlyReadback: unknown[];
     previewMatrix: Array<{ status: string }>; presentationControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; projectControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; topicControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; templateControls?: {planned:number;completed:number;outcomes:Array<Record<string,unknown>>}; specializedSettings?: { status: string }; media?: MediaJoinResult; mediaRecovery?: MediaJoinResult;
     menuIntegrityReadback: Array<{ topicId: number; menuId: number; expectedItems: number }>;
     evidence: Array<{ id: string; status: string }>; globalClosed: boolean;
@@ -180,7 +192,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     assert.ok(["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls", "presentation-controls"].includes(browser.cohort ?? ""));
     const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST } = await createJiti(import.meta.url, { fsCache: false, moduleCache: false }).import<typeof import("../src/lib/admin/form-system/adoption-manifest.ts")>("../src/lib/admin/form-system/adoption-manifest.ts");
     let canonicalRequiredCases = null;
-    if (browser.journeySelection !== undefined && browser.journeySelection !== null) {
+    { // Reuse the existing local inventory producer for every Core ledger, selected or full.
       const canonicalDirectory = join(artifactDir, "selected-journey-canonical-inventory");
       assert.equal(existsSync(canonicalDirectory), false, "Independent inventory receipt must be freshly generated for this join.");
       execFileSync(process.execPath, [resolve(import.meta.dirname, "qa-admin-adoption-journeys.mjs"), "--inventory-only", "--core-closure"], {
@@ -191,6 +203,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(canonical.inventoryOnly, true); assert.equal(canonical.driverCompleted, false); assert.equal(canonical.status, "pass");
       assert.equal(canonical.globalClosed, false); assert.deepEqual(canonical.evidence, []); assert.deepEqual(canonical.errors, []);
       assert.ok(canonical.requiredCases.every((row: {status:string;evidence:unknown}) => row.status === "open" && row.evidence === null));
+      assertCoreHistoricalCoverageAccounting(browser,canonical);
       canonicalRequiredCases = canonical.requiredCases;
     }
     const isPreviewImpact = browser.journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION;
@@ -244,7 +257,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
         cohortNative = partitionCoreDescendantNativeCheckpoints(handle,nativeCheckpoints);
       }
       if (browser.cohort === "navigation-settings") navigationPermission = assertCoreNavigationPermissionReceipts(handle, browser, cohortNative, draftArtifact);
-      else if (browser.cohort === "page-composition") pageSeo = assertPageSeoReceiptJoin(browser, cohortNative, JSON.parse(readFileSync(join(artifactDir, "core-native-write-faults.json"), "utf8")), assertCorePageSeoCompleted(handle));
+      else if (browser.cohort === "page-composition") { const {ADMIN_COLLECTION_SURFACE_ADOPTION}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import("../src/lib/admin/interaction-system/adoption-manifest.ts")>("../src/lib/admin/interaction-system/adoption-manifest.ts"); const source=JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")); pageSeo = assertPageSeoReceiptJoin(browser, cohortNative, JSON.parse(readFileSync(join(artifactDir, "core-native-write-faults.json"), "utf8")), assertCorePageSeoCompleted(handle),{formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION,sourceSha256:source.sourceSha256}); }
       else assert.ok(nativeCheckpoints.records.every((row: {kind: string; status: string}) => row.kind === kind && row.status === "pass"));
     }
     const mediaCompletion = browser.cohort === "media-library" ? assertCoreMediaCompletionReceipts(handle, browser, nativeCheckpoints) : null;
@@ -317,12 +330,15 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(result.planned,completion.recipes);assert.equal(result.completed,completion.recipes);assert.equal(result.outcomes.length,completion.recipes);
       assert.deepEqual(result.outcomes.map(row=>row.kind).sort(),["content","hero"]);
       const native=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));assert.equal(native.status,"pass");assert.equal(native.ownedRunId,handle.identity.runId);
+      const contentScroll=await assertCoreContentScrollCompleted(handle,browser,native.records);const contentNative=partitionContentScrollNativeRecords(native.records,contentScroll);
+      const contentScrollSource=JSON.parse(readFileSync(join(artifactDir,'public-source-manifest.json'),'utf8'));
+      const contentScrollRendered=assertCoreRenderedAdoptionJoin({browser,sourceSha256:contentScrollSource.sourceSha256,expected:[{journeyId:'core-presentation-content-variant-scroll',observationId:'presentation-content-single-image-media-scroll',axis:'scrollbar',bindings:[{boundary:'form',consumer:'block-template-content-editor',surface:'content:template-edit'}],routePathname:'/admin/pages-blocks/blocks/content/'+contentScroll.fixtureId}]});
       const cleanup=JSON.parse(readFileSync(join(artifactDir,"core-native-write-faults.json"),"utf8"));assert.equal(cleanup.status,"closed");assert.equal(cleanup.activeLocks,0);
-      const faults=native.records.filter((r:Record<string,unknown>)=>String(r.kind).startsWith("domain-write-fault-"));assert.deepEqual(faults,cleanup.records);
-      assert.ok(native.records.every((r:Record<string,unknown>)=>r.kind==="presentation-controls-state"||faults.includes(r)));assert.equal(native.records.filter((r:Record<string,unknown>)=>r.kind==="presentation-controls-state").length,completion.nativeCheckpoints);
+      const faults=contentNative.filter((r:Record<string,unknown>)=>String(r.kind).startsWith("domain-write-fault-"));assert.deepEqual(faults,cleanup.records);
+      assert.ok(contentNative.every((r:Record<string,unknown>)=>r.kind==="presentation-controls-state"||faults.includes(r)));assert.equal(contentNative.filter((r:Record<string,unknown>)=>r.kind==="presentation-controls-state").length,completion.nativeCheckpoints);
       for(const row of result.outcomes){
         assert.equal(row.postRejectionDirtyNavigationCancelled,true);assert.equal(row.exactWrites,1);assert.equal(row.nativeCheckpoints,6);assert.deepEqual(row.nativePhases,PRESENTATION_CONTROL_PHASES);
-        const states=native.records.filter((r:Record<string,unknown>)=>r.kind==="presentation-controls-state"&&r.recipe===row.kind);assert.deepEqual(states.map((r:Record<string,unknown>)=>r.phase),PRESENTATION_CONTROL_PHASES);assert.ok(states.every((r:Record<string,unknown>)=>r.status==="pass"));
+        const states=contentNative.filter((r:Record<string,unknown>)=>r.kind==="presentation-controls-state"&&r.recipe===row.kind);assert.deepEqual(states.map((r:Record<string,unknown>)=>r.phase),PRESENTATION_CONTROL_PHASES);assert.ok(states.every((r:Record<string,unknown>)=>r.status==="pass"));
         const evidence=browser.evidence.filter(item=>item.id==="core-presentation-controls-"+row.kind);assert.equal(evidence.length,1);assert.equal(evidence[0].status,"pass");
         const actual=faults.filter((r:Record<string,unknown>)=>r.entity==="presentation_control_"+row.kind);const tokens=[...new Set(actual.map((r:Record<string,unknown>)=>r.token))];assert.equal(tokens.length,2);
         for(const [index,key]of ["pendingRejection","pendingSave"].entries()){
@@ -331,14 +347,15 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
           assert.equal(sequence.at(-1).ownedLockRolledBack,true);assert.equal(sequence.at(-1).cancellationObserved,index===0);
         }
       }
-      presentationControls={...result,completion,cleanup};
+      presentationControls={...result,completion,cleanup,contentScroll,contentScrollRendered};
     }
     const domainBulk=browser.cohort==="domain-bulk"?await verifyCoreDomainBulkCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"))):null;
-    let trackingDates=null,trackingMedia=null;
+    let trackingDates=null,trackingMedia=null,trackingMediaApplicability=null;
     if(browser.cohort==='domain-forms'&&!browser.journeySelection){
       const {ADMIN_COLLECTION_SURFACE_ADOPTION}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import('../src/lib/admin/interaction-system/adoption-manifest.ts')>('../src/lib/admin/interaction-system/adoption-manifest.ts');
       const source=JSON.parse(readFileSync(join(artifactDir,'public-source-manifest.json'),'utf8'));
       trackingDates=assertCoreTrackingDateReceipts({browser,native:JSON.parse(readFileSync(join(artifactDir,'core-native-control-readback.json'),'utf8')),ownedRunId:handle.identity.runId,sourceSha256:source.sourceSha256,actorId:await readCoreFixedQaActor(handle),fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION});
+      trackingMediaApplicability=assertCoreTrackingMediaApplicability({browser,native:JSON.parse(readFileSync(join(artifactDir,'core-native-control-readback.json'),'utf8')),ownedRunId:handle.identity.runId,sourceSha256:source.sourceSha256,actorId:await readCoreFixedQaActor(handle),fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION});
       trackingMedia=assertCoreTrackingMediaCompletion({browser,native:JSON.parse(readFileSync(join(artifactDir,'core-native-control-readback.json'),'utf8')),ownedRunId:handle.identity.runId,sourceSha256:source.sourceSha256,actorId:await readCoreFixedQaActor(handle),fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION});
     }
     const templateLibraryPresentation = browser.cohort === "template-libraries" ? verifyCoreTemplatePresentationCompletion(handle,browser) : null;
@@ -349,7 +366,8 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     if (specializedSettings) assert.equal(browser.specializedSettings?.status,"pass");
     const writes = await verifyCoreDomainWrites(handle, browser);
     const readOnly = browser.cohort === "domain-commands" ? await verifyCoreReadonlyReadback(handle, browser) : null;
-    const result = { status: "pass", authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, trackingDates, trackingMedia, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const downloadMedia=["template-controls","navigation-settings"].includes(browser.cohort ?? "") ? await verifyCoreDownloadMediaCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256) : null;
+    const result = { status: "pass", downloadMedia, authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, presentationControls, domainBulk, trackingDates, trackingMedia, trackingMediaApplicability, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }

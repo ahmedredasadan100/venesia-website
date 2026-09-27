@@ -1,3 +1,5 @@
+import {CORE_DOWNLOAD_MEDIA_HREF,CORE_DOWNLOAD_LINK} from './fixtures/admin-core-download-media-adoption.mjs';
+import {recordCoreDownloadCheckpoint,prepareCoreDownloadMediaFixture,assertCoreDownloadMediaUnchanged} from './verify-admin-core-download-media-isolated.mts';
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -58,7 +60,7 @@ export async function prepareCoreNavigationSettingsFixtures(handle: OwnedLocalHa
     await handle.query("select public.save_footer_settings($1::jsonb,$2,$3,'qa.navigation.footer.prepare','{}'::jsonb)", [JSON.stringify(baseline), actor.id, actor.username]);
   }
   state.baselineFooter = await footerRows(handle);
-  return { recipe: clone(CORE_NAVIGATION_RECIPE), duplicatePagePath: String(originalPages[0].path), duplicateMenuSlug: String(originalMenus[0].slug), footerBaselineSeeded: !valid, originalFooterHash: hash(originalFooter), phaseCounts: Object.fromEntries(Object.entries(NAVIGATION_SETTINGS_PHASES).map(([key, phases]) => [key, phases.length])) };
+  return { downloadMedia:await prepareCoreDownloadMediaFixture(handle),recipe: clone(CORE_NAVIGATION_RECIPE), duplicatePagePath: String(originalPages[0].path), duplicateMenuSlug: String(originalMenus[0].slug), footerBaselineSeeded: !valid, originalFooterHash: hash(originalFooter), phaseCounts: Object.fromEntries(Object.entries(NAVIGATION_SETTINGS_PHASES).map(([key, phases]) => [key, phases.length])) };
 }
 
 export function validateCoreNavigationSettingsRequest(input: unknown) {
@@ -79,7 +81,7 @@ export function assertCoreNavigationGraph(items: Row[], menuId: number, phase: s
   const base = { menu_id: menuId, href: "#", linked_type: null, linked_id: null, anchor: null, target: "_self", css_class: null, style_preset: "default", is_visible: true, item_type: "parent" };
   if (after("item-a")) expected.push({ ...base, id: ids.a, parent_id: null, label: r.a, sort_order: after("reordered") && !after("subtree-deleted") ? 20 : 10 });
   if (after("item-b") && !after("subtree-deleted")) expected.push({ ...base, id: ids.b, parent_id: null, label: r.b, sort_order: after("reordered") ? 10 : 20 });
-  if (after("item-c") && !after("subtree-deleted")) expected.push({ ...base, id: ids.c, parent_id: after("reparented") ? ids.b : ids.a, label: after("item-edited") ? r.editedC : r.c, item_type: "external", href: after("item-edited") ? r.editedHref : r.href, target: "_blank", css_class: after("item-edited") ? r.css : null, style_preset: after("item-edited") ? "gold-card" : "default", is_visible: !after("hidden"), sort_order: 10 });
+  if (after("item-c") && !after("subtree-deleted")) expected.push({ ...base, id: ids.c, parent_id: after("reparented") ? ids.b : ids.a, label: after("item-edited") ? r.editedC : r.c, item_type: after("item-edited") ? "custom" : "external", href: after("item-edited") ? CORE_DOWNLOAD_MEDIA_HREF : r.href, target: "_blank", css_class: after("item-edited") ? r.css : null, style_preset: after("item-edited") ? "gold-card" : "default", is_visible: !after("hidden"), sort_order: 10 });
   assert.equal(new Set(items.map(row => row.id)).size, items.length);
   const keys = ["id", ...Object.keys(base), "parent_id", "label", "sort_order"];
   assert.deepEqual(items.map(row => graphSelect(row, keys)).sort((a, b) => Number(a.id) - Number(b.id)), expected.map(row => select(row, keys)).sort((a, b) => Number(a.id) - Number(b.id)), "Exact bounded Menu graph and all authored fields must match.");
@@ -96,7 +98,7 @@ export async function buildExpectedCoreNavigationFooter(baselineFooter: Row[], m
   slots = slots.map((slot, i) => ({ ...slot, enabled: true, heading: r.headings[i] }));
   slots[0].config = { title: r.title, body: r.body, showBrandIcon: false, cta: { enabled: false, label: "", href: "", target: "_self" } };
   slots[1].config = { links: [
-    { label: r.editedLink, href: "", target: "_self", visible: true, sortOrder: 0, link: serializeAdminLink({ link_kind: "external", href: r.editedHref, target: "_blank" }) },
+    { label: r.editedLink, href: "", target: "_self", visible: true, sortOrder: 0, link: serializeAdminLink(CORE_DOWNLOAD_LINK) },
     { label: r.links[0], href: "", target: "_self", visible: true, sortOrder: 1, link: serializeAdminLink({ link_kind: "external", href: r.hrefs[0], target: "_blank" }) },
   ] };
   // Keep defaults from the actual owner for unedited configuration fields.
@@ -175,7 +177,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
     if (phase !== "baseline") assert.deepEqual(snapshot, state.last[entity], "Rejected and local-only changes must preserve exact persisted rows/revisions.");
   }
   state.last[entity] = clone(snapshot); state.phase[entity]++; state.auditCursor[entity] = await auditHead(handle);
-  return { ...request, status: "pass", actorBoundAuditCount: audit.length, snapshotHash: hash(snapshot), pageId: state.pageId ?? null, menuId: state.menuId ?? null, duplicateMenuId: state.duplicateId ?? null, itemIds: { ...state.itemIds }, globalClosed: false };
+  return recordCoreDownloadCheckpoint(handle,{ ...request, status: "pass", downloadMedia:await assertCoreDownloadMediaUnchanged(handle), actorBoundAuditCount: audit.length, snapshotHash: hash(snapshot), pageId: state.pageId ?? null, menuId: state.menuId ?? null, duplicateMenuId: state.duplicateId ?? null, itemIds: { ...state.itemIds }, globalClosed: false });
 }
 
 /** Owned teardown restores captured four-key policy before deleting only identities created above. */

@@ -1,3 +1,4 @@
+import {CORE_DOWNLOAD_LINK} from './admin-core-download-media-adoption.mjs';
 import assert from "node:assert/strict";
 
 // Finite verification recipes. Applicability comes from the existing Form
@@ -54,19 +55,19 @@ export function assertTemplateControlsProjection(kind, row, fixtures) {
   if (kind === "cards") {
     assert.equal(c.columns, 4);
     assert.deepEqual(c.items, [
-      { ...r.cards[1], link: external(r.hrefs[1], "_self"), target: "_self" },
+      { ...r.cards[1], link: CORE_DOWNLOAD_LINK, target: "_blank" },
       { ...r.cards[0], link: external(r.hrefs[0], "_blank"), target: "_blank" },
     ]);
   }
   if (kind === "breadcrumb") {
     assert.deepEqual(c, { source: "manual", showHome: false, currentLabelOverride: r.title, manualItems: [
-      { label: r.breadcrumbs[1], link: external(r.hrefs[1], "_self") },
+      { label: r.breadcrumbs[1], link: CORE_DOWNLOAD_LINK },
       { label: r.breadcrumbs[0], link: external(r.hrefs[0], "_blank") },
     ] });
   }
   if (kind === "cta") {
     assert.equal(c.backgroundStyle, "gradient");
-    assert.deepEqual(c.primaryCta, { label: r.primaryLabel, link: external(r.hrefs[1], "_self"), target: "_self" });
+    assert.deepEqual(c.primaryCta, { label: r.primaryLabel, link: CORE_DOWNLOAD_LINK, target: "_blank" });
     assert.equal(Object.hasOwn(c, "secondaryCta"), false, "Explicit clear must not retain the old destination or empty CTA.");
   }
   if (["cards", "cta"].includes(kind)) assert.deepEqual([c.title, c.showTitle, c.titleBold, c.titleAlignment], [r.title, true, false, "center"]);

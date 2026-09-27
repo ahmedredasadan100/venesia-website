@@ -1,3 +1,4 @@
+import {recordCoreDownloadCheckpoint,prepareCoreDownloadMediaFixture,assertCoreDownloadMediaUnchanged,type DownloadAsset} from './verify-admin-core-download-media-isolated.mts';
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
@@ -6,6 +7,7 @@ import { TEMPLATE_CONTROL_RECIPES, TEMPLATE_CONTROL_PHASES, validateTemplateCont
 type Row = Record<string, unknown>;
 type Kind = keyof typeof TEMPLATE_CONTROL_RECIPES;
 type PublicFixtures = {
+  downloadMedia:DownloadAsset;
   templates: Array<{kind: Kind;id:number;name:string;slug:string}>;
   category:{id:number;name:string;slug:string};otherCategory:{id:number;name:string;slug:string};
   series:{id:number;name:string;slug:string};article:{id:number;title:string};news:{id:number;title:string};
@@ -39,7 +41,7 @@ export async function prepareCoreTemplateControlsFixtures(handle:OwnedLocalHandl
     const row=rows[0];assert.ok(!assignmentRows.some(item=>item.kind===kind.replaceAll("-","_")&&Number(item.template_id)===Number(row.id)),"Control fixture must be physically unassigned.");
     templates.push({kind,...ids(row)});phases[kind]=0;
   }
-  const fixtures:PublicFixtures={templates,category:ids(categories[0]),otherCategory:ids(categories[1]),series:ids(series[0]),article:{id:Number(article[0].id),title:String(article[0].title)},news:{id:Number(news[0].id),title:String(news[0].title)}};
+  const fixtures:PublicFixtures={downloadMedia:await prepareCoreDownloadMediaFixture(handle),templates,category:ids(categories[0]),otherCategory:ids(categories[1]),series:ids(series[0]),article:{id:Number(article[0].id),title:String(article[0].title)},news:{id:Number(news[0].id),title:String(news[0].title)}};
   states.set(handle,{actorId:Number(actor[0].id),fixtures,tables,assignmentRows,phases,auditHeads:{},last:{},nativeReads:0,writes:0});
   return fixtures;
 }
@@ -77,7 +79,7 @@ export async function readCoreTemplateControlsCheckpoint(handle:OwnedLocalHandle
     }
   }
   s.phases[kind]++;s.nativeReads++;
-  return {id:request.id,kind:request.kind,recipe:kind,phase,status:"pass",rowHash:hash(current),otherRowsHash:hash(rows.filter(row=>Number(row.id)!==target.id)),auditCount:audit.length,actorBound:true,assignmentGraphUnchanged:true};
+  return recordCoreDownloadCheckpoint(handle,{templateId:target.id,id:request.id,kind:request.kind,recipe:kind,phase,status:"pass",downloadMedia:await assertCoreDownloadMediaUnchanged(handle),rowHash:hash(current),otherRowsHash:hash(rows.filter(row=>Number(row.id)!==target.id)),auditCount:audit.length,actorBound:true,assignmentGraphUnchanged:true});
 }
 
 export function assertCoreTemplateControlsCompleted(handle:OwnedLocalHandle){

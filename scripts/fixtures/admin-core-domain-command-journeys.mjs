@@ -1,3 +1,4 @@
+import {createCoreDomainVisibilityControl} from './admin-core-domain-visibility-control.mjs';
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
 import { createJiti } from 'jiti';
@@ -83,9 +84,9 @@ export async function runCoreDomainCommandJourneys(ctx) {
   for (const recipe of plan) await run('domain-' + recipe.entity + '-visibility-command-reload-audit', [], async () => {
     const startedAt = new Date().toISOString();
     await observe('domain-open-' + recipe.entity, () => page.goto(origin + recipe.path + '?q=' + encodeURIComponent(recipe.label), { waitUntil: 'domcontentloaded' }));
-    const visibility = page.locator('[data-admin-row-action="visibility"][data-admin-entity-id="' + recipe.id + '"] button');
-    await expect(visibility).toHaveCount(1, { timeout: 60_000 }); await expect(visibility).toBeEnabled({ timeout: 60_000 });
-    const original = await visibility.getAttribute('aria-pressed');
+    const visibility = createCoreDomainVisibilityControl({page,recipe});
+    await visibility.expectEnabled();
+    const original = await visibility.readState();
     assert.ok(original === 'true' || original === 'false');
     const originalState = recipe.values[original === 'true' ? 0 : 1];
     const dialog = page.locator('[data-admin-confirm-dialog]');
@@ -98,9 +99,9 @@ export async function runCoreDomainCommandJourneys(ctx) {
     try {
       if (coreDomainVisibilityRequiresConfirmation(recipe,original)) {
         await observe('domain-confirmation-cancel', async () => {
-          await visibility.click(); await expect(dialog).toHaveCount(1);
+          await visibility.invoke(); await expect(dialog).toHaveCount(1);
           await dialog.locator('[data-admin-confirm-cancel]').click(); await expect(dialog).toHaveCount(0);
-          await expect(visibility).toBeFocused(); await expect(visibility).toHaveAttribute('aria-pressed', original);
+          await visibility.expectReturnedFocus(); await visibility.expectState(original);
           assert.equal(posts.length, 0, 'Cancelled confirmation must not dispatch a command.'); confirmationCancelled = true;
         });
       }
@@ -114,9 +115,9 @@ export async function runCoreDomainCommandJourneys(ctx) {
         };
         const removeRejectedRoute = await registerCorePageRoute(page, '**/*', rejectBeforeDispatch);
         try {
-          await observe('domain-real-client-pre-dispatch-failure', () => visibility.click());
+          await observe('domain-real-client-pre-dispatch-failure', () => visibility.invoke());
           await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible({ timeout: 60_000 });
-          await expect(visibility).toHaveAttribute('aria-pressed', original); await expect(visibility).toBeEnabled();
+          await visibility.expectState(original); await visibility.expectEnabled();
           assert.equal(aborted, 1, 'Exactly one actual request must be rejected before it reaches the server.');
         } finally { await removeRejectedRoute(); }
         rollbackRetried = true;
@@ -141,27 +142,27 @@ export async function runCoreDomainCommandJourneys(ctx) {
         try {
           const response = actionResponse();
           response.catch(() => {});
-          if (confirmationRequired) { await visibility.click(); await expect(dialog).toHaveCount(1); }
+          if (confirmationRequired) { await visibility.invoke(); await expect(dialog).toHaveCount(1); }
           const trigger = confirmationRequired ? dialog.locator('[data-admin-confirm-submit]') : visibility;
-          const click = trigger.click();
+          const click = confirmationRequired ? trigger.click() : visibility.invoke();
           click.catch(() => {});
           if (index === 0 || confirmationRequired) {
             await Promise.race([held, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('The real domain command did not reach its owned request hold.')), 30_000); })]);
-            await expect(trigger).toBeDisabled();
-            await trigger.evaluate(button => button.click());
+            if(confirmationRequired){await expect(trigger).toBeDisabled();await trigger.evaluate(button => button.click());}
+            else await visibility.assertPendingDuplicateBlocked(()=>intercepted);
             assert.equal(intercepted, 1, 'A disabled pending trigger must not dispatch a duplicate.');
             release(); await continued; if (routeFailure) throw routeFailure; pendingDedup = true;
           }
           const acknowledged = await response; assertActionAcknowledged(acknowledged); await click;
           if (confirmationRequired) await expect(dialog).toHaveCount(0, { timeout: 60_000 });
-          await expect(visibility).toBeEnabled({ timeout: 60_000 }); await expect(visibility).toHaveAttribute('aria-pressed', expected);
+          await visibility.expectEnabled(); await visibility.expectState(expected);
           if (index === 0 || confirmationRequired) assert.equal(intercepted, 1);
         } finally {
           clearTimeout(timer); release();
           if (removeHeldRoute) await removeHeldRoute();
         }
         await observe('domain-reload-' + recipe.entity + '-' + index, () => page.reload({ waitUntil: 'domcontentloaded' }));
-        await expect(visibility).toHaveAttribute('aria-pressed', expected, { timeout: 60_000 });
+        await visibility.expectState(expected);
       }
       assert.equal(posts.length, recipe.preDispatchFailure ? 3 : 2, 'Only the measured failure and two explicit visibility commands may execute.');
       const auditActions = recipe.audit.startsWith('project_tracking_') ? ['project_children.update']

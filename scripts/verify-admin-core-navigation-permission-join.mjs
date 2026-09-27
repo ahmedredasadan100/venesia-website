@@ -15,7 +15,6 @@ const declarations=extract(ownerSource,['NAVIGATION_SETTINGS_PHASES','CORE_NAVIG
 const js=ts.transpileModule(declarations,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
 const handles=new WeakSet(),states=new WeakMap(),own=handle=>assert.ok(handles.has(handle),'Foreign owned handle');
 const owner=new Function('assert','assertOwnedLocalHandle','states','assertCoreFormDraftRestorationJoin',js+';return {assertCoreNavigationPermissionReceipts,assertCoreNavigationSettingsCompleted,NAVIGATION_SETTINGS_PHASES,CORE_NAVIGATION_RECIPE};')(assert,own,states,assertCoreFormDraftRestorationJoin);
-assert.match(source,/if \(browser\.cohort === "navigation-settings"\) navigationPermission = assertCoreNavigationPermissionReceipts\(handle, browser, nativeCheckpoints, draftArtifact\)/);
 assert.match(source,/navigationSettings = browser\.cohort === "navigation-settings" \? \{ \.\.\.assertCoreNavigationSettingsCompleted\(handle\), permission: navigationPermission \}/);
 function fixture(){const handle={identity:{runId:'owned-page-permission-controls'}};handles.add(handle);
 const navigation=Object.entries(owner.NAVIGATION_SETTINGS_PHASES).flatMap(([entity,phases])=>phases.map(phase=>({id:crypto.randomUUID(),kind:'navigation-settings-state',entity,phase,status:'pass',pageId:91,actorBoundAuditCount:phase==='created'?1:0,snapshotHash:'a'.repeat(64),globalClosed:false})));
@@ -88,4 +87,48 @@ function restorationFixture(){const f=fixture();f.native.ownedRunId=f.handle.ide
 test('actual-Page-restoration-pair-joins-before-created-state-with-no-orphan-records',()=>{const f=restorationFixture(),result=f.check();assert.equal(result.nativeCheckpoints,36);assert.equal(result.navigationCheckpoints,31);assert.equal(result.globalClosed,false);});
 const restorationNegatives={missingReceipt:f=>f.draftRef.value=undefined,wrongCase:f=>f.restoration.caseId='different',wrongJourney:f=>f.restoration.journeyId='different',wrongConsumer:f=>f.restoration.formConsumer='menu-quick-create',wrongPath:f=>f.restoration.routePathname='/admin/other',wrongDirtyNavigation:f=>f.restoration.dirtyNavigation='navigation',unknownCommit:f=>f.restoration.matchingActionForwarded=true,absentAbort:f=>f.restoration.abortedActions=0,missingAfter:f=>f.native.records.splice(3,1),changedState:f=>f.restorationAfter.publicDataSha256='f'.repeat(64),foreignRun:f=>f.restorationBefore.ownedRunId='foreign',duplicateProof:f=>f.draftRef.value.receipts.push({...f.restoration}),orphanAfter:f=>f.native.records.push({...f.restorationAfter,id:crypto.randomUUID()}),wrongOrder:f=>{const pair=f.native.records.splice(2,2);f.native.records.push(...pair);}};
 for(const[name,mutate]of Object.entries(restorationNegatives))test('restoration-reject-'+name,()=>{const f=restorationFixture();mutate(f);assert.throws(f.check);});
+// Execute the actual collector's current partition-before-permission statements.
+// A completed owned descendant prefix must never bypass the Page join or be counted twice.
+const descendantSource=fs.readFileSync('scripts/verify-admin-core-descendant-presentation-isolated.mts','utf8'),descendantStates=new WeakMap();
+const partitionJs=ts.transpileModule(extract(descendantSource,['phases','partitionCoreDescendantNativeCheckpoints']),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+const partition=new Function('assert','assertOwnedLocalHandle','states',partitionJs+';return partitionCoreDescendantNativeCheckpoints;')(assert,own,descendantStates);
+function currentCollectorWiring(text){
+ const ast=ts.createSourceFile('readback.mts',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS),declarations=[],partitionIfs=[],permissionIfs=[];
+ function calls(node,name){let found=false;function visit(child){if(ts.isCallExpression(child)&&ts.isIdentifier(child.expression)&&child.expression.text===name)found=true;ts.forEachChild(child,visit);}visit(node);return found;}
+ function directlyCalls(node,name){return ts.isBlock(node)&&node.statements.some(row=>ts.isExpressionStatement(row)&&ts.isBinaryExpression(row.expression)&&ts.isCallExpression(row.expression.right)&&ts.isIdentifier(row.expression.right.expression)&&row.expression.right.expression.text===name);}
+ function visit(node){
+  if(ts.isVariableStatement(node)&&node.declarationList.declarations.some(row=>ts.isIdentifier(row.name)&&row.name.text==='cohortNative'))declarations.push(node);
+  if(ts.isIfStatement(node)&&directlyCalls(node.thenStatement,'verifyCoreDescendantPresentationCompletion')&&directlyCalls(node.thenStatement,'partitionCoreDescendantNativeCheckpoints'))partitionIfs.push(node);
+  if(ts.isIfStatement(node)&&ts.isBinaryExpression(node.expression)&&node.expression.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken&&node.expression.left.getText(ast)==='browser.cohort'&&ts.isStringLiteral(node.expression.right)&&node.expression.right.text==='navigation-settings'&&calls(node.thenStatement,'assertCoreNavigationPermissionReceipts'))permissionIfs.push(node);
+  ts.forEachChild(node,visit);
+ }visit(ast);assert.equal(declarations.length,1);assert.equal(partitionIfs.length,1);assert.equal(permissionIfs.length,1);assert.ok(declarations[0].pos<partitionIfs[0].pos&&partitionIfs[0].end<=permissionIfs[0].pos);
+ const statements=declarations[0].getText(ast)+'\n'+partitionIfs[0].getText(ast)+'\nif ('+permissionIfs[0].expression.getText(ast)+') '+permissionIfs[0].thenStatement.getText(ast);
+ const js=ts.transpileModule(statements,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+ return new Function('browser','handle','nativeCheckpoints','draftArtifact','verifyCoreDescendantPresentationCompletion','partitionCoreDescendantNativeCheckpoints','assertCoreNavigationPermissionReceipts','let descendantPresentation=null,navigationPermission=null;'+js+';return {cohortNative,descendantPresentation,navigationPermission};');
+}
+function partitionFixture(withRestoration=false){
+ const f=withRestoration?restorationFixture():fixture(),proofs=new Map(['before','after'].map(phase=>{const id=crypto.randomUUID();return[id,{id,key:'controlled-exact-descendant',phase,ownedRunId:f.handle.identity.runId,actorId:7}];}));
+ const state={cleaned:true,plan:[{preferenceId:null}],proofs};descendantStates.set(f.handle,state);
+ const prefix=[...proofs.values()].map(row=>({kind:'descendant-presentation-state',status:'pass',...row}));f.native.ownedRunId=f.handle.identity.runId;
+ return{...f,state,prefix,mixed:{...f.native,records:[...prefix,...f.native.records]}};
+}
+function proveWiring(f,text=source,cohort='navigation-settings'){
+ const callOrder=[],browser={...f.browser,cohort},draft=f.draftRef.value;
+ const actual=currentCollectorWiring(text)(browser,f.handle,f.mixed,draft,
+  (handle,actualBrowser,native)=>{assert.equal(handle,f.handle);assert.equal(actualBrowser,browser);assert.equal(native,f.mixed);callOrder.push('complete');partition(handle,native);return{status:'pass',controlledCompletion:true};},
+  (handle,native)=>{assert.equal(handle,f.handle);assert.equal(native,f.mixed);callOrder.push('partition');return partition(handle,native);},
+  (handle,actualBrowser,native,artifact)=>{assert.equal(handle,f.handle);assert.equal(actualBrowser,browser);assert.equal(artifact,draft);callOrder.push('permission');assert.deepEqual(native.records,f.native.records);return owner.assertCoreNavigationPermissionReceipts(handle,actualBrowser,native,artifact);});
+ assert.deepEqual(callOrder,cohort==='navigation-settings'?['complete','partition','permission']:cohort==='page-composition'?['complete','partition']:[]);
+ if(cohort==='navigation-settings'){assert.equal(actual.navigationPermission.nativeCheckpoints,f.native.records.length);assert.equal(actual.navigationPermission.navigationCheckpoints,31);assert.equal(actual.navigationPermission.globalClosed,false);assert.deepEqual(actual.navigationPermission.automaticCoverage,[]);}
+ else assert.equal(actual.navigationPermission,null);return actual;
+}
+test('collector-partitions-exact-owned-prefix-before-existing-Page-join',()=>proveWiring(partitionFixture()));
+test('collector-preserves-Page-draft-pair-in-partitioned-remainder',()=>proveWiring(partitionFixture(true)));
+test('collector-keeps-PageComposition-partition-but-does-not-run-Page-create-join',()=>proveWiring(partitionFixture(),source,'page-composition'));
+test('collector-leaves-unrelated-cohort-unchanged',()=>{const f=partitionFixture(),result=proveWiring(f,source,'media-library');assert.equal(result.cohortNative,f.mixed);});
+const partitionNegatives={missingPrefix:f=>f.mixed.records.shift(),duplicatePrefix:f=>f.mixed.records.splice(1,0,f.prefix[0]),foreignPrefix:f=>f.mixed.records[0]={...f.prefix[0],id:crypto.randomUUID()},outOfOrder:f=>f.mixed.records.splice(0,2,...f.prefix.toReversed()),missingCompletion:f=>f.state.cleaned=false,foreignRun:f=>f.mixed.ownedRunId='foreign',foreignActor:f=>f.mixed.records[0]={...f.prefix[0],actorId:8},extraDescendantTail:f=>f.mixed.records.push({...f.prefix[0],id:crypto.randomUUID()}),reusedPrefixIdentity:f=>f.mixed.records.push({...f.saved,id:f.prefix[0].id}),orphanPageSave:f=>f.mixed.records.push({...f.saved,id:crypto.randomUUID()}),orphanFingerprint:f=>f.mixed.records.push({...f.after,id:crypto.randomUUID()}),foreignHandle:f=>handles.delete(f.handle)};
+for(const[name,mutate]of Object.entries(partitionNegatives))test('collector-reject-'+name,()=>{const f=partitionFixture();mutate(f);assert.throws(()=>proveWiring(f));});
+const wiringNegatives={unpartitionedPageInput:text=>text.replace('assertCoreNavigationPermissionReceipts(handle, browser, cohortNative, draftArtifact)','assertCoreNavigationPermissionReceipts(handle, browser, nativeCheckpoints, draftArtifact)'),missingDraft:text=>text.replace('cohortNative, draftArtifact)','cohortNative, undefined)'),skippedPartition:text=>text.replace('cohortNative = partitionCoreDescendantNativeCheckpoints(handle,nativeCheckpoints);','cohortNative = nativeCheckpoints;'),missingCompletion:text=>text.replace('descendantPresentation = verifyCoreDescendantPresentationCompletion(handle,browser,nativeCheckpoints);','descendantPresentation = null;'),wrongCohort:text=>text.replace('if (browser.cohort === "navigation-settings") navigationPermission','if (browser.cohort === "page-composition") navigationPermission')};
+for(const[name,mutate]of Object.entries(wiringNegatives))test('collector-wiring-reject-'+name,()=>{const bad=mutate(source);assert.notEqual(bad,source);assert.throws(()=>proveWiring(partitionFixture(true),bad));});
+
 const artifact={status:'pass',count:checks.length,checks,sourceSha256:crypto.createHash('sha256').update(source).digest('hex'),canonicalOwnerSha256:crypto.createHash('sha256').update(ownerSource).digest('hex'),automaticCoverage:[],boundary:'Actual canonical aggregate and current Navigation completion functions with controlled native/Browser ports; no live Browser or database permission evidence.'};fs.writeFileSync(path.join(dir,'navigation-permission-join-controls.json'),JSON.stringify(artifact,null,2)+'\n');console.log(JSON.stringify({status:artifact.status,count:artifact.count}));

@@ -82,6 +82,19 @@ async function observe(step, task) {
     throw error;
   }
 }
+// These are retained historical cells in this existing closure ledger, not new capabilities.
+function retainedTrackingMediaCases() {
+ return ["stages","items"].map(child=>({key:"collection:project-tracking-"+child+":capability:media",consumer:"project-tracking-"+child,boundary:"collection",axis:"media",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
+}
+function assertHistoricalCoreCaseIdentity(cases) {
+ assert.equal(cases.length,959,"The bounded closure ledger must retain every historical case.");
+ assert.equal(new Set(cases.map(row=>row.key)).size,cases.length,"Duplicate historical case identity.");
+ assert.equal(createHash("sha256").update(JSON.stringify(cases.map(row=>row.key).sort())).digest("hex"),"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71","Historical required-case identity changed; an applicability correction cannot remove or replace any cell.");
+ const retained=retainedTrackingMediaCases();
+ assert.deepEqual(cases.filter(row=>row.declaration==="not_applicable").map(row=>row.key).sort(),retained.map(row=>row.key).sort(),"Only the two source-bound Tracking Media corrections may be retained as not applicable.");
+ for(const row of retained){const actual=cases.find(cell=>cell.key===row.key);for(const[key,value]of Object.entries(row))assert.equal(actual[key],value);}
+ return {historicalRequiredCases:cases.length,currentApplicableCases:cases.filter(row=>row.declaration!=="not_applicable").length,retainedNotApplicableCases:retained.length,historicalIdentitySha256:"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",dispositions:retained,automaticCoverage:[],globalClosed:false};
+}
 function receipt() {
   const evidenceIdCounts = new Map();
   for (const row of evidence) evidenceIdCounts.set(row.id, (evidenceIdCounts.get(row.id) ?? 0) + 1);
@@ -91,13 +104,14 @@ function receipt() {
   const covered = new Map(eligibleEvidence.flatMap(row => row.coverage.map(key => [key, row.id])));
   const settledPreviewMatrix = previewMatrix.map(row => row.status === "behavior_verified" && eligibleIds.has(row.evidence)
     ? row : { ...row, status: "open", evidence: null });
-  const cases = requiredCases.map(row => ({ ...row, status: covered.has(row.key) ? "behavior_verified" : "open", evidence: covered.get(row.key) ?? null }));
+  const cases = requiredCases.map(row => ({ ...row, status: row.declaration !== "not_applicable" && covered.has(row.key) ? "behavior_verified" : "open", evidence: row.declaration !== "not_applicable" ? covered.get(row.key) ?? null : null }));
   return {
     status: errors.length ? "fail" : inventoryOnly || driverCompleted ? "pass" : "running",
     journeySelection, selectedJourneyIds, executedJourneyIds: [...executedJourneyIds], wholeCohortExecuted: journeySelection === null && driverCompleted,
     inventoryOnly, driverCompleted, scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreClosure ? coreCohort : null, proofBoundary: inventoryOnly ? "applicability inventory only; no browser execution" : "owned local production Next and real authenticated application persistence",
     globalClosed: journeySelection === null && driverCompleted && errors.length === 0 && cases.length > 0 && cases.every(row => row.status === "behavior_verified") && inventory.every(row => row.domainJourneyInventoryComplete) && settledPreviewMatrix.every(row => row.status === "behavior_verified"),
     inventorySource: sourceHashes, sourceSha256: process.env.QA_ADMIN_SOURCE_SHA256 ?? null,
+    coverageAccounting: typeof historicalCoverageAccounting === "undefined" ? null : historicalCoverageAccounting,
     startedAt, publicPreviewImpact: publicPreviewImpactResult, specializedSettings: specializedSettingsResult, media: mediaResult, navigationSettings: navigationSettingsResult, authEntry: authEntryResult, mediaRecovery: mediaRecoveryResult, queryPresentation: queryPresentationResult, templateControls: templateControlsResult, topicControls: topicControlsResult, projectControls: projectControlsResult, presentationControls: presentationControlsResult, domainBulk: domainBulkResult, inventory, coverageModel: "Canonical applicable capability cells and generic shared Form lifecycle only; specialized and Collection domain journeys remain unclassified/open.", requiredCases: cases, evidence, databaseReadback, readOnlyReadback, menuIntegrityReadback, previewMatrix: settledPreviewMatrix, previewNonApplicability, errors, expectedBlockedRequests: typeof expectedBlockedRequests === "undefined" ? [] : expectedBlockedRequests,
     limitations: ["Unexecuted applicability cells remain open; successful representative journeys do not close the full inventory.",
       "Database readback expectations require the owning parent to verify through its opaque owned handle.",
@@ -129,7 +143,12 @@ for (const consumer of inventory) {
     requiredCases.push({ key: [consumer.boundary, consumer.id, "capability", axis].join(":"), consumer: consumer.id, boundary: consumer.boundary, axis, scenario: decision.state === "approved_exception" ? "approved_exception_contract_behavior" : "complete_applicable_capability_behavior", declaration: decision.state });
   }
 }
+for (const retained of retainedTrackingMediaCases()) {
+ const consumer=inventory.filter(row=>row.boundary===retained.boundary&&row.id===retained.consumer);assert.equal(consumer.length,1);assert.equal(consumer[0].applicability.media.state,"not_applicable");
+ assert.equal(requiredCases.some(row=>row.key===retained.key),false);requiredCases.push({...retained,rationale:consumer[0].applicability.media.rationale});
+}
 for (const preview of collections.ADMIN_ENTITY_PREVIEW_CAPABILITY_ADOPTION) requiredCases.push({ key: "preview:" + preview.id, consumer: preview.id, boundary: "preview", scenario: "actual_destination" });
+const historicalCoverageAccounting = assertHistoricalCoreCaseIdentity(requiredCases);
 write("admin-adoption-browser.json", receipt());
 if (inventoryOnly) {
   console.log(JSON.stringify({ inventoryOnly: true, consumers: inventory.length, axes: axes.length, requiredCases: requiredCases.length, globalClosed: false }));
@@ -362,7 +381,7 @@ try {
    } else if (coreCohort === "domain-bulk") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreDomainBulkJourneys}=await import("./fixtures/admin-core-domain-bulk-journeys.mjs");
-    domainBulkResult=await runCoreDomainBulkJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output}),databaseReadback});
+    domainBulkResult=await runCoreDomainBulkJourneys({requiredCases,page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output}),databaseReadback});
    } else if (coreCohort === "presentation-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCorePresentationControlsJourneys}=await import("./fixtures/admin-core-presentation-controls-journeys.mjs");

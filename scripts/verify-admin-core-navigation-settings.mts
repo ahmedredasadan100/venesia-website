@@ -1,3 +1,4 @@
+import {CORE_DOWNLOAD_MEDIA_HREF} from './fixtures/admin-core-download-media-adoption.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -6,7 +7,7 @@ import { createJiti } from "jiti";
 import { buildCoreNavigationSettingsPlan } from "./fixtures/admin-core-navigation-settings-journeys.mjs";
 const root = resolve(import.meta.dirname, "..");
 const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false, alias: { "server-only": resolve(root, "node_modules/next/dist/compiled/server-only/empty.js") } });
-const owner = await jiti.import<typeof import("./verify-admin-core-navigation-settings-isolated.mts")>(resolve(root, "scripts/verify-admin-core-navigation-settings-isolated.mts"));
+import * as owner from './verify-admin-core-navigation-settings-isolated.mts';
 const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import<typeof import("../src/lib/admin/form-system/adoption-manifest.ts")>(resolve(root, "src/lib/admin/form-system/adoption-manifest.ts"));
 const { ADMIN_COLLECTION_SURFACE_ADOPTION: collections } = await jiti.import<typeof import("../src/lib/admin/interaction-system/adoption-manifest.ts")>(resolve(root, "src/lib/admin/interaction-system/adoption-manifest.ts"));
 const requiredCases = manifest.filter(row => ["pages-quick-create", "menu-quick-create"].includes(row.id)).flatMap(row => row.surfaces.flatMap(surface => ["save_reload", "failure_preserves_input", "retry"].map(scenario => ({ key: ["form", row.id, surface, scenario].join(":"), boundary: "form", consumer: row.id, surface, scenario }))));
@@ -26,7 +27,7 @@ for (const changed of [{ sql: "select secret" }, { expected: [] }, { menuId: 1 }
 await test("Every declared finite phase is independently addressable", () => { for (const [entity, phases] of Object.entries(owner.NAVIGATION_SETTINGS_PHASES)) for (const phase of phases) owner.validateCoreNavigationSettingsRequest({ ...request, entity, phase }); assert.equal(Object.values(owner.NAVIGATION_SETTINGS_PHASES).reduce((sum, phases) => sum + phases.length, 0), 31); });
 const r = owner.CORE_NAVIGATION_RECIPE.menu, ids = { a: 101, b: 102, c: 103 };
 const base = { menu_id: 41, parent_id: null, href: "#", linked_type: null, linked_id: null, anchor: null, target: "_self", css_class: null, style_preset: "default", is_visible: true, item_type: "parent" };
-const graph = [{ ...base, id: 101, label: r.a, sort_order: 20 }, { ...base, id: 102, label: r.b, sort_order: 10 }, { ...base, id: 103, parent_id: 102, label: r.editedC, sort_order: 10, href: r.editedHref, item_type: "external", target: "_blank", css_class: r.css, style_preset: "gold-card", is_visible: false }];
+const graph = [{ ...base, id: 101, label: r.a, sort_order: 20 }, { ...base, id: 102, label: r.b, sort_order: 10 }, { ...base, id: 103, parent_id: 102, label: r.editedC, sort_order: 10, href: CORE_DOWNLOAD_MEDIA_HREF, item_type: "custom", target: "_blank", css_class: r.css, style_preset: "gold-card", is_visible: false }];
 await test("Complete hidden/reparented/reordered graph accepted with exact authored identity", () => owner.assertCoreNavigationGraph(graph, 41, "hidden", ids));
 for (const [name, mutate] of [
   ["orphan", (rows: typeof graph) => { rows[2].parent_id = 999; }],
@@ -43,7 +44,7 @@ const footer = await owner.buildExpectedCoreNavigationFooter([{ key: "footer.con
 const { validateFooterSlots } = await jiti.import<typeof import("../src/lib/footer/validate-footer-slots.ts")>(resolve(root, "src/lib/footer/validate-footer-slots.ts"));
 const slots = footer.find(row => row.key === "footer.slots")!.value as import("../src/lib/footer/footer-slot-types.ts").FooterSlotsConfig;
 await test("Authored Footer uses canonical four-slot schema and real Menu identity", () => { assert.equal(validateFooterSlots(slots).ok, true); assert.deepEqual(slots.slots.map(slot => [slot.index, slot.type]), [[1, "custom_links"], [2, "text"], [3, "menu"], [4, "contact"]]); assert.equal((slots.slots[2].config as { menuId: number }).menuId, 41); });
-await test("Footer manual draft owner preserves only edited/reordered and surviving links", () => { const links = (slots.slots[0].config as { links: { label: string; sortOrder: number; link: { href: string } }[] }).links; assert.deepEqual(links.map(row => [row.label, row.sortOrder]), [[owner.CORE_NAVIGATION_RECIPE.footer.editedLink, 0], [owner.CORE_NAVIGATION_RECIPE.footer.links[0], 1]]); assert.equal(links[0].link.href, owner.CORE_NAVIGATION_RECIPE.footer.editedHref); });
+await test("Footer manual draft owner preserves only edited/reordered and surviving links", () => { const links = (slots.slots[0].config as { links: { label: string; sortOrder: number; link: { href: string } }[] }).links; assert.deepEqual(links.map(row => [row.label, row.sortOrder]), [[owner.CORE_NAVIGATION_RECIPE.footer.editedLink, 0], [owner.CORE_NAVIGATION_RECIPE.footer.links[0], 1]]); assert.equal(links[0].link.href, CORE_DOWNLOAD_MEDIA_HREF); });
 await test("Nonempty original global contacts normalize through the current owner", () => assert.deepEqual(footer.find(row => row.key === "footer.contact_items")!.value, [{ label: "preserved", value: "original" }]));
 await test("Disabled slot is still schema validated", () => { const changed = structuredClone(slots); changed.slots[0].enabled = false; (changed.slots[0].config as Record<string, unknown>).links = "invalid"; assert.equal(validateFooterSlots(changed).ok, false); });
 await test("Footer unsafe href rejects using the actual owner", () => { const changed = structuredClone(slots); (changed.slots[0].config as { links: { href: string }[] }).links[0].href = "javascript:alert(1)"; assert.equal(validateFooterSlots(changed).ok, false); });

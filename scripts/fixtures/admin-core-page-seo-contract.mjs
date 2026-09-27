@@ -38,7 +38,7 @@ export function assertPageSeoEvidence(before, after, phase) {
  assert.equal(entry.metadata.scope,"page_seo"); assert.equal(entry.metadata.score,after.page.seo_score); assert.equal(entry.metadata.scoreVersion,after.page.seo_score_version);
 }
 /** Join named executed SEO evidence to all four native snapshots and its single released hold. */
-export function assertPageSeoReceiptJoin(browser, native, cleanup, completion) {
+export function assertPageSeoReceiptJoin(browser, native, cleanup, completion, adoption) {
  assert.equal(browser.status,"pass");assert.equal(browser.driverCompleted,true);assert.deepEqual(browser.errors,[]);assert.equal(browser.cohort,"page-composition");
  assert.equal(native.status,"pass");assert.equal(completion.status,"pass");assert.deepEqual(completion.phases,PAGE_SEO_PHASES);assert.equal(completion.exactWrites,1);assert.equal(completion.nativeCheckpoints,4);
  const matches=browser.evidence.filter(row=>row.id==="core-page-composition-seo-reject-retry-reload");assert.equal(matches.length,1);const row=matches[0];assert.equal(row.status,"pass");assert.equal(row.consumer,"page-composition-and-seo");assert.equal(row.surface,"seo");
@@ -56,5 +56,16 @@ export function assertPageSeoReceiptJoin(browser, native, cleanup, completion) {
  assert.ok(native.records.every(item=>item.status==="pass"&&(item.kind==="page-composition-state"||faults.includes(item))));
  assert.equal(cleanup.status,"closed");assert.equal(cleanup.activeLocks,0);assert.deepEqual(cleanup.records,faults);
  for(const key of["nativeStatementObservedTwice","sameStatementIdentity","normalKeyboardDedup","fieldsDisabledAndInert","ownedLockReleased"])assert.equal(row.pending[key],true);assert.equal(row.pending.actionRequests,1);
- return{...completion,joinedNativeReceipts:row.checkpoints,joinedFaultReceipts:row.faultReceipts,rejectionUi:row.rejectionUi,automaticCoverage:[],globalClosed:false};
+ return{...completion,...(adoption?{mediaAdoption:assertPageSeoMediaAdoption(browser,completion,adoption)}:{}),joinedNativeReceipts:row.checkpoints,joinedFaultReceipts:row.faultReceipts,rejectionUi:row.rejectionUi,automaticCoverage:[],globalClosed:false};
+}
+
+/** Alias qualification follows the current Page aggregate's exact rendered SEO child. */
+export function assertPageSeoMediaAdoption(browser,completion,{formManifest,collectionManifest,sourceSha256}){
+ assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.cohort,'page-composition');assert.equal(browser.scope,'core-closure');assert.equal(browser.inventoryOnly,false);assert.equal(browser.sourceSha256,sourceSha256);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(completion.status,'pass');assert.ok(Number.isSafeInteger(completion.pageId)&&completion.pageId>0);
+ const forms=formManifest.filter(row=>row.id==='page-composition-and-seo');assert.equal(forms.length,1);const owner='src/app/admin/pages-blocks/pages/[id]/PageBlocksClient.tsx',seo='src/app/admin/pages-blocks/pages/[id]/PageSeoPanel.tsx',route='src/app/admin/pages-blocks/pages/[id]/page.tsx';assert.ok(forms[0].sourceFiles.includes(owner)&&forms[0].sourceFiles.includes(seo));assert.ok(forms[0].surfaces.includes('seo'));
+ const rows=browser.evidence.filter(row=>row.id==='core-page-composition-seo-reject-retry-reload');assert.equal(rows.length,1);const row=rows[0];assert.equal(row.status,'pass');assert.equal(row.consumer,forms[0].id);assert.equal(row.surface,'seo');assertCoreDirectImageReceipts(row.imageAdoption,['og_image','og_image'],sourceSha256);for(const proof of row.imageAdoption)assert.equal(proof.routePathname,'/admin/pages-blocks/pages/'+completion.pageId);
+ const bindings=[{boundary:'form',consumer:forms[0].id,physicalChild:'seo',nativePageId:completion.pageId}];
+ for(const id of['page-composition-shell','page-block-assignments']){const found=collectionManifest.surfaces.filter(item=>item.id===id);assert.equal(found.length,1);assert.deepEqual(found[0].routes,['/admin/pages-blocks/pages/[id]']);assert.ok(found[0].pageSourceFiles.includes(route));if(id==='page-block-assignments')assert.ok(found[0].presentationSourceFiles.includes(owner));bindings.push({boundary:'collection',consumer:id,physicalChild:'page-composition-and-seo/seo',nativePageId:completion.pageId});}
+ const keys=bindings.map(item=>item.boundary+':'+item.consumer+':capability:media');for(const key of keys)assert.equal(browser.requiredCases.filter(item=>item.key===key&&item.axis==='media').length,1);
+ return{status:'partial-not-global-pass',candidateRequiredCases:keys,bindings,physicalFields:['og_image','og_image_alt'],sourceSha256,automaticCoverage:[],globalClosed:false,boundary:'Exact Page aggregate route and existing PageBlocksClient SEO child only, already joined to one native Page save and four snapshots; no extra assignment or template media mutation claimed.'};
 }

@@ -261,5 +261,69 @@ await check("menu list: failed aggregate read reports failure without false coun
   assert.equal(state.reads, 1);
   assert.equal(state.menuItemReads, 0);
 });
+
+// Actual existing Menu/Link bridge round-trips. No new download inference or
+// registry: the persisted Menu target is separate from inferred link kind.
+const menuBridge = load<typeof import("../src/lib/admin/links/menu-bridge")>("src/lib/admin/links/menu-bridge.ts");
+const linkSerialize = load<typeof import("../src/lib/admin/links/serialize")>("src/lib/admin/links/serialize.ts");
+const linkTypes = load<typeof import("../src/lib/admin/links/types")>("src/lib/admin/links/types.ts");
+const asRow = (c: ReturnType<typeof menuBridge.adminLinkToMenuItemColumns>) => ({
+  item_type:c.itemType,href:c.href,linked_type:c.linkedType,linked_id:c.linkedId,anchor:c.anchor,target:c.target,
+});
+await check("menu link: PDF target survives actual unchanged reopen and resave without inferred Download kind",async()=>{
+  const href="/files/projects/document-1782017403551.pdf";
+  const saved=menuBridge.adminLinkToMenuItemColumns({link_kind:"download",href,target:"_blank"},href);
+  const reopened=menuBridge.menuItemToAdminLink(asRow(saved));
+  assert.equal(saved.itemType,"custom");assert.equal(reopened.link_kind,"legacy");
+  assert.equal(reopened.href,href);assert.equal(reopened.target,"_blank");
+  assert.deepEqual(menuBridge.adminLinkToMenuItemColumns(reopened,href),saved);
+  assert.equal(state.writes,0);assert.equal(state.audits,0);
+});
+for(const item_type of ["page","custom"])for(const href of ["/files/projects/document-1782017403551.pdf","/unknown-custom","/about","#section","mailto:test@example.invalid","tel:123","https://example.invalid/path"])for(const target of ["_blank","_self"]){
+  await check("menu fallback preserves stored target and existing inference: "+[item_type,href,target].join("/"),async()=>{
+    const row={item_type,href,linked_type:null,linked_id:null,anchor:null,target};
+    const inferred=linkSerialize.deserializeAdminLink({href,target,anchor:null}),actual=menuBridge.menuItemToAdminLink(row);
+    assert.deepEqual(actual,{...inferred,target});
+    const resaved=menuBridge.adminLinkToMenuItemColumns(actual,href);
+    // Explicit Anchor normalization is still canonical; all other kinds retain the target.
+    assert.equal(resaved.target,actual.link_kind==="anchor"?"_self":target);
+    assert.equal(actual.href,inferred.href);assert.equal(actual.link_kind,inferred.link_kind);
+  });
+}
+for(const target of ["unexpected","",null,undefined])await check("menu fallback normalizes unsupported target "+String(target),async()=>{
+ const row={item_type:"custom",href:"/owned-local",linked_type:null,linked_id:null,anchor:null,target} as unknown as Parameters<typeof menuBridge.menuItemToAdminLink>[0];
+ assert.equal(menuBridge.menuItemToAdminLink(row).target,"_self");
+});
+for(const item_type of ["page","custom","parent"])for(const href of [null,"","   "])await check("menu empty/parent keeps canonical none "+item_type+"/"+String(href),async()=>{
+ assert.deepEqual(menuBridge.menuItemToAdminLink({item_type,href,linked_type:null,linked_id:null,anchor:null,target:"_blank"}),linkSerialize.emptyAdminLink());
+});
+const kindFixtures:Record<(typeof linkTypes.ADMIN_LINK_KINDS)[number],import("../src/lib/admin/links/types").AdminLinkValue>={
+ internal:{link_kind:"internal",linked_type:"topics",linked_id:17,href:"/topics/example",anchor:"section",target:"_blank"},
+ static_route:{link_kind:"static_route",linked_type:"static_routes",href:"/about",meta:{route_key:"about"},target:"_blank"},
+ external:{link_kind:"external",href:"https://example.invalid",target:"_self"},
+ email:{link_kind:"email",href:"mailto:test@example.invalid",target:"_blank"},
+ phone:{link_kind:"phone",href:"tel:123",target:"_blank"},
+ anchor:{link_kind:"anchor",href:"#section",anchor:"section",target:"_self"},
+ download:{link_kind:"download",href:"/files/example.pdf",target:"_blank"},
+ legacy:{link_kind:"legacy",href:"/unregistered",target:"_self"},
+ none:linkSerialize.emptyAdminLink(),
+};
+await check("menu regression fixtures derive all existing link kinds",async()=>assert.deepEqual(Object.keys(kindFixtures).sort(),[...linkTypes.ADMIN_LINK_KINDS].sort()));
+for(const kind of linkTypes.ADMIN_LINK_KINDS)await check("menu existing link kind retains current column semantics: "+kind,async()=>{
+ const value=kindFixtures[kind],href=value.href??"",columns=menuBridge.adminLinkToMenuItemColumns(value,href),row=asRow(columns);
+ const reopened=menuBridge.menuItemToAdminLink(row);
+ if(kind==="none"){assert.deepEqual(menuBridge.menuItemToAdminLink({...row,item_type:"parent"}),linkSerialize.emptyAdminLink());return;}
+ assert.equal(reopened.target,kind==="anchor"?"_self":value.target);
+ assert.equal(reopened.href,value.href);if(kind==="internal")assert.deepEqual([reopened.linked_type,reopened.linked_id,reopened.anchor],["topics",17,"section"]);
+ if(kind==="external")assert.equal(reopened.link_kind,"external");if(kind==="anchor")assert.equal(reopened.link_kind,"anchor");
+});
+for(const linked_type of linkTypes.LINKED_RESOURCE_TYPES)await check("menu typed resource projection unaffected: "+linked_type,async()=>{
+ const value={link_kind:"internal" as const,linked_type,linked_id:19,href:"/owned-resource",target:"_blank" as const},row=asRow(menuBridge.adminLinkToMenuItemColumns(value,"/owned-resource"));
+ const reopened=menuBridge.menuItemToAdminLink(row);assert.equal(reopened.link_kind,"internal");assert.equal(reopened.linked_type,linked_type);assert.equal(reopened.linked_id,19);assert.equal(reopened.target,"_blank");
+});
+await check("menu explicit Anchor ignores unsupported saved blank target as before",async()=>{
+ assert.equal(menuBridge.menuItemToAdminLink({item_type:"anchor",href:"#section",linked_type:null,linked_id:null,anchor:"section",target:"_blank"}).target,"_self");
+});
+
 if (failures.length) throw new Error(`${failures.length} remaining settings/menu proof failures: ${failures.join(", ")}`);
 console.log("Remaining settings/menu proof: actual action input, persistence, output and bounded-cache failure boundaries passed; no live mutations.");

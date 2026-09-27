@@ -1,3 +1,4 @@
+import {createCoreDomainVisibilityControl} from './admin-core-domain-visibility-control.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -50,10 +51,10 @@ export async function runCoreDomainPermissionJourneys(ctx) {
     for (const recipe of plan) {
       const page = await stale.newPage(); page.setDefaultTimeout(25_000);
       await observe('permission-mount-' + recipe.entity, () => page.goto(origin + recipe.path + '?q=' + encodeURIComponent(recipe.label), { waitUntil: 'domcontentloaded' }));
-      const visibility = page.locator('[data-admin-row-action="visibility"][data-admin-entity-id="' + recipe.id + '"] button');
-      await expect(visibility).toHaveCount(1, { timeout: 60_000 }); await expect(visibility).toBeEnabled({ timeout: 60_000 });
+      const visibility = createCoreDomainVisibilityControl({page,recipe});
+      await visibility.expectEnabled();
       assert.notEqual(new URL(page.url()).pathname, '/admin/login');
-      const original = await visibility.getAttribute('aria-pressed'); assert.ok(original === 'true' || original === 'false');
+      const original = await visibility.readState(); assert.ok(original === 'true' || original === 'false');
       mounted.push({ recipe, page, visibility, original });
     }
     await observe('permission-real-session-revocation', () => revokeSession());
@@ -67,17 +68,18 @@ export async function runCoreDomainPermissionJourneys(ctx) {
       const requests = request => { if (request.method() === 'POST' && request.headers()['next-action'] && new URL(request.url()).pathname === new URL(recipe.path, origin).pathname) posts++; };
       page.on('request', requests);
       try {
-        await expect(visibility).toHaveAttribute('aria-pressed', original);
+        await visibility.expectState(original);
         if (confirmationRequired) {
-          await visibility.click(); await expect(dialog).toHaveCount(1);
+          await visibility.invoke(); await expect(dialog).toHaveCount(1);
           await dialog.locator('[data-admin-confirm-cancel]').click(); await expect(dialog).toHaveCount(0);
+          await visibility.expectReturnedFocus();await visibility.expectState(original);
           assert.equal(posts, 0, 'Confirmation cancellation after revocation must still dispatch nothing.');
-          await visibility.click(); await expect(dialog).toHaveCount(1);
+          await visibility.invoke(); await expect(dialog).toHaveCount(1);
         }
         const response = page.waitForResponse(value => value.request().method() === 'POST'
           && Boolean(value.request().headers()['next-action']) && new URL(value.request().url()).pathname === new URL(recipe.path, origin).pathname, { timeout: 30_000 });
         response.catch(() => {});
-        await observe('permission-dispatch-' + recipe.entity, () => (confirmationRequired ? dialog.locator('[data-admin-confirm-submit]') : visibility).click());
+        await observe('permission-dispatch-' + recipe.entity, () => confirmationRequired ? dialog.locator('[data-admin-confirm-submit]').click() : visibility.invoke());
         const actual = await response;
         const denial = classifyCorePermissionDenial(actual.status(), await actual.allHeaders(), origin);
         assert.ok(denial, 'The actual command HTTP response must identify the existing login-denial destination.');

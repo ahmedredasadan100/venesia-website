@@ -1,3 +1,4 @@
+import {exerciseCoreDownloadField,CORE_DOWNLOAD_MEDIA_HREF} from './admin-core-download-media-adoption.mjs';
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -176,6 +177,8 @@ export async function runCoreTemplateControlsJourneys(ctx) {
   async function authorFeatured(form) {
     await select(form, "source_kind", "categories"); await select(form, "category_slug", f.category.slug);
     await select(form, "selection_mode", "manual");
+    const manual=form.locator('[data-featured-manual-items-scroll]');await expect(manual).toHaveCount(1);
+    renderedAdoption.push(await observeCoreScrollbarAdoption({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:currentRecipe.consumer,surface:currentRecipe.surface}],id:'template-controls-featured-manual-scroll',container:manual,target:manual.locator(':scope > label').last(),axis:'y',containment:'default-chaining'}));
     for (const remove of await form.locator("[data-featured-manual-remove]").all()) await remove.click();
     const article = form.getByRole("checkbox", { name: "اختيار " + f.article.title, exact: true });
     await setChecked(article, true); await setChecked(article, false); await setChecked(article, true);
@@ -257,18 +260,20 @@ export async function runCoreTemplateControlsJourneys(ctx) {
 
   async function checkReload(recipe, form) {
     const kind = recipe.kind;
+    const field=({cards:"item_0",breadcrumb:"manual_item_0",cta:"primary_cta"})[kind];
+    if(field){await expect(state(form,field+"_link_href")).toHaveValue(CORE_DOWNLOAD_MEDIA_HREF);await expect(state(form,field+"_link_kind")).toHaveValue("download");await expect(state(form,field+"_link_target")).toHaveValue("_blank");}
     if (kind === "cards") {
       await expect(form.locator('select[name="columns"]')).toHaveValue("4");
       for (let i = 0; i < 2; i++) {
         await expect(input(form, "item_" + i + "_title")).toHaveValue(values.cards[1 - i].title);
-        await expect(state(form, "item_" + i + "_link_href")).toHaveValue(values.hrefs[1 - i]);
+        await expect(state(form, "item_" + i + "_link_href")).toHaveValue(i ? values.hrefs[0] : CORE_DOWNLOAD_MEDIA_HREF);
       }
     } else if (kind === "breadcrumb") {
       await expect(form.locator('select[name="source"]')).toHaveValue("manual");
       await expect(input(form, "show_home")).not.toBeChecked();
       for (let i = 0; i < 2; i++) await expect(input(form, "manual_item_" + i + "_label")).toHaveValue(values.breadcrumbs[1 - i]);
     } else if (kind === "cta") {
-      await expect(state(form, "primary_cta_link_href")).toHaveValue(values.hrefs[1]);
+      await expect(state(form, "primary_cta_link_href")).toHaveValue(CORE_DOWNLOAD_MEDIA_HREF);
       await expect(state(form, "secondary_cta_link_kind")).toHaveValue("none");
       await expect(input(form, "secondary_cta_label")).toHaveValue("");
     } else if (kind === "feed") {
@@ -294,7 +299,13 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     const path = "/admin/pages-blocks/blocks/" + recipe.kind + "/" + recipe.template.id;
     await observe("template-controls-open", () => page.goto(origin + path, { waitUntil: "domcontentloaded" }));
     const form = formFor(recipe.template.id); await expect(form).toHaveCount(1); await tab(form, "content");
-    await checkpoint(recipe.kind, "baseline"); await author[recipe.kind](form); await checkpoint(recipe.kind, "draft");
+    await checkpoint(recipe.kind, "baseline"); await author[recipe.kind](form);
+    const downloadField=({cards:'item_0',breadcrumb:'manual_item_0',cta:'primary_cta'})[recipe.kind];
+    const downloadMedia=downloadField ? await exerciseCoreDownloadField({page,origin,owner:linkOwner(form,downloadField),asset:f.downloadMedia,field:downloadField,originalHref:values.hrefs[1],clearLabel:recipe.kind==='cta'?'مسح':'مسح الرابط',assertCurrent:async(href,kind)=>{
+      await expect(state(form,downloadField+'_link_href')).toHaveValue(href);await expect(state(form,downloadField+'_link_kind')).toHaveValue(kind);
+      await expect(state(form,downloadField+'_link_target')).toHaveValue(kind==='download'?'_blank':'_self');
+    }}) : null;
+    await checkpoint(recipe.kind, "draft");
     if (recipe.kind === "cards") await chooseExternal(form, "item_0", values.hrefs[0], "_blank", true);
     else if (recipe.kind === "breadcrumb") await chooseExternal(form, "manual_item_0", values.hrefs[0], "_blank", true);
     else if (recipe.kind === "cta") await chooseExternal(form, "primary_cta", values.hrefs[0], "_blank", true);
@@ -314,7 +325,7 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     await observe("template-controls-reload", () => page.reload({ waitUntil: "domcontentloaded" }));
     const reloaded = formFor(recipe.template.id); await tab(reloaded, "content"); await checkReload(recipe, reloaded);
     await checkpoint(recipe.kind, "reloaded");
-    const result = { renderedAdoption, consumer: recipe.consumer, surface: recipe.surface, kind: recipe.kind, observations: recipe.controls, viewports, pendingProof,
+    const result = { renderedAdoption, consumer: recipe.consumer, surface: recipe.surface, kind: recipe.kind, observations: recipe.controls, viewports, pendingProof, downloadMedia,
       nativeCheckpoints: 5, genericCoverage: [], completeAxisCoverage: [], globalClosed: false };
     outcomes.push(result); return result;
   });

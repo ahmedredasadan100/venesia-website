@@ -2710,7 +2710,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
             "src/components/admin/projects/tracking/TrackingCollections.tsx",
           applicability: adminConsumerCapabilityAudit(
             {
-              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+              ...ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+              media: {
+                state: "not_applicable",
+                rationale: "This exact child collection mounts only its scalar Tracking Profile/Stage Forms. Gallery and video belong to TrackingUpdateFormModal on the separate Updates route; no Update Media proof is inherited.",
+              },
               date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
             },
             {
@@ -2742,7 +2746,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
             "src/components/admin/projects/tracking/TrackingCollections.tsx",
           applicability: adminConsumerCapabilityAudit(
             {
-              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+              ...ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+              media: {
+                state: "not_applicable",
+                rationale: "This exact child collection mounts only its scalar Tracking Item Forms. Gallery and video belong to TrackingUpdateFormModal on the separate Updates route; no Update Media proof is inherited.",
+              },
               date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
             },
             {

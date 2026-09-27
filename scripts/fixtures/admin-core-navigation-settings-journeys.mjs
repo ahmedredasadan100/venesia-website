@@ -1,3 +1,5 @@
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,observeCoreModalPendingDismissal} from "./admin-core-rendered-adoption.mjs";
+import {exerciseCoreDownloadField,CORE_DOWNLOAD_MEDIA_HREF} from './admin-core-download-media-adoption.mjs';
 import { runCoreDescendantPresentationJourneys } from './admin-core-descendant-presentation-journeys.mjs';
 import assert from "node:assert/strict";
 import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
@@ -22,7 +24,7 @@ export function buildCoreNavigationSettingsPlan({ manifest, collections, require
     assert.equal(matches.length, 1); return matches[0].key;
   });
   return { consumers: forms.map(row => ({ consumer: row.id, classification: row.classification, surfaces: row.id === "page-composition-and-seo" ? ["seo"] : [...row.surfaces] })), pageCoverage: coverage(families[0]), menuCoverage: coverage(families[1]), specializedAutomaticCoverage: [], globalClosed: false,
-    remaining: ["Composition/layout and Media selection are outside this cohort.", "Menu bulk operations belong to the separate bulk cohort.", "No generic pending, responsive or complete capability closure is inferred from these selected journeys.", "Existing native stale-target concurrency proof is not relabelled as this cohort's Browser coverage."] };
+    remaining: ["Composition/layout and Media fields other than the declared PDF link selection remain outside this cohort.", "Menu bulk operations belong to the separate bulk cohort.", "No generic pending, responsive or complete capability closure is inferred from these selected journeys.", "Existing native stale-target concurrency proof is not relabelled as this cohort's Browser coverage."] };
 }
 
 /** Real isolated UI only. Finite native checkpoints own all expected values and actor attribution. */
@@ -33,7 +35,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const { ADMIN_COLLECTION_SURFACE_ADOPTION } = await jiti.import("../../src/lib/admin/interaction-system/adoption-manifest.ts");
   const plan = buildCoreNavigationSettingsPlan({ manifest, collections: ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces, requiredCases, fixtures: fixtures.navigationSettings });
-  const f = fixtures.navigationSettings, r = f.recipe, completed = [], checkpoints = [], permissionEvidence = [];
+  const f = fixtures.navigationSettings, r = f.recipe, completed = [], checkpoints = [], permissionEvidence = [], downloadMedia = [];
   const checkpoint = async (entity, phase) => {
     const request = { id: randomUUID(), kind: "navigation-settings-state", entity, phase };
     const result = await nativeCheckpoint(request); for (const key of Object.keys(request)) assert.equal(result[key], request[key]); assert.equal(result.status, "pass"); checkpoints.push(result); return result;
@@ -60,11 +62,28 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await switchTo(picker, "فتح في تبويب جديد", true);
     await picker.getByRole("button", { name: "اعتماد الرابط", exact: true }).click(); await expect(picker).toBeHidden();
   };
+  let renderedAdoption=[],renderedOpened=new Set();
+  const renderedBase=(consumer,surface,collections,axis)=>({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:"form",consumer,surface},...(axis==="modal"?collections.map(consumer=>({boundary:"collection",consumer,surface:new URL(page.url()).pathname})):[])]});
+  async function observeNavigationOpening({id,consumer,surface,collections,dialog,target,form=null,trigger=null}) {
+    if(renderedOpened.has(id))return;
+    const common=renderedBase(consumer,surface,collections,"modal");
+    if(form){assert.ok(trigger);renderedAdoption.push(await observeCoreModalCleanReturn({...common,id:id+"-return",dialog,form,trigger,cancel:form.getByRole("button",{name:"إلغاء",exact:true})}));}
+    renderedAdoption.push(await observeCoreModalFocusAdoption({...common,id:id+"-focus",dialog}));
+    const body=dialog.locator(":scope > div").filter({has:page.locator("[data-admin-feedback-modal-host]")});
+    renderedAdoption.push(await observeCoreScrollbarAdoption({...renderedBase(consumer,surface,collections,"scrollbar"),id:id+"-scroll",container:body,target,axis:"y",containment:"modal-lock"}));
+    renderedOpened.add(id);
+  }
+  async function observePageCreatePending(form) {
+    const dialog=page.getByRole("dialog",{name:"إضافة صفحة جديدة",exact:true});
+    renderedAdoption.push(await observeCoreModalPendingDismissal({...renderedBase("pages-quick-create","create",["pages"],"modal"),id:"navigation-page-create-pending",dialog,form}));
+  }
   let pageId, menuId, itemIds;
   await runCoreDescendantPresentationJourneys(ctx,"navigation");
   await run("core-navigation-page-create-rejection-retry-reload", plan.pageCoverage, async () => {
+    renderedAdoption=[];renderedOpened=new Set();
     await goto("/admin/pages-blocks/pages"); await checkpoint("page", "baseline");
     await page.getByRole("button", { name: "إضافة صفحة", exact: true }).click(); const form = page.locator("#create-page-form");
+    await observeNavigationOpening({id:"navigation-page-create",consumer:"pages-quick-create",surface:"create",collections:["pages"],dialog:page.getByRole("dialog",{name:"إضافة صفحة جديدة",exact:true}),form,trigger:page.getByRole("button",{name:"إضافة صفحة",exact:true}),target:form.getByRole("button",{name:"إنشاء وفتح المحرر",exact:true})});
     await form.locator('[name="path"]').fill(f.duplicatePagePath);
     await form.getByRole("button", { name: "إنشاء وفتح المحرر", exact: true }).click();
     assert.equal(await form.locator('[name="title"]').evaluate(input => input.validity.valueMissing), true);
@@ -74,9 +93,9 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await expect(form.locator('[name="title"]')).toHaveValue(r.page.title); await expect(form.locator('[name="path"]')).toHaveValue(f.duplicatePagePath);
     await checkpoint("page", "rejected");
     await form.locator('[name="path"]').fill(r.page.path);
-    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-navigation-page-create-accepted-save",journeyId:"core-navigation-page-create-rejection-retry-reload",formConsumer:"pages-quick-create",surface:"create"},form,submit:form.getByRole("button",{name:"إنشاء وفتح المحرر",exact:true}),dirtyNavigation:"close",
+    await ctx.permissionReplay.restoreDraft({mapping:{caseId:"core-navigation-page-create-accepted-save",journeyId:"core-navigation-page-create-rejection-retry-reload",formConsumer:"pages-quick-create",surface:"create"},form,submit:form.getByRole("button",{name:"إنشاء وفتح المحرر",exact:true}),dirtyNavigation:"close",observePending:()=>observePageCreatePending(form),
       assertDraft:async()=>{await expect(form.locator('[name="title"]')).toHaveValue(r.page.title);await expect(form.locator('[name="path"]')).toHaveValue(r.page.path);},
-      cancelDirty:async()=>{const original=page.url(),trigger=form.getByRole("button",{name:"إلغاء",exact:true});await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form).toBeVisible();},
+      cancelDirty:async()=>{const original=page.url(),trigger=form.getByRole("button",{name:"إلغاء",exact:true});await trigger.click();const dialog=page.getByRole("dialog",{name:"إغلاق دون حفظ؟",exact:true});await expect(dialog).toBeVisible();renderedAdoption.push(await observeCoreModalFocusAdoption({...renderedBase("pages-quick-create","create",["pages"],"modal"),id:"navigation-page-create-dirty-focus",dialog,state:"dirty-confirmation",escape:"not-exercised"}));await dialog.locator("[data-admin-confirm-cancel]").click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),original);await expect(form).toBeVisible();},
     });
     await runCoreFormPermissionIntent({permissionReplay:ctx.permissionReplay,mapping:{caseId:"core-navigation-page-create-accepted-save",formConsumer:"pages-quick-create",surface:"create"},permissionEvidence,perform:async()=>{
     await action(() => form.getByRole("button", { name: "إنشاء وفتح المحرر", exact: true }).click());
@@ -87,7 +106,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       return {nativeWrites:[{table:"pages",id:pageId,expected:{title:r.page.title,path:r.page.path,slug:r.page.slug,status:"unpublished",page_type:"static"},auditEntityType:"page",auditEntityLabel:r.page.title,auditActions:["page.create"]}]};
     }});
     completed.push("page-create");
-    return {consumer:"pages-quick-create",surface:"create",permissionEvidence:[...permissionEvidence],automaticCoverage:[]};
+    return {consumer:"pages-quick-create",surface:"create",permissionEvidence:[...permissionEvidence],renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   assert.ok(pageId, "Page creation must finish before dependent metadata work.");
   await run("core-navigation-page-seo-validation-save-reload", [], async () => {
@@ -109,8 +128,10 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await checkpoint("page", "seo-saved"); completed.push("page-seo");
   });
   await run("core-navigation-menu-create-rejection-retry-reload", plan.menuCoverage, async () => {
+    renderedAdoption=[];renderedOpened=new Set();
     await goto("/admin/pages-blocks/menus"); await checkpoint("menu", "baseline");
     await page.getByRole("button", { name: "إضافة منيو", exact: true }).click(); const form = page.locator("#create-menu-form");
+    await observeNavigationOpening({id:"navigation-menu-create",consumer:"menu-quick-create",surface:"menu-create",collections:["menus-list"],dialog:page.getByRole("dialog",{name:"إضافة قائمة جديدة",exact:true}),form,trigger:page.getByRole("button",{name:"إضافة منيو",exact:true}),target:form.getByRole("button",{name:"إنشاء وفتح القائمة",exact:true})});
     await form.locator('[name="name"]').fill(r.menu.name); await form.locator('[name="slug"]').fill(f.duplicateMenuSlug); await select(form, "مكان الاستخدام", "Custom");
     await action(() => form.getByRole("button", { name: "إنشاء وفتح القائمة", exact: true }).click());
     await expect(form.locator('[name="slug"]')).toHaveAttribute("aria-invalid", "true"); await expect(form.locator('[name="name"]')).toHaveValue(r.menu.name); await expect(form.locator('[name="slug"]')).toHaveValue(f.duplicateMenuSlug);
@@ -119,9 +140,11 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/menus\/\d+$/u.test(url.pathname)); menuId = Number(new URL(page.url()).pathname.split("/").at(-1));
     await goto(`/admin/pages-blocks/menus/${menuId}`); await tab("menu-settings"); await expect(page.locator('input[name="name"]')).toHaveValue(r.menu.name);
     assert.equal((await checkpoint("menu", "created")).menuId, menuId); completed.push("menu-create");
+    return {renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   assert.ok(menuId, "Menu creation must finish before dependent graph work.");
   await run("core-navigation-menu-metadata-item-graph-commands", [], async () => {
+    renderedAdoption=[];renderedOpened=new Set();
     const path = `/admin/pages-blocks/menus/${menuId}`;
     await goto(path); await tab("menu-settings"); await page.locator('input[name="name"]').fill(r.menu.editedName);
     await action(() => page.getByRole("button", { name: "حفظ بيانات القائمة", exact: true }).click()); await expect(page).toHaveURL(url => url.pathname === "/admin/pages-blocks/menus"); await checkpoint("menu", "metadata-saved");
@@ -137,18 +160,31 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     let cycleFeedbackVariant;
     const edit = async (id, change, phase, negative = false) => {
       await goto(path); const row = rowById("menu_item", id); await row.locator('[data-admin-row-action="edit"] button').click();
-      const dialog = page.getByRole("dialog", { name: "تعديل عنصر القائمة", exact: true }); await change(dialog);
+      const dialog = page.getByRole("dialog", { name: "تعديل عنصر القائمة", exact: true });
+      await observeNavigationOpening({id:"navigation-menu-item-edit",consumer:"menu-builder",surface:"item-edit",collections:["menu-items","menu-editor-shell"],dialog,target:dialog.getByRole("button",{name:"حفظ",exact:true})});
+      await change(dialog);
       await action(() => dialog.getByRole("button", { name: "حفظ", exact: true }).click()); await expect(page).toHaveURL(url => url.searchParams.has("message")); await goto(new URL(page.url()).pathname + new URL(page.url()).search); await expect(dialog).toBeHidden();
       if (negative) { const rejection = page.locator('[data-admin-feedback-entry]').filter({ hasText: "menu_item_cycle_forbidden" }); await expect(rejection).toBeVisible(); cycleFeedbackVariant = await rejection.getAttribute("data-admin-feedback-variant"); }
       await checkpoint("menu", phase);
     };
-    await edit(itemIds.c, async dialog => { await dialog.locator('[name="label"]').fill(r.menu.editedC); await dialog.locator('[name="css_class"]').fill(r.menu.css); await select(dialog, "Style Preset", "gold-card"); await externalLink(dialog, r.menu.editedHref); }, "item-edited");
+    await edit(itemIds.c, async dialog => { await dialog.locator('[name="label"]').fill(r.menu.editedC); await dialog.locator('[name="css_class"]').fill(r.menu.css); await select(dialog, "Style Preset", "gold-card"); await externalLink(dialog, r.menu.editedHref);
+      downloadMedia.push(await exerciseCoreDownloadField({page,origin,owner:dialog,asset:f.downloadMedia,field:'menu_link',originalHref:r.menu.editedHref,assertCurrent:async(href,kind)=>{
+        await expect(dialog.locator('[name="menu_link_link_href"]')).toHaveValue(href);await expect(dialog.locator('[name="menu_link_link_kind"]')).toHaveValue(kind);await expect(dialog.locator('[name="menu_link_link_target"]')).toHaveValue(kind==='none'?'_self':'_blank');
+      }}));
+    }, "item-edited");
+    await goto(path);await rowById('menu_item',itemIds.c).locator('[data-admin-row-action="edit"] button').click();
+    const reopened=page.getByRole('dialog',{name:'تعديل عنصر القائمة',exact:true});
+    await expect(reopened.locator('[name="menu_link_link_href"]')).toHaveValue(CORE_DOWNLOAD_MEDIA_HREF);
+    // Menu's physical schema may project Download as custom/legacy; persisted target must still survive editing.
+    await expect(reopened.locator('[name="menu_link_link_target"]')).toHaveValue('_blank');
+    await reopened.getByRole('button',{name:'إلغاء',exact:true}).click();await expect(reopened).toBeHidden();
     await edit(itemIds.c, dialog => select(dialog, "Parent", r.menu.b), "reparented");
     await goto(path); await action(() => rowById("menu_item", itemIds.b).getByRole("button", { name: "تحريك لأعلى", exact: true }).click()); await expect(feedback()).toBeVisible(); await checkpoint("menu", "reordered");
     await goto(path); await action(() => rowById("menu_item", itemIds.c).locator('[data-admin-row-action="visibility"] button').click()); await expect(rowById("menu_item", itemIds.c).getByRole("button", { name: `إظهار ${r.menu.editedC}`, exact: true })).toBeVisible(); await checkpoint("menu", "hidden");
     await edit(itemIds.b, dialog => select(dialog, "Parent", r.menu.editedC), "cycle-rejected", true);
     await goto(path); await more(rowById("menu_item", itemIds.b), "delete"); await expect(confirm()).toBeVisible(); await cancel().click(); await expect(confirm()).toBeHidden(); await checkpoint("menu", "delete-cancelled");
     await more(rowById("menu_item", itemIds.b), "delete"); await action(() => confirm().click()); await expect(rowById("menu_item", itemIds.b)).toHaveCount(0); await expect(rowById("menu_item", itemIds.c)).toHaveCount(0); await checkpoint("menu", "subtree-deleted"); assert.equal(cycleFeedbackVariant, "danger", "A rejected cycle must not be displayed as a successful save."); completed.push("menu-graph");
+    return {renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   await run("core-navigation-menu-visibility-duplicate-delete", [], async () => {
     await goto("/admin/pages-blocks/menus"); await action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click());
@@ -161,6 +197,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
   });
   assert.ok(completed.includes("menu-list") && completed.includes("page-seo"), "Footer references only a completed owned Menu recipe.");
   await run("core-navigation-footer-aggregate-slots-manual-links-rejection-retry", [], async () => {
+    renderedAdoption=[];renderedOpened=new Set();
     await goto("/admin/pages-blocks/footer"); await checkpoint("footer", "baseline");
     const panel = () => page.getByRole("tabpanel");
     const types = ["نص / براند", "روابط", "قائمة", "تواصل"];
@@ -176,10 +213,19 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await tab("column-2");
     const linkModal = () => page.getByRole("dialog", { name: /^(إضافة رابط|تعديل رابط)$/u });
     for (let i = 0; i < r.footer.links.length; i++) {
-      await page.getByRole("button", { name: "+ إضافة رابط", exact: true }).click(); const dialog = linkModal(); await dialog.getByLabel("اسم العنصر", { exact: true }).fill(r.footer.links[i]); await externalLink(dialog, r.footer.hrefs[i]); await dialog.getByRole("button", { name: "حفظ", exact: true }).click(); await expect(dialog).toBeHidden();
+      await page.getByRole("button", { name: "+ إضافة رابط", exact: true }).click(); const dialog = linkModal();
+      await observeNavigationOpening({id:"navigation-footer-link-create",consumer:"footer-builder",surface:"footer-link-edit",collections:["footer-manual-links","footer-builder-shell","footer-fixed-slots"],dialog,target:dialog.getByRole("button",{name:"اختيار الرابط",exact:true})});
+      await dialog.getByLabel("اسم العنصر", { exact: true }).fill(r.footer.links[i]); await externalLink(dialog, r.footer.hrefs[i]); await dialog.getByRole("button", { name: "حفظ", exact: true }).click(); await expect(dialog).toBeHidden();
     }
     await checkpoint("footer", "draft");
-    await rowByLabel(r.footer.links[1]).locator('[data-admin-row-action="edit"] button').click(); const dialog = linkModal(); await dialog.getByLabel("اسم العنصر", { exact: true }).fill(r.footer.editedLink); await externalLink(dialog, r.footer.editedHref); await dialog.getByRole("button", { name: "حفظ", exact: true }).click(); await expect(dialog).toBeHidden();
+    await rowByLabel(r.footer.links[1]).locator('[data-admin-row-action="edit"] button').click(); const dialog = linkModal();
+    await observeNavigationOpening({id:"navigation-footer-link-edit",consumer:"footer-builder",surface:"footer-link-edit",collections:["footer-manual-links","footer-builder-shell","footer-fixed-slots"],dialog,target:dialog.getByRole("button",{name:"اختيار الرابط",exact:true})});
+    await dialog.getByLabel("اسم العنصر", { exact: true }).fill(r.footer.editedLink); await externalLink(dialog, r.footer.editedHref);
+    downloadMedia.push(await exerciseCoreDownloadField({page,origin,owner:dialog,asset:f.downloadMedia,field:'footer_manual_link',originalHref:r.footer.editedHref,assertCurrent:async(href,kind)=>{
+      await expect(dialog.getByText(href || 'لم يتم اختيار رابط بعد.',{exact:true})).toBeVisible();
+      if(kind==='download')await expect(dialog.getByText('تنزيل',{exact:true})).toBeVisible();
+    }}));
+    await dialog.getByRole("button", { name: "حفظ", exact: true }).click(); await expect(dialog).toBeHidden();
     await rowByLabel(r.footer.editedLink).getByRole("button", { name: "تحريك لأعلى", exact: true }).click();
     await more(rowByLabel(r.footer.links[2]), "delete"); await cancel().click(); await expect(confirm()).toBeHidden(); await expect(rowByLabel(r.footer.links[2])).toBeVisible(); await checkpoint("footer", "delete-cancelled");
     await more(rowByLabel(r.footer.links[2]), "delete"); await confirm().click(); await expect(rowByLabel(r.footer.links[2])).toHaveCount(0);
@@ -195,8 +241,12 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await select(page, "المنصة", "Facebook"); await panel().getByLabel("التسمية", { exact: true }).fill(r.footer.socialLabel); await panel().getByLabel("الرابط", { exact: true }).fill(r.footer.socialHref);
     await action(() => page.getByRole("button", { name: "حفظ الفوتر", exact: true }).click()); await expect(feedback()).toContainText("تم حفظ إعدادات الفوتر بنجاح."); await checkpoint("footer", "saved");
     await goto("/admin/pages-blocks/footer"); await tab("column-1"); await expect(rowByLabel(r.footer.editedLink)).toBeVisible(); await expect(rowByLabel(r.footer.links[0])).toBeVisible(); await expect(rowByLabel(r.footer.links[2])).toHaveCount(0);
+    await rowByLabel(r.footer.editedLink).locator('[data-admin-row-action="edit"] button').click();
+    await expect(linkModal().getByText(CORE_DOWNLOAD_MEDIA_HREF,{exact:true})).toBeVisible();await expect(linkModal().getByText('تنزيل',{exact:true})).toBeVisible();
+    await linkModal().getByRole('button',{name:'إلغاء',exact:true}).click();await expect(linkModal()).toBeHidden();
     await tab("column-2"); await expect(panel().getByLabel("النص / Tagline", { exact: true })).toHaveValue(r.footer.body); await tab("social-legal"); await expect(panel().getByLabel("Copyright", { exact: true })).toHaveValue(r.footer.copyright); await checkpoint("footer", "reloaded"); completed.push("footer-aggregate");
+    return {renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   assert.equal(completed.length, 6);
-  return { status: "pass", completed, plan, checkpoints, permissionEvidence, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
+  return { status: "pass", completed, plan, checkpoints, permissionEvidence, downloadMedia, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
 }

@@ -1,3 +1,4 @@
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -112,9 +113,12 @@ export async function assertCoreBulkTarget(page,target,{visible=true,timeout=60_
 
 /** Actual bulk UI on independent targets. Global Empty Trash is never invoked. */
 export async function runCoreDomainBulkJourneys(ctx){
- const {page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint,databaseReadback}=ctx;
+ const {page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint,databaseReadback,requiredCases}=ctx;
  assert.equal(new URL(origin).hostname,'127.0.0.1');const {plan,sourceOnlyNotApplicable}=await loadCoreDomainBulkPlan(fixtures);
  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),{ADMIN_BULK_ACTION_LABELS:labels}=await jiti.import('../../src/lib/admin/entity-list/bulk-action-labels.ts');
+ const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import('../../src/lib/admin/form-system/adoption-manifest.ts');
+ let renderedAdoption=[],renderedConfirmed=false;
+ const oneShotBase=()=>({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:'list-bulk-row-one-shot-actions',surface:'bulk-command'}]});
  const names={publish:labels.showSelected,unpublish:labels.hideSelected,hide:labels.hideSelected,delete:labels.deleteSelected,move_to_trash:labels.deleteSelected,restore:labels.restoreSelected,permanent_delete:labels.permanentlyDeleteSelected,move_category:'نقل لتصنيف',feature:'تعيين كمميز',unfeature:'إلغاء التمييز'};
  const bar=page.locator('[data-admin-bulk-action-bar]'),dialog=page.locator('[data-admin-confirm-dialog]'),outcomes=[];
  const actionRequest=(request,recipe)=>request.method()==='POST'&&Boolean(request.headers()['next-action'])&&new URL(request.url()).origin===origin&&new URL(request.url()).pathname===recipe.route;
@@ -131,7 +135,7 @@ export async function runCoreDomainBulkJourneys(ctx){
  async function openConfirm(step){if(step.confirmation){await bar.getByRole('button',{name:'تنفيذ',exact:true}).click();await expect(dialog).toHaveCount(1);}}
  async function cancelConfirmation(recipe,step){
   if(!step.confirmation)return null;const correlation=randomUUID(),before=await fingerprint(correlation,'before');let posts=0;const count=request=>{if(actionRequest(request,recipe))posts++;};page.on('request',count);
-  try{await openConfirm(step);await dialog.locator('[data-admin-confirm-cancel]').click();await expect(dialog).toHaveCount(0);await expect(bar.getByRole('button',{name:'تنفيذ',exact:true})).toBeFocused();assert.equal(posts,0);}finally{page.off('request',count);}
+  try{await openConfirm(step);if(!renderedConfirmed){renderedAdoption.push(await observeCoreModalFocusAdoption({...oneShotBase(),id:'domain-bulk-'+recipe.entity+'-confirm-focus',dialog,state:'dirty-confirmation',escape:'not-exercised'}));renderedConfirmed=true;}await dialog.locator('[data-admin-confirm-cancel]').click();await expect(dialog).toHaveCount(0);await expect(bar.getByRole('button',{name:'تنفيذ',exact:true})).toBeFocused();assert.equal(posts,0);}finally{page.off('request',count);}
   const after=await fingerprint(correlation,'after');unchanged(before,after);for(const target of recipe.targets)await expect(selection(target)).toBeChecked();return {before:before.id,after:after.id};
  }
  async function rejectUnknownTopicDelivery(recipe,step){
@@ -193,10 +197,13 @@ export async function runCoreDomainBulkJourneys(ctx){
   }return prepared;
  }
  for(const recipe of plan)await run('domain-bulk-'+recipe.entity+'-registered-options',[],async()=>{
+  renderedAdoption=[];renderedConfirmed=false;
   const actual=[],preparations=[];let rejection;
   for(const [ordinal,action]of recipe.steps.entries()){
    const step=coreDomainBulkStep(recipe,action,ordinal);if(recipe.entity==='categories'&&ordinal===1)preparations.push(...await reTrashCategories(recipe));
-   await navigate(recipe,step.trash);await select(recipe,step);const cancelled=await cancelConfirmation(recipe,step);
+   await navigate(recipe,step.trash);await select(recipe,step);
+   if(ordinal===0){const container=page.locator('[data-admin-data-grid-scroll]');await expect(container).toHaveCount(1);const row=container.locator('tr[data-entity-row-id="'+recipe.targets[0].id+'"]');const target=row.locator('td[data-admin-column-key]:not([data-admin-grid-sticky])').last();renderedAdoption.push(await observeCoreScrollbarAdoption({...oneShotBase(),id:'domain-bulk-'+recipe.entity+'-selected-grid-scroll',container,target,axis:'x',containment:'overscroll-contain'}));}
+   const cancelled=await cancelConfirmation(recipe,step);
    if(ordinal===0)rejection=await rejectBeforeDelivery(recipe,step);
    await openConfirm(step);const startedAt=new Date().toISOString(),trigger=step.confirmation?dialog.locator('[data-admin-confirm-submit]'):bar.locator('button[type="submit"]');
    const requests=await held(recipe,trigger,step.confirmation);await expect(dialog).toHaveCount(0);await expect(bar).toHaveCount(0,{timeout:60_000});
@@ -219,7 +226,7 @@ export async function runCoreDomainBulkJourneys(ctx){
    }
    actual.push({action,ordinal,requests,nativeState:state.id,nativeWrite:saved.id,publicationAudit,cancelled,...(nativeCommandId?{commandId:nativeCommandId}:{})});if(ordinal===recipe.steps.length-1)databaseReadback.push(...descriptors);
   }
-  const result={entity:recipe.entity,consumer:recipe.consumer,targetIds:recipe.ids,actualCommands:actual,preparationNativeIds:preparations,rejection,pendingDuplicateBlocked:true,selectionRetainedOnFailure:true,selectionClearedAfterSuccess:true};outcomes.push(result);return result;
+  const result={renderedAdoption,entity:recipe.entity,consumer:recipe.consumer,targetIds:recipe.ids,actualCommands:actual,preparationNativeIds:preparations,rejection,pendingDuplicateBlocked:true,selectionRetainedOnFailure:true,selectionClearedAfterSuccess:true};outcomes.push(result);return result;
  });
  return {status:outcomes.length===plan.length?'pass':'incomplete',outcomes,expectedConsumers:plan.length,sourceOnlyNotApplicable,automaticCoverage:[],globalClosed:false,
   boundary:'Only named current bulk commands on disposable rows; no global Empty Trash, permission outage, persistence fault, mixed protected-page batch, or complete capability-axis claim.'};

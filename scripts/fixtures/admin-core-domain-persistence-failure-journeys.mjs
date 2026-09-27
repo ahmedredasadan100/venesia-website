@@ -1,3 +1,4 @@
+import {createCoreDomainVisibilityControl} from './admin-core-domain-visibility-control.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -31,10 +32,10 @@ export async function runCoreDomainPersistenceFailureJourneys(ctx) {
   for (const recipe of plan) await run('domain-' + recipe.entity + '-native-statement-rejection-explicit-retry', [], async () => {
     const startedAt = new Date().toISOString();
     await observe('persistence-open-' + recipe.entity, () => page.goto(origin + recipe.path + '?q=' + encodeURIComponent(recipe.label), { waitUntil: 'domcontentloaded' }));
-    const visibility = page.locator('[data-admin-row-action="visibility"][data-admin-entity-id="' + recipe.id + '"] button');
+    const visibility = createCoreDomainVisibilityControl({page,recipe});
     const dialog = page.locator('[data-admin-confirm-dialog]');
-    await expect(visibility).toHaveCount(1, { timeout: 60_000 }); await expect(visibility).toBeEnabled({ timeout: 60_000 });
-    const original = await visibility.getAttribute('aria-pressed'); assert.ok(original === 'true' || original === 'false');
+    await visibility.expectEnabled();
+    const original = await visibility.readState(); assert.ok(original === 'true' || original === 'false');
     const originalState = recipe.values[original === 'true' ? 0 : 1],initialConfirmation=coreDomainVisibilityRequiresConfirmation(recipe,original);
     const probe = () => native(output, { kind: 'terminal-domain-state', entity: recipe.entity, ids: [recipe.id], startedAt });
     const before = await probe(); assert.ok(Number.isSafeInteger(before.expectedActorId)&&before.expectedActorId>0); assert.equal(before.rows.length, 1); assert.equal(before.rows[0][recipe.state], originalState);
@@ -46,20 +47,20 @@ export async function runCoreDomainPersistenceFailureJourneys(ctx) {
     page.on('request', requests);
     try {
       try {
-        if (initialConfirmation) { await visibility.click(); await expect(dialog).toHaveCount(1); }
+        if (initialConfirmation) { await visibility.invoke(); await expect(dialog).toHaveCount(1); }
         const requestStarted = page.waitForRequest(request => request.method() === 'POST' && Boolean(request.headers()['next-action'])
           && new URL(request.url()).pathname === new URL(recipe.path, origin).pathname, { timeout: 25_000 });
         const response = actionResponse(); response.catch(() => {}); requestStarted.catch(() => {});
-        const click = (initialConfirmation ? dialog.locator('[data-admin-confirm-submit]') : visibility).click(); click.catch(() => {});
+        const click = initialConfirmation ? dialog.locator('[data-admin-confirm-submit]').click() : visibility.invoke(); click.catch(() => {});
         await requestStarted;
         try { cancellation = await fault('cancel'); } catch (error) { producerFailed = true; throw error; }
         assert.equal(cancellation.cancelledOneStatement, true); assert.equal(cancellation.fixedMutationSignatureMatched, true);
         deniedStatus = (await response).status(); await click;
         assert.ok(deniedStatus === 200 || deniedStatus >= 400, 'A persistence fault must not masquerade as an Auth redirect.');
         await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible({ timeout: 25_000 });
-        await expect(visibility).toHaveAttribute('aria-pressed', original);
-        if (initialConfirmation) { await expect(dialog).toHaveCount(1); await expect(dialog.locator('[data-admin-confirm-submit]')).toBeEnabled(); }
-        else await expect(visibility).toBeEnabled();
+        await visibility.expectState(original);
+        if (initialConfirmation && visibility.failedConfirmation==='retained') { await expect(dialog).toHaveCount(1); await expect(dialog.locator('[data-admin-confirm-submit]')).toBeEnabled(); }
+        else {await expect(dialog).toHaveCount(0);await visibility.expectEnabled();}
         assert.equal(posts, 1, 'The cancelled statement cannot authorize an automatic domain-command replay.');
       } finally {
         // A failing producer operation releases its matching token itself. Every
@@ -71,10 +72,13 @@ export async function runCoreDomainPersistenceFailureJourneys(ctx) {
       const checkpoints = [];
       for (const [index, expected] of [[0, original === 'true' ? 'false' : 'true'], [1, original]]) {
         const confirmationRequired=coreDomainVisibilityRequiresConfirmation(recipe,index===0?original:(original==='true'?'false':'true'));
+        // The actual User failure result settles and closes its confirmation. Reopen
+        // it explicitly only after native unchanged proof, before the separate retry.
+        if(confirmationRequired&&index===0&&visibility.failedConfirmation==='closed'){await visibility.invoke();await expect(dialog).toHaveCount(1);assert.equal(posts,1);}
         if (confirmationRequired && index === 1) {
-          const postsBefore=posts;await visibility.click();await expect(dialog).toHaveCount(1);
-          await dialog.locator('[data-admin-confirm-cancel]').click();await expect(dialog).toHaveCount(0);await expect(visibility).toBeFocused();assert.equal(posts,postsBefore,'Cancelling restoration must dispatch nothing.');
-          await visibility.click();await expect(dialog).toHaveCount(1);
+          const postsBefore=posts;await visibility.invoke();await expect(dialog).toHaveCount(1);
+          await dialog.locator('[data-admin-confirm-cancel]').click();await expect(dialog).toHaveCount(0);await visibility.expectReturnedFocus();assert.equal(posts,postsBefore,'Cancelling restoration must dispatch nothing.');
+          await visibility.invoke();await expect(dialog).toHaveCount(1);
         }
         const trigger=confirmationRequired?dialog.locator('[data-admin-confirm-submit]'):visibility;
         let release;const gate=new Promise(resolve=>{release=resolve;}),holdConfirmation=recipe.entity==='projects'&&confirmationRequired&&index===1;let intercepted=0;
@@ -85,12 +89,12 @@ export async function runCoreDomainPersistenceFailureJourneys(ctx) {
         try {
         const response = actionResponse(); response.catch(() => {});
         await observe('persistence-explicit-' + (index === 0 ? 'retry' : 'restore') + '-' + recipe.entity,
-          () => trigger.click());
+          () => confirmationRequired ? trigger.click() : visibility.invoke());
         if(holdConfirmation){await expect.poll(()=>intercepted,{timeout:25000}).toBe(1);await expect(trigger).toBeDisabled();await trigger.evaluate(button=>button.click());assert.equal(intercepted,1,'Disabled confirmation cannot dispatch a duplicate.');release();}
         assertActionAcknowledged(await response);
         if (confirmationRequired) await expect(dialog).toHaveCount(0, { timeout: 60_000 });
-        await expect(visibility).toHaveAttribute('aria-pressed', expected, { timeout: 60_000 }); await expect(visibility).toBeEnabled({ timeout: 60_000 });
-        await page.reload({ waitUntil: 'domcontentloaded' }); await expect(visibility).toHaveAttribute('aria-pressed', expected, { timeout: 60_000 });
+        await visibility.expectState(expected); await visibility.expectEnabled();
+        await page.reload({ waitUntil: 'domcontentloaded' }); await visibility.expectState(expected);
         const state = await probe(); assert.equal(state.expectedActorId,before.expectedActorId); assert.equal(state.rows.length, 1); assert.equal(state.rows[0][recipe.state], recipe.values[expected === 'true' ? 0 : 1]);
         assert.ok(state.audit.length > rejected.audit.length); checkpoints.push(state);
         } finally {release();if(removeHold)await removeHold();}

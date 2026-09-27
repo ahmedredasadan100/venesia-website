@@ -16,6 +16,7 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
  const root=resolve(import.meta.dirname,'../..'),jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false,alias:{'server-only':resolve(root,'node_modules/next/dist/compiled/server-only/empty.js')}});
  const password=await jiti.import<typeof import('../../src/lib/admin/auth/password.ts')>(resolve(root,'src/lib/admin/auth/password.ts'));
  const duplicate=await jiti.import<typeof import('../../src/lib/admin/projects/project-duplicate-seo.ts')>(resolve(root,'src/lib/admin/projects/project-duplicate-seo.ts'));
+ const entry=await jiti.import<typeof import('../../src/lib/admin/projects/project-entry-contract.ts')>(resolve(root,'src/lib/admin/projects/project-entry-contract.ts'));
  const passwordHash=await password.hashPassword(randomBytes(32).toString('base64url'));
  const actorId=await readCoreFixedQaActor(handle),namespace='qa-b1-'+randomUUID().slice(0,8),contexts:Record<string,CoreQueryFixture>={};
  const columns=new Map<string,string[]>();
@@ -43,7 +44,8 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
       const proof=duplicate.buildProjectDuplicateSeoProof(original as unknown as Parameters<typeof duplicate.buildProjectDuplicateSeoProof>[0],copyNumber);
       const id=Number((await db.query('select * from public.duplicate_project_admin_entry($1,$2::jsonb)',[original.id,JSON.stringify(proof)])).rows[0].project_id);ids.push(id);
       const row={...original,arabic_name:label(i),english_name:slug(i),slug:slug(i)},score=seo.deriveEntitySeoScore(seo.toProjectSeoScoreInput(row as ProjectSeoSource));
-      await db.query('update public.projects set arabic_name=$2,english_name=$3,slug=$3,code=$3,seo_score=$4,seo_score_version=$5,seo_score_input_hash=$6 where id=$1',[id,row.arabic_name,row.slug,score.seo_score,score.seo_score_version,score.seo_score_input_hash]);
+      const codeForm=new FormData();codeForm.set('type',String(spec.type));codeForm.set('code',String(row.slug));const code=entry.projectEntryPayloadFromFormData(codeForm).project.code;
+      await db.query('update public.projects set arabic_name=$2,english_name=$3,slug=$3,code=$7,seo_score=$4,seo_score_version=$5,seo_score_input_hash=$6 where id=$1',[id,row.arabic_name,row.slug,score.seo_score,score.seo_score_version,score.seo_score_input_hash,code]);
       if(i%2===0){const readiness=(await db.query('select * from public.project_publishing_readiness($1)',[id])).rows[0];assert.equal(readiness.ready,true);await db.query('select * from public.set_project_publication_admin_entry($1,true,$2)',[id,actorId]);}
      }
     }else if(spec.level){
@@ -69,7 +71,8 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
       const original=spec.table==='topics'?topic:spec.table==='topic_categories'?category:spec.table==='topic_series'?series:page;
       const row:Row={...original,slug:slug(i),[spec.labelColumn]:label(i),deleted_at:null,created_at:stamp(i),updated_at:stamp(i),status:i%2===0?'published':'unpublished'};
       if(spec.table==='topics'){
-       Object.assign(row,{series_id:null,series:null,series_slug:null,is_featured:false,content_type:spec.entity==='topics_without_image'&&i%2?'news':'article'});
+       const linked=spec.entity==='topics'&&i%3===0;if(linked){assert.equal(series.status,'published');assert.equal(series.deleted_at,null);assert.equal(Number(series.category_id),Number(category.id));}
+       Object.assign(row,{series_id:linked?series.id:null,series:linked?series.name:null,series_slug:linked?series.slug:null,is_featured:false,content_type:spec.entity==='topics_without_image'&&i%2?'news':'article'});
        if(spec.entity==='topics_without_image')Object.assign(row,{image:'',image_alt:null,status:'unpublished',published_at:null});
        Object.assign(row,seo.deriveEntitySeoScore(seo.toTopicSeoScoreInput(row as unknown as TopicSeoSource)));
       }else if(spec.table==='topic_categories')Object.assign(row,{parent_id:null,is_active:i%2===0,show_in_menu:false});
@@ -85,7 +88,7 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
   });
   if(spec.entity==='projects'&&chunk%4===3)await handle.renewDatabaseControlConnection();
   }
-  assert.equal(ids.length,count);assert.equal(new Set(ids).size,count);contexts[spec.key]??={search,ids};if(['topics','series'].includes(spec.entity)){assert.ok(Number.isSafeInteger(Number(category.id))&&Number(category.id)>0);assert.equal(typeof category.name,'string');contexts[spec.key].filterOptions={category:{id:Number(category.id),name:String(category.name)}};}await handle.renewDatabaseControlConnection();
+  assert.equal(ids.length,count);assert.equal(new Set(ids).size,count);contexts[spec.key]??={search,ids};if(['topics','series'].includes(spec.entity)){assert.ok(Number.isSafeInteger(Number(category.id))&&Number(category.id)>0);assert.equal(typeof category.name,'string');contexts[spec.key].filterOptions={category:{id:Number(category.id),name:String(category.name)},...(spec.entity==='topics'?{series:{id:Number(series.id),name:String(series.name)}}:{})};}await handle.renewDatabaseControlConnection();
  }
  // Keep synthetic audit rows labelled as read fixtures, never domain-write proof.
  return {contexts,namespace,scope:'Read-model fixtures only; Activity Log entries are synthetic fixtures, not evidence of audited Product mutations.'};

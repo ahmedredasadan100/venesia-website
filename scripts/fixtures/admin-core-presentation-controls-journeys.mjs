@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {createJiti} from "jiti";
 import {expect} from "playwright/test";
-import {buildCorePresentationControlsPlan,loadPresentationControlBuilders,presentationControlForm,assertPresentationControlsConfig,PRESENTATION_CONTROL_PHASES,PRESENTATION_CONTROL_VALUES as v} from "./admin-core-presentation-controls-contract.mjs";
+import {buildCorePresentationControlsPlan,validateContentScrollFixture,assertContentScrollFingerprints,loadPresentationControlBuilders,presentationControlForm,assertPresentationControlsConfig,PRESENTATION_CONTROL_PHASES,PRESENTATION_CONTROL_VALUES as v} from "./admin-core-presentation-controls-contract.mjs";
 
 /** Existing unused internal Hero/generic Content only; no public destination follows. */
 export async function runCorePresentationControlsJourneys(ctx){
@@ -96,5 +96,27 @@ export async function runCorePresentationControlsJourneys(ctx){
   await observe("presentation-controls-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await tab("content");await assertUi();await checkpoint("reloaded");
   const result={renderedAdoption,kind:recipe.kind,consumer:recipe.consumer,surface:recipe.surface,nativeCheckpoints:6,nativePhases:[...PRESENTATION_CONTROL_PHASES],exactWrites:1,pendingRejection:rejected,pendingSave:saved,postRejectionDirtyNavigationCancelled:true,controls:recipe.kind==="hero"?["five_text_fields","visibility_bold_alignment","current_variant_selection_restored","image_composition","desktop_add_replace_cancel_order_remove","optional_mobile_add_replace_empty","primary_link_replace_target_cancel","secondary_link_clear","mirrored_cta_controls"]:["four_generic_text_fields","visibility_bold_alignment","hidden_identity_preserved"],automaticAxisCoverage:[],globalClosed:false};outcomes.push(result);return result;
  });
- return{planned:2,completed:outcomes.length,outcomes,nonCapabilities:plan.nonCapabilities,nativeFinalityRequired:true,globalClosed:false};
+ const contentScroll=await observeContentScrollVariant({...ctx,formManifest:manifest},f.contentScroll);
+ return{planned:2,completed:outcomes.length,outcomes,contentScroll,nonCapabilities:plan.nonCapabilities,nativeFinalityRequired:true,globalClosed:false};
+}
+
+/** Existing conditional Content descendant, opened and cancelled without changing its draft. */
+async function observeContentScrollVariant(ctx,fixture){
+ validateContentScrollFixture(fixture);const{page,origin,requiredCases,formManifest,run,observe,nativeCheckpoint}=ctx;let completed;
+ await run('core-presentation-content-variant-scroll',[],async()=>{
+  const correlationId=randomUUID(),checkpoint=async phase=>{const request={id:randomUUID(),kind:'form-permission-fingerprint',correlationId,phase},result=await nativeCheckpoint(request);for(const key of Object.keys(request))assert.equal(result[key],request[key]);return result;};
+  const before=await checkpoint('before');let actionRequests=0;const count=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)actionRequests++;};page.on('request',count);
+  try{
+   await observe('content-scroll-variant-navigation',()=>page.goto(origin+fixture.editPath,{waitUntil:'domcontentloaded'}));
+   const form=page.locator('form[data-admin-form-runtime]').filter({has:page.locator('input[name="id"][value="'+fixture.id+'"]')}),variant=form.locator('input[name="variant"]');await expect(form).toHaveCount(1);await expect(variant).toHaveValue(fixture.variant);await expect(form.locator('input[name="name"]')).toHaveValue(fixture.name);
+   await form.locator('[data-admin-tab-id="content"]').click();const owner=form.locator('[data-admin-media-image-field="image_main"]'),original=await owner.locator('input[name="image_main"]').inputValue(),trigger=owner.getByRole('button').first();await expect(owner).toHaveCount(1);
+   const [initial]=await Promise.all([page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).origin===origin&&new URL(response.url()).pathname==='/api/admin/media-library'),trigger.click()]);assert.equal(initial.status(),200);
+   const picker=page.getByRole('dialog',{name:'اختيار صورة من المكتبة',exact:true});await expect(picker).toBeVisible();const required=requiredCases.filter(row=>row.boundary==='form'&&row.consumer==='block-template-content-editor'&&row.axis==='scrollbar');assert.equal(required.length,1);
+   const renderedAdoption=[await observeCoreScrollbarAdoption({page,origin,requiredCases,formManifest,bindings:[{boundary:'form',consumer:'block-template-content-editor',surface:'content:template-edit'}],id:'presentation-content-single-image-media-scroll',container:picker.locator('[data-media-picker-scroll]'),target:picker.getByText('يُعاد التحقق من الارتباطات تلقائيًا قبل أي حذف.',{exact:true}),axis:'y',containment:'overscroll-contain'})];
+   await picker.getByRole('button',{name:'إلغاء',exact:true}).click();await expect(picker).toHaveCount(0);await expect(trigger).toBeFocused();await expect(owner.locator('input[name="image_main"]')).toHaveValue(original);await expect(form).toHaveAttribute('data-admin-form-dirty','false');
+   await observe('content-scroll-variant-reload',()=>page.reload({waitUntil:'domcontentloaded'}));await expect(variant).toHaveValue(fixture.variant);await expect(owner.locator('input[name="image_main"]')).toHaveValue(original);await expect(form).toHaveAttribute('data-admin-form-dirty','false');assert.equal(new URL(page.url()).pathname,fixture.editPath);assert.equal(actionRequests,0);
+   const after=await checkpoint('after');assertContentScrollFingerprints(before,after);completed={fixture,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,routePathname:fixture.editPath,readOnly:true,saveNotInvoked:true,reloadVariantRetained:true,pickerCancelled:true,exactTriggerFocusRestored:true,nativeIds:[before.id,after.id],ownedRunId:before.ownedRunId,automaticCoverage:[],globalClosed:false};return{contentScroll:completed,renderedAdoption,automaticCoverage:[]};
+  }finally{page.off('request',count);}
+ });
+ return completed;
 }

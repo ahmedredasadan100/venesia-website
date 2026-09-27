@@ -1,4 +1,5 @@
 import { exerciseCoreImageField } from "./admin-core-direct-image-adoption.mjs";
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
 import { runCoreDescendantPresentationJourneys } from './admin-core-descendant-presentation-journeys.mjs';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -119,6 +120,20 @@ export async function runCorePageCompositionJourneys(ctx) {
     await page.getByRole("option", { name: label, exact: true }).click();
     await expect(field).toHaveValue(String(value));
   }
+  let renderedAdoption=[],renderedAssignmentObserved=false;
+  const compositionRenderedBase=(surface,axis)=>({page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:"form",consumer,surface},...(axis==="modal"?collectionConsumers.map(consumer=>({boundary:"collection",consumer,surface:new URL(page.url()).pathname})):[])]});
+  async function observeAssignmentModal(template) {
+    if(renderedAssignmentObserved)return;
+    const current=dialog(),prefix="composition-"+template.kind+"-assignment";
+    renderedAdoption.push(await observeCoreModalFocusAdoption({...compositionRenderedBase("assignment","modal"),id:prefix+"-focus",dialog:current}));
+    const body=current.locator(":scope > div").filter({has:page.locator("#assign-page-block-form")});
+    const target=current.getByText("الربط الظاهر لا يكفي وحده",{exact:false});
+    renderedAdoption.push(await observeCoreScrollbarAdoption({...compositionRenderedBase("assignment","scrollbar"),id:prefix+"-scroll",container:body,target,axis:"y",containment:"modal-lock"}));
+    renderedAssignmentObserved=true;
+  }
+  async function observeRemovalModal(confirmation,template) {
+    renderedAdoption.push(await observeCoreModalFocusAdoption({...compositionRenderedBase("composition","modal"),id:"composition-"+template.kind+"-remove-focus",dialog:confirmation,state:"dirty-confirmation",escape:"not-exercised"}));
+  }
   async function openAssignment(template, slot, order) {
     await page.getByRole("button", { name: "إضافة موديول", exact: true }).click();
     await expect(dialog()).toBeVisible();
@@ -126,7 +141,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     await page.getByRole("option", { name: moduleKindLabel(template.kind), exact: true }).click();
     const templateField = dialog().locator('[data-admin-form-listbox]:has(select[name="template_id"])');
     await expect(templateField).toHaveAttribute("data-admin-form-listbox-state", template.fixed ? "empty" : "ready", { timeout: 60_000 });
-    if (template.fixed) return;
+    if (template.fixed) {await observeAssignmentModal(template);return;}
     const slotValues = await dialog().locator('select[name="slot"] option').evaluateAll(options => options.map(option => option.value).filter(Boolean));
     assert.deepEqual(slotValues, template.slots, "The picker must expose exactly the current canonical compatible positions.");
     for (const existing of fixtures.pages.templates.filter(row => row.kind === template.kind && row.assigned)) {
@@ -135,6 +150,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     await select(dialog(), "template_id", template.id);
     await select(dialog(), "slot", slot);
     await dialog().locator('input[name="sort_order"]').fill(String(order));
+    await observeAssignmentModal(template);
   }
   async function removal(template) {
     await assignedRow(template).locator('[data-admin-row-action="more"]').getByRole("button").click();
@@ -147,12 +163,13 @@ export async function runCorePageCompositionJourneys(ctx) {
     comparePageAssignmentOrder({ sortOrder: a.sort_order, moduleKind: a.kind.replaceAll("_", "-"), assignmentId: number(a.id) },
       { sortOrder: b.sort_order, moduleKind: b.kind.replaceAll("_", "-"), assignmentId: number(b.id) }));
   const result = (id, details) => {
-    const value = { id, consumer, collectionConsumers, automaticCoverage: [], relatedRequiredCases: plan.relatedCases, ...details,
+    const value = { id, consumer, collectionConsumers, renderedAdoption:[...renderedAdoption], automaticCoverage: [], relatedRequiredCases: plan.relatedCases, ...details,
       proofBoundary: "Only these concrete current Page Composition and SEO UI/native journeys. No complete capability axis or generic SEO rollback claim." };
-    results.push(value); return value;
+    results.push(value);renderedAdoption=[];renderedAssignmentObserved=false;return value;
   };
 
   for (const template of plan.fixed) await run("core-page-composition-fixed-" + template.kind, [], async () => {
+    renderedAdoption=[];renderedAssignmentObserved=false;
     await navigate(); const before = await snapshot(template.kind + "-before");
     assert.ok(before.assignments.some(row => row.kind === template.kind), "The fixed-kind exclusion requires its actual existing assignment.");
     await openAssignment(template);
@@ -166,6 +183,7 @@ export async function runCorePageCompositionJourneys(ctx) {
   });
 
   for (const template of plan.assignments) await run("core-page-composition-" + template.kind + "-assignment", [], async () => {
+    renderedAdoption=[];renderedAssignmentObserved=false;
     await navigate(); let before = await snapshot(template.kind + "-before");
     const slot = template.slots.find(value => value !== "hero"); assert.ok(slot);
     const sortOrder = Math.max(0, ...ordered(before, slot).map(row => row.sort_order)) + 10;
@@ -205,6 +223,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     assert.equal(after.assignments.find(row => identity(row) === assignmentKey).slot, destination);
     auditIds.push(assertPageCompositionAudit(before, after, "save_assignment"));
     const confirmation = await removal(template);
+    await observeRemovalModal(confirmation,template);
     await confirmation.locator("[data-admin-confirm-cancel]").click(); await expect(confirmation).toHaveCount(0);
     await expect(assignedRow(template)).toHaveCount(1);
     assertPageCompositionUnchanged(after, await snapshot(template.kind + "-remove-cancel"));
@@ -221,6 +240,7 @@ export async function runCorePageCompositionJourneys(ctx) {
   });
 
   await run("core-page-composition-layout-reject-retry", [], async () => {
+    renderedAdoption=[];renderedAssignmentObserved=false;
     await navigate("layout"); const before = await snapshot("layout-before");
     const panel = page.locator("section").filter({ has: page.locator('select[name="layout_editor"]') }).last();
     await select(panel, "layout_editor", "new");
@@ -278,6 +298,7 @@ export async function runCorePageCompositionJourneys(ctx) {
       verified: ["incompatible_layout_reject_no_write", "draft_preserved", "compatible_retry_save_reload_native", "used_region_delete_reject_no_write", "original_layout_restored"] });
   });
   await run("core-page-composition-seo-reject-retry-reload", [], async () => {
+    renderedAdoption=[];renderedAssignmentObserved=false;
     const scope = assertPageSeoScope(manifest);
     const seoOwner = await jiti.import("../../src/lib/seo/entity-seo-types.ts");
     await navigate("seo");
