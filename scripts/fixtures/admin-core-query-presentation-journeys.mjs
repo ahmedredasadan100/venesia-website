@@ -26,6 +26,16 @@ export async function assertCoreQueryInformation(spec,row,info){
   await expect(info.getByText(row.information.viewCount.toLocaleString('en-US')+' مشاهدة',{exact:true})).toHaveCount(1);
   return {kind:'information',nativeEntityId:row.id,nativeViewCount:row.information.viewCount,actualActivityPanel:true};
  }
+ if(spec.entity==='pages'){
+  assert.ok(Number.isSafeInteger(row.id)&&row.id>0,'Native Page identity is required.');
+  assert.ok(typeof row.publicPath==='string'&&row.publicPath.startsWith('/')&&!row.publicPath.startsWith('//'),'Native canonical Page path is required.');
+  await expect(info.locator('[data-admin-row-actions-information-title]')).toHaveText('معلومات الصفحة');
+  const nativeId=info.locator('dt').filter({hasText:/^المعرف$/u}).locator('..').locator('dd');
+  const nativePath=info.locator('dt').filter({hasText:/^المسار$/u}).locator('..').locator('dd');
+  await expect(nativeId).toBeVisible();await expect(nativeId).toHaveText(String(row.id));
+  await expect(nativePath).toBeVisible();await expect(nativePath).toHaveText(row.publicPath);
+  return {kind:'information',nativeEntityId:row.id,nativePublicPath:row.publicPath,actualPageInformation:true};
+ }
  await expect(info).toContainText(row.label);return {kind:'information',nativeEntityId:row.id,nativeLabel:row.label};
 }
 /** Current B1 context bindings come from its source-derived plan and canonical cells. */

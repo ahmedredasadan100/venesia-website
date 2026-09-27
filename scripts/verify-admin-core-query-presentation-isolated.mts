@@ -87,7 +87,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
 
 
  const direction=query.sort.direction==='asc'?'asc':'desc';
- const idDirection=['topics','categories','series','pages','projects','project_tracking_stages','project_tracking_items'].includes(spec.entity)?'asc':direction;
+ const idDirection=spec.entity==='projects'?'desc':['topics','categories','series','pages','project_tracking_stages','project_tracking_items'].includes(spec.entity)?'asc':direction;
  return handle.withDatabaseConnection(async connection=>{
   await connection.query('begin isolation level repeatable read read only');
   try{
@@ -97,7 +97,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    assert.deepEqual(cohort.ids,[...fixture.ids].sort((a,b)=>a-b),'Native complete search set must equal the pre-registered fixture IDs.');
    const fingerprint=String(cohort.fingerprint),previous=current.fingerprints.get(spec.key);
    if(previous)assert.equal(fingerprint,previous,'Read-only query/row information journeys must not mutate their domain rows.');
-   let rows=(await connection.query(`select id,${label} label${spec.entity==='projects'?',slug':spec.entity==='pages'?',path':spec.entity==='topics'?',view_count':spec.entity==='activity_log'?',created_at':''} from public.${table} where ${filtered.join(' and ')} order by ${sort} ${direction} nulls last,id ${idDirection}`,filteredValues)).rows;
+   let rows=(await connection.query(`select id,${label} label${spec.entity==='projects'?',slug':spec.entity==='pages'?',path':spec.entity==='topics'?',views_count':spec.entity==='activity_log'?',created_at':''} from public.${table} where ${filtered.join(' and ')} order by ${sort} ${direction} nulls last,id ${idDirection}`,filteredValues)).rows;
    if(viewTrash&&spec.entity==='categories'){
     // Reuse the actual stable taxonomy tree reader. Independently reject any
     // missing, duplicate or active member against raw native trash membership.
@@ -124,7 +124,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    await connection.query('commit');current.fingerprints.set(spec.key,fingerprint);
    current.proofs.set(request.id,{id:request.id,routeKey:spec.key,scenario:request.scenario,actorId,ownedRunId:handle.identity.runId,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,query:params.toString(),completeIds:ids,dateFilterProjection,searchProjection,extraFilterProjection,viewProjection});
    return {status:"pass" as const,ownedRunId:handle.identity.runId,id:request.id,kind:request.kind,routeKey:spec.key,scenario:request.scenario,entity:spec.entity,consumerId:spec.consumerId,actorId,route:spec.routeFor(fixture),query:params.toString(),
-    expectedIds:ids.slice(start,start+query.pageSize),completeIds:ids,rows:rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),label:String(row.label),publicPath:spec.publicPathFor(row),...(spec.entity==='topics'?{information:{viewCount:Number(row.view_count??0)}}:{})})),
+    expectedIds:ids.slice(start,start+query.pageSize),completeIds:ids,rows:rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),label:String(row.label),publicPath:spec.publicPathFor(row),...(spec.entity==='topics'?{information:{viewCount:Number(row.views_count??0)}}:{})})),
     pagination:{page,pageSize:query.pageSize,totalRows:rows.length,totalPages},dateFilterProjection,searchProjection,extraFilterProjection,viewProjection,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,
     proofBoundary:'Native table order, complete isolated search set and same-run QA preference projection; no domain audit or unrelated capability proof is inferred.'};
   }catch(error){await connection.query('rollback');throw error;}

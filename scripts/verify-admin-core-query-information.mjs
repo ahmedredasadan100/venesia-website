@@ -4,6 +4,8 @@ import{resolve}from'node:path';
 import{pathToFileURL}from'node:url';
 import{chromium,expect}from'playwright/test';
 import ts from'typescript';
+import React from'react';
+import{renderToStaticMarkup}from'react-dom/server';
 
 function declaration(source,name,kind=ts.ScriptKind.JS){const file=ts.createSourceFile('owner.tsx',source,ts.ScriptTarget.Latest,true,kind),found=[];const visit=node=>{if(ts.isFunctionDeclaration(node)&&node.name?.text===name)found.push(node);ts.forEachChild(node,visit);};visit(file);assert.equal(found.length,1);return found[0].getText(file).replace(/^export\s+/,'');}
 export async function verifyCoreQueryInformation(source){
@@ -30,9 +32,33 @@ export async function verifyCoreQueryInformation(source){
   await test('Missing semantic view-count label remains a rejection',async()=>{await page.setContent(body({label:'other'}));await assert.rejects(run());});
   await test('A duplicated matching count is not accepted as one canonical value',async()=>{await page.setContent(body({extra:'<p>1,234 مشاهدة</p>'}));await assert.rejects(run());});
   await test('Matching text outside the row panel cannot replace its native view count',async()=>{await page.setContent(body({value:'0 مشاهدة'})+'<aside>1,234 مشاهدة</aside>');await assert.rejects(run());});
+  // Execute the actual Page information descriptor and canonical labeled renderer.
+  const pageSource=readFileSync('src/app/admin/pages-blocks/pages/PagesTableClient.tsx','utf8'),pageAst=ts.createSourceFile('pages.tsx',pageSource,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),descriptors=[];
+  const pageAction=pageAst.statements.find(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='PageRowActions');assert.ok(pageAction);
+  const visitPage=n=>{if(ts.isPropertyAssignment(n)&&n.name.getText(pageAst)==='information')descriptors.push(n.initializer.getText(pageAst));ts.forEachChild(n,visitPage);};visitPage(pageAction);assert.equal(descriptors.length,1);
+  const pure=file=>{const code=ts.transpileModule(readFileSync(file,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;return new Function('exports',code+';return exports;')({});};
+  const {resolvePagePublicPath}=pure('src/lib/pages/page-admin-policy.ts'),{formatPageTypeLabel}=pure('src/lib/admin/pages/format-page-type-label.ts'),{getContentStatusMetadata}=pure('src/lib/admin/content/content-status-metadata.ts');
+  const rawPage={id:12,title:'qa-b1-pages-rows 000',path:'/qa-b1-pages-rows-000',slug:'qa-b1-pages-rows-000',page_type:'static',status:'published'},pageRow={id:rawPage.id,label:rawPage.title,publicPath:resolvePagePublicPath(rawPage)};
+  const pageInformation=new Function('row','publicPath','status','formatPageTypeLabel','return ('+descriptors[0]+');')(rawPage,pageRow.publicPath,getContentStatusMetadata(rawPage.status),formatPageTypeLabel);
+  assert.deepEqual(pageInformation.items.map(x=>x.label),['المعرف','المسار','النوع','الحالة']);assert.equal(pageInformation.items.some(x=>x.value===rawPage.title),false);
+  const activity=declaration(readFileSync('src/components/admin/ui/AdminActivityPopover.tsx','utf8'),'AdminActivityContent',ts.ScriptKind.TSX),activityCode=ts.transpileModule(activity,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS,jsx:ts.JsxEmit.React}}).outputText,Activity=new Function('React',activityCode+';return AdminActivityContent;')(React);
+  const pageBody=({id=pageRow.id,title=pageInformation.title,items=pageInformation.items,extra=''}={})=>'<section data-admin-entity-id="'+id+'"><h3 data-admin-row-actions-information-title>'+title+'</h3>'+renderToStaticMarkup(React.createElement(Activity,{items}))+extra+'</section>';
+  const runPage=(row=pageRow)=>actual({entity:'pages'},row,info()),pageItems=(label,value)=>pageInformation.items.map(item=>item.label===label?{...item,value}:item);
+  await test('Actual Page descriptor and shared labeled renderer pass exact native ID and canonical path without display title',async()=>{await page.setContent(pageBody());assert.deepEqual(await runPage(),{kind:'information',nativeEntityId:12,nativePublicPath:pageRow.publicPath,actualPageInformation:true});});
+  await test('Old universal label expectation rejects the actual correct Page descriptor',async()=>{await page.setContent(pageBody());await assert.rejects(bounded(info()).toContainText(pageRow.label));});
+  await test('Page information rejects a wrong container native ID',async()=>{await page.setContent(pageBody({id:13}));await assert.rejects(runPage());});
+  await test('Page information rejects wrong displayed ID even when panel attribute is correct',async()=>{await page.setContent(pageBody({items:pageItems('المعرف','13')}));await assert.rejects(runPage());});
+  await test('Page information rejects wrong native path despite correct ID and borrowed display title',async()=>{await page.setContent(pageBody({items:pageItems('المسار','/wrong-path'),extra:'<p>'+pageRow.label+'</p>'}));await assert.rejects(runPage());});
+  await test('Page information requires the native receipt path, not a label fallback',async()=>{await page.setContent(pageBody());for(const publicPath of [undefined,null,'','//foreign/path'])await assert.rejects(runPage({...pageRow,publicPath}));});
+  await test('Page information rejects malformed native IDs',async()=>{for(const id of [0,-1,NaN,1.5]){await page.setContent(pageBody({id}));await assert.rejects(runPage({...pageRow,id}));}});
+  await test('Page information cannot borrow a correct path from outside its panel',async()=>{await page.setContent(pageBody({items:pageItems('المسار','/wrong-path')})+'<aside>'+pageRow.publicPath+'</aside>');await assert.rejects(runPage());});
+  await test('Page information cannot borrow a correct path from an unrelated labeled item',async()=>{await page.setContent(pageBody({items:[...pageItems('المسار','/wrong-path'),{label:'unrelated',value:pageRow.publicPath}]}));await assert.rejects(runPage());});
+  await test('Page information rejects duplicate canonical identity fields',async()=>{for(const label of ['المعرف','المسار']){await page.setContent(pageBody({items:[...pageInformation.items,pageInformation.items.find(x=>x.label===label)]}));await assert.rejects(runPage());}});
+  await test('Page information requires visible canonical path value',async()=>{await page.setContent(pageBody());await info().locator('dt').filter({hasText:/^المسار$/u}).locator('..').locator('dd').evaluate(el=>{el.hidden=true;});await assert.rejects(runPage());});
+  await test('Page information retains the canonical information-panel title',async()=>{await page.setContent(pageBody({title:pageRow.label}));await assert.rejects(runPage());});
   await test('Other consumers retain their native row-label requirement',async()=>{await page.setContent(body({title:'Category native label'}));const category={id:51,label:'Category native label'};assert.equal((await actual({entity:'topic_categories'},category,info())).nativeLabel,category.label);await assert.rejects(actual({entity:'topic_categories'},{...category,label:'Wrong label'},info()));});
   await test('Hidden or duplicate information panels remain strict failures',async()=>{await page.setContent('<div hidden>'+body()+'</div>');await assert.rejects(run());await page.setContent(body()+body());await assert.rejects(run());});
  }finally{await context.close();await browser.close();}
- return{status:'pass',checks:checks.length,cases:checks,scope:'Actual extracted Browser assertion and installed Playwright on source-bound controlled DOM. Actual shared formatter is executed. Native SQL projection is covered separately; no live application or global capability claim.'};
+ return{status:'pass',checks:checks.length,cases:checks,scope:'Actual extracted Browser assertion and installed Playwright on source-bound controlled DOM. Actual shared formatter, Page descriptor/path/status/type owners and labeled information renderer are executed. Native SQL projection is covered separately; no live application or global capability claim.'};
 }
 if(import.meta.url===pathToFileURL(resolve(process.argv[1])).href){const file=process.argv.includes('--candidate')?'.tmp-qa/core-final-closure/b1-information-contract-patch/files/scripts/fixtures/admin-core-query-presentation-journeys.mjs':'scripts/fixtures/admin-core-query-presentation-journeys.mjs';console.log(JSON.stringify(await verifyCoreQueryInformation(readFileSync(file,'utf8')),null,2));}

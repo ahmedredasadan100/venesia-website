@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as ts from "typescript";
+import { buildAdminListSearchOrFilter } from "../src/lib/admin/admin-list-search.ts";
 
 import {
   ADMIN_ROW_ACTION_MORE_ORDER,
@@ -6238,19 +6239,59 @@ check(
     read(paths.redirectsFilters).includes("onQueryPatch") &&
     !read(paths.redirectsFilters).includes("useRouter"),
 );
+
+
+function verifyServerPageSearchDelegationControls() {
+  const rootFile = paths.redirectsAdapter;
+  const alias = 'import { buildAdminListSearchOrFilter as search } from "../admin-list-search"; export function load(q:string){ return search(["title"], q); }';
+  assert.equal(verifyServerPageSearchDelegation(new Map([[rootFile, alias]])), true);
+  for (const source of [
+    'export const note = "buildAdminListSearchOrFilter"; // buildAdminListSearchOrFilter is not called',
+    'import { buildAdminListSearchOrFilter } from "../admin-list-search"; export const unused = true;',
+  ]) assert.throws(() => verifyServerPageSearchDelegation(new Map([[rootFile, source]])));
+  const foreign = "src/lib/admin/redirects/controlled-search-owner.ts";
+  assert.throws(() => verifyServerPageSearchDelegation(new Map([
+    [rootFile, 'import { buildAdminListSearchOrFilter } from "./controlled-search-owner"; export function load(q:string){ return buildAdminListSearchOrFilter(["title"], q); }'],
+    [foreign, 'export function buildAdminListSearchOrFilter(){ return "local replacement"; }'],
+  ])));
+  assert.throws(() => verifyServerPageSearchDelegation(new Map(), (fields, term) =>
+    term === "50%" ? 'title.ilike."%50%"' : buildAdminListSearchOrFilter(fields, term)));
+  assert.throws(() => verifyServerPageSearchDelegation(new Map(), (fields, term) =>
+    buildAdminListSearchOrFilter(fields.map(field => field === "title,deleted_at" ? "title" : field), term)));
+  return 6;
+}
+
+function verifyServerPageSearchDelegation(
+  sourceOverrides: SourceOverrides = new Map(),
+  build: typeof buildAdminListSearchOrFilter = buildAdminListSearchOrFilter,
+) {
+  for (const sourceFile of [paths.redirectsAdapter, paths.activityLoader, paths.reportQuery]) {
+    const graph = collectExecutableSourceGraph({
+      root: ROOT, entrySourceFiles: [sourceFile], sourceOverrides, symbolAware: true,
+    });
+    assert.ok(graphUsesExecutableBinding({
+      root: ROOT, graph, sourceOverrides,
+      bindings: [{ sourceFile: paths.adminListSearch, exportNames: ["buildAdminListSearchOrFilter"] }],
+    }), sourceFile + ": executable search delegation must reach the canonical owner");
+  }
+  assert.equal(build(["title"], "   "), "");
+  assert.equal(build(["title"], "ordinary text"), 'title.ilike."%ordinary text%"');
+  assert.equal(build(["title"], "50%"), "title.ilike." + JSON.stringify("%50\\%%"));
+  assert.equal(build(["title"], "a*.b"), "title.imatch." + JSON.stringify("a\\*\\.b"));
+  assert.throws(() => build(["title,deleted_at"], "literal"), TypeError);
+  return true;
+}
+
 check(
   "server-page search consumers delegate escaping to their authoritative query owners",
-  [paths.redirectsAdapter, paths.activityLoader, paths.reportQuery].every(
-    (sourceFile) => read(sourceFile).includes("buildAdminListSearchOrFilter"),
-  ) &&
+  verifyServerPageSearchDelegation() &&
     read(paths.projectsAdapter).includes("p_search: query.search") &&
     read(paths.projectPublishing).includes("v_search_pattern") &&
     read(paths.projectPublishing).includes("ilike v_search_pattern") &&
-    read(paths.adminListSearch).includes('const pattern = `"%${escaped}%"`') &&
-    read(paths.adminListSearch).includes("Invalid Admin list search field") &&
     !read(paths.redirectsAdapter).includes("sanitizeRedirectSearch") &&
     !read(paths.projectsAdapter).includes("sanitizeProjectSearch"),
 );
+check("search delegation retains alias support and rejects five ownership or behavior counterexamples", verifyServerPageSearchDelegationControls() === 6);
 check(
   "topics-without-image adapter delegates canonical sort direction to the domain read",
   read(paths.reportAdapter).includes("sortDirection: query.sort.direction") &&

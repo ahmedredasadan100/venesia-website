@@ -4,6 +4,7 @@ import ts from "typescript";
 import { fileURLToPath } from "node:url";
 import { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
 
 import {
   AdminEntityListQueryValidationError,
@@ -284,6 +285,46 @@ assert.throws(
   () => buildAdminListSearchOrFilter(["title,deleted_at"], "unsafe"),
   TypeError,
 );
+// The installed client transports the quoted operand unchanged. PostgreSQL
+// pattern behavior is tested independently in the existing search-boundary gate.
+const searchWireCases = [
+  ['qa plain', 'ilike', '%qa plain%'],
+  ['  عربية  ', 'ilike', '%عربية%'],
+  ['50%', 'ilike', String.raw`%50\%%`],
+  ['under_score', 'ilike', String.raw`%under\_score%`],
+  ['quote"mark', 'ilike', String.raw`%quote\"mark%`],
+  ['back\\slash', 'ilike', String.raw`%back\\slash%`],
+  ['a*b', 'imatch', String.raw`a\*b`],
+  ['*.[x]+?(a)|^$' + '{2}', 'imatch', String.raw`\*\.\[x\]\+\?\(a\)\|\^\$\{2\}`],
+  ['a*"\\b_%', 'imatch', String.raw`a\*"\\b_%`],
+] as const;
+const searchWireRequests: URL[] = [];
+const searchClient = createClient('https://abcdefghijklmnopqrst.supabase.co', 'controlled-public-key', {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  global: { fetch: async (input) => {
+    searchWireRequests.push(new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url));
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  } },
+});
+for (const [term, operator, pattern] of searchWireCases) {
+  const fields = ['title', 'slug'];
+  const filter = buildAdminListSearchOrFilter(fields, term);
+  assert.equal(filter, fields.map(field => field + '.' + operator + '.' + JSON.stringify(pattern)).join(','));
+  const response = await searchClient.from('controlled_search_rows').select('id').or(filter);
+  assert.equal(response.error, null);
+  const request = searchWireRequests.at(-1)!;
+  assert.equal(request.origin, 'https://abcdefghijklmnopqrst.supabase.co');
+  assert.equal(request.pathname, '/rest/v1/controlled_search_rows');
+  assert.equal(request.searchParams.get('or'), '(' + filter + ')');
+  assert.equal(request.searchParams.get('select'), 'id');
+  assert.deepEqual([...request.searchParams.keys()].sort(), ['or', 'select']);
+}
+assert.equal(searchWireRequests.length, searchWireCases.length);
+for (const badField of ['title,deleted_at', 'title.ilike.x', 'title)', 'title\\', '1title']) {
+  assert.throws(() => buildAdminListSearchOrFilter([badField], 'literal*'), TypeError);
+}
+console.log(JSON.stringify({ searchWireContract: 'pass', cases: searchWireCases.length, invalidFields: 5, actualNetwork: false }));
+
 
 const stablePageReads: number[] = [];
 const stablePage = await loadNormalizedAdminEntityListPage({

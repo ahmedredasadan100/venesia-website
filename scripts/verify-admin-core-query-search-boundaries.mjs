@@ -1,3 +1,5 @@
+import {PGlite} from '@electric-sql/pglite';
+import {buildAdminListSearchOrFilter,escapeAdminListSearchTerm} from '../src/lib/admin/admin-list-search.ts';
 import {observeCoreQueryStaleRead} from './fixtures/admin-core-query-presentation-journeys.mjs';
 import assert from 'node:assert/strict';import fs from 'node:fs';import path from 'node:path';import {randomUUID}from'node:crypto';import ts from 'typescript';
 import {loadCoreQueryPresentationPlan,CORE_QUERY_SEARCH_SCENARIOS,CORE_QUERY_STALE_SCENARIOS,coreQueryStaleOwner,coreQueryStaleRequestMatches,assertCoreQueryStaleReceipts,coreQueryViewScenarios,coreQueryTrashLinkFromSource,assertCoreQueryViewReceipts,CORE_ACTIVITY_DATE_SCENARIOS,coreQueryScenario,coreQuerySearchColumns,assertCoreQuerySearchReceipts}from'./fixtures/admin-core-query-presentation-plan.mjs';
@@ -15,7 +17,50 @@ for(const spec of plan)test('actual-native-route-scope-builder-'+spec.key,()=>{c
 const ownerBindings={topics:['src/lib/admin/content/load-unified-content.ts',['title']],categories:['sql/migrations/20260808120000_taxonomy_lifecycle_contract.sql',['listed.name']],series:['sql/migrations/20260808120000_taxonomy_lifecycle_contract.sql',['series_base.name','series_base.slug']],pages:['sql/migrations/20260810020000_admin_pages_sort_adoption.sql',['p.title','p.slug','p.path','p.page_type','p.status']],projects:['sql/migrations/20260803120000_project_publishing_visibility_capability.sql',['project.arabic_name','project.english_name','project.slug','project.location_label']],redirects:['src/lib/admin/redirects/entity-list-adapter.ts',['["source_path", "destination_path", "note"]']],activity_log:['src/lib/admin/audit/list-admin-audit-logs.ts',['["actor_username", "entity_label"]']],topics_without_image:['src/lib/admin/media-catalog/reports.ts',['["title", "slug"]']],admin_users:['src/lib/admin/users/entity-list-adapter.ts',['["username", "email", "full_name"]']]};
 for(const[entity,[file,markers]]of Object.entries(ownerBindings))test('canonical-search-fields-source-'+entity,()=>{const source=read(file);for(const marker of markers)assert.ok(source.includes(marker),marker);assert.ok(coreQuerySearchColumns(plan.find(row=>row.entity===entity)).length>0);});
 for(const[entity,file,marker]of [['project_locations_governorate','src/lib/admin/projects/location-management-adapter.ts','["name_ar", "name_en"]'],['project_tracking_stages','src/lib/admin/projects/tracking-adapter.ts','["name", "description"]'],['project_tracking_items','src/lib/admin/projects/tracking-adapter.ts','["name", "description"]'],['project_tracking_updates','src/lib/admin/projects/tracking-adapter.ts','["title", "body"]']])test('canonical-search-fields-source-'+entity,()=>assert.ok(read(file).includes(marker)));
-test('Topics-literal-contract-preserved-despite-source-risk',()=>{assert.ok(read('src/lib/admin/admin-list-search.ts').includes('.replace(/[%_*]/g, "\\\\$&")'));assert.ok(source.includes('Literal')||read('scripts/fixtures/admin-core-query-presentation-journeys.mjs').includes('wildcard widening must fail'));});
+
+// These expected operands are independent contract vectors, not a replacement
+// PostgREST parser. Exact emitted filters are checked before real PostgreSQL
+// ILIKE/~* semantics; the installed-client wire check lives in Data contracts.
+const literalVectors = [
+ ['plain','ilike','%plain%'],['عربية','ilike','%عربية%'],
+ ['50%','ilike',String.raw`%50\%%`],['under_score','ilike',String.raw`%under\_score%`],
+ ['quote"mark','ilike',String.raw`%quote\"mark%`],['back\\slash','ilike',String.raw`%back\\slash%`],
+ ['a*b','imatch',String.raw`a\*b`],
+ ['*.[x]+?(a)|^$'+'{2}','imatch',String.raw`\*\.\[x\]\+\?\(a\)\|\^\$\{2\}`],
+ ['a*"\\b_%','imatch',String.raw`a\*"\\b_%`],
+ ...[['%','ilike',String.raw`%qa-controlled-\%%`],['_','ilike',String.raw`%qa-controlled-\_%`],['*','imatch',String.raw`qa-controlled-\*`],['"','ilike',String.raw`%qa-controlled-\"%`],['\\','ilike',String.raw`%qa-controlled-\\%`]].map(([suffix,operator,pattern])=>['qa-controlled-'+suffix,operator,pattern]),
+];
+const literalDb=new PGlite();
+try{
+ await literalDb.exec('create table literal_contract_rows(id integer primary key,title text not null,slug text not null)');
+ const corpus=[...literalVectors.slice(0,9).map(([term],index)=>({id:index+1,title:'prefix '+term+' suffix',slug:'unrelated'})),{id:20,title:'50X underXscore aZZb a.b plain PLAIN',slug:'unrelated'},{id:21,title:'unrelated',slug:'prefix PLAIN suffix'},{id:22,title:'qa-controlled-ordinary',slug:'other'}];
+ for(const row of corpus)await literalDb.query('insert into literal_contract_rows values($1,$2,$3)',[row.id,row.title,row.slug]);
+ const verifyLiteral=async build=>{
+  assert.equal(build(['title','slug'],'   '),'');
+  for(const[term,operator,pattern]of literalVectors){
+   assert.equal(build(['title','slug'],term),['title','slug'].map(field=>field+'.'+operator+'.'+JSON.stringify(pattern)).join(','),'Exact quoted wire operand: '+term);
+   const sqlOperator=operator==='imatch'?'~*':'ilike';
+   const actual=(await literalDb.query('select id from literal_contract_rows where title '+sqlOperator+' $1 or slug '+sqlOperator+' $1 order by id',[pattern])).rows.map(row=>Number(row.id));
+   const expected=corpus.filter(row=>[row.title,row.slug].some(value=>value.toLowerCase().includes(term.toLowerCase()))).map(row=>row.id);
+   assert.deepEqual(actual,expected,'Literal case-insensitive substring semantics: '+term);
+   if(term.startsWith('qa-controlled-'))assert.deepEqual(actual,[],'Wildcard widening must remain rejected.');
+  }
+  for(const field of ['title,deleted_at','title.ilike.x','title)','1title'])assert.throws(()=>build([field],'a*b'),TypeError);
+ };
+ await verifyLiteral(buildAdminListSearchOrFilter);checks.push('shared-search-quoted-wire-and-real-SQL-literal-contract');
+ const oldSingle=(fields,term)=>{const escaped=escapeAdminListSearchTerm(term);return escaped?fields.map(field=>field+'.ilike."%'+escaped+'%"').join(','):'';};
+ const doubleOnly=(fields,term)=>{const escaped=escapeAdminListSearchTerm(term);return escaped?fields.map(field=>field+'.ilike.'+JSON.stringify('%'+escaped+'%')).join(','):'';};
+ const missingRegex=(fields,term)=>term.includes('*')?fields.map(field=>field+'.imatch.'+JSON.stringify(term.trim().replaceAll('*','\\*'))).join(','):buildAdminListSearchOrFilter(fields,term);
+ const unsafeFields=(fields,term)=>buildAdminListSearchOrFilter(fields.map(field=>/^[A-Za-z_][A-Za-z0-9_]*$/.test(field)?field:'title'),term);
+ for(const[name,mutant]of Object.entries({oldSingleEscape:oldSingle,doubleEscapeOnlyStarAlias:doubleOnly,missingRegexMetacharEscape:missingRegex,badFieldAccepted:unsafeFields})){await assert.rejects(verifyLiteral(mutant));checks.push('reject-shared-search-'+name);}
+ // Concrete faulty SQL outcomes demonstrate why the negative wire contracts
+ // matter; no synthetic decoder is credited as actual PostgREST execution.
+ const oldWildcard=(await literalDb.query('select id from literal_contract_rows where title ilike $1',['%qa-controlled-%%'])).rows;
+ assert.ok(oldWildcard.some(row=>Number(row.id)===22));checks.push('old-single-escape-widens-real-SQL');
+ const aliasedStar=(await literalDb.query('select id from literal_contract_rows where title ilike $1',[String.raw`%a\%b%`])).rows.map(row=>Number(row.id));
+ assert.equal(aliasedStar.includes(7),false);checks.push('double-escape-only-star-alias-loses-literal-row');
+}finally{await literalDb.close();}
+
 test('same-native-sequence-and-private-proof-remain-wired',()=>{for(const marker of ["['first','empty',...CORE_QUERY_SEARCH_SCENARIOS",'dateFilterProjection,searchProjection,extraFilterProjection,viewProjection});','const searchBoundary=assertCoreQuerySearchReceipts'])assert.ok(source.includes(marker),marker);});
 function controlledStale(spec){const fixture=fixtureFor(spec),base={id:randomUUID(),scenario:'first',routeKey:spec.key,actorId:2,ownedRunId:'controlled-owned-run',fixtureFingerprint:'fixed-fixture',completeIds:[31,32]},proofs=[base];for(const scenario of CORE_QUERY_STALE_SCENARIOS){const params=coreQueryScenario(spec,fixture,scenario),completeIds=scenario==='stale-held'?[]:[31,32];proofs.push({...base,id:randomUUID(),scenario,query:params.toString(),completeIds,searchProjection:{scenario,normalizedSearch:spec.normalizeQuery(params,fixture).search,columns:coreQuerySearchColumns(spec),scope:'full-registered-route',completeIds}});}return{fixture,proofs,outcome:{consumerId:spec.consumerId,routeKey:spec.key,nativeActorId:2,staleReadEvidence:{sourceOwner:coreQueryStaleOwner(),heldNativeId:proofs[1].id,currentNativeId:proofs[2].id,beforeReleaseIds:[31,32],afterReleaseIds:[31,32],heldResponseIds:[],heldResponseStatus:200,strictRequestCount:1,posts:0,actualSearchInteraction:true,currentQueryRetained:true,method:'GET',pathname:'/api/admin/entity-lists/'+spec.entity,events:{held:1,currentSettled:2,released:3,terminal:4},terminal:'completed',failure:null,responseDelivered:true,automaticCoverage:[],globalClosed:false}}};}
 for(const spec of plan){test('native-stale-join-completed-'+spec.key,()=>{const c=controlledStale(spec);assert.equal(assertCoreQueryStaleReceipts(c.outcome,c.proofs,spec,c.fixture).terminal,'completed');});test('native-stale-join-aborted-'+spec.key,()=>{const c=controlledStale(spec);Object.assign(c.outcome.staleReadEvidence,{terminal:'aborted',failure:'net::ERR_ABORTED',responseDelivered:false,events:{held:1,terminal:2,currentSettled:3,released:4}});assert.equal(assertCoreQueryStaleReceipts(c.outcome,c.proofs,spec,c.fixture).terminal,'aborted');});test('exact-owned-GET-selection-'+spec.key,()=>{const c=controlledStale(spec),url='http://127.0.0.1:31001/api/admin/entity-lists/'+spec.entity+'?'+c.proofs[1].query;assert.equal(coreQueryStaleRequestMatches(spec,c.fixture,url,'http://127.0.0.1:31001'),true);assert.equal(coreQueryStaleRequestMatches(spec,c.fixture,url,'http://127.0.0.1:31002'),false);assert.equal(coreQueryStaleRequestMatches(spec,c.fixture,url.replace('held-older-read','other'),'http://127.0.0.1:31001'),false);assert.throws(()=>coreQueryStaleRequestMatches(spec,c.fixture,url+'&unknown=1','http://127.0.0.1:31001'));});}
