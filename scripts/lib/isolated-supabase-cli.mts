@@ -238,35 +238,73 @@ function prepare(context: ApplicationMigrationCliContext): Prepared {
   return state;
 }
 
-function run(binary: string, args: string[], cwd: string, env: NodeJS.ProcessEnv): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
-  return new Promise((done, reject) => {
-    const child = spawn(binary, args, { cwd, env, windowsHide: true, shell: false, stdio: ["ignore", "pipe", "pipe"] });
-    const stdout: Buffer[] = [], stderr: Buffer[] = [];
-    let size = 0, failure: string | null = null;
-    const timer = setTimeout(() => { failure = "CLI_TIMEOUT"; child.kill(); }, CLI_TIMEOUT_MS);
-    const capture = (target: Buffer[]) => (chunk: Buffer) => {
-      size += chunk.length;
-      if (size > MAX_OUTPUT_BYTES) { failure = "CLI_OUTPUT_LIMIT"; child.kill(); return; }
-      target.push(chunk);
-    };
-    child.stdout.on("data", capture(stdout));
-    child.stderr.on("data", capture(stderr));
-    child.once("error", () => { failure = "CLI_PROCESS_START_FAILED"; });
-    child.once("close", code => {
-      clearTimeout(timer);
-      try {
-        if (failure) reject(new IsolatedSupabaseCliError(failure));
-        else done({ exitCode: code, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") });
-      } finally {
-        for (const buffer of [...stdout, ...stderr]) buffer.fill(0);
-        env.PGPASSWORD = "";
-      }
+type ApplicationCliControl = Readonly<{ signal: AbortSignal; pulse(): Promise<void> }>;
+
+async function run(binary: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, control?: ApplicationCliControl): Promise<{ exitCode: number | null; stdout: string; stderr: string }> {
+  // Only db push supplies this private control binding. Other CLI jobs retain
+  // their existing timeout/output contract without a heartbeat or new lease.
+  try {
+    if (control) {
+      check(!control.signal.aborted, "CLI_ABORTED");
+      await control.pulse();
+      check(!control.signal.aborted, "CLI_ABORTED");
+    }
+    return await new Promise((done, reject) => {
+      const child = spawn(binary, args, { cwd, env, windowsHide: true, shell: false, stdio: ["ignore", "pipe", "pipe"] });
+      const stdout: Buffer[] = [], stderr: Buffer[] = [];
+      let size = 0, failure: IsolatedSupabaseCliError | undefined, closed = false, pulseBusy = false;
+      let pulse = Promise.resolve();
+      const stop = (error: IsolatedSupabaseCliError) => {
+        failure ??= error;
+        if (!closed) child.kill();
+      };
+      const abort = () => stop(new IsolatedSupabaseCliError("CLI_ABORTED"));
+      const timer = setTimeout(() => stop(new IsolatedSupabaseCliError("CLI_TIMEOUT")), CLI_TIMEOUT_MS);
+      const heartbeat = control ? setInterval(() => {
+        if (closed || pulseBusy || failure) return;
+        pulseBusy = true;
+        pulse = (async () => {
+          try { await control.pulse(); }
+          catch (error) { stop(error instanceof IsolatedSupabaseCliError ? error : new IsolatedSupabaseCliError("CLI_CONTROL_PULSE_FAILED")); }
+          finally { pulseBusy = false; }
+        })();
+      }, 20_000) : undefined;
+      const capture = (target: Buffer[]) => (chunk: Buffer) => {
+        size += chunk.length;
+        if (size > MAX_OUTPUT_BYTES) { stop(new IsolatedSupabaseCliError("CLI_OUTPUT_LIMIT")); return; }
+        target.push(chunk);
+      };
+      child.stdout.on("data", capture(stdout));
+      child.stderr.on("data", capture(stderr));
+      child.once("error", () => stop(new IsolatedSupabaseCliError("CLI_PROCESS_START_FAILED")));
+      child.once("close", code => {
+        closed = true;
+        clearTimeout(timer);
+        if (heartbeat) clearInterval(heartbeat);
+        // A process exit is not completion until the last pulse is drained.
+        void (async () => {
+          try {
+            await pulse;
+            if (!failure && control) await control.pulse();
+            if (failure) throw failure;
+            done({ exitCode: code, stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8") });
+          } catch (error) {
+            reject(failure ?? (error instanceof IsolatedSupabaseCliError ? error : new IsolatedSupabaseCliError("CLI_CONTROL_PULSE_FAILED")));
+          } finally {
+            control?.signal.removeEventListener("abort", abort);
+            for (const buffer of [...stdout, ...stderr]) buffer.fill(0);
+          }
+        })();
+      });
+      control?.signal.addEventListener("abort", abort, { once: true });
+      if (control?.signal.aborted) abort();
     });
-  });
+  } finally { env.PGPASSWORD = ""; }
 }
 
 /** Called only by the active lifecycle's handle binding, with private context. */
-export async function pushApplicationMigrations(context: ApplicationMigrationCliContext, input: Request): Promise<ApplicationMigrationCliResult> {
+export async function pushApplicationMigrations(context: ApplicationMigrationCliContext, input: Request, control: ApplicationCliControl): Promise<ApplicationMigrationCliResult> {
+  check(control?.signal instanceof AbortSignal && typeof control.pulse === "function", "CLI_CONTROL_REQUIRED");
   await context.assertOwned();
   check(input && (input.mode === "dry-run" || input.mode === "apply")
     && input.stage && Array.isArray(input.stage.files), "INVALID_CLI_REQUEST");
@@ -310,7 +348,7 @@ export async function pushApplicationMigrations(context: ApplicationMigrationCli
     check(readdirSync(migrationDirectory).sort().join("\n") === request.stage.files.map(file => file.file).join("\n"), "CLI_STAGED_FILES_CHANGED");
     for (const entry of request.stage.files) check(sha256(sourceBytes(join(migrationDirectory, entry.file))) === entry.sourceSha256, "CLI_STAGED_SQL_CHANGED");
     check(sha256(sourceBytes(state.binary)) === context.tool.executableSha256, "CLI_BINARY_IDENTITY_CHANGED");
-    const result = parseApplicationMigrationCliResult(await run(state.binary, args, workdir, env), request, context.tool,
+    const result = parseApplicationMigrationCliResult(await run(state.binary, args, workdir, env, control), request, context.tool,
       canonical.slice(0, request.stage.files.length));
     await context.assertOwned();
     assertApplicationMigrationStage(request.stage, corpus());

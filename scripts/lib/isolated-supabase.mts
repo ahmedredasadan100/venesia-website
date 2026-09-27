@@ -134,6 +134,35 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
   };
 }
 
+/** Private CLI binding: fixed read-only traffic on the same healthy idle backend. */
+export async function createApplicationCliControlPulse(client: Pick<PgConnection, "query">, options: {
+  assertExclusive(): void;
+  assertHealthy(): void;
+  assertOwned(): Promise<void>;
+  assertIdle(pid: number): Promise<void>;
+}) {
+  let backendPid: number | undefined, busy = false;
+  const pulse = async () => {
+    requireThat(!busy, "CLI_CONTROL_PULSE_OVERLAP", "application-cli");
+    busy = true;
+    try {
+      options.assertExclusive(); options.assertHealthy(); await options.assertOwned();
+      options.assertExclusive(); options.assertHealthy();
+      const row = (await client.query("select current_database() as database,current_user as role,pg_backend_pid() as backend_pid")).rows[0];
+      options.assertExclusive(); options.assertHealthy(); await options.assertOwned();
+      options.assertExclusive(); options.assertHealthy();
+      const pid = Number(row?.backend_pid);
+      requireThat(row?.database === "postgres" && row.role === "postgres" && Number.isSafeInteger(pid) && pid > 0
+        && (backendPid === undefined || backendPid === pid), "CLI_CONTROL_IDENTITY_MISMATCH", "application-cli");
+      backendPid = pid;
+    } finally { busy = false; }
+  };
+  await pulse();
+  await options.assertIdle(backendPid!);
+  options.assertExclusive(); options.assertHealthy(); await options.assertOwned();
+  return pulse;
+}
+
 /** Fixed installed-pg messages only; never echo arbitrary driver text. */
 export function classifyOwnedPgConnectMessage(error: unknown) {
   if (!(error instanceof Error)) return null;
@@ -579,7 +608,9 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const dockerHost = options.dockerHost ?? (process.platform === "win32" ? "npipe:////./pipe/dockerDesktopLinuxEngine" : "unix:///var/run/docker.sock");
   requireThat(["npipe:////./pipe/dockerDesktopLinuxEngine", "npipe:////./pipe/docker_engine", "unix:///var/run/docker.sock"].includes(dockerHost), "REMOTE_DOCKER_FORBIDDEN", "preflight");
   let interrupted = false, cleaning = false;
-  const interrupt = () => { interrupted = true; };
+  let cliJobAbort: AbortController | undefined;
+  let cliJob: Promise<ApplicationMigrationCliResult> | undefined;
+  const interrupt = () => { interrupted = true; cliJobAbort?.abort(); };
   const dc = (args: string[], stage: string, extra: { timeout?: number; allowFailure?: boolean } = {}) => {
     requireThat(cleaning || !interrupted, "INTERRUPTED", stage);
     return command(dockerBinary, ["--host", dockerHost, ...args], stage, extra);
@@ -625,7 +656,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   let handle: OwnedLocalHandle | undefined;
   let appConnection: PgConnection | undefined;
   const scopedConnections = new Set<PgConnection>();
-  let controlMaintenance = false;
+  let controlMaintenance = false, controlQueries = 0, pendingScopedConnections = 0;
   let publicJobAbort: AbortController | undefined;
   let publicJob: ReturnType<typeof runOwnedPublicVerification> | undefined;
   let hostBridge: HostBridge | undefined;
@@ -1096,6 +1127,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       appConnection = await connect("postgres");
       const boundConnection = appConnection;
       const applicationClient = observeApplicationClient(boundConnection, () => {
+        cliJobAbort?.abort();
         if (handle) activeHandles.delete(handle);
         safeRecord("application-client-disconnected", { code: "APPLICATION_CLIENT_DISCONNECTED", errorDetailsRetained: false });
       });
@@ -1132,20 +1164,22 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       handle = Object.freeze({ identity: Object.freeze({ runId, projectName: run.projectName, database: "postgres" as const, host: "127.0.0.1" as const, port: run.pgPort, databaseContainerId: serviceResource("db").identity.id }),
         query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
           requireThat(!controlMaintenance, "CONTROL_CONNECTION_MAINTENANCE", "application-query");
-          assertOwnedLocalHandle(handle);
-          applicationClient.assertHealthy();
-          await inspectCaptured(serviceResource("db"));
+          controlQueries++;
           try {
+            assertOwnedLocalHandle(handle);
+            applicationClient.assertHealthy();
+            await inspectCaptured(serviceResource("db"));
             const result = await applicationLease.client.query(sql, params);
             return Array.isArray(result) ? result[result.length - 1] as QueryResult : result;
           } catch (error) { throw asSafeError(error, "application-query"); }
+          finally { controlQueries--; }
         },
         renewDatabaseControlConnection: async (): Promise<void> => {
-          await cliContext.assertOwned();
-          requireThat(!controlMaintenance && scopedConnections.size === 0 && !publicJob,
+          requireThat(!controlMaintenance && controlQueries === 0 && pendingScopedConnections === 0 && scopedConnections.size === 0 && !publicJob,
             "CONTROL_CONNECTION_NOT_IDLE", "application-query");
           controlMaintenance = true;
           try {
+            await cliContext.assertOwned();
             const pid = Number((await applicationLease.client.query("select pg_backend_pid() pid")).rows[0].pid);
             const probe = await connect("postgres");
             try {
@@ -1158,7 +1192,10 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               transportLifetimeUnchanged: true, failedTransportRecovered: false });
           } finally { controlMaintenance = false; }
         },
-        generateDatabaseTypes: () => generateOwnedDatabaseTypes(cliContext),
+        generateDatabaseTypes: () => {
+          requireThat(!cliJob, "CLI_CONTROL_BUSY", "application-cli");
+          return generateOwnedDatabaseTypes(cliContext);
+        },
         callDataApiRpc: async (name: string, args: Record<string, unknown>): Promise<Response> => {
           await publicContext.assertOwned();
           requireThat(typeof name === "string" && /^[a-z][a-z0-9_]*$/u.test(name)
@@ -1194,9 +1231,14 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           return response;
         },
         withDatabaseConnection: async <T,>(run: (connection: OwnedDatabaseConnection) => Promise<T>): Promise<T> => {
-          await cliContext.assertOwned();
-          const client = await connect("postgres");
-          scopedConnections.add(client);
+          requireThat(!controlMaintenance, "CONTROL_CONNECTION_MAINTENANCE", "application-query");
+          pendingScopedConnections++;
+          let client: PgConnection;
+          try {
+            await cliContext.assertOwned();
+            client = await connect("postgres");
+            scopedConnections.add(client);
+          } finally { pendingScopedConnections--; }
           let open = true;
           const observer = observeApplicationClient(client, () => { open = false; });
           const connection: OwnedDatabaseConnection = Object.freeze({
@@ -1223,10 +1265,40 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         },
         pushApplicationMigrations: async (request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }) => {
           assertOwnedLocalHandle(handle);
-          return pushApplicationMigrations(cliContext, request);
+          requireThat(!cliJob && !controlMaintenance && controlQueries === 0 && pendingScopedConnections === 0
+            && scopedConnections.size === 0 && !publicJob, "CLI_CONTROL_NOT_IDLE", "application-cli");
+          controlMaintenance = true;
+          const abort = new AbortController();
+          cliJobAbort = abort;
+          const client = applicationLease.client;
+          // Reserve synchronously before any await. The outer lifecycle retains
+          // this promise even if the application observer wins its failure race.
+          const job = Promise.resolve().then(async () => {
+            const pulse = await createApplicationCliControlPulse(client, {
+              assertExclusive: () => requireThat(controlMaintenance && cliJob === job && applicationLease.client === client
+                && controlQueries === 0 && pendingScopedConnections === 0 && scopedConnections.size === 0 && !publicJob
+                && !abort.signal.aborted, "CLI_CONTROL_NOT_IDLE", "application-cli"),
+              assertHealthy: () => applicationClient.assertHealthy(), assertOwned: () => cliContext.assertOwned(),
+              assertIdle: async pid => {
+                const probe = await connect("postgres");
+                try {
+                  const state = (await probe.query("select state from pg_stat_activity where pid=$1", [pid])).rows[0]?.state;
+                  requireThat(state === "idle", "CONTROL_TRANSACTION_OPEN", "application-cli");
+                } finally { await probe.end(); }
+              },
+            });
+            return pushApplicationMigrations(cliContext, request, { signal: abort.signal, pulse: async () => {
+              try { await pulse(); }
+              catch (error) { throw new IsolatedSupabaseCliError(asSafeError(error, "application-cli").code); }
+            } });
+          });
+          cliJob = job;
+          try { return await job; }
+          finally { if (cliJob === job) { cliJob = undefined; cliJobAbort = undefined; controlMaintenance = false; } }
         },
         runEntitySeoBackfill: async (request: { mode: "dry-run" | "apply" | "verify"; entities?: readonly ("topics" | "projects" | "pages")[] }) => {
           assertOwnedLocalHandle(handle);
+          requireThat(!cliJob, "CLI_CONTROL_BUSY", "application-cli");
           return runOwnedEntitySeoBackfill(cliContext, request);
         },
         preparePublicVerification: async () => {
@@ -1260,6 +1332,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         runPublicVerification: async (request: PublicGateRequest) => {
           assertOwnedLocalHandle(handle);
           requireThat(!publicJob, "PUBLIC_JOB_ALREADY_STARTED", "public-verification");
+          requireThat(!controlMaintenance && !cliJob, "CLI_CONTROL_BUSY", "public-verification");
           publicJobAbort = new AbortController();
           let heartbeatActive = true, heartbeatBusy = false;
           let pulse = Promise.resolve();
@@ -1300,6 +1373,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     primaryFailure = asSafeError(error, currentStage);
     recordFile("failure.json", { stage: primaryFailure.stage, code: primaryFailure.code, rawErrorRetained: false });
   } finally {
+    cliJobAbort?.abort();
+    if (cliJob) await cliJob.catch(() => undefined);
     publicJobAbort?.abort();
     if (publicJob) await publicJob.catch(() => undefined);
     cleaning = true;
