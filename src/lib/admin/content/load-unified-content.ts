@@ -1,5 +1,6 @@
 import "server-only";
 
+import { buildAdminListSearchOrFilter } from "../admin-list-search";
 import { ENTITY_SEO_SCORE_VERSION } from "../seo-score";
 import { z } from "zod";
 import type { Tables } from "../../database.types";
@@ -131,7 +132,6 @@ export function cleanContentTitleSearch(value?: string | null) {
 interface UnifiedContentFilterQuery {
   not(column: "deleted_at" | "series_id", operator: "is", value: null): this;
   is(column: "deleted_at", value: null): this;
-  ilike(column: "title", pattern: string): this;
   eq(column: "content_type", value: ContentType): this;
   eq(column: "series_id", value: number): this;
   eq(column: "status", value: string): this;
@@ -150,7 +150,7 @@ function applyFilters<Query extends UnifiedContentFilterQuery>(
     : query.is("deleted_at", null);
 
   for (const word of filters.q.split(" ").filter(Boolean)) {
-    next = next.ilike("title", `%${word}%`);
+    next = next.or(buildAdminListSearchOrFilter(["title"], word));
   }
 
   if (filters.contentType !== "all") next = next.eq("content_type", filters.contentType);

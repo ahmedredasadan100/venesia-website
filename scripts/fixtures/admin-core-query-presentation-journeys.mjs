@@ -36,6 +36,21 @@ export async function assertCoreQueryInformation(spec,row,info){
   await expect(nativePath).toBeVisible();await expect(nativePath).toHaveText(row.publicPath);
   return {kind:'information',nativeEntityId:row.id,nativePublicPath:row.publicPath,actualPageInformation:true};
  }
+ if(spec.entity==='projects'){
+  assert.ok(Number.isSafeInteger(row.id)&&row.id>0,'Native Project identity is required.');
+  assert.ok(typeof row.publicPath==='string'&&row.publicPath.startsWith('/')&&!row.publicPath.startsWith('//'),'Native canonical Project path is required.');
+  assert.equal(typeof spec.publicPathFor,'function','The canonical Project path projection is required.');
+  assert.ok(spec.type==='residential'||spec.type==='commercial','The native Project route type is required.');
+  await expect(info.locator('[data-admin-row-actions-information-title]')).toHaveText('معلومات المشروع');
+  const nativeId=info.locator('dt').filter({hasText:/^المعرف$/u}).locator('..').locator('dd');
+  const nativeSlug=info.locator('dt').filter({hasText:/^الرابط المختصر$/u}).locator('..').locator('dd');
+  const nativeType=info.locator('dt').filter({hasText:/^النوع$/u}).locator('..').locator('dd');
+  await expect(nativeId).toBeVisible();await expect(nativeId).toHaveText(String(row.id));
+  await expect(nativeSlug).toBeVisible();const slug=(await nativeSlug.innerText()).trim();assert.ok(slug.length>0,'Displayed native Project slug is required.');
+  assert.equal(spec.publicPathFor({slug}),row.publicPath,'Displayed Project slug must project to the exact native path.');
+  await expect(nativeType).toBeVisible();await expect(nativeType).toHaveText(spec.type==='commercial'?'تجاري':'سكني');
+  return {kind:'information',nativeEntityId:row.id,nativePublicPath:row.publicPath,nativeProjectSlug:slug,nativeProjectType:spec.type,actualProjectInformation:true};
+ }
  await expect(info).toContainText(row.label);return {kind:'information',nativeEntityId:row.id,nativeLabel:row.label};
 }
 /** Current B1 context bindings come from its source-derived plan and canonical cells. */
