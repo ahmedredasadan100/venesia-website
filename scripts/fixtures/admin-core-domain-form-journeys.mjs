@@ -23,7 +23,7 @@ const locationSurface = { governorate: "governorate", city: "city", main_area: "
 export function validateCoreJourneySelection({ scope, cohort, selection }) {
   if (selection === undefined || selection === null) return null;
   assert.equal(scope, "core-closure");
-  if (selection === "domain-command-tail" || selection === "tracking-permissions") assert.equal(cohort, "domain-commands");
+  if (selection === "domain-command-tail" || selection === "tracking-permissions" || selection === "readonly-query-proof") assert.equal(cohort, "domain-commands");
   else if (selection === "template-form-creates") assert.equal(cohort, "recovery-templates");
   else { assert.equal(cohort, "domain-forms"); assert.equal(selection, "text-topic-forms", "Unknown affected journey selection."); }
   return selection;
@@ -560,4 +560,35 @@ export async function observeCoreVisibleAcceptedFeedback({page,channel,perform})
  try{await perform();await expect(entry).toHaveCount(1);await expect(entry).toBeVisible();await expect(entry).toHaveAttribute('data-admin-feedback-variant',/^(success|warning)$/u);if(previous)await expect.poll(()=>previous.evaluate(node=>node.isConnected)).toBe(false);assert.ok((await entry.innerText()).trim().length>0);
   return assertCoreVisibleAcceptedFeedback({channel,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,variant:await entry.getAttribute('data-admin-feedback-variant'),visibleCount:1,nonemptyMessage:true,priorEntryDetached:true,renderedRegionObserved:true,observedBeforeReload:true,automaticCoverage:[],globalClosed:false},channel,process.env.QA_ADMIN_SOURCE_SHA256);
  }finally{await previous?.dispose();}
+}
+
+/** Observe the existing Provider's actual DOM during a mounted read/error/retry window. */
+export function createCoreMutationFeedbackAbsenceObserver() {
+ const selector='[data-admin-feedback-entry]',initialCount=document.querySelectorAll(selector).length;
+ let observedEntries=0,disconnected=false;const checkpoints=[];
+ const countNode=node=>node?.nodeType===1?Number(node.matches(selector))+node.querySelectorAll(selector).length:0;
+ const inspect=records=>{for(const record of records){if(record.type==='childList'){for(const node of [...record.addedNodes,...record.removedNodes])observedEntries+=countNode(node);}else if(record.type==='attributes'&&record.attributeName==='data-admin-feedback-entry'){observedEntries+=Math.max(countNode(record.target),Number(record.oldValue!==null));}}};
+ const observer=new MutationObserver(inspect);observer.observe(document.documentElement,{subtree:true,childList:true,attributes:true,attributeOldValue:true,attributeFilter:['data-admin-feedback-entry']});
+ return {
+  mark(label){inspect(observer.takeRecords());const count=document.querySelectorAll(selector).length;checkpoints.push({label,count});return count;},
+  finish(){inspect(observer.takeRecords());const finalCount=document.querySelectorAll(selector).length;observer.disconnect();disconnected=true;return{initialCount,finalCount,observedEntries,checkpoints,disconnected};},
+  disconnect(){observer.disconnect();disconnected=true;},
+ };
+}
+export function assertCoreMutationFeedbackAbsence(proof,sourceSha256){
+ assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(proof.sourceSha256,sourceSha256);
+ for(const key of ['initialCount','finalCount','observedEntries'])assert.equal(proof[key],0);
+ assert.deepEqual(proof.checkpoints,[{label:'query-error-visible',count:0},{label:'retry-success-visible',count:0}]);
+ for(const key of ['disconnected','renderedRegionObserved','sameDocumentWindow','observedBeforeReload'])assert.equal(proof[key],true);
+ assert.equal(proof.scope,'mounted-query-error-and-retry');assert.equal(proof.mutationResultFeedbackClaimed,false);assert.deepEqual(proof.automaticCoverage,[]);assert.equal(proof.globalClosed,false);return proof;
+}
+export async function observeCoreMutationFeedbackAbsence({page,perform}){
+ const sourceSha256=process.env.QA_ADMIN_SOURCE_SHA256;assert.match(sourceSha256,/^[a-f0-9]{64}$/u);
+ const pathname=new URL(page.url()).pathname,observer=await page.evaluateHandle(createCoreMutationFeedbackAbsenceObserver);
+ try{
+  await perform(async label=>{assert.equal(await observer.evaluate((value,marker)=>value.mark(marker),label),0);});
+  assert.equal(new URL(page.url()).pathname,pathname);
+  const observed=await observer.evaluate(value=>value.finish());
+  return assertCoreMutationFeedbackAbsence({...observed,sourceSha256,renderedRegionObserved:true,sameDocumentWindow:true,observedBeforeReload:true,scope:'mounted-query-error-and-retry',mutationResultFeedbackClaimed:false,automaticCoverage:[],globalClosed:false},sourceSha256);
+ }finally{try{await observer.evaluate(value=>value.disconnect());}finally{await observer.dispose();}}
 }

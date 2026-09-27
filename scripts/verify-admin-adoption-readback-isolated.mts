@@ -1,7 +1,8 @@
+import {assertCoreReadonlyQueryProofCompletion} from "./fixtures/admin-core-readonly-journeys.mjs";
 import {assertCoreProjectVisibilityGuardReceipt} from './fixtures/admin-core-domain-command-journeys.mjs';
 import {assertCorePageAssignmentRowActionsJoin} from './fixtures/admin-core-page-composition-journeys.mjs';
 import {assertCoreTemplateFeedbackCompletion} from "./fixtures/admin-core-template-controls-contract.mjs";
-import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
+import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, CORE_READONLY_QUERY_SELECTION, buildCoreReadonlyQueryProofPlan, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
 import { CORE_TEMPLATE_FORM_CREATES_SELECTION, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import {assertCoreResidualSearchCompletion} from './fixtures/admin-core-residual-search.mjs';
 import {assertCoreRenderedAdoptionJoin} from './fixtures/admin-core-rendered-adoption.mjs';
@@ -230,13 +231,14 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     }
     const isTemplateCreates = browser.journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION;
     const isTrackingPermissions = browser.journeySelection === CORE_TRACKING_PERMISSION_SELECTION;
-    const isDomainTail = browser.journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || isTrackingPermissions;
+    const isReadonlyQueryProof = browser.journeySelection === CORE_READONLY_QUERY_SELECTION;
+    const isDomainTail = browser.journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || isTrackingPermissions || isReadonlyQueryProof;
     let domainTailPlan = null;
     if (isDomainTail) {
       const jiti = createJiti(import.meta.url,{fsCache:false,moduleCache:false});
       const {ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION} = await jiti.import<typeof import("../src/lib/admin/interaction-system/adoption-manifest.ts")>("../src/lib/admin/interaction-system/adoption-manifest.ts");
       const location = await jiti.import<typeof import("../src/lib/admin/projects/location-management-contract.ts")>("../src/lib/admin/projects/location-management-contract.ts"), tracking = await jiti.import<typeof import("../src/lib/admin/projects/tracking-contract.ts")>("../src/lib/admin/projects/tracking-contract.ts");
-      domainTailPlan = (isTrackingPermissions ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),paths:{...location,...tracking}});
+      domainTailPlan = (isReadonlyQueryProof ? buildCoreReadonlyQueryProofPlan : isTrackingPermissions ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),paths:{...location,...tracking}});
     }
     const domainTailNative = isDomainTail ? JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")) : null;
     const selectedJourneys = isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
@@ -427,9 +429,10 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       sourceSha256:JSON.parse(readFileSync(join(artifactDir,'public-source-manifest.json'),'utf8')).sourceSha256,
       expectedActorId:await readCoreFixedQaActor(handle),writes}):null;
     const readOnly = browser.cohort === "domain-commands" && !isTrackingPermissions ? await verifyCoreReadonlyReadback(handle, browser) : null;
+    const readonlyQueryProof=isReadonlyQueryProof?assertCoreReadonlyQueryProofCompletion(browser,domainTailNative,readOnly,handle.identity.runId,JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,canonicalRequiredCases,domainTailPlan):null;
     const downloadMedia=["template-controls","navigation-settings"].includes(browser.cohort ?? "") ? await verifyCoreDownloadMediaCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256) : null;
     const residualSearch = ["readonly-hubs", "media-library"].includes(browser.cohort ?? "") ? await assertCoreResidualSearchCompletion(browser, nativeCheckpoints, JSON.parse(readFileSync(join(artifactDir, "public-source-manifest.json"), "utf8"))) : null;
-    const result = { status: "pass", residualSearch, downloadMedia, authenticatedBrowserReceipt: "admin-adoption-browser.json", selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, pageAssignmentRowActions, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, projectVisibility, presentationControls, domainBulk, trackingDates, trackingMedia, trackingMediaApplicability, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const result = { status: "pass", residualSearch, downloadMedia, authenticatedBrowserReceipt: "admin-adoption-browser.json", readonlyQueryProof, selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, pageAssignmentRowActions, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, projectVisibility, presentationControls, domainBulk, trackingDates, trackingMedia, trackingMediaApplicability, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }

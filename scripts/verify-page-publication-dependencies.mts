@@ -60,7 +60,7 @@ const initial = {
 const state = {
   tables: structuredClone(initial) as Record<string, Row[]>,
   writes: [] as Row[], audits: [] as Row[], revalidations: [] as number[],
-  authCalls: 0, failRead: "", conflictOnWrite: false,
+  authCalls: 0, failRead: "", conflictOnWrite: false, cacheFailures: 0,
 };
 
 class Query implements PromiseLike<DbResult> {
@@ -96,7 +96,21 @@ class Query implements PromiseLike<DbResult> {
 port("src/lib/supabase-admin", { getSupabaseAdmin: () => ({ from: (table: string) => new Query(table) }) });
 port("src/lib/admin/auth/require-admin-session", { async requireAdminSession() { state.authCalls++; return { id: 7, username: "qa" }; } });
 port("src/lib/admin/audit-log", { async recordCmsAdminAudit(value: Row) { state.audits.push(structuredClone(value)); } });
-port("src/lib/page-blocks/admin-revalidate", { async revalidatePageBlocksPath(id: number) { state.revalidations.push(id); } });
+// Load the actual settlement and bounded cache-retry owners. Only delivery is
+// a controlled port; unexpected direct cache/generation calls fail closed.
+const unexpectedCacheCall = () => { throw new Error("Unexpected direct cache delivery in publication-dependency fixture"); };
+ports.set("next/cache", { revalidatePath: unexpectedCacheCall, revalidateTag: unexpectedCacheCall, updateTag: unexpectedCacheCall });
+port("src/lib/cache/public-cache-generation", { advancePublicCacheGeneration: unexpectedCacheCall });
+const revalidation = load<typeof import("../src/lib/page-blocks/admin-revalidate.ts")>("src/lib/page-blocks/admin-revalidate.ts");
+port("src/lib/page-blocks/admin-revalidate", {
+  ...revalidation,
+  async revalidatePageBlocksPath(id: number) {
+    assert.equal(state.writes.length, 1, "cache delivery follows one acknowledged write");
+    assert.equal(state.audits.length, 1, "cache delivery follows its audit");
+    state.revalidations.push(id);
+    if (state.cacheFailures-- > 0) throw new Error("isolated_cache_delivery_failure");
+  },
+});
 
 const action = load<typeof import("../src/app/admin/pages-blocks/pages/page-actions/page-status.ts")>(
   "src/app/admin/pages-blocks/pages/page-actions/page-status.ts",
@@ -106,7 +120,7 @@ const searchConfig = load<typeof import("../src/lib/page-blocks/search-platform-
 function reset() {
   state.tables = structuredClone(initial) as Record<string, Row[]>;
   state.writes.length = state.audits.length = state.revalidations.length = 0;
-  state.authCalls = 0; state.failRead = ""; state.conflictOnWrite = false;
+  state.authCalls = 0; state.failRead = ""; state.conflictOnWrite = false; state.cacheFailures = 0;
 }
 function page(id = 69) { return state.tables.pages.find((row) => row.id === id)!; }
 async function toggle(id = 69, status = String(page(id).status), revision = String(page(id).updated_at)) {
@@ -175,6 +189,28 @@ await check("publishing valid Search destination records dependency audit and re
   const result = await toggle(); assert.equal(result.ok, true); assert.equal(result.status, "published");
   assert.equal(state.audits.length, 1); assert.equal((state.audits[0].metadata as Row).previous_status, "unpublished");
   assert.deepEqual(state.revalidations, [69]);
+});
+
+await check("transient cache failure retries delivery without repeating Page write or audit", async () => {
+  state.cacheFailures = 1;
+  const result = await toggle(8);
+  assert.equal(result.ok, true); assert.equal(result.status, "unpublished");
+  assert.equal(result.feedbackStatus, "success"); assert.equal(page(8).status, "unpublished");
+  assert.equal(state.writes.length, 1); assert.equal(state.audits.length, 1);
+  assert.deepEqual(state.revalidations, [8, 8]);
+});
+await check("persistent cache failure preserves acknowledged Page state with a warning", async () => {
+  state.cacheFailures = 2;
+  const logged: unknown[][] = []; const previousError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args); };
+  try {
+    const result = await toggle(8);
+    assert.equal(result.ok, true); assert.equal(result.status, "unpublished");
+    assert.equal(result.feedbackStatus, "warning"); assert.equal(page(8).status, "unpublished");
+    assert.equal(state.writes.length, 1); assert.equal(state.audits.length, 1);
+    assert.deepEqual(state.revalidations, [8, 8]);
+    assert.equal(logged.length, 1); assert.match(String(logged[0][0]), /mutation committed; cache revalidation failed/);
+  } finally { console.error = previousError; }
 });
 
 console.log(JSON.stringify({ passed: passed.length, failed: 0, scope: "Current Page publication mutation owner and Search public dependency owners; isolated DB/Auth/cache ports." }));

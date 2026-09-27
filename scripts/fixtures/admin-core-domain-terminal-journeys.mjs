@@ -1,5 +1,5 @@
 import { observeCoreVisibleAcceptedFeedback, validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
-import { buildCoreReadonlyJourneyPlan } from "./admin-core-readonly-journeys.mjs";
+import { buildCoreReadonlyJourneyPlan, assertCoreReadonlyNoWritePair, assertCoreReadonlyActivityFixture, assertCoreReadonlyActivityProjection } from "./admin-core-readonly-journeys.mjs";
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -46,6 +46,13 @@ export function normalizeCoreTerminalAuditId(value) {
 
 export const CORE_DOMAIN_COMMAND_TAIL_SELECTION = 'domain-command-tail';
 export const CORE_TRACKING_PERMISSION_SELECTION = 'tracking-permissions';
+export const CORE_READONLY_QUERY_SELECTION = 'readonly-query-proof';
+export function buildCoreReadonlyQueryProofPlan(input) {
+ const readonly=buildCoreReadonlyJourneyPlan(input.fixtures);
+ assert.deepEqual(readonly.map(r=>r.entity),['activity_log','topics_without_image']);
+ const activityFixture=input.fixtures.readonlyClosure.activityFixture;assertCoreReadonlyActivityFixture(activityFixture);readonly[0]={...readonly[0],activityFixture};
+ return {selection:CORE_READONLY_QUERY_SELECTION,trash:[],permissions:[],readonly,journeyIds:readonly.map(recipe=>'core-readonly-'+recipe.entity+'-query-failure-retry-auth')};
+}
 /** Fixed affected subset of the existing canonical domain command plan.
  * @param {string|null|undefined} selection
  */
@@ -78,9 +85,10 @@ export function buildCoreDomainCommandTailPlan(input) {
  */
 export function assertCoreDomainCommandTailReceipt(browser, plan, canonicalRequiredCases, nativeContext = null) {
   const selection=validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection});
-  assert.ok(selection===CORE_DOMAIN_COMMAND_TAIL_SELECTION||selection===CORE_TRACKING_PERMISSION_SELECTION);
+  assert.ok(selection===CORE_DOMAIN_COMMAND_TAIL_SELECTION||selection===CORE_TRACKING_PERMISSION_SELECTION||selection===CORE_READONLY_QUERY_SELECTION);
   assert.equal(plan.selection ?? CORE_DOMAIN_COMMAND_TAIL_SELECTION, selection, "The fixed plan must bind the selected journey family.");
   if(selection===CORE_TRACKING_PERMISSION_SELECTION){assert.deepEqual(plan.trash,[]);assert.deepEqual(plan.readonly,[]);assert.deepEqual(plan.permissions.map(recipe=>recipe.entity),['project_tracking_stages','project_tracking_items','project_tracking_updates']);}
+  if(selection===CORE_READONLY_QUERY_SELECTION){assert.deepEqual(plan.trash,[]);assert.deepEqual(plan.permissions,[]);assert.deepEqual(plan.readonly.map(r=>r.entity),['activity_log','topics_without_image']);}
   assert.ok(plan && Array.isArray(plan.trash) && Array.isArray(plan.permissions));
   const ids=[...plan.trash.map(recipe=>'terminal-'+recipe.entity+'-global-empty-trash'),...plan.readonly.map(recipe=>'core-readonly-'+recipe.entity+'-query-failure-retry-auth'),...plan.permissions.map(recipe=>'domain-'+recipe.entity+'-mounted-revoked-session-rejection')];
   assert.deepEqual(plan.journeyIds,ids);assert.equal(new Set(ids).size,ids.length);
@@ -122,7 +130,7 @@ export function assertCoreDomainCommandTailReceipt(browser, plan, canonicalRequi
     // initial set; clone/delete reads; count/cancel sets; third clone; stale CAS;
     // final empty set and audit. They are not a second operation registry.
     const phaseKinds=['trash','state','state','state','state','trash','trash','trash','state','trash','state','state','trash','state'];
-    assert.equal(native.records.length,plan.trash.length*phaseKinds.length+plan.permissions.length*2);
+    assert.equal(native.records.length,plan.trash.length*phaseKinds.length+plan.permissions.length*2+(selection===CORE_READONLY_QUERY_SELECTION?plan.readonly.length*2:0));
     const sorted=values=>values.map(Number).sort((a,b)=>a-b);
     const check=(record,entity,kind)=>{assert.equal(record.entity,entity);assert.equal(record.kind,kind);assert.equal(record.status,'pass');assert.match(record.id,/^[a-f0-9-]{36}$/iu);assert.ok(Number.isFinite(Date.parse(record.observedAt)));if(kind==='terminal-domain-state'){assert.equal(record.expectedActorId,expectedActorId);assert.ok(Array.isArray(record.rows)&&Array.isArray(record.audit));for(const audit of record.audit)assert.equal(Number(audit.actor_admin_user_id),expectedActorId);}else assert.ok(Array.isArray(record.ids));};
     for(const[index,recipe]of plan.trash.entries()){
@@ -137,6 +145,7 @@ export function assertCoreDomainCommandTailReceipt(browser, plan, canonicalRequi
       const permanent=audit.filter(item=>item.action===recipe.audit+'.permanent_delete');assert.equal(permanent.length,1);const aggregateKey=recipe.entity==='topics'?'topic_ids':recipe.entity==='categories'?'category_ids':'series_ids';assert.deepEqual(sorted(permanent[0].metadata[aggregateKey]),sorted(copies));
       for(const id of copies){for(const action of ['duplicate','delete'])assert.equal(audit.filter(item=>Number(item.entity_id)===id&&item.action===recipe.audit+'.'+action).length,1);const write=deleted.find(item=>item.table===recipe.table&&item.id===id);assert.deepEqual(write.aggregateAuditIds.map(String),[String(permanent[0].id)]);}
     }
+    if(selection===CORE_READONLY_QUERY_SELECTION){assertCoreReadonlyActivityFixture(plan.readonly[0].activityFixture,ownedRunId);assert.equal(plan.readonly[0].activityFixture.actorId,expectedActorId);assert.deepEqual(browser.evidence[1].readonlyProof.activityFixture,plan.readonly[0].activityFixture);assertCoreReadonlyActivityProjection(browser.readOnlyReadback[0].rows,plan.readonly[0].activityFixture);for(const index of plan.readonly.keys()){const row=browser.evidence[index+1],before=native.records[index*2],after=native.records[index*2+1];assertCoreReadonlyNoWritePair(row,before,after,ownedRunId,sourceSha256);}}
     for(const[index,recipe]of plan.permissions.entries()){
       const row=browser.evidence[plan.readonly.length+plan.trash.length+index+1],offset=plan.trash.length*phaseKinds.length+index*2,before=native.records[offset],after=native.records[offset+1];
       check(before,recipe.entity,'terminal-domain-state');check(after,recipe.entity,'terminal-domain-state');assert.equal(row.nativeBefore,before.id);assert.equal(row.nativeAfter,after.id);

@@ -1,3 +1,4 @@
+import {readCoreFixedQaActor} from "./verify-admin-core-domain-readback-isolated.mts";
 import assert from "node:assert/strict";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
 import { loadEntitySeoPersistenceOwner } from "./backfill-entity-seo-scores.mts";
@@ -35,4 +36,16 @@ export async function verifyCoreReadonlyReadback(handle: OwnedLocalHandle,browse
     evidence.push({entity:row.entity,actual,nativeProjectionMatched:true});
   }
   return {status:"pass",evidence,scope:"Two registered read-only consumers: real authenticated API projections joined to native state; no mutation contract is inferred."};
+}
+
+/** Opt-in read-projection setup only. This row is not evidence of a domain command. */
+export async function seedCoreReadonlyQueryActivityFixture(handle: OwnedLocalHandle,topic:{id:number|string;title:string}){
+ assertOwnedLocalHandle(handle);const topicId=Number(topic.id);assert.ok(Number.isSafeInteger(topicId)&&topicId>0);assert.ok(typeof topic.title==='string'&&topic.title.length>0);
+ const source=(await handle.query("select id,title from public.topics where id=$1 and slug='isolated-public-property-ownership' and deleted_at is null",[topicId])).rows;
+ assert.equal(source.length,1);assert.equal(Number(source[0].id),topicId);assert.equal(source[0].title,topic.title);
+ const actorId=await readCoreFixedQaActor(handle);assert.equal((await handle.query("select id from public.admin_audit_logs where action='qa.readonly.fixture'")).rows.length,0);
+ const metadata={verificationFixture:true,purpose:'readonly-query-proof',domainMutationEvidence:false,ownedRunId:handle.identity.runId};
+ const rows=(await handle.query("insert into public.admin_audit_logs(actor_admin_user_id,actor_username,action,entity_type,entity_id,entity_label,metadata) values($1,'qa_admin_interaction','qa.readonly.fixture','topic',$2,$3,$4::jsonb) returning id,actor_admin_user_id,actor_username,action,entity_type,entity_id,entity_label,metadata",[actorId,topicId,topic.title,JSON.stringify(metadata)])).rows;
+ assert.equal(rows.length,1);const row=rows[0],id=Number(row.id);assert.ok(Number.isSafeInteger(id)&&id>0);assert.equal(Number(row.actor_admin_user_id),actorId);assert.equal(row.actor_username,'qa_admin_interaction');assert.equal(row.action,'qa.readonly.fixture');assert.equal(row.entity_type,'topic');assert.equal(Number(row.entity_id),topicId);assert.equal(row.entity_label,topic.title);assert.deepEqual(row.metadata,metadata);
+ return{id,actorId,actorUsername:'qa_admin_interaction',entityId:topicId,entityLabel:topic.title,action:'qa.readonly.fixture',entityType:'topic',...metadata};
 }

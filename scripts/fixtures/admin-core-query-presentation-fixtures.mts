@@ -56,7 +56,7 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
      const stageId=contexts.project_tracking_stages?.ids[0],itemId=contexts.project_tracking_items?.ids[0];
      for(let i=0;i<count;i++){
       const sql=spec.kind==='stages'?'insert into public.project_tracking_stages(project_id,name,sort_order,is_visible) values($1,$2,$3,$4) returning id':spec.kind==='items'?"insert into public.project_tracking_items(stage_id,name,sort_order,is_visible,status) values($1,$2,$3,$4,'not_started') returning id":"insert into public.project_tracking_updates(item_id,title,occurred_at,publication_status,body) values($1,$2,$3,$4,'QA B1 authored fixture') returning id";
-      const values=spec.kind==='updates'?[itemId,label(i),stamp(i),i%2===0?'unpublished':'draft']:[spec.kind==='stages'?projectId:stageId,label(i),Math.floor(i/2),i%2===0];
+      const values=spec.kind==='updates'?[itemId,label(i),stamp(i),i%2===0?'unpublished':'draft']:[spec.kind==='stages'?projectId:stageId,label(i),i,i%2===0];
       ids.push(Number((await db.query(sql,values)).rows[0].id));
      }
      contexts[spec.key]={search,ids,projectId,...(spec.kind==='items'?{stageId}:spec.kind==='updates'?{itemId}:{})};

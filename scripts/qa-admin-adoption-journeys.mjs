@@ -1,4 +1,4 @@
-import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
+import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, CORE_READONLY_QUERY_SELECTION, buildCoreReadonlyQueryProofPlan, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
 import { CORE_TEMPLATE_FORM_CREATES_SELECTION, coreSelectedTemplateCreates, coreTemplateCreateJourneyId, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection, buildCorePreviewPublicImpactPlan, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
@@ -41,7 +41,7 @@ const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".l
 const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
   ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
-let selectedJourneyIds = journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION) ? [] : journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION
+let selectedJourneyIds = journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION
   ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTemplateCreateJourneyId)
   : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
@@ -168,9 +168,9 @@ assert.ok(process.env.QA_ADMIN_USERNAME && process.env.QA_ADMIN_PASSWORD, "The o
 const fixtures = JSON.parse(readFileSync(process.env.QA_ADMIN_FIXTURES, "utf8"));
 if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) selectedJourneyIds = buildCorePreviewPublicImpactPlan({fixtures,previewMatrix}).journeyIds;
 let domainCommandTailPlan = null;
-if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION) {
+if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) {
   const location = await jiti.import("../src/lib/admin/projects/location-management-contract.ts"), tracking = await jiti.import("../src/lib/admin/projects/tracking-contract.ts");
-  domainCommandTailPlan = (journeySelection === CORE_TRACKING_PERMISSION_SELECTION ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:collections.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures,paths:{...location,...tracking}});
+  domainCommandTailPlan = (journeySelection === CORE_READONLY_QUERY_SELECTION ? buildCoreReadonlyQueryProofPlan : journeySelection === CORE_TRACKING_PERMISSION_SELECTION ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:collections.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures,paths:{...location,...tracking}});
   selectedJourneyIds = domainCommandTailPlan.journeyIds;
 }
 const allowedStorage = JSON.parse(process.env.QA_ADMIN_STORAGE_PUBLIC_PREFIXES || "[]");
@@ -482,15 +482,21 @@ try {
     await runCoreDomainTerminalJourneys(terminalContext);
     coreFormPermission.close();coreFormPermission=null;
     }
-    const emptyTrashResult = journeySelection === CORE_TRACKING_PERMISSION_SELECTION ? null : await runCoreEmptyTrashSuccessJourneys(terminalContext);
+    const emptyTrashResult = journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION ? null : await runCoreEmptyTrashSuccessJourneys(terminalContext);
     if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION) {
       assert.ok(emptyTrashResult, "Selected EmptyTrash completion is required before dependent readonly proof.");
       assert.equal(emptyTrashResult.outcomes.length, domainCommandTailPlan.trash.length, "All selected EmptyTrash journeys must pass before dependent readonly proof.");
       const { runCoreReadonlyJourneys } = await import("./fixtures/admin-core-readonly-journeys.mjs");
       await runCoreReadonlyJourneys({ page, context, origin, fixtures, run, observe, readOnlyReadback });
     }
+    if (journeySelection === CORE_READONLY_QUERY_SELECTION) {
+      const {runCoreReadonlyJourneys}=await import("./fixtures/admin-core-readonly-journeys.mjs");
+      const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
+      await runCoreReadonlyJourneys({page,context,origin,fixtures,run,observe,readOnlyReadback,journeySelection,requiredCases,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    } else {
     const { runCoreDomainPermissionJourneys } = await import("./fixtures/admin-core-domain-permission-journeys.mjs");
     await runCoreDomainPermissionJourneys({ browser, context, origin, output, fixtures, run, observe, ownedNetworkOnly, revokeSession, journeySelection });
+    }
    }
   } else {
   const suffix = Date.now().toString(36);
@@ -778,7 +784,7 @@ try {
   assert.deepEqual(externalRequests, [], "The browser attempted an unowned network destination.");
   driverCompleted = true;
   if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) assertCorePreviewPublicImpactReceipt(receipt(), {fixtures,previewMatrix,canonicalRequiredCases:requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256});
-  else if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION) assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases);
+  else if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases);
   else if (journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION) assertCoreTemplateSelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   else if (journeySelection !== null) assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   checkpoint("driver", "complete");
