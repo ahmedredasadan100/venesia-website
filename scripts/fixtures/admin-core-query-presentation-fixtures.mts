@@ -30,7 +30,9 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
   assert.equal((await handle.query(`select count(*)::int count from public.${spec.table} where "${spec.labelColumn}" like $1`,['%'+search+'%'])).rows[0].count,0);
   const count=spec.rowCount,stamp=(index:number)=>new Date(Date.UTC(2026,0,3,0,Math.floor(index/2))).toISOString();
   const label=(index:number)=>search+' '+String(spec.level?index:Math.floor(index/2)).padStart(3,'0'),slug=(index:number)=>search+'-'+String(index).padStart(3,'0');
-  for(let chunk=0;chunk<(spec.entity==='projects'?count:1);chunk++){
+  // Row-by-row inserts share a bounded transaction; renew only after it closes.
+  const chunkSize=spec.entity==='projects'?1:spec.level||spec.kind||['admin_users','redirects','activity_log'].includes(spec.entity)?4:count;
+  for(let chunk=0;chunk<count;chunk+=chunkSize){
   await handle.withDatabaseConnection(async db=>{
    await db.query('begin');
    try{
@@ -50,22 +52,22 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
      }
     }else if(spec.level){
      const original=projectSources.residential;const parent=spec.level==='governorate'?null:spec.level==='city'?original.governorate_id:spec.level==='main_area'?original.city_id:original.main_area_id;
-     for(let i=0;i<count;i++)ids.push(Number((await db.query('insert into public.project_locations(client_key,level,parent_id,name_ar,name_en,sort_order,is_active) values($1,$2,$3,$4,$4,$5,$6) returning id',[randomUUID(),spec.level,parent,label(i),Math.floor(i/2),i%2===0])).rows[0].id));
+     for(let i=chunk;i<Math.min(chunk+chunkSize,count);i++)ids.push(Number((await db.query('insert into public.project_locations(client_key,level,parent_id,name_ar,name_en,sort_order,is_active) values($1,$2,$3,$4,$4,$5,$6) returning id',[randomUUID(),spec.level,parent,label(i),Math.floor(i/2),i%2===0])).rows[0].id));
     }else if(spec.kind){
      const projectId=contexts['projects-residential'].ids[0];
      const stageId=contexts.project_tracking_stages?.ids[0],itemId=contexts.project_tracking_items?.ids[0];
-     for(let i=0;i<count;i++){
+     for(let i=chunk;i<Math.min(chunk+chunkSize,count);i++){
       const sql=spec.kind==='stages'?'insert into public.project_tracking_stages(project_id,name,sort_order,is_visible) values($1,$2,$3,$4) returning id':spec.kind==='items'?"insert into public.project_tracking_items(stage_id,name,sort_order,is_visible,status) values($1,$2,$3,$4,'not_started') returning id":"insert into public.project_tracking_updates(item_id,title,occurred_at,publication_status,body) values($1,$2,$3,$4,'QA B1 authored fixture') returning id";
       const values=spec.kind==='updates'?[itemId,label(i),stamp(i),i%2===0?'unpublished':'draft']:[spec.kind==='stages'?projectId:stageId,label(i),i,i%2===0];
       ids.push(Number((await db.query(sql,values)).rows[0].id));
      }
      contexts[spec.key]={search,ids,projectId,...(spec.kind==='items'?{stageId}:spec.kind==='updates'?{itemId}:{})};
     }else if(spec.entity==='admin_users'){
-     for(let i=0;i<count;i++)ids.push(Number((await db.query("insert into public.admin_users(email,username,password_hash,full_name,role,is_active,session_version,created_at) values($1,$2,$3,$4,'admin',$5,1,$6) returning id",[slug(i)+'@example.invalid',slug(i),passwordHash,label(i),i%2===0,stamp(i)])).rows[0].id));
+     for(let i=chunk;i<Math.min(chunk+chunkSize,count);i++)ids.push(Number((await db.query("insert into public.admin_users(email,username,password_hash,full_name,role,is_active,session_version,created_at) values($1,$2,$3,$4,'admin',$5,1,$6) returning id",[slug(i)+'@example.invalid',slug(i),passwordHash,label(i),i%2===0,stamp(i)])).rows[0].id));
     }else if(spec.entity==='redirects'){
-     for(let i=0;i<count;i++)ids.push(Number((await db.query("insert into public.url_redirects(source_path,destination_path,redirect_type,status,updated_at) values($1,'/topics','302',$2,$3) returning id",['/'+slug(i),i%2===0?'active':'inactive',stamp(i)])).rows[0].id));
+     for(let i=chunk;i<Math.min(chunk+chunkSize,count);i++)ids.push(Number((await db.query("insert into public.url_redirects(source_path,destination_path,redirect_type,status,updated_at) values($1,'/topics','302',$2,$3) returning id",['/'+slug(i),i%2===0?'active':'inactive',stamp(i)])).rows[0].id));
     }else if(spec.entity==='activity_log'){
-     for(let i=0;i<count;i++)ids.push(Number((await db.query("insert into public.admin_audit_logs(actor_admin_user_id,actor_username,action,entity_type,entity_label,metadata,created_at) values($1,'qa_admin_interaction',$2,$3,$4,'{\"verificationFixture\":true}'::jsonb,$5) returning id",[actorId,i%2===0?'topic.update':'page.update',i%2===0?'topic':'page',label(i),stamp(i)])).rows[0].id));
+     for(let i=chunk;i<Math.min(chunk+chunkSize,count);i++)ids.push(Number((await db.query("insert into public.admin_audit_logs(actor_admin_user_id,actor_username,action,entity_type,entity_label,metadata,created_at) values($1,'qa_admin_interaction',$2,$3,$4,'{\"verificationFixture\":true}'::jsonb,$5) returning id",[actorId,i%2===0?'topic.update':'page.update',i%2===0?'topic':'page',label(i),stamp(i)])).rows[0].id));
     }else{
      const rows=Array.from({length:count},(_,i)=>{
       const original=spec.table==='topics'?topic:spec.table==='topic_categories'?category:spec.table==='topic_series'?series:page;
@@ -86,9 +88,9 @@ export async function prepareCoreQueryPresentationFixtures(handle:OwnedLocalHand
     await db.query('commit');
    }catch(error){await db.query('rollback');throw error;}
   });
-  if(spec.entity==='projects'&&chunk%4===3)await handle.renewDatabaseControlConnection();
+  await handle.renewDatabaseControlConnection();
   }
-  assert.equal(ids.length,count);assert.equal(new Set(ids).size,count);contexts[spec.key]??={search,ids};if(['topics','series'].includes(spec.entity)){assert.ok(Number.isSafeInteger(Number(category.id))&&Number(category.id)>0);assert.equal(typeof category.name,'string');contexts[spec.key].filterOptions={category:{id:Number(category.id),name:String(category.name)},...(spec.entity==='topics'?{series:{id:Number(series.id),name:String(series.name)}}:{})};}await handle.renewDatabaseControlConnection();
+  assert.equal(ids.length,count);assert.equal(new Set(ids).size,count);contexts[spec.key]??={search,ids};if(['topics','series'].includes(spec.entity)){assert.ok(Number.isSafeInteger(Number(category.id))&&Number(category.id)>0);assert.equal(typeof category.name,'string');contexts[spec.key].filterOptions={category:{id:Number(category.id),name:String(category.name)},...(spec.entity==='topics'?{series:{id:Number(series.id),name:String(series.name)}}:{})};}
  }
  // Keep synthetic audit rows labelled as read fixtures, never domain-write proof.
  return {contexts,namespace,scope:'Read-model fixtures only; Activity Log entries are synthetic fixtures, not evidence of audited Product mutations.'};

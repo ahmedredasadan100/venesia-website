@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PGlite } from "@electric-sql/pglite";
+import ts from "typescript";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const SCOPE_MIGRATION =
@@ -119,15 +120,102 @@ check(
     adminPreview.includes("loadProjectLocationSectionPresentation(projectId)"),
 );
 
-check(
-  "Project Admin writes expire shared Project caches immediately",
-  /export function revalidateProjectsCache\(\) \{\s*updatePublicCacheTags\(PUBLIC_CACHE_TAG_GROUPS\.projects\)/.test(
-    cacheRevalidationOwner,
-  ) &&
-    !/export function revalidateProjectsCache\(\) \{\s*revalidatePublicCacheTags\(PUBLIC_CACHE_TAG_GROUPS\.projects\)/.test(
-      cacheRevalidationOwner,
-    ),
-);
+// Execute the current owner: its async generation fence must finish before
+// both Project tags expire immediately. A synchronous source spelling is not
+// the cache contract; these ports observe the actual owner's API calls.
+function loadProjectCacheOwner(
+  source: string,
+  events: string[],
+  advance: () => Promise<void>,
+) {
+  const code = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+  }).outputText;
+  const cacheModule = { exports: {} };
+  new Function("require", "module", "exports", code)(
+    (id: string) => {
+      if (id === "server-only") return {};
+      if (id === "./public-cache-generation") {
+        return { advancePublicCacheGeneration: advance };
+      }
+      if (id === "next/cache") {
+        return {
+          updateTag: (tag: string) => events.push("update:" + tag),
+          revalidateTag: (tag: string, profile: unknown) =>
+            events.push("revalidate:" + tag + ":" + JSON.stringify(profile)),
+          revalidatePath: (path: string) => events.push("path:" + path),
+        };
+      }
+      throw new Error("Unexpected Project cache owner dependency: " + id);
+    },
+    cacheModule,
+    cacheModule.exports,
+  );
+  return cacheModule.exports as { revalidateProjectsCache: () => Promise<void> };
+}
+
+async function assertProjectImmediateExpiration(source: string) {
+  const events: string[] = [];
+  let release!: () => void;
+  const generationGate = new Promise<void>((resolve) => { release = resolve; });
+  const owner = loadProjectCacheOwner(source, events, async () => {
+    events.push("generation:start");
+    await generationGate;
+    events.push("generation:ready");
+  });
+  let settled = false;
+  const operation = owner.revalidateProjectsCache();
+  const observed = operation.then(() => { settled = true; });
+  try {
+    await Promise.resolve();
+    assert.deepEqual(events, ["generation:start"]);
+    assert.equal(settled, false, "Project invalidation must await the generation fence");
+  } finally {
+    release();
+    await observed;
+  }
+  assert.deepEqual(events, [
+    "generation:start", "generation:ready",
+    "update:projects", "update:project", "path:/sitemap.xml",
+  ]);
+
+  events.length = 0;
+  const generationFailure = new Error("controlled Project generation failure");
+  const failedOwner = loadProjectCacheOwner(source, events, async () => {
+    events.push("generation:failed");
+    throw generationFailure;
+  });
+  await assert.rejects(
+    failedOwner.revalidateProjectsCache,
+    (error) => error === generationFailure,
+  );
+  assert.deepEqual(events, ["generation:failed"]);
+}
+
+await assertProjectImmediateExpiration(cacheRevalidationOwner);
+check("Project Admin writes expire shared Project caches immediately", true);
+
+// These are controlled mutations of the real source, never alternate owners.
+// Each must fail the same behavioral assertion used above.
+const cacheMutants = [
+  ["SWR instead of immediate expiry", "updateTag(tag);", 'revalidateTag(tag, "max");'],
+  ["unawaited generation", "await advancePublicCacheGeneration();", "void advancePublicCacheGeneration();"],
+  ["missing generation", "await advancePublicCacheGeneration();", ""],
+  ["unawaited Project invalidation", "await updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects);", "void updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects);"],
+  ["wrong tag group", "await updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects);", "await updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.navigation);"],
+  ["missing singular Project tag", 'projects: ["projects", "project"],', 'projects: ["projects"],'],
+  ["swallowed generation failure", "await advancePublicCacheGeneration();", "await advancePublicCacheGeneration().catch(() => undefined);"],
+  ["missing sitemap invalidation", 'revalidatePath("/sitemap.xml");', ""],
+] as const;
+for (const [label, from, to] of cacheMutants) {
+  assert.ok(cacheRevalidationOwner.includes(from), "Project cache mutation anchor: " + label);
+  const mutant = cacheRevalidationOwner.replace(from, to);
+  await assert.rejects(() => assertProjectImmediateExpiration(mutant));
+  check("Project cache guard rejects " + label, true);
+}
 
 const otherConsumerSources = [
   publicTypes,
