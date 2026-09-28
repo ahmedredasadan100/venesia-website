@@ -1,3 +1,5 @@
+import ts from 'typescript';
+import {createJiti} from 'jiti';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,symlinkSync} from 'node:fs';
@@ -71,6 +73,28 @@ for(const spec of plan){
 const nativeUrl=new URL('./verify-admin-core-template-library-presentation-isolated.mts',import.meta.url).href;
 const hooks=registerHooks({resolve(specifier,context,next){if(context.parentURL===nativeUrl&&specifier==='./lib/isolated-supabase.mts')return{url:'data:text/javascript,'+encodeURIComponent('import assert from "node:assert/strict"; export function assertOwnedLocalHandle(h){assert.equal(h.controlledVerifierPort,true)}'),shortCircuit:true};if(context.parentURL===nativeUrl&&specifier==='./verify-admin-core-domain-readback-isolated.mts')return{url:'data:text/javascript,'+encodeURIComponent('export async function readCoreFixedQaActor(connection){return Number((await connection.query("select 91::int id")).rows[0].id)}'),shortCircuit:true};return next(specifier,context);}});
 const native=await import('./verify-admin-core-template-library-presentation-isolated.mts');hooks.deregister();
+// Execute the actual Cards value producer and AdminLinkField effect. The Action
+// receives value, not the separate serialized hidden-input representation.
+const product=createJiti(import.meta.url,{fsCache:false,moduleCache:false});
+const {linkDefaultFromContainer}=product('../src/lib/admin/links/link-defaults.ts');
+const {serializeAdminLink,deserializeAdminLink}=product('../src/lib/admin/links/serialize.ts');
+const parseTsx=file=>ts.createSourceFile(file,readFileSync(file,'utf8'),ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+const cardsSource=parseTsx('src/components/admin/page-blocks/CardsModuleEditClient.tsx'),renderCard=cardsSource.statements.find(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='renderCardHref');assert.ok(renderCard);
+const renderJs=ts.transpileModule(renderCard.getText(cardsSource),{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React,jsxFactory:'jsx'}}).outputText;
+const renderActual=new Function('jsx','AdminLinkField','linkDefaultFromContainer',renderJs+';return renderCardHref;')((type,props)=>({type,props}),Symbol.for('AdminLinkField'),linkDefaultFromContainer);
+const fieldSource=parseTsx('src/components/admin/ui/AdminLinkField.tsx');let effect;
+const visitEffect=node=>{if(ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text==='useEffect'){assert.equal(effect,undefined);effect=node.arguments[0];}ts.forEachChild(node,visitEffect);};visitEffect(fieldSource);assert.ok(effect);
+const actualPreviewValues=item=>{const value=renderActual(item,0).props.defaultValue,calls=[];const callback=new Function('value','valueKey','display','resolveAdminLinkAjax','setDisplay','unstable_rethrow','return ('+effect.getText(fieldSource)+');')(value,JSON.stringify(serializeAdminLink(value)),null,next=>{calls.push(structuredClone(next));return Promise.resolve({ok:false});},()=>assert.fail('Unexpected display update'),error=>{throw error;});const cleanup=callback();cleanup?.();return calls;};
+for(const item of [{title:'Legacy card',href:'/qa-admin-page-interaction'},{title:'Structured card',link:{link_kind:'internal',linked_type:'pages',linked_id:7,href:'/qa-admin-page-interaction',target:'_self'}},{title:'Unlinked card'}]){
+ const actual=actualPreviewValues(item),expected=native.coreTemplateLinkPreviewValues('cards',{config:{items:[item]}}),context={origin,pathname,actionId:actual.length?actionId:null,expectedValues:expected};
+ positive(()=>assert.deepEqual(expected,actual));positive(()=>assert.equal(assertCoreReadOnlyEditRequests(actual.map(value=>({...requestEvidence,body:JSON.stringify([value])})),context).count,actual.length));
+}
+const legacyItem={title:'Legacy card',href:'/qa-admin-page-interaction'},legacyValues=actualPreviewValues(legacyItem),legacyExpected=native.coreTemplateLinkPreviewValues('cards',{config:{items:[legacyItem]}}),legacyArgs={origin,pathname,actionId,expectedValues:legacyExpected},legacyRequest={...requestEvidence,body:JSON.stringify(legacyValues)};
+positive(()=>assert.deepEqual(legacyExpected,[{link_kind:'legacy',href:'/qa-admin-page-interaction',target:'_self'}]));
+negative(()=>assertCoreReadOnlyEditRequests([legacyRequest],{...legacyArgs,expectedValues:legacyExpected.map(deserializeAdminLink)}));
+for(const change of [value=>value.href='/foreign',value=>value.target='_blank',value=>value.link_kind='external',value=>value.linked_id=7,value=>value.foreign=null,value=>value.linked_type=null,value=>value.anchor=null,value=>value.meta=null,value=>delete value.target]){const value=structuredClone(legacyValues[0]);change(value);negative(()=>assertCoreReadOnlyEditRequests([{...legacyRequest,body:JSON.stringify([value])}],legacyArgs));}
+positive(()=>assert.deepEqual(native.coreTemplateLinkPreviewValues('hero',{config:{items:[legacyItem]}}),[]));
+
 const request=(kind,phase)=>({id:randomUUID(),kind:'template-library-presentation-state',moduleKind:kind,phase});
 positive(()=>native.validateCoreTemplatePresentationRequest(request(plan[0].kind,'before')));
 for(const change of [row=>row.sql='delete',row=>row.id='bad',row=>row.kind='other',row=>row.phase='all',row=>row.actorId=1]){const row=request(plan[0].kind,'before');change(row);negative(()=>native.validateCoreTemplatePresentationRequest(row));}

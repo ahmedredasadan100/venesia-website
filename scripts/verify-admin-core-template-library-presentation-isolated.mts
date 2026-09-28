@@ -2,7 +2,6 @@ import {createJiti} from 'jiti';
 const productLoader=createJiti(import.meta.url,{fsCache:false,moduleCache:false});
 const {asCardsConfig}=productLoader('../src/lib/page-blocks/configs.ts') as typeof import('../src/lib/page-blocks/configs.ts');
 const {linkDefaultFromContainer}=productLoader('../src/lib/admin/links/link-defaults.ts') as typeof import('../src/lib/admin/links/link-defaults.ts');
-const {deserializeAdminLink}=productLoader('../src/lib/admin/links/serialize.ts') as typeof import('../src/lib/admin/links/serialize.ts');
 import { assertCoreRenderedAdoptionJoin } from './fixtures/admin-core-rendered-adoption.mjs';
 import assert from 'node:assert/strict';
 import { formatAdminDateTime } from '../src/lib/content-dates.ts';
@@ -18,7 +17,7 @@ type Spec={pageSizeOptions:number[];searchMinLength:number;searchSourceHashes:Re
 type Fixture={search:string;ids:number[]};
 type Proof={id:string;moduleKind:string;phase:string;actorId:number;ownedRunId:string;fingerprint:string;preference:Row;rows:Row[];search:SearchProjection};
 type State={plan:Spec[];actorId:number;fixtures:Record<string,Fixture>;original:Map<string,Row|null>;proofs:Map<string,Proof>;baseline:Map<string,string>;cleaned:boolean};
-export function coreTemplateLinkPreviewValues(kind:string,row:Row){return kind==='cards'?(asCardsConfig(row.config).items??[]).map(item=>deserializeAdminLink(linkDefaultFromContainer(item as Record<string,unknown>))).filter(value=>value.link_kind!=='none'):[];}
+export function coreTemplateLinkPreviewValues(kind:string,row:Row){return kind==='cards'?(asCardsConfig(row.config).items??[]).map(item=>linkDefaultFromContainer(item as Record<string,unknown>)).filter(value=>value.link_kind!=='none'):[];}
 const states=new WeakMap<OwnedLocalHandle,State>();
 const identifier=(value:string)=>{assert.match(value,/^[a-z][a-z0-9_]*$/);return '"'+value+'"';};
 export function validateCoreTemplatePresentationRequest(input:unknown){
