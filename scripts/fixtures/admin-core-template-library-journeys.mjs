@@ -22,6 +22,17 @@ const mediaKinds = new Set(['media-hub', 'media-sidebar']);
 const visibilitySelector = id => '[data-admin-row-action="visibility"][data-admin-entity-id="' + id + '"] button';
 const moreSelector = id => '[data-admin-row-action="more"][data-admin-entity-id="' + id + '"] button';
 
+// These are the current presentation owners, not per-consumer exceptions.
+// Each actual mutation/row projection is exercised by the pending verifier.
+export function coreTemplateDeletePendingBoundary(presentationOwner) {
+  assert.ok([
+    'src/app/admin/pages-blocks/blocks/content/ContentBlocksTableClient.tsx',
+    'src/app/admin/pages-blocks/blocks/hero/HeroManagerClient.tsx',
+    'src/components/admin/page-blocks/BlockModuleManagerClient.tsx',
+  ].includes(presentationOwner), 'Unreviewed template delete presentation owner.');
+  return 'optimistic_row_and_local_confirmation_removed_before_delivery';
+}
+
 export function buildCoreTemplateLibraryPlan({ collectionAdoption, rowActions, fixtures }) {
   const surface = collectionAdoption.surfaces.find(row => row.id === 'block-template-libraries');
   assert.ok(surface && surface.queryMode === 'bounded-client');
@@ -49,6 +60,7 @@ export function buildCoreTemplateLibraryPlan({ collectionAdoption, rowActions, f
     const terminal = !mediaKinds.has(kind);
     if (!terminal) assert.ok(declaration.genuineExceptions.some(value => /duplicate, and delete are not supported/.test(value)));
     return { kind, ...recipe, consumer: declaration.id, route: declaration.route, source, assigned: assigned[0], terminal,
+      deletePendingBoundary: terminal ? coreTemplateDeletePendingBoundary(declaration.presentationOwner) : null,
       filterBoundary: recipe.filterId ? 'actual-status-filter' : 'disabled-no-filter-contract',
       knownSourceAuditGap: kind === 'content' ? ['publish', 'unpublish', 'duplicate', 'delete'] : [] };
   });
@@ -117,7 +129,7 @@ export async function runCoreTemplateLibraryJourneys(ctx) {
     await open();
     await heldCommand(() => dialog.locator('[data-admin-confirm-submit]').click(), async () => {
       if (optimisticRemoval) {
-        // Content's existing bounded mutation removes the row and its local
+        // The declared owner's bounded mutation removes the row and its local
         // confirmation before the held request is delivered. A removed control
         // cannot accept another user command; the held owner still requires
         // exactly one request and later real acknowledgement/reload/native proof.
@@ -188,7 +200,7 @@ export async function runCoreTemplateLibraryJourneys(ctx) {
     await expect(page.getByRole('link', { name: cloneName, exact: true })).toHaveAttribute('href', recipe.route + '/' + cloneId);
     await expect(page.locator(visibilitySelector(cloneId))).toHaveAttribute('aria-pressed', 'false');
     let deletePosts = 0; const count = request => { if (isAction(request)) deletePosts++; }; page.on('request', count);
-    try { await confirmDelete(cloneId, { optimisticRemoval: recipe.kind === "content" }); assert.equal(deletePosts, 1, 'Cancel plus one confirmed delete may dispatch exactly once.'); }
+    try { await confirmDelete(cloneId, { optimisticRemoval: recipe.deletePendingBoundary === "optimistic_row_and_local_confirmation_removed_before_delivery" }); assert.equal(deletePosts, 1, 'Cancel plus one confirmed delete may dispatch exactly once.'); }
     finally { page.off('request', count); }
     await reload(); await expect(page.locator(moreSelector(cloneId))).toHaveCount(0);
     await expect(page.locator(moreSelector(recipe.source.id))).toHaveCount(1);
@@ -198,7 +210,7 @@ export async function runCoreTemplateLibraryJourneys(ctx) {
       auditEntityLabel: null, auditActions: ['content_block_template.delete'], auditMetadata: metadata(recipe), auditSince: startedAt, exactAuditCount: 1 });
     const result = { consumer: recipe.consumer, sourceId: recipe.source.id, cloneId, cloneName,
       onePhysicalCloneAfterReload: true, cloneUnpublished: true, deleteCancelledThenConfirmed: true,
-      pendingDuplicateBlocked: true, deletePendingBoundary: recipe.kind === "content" ? "optimistic_row_and_local_confirmation_removed_before_delivery" : "mounted_confirmation_disabled_before_delivery", deletedCloneAbsentAfterReload: true, originalPreserved: true, nativeAuditRequired: true,
+      pendingDuplicateBlocked: true, deletePendingBoundary: recipe.deletePendingBoundary, deletedCloneAbsentAfterReload: true, originalPreserved: true, nativeAuditRequired: true,
       knownSourceAuditGap: recipe.knownSourceAuditGap.filter(action => ['duplicate', 'delete'].includes(action)),
       boundary: 'Only the newly created unassigned clone is deleted; no assigned cascade or global delete is attempted.' };
     outcomes.push(result); return result;

@@ -6081,14 +6081,10 @@ check(
     read(paths.boundedPagination).includes(
       "const applyQueryPatch = useCallback",
     ) &&
-    read(paths.boundedPagination).includes("useRouter") &&
-    read(paths.boundedPagination).includes(
-      "router.push(href, { scroll: false })",
-    ) &&
-    read(paths.boundedPagination).includes(
-      "router.replace(href, { scroll: false })",
-    ) &&
-    !read(paths.boundedPagination).includes("window.history") &&
+    read(paths.boundedPagination).includes("window.history[behavior") &&
+    read(paths.boundedPagination).includes("window.history.replaceState(null") &&
+    read(paths.boundedPagination).includes("currentPageSize") &&
+    !read(paths.boundedPagination).includes("useRouter") &&
     read(paths.boundedPagination).includes("previousDatasetKey"),
 );
 
