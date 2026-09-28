@@ -1,3 +1,4 @@
+import {CORE_READONLY_HUB_FOLLOWUP_SELECTION,assertCoreReadonlyHubFollowupReceipt,assertCoreReadonlyHubFollowupCompletion} from "./fixtures/admin-core-readonly-hubs-journeys.mjs";
 import {CORE_TEMPLATE_CARDS_SELECTION,loadCoreTemplatePresentationPlan,assertCoreTemplateCardsSelectionReceipt} from "./fixtures/admin-core-template-library-presentation-plan.mjs";
 import {CORE_QUERY_LAYOUT_SELECTION,loadCoreQueryPresentationPlan,assertCoreQuerySelectionReceipt} from "./fixtures/admin-core-query-presentation-plan.mjs";
 import {assertCoreReadonlyQueryProofCompletion} from "./fixtures/admin-core-readonly-journeys.mjs";
@@ -231,6 +232,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       const source = JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
       previewImpactContext = {fixtures,previewMatrix,canonicalRequiredCases,sourceSha256:source.sourceSha256};
     }
+    const isReadonlyHubFollowup = browser.journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION;
     const isTemplateCards = browser.journeySelection === CORE_TEMPLATE_CARDS_SELECTION;
     const isQueryLayout = browser.journeySelection === CORE_QUERY_LAYOUT_SELECTION;
     const isTemplateCreates = browser.journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION;
@@ -245,7 +247,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       domainTailPlan = (isReadonlyQueryProof ? buildCoreReadonlyQueryProofPlan : isTrackingPermissions ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),paths:{...location,...tracking}});
     }
     const domainTailNative = isDomainTail ? JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")) : null;
-    const selectedJourneys = isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
+    const selectedJourneys = isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupReceipt(browser,canonicalRequiredCases) : isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
       native:domainTailNative,ownedRunId:handle.identity.runId,
       sourceSha256:JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,expectedActorId:await readCoreFixedQaActor(handle),
     }) : isPreviewImpact ? assertCorePreviewPublicImpactReceipt(browser, previewImpactContext!) : isTemplateCreates
@@ -275,7 +277,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(draftNative.status,"pass");
       draftRestoration=assertCoreFormDraftRestorationJoin({artifact:draftArtifact,browser,native:draftNative,ownedRunId:handle.identity.runId,sourceSha256:(browser as unknown as {sourceSha256:string}).sourceSha256});
     }
-    if (selectedJourneys && !isPreviewImpact && !isDomainTail && !isQueryLayout && !isTemplateCards) {
+    if (selectedJourneys && !isPreviewImpact && !isDomainTail && !isQueryLayout && !isTemplateCards && !isReadonlyHubFollowup) {
       assert.ok(draftRestoration);
       if (isTemplateCreates) assertCoreTemplateSelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration, {
         native: JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),
@@ -439,7 +441,8 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     const readonlyQueryProof=isReadonlyQueryProof?assertCoreReadonlyQueryProofCompletion(browser,domainTailNative,readOnly,handle.identity.runId,JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,canonicalRequiredCases,domainTailPlan):null;
     const downloadMedia=["template-controls","navigation-settings"].includes(browser.cohort ?? "") ? await verifyCoreDownloadMediaCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256) : null;
     const residualSearch = ["readonly-hubs", "media-library"].includes(browser.cohort ?? "") ? await assertCoreResidualSearchCompletion(browser, nativeCheckpoints, JSON.parse(readFileSync(join(artifactDir, "public-source-manifest.json"), "utf8"))) : null;
-    const result = { status: "pass", residualSearch, downloadMedia, authenticatedBrowserReceipt: "admin-adoption-browser.json", readonlyQueryProof, selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, pageAssignmentRowActions, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, projectVisibility, presentationControls, domainBulk, trackingDates, trackingMedia, trackingMediaApplicability, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
+    const readonlyHubFollowup = isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupCompletion({browser,native:nativeCheckpoints,ownedRunId:handle.identity.runId,sourceSha256:JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),canonicalRequiredCases}) : null;
+    const result = { status: "pass", readonlyHubFollowup, residualSearch, downloadMedia, authenticatedBrowserReceipt: "admin-adoption-browser.json", readonlyQueryProof, selectedJourneys, publicPreviewImpact, previewStates, writes, readOnly, nativeCheckpoints, draftRestoration, companyImages, pageSeo, pageAssignmentRowActions, specializedSettings, media: browser.media ?? null, mediaCompletion, navigationSettings, authEntry, mediaRecovery, descendantPresentation, templateLibraryPresentation, queryPresentation, templateControls, topicControls, projectControls, projectVisibility, presentationControls, domainBulk, trackingDates, trackingMedia, trackingMediaApplicability, globalClosed: browser.globalClosed, boundary: "Selected Core writes joined to native fields/configuration/audit, and read-only Preview states joined to unchanged native publication/deletion state." };
     writeFileSync(join(artifactDir, "admin-adoption-database-readback.json"), JSON.stringify(result, null, 2) + "\n");
     return result;
   }

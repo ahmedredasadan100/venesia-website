@@ -42,9 +42,88 @@ export function buildCoreReadonlyHubPlan({ collectionAdoption, formManifest, rep
   return { selected, reports: reportDefinitions, integrations: integrationDefinitions, remaining };
 }
 
+export const CORE_READONLY_HUB_FOLLOWUP_SELECTION = 'readonly-hubs-followup';
+export function selectCoreReadonlyHubJourneyIds(selection) {
+  if (selection === null || selection === undefined) return null;
+  assert.equal(selection, CORE_READONLY_HUB_FOLLOWUP_SELECTION);
+  return [
+    'readonly-hub-project-types-native-count-navigation',
+    'readonly-hub-location-level-navigation',
+    'readonly-hub-tracking-native-aggregate-navigation',
+    'readonly-integrations-catalog-query-filter-empty-reset',
+    'readonly-report-analytics-filter-query-contract',
+    'readonly-report-business-filter-query-contract',
+  ];
+}
+export function assertCoreReadonlyHubFollowupReceipt(browser, canonicalRequiredCases) {
+  assert.equal(browser.scope, 'core-closure'); assert.equal(browser.cohort, 'readonly-hubs');
+  const ids = selectCoreReadonlyHubJourneyIds(browser.journeySelection); assert.ok(ids);
+  assert.equal(browser.status, 'pass'); assert.equal(browser.driverCompleted, true); assert.equal(browser.inventoryOnly, false);
+  assert.deepEqual(browser.errors, []); assert.equal(browser.wholeCohortExecuted, false); assert.equal(browser.globalClosed, false);
+  const identities = rows => {
+    assert.ok(Array.isArray(rows) && rows.length > 0); assert.ok(rows.every(row => typeof row.key === 'string' && row.key));
+    assert.equal(new Set(rows.map(row => row.key)).size, rows.length);
+    return rows.map(row => { const value = { ...row }; delete value.status; delete value.evidence; return value; }).sort((a,b) => a.key.localeCompare(b.key));
+  };
+  assert.deepEqual(identities(browser.requiredCases), identities(canonicalRequiredCases));
+  assert.ok(browser.requiredCases.every(row => row.status === 'open' && row.evidence === null));
+  assert.deepEqual(browser.selectedJourneyIds, ids); assert.deepEqual(browser.executedJourneyIds, ids);
+  assert.deepEqual(browser.evidence.map(row => row.id), ['existing-auth-login', ...ids]);
+  assert.ok(browser.evidence.every(row => row.status === 'pass' && Array.isArray(row.coverage) && row.coverage.length === 0));
+  const login = browser.evidence[0]; assert.equal(login.authenticated, true); assert.equal(login.sessionArtifactWritten, false);
+  assert.match(login.dashboardState, /^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
+  assert.deepEqual(browser.evidence.slice(1).map(row => row.consumer), ['projects-hub', 'project-locations-hub', 'construction-updates-hub', 'settings-pages', 'reports-hub', 'reports-hub']);
+  for (const row of browser.evidence.slice(1)) assert.deepEqual(row.readonlyRequestGuard, { writes: 0, blockedWrites: [] });
+  assert.deepEqual(browser.databaseReadback, []); assert.deepEqual(browser.readOnlyReadback, []); assert.deepEqual(browser.menuIntegrityReadback, []);
+  return { selection: CORE_READONLY_HUB_FOLLOWUP_SELECTION, selectedJourneyIds: ids, executedJourneyIds: [...ids], wholeCohortExecuted: false, automaticCoverage: [], globalClosed: false };
+}
+export function assertCoreReadonlyHubFollowupCompletion({ browser, native, ownedRunId, sourceSha256, fixtures, canonicalRequiredCases }) {
+  const selected = assertCoreReadonlyHubFollowupReceipt(browser, canonicalRequiredCases);
+  assert.match(sourceSha256, /^[a-f0-9]{64}$/u); assert.equal(browser.sourceSha256, sourceSha256);
+  assert.ok(typeof ownedRunId === 'string' && ownedRunId); assert.equal(native.status, 'pass'); assert.equal(native.ownedRunId, ownedRunId);
+  assert.equal(native.records.length, 6); assert.equal(new Set(native.records.map(row => row.id)).size, 6);
+  assert.deepEqual(native.records.map(row => row.entity), ['projects', 'tracking', 'integration-search', 'integration-search', 'analytics', 'analytics']);
+  for (const record of native.records) {
+    assert.match(record.id, /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu);
+    assert.equal(record.kind, 'readonly-hub-state'); assert.equal(record.status, 'pass'); assert.equal(record.ownedRunId, ownedRunId);
+  }
+  const [projects, locations, tracking, integrations, analytics, business] = browser.evidence.slice(1);
+  assert.equal(projects.native, native.records[0].id); assert.deepEqual(projects.counts, native.records[0].value); assert.equal(projects.actualCardNavigation, true);
+  assert.deepEqual(locations.levels, ['governorate', 'city', 'main_area', 'sub_area']); assert.equal(locations.actualNavigation, true);
+  assert.equal(tracking.native, native.records[1].id); assert.deepEqual(tracking.project, native.records[1].value); assert.equal(tracking.project.id, Number(fixtures.project.id)); assert.equal(tracking.actualNavigation, true);
+  assert.deepEqual(integrations.searchNativeCheckpointIds, native.records.slice(2,4).map(row => row.id));
+  assertCoreIntegrationSearchNative(native.records[2], native.records[3]); assert.equal(integrations.searchWrites, 0); assert.equal(integrations.localQueryUrlUnchanged, true);
+  for (const [row, report, record] of [[analytics, 'analytics', native.records[4]], [business, 'business', native.records[5]]]) {
+    assert.equal(row.report, report); assert.equal(row.native, record.id); assert.equal(row.unavailableAnalyticsSourceProven, true);
+    assert.deepEqual(record.value, { period: 'last_90_days', compare: 'previous_period', storedReadModelCount: 0 });
+    assert.equal(row.reloadContextPreserved, true); assert.equal(row.exportLinkContextMatched, true); assert.equal(row.invalidQueryRejectedThenRecovered, true);
+  }
+  return { status: 'readonly-hubs-followup-joined', ...selected, ownedRunId, sourceSha256, nativeCheckpointIds: native.records.map(row => row.id), writes: 0 };
+}
+
 /** No external provider calls or credentials; selected real owner controls only. */
+export async function assertCoreReadonlyDestinationHeader(main, { timeout = 60_000 } = {}) {
+  const visibleHeader = main.locator('[data-admin-page-header]:visible');
+  await expect(visibleHeader).toHaveCount(1, { timeout });
+  await expect(visibleHeader.locator('h1')).toBeVisible({ timeout });
+  await expect(main.locator('[data-admin-fallback-header] [data-admin-page-header]')).toBeHidden({ timeout });
+}
+
+export async function readCoreIntegrationCardStatus(card, labels) {
+  assert.equal(await card.count(), 1, 'Exactly one identified integration card is required.');
+  assert.equal(new Set(labels).size, labels.length, 'Status labels must be unique.');
+  const matches = [];
+  for (const label of labels) {
+    const count = await card.getByText(label, { exact: true }).and(card.locator('span')).count();
+    assert.ok(count <= 1, 'Ambiguous integration status span.');
+    if (count === 1) matches.push(label);
+  }
+  assert.equal(matches.length, 1, 'Exactly one current IntegrationCard status is required.');
+  return matches[0];
+}
+
 export async function runCoreReadonlyHubJourneys(ctx) {
-  const { page, origin, fixtures, run, observe, nativeCheckpoint, actionResponse, assertActionAcknowledged, requiredCases } = ctx;
+  const { page, origin, fixtures, run: runJourney, observe, nativeCheckpoint, actionResponse, assertActionAcknowledged, requiredCases } = ctx;
   assert.equal(new URL(origin).hostname, '127.0.0.1'); assert.equal(typeof nativeCheckpoint, 'function');
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const [collection, forms, reports, integrations, locations] = await Promise.all([
@@ -57,6 +136,15 @@ export async function runCoreReadonlyHubJourneys(ctx) {
   const plan = buildCoreReadonlyHubPlan({ collectionAdoption: collection.ADMIN_COLLECTION_SURFACE_ADOPTION,
     formManifest: forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, reportDefinitions: reports.ADMIN_REPORT_DEFINITIONS,
     integrationDefinitions: integrations.INTEGRATION_DEFINITIONS });
+  const selectedIds = selectCoreReadonlyHubJourneyIds(ctx.journeySelection);
+  const run = (id, coverage, task) => {
+    if (selectedIds && !selectedIds.includes(id)) return Promise.resolve();
+    if (!selectedIds) return runJourney(id, coverage, task);
+    return runJourney(id, coverage, async () => {
+      const value = await task(); assert.equal(writes, 0); assert.deepEqual(blockedWrites, []);
+      return { ...value, readonlyRequestGuard: { writes, blockedWrites: [...blockedWrites] } };
+    });
+  };
   const outcomes = [], limits = [...plan.remaining];
   const main = page.locator('main').last();
   async function navigate(path) {
@@ -100,7 +188,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
       for (const type of ['residential', 'commercial']) {
         const path = '/admin/projects/' + type, link = main.locator('a[href="' + path + '"]');
         await expect(link).toHaveCount(1); await expect(link.getByText(native.value[type] + ' مشروع', { exact: true })).toBeVisible();
-        await clickLocal(link, path); await expect(main.locator('[data-admin-page-header]')).toBeVisible({ timeout: 60_000 }); await navigate(routes['projects-hub']);
+        await clickLocal(link, path); await assertCoreReadonlyDestinationHeader(main); await navigate(routes['projects-hub']);
       }
       return outcome({ consumer: 'projects-hub', native: native.id, counts: native.value, actualCardNavigation: true, boundary: 'Current project-type counts; no empty-database or mutation claim.' });
     });
@@ -109,7 +197,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
       for (const level of locations.PROJECT_LOCATION_LEVELS) {
         await navigate(routes['project-locations-hub']); const path = locations.projectLocationManagementPath(level);
         const link = main.locator('a[href="' + path + '"]'); await expect(link).toContainText(locations.PROJECT_LOCATION_LEVEL_CONFIG[level].label);
-        await clickLocal(link, path); await expect(main.locator('[data-admin-page-header]')).toBeVisible({ timeout: 60_000 }); clicked.push(level);
+        await clickLocal(link, path); await assertCoreReadonlyDestinationHeader(main); clicked.push(level);
       }
       return outcome({ consumer: 'project-locations-hub', levels: clicked, actualNavigation: true, boundary: 'Fixed structural navigation, no growing collection or database-count claim.' });
     });
@@ -134,7 +222,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
       await expect(main.getByText('نظام المتابعة متاح', { exact: true })).toBeVisible(); await expect(card).toContainText(native.value.title);
       for (const [label, field] of [['المراحل', 'stageCount'], ['التحديثات', 'updateCount']])
         await expect(card.locator('dt').filter({ hasText: new RegExp('^' + label + '$') }).locator('..').locator('dd')).toHaveText(String(native.value[field]));
-      await clickLocal(card, path); await expect(main.locator('[data-admin-page-header]')).toBeVisible({ timeout: 60_000 });
+      await clickLocal(card, path); await assertCoreReadonlyDestinationHeader(main);
       return outcome({ consumer: 'construction-updates-hub', native: native.id, project: native.value, actualNavigation: true, boundary: 'One owned populated project; the no-project database state was not seeded.' });
     });
     await run('readonly-dashboard-recent-owner-information-and-native-projection', [], async () => {
@@ -176,13 +264,14 @@ export async function runCoreReadonlyHubJourneys(ctx) {
       const statusControl = page.getByRole('combobox', { name: 'فلترة حسب حالة الاتصال', exact: true }); await statusControl.click();
       const options = await page.getByRole('option').allTextContents(); await page.keyboard.press('Escape');
       const candidates = options.map(label => label.trim()).filter(label => label && label !== 'كل الحالات');
+      const cardStatuses = [];
+      for (const definition of plan.integrations) {
+        const card = cards.filter({ has: page.getByText(definition.label, { exact: true }) });
+        cardStatuses.push({ key: definition.key, status: await readCoreIntegrationCardStatus(card, candidates) });
+      }
       let selected, matching = [];
       for (const candidate of candidates) {
-        const present = [];
-        for (const definition of plan.integrations) {
-          const card = cards.filter({ has: page.getByText(definition.label, { exact: true }) });
-          if (await card.getByText(candidate, { exact: true }).count()) present.push(definition.key);
-        }
+        const present = cardStatuses.filter(row => row.status === candidate).map(row => row.key);
         if (present.length) { selected = candidate; matching = present; break; }
       }
       assert.ok(selected && matching.length); await listbox('فلترة حسب حالة الاتصال', selected); await expect(cards).toHaveCount(matching.length);
@@ -213,7 +302,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
         native = await checkpoint('analytics', { period: 'last_90_days', compare: 'previous_period' });
         assert.equal(native.value.storedReadModelCount, 0, 'The unavailable-source proof requires actual owned absence, never fabricated healthy metrics.');
         await expect(main.getByRole('heading', { name: 'لا توجد بيانات قابلة للعرض في هذا السياق', exact: true })).toBeVisible();
-        await expect(main.locator('section').filter({ has: main.getByRole('heading', { name: 'حالة التقرير', exact: true }) }).getByText('غير متاح', { exact: true })).toBeVisible();
+        await expect(main.locator('section').filter({ has: page.getByRole('heading', { name: 'حالة التقرير', exact: true }) }).getByText('غير متاح', { exact: true })).toBeVisible();
       }
       const current = page.url(); await observe('readonly-report-reload', () => page.reload({ waitUntil: 'domcontentloaded' })); assert.equal(page.url(), current);
       await expect(filters.getByRole('link', { name: filter.label, exact: true })).toHaveAttribute('aria-current', 'true');
@@ -228,6 +317,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
         invalidQueryRejectedThenRecovered: true, ...(native ? { native: native.id, unavailableAnalyticsSourceProven: true } : {}),
         boundary: 'Real report query/navigation semantics. Export execution, print and all metric values are not inferred.' });
     });
+    if (selectedIds === null) {
     await navigate(routes['sitemap-monitor']);
     const sitemapHref = await main.getByRole('link', { name: 'فتح /sitemap.xml', exact: true }).getAttribute('href');
     const canonicalRow = main.getByRole('region', { name: 'Effective Source Contract', exact: true }).locator('article')
@@ -252,6 +342,7 @@ export async function runCoreReadonlyHubJourneys(ctx) {
         configuredCanonicalSitemap: configuredSitemap.href, canonicalLinkUnchanged: true, canonicalLinkNavigated: false, externalUrlProbe: false,
         boundary: 'Existing string/owned-DB diagnostics only, even when canonical origin is Production metadata; no endpoint request, diagnostic-health or public-route proof.' });
     });
+    }
     assert.deepEqual(blockedWrites, [], 'Read-only Hub controls attempted an unexpected write.');
   } finally { await removeReadonlyRoute(); }
   return { outcomes, limits, sourceInventory: plan.selected, globalClosed: false,
