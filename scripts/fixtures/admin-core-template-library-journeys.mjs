@@ -1,3 +1,4 @@
+import {CORE_TEMPLATE_CARDS_SELECTION} from "./admin-core-template-library-presentation-plan.mjs";
 import { runCoreTemplateLibraryPresentationJourneys } from './admin-core-template-library-presentation-journeys.mjs';
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
 import assert from 'node:assert/strict';
@@ -75,7 +76,8 @@ export async function runCoreTemplateLibraryJourneys(ctx) {
   const manifest = await jiti.import('../../src/lib/admin/interaction-system/adoption-manifest.ts');
   const plan = buildCoreTemplateLibraryPlan({ collectionAdoption: manifest.ADMIN_COLLECTION_SURFACE_ADOPTION,
     rowActions: manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION, fixtures });
-  await runCoreTemplateLibraryPresentationJourneys(ctx);
+  const presentation = await runCoreTemplateLibraryPresentationJourneys(ctx);
+  if (ctx.journeySelection === CORE_TEMPLATE_CARDS_SELECTION) return presentation;
   const outcomes = [], dialog = page.locator('[data-admin-confirm-dialog]');
   const isAction = request => request.method() === 'POST' && request.headers()['next-action'] && new URL(request.url()).origin === origin;
   // Null-label commands need a concrete kind because template tables share

@@ -115,3 +115,23 @@ export function assertCoreTemplateSearchObservation(spec,nativeSearch,observatio
  assert.deepEqual(observation.cases.map(row=>row.id),nativeSearch.cases.map(row=>row.id));
  for(const [index,expected]of nativeSearch.cases.entries()){const actual=observation.cases[index];assert.equal(actual.query,expected.query);assert.equal(actual.inputValue,expected.query);assert.equal(actual.clearClicked,expected.id==='clear');assert.equal(actual.enterPressed,expected.id!=='clear');assert.equal(actual.limit,Math.max(...spec.pageSizeOptions));assert.equal(actual.firstPageParam,null);assert.equal(actual.queryParam,expected.query||null);assert.deepEqual(actual.unrelatedParams,[]);assert.equal(actual.pages.length,Math.max(1,Math.ceil(expected.groups.flat().length/actual.limit)));for(const [page,ids]of actual.pages.entries())assertCoreTemplateSearchIds(expected.groups,ids,{offset:page*actual.limit,count:Math.min(actual.limit,expected.groups.flat().length-page*actual.limit)});assertCoreTemplateSearchIds(expected.groups,actual.pages.flat());}
 }
+
+/** Retry only the existing Cards presentation body; the nine-library default stays intact. */
+export const CORE_TEMPLATE_CARDS_SELECTION='template-cards-presentation';
+export function selectCoreTemplatePresentationPlan(plan,selection){
+ if(selection===null||selection===undefined)return plan;
+ assert.equal(selection,CORE_TEMPLATE_CARDS_SELECTION);assert.ok(Array.isArray(plan));assert.equal(new Set(plan.map(row=>row.kind)).size,plan.length);
+ const selected=plan.filter(row=>row.kind==='cards');assert.equal(selected.length,1);assert.equal(selected[0].consumer,'cards-template-library');return selected;
+}
+export function assertCoreTemplateCardsSelectionReceipt(browser,plan,canonicalRequiredCases){
+ assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'template-libraries');assert.equal(browser.journeySelection,CORE_TEMPLATE_CARDS_SELECTION);
+ assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.deepEqual(browser.errors,[]);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
+ const identities=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.ok(rows.every(row=>typeof row.key==='string'&&row.key));assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const value={...row};delete value.status;delete value.evidence;return value;}).sort((a,b)=>a.key.localeCompare(b.key));};
+ assert.deepEqual(identities(browser.requiredCases),identities(canonicalRequiredCases));assert.ok(browser.requiredCases.every(row=>row.status==='open'&&row.evidence===null));
+ const ids=selectCoreTemplatePresentationPlan(plan,CORE_TEMPLATE_CARDS_SELECTION).map(row=>'core-template-presentation-'+row.kind);
+ assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...ids]);assert.ok(browser.evidence.every(row=>row.status==='pass'&&Array.isArray(row.coverage)&&row.coverage.length===0));
+ const login=browser.evidence[0];assert.equal(login.authenticated,true);assert.equal(login.sessionArtifactWritten,false);assert.match(login.dashboardState,/^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
+ const row=browser.evidence[1];assert.equal(row.moduleKind,'cards');assert.equal(row.consumer,'cards-template-library');assert.equal(row.nativeCheckpointIds.length,4);assert.equal(new Set(row.nativeCheckpointIds).size,4);assert.deepEqual(row.automaticCoverage,[]);assert.equal(row.globalClosed,false);
+ assert.deepEqual(browser.databaseReadback,[]);assert.deepEqual(browser.readOnlyReadback,[]);assert.deepEqual(browser.menuIntegrityReadback,[]);
+ return{selection:CORE_TEMPLATE_CARDS_SELECTION,selectedJourneyIds:ids,executedJourneyIds:[...ids],wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
+}

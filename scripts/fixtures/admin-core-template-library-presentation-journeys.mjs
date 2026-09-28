@@ -1,17 +1,25 @@
 import assert from 'node:assert/strict';
 import {randomUUID,createHash} from 'node:crypto';
-import {readFileSync} from 'node:fs';
-import {resolve} from 'node:path';
+import {readFileSync,realpathSync} from 'node:fs';
+import {resolve,relative,isAbsolute} from 'node:path';
 import {expect} from 'playwright/test';
-import {loadCoreTemplatePresentationPlan,assertCoreTemplateSearchIds,assertCoreTemplateSearchObservation} from './admin-core-template-library-presentation-plan.mjs';
+import {selectCoreTemplatePresentationPlan,loadCoreTemplatePresentationPlan,assertCoreTemplateSearchIds,assertCoreTemplateSearchObservation} from './admin-core-template-library-presentation-plan.mjs';
 import {observeCoreScrollbarAdoption} from './admin-core-rendered-adoption.mjs';
 const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
 
-export function selectCoreLinkPreviewAction(manifest,worker){
- assert.ok(manifest&&manifest.node&&typeof worker==='string');const matches=Object.entries(manifest.node).filter(([,row])=>row.filename==='src/lib/admin/links/actions.ts'&&row.exportedName==='resolveAdminLinkAjax'&&Object.hasOwn(row.workers??{},worker));
+export function selectCoreLinkPreviewAction(manifest,worker,{buildMetadata,projectDirectory=process.cwd(),recordProjection=()=>{}}={}){
+ assert.ok(manifest&&manifest.node&&typeof worker==='string');assert.ok(buildMetadata&&typeof buildMetadata.appDir==='string');
+ const project=realpathSync(projectDirectory),app=resolve(buildMetadata.appDir);assert.equal(app,project,'Compiled metadata must belong to this exact owned build project.');
+ const config=buildMetadata.config;assert.ok(config&&typeof config.outputFileTracingRoot==='string');const root=realpathSync(config.turbopack?.root??config.outputFileTracingRoot);assert.equal(resolve(config.outputFileTracingRoot),root,'Compiled tracing and bundler roots must agree.');
+ const relativeProject=relative(root,project),segments=relativeProject.split(/[\\/]/u);assert.equal(isAbsolute(relativeProject),false);assert.equal(segments.includes('..'),false,'The owned project must remain inside the compiled workspace root.');assert.equal(typeof buildMetadata.relativeAppDir,'string');assert.equal(buildMetadata.relativeAppDir.replaceAll('\\','/'),relativeProject.replaceAll('\\','/'));
+ const owner='src/lib/admin/links/actions.ts',physicalOwner=resolve(project,owner);assert.equal(realpathSync(physicalOwner),physicalOwner,'The canonical resolver source must be owned by this build project.');
+ const filenames=[...new Set([owner,relative(root,physicalOwner).replaceAll('\\','/')])],entries=Object.entries(manifest.node),matches=entries.filter(([,row])=>filenames.includes(row.filename)&&row.exportedName==='resolveAdminLinkAjax'&&Object.hasOwn(row.workers??{},worker));
+ // Persist only this public identity projection before admission; never emit the manifest or encryption key.
+ recordProjection({owner,exportedName:'resolveAdminLinkAjax',worker,allowedFilenames:filenames,sourceSha256:createHash('sha256').update(readFileSync(physicalOwner)).digest('hex'),candidates:entries.filter(([,row])=>row.exportedName==='resolveAdminLinkAjax'||filenames.includes(row.filename)).map(([id,row])=>({actionIdSha256:createHash('sha256').update(id).digest('hex'),filename:typeof row.filename==='string'?row.filename:null,exportedName:typeof row.exportedName==='string'?row.exportedName:null,workerPresent:Object.hasOwn(row.workers??{},worker)})),matches:matches.length});
  assert.equal(matches.length,1,'Only the actual compiled resolver export for this exact edit worker may be admitted.');assert.match(matches[0][0],/^[a-f0-9]{40,64}$/u);return matches[0][0];
 }
+
 export function assertCoreReadOnlyEditRequests(requests,{origin,pathname,actionId,expectedValues}){
  assert.ok(Array.isArray(requests)&&Array.isArray(expectedValues));if(expectedValues.length)assert.match(actionId,/^[a-f0-9]{40,64}$/u);else assert.equal(actionId,null);const expected=expectedValues.map(value=>JSON.stringify([value])).sort(),actual=[];
  for(const request of requests){assert.equal(request.method,'POST');const url=new URL(request.url);assert.equal(url.origin,origin);assert.equal(url.pathname,pathname);assert.equal(request.actionId,actionId);assert.match(request.contentType,/^text\/plain(?:;|$)/iu);assert.ok(typeof request.body==='string'&&request.body.length<=16384);actual.push(JSON.stringify(JSON.parse(request.body)));}
@@ -24,8 +32,8 @@ export function assertCoreReadOnlyEditRequests(requests,{origin,pathname,actionI
  * mutation receipt, full capability axis or whole-cohort pass is inferred. */
 export async function runCoreTemplateLibraryPresentationJourneys(ctx){
  const {page,origin,fixtures,run,observe,nativeCheckpoint,actionResponse,assertActionAcknowledged,requiredCases}=ctx;
- assert.equal(new URL(origin).hostname,'127.0.0.1');assert.ok(Array.isArray(requiredCases));const plan=await loadCoreTemplatePresentationPlan();
- assert.deepEqual(Object.keys(fixtures.templateLibraryPresentation.contexts).sort(),plan.map(spec=>spec.kind).sort());
+ assert.equal(new URL(origin).hostname,'127.0.0.1');assert.ok(Array.isArray(requiredCases));const fullPlan=await loadCoreTemplatePresentationPlan(),plan=selectCoreTemplatePresentationPlan(fullPlan,ctx.journeySelection);
+ assert.deepEqual(Object.keys(fixtures.templateLibraryPresentation.contexts).sort(),fullPlan.map(spec=>spec.kind).sort());
  const grid=page.locator('[data-admin-data-grid-scroll]'),header=grid.locator(':scope > div').first(),rows=grid.locator(':scope > article');
  const visibleIds=()=>rows.locator('[data-admin-row-action="more"][data-admin-entity-id]').evaluateAll(nodes=>nodes.map(node=>Number(node.getAttribute('data-admin-entity-id'))));
  const assertIds=expected=>expect.poll(visibleIds,{timeout:60000}).toEqual(expected);
@@ -97,7 +105,7 @@ export async function runCoreTemplateLibraryPresentationJourneys(ctx){
    await page.keyboard.press('Escape');await expect(info).toHaveCount(0);await expect(more).toBeFocused();
    const edit=row.locator('[data-admin-row-action="edit"] a[href]');await expect(edit).toHaveCount(1);const target=new URL(await edit.getAttribute('href'),origin);assert.equal(target.origin,origin);assert.equal(target.pathname,spec.route+'/'+nativeRow.id);
    // Read only the compiled export projection; never persist the manifest's encryption key.
-   const actionId=nativeRow.linkPreviewValues.length?selectCoreLinkPreviewAction(JSON.parse(readFileSync(resolve(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')),'app'+spec.route+'/[id]/page'):null;editing=true;
+   const actionId=nativeRow.linkPreviewValues.length?selectCoreLinkPreviewAction(JSON.parse(readFileSync(resolve(process.cwd(),'.next/server/server-reference-manifest.json'),'utf8')),'app'+spec.route+'/[id]/page',{buildMetadata:JSON.parse(readFileSync(resolve(process.cwd(),'.next/required-server-files.json'),'utf8')),recordProjection:projection=>console.log('core-template-link-preview-projection '+JSON.stringify(projection))}):null;editing=true;
    await edit.click();await expect.poll(()=>new URL(page.url()).pathname,{timeout:60000}).toBe(target.pathname);await expect(page.locator('main [name="name"]')).toHaveValue(nativeRow.name,{timeout:60000});
    await expect.poll(()=>editRequests.length,{timeout:60000}).toBe(nativeRow.linkPreviewValues.length);
    await expect.poll(()=>editRequests.every(entry=>editResponses.has(entry.request)),{timeout:60000}).toBe(true);
