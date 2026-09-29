@@ -6,7 +6,7 @@ import {assertCoreProjectVisibilityGuardReceipt} from './fixtures/admin-core-dom
 import {assertCorePageAssignmentRowActionsJoin} from './fixtures/admin-core-page-composition-journeys.mjs';
 import {assertCoreTemplateFeedbackCompletion} from "./fixtures/admin-core-template-controls-contract.mjs";
 import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, CORE_READONLY_QUERY_SELECTION, buildCoreReadonlyQueryProofPlan, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
-import { CORE_TEMPLATE_FORM_CREATES_SELECTION, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
+import { isCoreTemplateCreateSelection, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import {assertCoreResidualSearchCompletion} from './fixtures/admin-core-residual-search.mjs';
 import {assertCoreRenderedAdoptionJoin} from './fixtures/admin-core-rendered-adoption.mjs';
 import {verifyCoreDownloadMediaCompletion} from './verify-admin-core-download-media-isolated.mts';
@@ -235,7 +235,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     const isReadonlyHubFollowup = browser.journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION;
     const isTemplateCards = browser.journeySelection === CORE_TEMPLATE_CARDS_SELECTION;
     const isQueryLayout = browser.journeySelection === CORE_QUERY_LAYOUT_SELECTION;
-    const isTemplateCreates = browser.journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION;
+    const isTemplateCreates = isCoreTemplateCreateSelection(browser.journeySelection);
     const isTrackingPermissions = browser.journeySelection === CORE_TRACKING_PERMISSION_SELECTION;
     const isReadonlyQueryProof = browser.journeySelection === CORE_READONLY_QUERY_SELECTION;
     const isDomainTail = browser.journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || isTrackingPermissions || isReadonlyQueryProof;

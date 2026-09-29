@@ -27,7 +27,7 @@ export function validateCoreJourneySelection({ scope, cohort, selection }) {
   else if (selection === "readonly-hubs-followup") assert.equal(cohort, "readonly-hubs");
   else if (selection === "template-cards-presentation") assert.equal(cohort, "template-libraries");
   else if (selection === "query-layout-followup") assert.equal(cohort, "query-presentation");
-  else if (selection === "template-form-creates") assert.equal(cohort, "recovery-templates");
+  else if (selection === "template-form-creates" || selection === "template-form-creates-followup") assert.equal(cohort, "recovery-templates");
   else { assert.equal(cohort, "domain-forms"); assert.equal(selection, "text-topic-forms", "Unknown affected journey selection."); }
   return selection;
 }

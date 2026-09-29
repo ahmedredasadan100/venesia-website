@@ -19,18 +19,27 @@ const recipes = {
 };
 
 export const CORE_TEMPLATE_FORM_CREATES_SELECTION = "template-form-creates";
+export const CORE_TEMPLATE_FORM_CREATES_FOLLOWUP_SELECTION = "template-form-creates-followup";
+export function isCoreTemplateCreateSelection(selection) { return selection === CORE_TEMPLATE_FORM_CREATES_SELECTION || selection === CORE_TEMPLATE_FORM_CREATES_FOLLOWUP_SELECTION; }
+export function selectCoreTemplateCreateRecipes(creates, selection) {
+  assert.ok(isCoreTemplateCreateSelection(selection));
+  if (selection === CORE_TEMPLATE_FORM_CREATES_SELECTION) return creates;
+  const kinds = Object.keys(recipes).filter(kind => !["media-sidebar", "media-hub"].includes(kind));
+  assert.deepEqual(creates.map(row => row.kind).sort(), [...kinds].sort(), "Follow-up requires the complete canonical create plan before selection.");
+  return creates.filter(row => ["content", "breadcrumb", "cards", "featured"].includes(row.kind));
+}
 export function coreTemplateCreateJourneyId(recipe) { return `core-template-${recipe.kind}-create-reject-retry`; }
-export function coreSelectedTemplateCreates(manifest) {
+export function coreSelectedTemplateCreates(manifest, selection = CORE_TEMPLATE_FORM_CREATES_SELECTION) {
   const entries = manifest.filter(entry => entry.id === "block-template-create-modals"); assert.equal(entries.length, 1);
   const entry = entries[0], kinds = Object.keys(recipes).filter(kind => !["media-sidebar", "media-hub"].includes(kind));
   assert.deepEqual([...entry.surfaces].sort(), kinds.map(kind => `${kind}:create`).sort(), "Selection must match all current declared quick-create surfaces exactly.");
-  return entry.surfaces.map(surface => { const kind = surface.split(":")[0]; return { entry, kind, surface, ...recipes[kind] }; });
+  return selectCoreTemplateCreateRecipes(entry.surfaces.map(surface => { const kind = surface.split(":")[0]; return { entry, kind, surface, ...recipes[kind] }; }), selection);
 }
 export function selectCoreTemplateFormPlan(plan, selection) {
   if (selection === null || selection === undefined) return plan;
   validateCoreJourneySelection({ scope: "core-closure", cohort: "recovery-templates", selection });
-  assert.equal(selection, CORE_TEMPLATE_FORM_CREATES_SELECTION);
-  return { ...plan, editors: [] };
+  assert.ok(isCoreTemplateCreateSelection(selection));
+  return { ...plan, editors: [], creates: selectCoreTemplateCreateRecipes(plan.creates, selection) };
 }
 /** Fixed selection never changes the canonical universe or promotes an unexecuted editor/recovery. */
 /**
@@ -38,14 +47,14 @@ export function selectCoreTemplateFormPlan(plan, selection) {
  * @param {{native:{status:string,ownedRunId:string,records:Array<object>},ownedRunId:string,sourceSha256:string,expectedActorId:number}|null} nativeContext
  */
 export function assertCoreTemplateSelectionReceipt(browser, manifest, canonicalRequiredCases, draftRestoration = null, nativeContext = null) {
-  assert.equal(validateCoreJourneySelection({ scope: browser.scope, cohort: browser.cohort, selection: browser.journeySelection }), CORE_TEMPLATE_FORM_CREATES_SELECTION);
+  assert.ok(isCoreTemplateCreateSelection(validateCoreJourneySelection({ scope: browser.scope, cohort: browser.cohort, selection: browser.journeySelection })));
   const identities = rows => {
     assert.ok(Array.isArray(rows) && rows.length > 0); assert.ok(rows.every(row => typeof row.key === "string" && row.key.length > 0));
     assert.equal(new Set(rows.map(row => row.key)).size, rows.length);
     return rows.map(row => { const identity = { ...row }; delete identity.status; delete identity.evidence; return identity; }).sort((a,b) => a.key.localeCompare(b.key));
   };
   assert.deepEqual(identities(browser.requiredCases), identities(canonicalRequiredCases));
-  const selected = coreSelectedTemplateCreates(manifest), ids = selected.map(coreTemplateCreateJourneyId), allowed = new Set();
+  const selected = coreSelectedTemplateCreates(manifest, browser.journeySelection), ids = selected.map(coreTemplateCreateJourneyId), allowed = new Set();
   assert.equal(browser.status, "pass"); assert.equal(browser.driverCompleted, true); assert.equal(browser.inventoryOnly, false); assert.deepEqual(browser.errors, []);
   assert.equal(browser.globalClosed, false); assert.equal(browser.wholeCohortExecuted, false);
   assert.deepEqual(browser.selectedJourneyIds, ids); assert.deepEqual(browser.executedJourneyIds, ids);
@@ -122,7 +131,7 @@ export function assertCoreTemplateSelectionReceipt(browser, manifest, canonicalR
     }
     assert.equal(claimed.size,native.records.length,"No recovery, unrelated or unjoined native checkpoint may be borrowed by this selection.");
   }
-  return {selection:CORE_TEMPLATE_FORM_CREATES_SELECTION,selectedJourneyIds:ids,executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,globalClosed:false};
+  return {selection:browser.journeySelection,selectedJourneyIds:ids,executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,globalClosed:false};
 }
 
 export function buildCoreTemplateFormPlan({ formManifest, fixtures, requiredCases }) {

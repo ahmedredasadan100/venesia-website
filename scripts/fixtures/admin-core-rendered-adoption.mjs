@@ -114,6 +114,8 @@ export async function observeCoreModalPendingDismissal(input){
 /** Actual clean Cancel closes and returns focus to the mounted trigger; reopen uses the same control. */
 export async function observeCoreModalCleanReturn(input){
  const receipt=scope(input,'modal'),{page,dialog,form,trigger,cancel}=input;await expect(form).toHaveAttribute('data-admin-form-dirty','false');await expect(trigger).toHaveCount(1);await expect(cancel).toHaveCount(1);
+ // Snapshot only the modal's genuine initial focus; an opener captured before its frame would be restored behind the reopened modal.
+ await expect.poll(()=>dialog.evaluate(node=>node.contains(document.activeElement)),{message:'The clean modal must own initial focus before the observer snapshot.'}).toBe(true);
  const originalUrl=page.url(),restore=await remember(page),observations=[];
  try{for(const viewport of viewports){
   await page.setViewportSize({width:viewport.width,height:viewport.height});await frames(page);await expect(form).toHaveAttribute('data-admin-form-dirty','false');await cancel.click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();assert.equal(page.url(),originalUrl);

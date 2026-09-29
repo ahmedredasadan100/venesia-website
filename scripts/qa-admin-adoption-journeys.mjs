@@ -2,7 +2,7 @@ import {CORE_READONLY_HUB_FOLLOWUP_SELECTION,selectCoreReadonlyHubJourneyIds,ass
 import {CORE_TEMPLATE_CARDS_SELECTION,loadCoreTemplatePresentationPlan,selectCoreTemplatePresentationPlan,assertCoreTemplateCardsSelectionReceipt} from "./fixtures/admin-core-template-library-presentation-plan.mjs";
 import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, CORE_READONLY_QUERY_SELECTION, buildCoreReadonlyQueryProofPlan, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
 import { CORE_QUERY_LAYOUT_SELECTION, loadCoreQueryPresentationPlan, selectCoreQueryPresentationPlan, assertCoreQuerySelectionReceipt } from "./fixtures/admin-core-query-presentation-plan.mjs";
-import { CORE_TEMPLATE_FORM_CREATES_SELECTION, coreSelectedTemplateCreates, coreTemplateCreateJourneyId, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
+import { isCoreTemplateCreateSelection, coreSelectedTemplateCreates, coreTemplateCreateJourneyId, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection, buildCorePreviewPublicImpactPlan, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { registerCorePageRoute } from "./fixtures/admin-core-form-permission-context.mjs";
@@ -44,8 +44,8 @@ const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".l
 const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
   ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
-let selectedJourneyIds = journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION
-  ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTemplateCreateJourneyId)
+let selectedJourneyIds = journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : isCoreTemplateCreateSelection(journeySelection)
+  ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, journeySelection).map(coreTemplateCreateJourneyId)
   : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
 let driverCompleted = false, activeCase = "bootstrap";
@@ -796,7 +796,7 @@ try {
   else if (journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION) assertCoreReadonlyHubFollowupReceipt(receipt(),requiredCases);
   else if (journeySelection === CORE_TEMPLATE_CARDS_SELECTION) assertCoreTemplateCardsSelectionReceipt(receipt(),templateCardsSelectionPlan,requiredCases);
   else if (journeySelection === CORE_QUERY_LAYOUT_SELECTION) assertCoreQuerySelectionReceipt(receipt(),querySelectionPlan,requiredCases);
-  else if (journeySelection === CORE_TEMPLATE_FORM_CREATES_SELECTION) assertCoreTemplateSelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
+  else if (isCoreTemplateCreateSelection(journeySelection)) assertCoreTemplateSelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   else if (journeySelection !== null) assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   checkpoint("driver", "complete");
 } catch (error) {
