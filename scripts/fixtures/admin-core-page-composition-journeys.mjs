@@ -8,6 +8,21 @@ import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 import { PAGE_SEO_PHASES, PAGE_SEO_RECIPE, PAGE_SEO_INVALID_CANONICAL, assertPageSeoScope, summarizePageSeoRejection } from "./admin-core-page-seo-contract.mjs";
 
+export const CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION = "page-composition-followup";
+export async function loadCorePageCompositionFollowupIds() {
+  const registry = await createJiti(import.meta.url, {fsCache:false,moduleCache:false}).import("../../src/lib/page-composition/slot-module-registry.ts");
+  return [...registry.REGISTERED_SLOT_MODULE_KINDS.filter(kind=>kind!=="hero").map(kind=>"core-page-composition-"+kind+"-assignment"),"core-page-composition-layout-reject-retry","core-page-composition-seo-reject-retry-reload"];
+}
+export async function assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) {
+  assert.equal(browser.scope,"core-closure");assert.equal(browser.cohort,"page-composition");assert.equal(browser.journeySelection,CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION);
+  const ids=await loadCorePageCompositionFollowupIds();assert.equal(ids.length,10);assert.equal(new Set(ids).size,ids.length);
+  assert.equal(browser.driverCompleted,true);assert.equal(browser.status,"pass");assert.deepEqual(browser.errors,[]);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
+  assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(row=>row.id),["existing-auth-login",...ids]);assert.ok(browser.evidence.every(row=>row.status==="pass"));
+  const identities=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const copy={...row};delete copy.status;delete copy.evidence;return copy;}).sort((a,b)=>a.key.localeCompare(b.key));};
+  assert.deepEqual(identities(browser.requiredCases),identities(canonicalRequiredCases));
+  return {selection:CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION,selectedJourneyIds:ids,executedJourneyIds:ids,wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
+}
+
 const consumer = "page-composition-and-seo";
 const collectionConsumers = ["page-block-assignments", "page-composition-shell"];
 const identity = row => row.kind + ":" + row.id;
@@ -162,7 +177,8 @@ export async function runCorePageCompositionJourneys(ctx) {
     checkpoints.push({ label, receiptId: value.id });
     return value;
   }
-  await runCoreDescendantPresentationJourneys({...ctx,nativeCheckpoint:compositionCheckpoint},"composition");
+  const followup = ctx.journeySelection === CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION;
+  if (!followup) await runCoreDescendantPresentationJourneys({...ctx,nativeCheckpoint:compositionCheckpoint},"composition");
   const initial = await snapshot("initial");
   const originalLayoutId = number(initial.page.layout_id);
   const regions = initial.regions.filter(region => number(region.layout_id) === originalLayoutId);
@@ -263,7 +279,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     results.push(value);renderedAdoption=[];renderedAssignmentObserved=false;return value;
   };
 
-  for (const template of plan.fixed) await run("core-page-composition-fixed-" + template.kind, [], async () => {
+  for (const template of (followup ? [] : plan.fixed)) await run("core-page-composition-fixed-" + template.kind, [], async () => {
     renderedAdoption=[];renderedAssignmentObserved=false;
     await navigate(); const before = await snapshot(template.kind + "-before");
     assert.ok(before.assignments.some(row => row.kind === template.kind), "The fixed-kind exclusion requires its actual existing assignment.");

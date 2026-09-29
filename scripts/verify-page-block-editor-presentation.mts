@@ -1405,6 +1405,32 @@ check(
     !assignmentModalOwner.includes("assignState.ok || assignHeroState.ok"),
 );
 
+const assignmentFeedbackAst = ts.createSourceFile("assignment.ts", assignmentModalOwner, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+const assignmentFeedbackTransitions: ts.IfStatement[] = [];
+const findAssignmentFeedbackTransition = (node: ts.Node): void => {
+  if (ts.isIfStatement(node) && node.expression.getText(assignmentFeedbackAst) === "assignPending !== prevAssignPending") assignmentFeedbackTransitions.push(node);
+  ts.forEachChild(node, findAssignmentFeedbackTransition);
+};
+findAssignmentFeedbackTransition(assignmentFeedbackAst);
+assert.equal(assignmentFeedbackTransitions.length, 1);
+const assignmentFeedbackTransition = new Function("state", "callbacks",   "with (state) { with (callbacks) { " + assignmentFeedbackTransitions[0].getText(assignmentFeedbackAst) + " } }");
+for (const scenario of [
+  { state: { ok: true, message: null, feedbackStatus: "success" }, expected: ["تم ربط الموديول بالصفحة.", "success"] },
+  { state: { ok: true, message: "accepted", feedbackStatus: "success" }, expected: ["accepted", "success"] },
+  { state: { ok: true, message: "cache warning", feedbackStatus: "warning" }, expected: ["cache warning", "warning"] },
+  { state: { ok: false, message: "rejected" }, expected: ["rejected"] },
+]) {
+  const messages: unknown[][] = [], dismissals: number[] = [];
+  assignmentFeedbackTransition({ assignPending: false, prevAssignPending: true, showAssignModal: true, activeAssignState: scenario.state, assignModalSession: 7, assignSubmitSession: 7 }, {
+    setPrevAssignPending() {}, setAssignSubmitSession() {}, setAssignVisible() {},
+    setAssignDismissSession(value: number) { dismissals.push(value); },
+    setActionMessage(...args: unknown[]) { messages.push(args); },
+  });
+  assert.deepEqual(messages, [scenario.expected]);
+  assert.deepEqual(dismissals, scenario.state.ok ? [7] : []);
+}
+check("Submitted assignment success survives modal dismissal; warning and rejection keep their outcomes", true);
+
 const assignmentCreateActions = read("src/app/admin/pages-blocks/pages/page-actions/assignment-create.ts");
 check(
   "Page assignment creation consumes the canonical revalidated Action render without an extra refresh roundtrip",

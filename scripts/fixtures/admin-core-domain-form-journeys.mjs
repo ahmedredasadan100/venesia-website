@@ -24,6 +24,7 @@ export function validateCoreJourneySelection({ scope, cohort, selection }) {
   if (selection === undefined || selection === null) return null;
   assert.equal(scope, "core-closure");
   if (selection === "domain-command-tail" || selection === "tracking-permissions" || selection === "readonly-query-proof") assert.equal(cohort, "domain-commands");
+  else if (selection === "page-composition-followup") assert.equal(cohort, "page-composition");
   else if (selection === "readonly-hubs-followup") assert.equal(cohort, "readonly-hubs");
   else if (selection === "template-cards-presentation") assert.equal(cohort, "template-libraries");
   else if (selection === "query-layout-followup") assert.equal(cohort, "query-presentation");

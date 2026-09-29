@@ -117,7 +117,7 @@ export function usePageBlocksAssignModal({
       if (activeAssignState.ok) {
         setAssignDismissSession(assignModalSession);
         setAssignVisible(true);
-        setActionMessage(activeAssignState.feedbackStatus === "warning" ? activeAssignState.message : null, activeAssignState.feedbackStatus);
+        setActionMessage(activeAssignState.message ?? "تم ربط الموديول بالصفحة.", activeAssignState.feedbackStatus ?? "success");
       } else if (assignSubmitSession === assignModalSession) {
         setActionMessage(activeAssignState.message);
       }
