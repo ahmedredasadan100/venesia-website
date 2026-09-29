@@ -131,7 +131,7 @@ export function assertCoreTemplateSelectionReceipt(browser, manifest, canonicalR
     }
     assert.equal(claimed.size,native.records.length,"No recovery, unrelated or unjoined native checkpoint may be borrowed by this selection.");
   }
-  return {selection:browser.journeySelection,selectedJourneyIds:ids,executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,globalClosed:false};
+  return {selection:browser.journeySelection,selectedJourneyIds:ids,executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
 }
 
 export function buildCoreTemplateFormPlan({ formManifest, fixtures, requiredCases }) {
