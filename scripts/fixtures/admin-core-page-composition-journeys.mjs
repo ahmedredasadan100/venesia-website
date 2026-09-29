@@ -184,12 +184,17 @@ export async function runCorePageCompositionJourneys(ctx) {
   const regions = initial.regions.filter(region => number(region.layout_id) === originalLayoutId);
   const plan = buildCorePageCompositionPlan({ fixtures, manifest, collections: ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces,
     kinds, positionCapabilities, getAssignablePositions, regions, requiredCases });
+  // Assignment and duplicate actions add at most two rows to the initial fixture.
+  // Use the existing bounded URL owner so row assertions include those rows.
+  const { ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS } = await jiti.import("../../src/lib/admin/entity-list/pagination.ts");
+  const assignmentPageSize = ADMIN_ENTITY_LIST_PAGE_SIZE_OPTIONS.find(size => size >= initial.assignments.length + 2);
+  assert.ok(assignmentPageSize, "The existing fixture must fit a supported assignment page size.");
   const table = () => page.locator("[data-page-composition-table-surface]");
   const assignedRow = template => table().locator("article").filter({ has: page.getByRole("link", { name: template.name, exact: true }) });
   const dialog = () => page.getByRole("dialog", { name: "ربط موديول بالصفحة", exact: true });
   const feedback = channel => page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="' + channel + '"]');
   async function navigate(tab = "modules") {
-    await observe("composition-navigation", () => page.goto(origin + fixtures.pages.editorPath + "?tab=" + tab, { waitUntil: "domcontentloaded" }));
+    await observe("composition-navigation", () => page.goto(origin + fixtures.pages.editorPath + "?tab=" + tab + (tab === "modules" ? "&limit=" + assignmentPageSize : ""), { waitUntil: "domcontentloaded" }));
     await expect(page.locator('[data-admin-tab-id="' + tab + '"]')).toHaveAttribute("aria-selected", "true");
   }
   async function reload(tab = "modules") {
