@@ -142,7 +142,7 @@
   ],
   "transport": {
     "path": "scripts/lib/isolated-supabase-transport.mjs",
-    "sha256": "b7d7657d0242db1f08d8af480667759eb23cbac51f4ab2908ddca489d8c71df5",
+    "sha256": "ce961ac2a6991da767eb362a50c508464fbb7691e91ac3f407700e3bceb1d497",
     "role": "QA lifecycle fixed-target Docker exec transport; not a platform service"
   }
 }
