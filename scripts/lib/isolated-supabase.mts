@@ -10,7 +10,7 @@ import { assertApplicationMigrationTool, selectApplicationMigrationTool, Isolate
   type ApplicationMigrationCliContext, type ApplicationMigrationCliResult,
   type ApplicationMigrationStage, type ApplicationMigrationTool, type EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 export type { ApplicationMigrationCliResult, ApplicationMigrationStage, EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
-import { proveHostBoundary, startHostAccessBridge } from "./isolated-supabase-transport.mjs";
+import { proveHostBoundary, startHostAccessBridge, waitForOwnedDatabaseCapacity } from "./isolated-supabase-transport.mjs";
 import { prepareOwnedPublicVerification, registerOwnedAdminMeasurement, runOwnedPublicVerification,
   type PrivatePublicVerificationContext, type PublicFixtureReadiness, type PublicGateRequest } from "./isolated-public-verification.mts";
 import { prepareOwnedAdminMeasurementAccount } from "../fixtures/admin-interaction-fixtures.mts";
@@ -848,18 +848,22 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   };
   const connect = async (username: "postgres" | "supabase_admin"): Promise<PgConnection> => {
     await inspectCaptured(serviceResource("db"));
-    const client = new pg.Client({ connectionString: databaseUrl(username), connectionTimeoutMillis: 5000, ssl: false, options: "",
-      statement_timeout: 30000, application_name: OWNER }) as PgConnection;
+    let client: PgConnection | undefined;
     const bridgeSnapshot = () => { try { return hostBridge?.snapshot() ?? null; } catch { return null; } };
     const bridgeBefore = bridgeSnapshot(), started = performance.now();
-    try { await client.connect(); } catch (error) {
+    try {
+      const connectionTimeoutMillis = hostBridge ? await waitForOwnedDatabaseCapacity(hostBridge) : 5000;
+      client = new pg.Client({ connectionString: databaseUrl(username), connectionTimeoutMillis, ssl: false, options: "",
+        statement_timeout: 30000, application_name: OWNER }) as PgConnection;
+      await client.connect();
+    } catch (error) {
       const elapsedMs = performance.now() - started, safe = asSafeError(error, "database-connect");
       const observation = describeOwnedPgConnectFailure(error, elapsedMs, bridgeBefore, bridgeSnapshot());
       // Preserve the classified original failure even if its optional receipt
       // cannot be written. This never retries or recovers the failed attempt.
       try { safeRecord("database-connect-failed", { safeCode: safe.code, ...observation }); }
       catch { /* The original failed attempt still rejects below. */ }
-      await client.end().catch(() => undefined);
+      await client?.end().catch(() => undefined);
       throw safe;
     }
     return client;

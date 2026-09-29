@@ -3,7 +3,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import net from 'node:net';
 import { once } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { runContainerPipe, startHostAccessBridge, validateTransportOptions } from './lib/isolated-supabase-transport.mjs';
+import { runContainerPipe, startHostAccessBridge, validateTransportOptions, waitForOwnedDatabaseCapacity } from './lib/isolated-supabase-transport.mjs';
 
 const cases = [];
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -52,6 +52,25 @@ async function protocolCase(name, size) {
 
 await protocolCase('binary duplex and client half-close preserve complete reply', 8192);
 await protocolCase('backpressure preserves multi-megabyte payload without text conversion', 2 * 1024 * 1024);
+
+let capacityActive = 32, capacityDispatches = 0;
+const capacityBridge = { snapshot: () => ({ active: capacityActive, stopping: false }) };
+const waiting = waitForOwnedDatabaseCapacity(capacityBridge).then(remaining => { capacityDispatches++; return remaining; });
+await new Promise(done => setTimeout(done, 40));
+assert.equal(capacityDispatches, 0, 'No new PG connection is dispatched while the unchanged32 limit is full');
+capacityActive = 31;
+const remainingBudget = await waiting;
+assert.equal(capacityDispatches, 1);assert.ok(remainingBudget > 0 && remainingBudget < 5000);
+cases.push('capacity wait precedes dispatch and consumes original connection budget');
+await assert.rejects(() => waitForOwnedDatabaseCapacity({ snapshot: () => ({ active: 32, stopping: false }) }, 30), { code: 'QA_TRANSPORT_CAPACITY_TIMEOUT' });
+assert.equal(capacityDispatches, 1);
+cases.push('full bridge times out without a socket attempt or retry');
+await assert.rejects(() => waitForOwnedDatabaseCapacity({ snapshot: () => ({ active: 0, stopping: true }) }), { code: 'QA_TRANSPORT_STOPPING' });
+cases.push('stopping bridge cannot admit a waiting database request');
+for (const budget of [0, -1, 5001, 1.5]) await assert.rejects(() => waitForOwnedDatabaseCapacity(capacityBridge, budget));
+cases.push('capacity wait cannot increase the existing5000ms connection budget');
+assert.ok(await waitForOwnedDatabaseCapacity({snapshot:()=>({active:0,stopping:false})}) <= 5000);
+cases.push('available bridge keeps ordinary immediate connection admission');
 
 let ownershipCalls = 0;
 const bridge = await startHostAccessBridge({ ...options, assertOwnedTransport: async () => { ownershipCalls++; return 'not-an-owned-container'; } });
