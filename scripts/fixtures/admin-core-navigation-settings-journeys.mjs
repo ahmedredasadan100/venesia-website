@@ -97,14 +97,18 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     } finally {page.off('request',listener);}
   }
   let pageId, menuId, itemIds;
-  await runCoreDescendantPresentationJourneys(ctx,"navigation");
+  if (ctx.journeySelection !== CORE_NAVIGATION_FOLLOWUP_SELECTION) await runCoreDescendantPresentationJourneys(ctx,"navigation");
   await run("core-navigation-page-create-rejection-retry-reload", plan.pageCoverage, async () => {
     renderedAdoption=[];renderedOpened=new Set();
     await goto("/admin/pages-blocks/pages"); await checkpoint("page", "baseline");
     await page.getByRole("button", { name: "إضافة صفحة", exact: true }).click(); const form = page.locator("#create-page-form");
     await observeNavigationOpening({id:"navigation-page-create",consumer:"pages-quick-create",surface:"create",collections:["pages"],dialog:page.getByRole("dialog",{name:"إضافة صفحة جديدة",exact:true}),form,trigger:page.getByRole("button",{name:"إضافة صفحة",exact:true}),target:form.getByRole("button",{name:"إنشاء وفتح المحرر",exact:true})});
     await form.locator('[name="path"]').fill(f.duplicatePagePath);
-    await form.getByRole("button", { name: "إنشاء وفتح المحرر", exact: true }).click();
+    await action(() => form.getByRole("button", { name: "إنشاء وفتح المحرر", exact: true }).click());
+    await expect(form.locator('[name="title"]')).toBeEnabled();
+    await expect(form.locator('[name="title"]')).toHaveAttribute("aria-invalid", "true");
+    await expect(form.locator('#title-error')).toHaveText("اسم الصفحة مطلوب.");
+    await expect(form.locator('[name="title"]')).toHaveValue("");
     assert.equal(await form.locator('[name="title"]').evaluate(input => input.validity.valueMissing), true);
     await form.locator('[name="title"]').fill(r.page.title);
     await action(() => form.getByRole("button", { name: "إنشاء وفتح المحرر", exact: true }).click());
@@ -322,4 +326,29 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
   });
   assert.equal(completed.length, 7);
   return { status: "pass", completed, plan, checkpoints, permissionEvidence, downloadMedia, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
+}
+
+export const CORE_NAVIGATION_FOLLOWUP_SELECTION = "navigation-settings-followup";
+export const CORE_NAVIGATION_FOLLOWUP_IDS = [
+  "core-navigation-page-create-rejection-retry-reload",
+  "core-navigation-page-seo-validation-save-reload",
+  "core-navigation-menu-create-rejection-retry-reload",
+  "core-navigation-menu-metadata-item-graph-commands",
+  "core-navigation-menu-visibility-duplicate-delete",
+  "core-navigation-footer-aggregate-slots-manual-links-rejection-retry",
+  "core-navigation-footer-default-restore-confirm-reject-retry"
+];
+export function assertCoreNavigationFollowupReceipt(browser, requiredCases) {
+  assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "navigation-settings");
+  assert.equal(browser.journeySelection, CORE_NAVIGATION_FOLLOWUP_SELECTION);
+  assert.equal(browser.status, "pass"); assert.equal(browser.driverCompleted, true);
+  assert.equal(browser.inventoryOnly, false); assert.equal(browser.wholeCohortExecuted, false);
+  assert.deepEqual(browser.errors, []); assert.equal(browser.globalClosed, false);
+  assert.deepEqual(browser.requiredCases, requiredCases);
+  assert.deepEqual(browser.selectedJourneyIds, CORE_NAVIGATION_FOLLOWUP_IDS);
+  assert.deepEqual(browser.executedJourneyIds, CORE_NAVIGATION_FOLLOWUP_IDS);
+  const evidence = browser.evidence.filter(row => row.id !== "existing-auth-login");
+  assert.deepEqual(evidence.map(row => row.id), CORE_NAVIGATION_FOLLOWUP_IDS);
+  assert.ok(evidence.every(row => row.status === "pass"));
+  return { status: "pass", selectedJourneyIds: [...CORE_NAVIGATION_FOLLOWUP_IDS], executedJourneyIds: [...CORE_NAVIGATION_FOLLOWUP_IDS], retainedDescendantsReplayed: false, wholeCohortExecuted: false, globalClosed: false };
 }

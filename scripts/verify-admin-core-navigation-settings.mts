@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createJiti } from "jiti";
-import { buildCoreNavigationSettingsPlan } from "./fixtures/admin-core-navigation-settings-journeys.mjs";
+import { buildCoreNavigationSettingsPlan, CORE_NAVIGATION_FOLLOWUP_SELECTION, CORE_NAVIGATION_FOLLOWUP_IDS, assertCoreNavigationFollowupReceipt } from "./fixtures/admin-core-navigation-settings-journeys.mjs";
 const root = resolve(import.meta.dirname, "..");
 const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false, alias: { "server-only": resolve(root, "node_modules/next/dist/compiled/server-only/empty.js") } });
 import * as owner from './verify-admin-core-navigation-settings-isolated.mts';
@@ -184,4 +184,8 @@ for(const [kind,status]of [['unknown-kind','partial-not-global-pass'],['form-sav
  const a=restoreJoinFixture();a.native.records.unshift({id:randomUUID(),kind,status} as typeof a.native.records[number]);assert.throws(()=>owner.assertCoreFooterRestoreCompletion(a.browser,a.native,a.cleanup,'run',a.source));
  const b=navigationRowJoinFixture();b.native.records.unshift({id:randomUUID(),kind,status});assert.throws(()=>owner.assertCoreNavigationRowActionsCompletion(b.browser,b.native,'owned',b.source));
 });
+
+const selectedReceipt = {scope:'core-closure',cohort:'navigation-settings',journeySelection:CORE_NAVIGATION_FOLLOWUP_SELECTION,status:'pass',driverCompleted:true,inventoryOnly:false,wholeCohortExecuted:false,errors:[],globalClosed:false,requiredCases,selectedJourneyIds:[...CORE_NAVIGATION_FOLLOWUP_IDS],executedJourneyIds:[...CORE_NAVIGATION_FOLLOWUP_IDS],evidence:CORE_NAVIGATION_FOLLOWUP_IDS.map(id=>({id,status:'pass'}))};
+await test('Followup retains exactly seven original navigation operations without descendant replay',()=>assertCoreNavigationFollowupReceipt(selectedReceipt,requiredCases));
+for(const [label,edit] of Object.entries({missing:(r:typeof selectedReceipt)=>{r.executedJourneyIds.pop();},replay:(r:typeof selectedReceipt)=>{r.evidence.push({id:'core-descendant-presentation-menus',status:'pass'});},failed:(r:typeof selectedReceipt)=>{r.evidence[0].status='fail';},whole:(r:typeof selectedReceipt)=>{r.wholeCohortExecuted=true;},unfinished:(r:typeof selectedReceipt)=>{r.driverCompleted=false;},inventory:(r:typeof selectedReceipt)=>{r.requiredCases=[];},foreign:(r:typeof selectedReceipt)=>{r.cohort='page-composition';}})) await test('Followup rejects '+label,()=>{const r=structuredClone(selectedReceipt);edit(r);assert.throws(()=>assertCoreNavigationFollowupReceipt(r,requiredCases));});
 console.log(JSON.stringify({ status: "pass", controls: cases.length, cases, runtimeExecuted: false, globalClosed: false }));

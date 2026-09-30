@@ -1,3 +1,4 @@
+import {CORE_NAVIGATION_FOLLOWUP_SELECTION,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import {CORE_TEMPLATE_HERO_BULK_SELECTION,assertCoreTemplateHeroBulkReceipt} from './fixtures/admin-core-template-bulk-journeys.mjs';
 import {CORE_SPECIALIZED_FOLLOWUP_SELECTION,assertCoreSpecializedFollowupReceipt} from './fixtures/admin-core-specialized-settings-journeys.mjs';
 import {CORE_PAGE_COMPOSITION_SEO_SELECTION,isCorePageCompositionFollowupSelection,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
@@ -235,6 +236,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       const source = JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
       previewImpactContext = {fixtures,previewMatrix,canonicalRequiredCases,sourceSha256:source.sourceSha256};
     }
+    const isNavigationFollowup = browser.journeySelection === CORE_NAVIGATION_FOLLOWUP_SELECTION;
     const isTemplateHeroBulk = browser.journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION;
     const isSpecializedFollowup = browser.journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION;
     const isPageCompositionFollowup = isCorePageCompositionFollowupSelection(browser.journeySelection);
@@ -253,7 +255,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       domainTailPlan = (isReadonlyQueryProof ? buildCoreReadonlyQueryProofPlan : isTrackingPermissions ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),paths:{...location,...tracking}});
     }
     const domainTailNative = isDomainTail ? JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")) : null;
-    const selectedJourneys = isTemplateHeroBulk ? assertCoreTemplateHeroBulkReceipt(browser,canonicalRequiredCases) : isSpecializedFollowup ? await assertCoreSpecializedFollowupReceipt(browser,canonicalRequiredCases) : isPageCompositionFollowup ? await assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) : isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupReceipt(browser,canonicalRequiredCases) : isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
+    const selectedJourneys = isNavigationFollowup ? assertCoreNavigationFollowupReceipt(browser,canonicalRequiredCases) : isTemplateHeroBulk ? assertCoreTemplateHeroBulkReceipt(browser,canonicalRequiredCases) : isSpecializedFollowup ? await assertCoreSpecializedFollowupReceipt(browser,canonicalRequiredCases) : isPageCompositionFollowup ? await assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) : isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupReceipt(browser,canonicalRequiredCases) : isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
       native:domainTailNative,ownedRunId:handle.identity.runId,
       sourceSha256:JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,expectedActorId:await readCoreFixedQaActor(handle),
     }) : isPreviewImpact ? assertCorePreviewPublicImpactReceipt(browser, previewImpactContext!) : isTemplateCreates
@@ -283,7 +285,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(draftNative.status,"pass");
       draftRestoration=assertCoreFormDraftRestorationJoin({artifact:draftArtifact,browser,native:draftNative,ownedRunId:handle.identity.runId,sourceSha256:(browser as unknown as {sourceSha256:string}).sourceSha256});
     }
-    if (selectedJourneys && !isPreviewImpact && !isDomainTail && !isQueryLayout && !isTemplateCards && !isReadonlyHubFollowup && !isPageCompositionFollowup && !isSpecializedFollowup && !isTemplateHeroBulk) {
+    if (selectedJourneys && !isPreviewImpact && !isDomainTail && !isQueryLayout && !isTemplateCards && !isReadonlyHubFollowup && !isPageCompositionFollowup && !isSpecializedFollowup && !isTemplateHeroBulk && !isNavigationFollowup) {
       assert.ok(draftRestoration);
       if (isTemplateCreates) assertCoreTemplateSelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration, {
         native: JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),
@@ -304,11 +306,11 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       const kind = browser.cohort === "page-composition" ? "page-composition-state" : browser.cohort === "readonly-hubs" ? "readonly-hub-state" : browser.cohort === "media-library" ? "media-library-state" : browser.cohort === "navigation-settings" ? "navigation-settings-state" : browser.cohort === "auth-entry" ? "auth-entry-state" : "specialized-settings-state";
       assert.ok(Array.isArray(nativeCheckpoints.records) && nativeCheckpoints.records.length > 0);
       let cohortNative = nativeCheckpoints;
-      if (browser.cohort === "navigation-settings" || (browser.cohort === "page-composition" && !isPageCompositionFollowup)) {
+      if ((browser.cohort === "navigation-settings" && !isNavigationFollowup) || (browser.cohort === "page-composition" && !isPageCompositionFollowup)) {
         descendantPresentation = verifyCoreDescendantPresentationCompletion(handle,browser,nativeCheckpoints);
         cohortNative = partitionCoreDescendantNativeCheckpoints(handle,nativeCheckpoints);
       }
-      if (isPageCompositionFollowup) assert.ok(nativeCheckpoints.records.every((row: {kind: string}) => row.kind !== "descendant-presentation-state"), "Retained descendant proof must not replay.");
+      if (isPageCompositionFollowup || isNavigationFollowup) assert.ok(nativeCheckpoints.records.every((row: {kind: string}) => row.kind !== "descendant-presentation-state"), "Retained descendant proof must not replay.");
       if (browser.cohort === "navigation-settings") {
         const source = JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
         const cleanup = JSON.parse(readFileSync(join(artifactDir,"core-native-write-faults.json"),"utf8"));
