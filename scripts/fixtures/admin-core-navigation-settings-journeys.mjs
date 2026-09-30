@@ -350,5 +350,5 @@ export function assertCoreNavigationFollowupReceipt(browser, requiredCases) {
   const evidence = browser.evidence.filter(row => row.id !== "existing-auth-login");
   assert.deepEqual(evidence.map(row => row.id), CORE_NAVIGATION_FOLLOWUP_IDS);
   assert.ok(evidence.every(row => row.status === "pass"));
-  return { status: "pass", selectedJourneyIds: [...CORE_NAVIGATION_FOLLOWUP_IDS], executedJourneyIds: [...CORE_NAVIGATION_FOLLOWUP_IDS], retainedDescendantsReplayed: false, wholeCohortExecuted: false, globalClosed: false };
+  return { status: "pass", selection: CORE_NAVIGATION_FOLLOWUP_SELECTION, automaticCoverage: [], selectedJourneyIds: [...CORE_NAVIGATION_FOLLOWUP_IDS], executedJourneyIds: [...CORE_NAVIGATION_FOLLOWUP_IDS], retainedDescendantsReplayed: false, wholeCohortExecuted: false, globalClosed: false };
 }
