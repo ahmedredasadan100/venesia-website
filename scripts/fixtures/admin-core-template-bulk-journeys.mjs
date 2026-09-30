@@ -5,6 +5,12 @@ import { createJiti } from 'jiti';
 import { expect } from 'playwright/test';
 import { buildCoreTemplateLibraryPlan } from './admin-core-template-library-journeys.mjs';
 
+export const CORE_TEMPLATE_HERO_BULK_SELECTION='template-hero-bulk-followup';
+export const CORE_TEMPLATE_HERO_BULK_IDS=['template-library-hero-actual-bulk-transport-retry-confirmation'];
+export function coreTemplateBulkSubmittedAction(recipe,action){assert.ok(['hide','publish','delete'].includes(action));return recipe.kind==='hero'&&action==='publish'?'show':action;}
+export function selectCoreTemplateBulkPlan(plan,selection){if(selection===null||selection===undefined)return plan;assert.equal(selection,CORE_TEMPLATE_HERO_BULK_SELECTION);const selected=plan.filter(row=>row.kind==='hero');assert.equal(selected.length,1);return selected;}
+export function assertCoreTemplateHeroBulkReceipt(browser,requiredCases){assert.equal(browser.journeySelection,CORE_TEMPLATE_HERO_BULK_SELECTION);assert.equal(browser.cohort,'template-bulk');assert.equal(browser.scope,'core-closure');assert.equal(browser.inventoryOnly,false);assert.equal(browser.driverCompleted,true);assert.equal(browser.status,'pass');assert.deepEqual(browser.errors,[]);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.selectedJourneyIds,CORE_TEMPLATE_HERO_BULK_IDS);assert.deepEqual(browser.executedJourneyIds,CORE_TEMPLATE_HERO_BULK_IDS);assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...CORE_TEMPLATE_HERO_BULK_IDS]);assert.ok(browser.evidence.every(row=>row.status==='pass'));assert.deepEqual(browser.requiredCases.map(row=>row.key),requiredCases.map(row=>row.key));return{selection:CORE_TEMPLATE_HERO_BULK_SELECTION,selectedJourneyIds:[...CORE_TEMPLATE_HERO_BULK_IDS],executedJourneyIds:[...CORE_TEMPLATE_HERO_BULK_IDS],wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};}
+
 export function buildCoreTemplateBulkPlan(input) {
   return buildCoreTemplateLibraryPlan(input).map(recipe => {
     const unused = input.fixtures.pages.templates.filter(row => row.kind === recipe.kind && row.assigned === false);
@@ -42,7 +48,7 @@ export async function runCoreTemplateBulkJourneys(ctx) {
   const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});
   const manifest=await jiti.import('../../src/lib/admin/interaction-system/adoption-manifest.ts');
   const {ADMIN_BULK_ACTION_LABELS:labels}=await jiti.import('../../src/lib/admin/entity-list/bulk-action-labels.ts');
-  const plan=buildCoreTemplateBulkPlan({collectionAdoption:manifest.ADMIN_COLLECTION_SURFACE_ADOPTION,rowActions:manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures});
+  const plan=selectCoreTemplateBulkPlan(buildCoreTemplateBulkPlan({collectionAdoption:manifest.ADMIN_COLLECTION_SURFACE_ADOPTION,rowActions:manifest.ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures}),ctx.journeySelection);
   const outcomes=[],bar=page.locator('[data-admin-bulk-action-bar]'),dialog=page.locator('[data-admin-confirm-dialog]');
   const visible=id=>page.locator('[data-admin-row-action="visibility"][data-admin-entity-id="'+id+'"] button');
   const isAction=request=>request.method()==='POST' && Boolean(request.headers()['next-action']) && new URL(request.url()).origin===origin;
@@ -58,12 +64,12 @@ export async function runCoreTemplateBulkJourneys(ctx) {
     assert.deepEqual((await bar.locator('input[name="ids"]').evaluateAll(nodes=>nodes.map(node=>Number(node.value)))).sort((a,b)=>a-b),recipe.ids);
     await bar.getByRole('combobox').click();
     await page.getByRole('option',{name:action==='hide'?labels.hideSelected:action==='publish'?labels.showSelected:labels.deleteSelected,exact:true}).click();
-    await expect(bar.locator('input[name="bulk_action"]')).toHaveValue(action);
+    await expect(bar.locator('input[name="bulk_action"]')).toHaveValue(coreTemplateBulkSubmittedAction(recipe,action));
   }
   async function nativeSave(recipe,action,startedAt){
     const descriptors=recipe.targets.map(row=>({table:recipe.table,id:row.id,deleted:action==='delete',expected:action==='delete'?{}:{name:row.name,status:action==='publish'?'published':'unpublished'},
       auditEntityType:'content_block_template',auditEntityLabel:recipe.table,auditActions:['content_block_template.'+(action==='hide'?'unpublish':action)],
-      auditMetadata:{blockType:recipe.kind,action,ids:recipe.ids,count:recipe.ids.length},auditSince:startedAt,exactAuditCount:1}));
+      auditMetadata:{blockType:recipe.kind,action:coreTemplateBulkSubmittedAction(recipe,action),ids:recipe.ids,count:recipe.ids.length},auditSince:startedAt,exactAuditCount:1}));
     const result=await nativeCheckpoint({id:randomUUID(),kind:'form-save-native',caseId:'template-bulk-'+recipe.kind,formConsumer:recipe.consumer,surface:'bulk',startedAt,descriptors});
     assertCoreTemplateBulkNative(result,recipe,action);return {result,descriptors};
   }

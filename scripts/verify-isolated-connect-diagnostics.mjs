@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import pg from 'pg';
+import { waitForOwnedDatabaseCapacity } from './lib/isolated-supabase-transport.mjs';
 
 function extract(source){
  const ast=ts.createSourceFile('owner.ts',source,ts.ScriptTarget.Latest,true),wanted=new Set(['OWNER','IsolatedSupabaseError','fail','requireThat','classifyOwnedPgConnectMessage','describeOwnedPgConnectFailure','createAdminMeasurementControlLease','transportCodes','ownerTransportCodes','asSafeError','connect']),parts=new Map();
@@ -20,10 +21,10 @@ export async function verifyIsolatedConnectDiagnostics(source){
  const compiled=extract(source),checks=[];let attempts=0,ended=0,inspections=0,records=[],failure=new Error('timeout expired'),recordFailure=false,time=100,snapshots=0;
  const marker='postgresql://private-user:private-value@example.invalid/postgres';
  class CliFailure extends Error{constructor(){super('private-message');this.code='CLI_CONTROLLED';this.stage='cli';}}
- const options=[];
+ const options=[],capacityBudgets=[];
  class ControlledClient{constructor(config){options.push(config);}async connect(){attempts++;if(failure)throw failure;}async end(){ended++;}}
  function owner(extra={}){
-  const loaded={exports:{}},ports={pg:{Client:ControlledClient},inspectCaptured:async()=>{inspections++;},serviceResource:()=>({owned:true}),databaseUrl:()=>marker,hostBridge:{snapshot:()=>{snapshots++;return {accepted:snapshots,rejected:0,failed:0,closed:0,active:1,localProcesses:1,stopping:false,listeners:[{host:marker,port:99}]};}},safeRecord:(stage,metadata)=>{if(recordFailure)throw Error(marker);records.push({stage,...metadata});},performance:{now:()=>{time+=4.8;return time;}},IsolatedSupabaseCliError:CliFailure,...extra};
+  const loaded={exports:{}},ports={waitForOwnedDatabaseCapacity:async bridge=>{const budget=await waitForOwnedDatabaseCapacity(bridge);capacityBudgets.push(budget);return budget;},pg:{Client:ControlledClient},inspectCaptured:async()=>{inspections++;},serviceResource:()=>({owned:true}),databaseUrl:()=>marker,hostBridge:{snapshot:()=>{snapshots++;return {accepted:snapshots,rejected:0,failed:0,closed:0,active:1,localProcesses:1,stopping:false,listeners:[{host:marker,port:99}]};}},safeRecord:(stage,metadata)=>{if(recordFailure)throw Error(marker);records.push({stage,...metadata});},performance:{now:()=>{time+=4.8;return time;}},IsolatedSupabaseCliError:CliFailure,...extra};
   new Function(...Object.keys(ports),'module','exports',compiled)(...Object.values(ports),loaded,loaded.exports);return loaded.exports;
  }
  const actualOwner=owner();const test=async(name,work)=>{await work();checks.push(name);};
@@ -47,7 +48,8 @@ export async function verifyIsolatedConnectDiagnostics(source){
  await test('Actual connect boundary records one failed attempt and retains pinned config/cleanup',async()=>{
   failure=new Error('timeout expired');const before=attempts;await assert.rejects(actualOwner.connect('postgres'),error=>error.code==='DB_CONNECTION_TIMEOUT'&&error.stage==='database-connect');
   assert.equal(attempts,before+1);assert.equal(ended,1);assert.equal(inspections,1);assert.equal(records.length,1);assert.equal(records[0].stage,'database-connect-failed');assert.equal(records[0].safeCode,'DB_CONNECTION_TIMEOUT');assert.equal(records[0].pgMessageClass,'pg_timeout_expired');assert.equal(records[0].elapsedMs,4);assert.ok(!JSON.stringify(records).includes(marker));
-  assert.deepEqual(options[0],{connectionString:marker,connectionTimeoutMillis:5000,ssl:false,options:'',statement_timeout:30000,application_name:'isolated-supabase'});
+  assert.equal(capacityBudgets.length,1);assert.ok(Number.isInteger(capacityBudgets[0])&&capacityBudgets[0]>0&&capacityBudgets[0]<=5000);
+  assert.deepEqual(options[0],{connectionString:marker,connectionTimeoutMillis:capacityBudgets[0],ssl:false,options:'',statement_timeout:30000,application_name:'isolated-supabase'});
  });
  await test('Diagnostic receipt failure preserves original classified rejection and closes client once',async()=>{recordFailure=true;failure=new Error('Connection terminated unexpectedly');const before=attempts,closed=ended;await assert.rejects(actualOwner.connect('postgres'),error=>error.code==='DB_CONNECTION_EOF');assert.equal(attempts,before+1);assert.equal(ended,closed+1);recordFailure=false;});
  await test('Transport codes and SQLSTATE retain precedence over message classification',()=>{for(const code of ['ECONNRESET','ECONNREFUSED','42501']){const error=Object.assign(new Error('timeout expired'),{code});assert.equal(actualOwner.asSafeError(error,'database-connect').code,code);}});
