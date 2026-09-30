@@ -161,12 +161,20 @@ export default function MediaLibraryCore({
   const searchParams = useSearchParams();
   const safeDeleteStatusId = useId();
   const { clearFeedback, publishFeedback } = useAdminFeedback();
-  const [folder, setFolder] = useState<string | null>(initialFolder);
+  const [folder, setFolder] = useState<string | null>(() =>
+    mode === "manage"
+      ? (searchParams.get("folder") ?? (searchParams.has("view") ? null : initialFolder))
+      : initialFolder,
+  );
   const [kind, setKind] = useState<KindFilter>(() => {
     const value = mode === "manage" ? searchParams.get("kind") : null;
     return value === "image" || value === "document" ? value : initialKind;
   });
-  const [smartView, setSmartView] = useState<MediaSmartView>("all");
+  const [smartView, setSmartView] = useState<MediaSmartView>(() =>
+    mode === "manage"
+      ? (SMART_VIEWS.find((item) => item.id === searchParams.get("view"))?.id ?? "all")
+      : "all",
+  );
   const [query, setQuery] = useState(() =>
     mode === "manage" ? (searchParams.get("q") ?? "") : "",
   );
@@ -203,12 +211,14 @@ export default function MediaLibraryCore({
       const nextKind = rawKind === "image" || rawKind === "document" ? rawKind : "all";
       setQuery(nextQuery);
       setKind(nextKind);
+      setFolder(parameters.get("folder") ?? (parameters.has("view") ? null : initialFolder));
+      setSmartView(SMART_VIEWS.find((item) => item.id === parameters.get("view"))?.id ?? "all");
       setPageNumber(1);
       setSelectedIds([]);
     }
     window.addEventListener("popstate", syncFromHistory);
     return () => window.removeEventListener("popstate", syncFromHistory);
-  }, [mode]);
+  }, [initialFolder, mode]);
 
   const loadPage = useCallback(async () => {
     requestControllerRef.current?.abort();
@@ -344,7 +354,19 @@ export default function MediaLibraryCore({
     [data?.folders, folder],
   );
 
+  function updateLibraryHistory(patch: Record<string, string | null>, behavior: "push" | "replace" = "push") {
+    if (mode !== "manage") return;
+    const next = applyAdminEntityUrlPatch(new URLSearchParams(window.location.search), patch);
+    const nextQuery = next.toString();
+    window.history[behavior === "replace" ? "replaceState" : "pushState"](
+      window.history.state,
+      "",
+      window.location.pathname + (nextQuery ? "?" + nextQuery : "") + window.location.hash,
+    );
+  }
+
   function openFolder(nextFolder: string) {
+    updateLibraryHistory({ folder: nextFolder, view: null });
     setFolder(nextFolder);
     setSmartView("all");
     setPageNumber(1);
@@ -352,6 +374,7 @@ export default function MediaLibraryCore({
   }
 
   function openSmartView(nextView: MediaSmartView) {
+    updateLibraryHistory({ folder: null, view: nextView });
     setFolder(null);
     setSmartView(nextView);
     setPageNumber(1);
@@ -687,20 +710,7 @@ export default function MediaLibraryCore({
               </div>
             }
             onQueryPatch={(patch, behavior = "push") => {
-              if (mode === "manage") {
-                const next = applyAdminEntityUrlPatch(
-                  new URLSearchParams(window.location.search),
-                  patch,
-                );
-                const nextQuery = next.toString();
-                window.history[
-                  behavior === "replace" ? "replaceState" : "pushState"
-                ](
-                  window.history.state,
-                  "",
-                  `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}${window.location.hash}`,
-                );
-              }
+              updateLibraryHistory(patch, behavior);
               if (Object.hasOwn(patch, "q")) setQuery(patch.q ?? "");
               if (Object.hasOwn(patch, "kind")) {
                 const nextKind = patch.kind;
@@ -862,13 +872,18 @@ export default function MediaLibraryCore({
               {mode === "manage" ? (
                 <section className="rounded-[24px] border border-white/10 bg-[#080B10]/92 p-5">
                   <h2 className="font-semibold text-white">البيانات الوصفية</h2>
-                  <form key={focusedAsset.id} action={(formData) => void updateMetadata(formData)} className="mt-4 space-y-3">
+                  <form key={focusedAsset.id} onSubmit={(event) => {
+                    event.preventDefault();
+                    void updateMetadata(new FormData(event.currentTarget));
+                  }} className="mt-4 space-y-3">
                     <input name="displayName" defaultValue={focusedAsset.displayName} aria-label="اسم العرض" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none" />
                     {focusedAsset.kind === "image" ? <><input name="defaultAltText" defaultValue={focusedAsset.defaultAltText ?? ""} placeholder="النص البديل الافتراضي" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none" /><input name="defaultTitle" defaultValue={focusedAsset.defaultTitle ?? ""} placeholder="العنوان الافتراضي" className="h-10 w-full rounded-xl border border-white/10 bg-black/25 px-3 text-sm text-white outline-none" /><textarea name="defaultCaption" defaultValue={focusedAsset.defaultCaption ?? ""} placeholder="التعليق" className="min-h-20 w-full rounded-xl border border-white/10 bg-black/25 p-3 text-sm text-white outline-none" /></> : null}
                     <button type="submit" disabled={!isManaged(focusedAsset) || busy === "metadata"} className="w-full rounded-xl border border-[#D8B87A]/35 bg-[#D8B87A]/10 px-3 py-2 text-sm font-semibold text-[#D8B87A] disabled:opacity-40">حفظ البيانات</button>
                   </form>
                   <div className="mt-4 border-t border-white/8 pt-4"><button ref={replacementConfirmationTriggerRef} type="button" disabled={!canMutate || !data?.readiness.usageResultsAuthoritative || !isManaged(focusedAsset) || Boolean(busy)} onClick={() => replacementInputRef.current?.click()} className="w-full rounded-xl border border-white/10 px-3 py-2 text-sm text-white/65 disabled:opacity-40">{busy === "replace-upload" ? "جارٍ رفع بديل جديد…" : "رفع بديل ثم استبدال كل المراجع"}</button><input ref={replacementInputRef} type="file" accept={focusedAsset.kind === "image" ? CMS_IMAGE_ACCEPT : CMS_PDF_ACCEPT} className="hidden" onChange={(event) => { void stageReplacement(event.currentTarget.files?.[0] ?? null); event.currentTarget.value = ""; }} /><p className="mt-2 text-[10px] leading-5 text-white/35">يتطلب الاستبدال فحص ارتباطات مكتملًا، ويبقى الأصل القديم محفوظًا.</p></div>
-                  {showPhysicalForm ? <form key={`move-${focusedAsset.id}`} action={(formData) => {
+                  {showPhysicalForm ? <form key={`move-${focusedAsset.id}`} onSubmit={(event) => {
+                    event.preventDefault();
+                    const formData = new FormData(event.currentTarget);
                     const targetFolder = String(formData.get("targetFolder") || "").trim();
                     const targetFilename = String(formData.get("targetFilename") || "").trim();
                     if (targetFolder && targetFilename) setConfirmation({ kind: "move", asset: focusedAsset, targetFolder, targetFilename });

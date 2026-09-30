@@ -4,10 +4,11 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import vm from "node:vm";
+import sharp from "sharp";
 import ts from "typescript";
 import { chromium } from "playwright";
 import { createJiti } from "jiti";
-import { buildCoreMediaPlan, matchesCoreMediaResponse, assertCoreMediaReceipt, assertCoreMediaUnchanged, assertCoreMediaAsset, assertCoreMediaAudit, validateCoreMediaReplaySpecimen, assertCoreMediaPermissionPrerequisites, assertCoreMediaPermissionResponse, coreMediaSyntheticPdf } from "./fixtures/admin-core-media-journeys.mjs";
+import { buildCoreMediaPlan, matchesCoreMediaResponse, assertCoreMediaReceipt, assertCoreMediaUnchanged, assertCoreMediaAsset, assertCoreMediaAudit, validateCoreMediaReplaySpecimen, assertCoreMediaPermissionPrerequisites, assertCoreMediaPermissionResponse, coreMediaSyntheticPdf, coreMediaSyntheticPng } from "./fixtures/admin-core-media-journeys.mjs";
 
 const checks = [], digest = input => createHash("sha256").update(input).digest("hex");
 const check = async (name, task) => { await task(); checks.push({ name, status: "pass" }); };
@@ -78,7 +79,11 @@ for (const rows of [[], [audit, { ...audit, id: 2 }], [{ ...audit, actor_admin_u
 const nativePath = "scripts/verify-admin-core-media-isolated.mts";
 const nativeSource = readFileSync(nativePath, "utf8");
 const compiled = ts.transpileModule(nativeSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-const pixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=", "base64");
+const pixel = coreMediaSyntheticPng();
+await check("synthetic-png-decodes-through-production-image-decoder", async () => {
+  const { info } = await sharp(pixel).raw().toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, 1); assert.equal(info.height, 1);
+});
 let mode = "valid", foreignHits = 0, publicGets = 0;
 const foreign = createServer((req, res) => { foreignHits++; res.end("must not follow"); });
 foreign.listen(0, "127.0.0.1"); await once(foreign, "listening");

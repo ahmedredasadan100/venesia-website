@@ -8,7 +8,8 @@ import { expect, request as http } from "playwright/test";
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const searchLabel = "ابحث بالاسم أو المسار أو الوصف البديل…";
 const groupNames = ["readiness", "folders", "upload-validation-retry", "catalog-query", "metadata-failure-retry", "preview", "picker-use", "in-use-delete", "physical-move", "replace-references", "detach-delete", "permission"];
-const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=", "base64");
+const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==", "base64");
+export function coreMediaSyntheticPng() { return Buffer.from(png); }
 export function coreMediaSyntheticPdf() {
   const objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 100 100] /Contents 4 0 R >>", "<< /Length 0 >>\nstream\n\nendstream"];
   let data = "%PDF-1.4\n"; const offsets = [];
@@ -342,7 +343,9 @@ export async function runCoreMediaJourneys(ctx) {
       assertCoreMediaUnchanged(before, await snapshot("picker-cancel"), true);
       await imageField().getByRole("button").first().click();
       dialog = page.getByRole("dialog", { name: "اختيار صورة من المكتبة", exact: true });
-      await folder("images", true, dialog); await search(dialog).fill(asset.display_name);
+      await folder("images", true, dialog);
+      const pickerData = await api("GET", () => search(dialog).fill(asset.display_name), { queryMatch: { q: asset.display_name, folder: "images/" + plan.namespace } });
+      assert.deepEqual(pickerData.assets.map(row => row.id), [asset.id]);
       await assetButton(dialog, asset.display_name).click();
       await dialog.getByRole("button", { name: "تأكيد الاختيار", exact: true }).click(); await expect(dialog).toHaveCount(0);
       await page.locator('[name="image_alt"]').fill("QA synthetic image"); await articleSave(asset.public_url);
@@ -380,6 +383,7 @@ export async function runCoreMediaJourneys(ctx) {
         await form.getByRole("button", { name: "مراجعة العملية", exact: true }).click();
         let dialog = page.getByRole("dialog", { name: "تنفيذ تغيير فعلي لمسار التخزين؟", exact: true });
         await dialog.locator("[data-admin-confirm-cancel]").click(); await expect(form.getByLabel("مجلد الوجهة", { exact: true })).toHaveValue(targetFolder);
+        await expect(form.getByLabel("اسم الملف الفعلي الجديد", { exact: true })).toHaveValue(filename);
         assertCoreMediaUnchanged(before, await snapshot("move-cancel-" + index), true);
         await form.getByRole("button", { name: "مراجعة العملية", exact: true }).click();
         dialog = page.getByRole("dialog", { name: "تنفيذ تغيير فعلي لمسار التخزين؟", exact: true });
