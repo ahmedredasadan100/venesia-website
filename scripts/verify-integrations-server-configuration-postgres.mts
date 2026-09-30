@@ -65,6 +65,17 @@ try {
 
   await db.exec("begin;");
   await db.exec(migration);
+  const definitionsQuery = "select p.oid::regprocedure::text as signature,pg_get_functiondef(p.oid) as definition,p.proowner::text as owner,p.proacl::text as acl from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname in ('replace_integration_app_configuration','remove_integration_app_configuration','claim_integration_app_configuration_test','complete_integration_app_configuration_test') order by signature";
+  const beforeTerminalConflict = (await db.query<{signature:string;definition:string;owner:string;acl:string}>(definitionsQuery)).rows;
+  assert.equal(beforeTerminalConflict.length,4);
+  const terminalConflictMigration = readFileSync('sql/migrations/20260930204331_integration_configuration_terminal_conflicts.sql','utf8');
+  await db.exec(terminalConflictMigration);
+  const afterTerminalConflict = (await db.query<{signature:string;definition:string;owner:string;acl:string}>(definitionsQuery)).rows;
+  assert.deepEqual(afterTerminalConflict,beforeTerminalConflict.map(row=>({...row,definition:row.definition.replace("errcode = '40001'", "errcode = 'PT409'")})), 'Only terminal conflict SQLSTATE may change; exact signatures, ACLs and owners must remain.');
+  await assert.rejects(db.exec(terminalConflictMigration), /integration_terminal_conflict_owner_drift/);
+  await db.exec('rollback');
+  assert.deepEqual((await db.query(definitionsQuery)).rows,afterTerminalConflict,'Failed migration replay rolls back without altering owners.');
+
   await db.query(
     "insert into supabase_migrations.schema_migrations(version) values('20260806010000'),($1)",
     [migrationVersion],
@@ -193,7 +204,7 @@ try {
       "select public.replace_integration_app_configuration('meta','production',2,$1::jsonb,array[]::text[],1,'cms_vault')",
       [conflictEntries],
     ),
-    /integration_app_configuration_version_conflict/,
+    (error: unknown) => error instanceof Error && error.message === 'integration_app_configuration_version_conflict' && 'code' in error && error.code === 'PT409',
   );
   assert.equal(Number((await db.query<{ count: number }>("select count(*)::integer as count from vault.secrets")).rows[0]?.count), beforeConflict);
 

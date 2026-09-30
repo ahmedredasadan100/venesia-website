@@ -70,19 +70,6 @@ function acceptReceipt(row, context, control) {
 globalThis.fetch = async function(input, init) {
   const context = store.getStore();
   const url = new URL(typeof input === 'string' || input instanceof URL ? input : input.url);
-  // Passive diagnosis of the existing failed configuration case; never export body or secrets.
-  if (!context && url.origin === dataOrigin.origin && url.pathname === '/rest/v1/rpc/replace_integration_app_configuration'
-    && String(init?.method ?? input?.method ?? 'GET').toUpperCase() === 'POST') {
-    const response = await originalFetch.call(this, input, init);
-    if (!response.ok) {
-      let payload; try { payload = await response.clone().json(); } catch { payload = null; }
-      write({ type: 'configuration-rpc-rejection', status: response.status,
-        code: typeof payload?.code === 'string' && /^(?:[0-9A-Z]{5}|PGRST[0-9]{3})$/.test(payload.code) ? payload.code : null,
-        versionConflict: payload?.message === 'integration_app_configuration_version_conflict',
-        jsonObject: !!payload && typeof payload === 'object' && !Array.isArray(payload) });
-    }
-    return response;
-  }
   if (!context || url.origin !== dataOrigin.origin) return originalFetch.call(this, input, init);
   const control = readControl();
   if (control.mode === 'off' || control.token !== context.token) return originalFetch.call(this, input, init);

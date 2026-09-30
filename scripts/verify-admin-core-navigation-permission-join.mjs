@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import ts from 'typescript';
+import {isCorePageCompositionFollowupSelection} from './fixtures/admin-core-page-composition-journeys.mjs';
 import {assertCoreFormDraftRestorationJoin} from './fixtures/admin-core-form-draft-restoration.mjs';
 import {CORE_DOWNLOAD_MEDIA_HREF} from './fixtures/admin-core-download-media-adoption.mjs';
 
@@ -109,15 +110,15 @@ function currentCollectorWiring(text){
  function calls(node,name){let found=false;function visit(child){if(ts.isCallExpression(child)&&ts.isIdentifier(child.expression)&&child.expression.text===name)found=true;ts.forEachChild(child,visit);}visit(node);return found;}
  function directlyCalls(node,name){return ts.isBlock(node)&&node.statements.some(row=>ts.isExpressionStatement(row)&&ts.isBinaryExpression(row.expression)&&ts.isCallExpression(row.expression.right)&&ts.isIdentifier(row.expression.right.expression)&&row.expression.right.expression.text===name);}
  function visit(node){
-  if(ts.isVariableStatement(node)&&node.declarationList.declarations.some(row=>ts.isIdentifier(row.name)&&row.name.text==='cohortNative'))declarations.push(node);
+  if(ts.isVariableStatement(node)&&node.declarationList.declarations.some(row=>ts.isIdentifier(row.name)&&['isPageCompositionFollowup','cohortNative'].includes(row.name.text)))declarations.push(node);
   if(ts.isIfStatement(node)&&directlyCalls(node.thenStatement,'verifyCoreDescendantPresentationCompletion')&&directlyCalls(node.thenStatement,'partitionCoreDescendantNativeCheckpoints'))partitionIfs.push(node);
   if(ts.isIfStatement(node)&&ts.isBinaryExpression(node.expression)&&node.expression.operatorToken.kind===ts.SyntaxKind.EqualsEqualsEqualsToken&&node.expression.left.getText(ast)==='browser.cohort'&&ts.isStringLiteral(node.expression.right)&&node.expression.right.text==='navigation-settings'&&calls(node.thenStatement,'assertCoreNavigationPermissionReceipts'))permissionIfs.push(node);
   ts.forEachChild(node,visit);
- }visit(ast);assert.equal(declarations.length,1);assert.equal(partitionIfs.length,1);assert.equal(permissionIfs.length,1);assert.ok(declarations[0].pos<partitionIfs[0].pos&&partitionIfs[0].end<=permissionIfs[0].pos);
+ }visit(ast);assert.equal(declarations.length,2);assert.equal(partitionIfs.length,1);assert.equal(permissionIfs.length,1);assert.ok(declarations[0].pos<partitionIfs[0].pos&&partitionIfs[0].end<=permissionIfs[0].pos);
  assert.equal(calls(permissionIfs[0].thenStatement,'assertCoreFooterRestoreCompletion'),true);assert.equal(calls(permissionIfs[0].thenStatement,'assertCoreNavigationRowActionsCompletion'),true);
- const statements=declarations[0].getText(ast)+'\n'+partitionIfs[0].getText(ast)+'\nif ('+permissionIfs[0].expression.getText(ast)+') '+permissionIfs[0].thenStatement.getText(ast);
+ const statements=declarations.map(row=>row.getText(ast)).join('\n')+'\n'+partitionIfs[0].getText(ast)+'\nif ('+permissionIfs[0].expression.getText(ast)+') '+permissionIfs[0].thenStatement.getText(ast);
  const js=ts.transpileModule(statements,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
- return new Function('browser','handle','nativeCheckpoints','draftArtifact','verifyCoreDescendantPresentationCompletion','partitionCoreDescendantNativeCheckpoints','assertCoreNavigationPermissionReceipts','assertCoreFooterRestoreCompletion','assertCoreNavigationRowActionsCompletion','readFileSync','join','artifactDir','let descendantPresentation=null,navigationPermission=null,footerRestore=null,navigationRowActions=null;'+js+';return {cohortNative,descendantPresentation,navigationPermission,footerRestore,navigationRowActions};');
+ return new Function('isCorePageCompositionFollowupSelection','browser','handle','nativeCheckpoints','draftArtifact','verifyCoreDescendantPresentationCompletion','partitionCoreDescendantNativeCheckpoints','assertCoreNavigationPermissionReceipts','assertCoreFooterRestoreCompletion','assertCoreNavigationRowActionsCompletion','readFileSync','join','artifactDir','let descendantPresentation=null,navigationPermission=null,footerRestore=null,navigationRowActions=null;'+js+';return {cohortNative,descendantPresentation,navigationPermission,footerRestore,navigationRowActions};').bind(null,isCorePageCompositionFollowupSelection);
 }
 function attachFooterAndRows(f){
  const r=owner.CORE_NAVIGATION_RECIPE,phase=(entity,name)=>f.navigation.find(row=>row.entity===entity&&row.phase===name);

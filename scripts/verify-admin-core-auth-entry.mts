@@ -1,4 +1,4 @@
-import{verifyCoreMaintenanceTransportControl}from'./fixtures/admin-core-auth-transport-controls.mjs';
+import{verifyCoreMaintenanceTransportControl,verifyCoreLoginHydrationControl}from'./fixtures/admin-core-auth-transport-controls.mjs';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createJiti } from 'jiti';
@@ -35,4 +35,5 @@ pass('Current local cookie security and bounded TTL accepted',()=>assertCoreAuth
 for(const patch of [{domain:'foreign.invalid'},{path:'/other'},{httpOnly:false},{sameSite:'None'},{secure:true},{expires:999999}])pass('Wrong cookie metadata rejected '+Object.keys(patch)[0],()=>assert.throws(()=>assertCoreAuthCookieMetadata({...cookie,...patch},'http://127.0.0.1:3000',43200,1000,1001)));
 pass('Only Maintenance transport fixture blocks service workers',()=>{assert.deepEqual(coreAuthEntryBrowserOptions('maintenance-login'),{serviceWorkers:'block'});assert.deepEqual(coreAuthEntryBrowserOptions('admin-login'),{});assert.throws(()=>coreAuthEntryBrowserOptions('other'));});
 const mounted=await verifyCoreMaintenanceTransportControl();
-console.log(JSON.stringify({status:'pass',controls:cases.length+mounted.controls,canonicalControls:cases.length,mountedControls:mounted.controls,cases,mounted,actualAuthenticatedRuntimeExecuted:false,globalClosed:false}));
+const hydration=await verifyCoreLoginHydrationControl();
+console.log(JSON.stringify({status:'pass',controls:cases.length+mounted.controls+hydration.controls,canonicalControls:cases.length,mountedControls:mounted.controls,cases,mounted,hydration,actualAuthenticatedRuntimeExecuted:false,globalClosed:false}));
