@@ -53,7 +53,7 @@ export async function runCoreSpecializedSettingsJourneys(ctx) {
   assert.ok(login?.password && login?.username && typeof ownedNetworkOnly === "function");
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
-  const { INTEGRATION_APP_CONFIGURATION_DEFINITIONS: definitions, INTEGRATION_APP_CONFIGURATION_SURFACES: surfaces } = await jiti.import("../../src/lib/admin/integrations/server-configuration-contract.ts");
+  const { INTEGRATION_APP_CONFIGURATION_DEFINITIONS: definitions, INTEGRATION_APP_CONFIGURATION_SURFACES: surfaces, getIntegrationAppConfigurationSurface } = await jiti.import("../../src/lib/admin/integrations/server-configuration-contract.ts");
   const plan = buildCoreSpecializedSettingsPlan({ manifest, definitions, surfaces, fixtures: fixtures.specializedSettings });
   const followup=ctx.journeySelection===CORE_SPECIALIZED_FOLLOWUP_SELECTION;assert.ok(ctx.journeySelection===undefined||ctx.journeySelection===null||followup);
   const completed = [], checkpoints = [];
@@ -81,12 +81,12 @@ export async function runCoreSpecializedSettingsJourneys(ctx) {
     await navigate(target, "/admin/login");
     await target.locator('input[name="username"]').fill(fixtures.specializedSettings.securityActor.username);
     await fillCorePrivateField(target.locator('input[name="password"]'), password);
-    const endpoint=origin+'/api/admin/auth/login',statuses=[];let posts=0;
-    const requestListener=request=>{if(request.url()===endpoint&&request.method()==='POST')posts++;};
+    const endpoint=origin+'/api/admin/auth/login',statuses=[],requestShapes=[];let posts=0;
+    const requestListener=request=>{if(request.url()===endpoint&&request.method()==='POST'){posts++;let body;try{body=request.postDataJSON();}catch{body=null;}requestShapes.push({jsonObject:!!body&&typeof body==='object'&&!Array.isArray(body),usernameMatches:body?.username===fixtures.specializedSettings.securityActor.username,passwordMatches:body?.password===password});}};
     const responseListener=response=>{if(response.url()===endpoint&&response.request().method()==='POST')statuses.push(response.status());};
     target.on('request',requestListener);target.on('response',responseListener);
     try { await Promise.all([target.waitForURL(url => url.pathname !== "/admin/login", { timeout: 60_000 }), target.getByRole("button", { name: "دخول لوحة التحكم", exact: true }).click()]); }
-    catch { const url=new URL(target.url());throw new Error('Owned security login did not complete: '+JSON.stringify({pathname:url.pathname,queryKeys:[...url.searchParams.keys()],posts,statuses,alertVisible:await target.getByRole('alert').isVisible().catch(()=>false)})); }
+    catch { const url=new URL(target.url());throw new Error('Owned security login did not complete: '+JSON.stringify({pathname:url.pathname,queryKeys:[...url.searchParams.keys()],posts,statuses,requestShapes,alertVisible:await target.getByRole('alert').isVisible().catch(()=>false)})); }
     finally {target.off('request',requestListener);target.off('response',responseListener);}
     await navigate(target, securityPath); await expect(target.getByRole("heading", { name: "الأمان", exact: true })).toBeVisible();
   };
@@ -195,7 +195,7 @@ export async function runCoreSpecializedSettingsJourneys(ctx) {
       await navigate(page, integrationPath);
       for (const field of definition.fields.filter(field => field.secret)) await expect(article(page).getByText(new RegExp(`Missing:.*${field.key}`, "u")).first()).toBeVisible();
       const tested = await mutate(page, "test", () => article(page).getByRole("button", { name: "اختبار الإعداد", exact: true }).click());
-      assert.deepEqual(tested.result.results.map(row => row.integration).sort(), [...definition.integrations].sort());
+      assert.deepEqual(tested.result.results.map(row => row.integration).sort(), [...getIntegrationAppConfigurationSurface(provider).integrations].sort());
       assert.ok(tested.result.results.every(row => row.status === "configuration_incomplete" && row.safeErrorCode === "integration_app_configuration_incomplete"));
       await checkpoint("integration", "incomplete-tested", provider);
       staleContext = await newContext(await page.context().storageState()); const stale = await staleContext.newPage(); await navigate(stale, integrationPath);
