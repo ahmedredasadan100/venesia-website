@@ -1,4 +1,4 @@
-import {CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
+import {isCorePageCompositionFollowupSelection,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
 import {CORE_READONLY_HUB_FOLLOWUP_SELECTION,assertCoreReadonlyHubFollowupReceipt,assertCoreReadonlyHubFollowupCompletion} from "./fixtures/admin-core-readonly-hubs-journeys.mjs";
 import {CORE_TEMPLATE_CARDS_SELECTION,loadCoreTemplatePresentationPlan,assertCoreTemplateCardsSelectionReceipt} from "./fixtures/admin-core-template-library-presentation-plan.mjs";
 import {CORE_QUERY_LAYOUT_SELECTION,loadCoreQueryPresentationPlan,assertCoreQuerySelectionReceipt} from "./fixtures/admin-core-query-presentation-plan.mjs";
@@ -233,7 +233,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       const source = JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
       previewImpactContext = {fixtures,previewMatrix,canonicalRequiredCases,sourceSha256:source.sourceSha256};
     }
-    const isPageCompositionFollowup = browser.journeySelection === CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION;
+    const isPageCompositionFollowup = isCorePageCompositionFollowupSelection(browser.journeySelection);
     const isReadonlyHubFollowup = browser.journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION;
     const isTemplateCards = browser.journeySelection === CORE_TEMPLATE_CARDS_SELECTION;
     const isQueryLayout = browser.journeySelection === CORE_QUERY_LAYOUT_SELECTION;

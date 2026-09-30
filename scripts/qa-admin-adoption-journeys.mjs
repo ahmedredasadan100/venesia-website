@@ -1,4 +1,4 @@
-import {CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION,loadCorePageCompositionFollowupIds,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
+import {isCorePageCompositionFollowupSelection,loadCorePageCompositionFollowupIds,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
 import {CORE_READONLY_HUB_FOLLOWUP_SELECTION,selectCoreReadonlyHubJourneyIds,assertCoreReadonlyHubFollowupReceipt} from "./fixtures/admin-core-readonly-hubs-journeys.mjs";
 import {CORE_TEMPLATE_CARDS_SELECTION,loadCoreTemplatePresentationPlan,selectCoreTemplatePresentationPlan,assertCoreTemplateCardsSelectionReceipt} from "./fixtures/admin-core-template-library-presentation-plan.mjs";
 import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, CORE_READONLY_QUERY_SELECTION, buildCoreReadonlyQueryProofPlan, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
@@ -45,7 +45,7 @@ const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".l
 const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
   ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
-let selectedJourneyIds = journeySelection === CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION ? await loadCorePageCompositionFollowupIds() : journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : isCoreTemplateCreateSelection(journeySelection)
+let selectedJourneyIds = isCorePageCompositionFollowupSelection(journeySelection) ? await loadCorePageCompositionFollowupIds(journeySelection) : journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : isCoreTemplateCreateSelection(journeySelection)
   ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, journeySelection).map(coreTemplateCreateJourneyId)
   : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
@@ -797,7 +797,7 @@ try {
   else if (journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION) assertCoreReadonlyHubFollowupReceipt(receipt(),requiredCases);
   else if (journeySelection === CORE_TEMPLATE_CARDS_SELECTION) assertCoreTemplateCardsSelectionReceipt(receipt(),templateCardsSelectionPlan,requiredCases);
   else if (journeySelection === CORE_QUERY_LAYOUT_SELECTION) assertCoreQuerySelectionReceipt(receipt(),querySelectionPlan,requiredCases);
-  else if (journeySelection === CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION) await assertCorePageCompositionFollowupReceipt(receipt(),requiredCases);
+  else if (isCorePageCompositionFollowupSelection(journeySelection)) await assertCorePageCompositionFollowupReceipt(receipt(),requiredCases);
   else if (isCoreTemplateCreateSelection(journeySelection)) assertCoreTemplateSelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   else if (journeySelection !== null) assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   checkpoint("driver", "complete");

@@ -9,18 +9,24 @@ import { expect } from "playwright/test";
 import { PAGE_SEO_PHASES, PAGE_SEO_RECIPE, PAGE_SEO_INVALID_CANONICAL, assertPageSeoScope, summarizePageSeoRejection } from "./admin-core-page-seo-contract.mjs";
 
 export const CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION = "page-composition-followup";
-export async function loadCorePageCompositionFollowupIds() {
+export const CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION = "page-composition-content-seo-followup";
+export const isCorePageCompositionFollowupSelection = selection => [CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION, CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION].includes(selection);
+export async function loadCorePageCompositionFollowupIds(selection = CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION) {
+  assert.ok(isCorePageCompositionFollowupSelection(selection));
   const registry = await createJiti(import.meta.url, {fsCache:false,moduleCache:false}).import("../../src/lib/page-composition/slot-module-registry.ts");
-  return [...registry.REGISTERED_SLOT_MODULE_KINDS.filter(kind=>kind!=="hero").map(kind=>"core-page-composition-"+kind+"-assignment"),"core-page-composition-layout-reject-retry","core-page-composition-seo-reject-retry-reload"];
+  const all = [...registry.REGISTERED_SLOT_MODULE_KINDS.filter(kind=>kind!=="hero").map(kind=>"core-page-composition-"+kind+"-assignment"),"core-page-composition-layout-reject-retry","core-page-composition-seo-reject-retry-reload"];
+  const selected = selection === CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION ? ["core-page-composition-content-assignment", "core-page-composition-seo-reject-retry-reload"] : all;
+  assert.ok(selected.every(id => all.includes(id)));
+  return selected;
 }
 export async function assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) {
-  assert.equal(browser.scope,"core-closure");assert.equal(browser.cohort,"page-composition");assert.equal(browser.journeySelection,CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION);
-  const ids=await loadCorePageCompositionFollowupIds();assert.equal(ids.length,10);assert.equal(new Set(ids).size,ids.length);
+  assert.equal(browser.scope,"core-closure");assert.equal(browser.cohort,"page-composition");assert.ok(isCorePageCompositionFollowupSelection(browser.journeySelection));
+  const ids=await loadCorePageCompositionFollowupIds(browser.journeySelection);assert.equal(ids.length,browser.journeySelection===CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION?2:10);assert.equal(new Set(ids).size,ids.length);
   assert.equal(browser.driverCompleted,true);assert.equal(browser.status,"pass");assert.deepEqual(browser.errors,[]);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
   assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(row=>row.id),["existing-auth-login",...ids]);assert.ok(browser.evidence.every(row=>row.status==="pass"));
   const identities=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const copy={...row};delete copy.status;delete copy.evidence;return copy;}).sort((a,b)=>a.key.localeCompare(b.key));};
   assert.deepEqual(identities(browser.requiredCases),identities(canonicalRequiredCases));
-  return {selection:CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION,selectedJourneyIds:ids,executedJourneyIds:ids,wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
+  return {selection:browser.journeySelection,selectedJourneyIds:ids,executedJourneyIds:ids,wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
 }
 
 const consumer = "page-composition-and-seo";
@@ -87,7 +93,13 @@ function assertAssignmentOrderNormalization(beforeRows, afterRows, inserted) {
     rows.forEach((row,index)=>assert.equal(afterRows.find(value=>identity(value)===identity(row))?.sort_order,(index+1)*10));
   }
   for(const hero of beforeRows.filter(row=>row.kind==="hero"))assert.deepEqual(afterRows.find(row=>identity(row)===identity(hero)),hero);
-  const times=afterRows.filter(row=>row.kind!=="hero").map(row=>row.updated_at);assert.ok(times.every(value=>typeof value==="string"&&value.length>0));assert.equal(new Set(times).size,1,"One RPC timestamps every ordinary assignment consistently.");
+  // The atomic guard stamps each updated row with clock_timestamp(), not one shared RPC timestamp.
+  for (const row of afterRows.filter(value => value.kind !== "hero")) {
+    const updated = Date.parse(row.updated_at);
+    assert.ok(Number.isFinite(updated), "Every normalized assignment needs a valid timestamp.");
+    const previous = beforeRows.find(value => identity(value) === identity(row));
+    if (previous) assert.ok(updated > Date.parse(previous.updated_at), "Every normalized existing assignment must receive a newer timestamp.");
+  }
 }
 /** Existing composition snapshots, exact actual UI intent; no capability promotion. */
 export function assertPageAssignmentVisibility(before,after,assignmentKey,visible) {
@@ -177,7 +189,8 @@ export async function runCorePageCompositionJourneys(ctx) {
     checkpoints.push({ label, receiptId: value.id });
     return value;
   }
-  const followup = ctx.journeySelection === CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION;
+  const followup = isCorePageCompositionFollowupSelection(ctx.journeySelection);
+  const contentSeoOnly = ctx.journeySelection === CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION;
   if (!followup) await runCoreDescendantPresentationJourneys({...ctx,nativeCheckpoint:compositionCheckpoint},"composition");
   const initial = await snapshot("initial");
   const originalLayoutId = number(initial.page.layout_id);
@@ -298,7 +311,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     return result("fixed-" + template.kind, { verified: ["existing_fixed_assignment_blocks_second_picker"], checkpoints: [before.id, after.id] });
   });
 
-  for (const template of plan.assignments) await run("core-page-composition-" + template.kind + "-assignment", [], async () => {
+  for (const template of plan.assignments.filter(row => !contentSeoOnly || row.kind === "content")) await run("core-page-composition-" + template.kind + "-assignment", [], async () => {
     renderedAdoption=[];renderedAssignmentObserved=false;
     await navigate(); let before = await snapshot(template.kind + "-before");
     const slot = template.slots.find(value => value !== "hero"); assert.ok(slot);
@@ -357,7 +370,7 @@ export async function runCorePageCompositionJourneys(ctx) {
       verified: ["compatible_picker", "existing_template_excluded", "add_cancel_no_write", "add_reload_native", "keyboard_reorder_native", "position_change_reload_native", "remove_cancel_no_write", "remove_confirm_template_retained"] });
   });
 
-  await run("core-page-composition-layout-reject-retry", [], async () => {
+  if (!contentSeoOnly) await run("core-page-composition-layout-reject-retry", [], async () => {
     renderedAdoption=[];renderedAssignmentObserved=false;
     await navigate("layout"); const before = await snapshot("layout-before");
     const panel = page.locator("section").filter({ has: page.locator('select[name="layout_editor"]') }).last();
@@ -433,7 +446,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     const beforeUi=await readUi(), before=await snapshot("seo-before","before"),imageAdoption=[];
     async function author(canonical) {
       for(const name of ["seo_title","seo_description","focus_keyword"])await field(name).fill(PAGE_SEO_RECIPE[name]);
-      const tags=form().locator('[data-admin-tags-field]').filter({has:field("seo_keywords")});
+      const tags=form().locator('[data-admin-tags-field]').filter({has:page.locator('[name="seo_keywords"]')});
       // Use the owner's visible chip controls, never hidden-field injection.
       while(await tags.getByRole("button",{name:/^حذف /u}).count())await tags.getByRole("button",{name:/^حذف /u}).first().click();
       const input=tags.locator('input[type="text"]');

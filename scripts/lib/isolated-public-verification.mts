@@ -68,7 +68,7 @@ export type PublicGateRequest = {
   /** Bounded independent Core families; the final gate still runs the Public suite. */
   adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings" | "media-library" | "template-bulk" | "navigation-settings" | "auth-entry" | "media-recovery" | "query-presentation" | "template-controls" | "domain-bulk" | "topic-controls" | "project-controls" | "presentation-controls";
   /** Optional exact affected journeys within the existing domain-forms cohort. */
-  adoptionJourneySelection?: "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
+  adoptionJourneySelection?: "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";
