@@ -123,7 +123,7 @@ export function assertPageAssignmentDuplicate(before,after,assignmentKey) {
   const original=before.templates.find(row=>row.kind===source.kind.replaceAll("_","-")&&number(row.id)===number(source.template_id));assert.ok(original?.source_row);
   const copy=after.templateCopies.find(row=>row.kind===original.kind&&number(row.row.id)===number(clone.template_id));assert.ok(copy);assert.equal(number(copy.sourceTemplateId),number(source.template_id));
   const allowed=new Set(["id","name","slug","created_at","updated_at","status","is_visible"]);assert.deepEqual(Object.keys(copy.row).sort(),Object.keys(original.source_row).sort());for(const[key,value]of Object.entries(original.source_row))if(!allowed.has(key))assert.deepEqual(copy.row[key],value,"Copied authored field changed: "+key);
-  assert.equal(copy.row.name,original.source_row.name+" — نسخة");assert.equal(copy.row.slug,original.source_row.slug+"-copy-"+copy.row.id);if(Object.hasOwn(copy.row,"status"))assert.equal(copy.row.status,"draft");if(Object.hasOwn(copy.row,"is_visible"))assert.equal(copy.row.is_visible,false);assert.ok(Number.isFinite(Date.parse(copy.row.created_at)));assert.equal(copy.row.created_at,copy.row.updated_at);
+  assert.equal(copy.row.name,original.source_row.name+" — نسخة");assert.equal(copy.row.slug,original.source_row.slug+"-copy-"+copy.row.id);if(Object.hasOwn(copy.row,"status"))assert.equal(copy.row.status,"unpublished");if(Object.hasOwn(copy.row,"is_visible"))assert.equal(copy.row.is_visible,false);assert.ok(Number.isFinite(Date.parse(copy.row.created_at)));assert.equal(copy.row.created_at,copy.row.updated_at);
   return{assignment:clone,template:copy.row,auditId:assertPageCompositionAudit(before,after,"duplicate_assignment")};
 }
 
