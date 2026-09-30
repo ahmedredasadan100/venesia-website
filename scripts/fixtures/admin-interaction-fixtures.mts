@@ -281,7 +281,7 @@ export async function seedOwnedCoreMediaFixture(handle: OwnedLocalHandle) {
       const columns = (await connection.query("select attname from pg_catalog.pg_attribute where attrelid='public.topics'::regclass and attnum>0 and not attisdropped and attgenerated='' and attidentity='' and attname<>'id' order by attnum")).rows.map(row => String(row.attname));
       assert.ok(columns.length > 10 && columns.every(name => /^[a-z_][a-z0-9_]*$/u.test(name)));
       const row = { ...sources[0], title: "QA isolated Media Article", slug, content_type: "article", status: "unpublished",
-        image: "", image_alt: "", og_image: "", og_image_alt: "", canonical_url: null, published_at: null, deleted_at: null,
+        image: "", image_alt: "", og_image: null, og_image_alt: "", canonical_url: null, published_at: null, deleted_at: null,
         is_featured: false, media_payload: null, series_id: null, series: null, series_slug: null,
         category_id: category.id, category: category.name, category_slug: category.slug,
         created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
