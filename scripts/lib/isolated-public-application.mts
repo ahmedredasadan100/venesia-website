@@ -267,8 +267,9 @@ export async function runApplicationHandoff(
         "20260926013156_menu_resource_reference_integrity.sql",
         "20260926013216_topics_command_completion.sql",
         "20260926153347_public_cache_invalidation_generation.sql",
+        "20260930204331_integration_configuration_terminal_conflicts.sql",
       ],
-      "Only the reviewed composition, SEO, resource-integrity, Topics command, and cache generation extensions may follow the SEO security declaration.",
+      "Only the reviewed composition, SEO, resource-integrity, Topics command, cache generation, and terminal integration conflict extensions may follow the SEO security declaration.",
     );
     const baseline = migrations.slice(0, seoBoundary);
     assert.equal(new Set(checkpoints.map(({ version }) => version)).size, checkpoints.length);
