@@ -1,4 +1,4 @@
-import {isCorePageCompositionFollowupSelection,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
+import {CORE_PAGE_COMPOSITION_SEO_SELECTION,isCorePageCompositionFollowupSelection,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
 import {CORE_READONLY_HUB_FOLLOWUP_SELECTION,assertCoreReadonlyHubFollowupReceipt,assertCoreReadonlyHubFollowupCompletion} from "./fixtures/admin-core-readonly-hubs-journeys.mjs";
 import {CORE_TEMPLATE_CARDS_SELECTION,loadCoreTemplatePresentationPlan,assertCoreTemplateCardsSelectionReceipt} from "./fixtures/admin-core-template-library-presentation-plan.mjs";
 import {CORE_QUERY_LAYOUT_SELECTION,loadCoreQueryPresentationPlan,assertCoreQuerySelectionReceipt} from "./fixtures/admin-core-query-presentation-plan.mjs";
@@ -317,10 +317,11 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       else if (browser.cohort === "page-composition") { const {ADMIN_COLLECTION_SURFACE_ADOPTION}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import("../src/lib/admin/interaction-system/adoption-manifest.ts")>("../src/lib/admin/interaction-system/adoption-manifest.ts"); const source=JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")); pageSeo = assertPageSeoReceiptJoin(browser, cohortNative, JSON.parse(readFileSync(join(artifactDir, "core-native-write-faults.json"), "utf8")), assertCorePageSeoCompleted(handle),{formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION,sourceSha256:source.sourceSha256});
         const registry=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import('../src/lib/page-composition/slot-module-registry.ts')>('../src/lib/page-composition/slot-module-registry.ts');
         const positions=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import('../src/lib/page-composition/page-assignment-contract.ts')>('../src/lib/page-composition/page-assignment-contract.ts');
-        pageAssignmentRowActions=assertCorePageAssignmentRowActionsJoin(browser,cohortNative,{fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),
+        if(browser.journeySelection!==CORE_PAGE_COMPOSITION_SEO_SELECTION) pageAssignmentRowActions=assertCorePageAssignmentRowActionsJoin(browser,cohortNative,{fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),
           formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION,kinds:registry.REGISTERED_SLOT_MODULE_KINDS,
           positionCapabilities:positions.MODULE_POSITION_CAPABILITIES,getAssignablePositions:positions.getAssignablePositions,ownedRunId:handle.identity.runId,
-          actorId:await readCoreFixedQaActor(handle),sourceSha256:source.sourceSha256}); }
+          actorId:await readCoreFixedQaActor(handle),sourceSha256:source.sourceSha256});
+        else { const pageRows=cohortNative.records.filter((row:{kind:string})=>row.kind==="page-composition-state");assert.equal(pageRows.filter((row:{seo?:unknown})=>!row.seo).length,1,"SEO-only may retain only its initial composition snapshot.");assert.equal(pageRows[0].seo,undefined); } }
       else assert.ok(nativeCheckpoints.records.every((row: {kind: string; status: string}) => row.kind === kind && row.status === "pass"));
     }
     const mediaCompletion = browser.cohort === "media-library" ? assertCoreMediaCompletionReceipts(handle, browser, nativeCheckpoints) : null;

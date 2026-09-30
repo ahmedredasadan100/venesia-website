@@ -10,18 +10,19 @@ import { PAGE_SEO_PHASES, PAGE_SEO_RECIPE, PAGE_SEO_INVALID_CANONICAL, assertPag
 
 export const CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION = "page-composition-followup";
 export const CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION = "page-composition-content-seo-followup";
-export const isCorePageCompositionFollowupSelection = selection => [CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION, CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION].includes(selection);
+export const CORE_PAGE_COMPOSITION_SEO_SELECTION = "page-composition-seo-followup";
+export const isCorePageCompositionFollowupSelection = selection => [CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION, CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION, CORE_PAGE_COMPOSITION_SEO_SELECTION].includes(selection);
 export async function loadCorePageCompositionFollowupIds(selection = CORE_PAGE_COMPOSITION_FOLLOWUP_SELECTION) {
   assert.ok(isCorePageCompositionFollowupSelection(selection));
   const registry = await createJiti(import.meta.url, {fsCache:false,moduleCache:false}).import("../../src/lib/page-composition/slot-module-registry.ts");
   const all = [...registry.REGISTERED_SLOT_MODULE_KINDS.filter(kind=>kind!=="hero").map(kind=>"core-page-composition-"+kind+"-assignment"),"core-page-composition-layout-reject-retry","core-page-composition-seo-reject-retry-reload"];
-  const selected = selection === CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION ? ["core-page-composition-content-assignment", "core-page-composition-seo-reject-retry-reload"] : all;
+  const selected = selection === CORE_PAGE_COMPOSITION_SEO_SELECTION ? [all.at(-1)] : selection === CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION ? ["core-page-composition-content-assignment", "core-page-composition-seo-reject-retry-reload"] : all;
   assert.ok(selected.every(id => all.includes(id)));
   return selected;
 }
 export async function assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) {
   assert.equal(browser.scope,"core-closure");assert.equal(browser.cohort,"page-composition");assert.ok(isCorePageCompositionFollowupSelection(browser.journeySelection));
-  const ids=await loadCorePageCompositionFollowupIds(browser.journeySelection);assert.equal(ids.length,browser.journeySelection===CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION?2:10);assert.equal(new Set(ids).size,ids.length);
+  const ids=await loadCorePageCompositionFollowupIds(browser.journeySelection);assert.equal(ids.length,browser.journeySelection===CORE_PAGE_COMPOSITION_SEO_SELECTION?1:browser.journeySelection===CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION?2:10);assert.equal(new Set(ids).size,ids.length);
   assert.equal(browser.driverCompleted,true);assert.equal(browser.status,"pass");assert.deepEqual(browser.errors,[]);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
   assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(row=>row.id),["existing-auth-login",...ids]);assert.ok(browser.evidence.every(row=>row.status==="pass"));
   const identities=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const copy={...row};delete copy.status;delete copy.evidence;return copy;}).sort((a,b)=>a.key.localeCompare(b.key));};
@@ -191,6 +192,7 @@ export async function runCorePageCompositionJourneys(ctx) {
   }
   const followup = isCorePageCompositionFollowupSelection(ctx.journeySelection);
   const contentSeoOnly = ctx.journeySelection === CORE_PAGE_COMPOSITION_CONTENT_SEO_SELECTION;
+  const seoOnly = ctx.journeySelection === CORE_PAGE_COMPOSITION_SEO_SELECTION;
   if (!followup) await runCoreDescendantPresentationJourneys({...ctx,nativeCheckpoint:compositionCheckpoint},"composition");
   const initial = await snapshot("initial");
   const originalLayoutId = number(initial.page.layout_id);
@@ -311,7 +313,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     return result("fixed-" + template.kind, { verified: ["existing_fixed_assignment_blocks_second_picker"], checkpoints: [before.id, after.id] });
   });
 
-  for (const template of plan.assignments.filter(row => !contentSeoOnly || row.kind === "content")) await run("core-page-composition-" + template.kind + "-assignment", [], async () => {
+  if (!seoOnly) for (const template of plan.assignments.filter(row => !contentSeoOnly || row.kind === "content")) await run("core-page-composition-" + template.kind + "-assignment", [], async () => {
     renderedAdoption=[];renderedAssignmentObserved=false;
     await navigate(); let before = await snapshot(template.kind + "-before");
     const slot = template.slots.find(value => value !== "hero"); assert.ok(slot);
@@ -370,7 +372,7 @@ export async function runCorePageCompositionJourneys(ctx) {
       verified: ["compatible_picker", "existing_template_excluded", "add_cancel_no_write", "add_reload_native", "keyboard_reorder_native", "position_change_reload_native", "remove_cancel_no_write", "remove_confirm_template_retained"] });
   });
 
-  if (!contentSeoOnly) await run("core-page-composition-layout-reject-retry", [], async () => {
+  if (!contentSeoOnly && !seoOnly) await run("core-page-composition-layout-reject-retry", [], async () => {
     renderedAdoption=[];renderedAssignmentObserved=false;
     await navigate("layout"); const before = await snapshot("layout-before");
     const panel = page.locator("section").filter({ has: page.locator('select[name="layout_editor"]') }).last();
@@ -478,7 +480,7 @@ export async function runCorePageCompositionJourneys(ctx) {
     try {
       await fault("arm");armed=true;page.on("request",listener);responsePromise=actionResponse();void responsePromise.catch(()=>{});await save().click();
       const first=await fault("observe-blocked");assert.equal(first.observedOneStatement,true);
-      const pending=form().locator("fieldset[data-admin-form-pending-fields]");await expect(pending).toBeDisabled();await expect(pending).toHaveAttribute("inert","");await expect(pending).toHaveAttribute("aria-busy","true");await expect(field("seo_title")).toBeDisabled();await expect(save()).toBeDisabled();
+      const pending=form().locator("fieldset[data-admin-form-pending-fields]");await expect(pending).toHaveJSProperty("disabled",true);await expect(pending).toHaveAttribute("inert","");await expect(pending).toHaveAttribute("aria-busy","true");await expect(field("seo_title")).toBeDisabled();await expect(save()).toBeDisabled();
       await page.keyboard.press("Enter");await page.keyboard.press("Enter");
       const second=await fault("observe-blocked");for(const key of ["backendPid","backendStartedAt","queryStartedAt","queryFingerprint","holderPid"])assert.equal(second[key],first[key]);assert.equal(posts.length,1);
       const released=await fault("release");armed=false;assert.equal(released.ownedLockRolledBack,true);assert.equal(released.cancellationObserved,false);
