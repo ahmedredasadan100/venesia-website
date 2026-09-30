@@ -319,6 +319,7 @@ export async function seedOwnedCoreQueryPresentationFixtures(handle: OwnedLocalH
 export async function seedOwnedCoreTemplateControlsFixtures(handle: OwnedLocalHandle) {
   assertOwnedLocalHandle(handle);const credentials=credentialsByHandle.get(handle);assert.ok(credentials);
   const {prepareCoreTemplateControlsFixtures}=await import("../verify-admin-core-template-controls-isolated.mts");
+  await seedOwnedCorePreviewFixtures(handle);
   return prepareCoreTemplateControlsFixtures(handle,{username:credentials.username});
 }
 
