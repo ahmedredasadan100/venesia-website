@@ -12,6 +12,9 @@ const source = resolve(root, "scripts/fixtures/vercel-cache-probe");
 const baseEnv = { NODE_ENV: "production" as const, VERCEL: "1", VERCEL_ENV: "preview", VERCEL_TARGET_ENV: "preview",
   VERCEL_GIT_COMMIT_REF: "codex/audit2-root-cause-closure", VERCEL_GIT_COMMIT_SHA: "a".repeat(40) };
 const manifest = JSON.parse(readFileSync(resolve(source, "manifest.json"), "utf8"));
+const testNow = manifest.expiresAt - 600_000;
+const prepareAtTestTime = (options: Parameters<typeof prepareVercelCacheProbe>[0]) => prepareVercelCacheProbe({ now: testNow, ...options });
+class TestDate extends Date { static now() { return testNow; } }
 const cases: string[] = [];
 const fresh = (name: string) => { const path = resolve(out, name); mkdirSync(resolve(path, "scripts/fixtures"), { recursive: true }); cpSync(source, resolve(path, "scripts/fixtures/vercel-cache-probe"), { recursive: true }); return path; };
 try {
@@ -48,26 +51,26 @@ try {
   assert.match(driver,/timeout: 30_000, maxRedirects: 0/); cases.push("signed-api-get-never-follows-redirects");
   assert.ok(driver.indexOf("await context.close()") >= 0 && driver.indexOf("assert.equal(proof.network.blockedUnexpectedForeignRequests") > driver.indexOf("await context.close()")); cases.push("network-completeness-checked-after-context-closed");
   const preview = fresh("preview");
-  assert.equal(prepareVercelCacheProbe({ root: preview, env: baseEnv }).generated, true);
+  assert.equal(prepareAtTestTime({ root: preview, env: baseEnv }).generated, true);
   for (const file of ["src/app/verification-cache-probe/page.tsx", "src/app/verification-cache-probe/actions.ts", "src/app/verification-cache-probe/runtime.ts", "src/app/api/verification-cache-probe/route.ts"]) assert.ok(existsSync(resolve(preview,file)));
   cases.push("exact-preview-generates-four-owned-sources");
   for (const [name, patch] of Object.entries({ production: { VERCEL_ENV: "production", VERCEL_TARGET_ENV: "production" },
     branch: { VERCEL_GIT_COMMIT_REF: "main" }, missing: { VERCEL: "" }, sha: { VERCEL_GIT_COMMIT_SHA: "bad" } })) {
-    prepareVercelCacheProbe({ root: preview, env: baseEnv });
-    assert.equal(prepareVercelCacheProbe({ root: preview, env: { ...baseEnv, ...patch } }).generated, false);
+    prepareAtTestTime({ root: preview, env: baseEnv });
+    assert.equal(prepareAtTestTime({ root: preview, env: { ...baseEnv, ...patch } }).generated, false);
     assert.equal(existsSync(resolve(preview, "src/app/verification-cache-probe")), false);
     assert.equal(existsSync(resolve(preview, "src/app/api/verification-cache-probe")), false);
     cases.push(name + "-removes-generated-routes");
   }
-  assert.equal(prepareVercelCacheProbe({ root: preview, env: baseEnv, now: manifest.expiresAt + 1 }).generated, false);
+  assert.equal(prepareAtTestTime({ root: preview, env: baseEnv, now: manifest.expiresAt + 1 }).generated, false);
   cases.push("expired-build-denied");
   const unowned = fresh("unowned"), ownedPath = resolve(unowned, "src/app/verification-cache-probe");
   mkdirSync(ownedPath, { recursive: true }); writeFileSync(resolve(ownedPath,"page.tsx"), "user code");
-  assert.throws(() => prepareVercelCacheProbe({ root: unowned, env: baseEnv }), /non-owned route/);
+  assert.throws(() => prepareAtTestTime({ root: unowned, env: baseEnv }), /non-owned route/);
   assert.equal(readFileSync(resolve(ownedPath,"page.tsx"),"utf8"),"user code"); cases.push("unowned-source-never-overwritten");
   const linked = fresh("symlink"), external = resolve(out, "external");
   mkdirSync(external); mkdirSync(resolve(linked,"src")); symlinkSync(external,resolve(linked,"src/app"),"junction");
-  assert.throws(() => prepareVercelCacheProbe({ root: linked, env: baseEnv }), /symlinks/);
+  assert.throws(() => prepareAtTestTime({ root: linked, env: baseEnv }), /symlinks/);
   assert.equal(existsSync(resolve(external,"verification-cache-probe")),false); cases.push("symlink-escape-rejected");
 
   const pair = generateKeyPairSync("ed25519");
@@ -90,7 +93,7 @@ try {
       assert.equal(name,"node:crypto");return required(name);
     }});
   let ambientCalls = 0, builtinCalls = 0;
-  const context = { exports, process:{env:{...baseEnv}, versions: process.versions,
+  const context = { exports, Date: TestDate, process:{env:{...baseEnv}, versions: process.versions,
     getBuiltinModule: (name: string): object | undefined => { builtinCalls++; assert.equal(name, "node:sqlite"); return process.getBuiltinModule(name); } }, Buffer, console, setTimeout, clearTimeout,
     require: (name:string) => {
       if(name==="server-only")return {};
@@ -103,12 +106,12 @@ try {
   vm.runInContext(compiled.outputText+"\nexports.checkTicket=ticketFor;exports.database=database;exports.reader=reader;",sandbox);
   const check = exports.checkTicket as (raw:string, phases:string[])=>unknown;
   const action = exports.executeAction as (raw:string)=>Promise<{status:string}>;
-  const payload={requestId:randomUUID(),run:randomUUID(),phase:"init",scenario:"serial",expiresAt:Date.now()+300_000,sourceHead:baseEnv.VERCEL_GIT_COMMIT_SHA};
+  const payload={requestId:randomUUID(),run:randomUUID(),phase:"init",scenario:"serial",expiresAt:testNow+300_000,sourceHead:baseEnv.VERCEL_GIT_COMMIT_SHA};
   const signed=(value:object)=>{const encoded=Buffer.from(JSON.stringify(value)).toString("base64url");return encoded+"."+sign(null,Buffer.from(encoded),pair.privateKey).toString("base64url");};
   assert.ok(check(signed(payload),["init"]));cases.push("valid-bound-ticket-accepted");
-  for(const [name,raw] of [["bad-signature",signed(payload).slice(0,-4)+"AAAA"],["expired",signed({...payload,expiresAt:Date.now()-1})],
+  for(const [name,raw] of [["bad-signature",signed(payload).slice(0,-4)+"AAAA"],["expired",signed({...payload,expiresAt:testNow-1})],
     ["wrong-sha",signed({...payload,sourceHead:"b".repeat(40)})],["wrong-phase",signed({...payload,phase:"arbitrary"})],
-    ["arbitrary-run",signed({...payload,run:"projects"})],["unbounded-expiry",signed({...payload,expiresAt:Date.now()+3_600_000})]]) {
+    ["arbitrary-run",signed({...payload,run:"projects"})],["unbounded-expiry",signed({...payload,expiresAt:testNow+3_600_000})]]) {
     assert.equal((await action(raw)).status,"denied");cases.push(name+"-denied-before-adapter");
   }
   context.process.env.VERCEL_ENV="production";assert.equal((await action(signed(payload))).status,"denied");

@@ -139,10 +139,12 @@ export async function readCoreSpecializedSettingsCheckpoint(handle: OwnedLocalHa
 }
 
 /** A complete cohort needs every ordered checkpoint, not just a successful final page. */
-export function assertCoreSpecializedSettingsCompleted(handle: OwnedLocalHandle) {
+export function assertCoreSpecializedSettingsCompleted(handle: OwnedLocalHandle, selection: "specialized-settings-followup" | null = null) {
   assertOwnedLocalHandle(handle); const state = stateByHandle.get(handle); assert.ok(state);
-  assert.equal(state.securityPhase, 8); assert.equal(state.maintenanceRestored, true); assert.equal(state.maintenancePhase, 4);
+  assert.ok(selection === null || selection === "specialized-settings-followup");const followup=selection === "specialized-settings-followup";
+  assert.equal(state.securityPhase, 8); assert.equal(state.maintenanceRestored, followup ? undefined : true); assert.equal(state.maintenancePhase, followup ? 0 : 4);
+  if(followup) assert.equal(state.maintenanceStarted,false);
   assert.deepEqual([...state.providers.keys()].sort(), providers.map(row => row.key).sort());
   for (const provider of state.providers.values()) assert.equal(provider.phase, sequence.length);
-  return { status: "pass", globalClosed: false, securityCheckpoints: 8, providerCheckpoints: providers.length * sequence.length, maintenanceRestored: true, secretsExported: false };
+  return { status: "pass", globalClosed: false, securityCheckpoints: 8, providerCheckpoints: providers.length * sequence.length, maintenanceRestored: !followup, ...(followup ? {maintenanceExecuted:false,journeySelection:selection} : {}), secretsExported: false };
 }

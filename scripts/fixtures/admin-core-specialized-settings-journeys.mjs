@@ -3,6 +3,17 @@ import { createHmac, randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
+export const CORE_SPECIALIZED_FOLLOWUP_SELECTION = 'specialized-settings-followup';
+export async function loadCoreSpecializedFollowupIds() {
+ const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});
+ const {INTEGRATION_APP_CONFIGURATION_DEFINITIONS:definitions}=await jiti.import('../../src/lib/admin/integrations/server-configuration-contract.ts');
+ return ['core-specialized-security-disposable-account',...definitions.map(row=>'core-specialized-integration-'+row.key)];
+}
+export async function assertCoreSpecializedFollowupReceipt(browser,requiredCases){
+ assert.equal(browser.journeySelection,CORE_SPECIALIZED_FOLLOWUP_SELECTION);assert.equal(browser.cohort,'specialized-settings');assert.equal(browser.scope,'core-closure');assert.equal(browser.inventoryOnly,false);assert.equal(browser.driverCompleted,true);assert.equal(browser.status,'pass');assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.errors,[]);
+ const ids=await loadCoreSpecializedFollowupIds();assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...ids]);assert.ok(browser.evidence.every(row=>row.status==='pass'));assert.deepEqual(browser.requiredCases.map(row=>row.key),requiredCases.map(row=>row.key));assert.equal(browser.specializedSettings.status,'pass');assert.equal(browser.specializedSettings.maintenanceExecuted,false);assert.equal(browser.specializedSettings.completed.length,ids.length);assert.ok(browser.specializedSettings.checkpoints.every(row=>row.entity!=='maintenance'));
+ return{selection:CORE_SPECIALIZED_FOLLOWUP_SELECTION,selectedJourneyIds:ids,wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
+}
 const families = ["security-settings", "integrations-server-configuration", "maintenance-immediate-setting"];
 const secret = (password, label) => createHmac("sha256", password).update("qa-specialized-settings/v1:" + label).digest("base64url");
 const securityPath = "/admin/settings/security", integrationPath = "/admin/settings/integrations/server-configuration";
@@ -44,6 +55,7 @@ export async function runCoreSpecializedSettingsJourneys(ctx) {
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const { INTEGRATION_APP_CONFIGURATION_DEFINITIONS: definitions, INTEGRATION_APP_CONFIGURATION_SURFACES: surfaces } = await jiti.import("../../src/lib/admin/integrations/server-configuration-contract.ts");
   const plan = buildCoreSpecializedSettingsPlan({ manifest, definitions, surfaces, fixtures: fixtures.specializedSettings });
+  const followup=ctx.journeySelection===CORE_SPECIALIZED_FOLLOWUP_SELECTION;assert.ok(ctx.journeySelection===undefined||ctx.journeySelection===null||followup);
   const completed = [], checkpoints = [];
   const checkpoint = async (entity, phase, provider) => {
     const request = { id: randomUUID(), kind: "specialized-settings-state", entity, phase, ...(provider ? { provider } : {}) };
@@ -69,7 +81,13 @@ export async function runCoreSpecializedSettingsJourneys(ctx) {
     await navigate(target, "/admin/login");
     await target.locator('input[name="username"]').fill(fixtures.specializedSettings.securityActor.username);
     await fillCorePrivateField(target.locator('input[name="password"]'), password);
-    await Promise.all([target.waitForURL(url => url.pathname !== "/admin/login", { timeout: 60_000 }), target.getByRole("button", { name: "دخول لوحة التحكم", exact: true }).click()]);
+    const endpoint=origin+'/api/admin/auth/login',statuses=[];let posts=0;
+    const requestListener=request=>{if(request.url()===endpoint&&request.method()==='POST')posts++;};
+    const responseListener=response=>{if(response.url()===endpoint&&response.request().method()==='POST')statuses.push(response.status());};
+    target.on('request',requestListener);target.on('response',responseListener);
+    try { await Promise.all([target.waitForURL(url => url.pathname !== "/admin/login", { timeout: 60_000 }), target.getByRole("button", { name: "دخول لوحة التحكم", exact: true }).click()]); }
+    catch { const url=new URL(target.url());throw new Error('Owned security login did not complete: '+JSON.stringify({pathname:url.pathname,queryKeys:[...url.searchParams.keys()],posts,statuses,alertVisible:await target.getByRole('alert').isVisible().catch(()=>false)})); }
+    finally {target.off('request',requestListener);target.off('response',responseListener);}
     await navigate(target, securityPath); await expect(target.getByRole("heading", { name: "الأمان", exact: true })).toBeVisible();
   };
   const revokedCookieDenied = async storageState => {
@@ -152,8 +170,10 @@ export async function runCoreSpecializedSettingsJourneys(ctx) {
       const [response] = await observe("specialized-integration-response", () => Promise.all([
         target.waitForResponse(response => response.request().method() === "POST" && response.url() === `${origin}/api/admin/integrations/server-configuration/${provider}`), trigger(),
       ]));
-      assert.equal(response.status(), expectedStatus); let payload;
+      let payload;
       try { payload = await response.json(); } catch { throw new Error("The owned configuration response was not valid JSON; its body is redacted."); }
+      const safeCode=typeof payload.error==='string'&&/^[a-z0-9_]{1,120}$/u.test(payload.error)?payload.error:'redacted-or-absent';
+      assert.equal(response.status(), expectedStatus, 'Owned integration response: '+safeCode);
       assert.equal(payload.ok, expectedStatus === 200);
       const serialized = JSON.stringify(payload);
       for (const field of definition.fields.filter(field => field.secret)) for (const revision of ["a", "b"]) assert.equal(serialized.includes(secret(login.password, `integration:${provider}:${field.key}:${revision}`)), false, "API responses never return the synthetic secret.");
@@ -204,7 +224,7 @@ export async function runCoreSpecializedSettingsJourneys(ctx) {
     completed.push({ consumer: families[1], provider, surfaces: ["provider-app-credentials", "vault-replacement", "configuration-test"], incompletePreAdapterTest: true, staleVersionRejected: true, blankSecretPreserved: true, secretReplaced: true, removedAndVaultClean: true, externalPositiveReadiness: "unexecuted" });
   });
 
-  await run("core-specialized-maintenance-restored", [], async () => {
+  if (!followup) await run("core-specialized-maintenance-restored", [], async () => {
     let baselineVerified = false, restored = false;
     const anonymous = await newContext(), visitor = await anonymous.newPage();
     const enable = () => page.getByRole("button", { name: "تشغيل الصيانة", exact: true });
@@ -239,5 +259,5 @@ export async function runCoreSpecializedSettingsJourneys(ctx) {
     }
     assert.equal(restored, true); completed.push({ consumer: families[2], surface: "immediate-toggle", cancelPreserved: true, anonymousMaintenanceRedirect: true, adminRemainedAvailable: true, restoredInFinally: true, existingProxyTtlMs: 5_000 });
   });
-  return { status: completed.length === 2 + definitions.length ? "pass" : "fail", globalClosed: false, automaticCoverage: [], consumers: plan.consumers, completed, checkpoints, nonApplicability: plan.nonApplicability, remaining: plan.remaining };
+  return { status: completed.length === (followup ? 1 : 2) + definitions.length ? "pass" : "fail", globalClosed: false, automaticCoverage: [], consumers: plan.consumers, maintenanceExecuted: !followup, completed, checkpoints, nonApplicability: plan.nonApplicability, remaining: plan.remaining };
 }
