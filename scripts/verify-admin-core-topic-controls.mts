@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { resolveTopicControlOptionIndex } from "./fixtures/admin-core-topic-controls-journeys.mjs";
 import ts from "typescript";
+import { createRequire } from "node:module";
+const pg = createRequire(import.meta.url)("pg") as { types: { getTypeParser(oid: 20, format: "text"): (value: string) => string } };
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -35,6 +37,17 @@ for(const kind of TOPIC_CONTROL_KINDS){
  if(kind==="article")saved={...original,...article.buildTopicWritePayload(article.getPayload(f),fixtures.category as Parameters<typeof article.buildTopicWritePayload>[1],fixtures.series as Parameters<typeof article.buildTopicWritePayload>[2],"unpublished","2026-01-02T00:00:00Z",original as unknown as Parameters<typeof article.buildTopicWritePayload>[5]),updated_by:8};
  else {const p=payload.parseMediaPayloadFromForm(kind,f),canonical=p?.kind==="video"?payload.normalizeVideoPayloadForStorage(p):p;saved={...original,...media.buildMediaWritePayload(media.getPayload(f),fixtures.category,kind as Parameters<typeof media.buildMediaWritePayload>[2],canonical,"2026-01-02T00:00:00Z",original as unknown as Parameters<typeof media.buildMediaWritePayload>[5],fixtures.series),updated_by:8};}
  test("Real canonical write builder matches authored control projection: "+kind,()=>assertTopicControlsProjection(kind,saved,original,fixtures,8));
+ test("Native PostgreSQL bigint identities retain the exact intended Topic links: "+kind,()=>{
+   const parse=pg.types.getTypeParser(20,"text"),categoryId=parse(String(fixtures.category.id)),seriesId=parse(String(fixtures.series.id));
+   assert.equal(categoryId,String(fixtures.category.id));assert.equal(seriesId,String(fixtures.series.id));
+   assertTopicControlsProjection(kind,{...saved,category_id:categoryId,series_id:seriesId},original,fixtures,8);
+ });
+ if(kind==="article")for(const [key,id]of [["category_id",fixtures.category.id],["series_id",fixtures.series.id]] as const){
+   for(const value of [null,undefined,true,id+1,String(id+1)," "+id,"0"+id,id+".0",id+"e0",9007199254740992,"9007199254740993"]){
+     test("Exact Topic identity rejects "+key+" "+String(value),()=>assert.throws(()=>assertTopicControlsProjection(kind,{...saved,[key]:value},original,fixtures,8)));
+   }
+ }
+
  for(const[key,value]of Object.entries({image:"/images/stale.jpg",series_id:999,is_featured:false,show_intro_card_on_page:true,status:"published",updated_by:999}))test("Native guard rejects "+kind+" corruption "+key,()=>assert.throws(()=>assertTopicControlsProjection(kind,{...saved,[key]:value},original,fixtures,8)));
 }
 test("Current Gallery parser preserves duplicate row identity/order rather than inventing dedup",()=>{const form=new FormData();for(const alt of ["واحد","اثنان"]){form.append("gallery_image_url",fixtures.assets[0].publicUrl);form.append("gallery_image_alt",alt);form.append("gallery_image_caption",alt);}assert.deepEqual(payload.parseGalleryPayloadFromForm(form).images.map(row=>row.alt),["واحد","اثنان"]);});

@@ -52,8 +52,14 @@ export function assertTopicControlsProjection(kind, row, original, fixtures, act
   for (const key of ["id", "slug", "title", "excerpt", "created_at", "created_by", "published_by", "view_count", "deleted_at"]) assert.deepEqual(row[key], original[key], "Preserve Topic identity/history: " + key);
   assert.equal(row.status, "unpublished"); assert.equal(row.published_at, null); assert.equal(row.date_label, original.date_label);
   assert.equal(row.content_type, kind); assert.equal(Number(row.updated_by), actorId);
-  assert.equal(row.category_id, fixtures.category.id); assert.equal(row.category_slug, fixtures.category.slug); assert.equal(row.category, fixtures.category.name);
-  assert.equal(row.series_id, fixtures.series.id); assert.equal(row.series_slug, fixtures.series.slug); assert.equal(row.series, fixtures.series.name);
+  // Native pg returns bigint as decimal text; write builders use safe numeric IDs.
+  // Accept only those two exact representations, without coercing malformed values.
+  for (const [key, id] of [["category_id", fixtures.category.id], ["series_id", fixtures.series.id]]) {
+    assert.ok(Number.isSafeInteger(id) && id > 0, "Owned Topic fixture identity must be a positive safe integer: " + key);
+    assert.ok(row[key] === id || row[key] === String(id), "Persist exact Topic relationship identity: " + key);
+  }
+  assert.equal(row.category_slug, fixtures.category.slug); assert.equal(row.category, fixtures.category.name);
+  assert.equal(row.series_slug, fixtures.series.slug); assert.equal(row.series, fixtures.series.name);
   assert.equal(row.image, fixtures.assets[1].publicUrl); assert.equal(row.image_alt, v.imageAlt);
   assert.equal(row.is_featured, true); assert.equal(row.is_popular, true);
   for (const [key, value] of Object.entries(v.display)) assert.equal(row[key], value, key);
