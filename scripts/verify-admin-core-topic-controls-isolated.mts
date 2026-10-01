@@ -35,7 +35,7 @@ export async function prepareCoreTopicControlsFixtures(handle:OwnedLocalHandle,c
         const slug="qa-core-topic-controls-"+kind,title="عناصر نموذج المحتوى "+kind;
         assert.equal((await connection.query("select id from public.topics where slug=$1",[slug])).rows.length,0,"Never overwrite existing fixture identity.");
         const row:Row={...source[0],slug,title,content_type:kind,status:"unpublished",published_at:null,published_by:null,date_label:null,deleted_at:null,
-          image:"",image_alt:"",og_image:"",og_image_alt:"",canonical_url:null,media_project:null,faq:[],is_featured:false,is_popular:false,
+          image:"",image_alt:"",og_image:null,og_image_alt:"",canonical_url:null,media_project:null,faq:[],is_featured:false,is_popular:false,
           media_payload:kind==="video"?{kind:"video",provider:"youtube",video_url:"",thumbnail:null,duration:null}:kind==="gallery"?{kind:"gallery",images:[]}:null,
           category_id:fixtures.category.id,category:fixtures.category.name,category_slug:fixtures.category.slug,series_id:null,series:null,series_slug:null,
           created_at:"2026-01-01T00:00:00.000Z",updated_at:"2026-01-01T00:00:00.000Z",created_by:Number(actor[0].id),updated_by:Number(actor[0].id)};
