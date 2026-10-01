@@ -171,7 +171,7 @@ export async function runCoreTopicControlsJourneys(ctx) {
       await fault("arm"); armed = true; page.on("request", onRequest);
       responsePromise = actionResponse(); void responsePromise.catch(() => {});
       await save().click(); const first = await fault("observe-blocked"); assert.equal(first.observedOneStatement, true); assert.equal(first.cancelledOneStatement, false);
-      const pending = form().locator("[data-admin-form-fields]"); await expect(form()).toHaveAttribute("aria-busy", "true"); await expect(pending).toBeDisabled();
+      const pending = form().locator("[data-admin-form-fields]"); await expect(form()).toHaveAttribute("aria-busy", "true"); await expect(pending).toHaveJSProperty("disabled", true);
       await expect(save()).toBeDisabled(); await expect(field("title")).toBeDisabled(); await expect(form().locator('[data-admin-form-action="close"]')).toBeDisabled();
       await page.keyboard.press("Enter"); await page.keyboard.press("Enter");
       const second = await fault("observe-blocked"); for (const key of ["backendPid", "backendStartedAt", "queryStartedAt", "queryFingerprint", "holderPid"]) assert.equal(second[key], first[key]);
@@ -202,7 +202,7 @@ export async function runCoreTopicControlsJourneys(ctx) {
     await imageControls("image", 1); await field("image_alt").fill(v.imageAlt);
     if (recipe.kind === "gallery") await galleryControls();
     else if (recipe.kind === "video") { await field("video_url").fill(v.videoUrl); await field("video_duration").fill(v.duration); await imageControls("video_thumbnail", 2); }
-    else { const editor = form().locator('[data-topic-content-editor] [contenteditable="true"]'); await expect(editor).toHaveCount(1); await editor.fill(v.markdown); await expect(field("content")).toHaveValue(v.markdown); }
+    else { const editor = form().locator('[data-topic-content-editor] [contenteditable="true"]'); await expect(editor).toHaveCount(1); await editor.fill(v.markdown); await form().getByRole("button", { name: "فقرة", exact: true }).click(); await expect(field("content")).toHaveValue(v.markdown); }
     if (["news", "site_update"].includes(recipe.kind)) await field("media_project").fill(v.mediaProject);
     if (recipe.kind === "article") await faqControls(); await publishControls(); await dirtyCloseCancel(); await assertDraft(recipe.kind);
     await checkpoint(recipe.kind, "draft"); await semanticNegative(recipe); await checkpoint(recipe.kind, "negative");

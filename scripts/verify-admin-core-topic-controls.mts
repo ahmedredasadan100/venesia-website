@@ -60,10 +60,10 @@ test("Actual Runtime owns disabled fieldset and form busy; specialized wrapper i
 });
 test("Actual specialized wrapper separately owns inert; never infer it for Runtime consumers",()=>{const rows=specializedElements.filter(row=>row.tag==="fieldset"&&row.attributes.has("data-admin-form-pending-fields"));assert.equal(rows.length,1);assert.equal(rows[0].attributes.get("disabled"),"{pending}");assert.equal(rows[0].attributes.get("inert"),"{pending}");});
 function assertTopicPendingOwner(candidate:string){
- const selected=/const pending = form\(\)\.locator\("\[([^\]]+)\]"\)/u.exec(candidate);assert.ok(selected);assert.ok(runtimeElements.some(row=>row.tag==="fieldset"&&row.attributes.has(selected[1])),"Topic pending selector must resolve inside actual AdminFormRuntimeInstance.");assert.match(candidate,/expect\(form\(\)\)\.toHaveAttribute\("aria-busy", "true"\)/u);assert.match(candidate,/expect\(pending\)\.toBeDisabled\(\)/u);assert.doesNotMatch(candidate,/expect\(pending\)\.toHaveAttribute\("inert"/u);
+ const selected=/const pending = form\(\)\.locator\("\[([^\]]+)\]"\)/u.exec(candidate);assert.ok(selected);assert.ok(runtimeElements.some(row=>row.tag==="fieldset"&&row.attributes.has(selected[1])),"Topic pending selector must resolve inside actual AdminFormRuntimeInstance.");assert.match(candidate,/expect\(form\(\)\)\.toHaveAttribute\("aria-busy", "true"\)/u);assert.match(candidate,/expect\(pending\)\.toHaveJSProperty\("disabled", true\)/u);assert.doesNotMatch(candidate,/expect\(pending\)\.toHaveAttribute\("inert"/u);
 }
 test("Topic pending selector adopts the actual current owner",()=>assertTopicPendingOwner(source));
-test("Regression: substituting specialized wrapper or an invented inert requirement fails",()=>{assert.throws(()=>assertTopicPendingOwner(source.replace('[data-admin-form-fields]','[data-admin-form-pending-fields]')));assert.throws(()=>assertTopicPendingOwner(source.replace('await expect(pending).toBeDisabled();','await expect(pending).toHaveAttribute("inert", "");')));});
+test("Regression: substituting specialized wrapper or an invented inert requirement fails",()=>{assert.throws(()=>assertTopicPendingOwner(source.replace('[data-admin-form-fields]','[data-admin-form-pending-fields]')));assert.throws(()=>assertTopicPendingOwner(source.replace('await expect(pending).toHaveJSProperty("disabled", true);','await expect(pending).toHaveAttribute("inert", "");')));});
 
 
 const option=(value:string,disabled=false)=>({id:"qa-series-option-"+value,disabled});

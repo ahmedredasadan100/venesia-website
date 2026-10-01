@@ -40,17 +40,17 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     if (await control.isChecked() !== checked) await control.locator("xpath=ancestor::label[1]").click();
     if (checked) await expect(control).toBeChecked(); else await expect(control).not.toBeChecked();
   }
-  async function titleFormat(form) {
-    const row = form.locator("[data-module-editor-control-row]").filter({ has: page.locator('input[name="title_alignment"]') });
+  async function titleFormat(form, formatField = "title") {
+    const row = form.locator("[data-module-editor-control-row]").filter({ has: page.locator('input[name="'+formatField+'_alignment"]') });
     await expect(row).toHaveCount(1); await input(form, "title").fill(values.title);
-    await setChecked(row.getByRole("switch"), false); await expect(state(form, "show_title")).toHaveValue("false");
+    await setChecked(row.getByRole("switch"), false); await expect(state(form, "show_" + formatField)).toHaveValue("false");
     await setChecked(row.getByRole("switch"), true);
     const bold = row.locator("[data-admin-text-format-bold]");
     if (await bold.getAttribute("aria-pressed") !== "false") await bold.click();
     await row.locator('[data-admin-text-alignment="left"]').click();
     await row.locator('[data-admin-text-alignment="center"]').click();
-    await expect(state(form, "title_bold")).toHaveValue("false");
-    await expect(state(form, "title_alignment")).toHaveValue("center");
+    await expect(state(form, formatField + "_bold")).toHaveValue("false");
+    await expect(state(form, formatField + "_alignment")).toHaveValue("center");
   }
   const linkOwner = (form, prefix) => state(form, prefix + "_link_kind").locator("xpath=..");
   async function chooseExternal(form, prefix, href, target, cancelOnly = false) {
@@ -207,8 +207,15 @@ export async function runCoreTemplateControlsJourneys(ctx) {
   }
   async function authorHub(form) {
     await select(form, "section_key", "videos"); await select(form, "section_key", "press");
-    await expect(input(form, "title")).toHaveValue("البيانات الصحفية"); await titleFormat(form);
+    await expect(input(form, "title")).toHaveValue("البيانات الصحفية"); await titleFormat(form, "section_title");
     await tab(form, "presentation"); await select(form, "collection_layout", "grid"); await select(form, "collection_layout", "list");
+    const itemTitle = form.locator('[data-collection-display-formatting-capability] [data-module-editor-control-row]').filter({ has: page.locator('input[name="title_alignment"]') });
+    await expect(itemTitle).toHaveCount(1);
+    const itemBold = itemTitle.locator('[data-admin-text-format-bold]');
+    if (await itemBold.getAttribute('aria-pressed') !== 'true') await itemBold.click();
+    await itemTitle.locator('[data-admin-text-alignment="left"]').click();
+    await expect(state(form, 'title_bold')).toHaveValue('true');
+    await expect(state(form, 'title_alignment')).toHaveValue('left');
     await input(form, "item_limit").fill("5");
   }
   const author = { cards: authorCards, breadcrumb: authorBreadcrumb, cta: authorCta, feed: authorFeed, featured: authorFeatured, "media-sidebar": authorSidebar, "media-hub": authorHub };

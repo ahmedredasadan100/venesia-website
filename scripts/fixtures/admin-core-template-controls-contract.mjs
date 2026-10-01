@@ -95,6 +95,7 @@ export function assertTemplateControlsProjection(kind, row, fixtures) {
     assert.equal(c.placement, "hub"); assert.equal(c.type, "press"); assert.equal(c.itemLimit, 5);
     assert.equal(c.presentation.collectionView.layout, "list");
     assert.deepEqual([c.presentation.title, c.presentation.showTitle, c.presentation.titleBold, c.presentation.titleAlignment], [r.title, true, false, "center"]);
+    assert.deepEqual([c.display.titleBold, c.display.titleAlignment], [true, "left"], "Item title formatting must persist independently from the section title.");
   }
 }
 

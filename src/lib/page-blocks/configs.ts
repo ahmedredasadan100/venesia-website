@@ -152,6 +152,7 @@ export function buildPageBlockTextFormattingPatch(
   formData: FormData,
   fields: ReadonlyArray<{
     field: PageBlockTextFormattingField;
+    formField?: string;
     defaults?: PageBlockTextFormatDefaults;
     visibility?: boolean;
     bold?: boolean;
@@ -161,22 +162,22 @@ export function buildPageBlockTextFormattingPatch(
   const patch: Record<string, boolean | PageBlockTextAlignment> = {};
 
   for (const descriptor of fields) {
-    const { field, defaults = {} } = descriptor;
+    const { field, defaults = {}, formField = field } = descriptor;
     const names = formattingPropertyNames(field);
     if (ownsFormattingVisibility(field) && descriptor.visibility !== false) {
       patch[names.visible] = readFormattingBoolean(
-        formData.get(`show_${field}`),
+        formData.get(`show_${formField}`),
         defaults.visible ?? true,
       );
     }
     if (descriptor.bold !== false) {
       patch[names.bold] = readFormattingBoolean(
-        formData.get(`${field}_bold`),
+        formData.get(`${formField}_bold`),
         defaults.bold ?? false,
       );
     }
     if (descriptor.alignment !== false) {
-      const alignment = String(formData.get(`${field}_alignment`) ?? "").trim();
+      const alignment = String(formData.get(`${formField}_alignment`) ?? "").trim();
       patch[names.alignment] = PAGE_BLOCK_TEXT_ALIGNMENTS.includes(
         alignment as PageBlockTextAlignment,
       )

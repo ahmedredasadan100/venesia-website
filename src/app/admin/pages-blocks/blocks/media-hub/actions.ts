@@ -68,7 +68,7 @@ export async function updateMediaHubModule(formData: FormData) {
     {
       ...buildPageBlockTextFormattingPatch(formData, [
         { field: "eyebrow" },
-        { field: "title", defaults: { bold: true } },
+        { field: "title", formField: "section_title", defaults: { bold: true } },
         { field: "description" },
         { field: "cta" },
       ]),
