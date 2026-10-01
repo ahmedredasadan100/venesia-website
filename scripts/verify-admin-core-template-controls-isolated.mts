@@ -20,7 +20,7 @@ const ids = (row:Row) => ({id:Number(row.id),name:String(row.name),slug:String(r
 const queryTable = async(handle:OwnedLocalHandle,kind:Kind) => (await handle.query("select * from public."+TEMPLATE_CONTROL_RECIPES[kind].table+" order by id")).rows;
 const assignments = async(handle:OwnedLocalHandle) => (await handle.query("select * from public.page_composition_assignments order by kind,id")).rows;
 
-/** Read-only opt-in after canonical Public/Admin fixtures. No new seed or credentials artifact. */
+/** Opt-in after canonical Public/Admin fixtures; the existing deployment PDF receives an owned QA catalog identity before snapshots. No credentials artifact. */
 export async function prepareCoreTemplateControlsFixtures(handle:OwnedLocalHandle,credentials:{username:string},selection:string|null=null) {
   assertOwnedLocalHandle(handle);assert.equal(states.has(handle),false);coreTemplateControlKinds(selection);
   const actor=(await handle.query("select id from public.admin_users where username=$1 and is_active",[credentials.username])).rows;
@@ -88,6 +88,6 @@ export function assertCoreTemplateControlsCompleted(handle:OwnedLocalHandle,sele
   assert.equal(s.fixtures.selection,selection);const kinds=coreTemplateControlKinds(selection) as Kind[];for(const kind of Object.keys(TEMPLATE_CONTROL_RECIPES) as Kind[])if(!kinds.includes(kind))assert.equal(s.phases[kind],0,"Unselected recipe replayed.");
   for(const kind of kinds)assert.equal(s.phases[kind],TEMPLATE_CONTROL_PHASES.length,"Incomplete concrete recipe cannot be promoted: "+kind);
   assert.equal(s.writes,kinds.length);assert.equal(s.nativeReads,kinds.length*TEMPLATE_CONTROL_PHASES.length);
-  return {status:"pass",recipes:kinds.length,exactWrites:s.writes,nativeCheckpoints:s.nativeReads,actorBound:true,publicAssignmentsUnchanged:true,automaticAxisCoverage:[],globalClosed:false,cleanupBoundary:"No additional resources seeded; parent must still prove owned lifecycle cleanup."};
+  return {status:"pass",recipes:kinds.length,exactWrites:s.writes,nativeCheckpoints:s.nativeReads,actorBound:true,publicAssignmentsUnchanged:true,automaticAxisCoverage:[],globalClosed:false,cleanupBoundary:"Owned QA PDF catalog prerequisite is isolated; parent must still prove owned lifecycle cleanup."};
 }
 
