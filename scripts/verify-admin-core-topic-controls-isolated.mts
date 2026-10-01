@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
 import { loadEntitySeoPersistenceOwner } from "./backfill-entity-seo-scores.mts";
 import type { TopicSeoSource } from "../src/lib/admin/seo/entity-seo-persistence.ts";
-import { TOPIC_CONTROL_KINDS, TOPIC_CONTROL_PHASES, TOPIC_CONTROL_ASSET_KEYS, coreSelectedTopicControlKinds, validateTopicControlsRequest, assertTopicControlsProjection } from "./fixtures/admin-core-topic-controls-contract.mjs";
+import { TOPIC_CONTROL_KINDS, TOPIC_CONTROL_PHASES, TOPIC_CONTROL_ASSET_KEYS, coreSelectedTopicControlKinds, coreTopicControlFixtureSlug, validateTopicControlsRequest, assertTopicControlsProjection } from "./fixtures/admin-core-topic-controls-contract.mjs";
 
 type Row = Record<string, unknown>;
 type Fixture = { topics: Array<{id:number;kind:string;title:string;slug:string;editPath:string}>; assets:Array<{id:string;objectKey:string;publicUrl:string;displayName:string}>;category:{id:number;name:string;slug:string};otherCategory:{id:number;name:string;slug:string};series:{id:number;name:string;slug:string} };
@@ -32,7 +32,7 @@ export async function prepareCoreTopicControlsFixtures(handle:OwnedLocalHandle,c
       assert.ok(columns.length>10&&columns.every(column=>/^[a-z_][a-z0-9_]*$/u.test(column)));
       const projection=columns.map(column=>'"'+column+'"').join(",");
       for(const kind of TOPIC_CONTROL_KINDS){
-        const slug="qa-core-topic-controls-"+kind,title="عناصر نموذج المحتوى "+kind;
+        const slug=coreTopicControlFixtureSlug(kind),title="عناصر نموذج المحتوى "+kind;
         assert.equal((await connection.query("select id from public.topics where slug=$1",[slug])).rows.length,0,"Never overwrite existing fixture identity.");
         const row:Row={...source[0],slug,title,content_type:kind,status:"unpublished",published_at:null,published_by:null,date_label:null,deleted_at:null,
           image:"",image_alt:"",og_image:null,og_image_alt:"",canonical_url:null,media_project:null,faq:[],is_featured:false,is_popular:false,

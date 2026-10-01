@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
+import {slugifyFromTitle} from "../../src/lib/admin/slug.ts";
 
 export const TOPIC_CONTROL_KINDS = ["article", "news", "press", "site_update", "video", "gallery"];
+/** Fixed fixture identity uses the same slug owner as the real Topic save. */
+export function coreTopicControlFixtureSlug(kind) {assert.ok(TOPIC_CONTROL_KINDS.includes(kind));return slugifyFromTitle("qa-core-topic-controls-"+kind);}
 export const TOPIC_CONTROL_PHASES = ["baseline", "draft", "negative", "serverRejected", "saved", "reloaded"];
 export const TOPIC_CONTROL_ASSET_KEYS = ["images/projects/c35/hero.jpg", "images/projects/c35/cover.jpg", "images/projects/c35/location-map.jpg"];
 export const TOPIC_CONTROL_VALUES = {
@@ -32,7 +35,7 @@ export function buildCoreTopicControlsPlan({ manifest, fixtures, selection = nul
     const surface = topic.kind === "article" ? "edit" : topic.kind + ":edit";
     assert.ok(registered[0].surfaces.includes(surface));
     assert.ok(Number.isSafeInteger(topic.id) && topic.id > 0);
-    assert.equal(topic.slug, "qa-core-topic-controls-" + topic.kind);
+    assert.equal(topic.slug, coreTopicControlFixtureSlug(topic.kind));
     assert.equal(topic.editPath, "/admin/content/topics/" + topic.id);
     return { ...topic, consumer, surface, coverage: [] };
   });
