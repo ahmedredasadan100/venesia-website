@@ -165,16 +165,24 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
   async function inspectBlocked(request: Row, cancelStatement: boolean) {
     const current = currentFor(request); assert.equal(current.state, 'armed', 'Only an armed token may observe or cancel a blocked statement.');
     const cancellationStarted = Date.now();
-    const result = await handle.withDatabaseConnection(async connection => {
+    let phase = 'connection', candidateCount: number | null = null, connectionElapsedMs: number | null = null;
+    let result: Row;
+    try {
+    result = await handle.withDatabaseConnection(async connection => {
+      connectionElapsedMs = Date.now() - cancellationStarted;
       const deadline = Math.min(current.deadline - 5_000, Date.now() + 20_000);
       while (true) {
+        phase = 'deadline';
         assert.ok(Date.now() < deadline, 'No uniquely attributable PostgREST statement reached the owned row lock.');
+        phase = 'candidate-read';
         await connection.query('select pg_stat_clear_snapshot()');
         const candidates = (await connection.query(`select pid,backend_start::text,query_start::text,application_name,usename,datname,state,backend_type,wait_event_type,
           pg_blocking_pids(pid) blockers,md5(query) query_fingerprint,(query ~* $2::text) signature_matches
           from pg_stat_activity where $1::integer=any(pg_blocking_pids(pid)) and pid<>pg_backend_pid() order by pid`, [current.holderPid, current.target.signature])).rows;
+        phase = 'candidate-count'; candidateCount = candidates.length;
         assert.ok(candidates.length <= 1, 'Multiple blocked statements cannot be attributed to a single intentional UI command.');
         if (candidates.length === 0) { await wait(100); continue; }
+        phase = 'candidate-identity';
         const candidate = candidates[0], pid = positive(Number(candidate.pid));
         assert.notEqual(pid, current.holderPid);
         assert.equal(candidate.usename, 'authenticator'); assert.equal(candidate.datname, 'postgres'); assert.equal(candidate.state, 'active'); assert.equal(candidate.backend_type, 'client backend'); assert.equal(candidate.wait_event_type, 'Lock');
@@ -184,7 +192,9 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
         assert.match(String(candidate.query_fingerprint), /^[a-f0-9]{32}$/);
         assert.ok(Date.now() < current.deadline && current.state === 'armed' && !current.holderFinished && !current.failure);
         const statementIdentity = { pid, backendStart: candidate.backend_start, queryStart: candidate.query_start, fingerprint: candidate.query_fingerprint };
+        phase = 'same-statement';
         if (current.observedStatement) assert.deepEqual(statementIdentity, current.observedStatement, 'A different statement cannot replace the first observed save.');
+        phase = 'atomic-recheck';
         await connection.query('select pg_stat_clear_snapshot()');
         const cancelled = (await connection.query(`select ${cancelStatement ? 'pg_cancel_backend(a.pid) cancelled' : 'a.pid observed_pid'} from pg_stat_activity a
           where a.pid=$1::integer and a.backend_start=$2::timestamptz and a.query_start=$3::timestamptz and md5(a.query)=$4
@@ -194,7 +204,9 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
             and h.usename='postgres' and h.datname=current_database() and h.backend_type='client backend' and h.state='idle in transaction')
           and (select count(*) from pg_stat_activity b where $5::integer=any(pg_blocking_pids(b.pid)))=1`,
         [pid, candidate.backend_start, candidate.query_start, candidate.query_fingerprint, current.holderPid, current.target.signature, current.holderBackendStart])).rows;
+        phase = 'atomic-identity';
         assert.equal(cancelled.length, 1, 'The exact observed backend/query/blocker identity changed before cancellation.');
+        phase = 'acknowledgement';
         if (cancelStatement) {
           assert.equal(cancelled[0].cancelled, true, 'PostgreSQL did not acknowledge cancellation of the one observed statement.');
           current.state = 'cancelled';
@@ -205,6 +217,16 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
           exactBlockers: candidate.blockers, fixedMutationSignatureMatched: true, holderLifetimeVerified: true, observedOneStatement: true, cancelledOneStatement: cancelStatement };
       }
     });
+    } catch (error) {
+      // Fixed diagnostic fields only; never serialize SQL, requests or error messages.
+      // Recording failure must not replace the original invariant failure or cleanup.
+      try { handle.record('core-domain-fault-inspection-failed', {
+        requestId: String(request.id), operation: cancelStatement ? 'cancel' : 'observe', phase, candidateCount, connectionElapsedMs,
+        elapsedMs: Date.now() - cancellationStarted, previouslyObserved: Boolean(current.observedStatement),
+        holderFinished: current.holderFinished, holderFailed: Boolean(current.failure), deadlineExpired: Date.now() >= current.deadline,
+      }); } catch { /* Preserve the original failure. */ }
+      throw error;
+    }
     return { status: 'pass', state: current.state, table: current.target.table, fixtureId: current.target.id, holderPid: current.holderPid, cancellationElapsedMs: Date.now() - cancellationStarted, ...result,
       boundary: cancelStatement ? 'Native query cancellation was acknowledged while the owned lock remains held. The Browser and native before/after proof must independently establish rejection and no commit.' : 'Read-only native observation matched one exact blocked statement and holder lifetime. No cancellation or commit occurred; Browser pending/dedup and later persistence remain separate assertions.' };
   }

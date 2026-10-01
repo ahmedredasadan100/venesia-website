@@ -22,7 +22,8 @@ function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug
   const holderEnded = new Promise<never>((_resolve, reject) => { rejectHolder = reject; });
   const timers = new Map<number, () => void>(), signatures: string[] = [], statements: string[] = [];
   const faults = { rows: [candidate()] as Array<Record<string, unknown>>, cancelRows: [{ cancelled: true }] as Array<Record<string, unknown>>, targetMissing: false, identityRole: 'postgres', connectionFailure: false, rollbackFailure: false };
-  const handle = { withDatabaseConnection: async <T,>(work: (connection: { query: (sql: string, params?: unknown[]) => Promise<{rows: Record<string, unknown>[];rowCount:number}> }) => Promise<T>) => {
+  const diagnostics: Array<{stage:string;metadata:Record<string,unknown>}> = [];
+  const handle = { record:(stage:string,metadata:Record<string,unknown>)=>{diagnostics.push({stage,metadata});}, withDatabaseConnection: async <T,>(work: (connection: { query: (sql: string, params?: unknown[]) => Promise<{rows: Record<string, unknown>[];rowCount:number}> }) => Promise<T>) => {
     if (faults.connectionFailure) throw new Error('Offline connect failure');
     liveConnections++; const ordinal = ++connectionOrdinal;
     try { const execution = work({ query: async (sql, params = []) => {
@@ -65,13 +66,29 @@ function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug
   const owner = loaded.exports as Owner, broker = owner.createOwnedCoreDomainWriteFaults(handle, {...fixtures,...(templateControls?{templateControls}:{}),...(topicControls?{topicControls}:{}),...(projectControls?{projectControls,commercialProject:{id:401}}:{}),...(presentationControls?{presentationControls}:{}),...(navigationSettings?{navigationSettings}:{})});
   const token = randomUUID();
   const request = (kind: string, entity = 'categories', override: Record<string, unknown> = {}) => broker.handleRequest({ id: randomUUID(), kind: 'domain-write-fault-' + kind, token, entity, ...override });
-  return { owner, handle, broker, request, faults, signatures, statements, counts: () => ({ liveConnections, rollbacks, cancels }),
+  return { owner, handle, broker, request, faults, signatures, statements, diagnostics, counts: () => ({ liveConnections, rollbacks, cancels }),
     disconnectHolder: () => rejectHolder(new Error('Offline owned holder disconnected')),
     expire: () => { clock += 45_000; for (const callback of [...timers.values()]) callback(); }, end: () => { active = false; } };
 }
 const checks: string[] = [];
 const test = async (name: string, run: () => Promise<void>) => { await run(); checks.push(name); };
 try {
+
+  await test('Inspection failure preserves strict rejection and records bounded atomic identity diagnostic',async()=>{
+    const f=fixture();await f.request('arm');f.faults.cancelRows=[];
+    await assert.rejects(f.request('cancel'),/exact observed backend/);
+    assert.equal(f.diagnostics.length,1);const entry=f.diagnostics[0];
+    assert.equal(entry.stage,'core-domain-fault-inspection-failed');
+    assert.deepEqual(Object.keys(entry.metadata).sort(),['requestId','operation','phase','candidateCount','connectionElapsedMs','elapsedMs','previouslyObserved','holderFinished','holderFailed','deadlineExpired'].sort());
+    assert.equal(entry.metadata.phase,'atomic-identity');assert.equal(entry.metadata.candidateCount,1);assert.equal(entry.metadata.operation,'cancel');
+    assert.equal(f.counts().liveConnections,0);await f.broker.close();
+  });
+  await test('Diagnostics distinguish no matching statement timeout from identity rejection',async()=>{
+    const f=fixture();await f.request('arm');f.faults.rows=[];
+    await assert.rejects(f.request('cancel'),/No uniquely attributable/);
+    assert.equal(f.diagnostics.length,1);assert.equal(f.diagnostics[0].metadata.phase,'deadline');assert.equal(f.diagnostics[0].metadata.candidateCount,0);
+    assert.equal(f.counts().cancels,0);assert.equal(f.counts().liveConnections,0);await f.broker.close();
+  });
 
   await test('Footer opt-in locks only private literal footer.slots and admits exactly save_footer_settings RPC',async()=>{
     const f=fixture(undefined,undefined,undefined,undefined,{footerRestore:{key:'footer.slots'}});const armed=await f.request('arm','footer_restore');assert.equal(armed.table,'site_settings');assert.equal(armed.fixtureId,'footer.slots');
@@ -279,6 +296,6 @@ try {
     const f=fixture();const {TEMPLATE_CONTROL_RECIPES}=require(resolve(process.cwd(),'scripts/fixtures/admin-core-template-controls-contract.mjs'));const other=Object.keys(TEMPLATE_CONTROL_RECIPES).map((kind,index)=>({kind,id:600+index,slug:'qa-admin-page-interaction-'+kind+'-8'}));
     assert.throws(()=>f.owner.createOwnedCoreDomainWriteFaults(f.handle,{...fixtures,presentationControls:{templates},templateControls:{templates:[...other,{kind:'hero',id:501,slug:templates[0].slug}]}}));assert.equal(f.statements.length,0);await f.broker.close();
   });
-  assert.equal(checks.length, 30);
+  assert.equal(checks.length, 32);
   console.log(JSON.stringify({ status: 'pass', cases: checks.length, checks, scope: 'Actual producer control flow with bounded connection ports, plus PostgreSQL signature matching. Live PostgreSQL locking/cancellation and Browser outcomes remain pending.' }, null, 2));
 } finally { await db.close(); }
