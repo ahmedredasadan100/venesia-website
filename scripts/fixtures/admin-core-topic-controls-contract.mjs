@@ -17,9 +17,12 @@ export const TOPIC_CONTROL_VALUES = {
 export const CORE_TOPIC_CONTROLS_RETRY_SELECTION = "topic-controls-followup";
 export const CORE_TOPIC_CONTROLS_RETRY_KINDS = Object.freeze(["site_update", "video"]);
 export const CORE_TOPIC_CONTROLS_RETRY_IDS = Object.freeze(CORE_TOPIC_CONTROLS_RETRY_KINDS.map(kind => "core-topic-controls-" + kind));
+export const CORE_TOPIC_VIDEO_SELECTION = "topic-video-followup";
+export function isCoreTopicControlsSelection(selection) { return selection === CORE_TOPIC_CONTROLS_RETRY_SELECTION || selection === CORE_TOPIC_VIDEO_SELECTION; }
 /** @param {string | null} selection */
 export function coreSelectedTopicControlKinds(selection = null) {
-  assert.ok(selection === null || selection === CORE_TOPIC_CONTROLS_RETRY_SELECTION, "Only the fixed two remaining Topic controls may be selected.");
+  assert.ok(selection === null || isCoreTopicControlsSelection(selection), "Only the fixed original Topic follow-ups may be selected.");
+  if (selection === CORE_TOPIC_VIDEO_SELECTION) return ["video"];
   return selection === CORE_TOPIC_CONTROLS_RETRY_SELECTION ? [...CORE_TOPIC_CONTROLS_RETRY_KINDS] : [...TOPIC_CONTROL_KINDS];
 }
 export function buildCoreTopicControlsPlan({ manifest, fixtures, selection = null }) {
@@ -82,13 +85,14 @@ export function assertTopicControlsProjection(kind, row, original, fixtures, act
 }
 
 
-/** Retain four completed recipes; run only the two explicitly unresolved original IDs. */
+/** Fixed original retries: two-case history remains valid; Video-only retains all five successes. */
 export function assertCoreTopicControlsRetryReceipt(browser, requiredCases) {
-  assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "topic-controls"); assert.equal(browser.journeySelection, CORE_TOPIC_CONTROLS_RETRY_SELECTION);
+  assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "topic-controls"); assert.ok(isCoreTopicControlsSelection(browser.journeySelection));
+  const kinds = coreSelectedTopicControlKinds(browser.journeySelection), ids = kinds.map(kind => "core-topic-controls-" + kind);
   assert.equal(browser.status, "pass"); assert.equal(browser.driverCompleted, true); assert.equal(browser.inventoryOnly, false); assert.equal(browser.wholeCohortExecuted, false); assert.equal(browser.globalClosed, false); assert.deepEqual(browser.errors, []);
   assert.deepEqual(browser.requiredCases, requiredCases.map(row => ({...row, status:"open", evidence:null})));
-  assert.deepEqual(browser.selectedJourneyIds, CORE_TOPIC_CONTROLS_RETRY_IDS); assert.deepEqual(browser.executedJourneyIds, CORE_TOPIC_CONTROLS_RETRY_IDS);
-  assert.deepEqual(browser.evidence.map(row => row.id), ["existing-auth-login", ...CORE_TOPIC_CONTROLS_RETRY_IDS]); assert.ok(browser.evidence.every(row => row.status === "pass")); assert.ok(browser.evidence.slice(1).every(row => Array.isArray(row.coverage) && row.coverage.length === 0));
-  assert.equal(browser.topicControls.planned, 2); assert.equal(browser.topicControls.completed, 2); assert.deepEqual(browser.topicControls.outcomes.map(row => row.kind), CORE_TOPIC_CONTROLS_RETRY_KINDS); assert.deepEqual(browser.databaseReadback, []);
-  return {status:"pass", selection:CORE_TOPIC_CONTROLS_RETRY_SELECTION, selectedJourneyIds:[...CORE_TOPIC_CONTROLS_RETRY_IDS], executedJourneyIds:[...CORE_TOPIC_CONTROLS_RETRY_IDS], retainedTopicControlsReplayed:false, wholeCohortExecuted:false, globalClosed:false, automaticCoverage:[]};
+  assert.deepEqual(browser.selectedJourneyIds, ids); assert.deepEqual(browser.executedJourneyIds, ids);
+  assert.deepEqual(browser.evidence.map(row => row.id), ["existing-auth-login", ...ids]); assert.ok(browser.evidence.every(row => row.status === "pass")); assert.ok(browser.evidence.slice(1).every(row => Array.isArray(row.coverage) && row.coverage.length === 0));
+  assert.equal(browser.topicControls.planned, kinds.length); assert.equal(browser.topicControls.completed, kinds.length); assert.deepEqual(browser.topicControls.outcomes.map(row => row.kind), kinds); assert.deepEqual(browser.databaseReadback, []);
+  return {status:"pass", selection:browser.journeySelection, selectedJourneyIds:[...ids], executedJourneyIds:[...ids], retainedTopicControlsReplayed:false, wholeCohortExecuted:false, globalClosed:false, automaticCoverage:[]};
 }

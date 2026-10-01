@@ -70,7 +70,10 @@ export async function runCoreTopicControlsJourneys(ctx) {
     assert.equal(found.status(), 200); const catalog = await found.json();
     assert.deepEqual(catalog.assets.map(row => row.publicUrl), [asset.publicUrl]);
     const button = dialog.locator("button[aria-pressed]").filter({ has: page.getByText(asset.displayName, { exact: true }) });
-    await expect(button).toHaveCount(1); await button.click(); await expect(button).toHaveAttribute("aria-pressed", "true");
+    await expect(button).toHaveCount(1);
+    if(!renderedPickerObserved) await selectCoreTopicAssetForScrollProof({page,origin,dialog,button,asset});
+    else await button.click();
+    await expect(button).toHaveAttribute("aria-pressed", "true");
     // Selection is staged in the picker until explicit confirmation; no resource is mutated.
     if(!renderedPickerObserved){
       const container=dialog.locator('[data-media-picker-scroll]'),target=dialog.getByText('يُعاد التحقق من الارتباطات تلقائيًا قبل أي حذف.',{exact:true});
@@ -223,3 +226,13 @@ export async function runCoreTopicControlsJourneys(ctx) {
   return { planned: plan.recipes.length, completed: completed.length, outcomes: completed, automaticAxisCoverage: [], globalClosed: false, explicitNonCapabilities: plan.explicitNonCapabilities, nativeFinalityRequired: true };
 }
 
+
+/** Bind the scrollbar specimen to the actual completed usage render, without a delay or weakened wheel assertion. */
+export async function selectCoreTopicAssetForScrollProof({page,origin,dialog,button,asset}) {
+ const [response]=await Promise.all([page.waitForResponse(response=>{const url=new URL(response.url());return url.origin===origin&&url.pathname==='/api/admin/media-usage'&&url.searchParams.get('asset')===asset.publicUrl&&response.request().method()==='GET';}),button.click()]);
+ assert.equal(response.status(),200);const payload=await response.json();assert.equal(Object.hasOwn(payload,'error'),false);assert.ok(Array.isArray(payload.hits));assert.equal(payload.count,payload.hits.length);assert.equal(typeof payload.scanComplete,'boolean');assert.equal(typeof payload.unusedAuthoritative,'boolean');assert.ok(payload.warning===null||typeof payload.warning==='string');
+ const panel=dialog.getByRole('heading',{name:'استخدامات الملف',exact:true}).locator('..');await expect(panel).toHaveCount(1);await expect(panel.getByText(asset.publicUrl,{exact:true})).toBeVisible();
+ await expect(panel.getByText('جارٍ البحث عن الاستخدامات…',{exact:true})).toHaveCount(0);
+ const count=panel.getByText('الارتباطات الحالية',{exact:true});await expect(count).toBeVisible();await expect(count.locator('..').locator('p').last()).toHaveText(String(payload.hits.length));
+ await expect(panel.locator('ul > li')).toHaveCount(payload.hits.length);if(payload.warning!==null)await expect(panel.getByText(payload.warning,{exact:true})).toBeVisible();
+}
