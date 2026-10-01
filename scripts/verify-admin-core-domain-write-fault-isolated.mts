@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 
-import { TOPIC_CONTROL_KINDS } from "./fixtures/admin-core-topic-controls-contract.mjs";
+import { TOPIC_CONTROL_KINDS, coreTopicControlFixtureSlug } from "./fixtures/admin-core-topic-controls-contract.mjs";
 import { PRESENTATION_CONTROL_KINDS, PRESENTATION_CONTROL_TABLES } from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import { PROJECT_CONTROL_KINDS, projectControlSlug } from "./fixtures/admin-core-project-controls-contract.mjs";
 import { TEMPLATE_CONTROL_RECIPES } from "./fixtures/admin-core-template-controls-contract.mjs";
@@ -61,7 +61,7 @@ function fixedTargets(input: unknown): Record<string, Target> {
     assert.equal(controls.topics.length, TOPIC_CONTROL_KINDS.length);
     for (const kind of TOPIC_CONTROL_KINDS) {
       const rows: Row[] = controls.topics.map(object).filter((row: Row) => row.kind === kind);
-      assert.equal(rows.length, 1); const slug = 'qa-core-topic-controls-' + kind;
+      assert.equal(rows.length, 1); const slug = coreTopicControlFixtureSlug(kind);
       assert.equal(rows[0].slug, slug);
       targets['topic_control_' + kind] = { table: 'topics', id: getId(rows[0]), slug, signature: update('topics') };
     }

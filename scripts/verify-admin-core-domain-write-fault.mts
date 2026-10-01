@@ -1,3 +1,4 @@
+import {coreTopicControlFixtureSlug} from "./fixtures/admin-core-topic-controls-contract.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -245,7 +246,7 @@ try {
   });
   await test('All six fixed Topic edit targets permit only topics UPDATE, retaining the original row identity', async()=>{
     const kinds=require(resolve(process.cwd(),'scripts/fixtures/admin-core-topic-controls-contract.mjs')).TOPIC_CONTROL_KINDS as string[];
-    const topics=kinds.map((kind,index)=>({kind,id:301+index,slug:'qa-core-topic-controls-'+kind}));
+    const topics=kinds.map((kind,index)=>({kind,id:301+index,slug:coreTopicControlFixtureSlug(kind)}));
     for(const row of topics){const f=fixture(undefined,{topics});const entity='topic_control_'+row.kind;await f.request('arm',entity);await f.request('observe-blocked',entity);await f.request('cancel',entity);
       const pattern=f.signatures[0];
       assert.equal((await db.query<{matches:boolean}>('select $1::text ~* $2::text as matches',['WITH pgrst_source AS (UPDATE "public"."topics" SET "title"=$1 WHERE id=$2 RETURNING *) SELECT * FROM pgrst_source',pattern])).rows[0].matches,true);
@@ -255,8 +256,8 @@ try {
   });
   await test('Topic optional identities cannot widen the existing native producer',async()=>{
     const kinds=require(resolve(process.cwd(),'scripts/fixtures/admin-core-topic-controls-contract.mjs')).TOPIC_CONTROL_KINDS as string[];
-    const topics=kinds.map((kind,index)=>({kind,id:301+index,slug:'qa-core-topic-controls-'+kind}));
-    for(const rows of [topics.slice(1),[...topics,topics[0]],topics.map((row,index)=>index?row:{...row,slug:'production-topic'}),topics.map((row,index)=>index?row:{...row,id:0})]){
+    const topics=kinds.map((kind,index)=>({kind,id:301+index,slug:coreTopicControlFixtureSlug(kind)}));
+    for(const rows of [topics.map(row=>row.kind==='site_update'?{...row,slug:'qa-core-topic-controls-site_update'}:row),topics.slice(1),[...topics,topics[0]],topics.map((row,index)=>index?row:{...row,slug:'production-topic'}),topics.map((row,index)=>index?row:{...row,id:0})]){
       const f=fixture();assert.throws(()=>f.owner.createOwnedCoreDomainWriteFaults(f.handle,{...fixtures,topicControls:{topics:rows}}));assert.equal(f.statements.length,0);await f.broker.close();
     }
   });
