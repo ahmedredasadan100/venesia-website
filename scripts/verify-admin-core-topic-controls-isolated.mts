@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
 import { loadEntitySeoPersistenceOwner } from "./backfill-entity-seo-scores.mts";
 import type { TopicSeoSource } from "../src/lib/admin/seo/entity-seo-persistence.ts";
-import { TOPIC_CONTROL_KINDS, TOPIC_CONTROL_PHASES, TOPIC_CONTROL_ASSET_KEYS, validateTopicControlsRequest, assertTopicControlsProjection } from "./fixtures/admin-core-topic-controls-contract.mjs";
+import { TOPIC_CONTROL_KINDS, TOPIC_CONTROL_PHASES, TOPIC_CONTROL_ASSET_KEYS, coreSelectedTopicControlKinds, validateTopicControlsRequest, assertTopicControlsProjection } from "./fixtures/admin-core-topic-controls-contract.mjs";
 
 type Row = Record<string, unknown>;
 type Fixture = { topics: Array<{id:number;kind:string;title:string;slug:string;editPath:string}>; assets:Array<{id:string;objectKey:string;publicUrl:string;displayName:string}>;category:{id:number;name:string;slug:string};otherCategory:{id:number;name:string;slug:string};series:{id:number;name:string;slug:string} };
@@ -78,9 +78,10 @@ export async function readCoreTopicControlsCheckpoint(handle:OwnedLocalHandle,in
   s.phases.set(kind,s.phases.get(kind)!+1);s.nativeReads++;
   return {...request,status:"pass",rowHash:hash(current),otherRowsHash:hash(all.filter(row=>Number(row.id)!==target.id)),auditCount:audit.length,actorBound:true,published:false,legacyFilesystemReferenceCount:0,managedReferenceProofClaimed:false};
 }
-export function assertCoreTopicControlsCompleted(handle:OwnedLocalHandle){
+export function assertCoreTopicControlsCompleted(handle:OwnedLocalHandle, selection: string | null = null){
   assertOwnedLocalHandle(handle);const s=states.get(handle);assert.ok(s);
-  for(const kind of TOPIC_CONTROL_KINDS)assert.equal(s.phases.get(kind),TOPIC_CONTROL_PHASES.length,"Incomplete recipe: "+kind);
-  assert.equal(s.writes,TOPIC_CONTROL_KINDS.length);assert.equal(s.nativeReads,TOPIC_CONTROL_KINDS.length*TOPIC_CONTROL_PHASES.length);
+  const selected = coreSelectedTopicControlKinds(selection);
+  for(const kind of TOPIC_CONTROL_KINDS)assert.equal(s.phases.get(kind),selected.includes(kind)?TOPIC_CONTROL_PHASES.length:0,"Selected recipes must finish; retained recipes must not replay: "+kind);
+  assert.equal(s.writes,selected.length);assert.equal(s.nativeReads,selected.length*TOPIC_CONTROL_PHASES.length);
   return {status:"pass",recipes:s.writes,exactWrites:s.writes,nativeCheckpoints:s.nativeReads,actorBound:true,allRemainUnpublished:true,managedReferenceProofClaimed:false,automaticAxisCoverage:[],globalClosed:false,cleanupRequired:true};
 }

@@ -24,7 +24,7 @@ export async function runCoreTopicControlsJourneys(ctx) {
   assert.equal(new URL(origin).hostname, "127.0.0.1"); const f = fixtures.topicControls; assert.ok(f);
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
-  const plan = buildCoreTopicControlsPlan({ manifest, fixtures: f }), completed = [];
+  const plan = buildCoreTopicControlsPlan({ manifest, fixtures: f, selection: ctx.journeySelection ?? null }), completed = [];
   let currentRecipe,renderedAdoption=[],renderedPickerObserved=false;
   const form = () => page.locator("form[data-admin-form-runtime]");
   const field = name => form().locator('[name="' + name + '"]');

@@ -1,3 +1,4 @@
+import {CORE_TOPIC_CONTROLS_RETRY_SELECTION,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
 import {CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,assertCoreTemplateControlsRetryReceipt} from "./fixtures/admin-core-template-controls-contract.mjs";
 import {CORE_PROJECT_EDITOR_SELECTION,assertCoreProjectEditorSelectionReceipt} from "./fixtures/admin-core-project-controls-contract.mjs";
 import {CORE_NAVIGATION_FOLLOWUP_SELECTION,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
@@ -239,6 +240,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       previewImpactContext = {fixtures,previewMatrix,canonicalRequiredCases,sourceSha256:source.sourceSha256};
     }
     const isTemplateControlsRetry = browser.journeySelection === CORE_TEMPLATE_CONTROLS_RETRY_SELECTION;
+    const isTopicControlsRetry = browser.journeySelection === CORE_TOPIC_CONTROLS_RETRY_SELECTION;
     const isProjectEditors = browser.journeySelection === CORE_PROJECT_EDITOR_SELECTION;
     const isNavigationFollowup = browser.journeySelection === CORE_NAVIGATION_FOLLOWUP_SELECTION;
     const isTemplateHeroBulk = browser.journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION;
@@ -259,7 +261,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       domainTailPlan = (isReadonlyQueryProof ? buildCoreReadonlyQueryProofPlan : isTrackingPermissions ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),paths:{...location,...tracking}});
     }
     const domainTailNative = isDomainTail ? JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")) : null;
-    const selectedJourneys = isTemplateControlsRetry ? assertCoreTemplateControlsRetryReceipt(browser,canonicalRequiredCases) : isProjectEditors ? assertCoreProjectEditorSelectionReceipt(browser,canonicalRequiredCases) : isNavigationFollowup ? assertCoreNavigationFollowupReceipt(browser,canonicalRequiredCases) : isTemplateHeroBulk ? assertCoreTemplateHeroBulkReceipt(browser,canonicalRequiredCases) : isSpecializedFollowup ? await assertCoreSpecializedFollowupReceipt(browser,canonicalRequiredCases) : isPageCompositionFollowup ? await assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) : isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupReceipt(browser,canonicalRequiredCases) : isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
+    const selectedJourneys = isTopicControlsRetry ? assertCoreTopicControlsRetryReceipt(browser,canonicalRequiredCases) : isTemplateControlsRetry ? assertCoreTemplateControlsRetryReceipt(browser,canonicalRequiredCases) : isProjectEditors ? assertCoreProjectEditorSelectionReceipt(browser,canonicalRequiredCases) : isNavigationFollowup ? assertCoreNavigationFollowupReceipt(browser,canonicalRequiredCases) : isTemplateHeroBulk ? assertCoreTemplateHeroBulkReceipt(browser,canonicalRequiredCases) : isSpecializedFollowup ? await assertCoreSpecializedFollowupReceipt(browser,canonicalRequiredCases) : isPageCompositionFollowup ? await assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) : isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupReceipt(browser,canonicalRequiredCases) : isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
       native:domainTailNative,ownedRunId:handle.identity.runId,
       sourceSha256:JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,expectedActorId:await readCoreFixedQaActor(handle),
     }) : isPreviewImpact ? assertCorePreviewPublicImpactReceipt(browser, previewImpactContext!) : isTemplateCreates
@@ -289,7 +291,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(draftNative.status,"pass");
       draftRestoration=assertCoreFormDraftRestorationJoin({artifact:draftArtifact,browser,native:draftNative,ownedRunId:handle.identity.runId,sourceSha256:(browser as unknown as {sourceSha256:string}).sourceSha256});
     }
-    if (selectedJourneys && !isPreviewImpact && !isDomainTail && !isQueryLayout && !isTemplateCards && !isReadonlyHubFollowup && !isPageCompositionFollowup && !isSpecializedFollowup && !isTemplateHeroBulk && !isNavigationFollowup && !isProjectEditors && !isTemplateControlsRetry) {
+    if (selectedJourneys && !isPreviewImpact && !isDomainTail && !isQueryLayout && !isTemplateCards && !isReadonlyHubFollowup && !isPageCompositionFollowup && !isSpecializedFollowup && !isTemplateHeroBulk && !isNavigationFollowup && !isProjectEditors && !isTemplateControlsRetry && !isTopicControlsRetry) {
       assert.ok(draftRestoration);
       if (isTemplateCreates) assertCoreTemplateSelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration, {
         native: JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),
@@ -360,7 +362,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     }
     let topicControls=null;
     if(browser.cohort==="topic-controls") {
-      const completion=assertCoreTopicControlsCompleted(handle),result=browser.topicControls;assert.ok(result);
+      const completion=assertCoreTopicControlsCompleted(handle,browser.journeySelection ?? null),result=browser.topicControls;assert.ok(result);
       assert.equal(result.planned,completion.recipes);assert.equal(result.completed,completion.recipes);assert.equal(result.outcomes.length,completion.recipes);
       assert.equal(new Set(result.outcomes.map(row=>row.kind)).size,completion.recipes);
       const native=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));assert.equal(native.status,"pass");assert.equal(native.ownedRunId,handle.identity.runId);
