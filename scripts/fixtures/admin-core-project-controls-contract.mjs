@@ -71,7 +71,7 @@ export function assertProjectControlGraph(graph, original, fixtures, empty = fal
     for (const row of rows) {
       assert.ok(Number.isSafeInteger(Number(row.id)) && Number(row.id) > 0); assert.match(row.client_key, uuid);
       const previous = old.find(item => item.client_key === row.client_key);
-      if (previous) { assert.equal(Number(row.id), Number(previous.id)); assert.equal(row.created_at, previous.created_at); }
+      if (previous) { assert.equal(Number(row.id), Number(previous.id)); assert.deepEqual(row.created_at, previous.created_at, "Retained child preserves exact native creation timestamp."); }
       else assert.ok(!old.some(item => Number(item.id) === Number(row.id)), "New client identity must not steal an old physical ID.");
       if (table === "project_floor_plan_details") assert.ok(graph.project_floor_plans.some(plan => Number(plan.id) === Number(row.floor_plan_id)), "No orphan or foreign detail.");
       else assert.equal(Number(row.project_id), Number(original.project.id));

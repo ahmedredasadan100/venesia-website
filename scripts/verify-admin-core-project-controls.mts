@@ -1,3 +1,5 @@
+import {createRequire} from "node:module";
+const pgTimestamp=createRequire(import.meta.url)("pg").types.getTypeParser(1184,"text") as (value:string)=>Date;
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {readFileSync} from "node:fs";
@@ -48,6 +50,11 @@ function formFor(payload:ReturnType<typeof initial>){
 for(const kind of PROJECT_CONTROL_KINDS as Array<"residential"|"commercial">){
  const baseline=initial(kind),value=authored(baseline),original=projectPayloadGraph(baseline),saved=projectPayloadGraph(value);
  test("Fixed authored aggregate projection: "+kind,()=>assertProjectControlGraph(saved,original,fixtures));
+ // Separate native reads return distinct Date objects for the same stored instant.
+ const nativeOriginal=structuredClone(original),nativeSaved=structuredClone(saved);for(const graph of[nativeOriginal,nativeSaved])for(const table of PROJECT_CONTROL_TABLES)for(const row of graph[table as keyof typeof graph] as Row[])row.created_at=pgTimestamp("2026-01-01 00:00:00+00");
+ test("Native pg timestamps preserve value across distinct object instances: "+kind,()=>{const before=nativeOriginal.project_features.find((row:Row)=>row.client_key===nativeSaved.project_features[0].client_key)!;assert.ok(before.created_at instanceof Date);assert.ok(nativeSaved.project_features[0].created_at instanceof Date);assert.notEqual(nativeSaved.project_features[0].created_at,before.created_at);assert.equal(nativeSaved.project_features[0].created_at.valueOf(),before.created_at.valueOf());assertProjectControlGraph(nativeSaved,nativeOriginal,fixtures);});
+ for(const[reason,value]of Object.entries({changedInstant:pgTimestamp("2026-01-01 00:00:00.001+00"),stringRepresentation:epoch,missing:undefined,invalidDate:new Date(Number.NaN)}))test("Native timestamp invariant rejects "+kind+" "+reason,()=>{const broken=structuredClone(nativeSaved);broken.project_features[0].created_at=value;assert.throws(()=>assertProjectControlGraph(broken,nativeOriginal,fixtures));});
+
  const parsed=contract.projectEntryPayloadFromFormData(formFor(value));
  test("Real current parallel FormData parsing preserves all seven child graphs: "+kind,()=>assert.deepEqual(projectGraphProjection(projectPayloadGraph(parsed)),projectGraphProjection(saved)));
  test("Actual current aggregate validation accepts authored controls: "+kind,()=>assert.deepEqual(contract.assessProjectEntryPayload(parsed).fieldErrors,{}));
