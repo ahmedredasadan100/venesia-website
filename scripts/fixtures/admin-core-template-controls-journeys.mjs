@@ -209,7 +209,7 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     await select(form, "section_key", "videos"); await select(form, "section_key", "press");
     await expect(input(form, "title")).toHaveValue("البيانات الصحفية"); await titleFormat(form, "section_title");
     await tab(form, "presentation"); await select(form, "collection_layout", "grid"); await select(form, "collection_layout", "list");
-    const itemTitle = form.locator('[data-collection-display-formatting-capability] [data-module-editor-control-row]').filter({ has: page.locator('input[name="title_alignment"]') });
+    const itemTitle = form.locator('[data-collection-display-settings] [data-module-editor-control-row]').filter({ has: page.locator('input[name="title_alignment"]') });
     await expect(itemTitle).toHaveCount(1);
     const itemBold = itemTitle.locator('[data-admin-text-format-bold]');
     if (await itemBold.getAttribute('aria-pressed') !== 'true') await itemBold.click();
