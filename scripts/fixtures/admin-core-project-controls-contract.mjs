@@ -98,3 +98,11 @@ export function projectPayloadGraph(payload) {
  return {project:payload.project,project_location_points:ordered(payload.location_points,"kind"),project_features:ordered(payload.features),project_delivery_items:ordered(payload.delivery_items),project_floor_plans:plans,
  project_floor_plan_details:payload.floor_plans.flatMap((row,index)=>ordered(row.details).map(detail=>({...detail,floor_plan_id:plans[index].id}))),project_media:ordered(payload.media,"section"),project_videos:ordered(payload.videos,"section")};
 }
+
+/** Retry the two existing editors without replaying qualified visibility cycles. */
+export const CORE_PROJECT_EDITOR_SELECTION="project-editors-followup";
+export const CORE_PROJECT_EDITOR_IDS=Object.freeze(PROJECT_CONTROL_KINDS.map(kind=>"core-project-controls-"+kind));
+export function assertCoreProjectEditorSelectionReceipt(browser,requiredCases){
+ assert.equal(browser.scope,"core-closure");assert.equal(browser.cohort,"project-controls");assert.equal(browser.journeySelection,CORE_PROJECT_EDITOR_SELECTION);assert.equal(browser.status,"pass");assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.errors,[]);assert.deepEqual(browser.requiredCases,requiredCases.map(row=>({...row,status:"open",evidence:null})));assert.deepEqual(browser.selectedJourneyIds,CORE_PROJECT_EDITOR_IDS);assert.deepEqual(browser.executedJourneyIds,CORE_PROJECT_EDITOR_IDS);assert.deepEqual(browser.evidence.map(row=>row.id),["existing-auth-login",...CORE_PROJECT_EDITOR_IDS]);assert.ok(browser.evidence.every(row=>row.status==="pass"));assert.ok(browser.evidence.slice(1).every(row=>Array.isArray(row.coverage)&&row.coverage.length===0));assert.equal(browser.projectControls.visibility,undefined);assert.deepEqual(browser.databaseReadback,[]);
+ return{status:"pass",selection:CORE_PROJECT_EDITOR_SELECTION,selectedJourneyIds:[...CORE_PROJECT_EDITOR_IDS],executedJourneyIds:[...CORE_PROJECT_EDITOR_IDS],retainedVisibilityReplayed:false,wholeCohortExecuted:false,globalClosed:false,automaticCoverage:[]};
+}

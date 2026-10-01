@@ -10,7 +10,7 @@ import { buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_VALUES as values, TEMPL
 export async function runCoreTemplateControlsJourneys(ctx) {
   const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, nativeCheckpoint, requiredCases } = ctx;
   assert.equal(new URL(origin).hostname, "127.0.0.1");
-  const f = fixtures.templateControls; assert.ok(f);
+  const f = fixtures.templateControls; assert.ok(f);assert.equal(f.selection??null,ctx.journeySelection??null);
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const plan = buildCoreTemplateControlsPlan({ manifest, fixtures: f }), outcomes = [];

@@ -316,11 +316,11 @@ export async function seedOwnedCoreQueryPresentationFixtures(handle: OwnedLocalH
 
 
 /** Explicit concrete-template controls opt-in; private credentials stay in this owner. */
-export async function seedOwnedCoreTemplateControlsFixtures(handle: OwnedLocalHandle) {
+export async function seedOwnedCoreTemplateControlsFixtures(handle: OwnedLocalHandle,selection:string|null=null) {
   assertOwnedLocalHandle(handle);const credentials=credentialsByHandle.get(handle);assert.ok(credentials);
   const {prepareCoreTemplateControlsFixtures}=await import("../verify-admin-core-template-controls-isolated.mts");
   await seedOwnedCorePreviewFixtures(handle);
-  return prepareCoreTemplateControlsFixtures(handle,{username:credentials.username});
+  return prepareCoreTemplateControlsFixtures(handle,{username:credentials.username},selection);
 }
 
 /** Explicit independent bulk cohort; existing private account owner remains mandatory. */

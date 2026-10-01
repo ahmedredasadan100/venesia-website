@@ -12,6 +12,11 @@ export const TEMPLATE_CONTROL_RECIPES = {
   "media-sidebar": { table: "media_sidebar_module_templates", controls: ["widget-source-conditional-controls", "content-type", "presentation-keyboard", "clamped-limit", "display-switches"] },
   "media-hub": { table: "media_hub_module_templates", controls: ["section-dependent-defaults", "collection-layout-keyboard", "numeric-rejection", "title-format"] },
 };
+export const CORE_TEMPLATE_CONTROLS_RETRY_SELECTION="template-controls-followup";
+export const CORE_TEMPLATE_CONTROLS_RETRY_KINDS=Object.freeze(["cards","breadcrumb","cta","media-hub"]);
+export const CORE_TEMPLATE_CONTROLS_RETRY_IDS=Object.freeze(CORE_TEMPLATE_CONTROLS_RETRY_KINDS.map(kind=>"core-template-controls-"+kind));
+/** @param {string|null} [selection] */
+export function coreTemplateControlKinds(selection=null){if(selection===null)return Object.keys(TEMPLATE_CONTROL_RECIPES);assert.equal(selection,CORE_TEMPLATE_CONTROLS_RETRY_SELECTION);return [...CORE_TEMPLATE_CONTROLS_RETRY_KINDS];}
 export const TEMPLATE_CONTROL_PHASES = ["baseline", "draft", "negative", "saved", "reloaded"];
 export const TEMPLATE_CONTROL_VALUES = {
   cards: [
@@ -27,7 +32,7 @@ export const TEMPLATE_CONTROL_VALUES = {
 };
 export function buildCoreTemplateControlsPlan({ manifest, fixtures }) {
   assert.ok(Array.isArray(manifest)); assert.ok(Array.isArray(fixtures?.templates));
-  const recipes = Object.entries(TEMPLATE_CONTROL_RECIPES).map(([kind, recipe]) => {
+  const recipes = Object.entries(TEMPLATE_CONTROL_RECIPES).filter(([kind])=>coreTemplateControlKinds(fixtures.selection??null).includes(kind)).map(([kind, recipe]) => {
     const entries = manifest.filter(entry => entry.registryModuleKind === kind);
     assert.equal(entries.length, 1, "Missing/ambiguous registered " + kind + " editor.");
     const entry = entries[0], surface = kind + ":template-edit";
@@ -126,7 +131,7 @@ export function assertCoreTemplateFeedbackAdapter(proof,kind,templateId,sourceSh
 }
 export function assertCoreTemplateFeedbackCompletion(browser,native,ownedRunId){
  assert.equal(browser.cohort,'template-controls');assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);assert.match(browser.sourceSha256,/^[a-f0-9]{64}$/u);
- const result=browser.templateControls,kinds=Object.keys(TEMPLATE_CONTROL_RECIPES);assert.ok(result);assert.equal(result.outcomes.length,kinds.length);assert.deepEqual(result.outcomes.map(row=>row.kind).sort(),[...kinds].sort());
+ const result=browser.templateControls,kinds=coreTemplateControlKinds(browser.journeySelection??null);assert.ok(result);assert.equal(result.outcomes.length,kinds.length);assert.deepEqual(result.outcomes.map(row=>row.kind).sort(),[...kinds].sort());
  const records=native.records.filter(row=>row.kind==='template-controls-state');assert.equal(records.length,kinds.length*TEMPLATE_CONTROL_PHASES.length);assert.equal(new Set(records.map(row=>row.id)).size,records.length);
  for(const row of result.outcomes){
   const evidence=browser.evidence.filter(e=>e.id==='core-template-controls-'+row.kind);assert.equal(evidence.length,1);assert.equal(evidence[0].status,'pass');assert.ok(!browser.errors.some(e=>e.id===evidence[0].id));
@@ -138,3 +143,5 @@ export function assertCoreTemplateFeedbackCompletion(browser,native,ownedRunId){
  }
  return{status:'pass',consumers:kinds.length,adapterObservations:kinds.length*TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS.length,nativeCheckpoints:records.length,additionalActions:0,backendFailureClaim:false,automaticCoverage:[],globalClosed:false};
 }
+
+export function assertCoreTemplateControlsRetryReceipt(browser,requiredCases){assert.equal(browser.scope,"core-closure");assert.equal(browser.cohort,"template-controls");assert.equal(browser.journeySelection,CORE_TEMPLATE_CONTROLS_RETRY_SELECTION);assert.equal(browser.status,"pass");assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.errors,[]);assert.deepEqual(browser.requiredCases,requiredCases.map(row=>({...row,status:"open",evidence:null})));assert.deepEqual(browser.selectedJourneyIds,CORE_TEMPLATE_CONTROLS_RETRY_IDS);assert.deepEqual(browser.executedJourneyIds,CORE_TEMPLATE_CONTROLS_RETRY_IDS);assert.deepEqual(browser.evidence.map(row=>row.id),["existing-auth-login",...CORE_TEMPLATE_CONTROLS_RETRY_IDS]);assert.ok(browser.evidence.every(row=>row.status==="pass"));assert.ok(browser.evidence.slice(1).every(row=>Array.isArray(row.coverage)&&row.coverage.length===0));assert.deepEqual(browser.templateControls.outcomes.map(row=>row.kind),CORE_TEMPLATE_CONTROLS_RETRY_KINDS);return{status:"pass",selection:CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,selectedJourneyIds:[...CORE_TEMPLATE_CONTROLS_RETRY_IDS],executedJourneyIds:[...CORE_TEMPLATE_CONTROLS_RETRY_IDS],retainedRecipesReplayed:false,wholeCohortExecuted:false,globalClosed:false,automaticCoverage:[]};}

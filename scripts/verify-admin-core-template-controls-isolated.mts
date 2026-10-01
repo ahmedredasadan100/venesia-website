@@ -2,11 +2,12 @@ import {recordCoreDownloadCheckpoint,prepareCoreDownloadMediaFixture,assertCoreD
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
-import { TEMPLATE_CONTROL_RECIPES, TEMPLATE_CONTROL_PHASES, validateTemplateControlsRequest, assertTemplateControlsProjection } from "./fixtures/admin-core-template-controls-contract.mjs";
+import { coreTemplateControlKinds, TEMPLATE_CONTROL_RECIPES, TEMPLATE_CONTROL_PHASES, validateTemplateControlsRequest, assertTemplateControlsProjection } from "./fixtures/admin-core-template-controls-contract.mjs";
 
 type Row = Record<string, unknown>;
 type Kind = keyof typeof TEMPLATE_CONTROL_RECIPES;
 type PublicFixtures = {
+  selection:string|null;
   downloadMedia:DownloadAsset;
   templates: Array<{kind: Kind;id:number;name:string;slug:string}>;
   category:{id:number;name:string;slug:string};otherCategory:{id:number;name:string;slug:string};
@@ -20,8 +21,8 @@ const queryTable = async(handle:OwnedLocalHandle,kind:Kind) => (await handle.que
 const assignments = async(handle:OwnedLocalHandle) => (await handle.query("select * from public.page_composition_assignments order by kind,id")).rows;
 
 /** Read-only opt-in after canonical Public/Admin fixtures. No new seed or credentials artifact. */
-export async function prepareCoreTemplateControlsFixtures(handle:OwnedLocalHandle,credentials:{username:string}) {
-  assertOwnedLocalHandle(handle);assert.equal(states.has(handle),false);
+export async function prepareCoreTemplateControlsFixtures(handle:OwnedLocalHandle,credentials:{username:string},selection:string|null=null) {
+  assertOwnedLocalHandle(handle);assert.equal(states.has(handle),false);coreTemplateControlKinds(selection);
   const actor=(await handle.query("select id from public.admin_users where username=$1 and is_active",[credentials.username])).rows;
   assert.equal(actor.length,1);
   const categories=(await handle.query("select id,name,slug from public.topic_categories where slug=any($1::text[]) and status='published' and is_active order by slug",[["qa-admin-category-1","qa-admin-category-2"]])).rows;
@@ -41,7 +42,7 @@ export async function prepareCoreTemplateControlsFixtures(handle:OwnedLocalHandl
     const row=rows[0];assert.ok(!assignmentRows.some(item=>item.kind===kind.replaceAll("-","_")&&Number(item.template_id)===Number(row.id)),"Control fixture must be physically unassigned.");
     templates.push({kind,...ids(row)});phases[kind]=0;
   }
-  const fixtures:PublicFixtures={downloadMedia:await prepareCoreDownloadMediaFixture(handle),templates,category:ids(categories[0]),otherCategory:ids(categories[1]),series:ids(series[0]),article:{id:Number(article[0].id),title:String(article[0].title)},news:{id:Number(news[0].id),title:String(news[0].title)}};
+  const fixtures:PublicFixtures={selection,downloadMedia:await prepareCoreDownloadMediaFixture(handle),templates,category:ids(categories[0]),otherCategory:ids(categories[1]),series:ids(series[0]),article:{id:Number(article[0].id),title:String(article[0].title)},news:{id:Number(news[0].id),title:String(news[0].title)}};
   states.set(handle,{actorId:Number(actor[0].id),fixtures,tables,assignmentRows,phases,auditHeads:{},last:{},nativeReads:0,writes:0});
   return fixtures;
 }
@@ -50,7 +51,7 @@ export async function readCoreTemplateControlsCheckpoint(handle:OwnedLocalHandle
   assertOwnedLocalHandle(handle);
   const request=validateTemplateControlsRequest(input) as {id:string;kind:string;recipe:Kind;phase:string};
   const s=states.get(handle);assert.ok(s);
-  const {recipe:kind,phase}=request;
+  const {recipe:kind,phase}=request;assert.ok(coreTemplateControlKinds(s.fixtures.selection).includes(kind),"Unselected recipe cannot execute a checkpoint.");
   assert.equal(phase,TEMPLATE_CONTROL_PHASES[s.phases[kind]],"No phase may be skipped, replayed or promoted out of order.");
   const target=s.fixtures.templates.find(row=>row.kind===kind)!;
   const rows=await queryTable(handle,kind),before=s.tables[kind],current=rows.find(row=>Number(row.id)===target.id),original=before.find(row=>Number(row.id)===target.id);
@@ -82,9 +83,9 @@ export async function readCoreTemplateControlsCheckpoint(handle:OwnedLocalHandle
   return recordCoreDownloadCheckpoint(handle,{templateId:target.id,id:request.id,kind:request.kind,recipe:kind,phase,status:"pass",downloadMedia:await assertCoreDownloadMediaUnchanged(handle),rowHash:hash(current),otherRowsHash:hash(rows.filter(row=>Number(row.id)!==target.id)),auditCount:audit.length,actorBound:true,assignmentGraphUnchanged:true});
 }
 
-export function assertCoreTemplateControlsCompleted(handle:OwnedLocalHandle){
+export function assertCoreTemplateControlsCompleted(handle:OwnedLocalHandle,selection:string|null=null){
   assertOwnedLocalHandle(handle);const s=states.get(handle);assert.ok(s);
-  const kinds=Object.keys(TEMPLATE_CONTROL_RECIPES) as Kind[];
+  assert.equal(s.fixtures.selection,selection);const kinds=coreTemplateControlKinds(selection) as Kind[];for(const kind of Object.keys(TEMPLATE_CONTROL_RECIPES) as Kind[])if(!kinds.includes(kind))assert.equal(s.phases[kind],0,"Unselected recipe replayed.");
   for(const kind of kinds)assert.equal(s.phases[kind],TEMPLATE_CONTROL_PHASES.length,"Incomplete concrete recipe cannot be promoted: "+kind);
   assert.equal(s.writes,kinds.length);assert.equal(s.nativeReads,kinds.length*TEMPLATE_CONTROL_PHASES.length);
   return {status:"pass",recipes:kinds.length,exactWrites:s.writes,nativeCheckpoints:s.nativeReads,actorBound:true,publicAssignmentsUnchanged:true,automaticAxisCoverage:[],globalClosed:false,cleanupBoundary:"No additional resources seeded; parent must still prove owned lifecycle cleanup."};

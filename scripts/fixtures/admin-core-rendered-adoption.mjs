@@ -46,16 +46,16 @@ export async function observeCoreScrollbarAdoption(input){
  const receipt=scope(input,'scrollbar'),{page,container,target,axis,containment}=input;
  assert.ok(['x','y'].includes(axis));assert.ok(['overscroll-contain','modal-lock','default-chaining'].includes(containment));await expect(container).toHaveCount(1);await expect(container).toBeVisible();await expect(target).toHaveCount(1);
  const handle=await target.elementHandle();assert.ok(handle);try{assert.equal(await container.evaluate((node,child)=>node.contains(child),handle),true);}finally{await handle.dispose();}
- const restore=await remember(page,container),restoreParents=containment==='default-chaining'?await retainParentScroll(container):async()=>{},observations=[];
+ const restore=await remember(page,container),restoreParents=containment==='default-chaining'?await retainParentScroll(container):async()=>{},observations=[];let wheelDiagnostic=null;
  try{for(const viewport of viewports){
-  await page.setViewportSize({width:viewport.width,height:viewport.height});await frames(page);await expect(container).toBeVisible();await target.scrollIntoViewIfNeeded();
+  wheelDiagnostic=null;await page.setViewportSize({width:viewport.width,height:viewport.height});await frames(page);await expect(container).toBeVisible();await target.scrollIntoViewIfNeeded();
   const measure=()=>container.evaluate((node,axis)=>{const style=getComputedStyle(node),rect=node.getBoundingClientRect();return{extent:axis==='x'?node.scrollWidth:node.scrollHeight,client:axis==='x'?node.clientWidth:node.clientHeight,position:axis==='x'?node.scrollLeft:node.scrollTop,direction:style.direction,overflow:axis==='x'?style.overflowX:style.overflowY,overscroll:axis==='x'?style.overscrollBehaviorX:style.overscrollBehaviorY,scrollbarWidth:style.scrollbarWidth,visible:rect.width>0&&rect.height>0,documentX:scrollX,documentY:scrollY,bodyOverflow:getComputedStyle(document.body).overflow,htmlOverflow:getComputedStyle(document.documentElement).overflow};},axis);
   const before=await measure();assert.ok(['auto','scroll'].includes(before.overflow),'Observe the actual overflow owner.');assert.equal(before.scrollbarWidth,'thin','Canonical thin scrollbar must be computed on the owner.');assert.ok(before.visible&&before.client>0);
   if(containment==='overscroll-contain')assert.ok(['contain','none'].includes(before.overscroll));else if(containment==='default-chaining')assert.equal(before.overscroll,'auto','Only the existing browser-default owner policy may use this observation.');else assert.equal(before.bodyOverflow==='hidden'&&before.htmlOverflow==='hidden',true,'Modal background must actually be locked.');
   await container.evaluate((node,axis)=>axis==='x'?node.scrollTo(0,node.scrollTop):node.scrollTo(node.scrollLeft,0),axis);await frames(page);
   const start=await measure(),overflow=start.extent-start.client>2,parentBefore=containment==='default-chaining'?await container.evaluate(parentScrollState,axis):null;
   if(overflow){
-   const box=await container.boundingBox();assert.ok(box);await page.mouse.move(Math.max(1,Math.min(viewport.width-2,box.x+box.width/2)),Math.max(1,Math.min(viewport.height-2,box.y+Math.min(box.height/2,100))));
+   const box=await container.boundingBox();assert.ok(box);const pointer={x:Math.max(1,Math.min(viewport.width-2,box.x+box.width/2)),y:Math.max(1,Math.min(viewport.height-2,box.y+Math.min(box.height/2,100)))};await page.mouse.move(pointer.x,pointer.y);wheelDiagnostic={viewport:viewport.name,axis,start,pointer,hit:await container.evaluate((owner,{x,y,axis})=>{const hit=document.elementFromPoint(x,y),chain=[];for(let node=hit;node&&chain.length<12;node=node.parentElement){const style=getComputedStyle(node);chain.push({tag:node.tagName,role:node.getAttribute('role'),owner:node===owner,overflow:axis==='x'?style.overflowX:style.overflowY,extent:axis==='x'?node.scrollWidth:node.scrollHeight,client:axis==='x'?node.clientWidth:node.clientHeight});if(node===owner)break;}return{insideOwner:!!hit&&owner.contains(hit),chain};},{...pointer,axis})};
    const delta=axis==='x'&&start.direction==='rtl'?-Math.max(1200,start.extent*2):Math.max(1200,start.extent*2);
    await page.mouse.wheel(axis==='x'?delta:0,axis==='y'?delta:0);await expect.poll(async()=>Math.abs((await measure()).position-start.position),{timeout:3000}).toBeGreaterThan(2);
    await expect.poll(async()=>Math.abs((await measure()).position),{timeout:3000}).toBeGreaterThanOrEqual(start.extent-start.client-2);
@@ -70,7 +70,7 @@ export async function observeCoreScrollbarAdoption(input){
    const chaining=containment==='default-chaining'?{containmentNotClaimed:true,computedBrowserDefaultChaining:true,parentChaining:{policy:'browser-default',wheelBoundaryExercised:false,before:parentBefore,after:await container.evaluate(parentScrollState,axis),positionChanged:false}}:{};
    observations.push({...chaining,viewport:viewport.name,width:viewport.width,height:viewport.height,state:'non-overflow-observed',axis,extent:start.extent,client:start.client,targetReachable:true,targetHitTestPassed:true,computedCanonicalThin:true,limitation:'Real fixture content does not overflow here. Wheel/overflow behavior is not proved at this viewport.'});
   }
- }}finally{try{await restoreParents();}finally{await restore();}}
+ }}catch(error){if(wheelDiagnostic&&error instanceof Error)error.message+="\nPre-wheel diagnostic: "+JSON.stringify(wheelDiagnostic);throw error;}finally{try{await restoreParents();}finally{await restore();}}
  return{...receipt,status:'rendered-fragments-observed',observations,containment,proofBoundary:'Actual rendered surface and wheel interaction where real content overflows. No complete capability credit or invented non-applicability.'};
 }
 

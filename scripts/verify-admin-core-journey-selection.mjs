@@ -1,3 +1,5 @@
+import {CORE_TEMPLATE_CONTROLS_RETRY_SELECTION} from "./fixtures/admin-core-template-controls-contract.mjs";
+import {CORE_PROJECT_EDITOR_SELECTION} from "./fixtures/admin-core-project-controls-contract.mjs";
 import {CORE_NAVIGATION_FOLLOWUP_SELECTION} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import {CORE_TEMPLATE_HERO_BULK_SELECTION} from './fixtures/admin-core-template-bulk-journeys.mjs';
 import {CORE_SPECIALIZED_FOLLOWUP_SELECTION} from './fixtures/admin-core-specialized-settings-journeys.mjs';
@@ -120,18 +122,18 @@ function extractCollectorWriteReadStatements(text){
 
 async function verifyCollectorDomainTailSelection(text,{rejectActor=false}={}){
  const ast=ts.createSourceFile('actual-collector.mts',text,ts.ScriptTarget.Latest,true),declarations=[];
- function visit(node){if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&['isNavigationFollowup','isTemplateHeroBulk','isSpecializedFollowup','isPageCompositionFollowup','selectedJourneys','writes'].includes(node.name.text))declarations.push(node);ts.forEachChild(node,visit);}const owners=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text==="verifyAdminAdoptionReadback");assert.equal(owners.length,1);visit(owners[0]);
+ function visit(node){if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&['isTemplateControlsRetry','isProjectEditors','isNavigationFollowup','isTemplateHeroBulk','isSpecializedFollowup','isPageCompositionFollowup','selectedJourneys','writes'].includes(node.name.text))declarations.push(node);ts.forEachChild(node,visit);}const owners=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text==="verifyAdminAdoptionReadback");assert.equal(owners.length,1);visit(owners[0]);
  const one=name=>{const rows=declarations.filter(node=>node.name.text===name);assert.equal(rows.length,1,'Exact current '+name+' declaration');return rows[0];};
  const selected=one('selectedJourneys'),writes=one('writes');assert.ok(selected.getStart(ast)<writes.getStart(ast),'Selected native guard must run before final write readback.');
  assert.ok(writes.initializer&&ts.isAwaitExpression(writes.initializer)&&ts.isCallExpression(writes.initializer.expression));assert.equal(writes.initializer.expression.expression.getText(ast),'verifyCoreDomainWrites');
  const browser={},domainTailPlan={},canonicalRequiredCases=[],domainTailNative={},handle={identity:{runId:'owned-run'}},sourceSha256='a'.repeat(64),calls=[],receipt={selection:'domain-command-tail'};
- const ports={CORE_NAVIGATION_FOLLOWUP_SELECTION,CORE_TEMPLATE_HERO_BULK_SELECTION,CORE_SPECIALIZED_FOLLOWUP_SELECTION,isCorePageCompositionFollowupSelection,isReadonlyHubFollowup:false,isTemplateCards:false,isQueryLayout:false,isDomainTail:true,isPreviewImpact:false,isTemplateCreates:false,browser,domainTailPlan,canonicalRequiredCases,domainTailNative,handle,artifactDir:'owned-artifacts',
+ const ports={CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,CORE_PROJECT_EDITOR_SELECTION,CORE_NAVIGATION_FOLLOWUP_SELECTION,CORE_TEMPLATE_HERO_BULK_SELECTION,CORE_SPECIALIZED_FOLLOWUP_SELECTION,isCorePageCompositionFollowupSelection,isReadonlyHubFollowup:false,isTemplateCards:false,isQueryLayout:false,isDomainTail:true,isPreviewImpact:false,isTemplateCreates:false,browser,domainTailPlan,canonicalRequiredCases,domainTailNative,handle,artifactDir:'owned-artifacts',
   join:(dir,name)=>{assert.equal(dir,'owned-artifacts');assert.equal(name,'public-source-manifest.json');return 'owned-source';},
   readFileSync:(name,encoding)=>{assert.equal(name,'owned-source');assert.equal(encoding,'utf8');calls.push('source');return JSON.stringify({sourceSha256});},
   readCoreFixedQaActor:async value=>{assert.equal(value,handle);calls.push('actor');if(rejectActor)throw Error('independent-actor-rejection');return 7;},
   assertCoreDomainCommandTailReceipt:(actualBrowser,actualPlan,actualCases,context)=>{assert.equal(actualBrowser,browser);assert.equal(actualPlan,domainTailPlan);assert.equal(actualCases,canonicalRequiredCases);assert.equal(context.native,domainTailNative);assert.deepEqual(context,{native:domainTailNative,ownedRunId:handle.identity.runId,sourceSha256,expectedActorId:7});calls.push('selection');return receipt;}
  };
- const code=ts.transpileModule('async function run(){'+['isNavigationFollowup','isTemplateHeroBulk','isSpecializedFollowup','isPageCompositionFollowup'].map(name=>'const '+one(name).getText(ast)+';').join('\n')+'return ('+selected.initializer.getText(ast)+');}',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+ const code=ts.transpileModule('async function run(){'+['isTemplateControlsRetry','isProjectEditors','isNavigationFollowup','isTemplateHeroBulk','isSpecializedFollowup','isPageCompositionFollowup'].map(name=>'const '+one(name).getText(ast)+';').join('\n')+'return ('+selected.initializer.getText(ast)+');}',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
  const result=await new Function(...Object.keys(ports),code+';return run();')(...Object.values(ports));assert.equal(result,receipt);assert.deepEqual(calls,['source','actor','selection']);return{status:'pass',calls};
 }
 

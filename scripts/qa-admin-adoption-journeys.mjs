@@ -1,3 +1,5 @@
+import {CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,CORE_TEMPLATE_CONTROLS_RETRY_IDS,assertCoreTemplateControlsRetryReceipt} from "./fixtures/admin-core-template-controls-contract.mjs";
+import {CORE_PROJECT_EDITOR_SELECTION,CORE_PROJECT_EDITOR_IDS,assertCoreProjectEditorSelectionReceipt} from "./fixtures/admin-core-project-controls-contract.mjs";
 import {CORE_NAVIGATION_FOLLOWUP_SELECTION,CORE_NAVIGATION_FOLLOWUP_IDS,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import {CORE_TEMPLATE_HERO_BULK_SELECTION,CORE_TEMPLATE_HERO_BULK_IDS,assertCoreTemplateHeroBulkReceipt} from './fixtures/admin-core-template-bulk-journeys.mjs';
 import {CORE_SPECIALIZED_FOLLOWUP_SELECTION,loadCoreSpecializedFollowupIds,assertCoreSpecializedFollowupReceipt} from './fixtures/admin-core-specialized-settings-journeys.mjs';
@@ -48,7 +50,7 @@ const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".l
 const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
   ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
-let selectedJourneyIds = journeySelection === CORE_NAVIGATION_FOLLOWUP_SELECTION ? [...CORE_NAVIGATION_FOLLOWUP_IDS] : journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION ? [...CORE_TEMPLATE_HERO_BULK_IDS] : journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION ? await loadCoreSpecializedFollowupIds() : isCorePageCompositionFollowupSelection(journeySelection) ? await loadCorePageCompositionFollowupIds(journeySelection) : journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : isCoreTemplateCreateSelection(journeySelection)
+let selectedJourneyIds = journeySelection === CORE_TEMPLATE_CONTROLS_RETRY_SELECTION ? [...CORE_TEMPLATE_CONTROLS_RETRY_IDS] : journeySelection === CORE_PROJECT_EDITOR_SELECTION ? [...CORE_PROJECT_EDITOR_IDS] : journeySelection === CORE_NAVIGATION_FOLLOWUP_SELECTION ? [...CORE_NAVIGATION_FOLLOWUP_IDS] : journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION ? [...CORE_TEMPLATE_HERO_BULK_IDS] : journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION ? await loadCoreSpecializedFollowupIds() : isCorePageCompositionFollowupSelection(journeySelection) ? await loadCorePageCompositionFollowupIds(journeySelection) : journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : isCoreTemplateCreateSelection(journeySelection)
   ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, journeySelection).map(coreTemplateCreateJourneyId)
   : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
@@ -418,7 +420,7 @@ try {
     const {runCoreProjectControlsJourneys}=await import("./fixtures/admin-core-project-controls-journeys.mjs");
     projectControlsResult=await runCoreProjectControlsJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
     const {runCoreProjectVisibilityGuardJourneys}=await import("./fixtures/admin-core-domain-command-journeys.mjs");
-    projectControlsResult.visibility=await runCoreProjectVisibilityGuardJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,databaseReadback});
+    if(journeySelection!==CORE_PROJECT_EDITOR_SELECTION) projectControlsResult.visibility=await runCoreProjectVisibilityGuardJourneys({page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,databaseReadback});
    } else if (coreCohort === "topic-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreTopicControlsJourneys}=await import("./fixtures/admin-core-topic-controls-journeys.mjs");
@@ -426,7 +428,7 @@ try {
    } else if (coreCohort === "template-controls") {
     const {createCoreNativeCheckpoint}=await import("./fixtures/admin-core-form-permission-context.mjs");
     const {runCoreTemplateControlsJourneys}=await import("./fixtures/admin-core-template-controls-journeys.mjs");
-    templateControlsResult=await runCoreTemplateControlsJourneys({requiredCases,page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
+    templateControlsResult=await runCoreTemplateControlsJourneys({journeySelection,requiredCases,page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output})});
    } else if (coreCohort === "query-presentation") {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreQueryPresentationJourneys } = await import("./fixtures/admin-core-query-presentation-journeys.mjs");
@@ -800,6 +802,8 @@ try {
   else if (journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION) assertCoreReadonlyHubFollowupReceipt(receipt(),requiredCases);
   else if (journeySelection === CORE_TEMPLATE_CARDS_SELECTION) assertCoreTemplateCardsSelectionReceipt(receipt(),templateCardsSelectionPlan,requiredCases);
   else if (journeySelection === CORE_QUERY_LAYOUT_SELECTION) assertCoreQuerySelectionReceipt(receipt(),querySelectionPlan,requiredCases);
+  else if (journeySelection === CORE_TEMPLATE_CONTROLS_RETRY_SELECTION) assertCoreTemplateControlsRetryReceipt(receipt(),requiredCases);
+  else if (journeySelection === CORE_PROJECT_EDITOR_SELECTION) assertCoreProjectEditorSelectionReceipt(receipt(),requiredCases);
   else if (journeySelection === CORE_NAVIGATION_FOLLOWUP_SELECTION) assertCoreNavigationFollowupReceipt(receipt(),requiredCases);
   else if (journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION) assertCoreTemplateHeroBulkReceipt(receipt(),requiredCases);
   else if (journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION) await assertCoreSpecializedFollowupReceipt(receipt(),requiredCases);
