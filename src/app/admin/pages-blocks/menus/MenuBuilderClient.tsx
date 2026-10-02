@@ -2,6 +2,7 @@
 
 import { AdminFormPendingFields } from "../../../../components/admin/ui/AdminFormRuntime";
 
+import { resolveAdminNoticeFeedback } from "../../../../lib/admin/entity-list/feedback-codes";
 import { AdminFeedbackRegion } from "../../../../components/admin/AdminFeedbackProvider";
 import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
 import {
@@ -14,13 +15,13 @@ import { createMenuItem, updateMenu } from "./actions";
 import MenuItemForm from "./MenuItemForm";
 import MenuItemsTableClient from "./MenuItemsTableClient";
 import type { Menu, MenuItem } from "./menu-builder-shared";
-import { menuFieldClassName, menuLabelClassName } from "./menu-builder-shared";
+import { MENU_BUILDER_NOTICE_CODES, menuFieldClassName, menuLabelClassName } from "./menu-builder-shared";
 
 type MenuBuilderClientProps = {
   menu: Menu;
   items: MenuItem[];
   message?: string | null;
-  messageWarning?: boolean;
+  messageNotice?: string | null;
   loadError?: string | null;
   initialVisibleColumns?: readonly string[] | null;
   preferenceError?: string | null;
@@ -30,7 +31,7 @@ export default function MenuBuilderClient({
   menu,
   items,
   message,
-  messageWarning = false,
+  messageNotice = null,
   loadError = null,
   initialVisibleColumns = null,
   preferenceError = null,
@@ -149,15 +150,7 @@ export default function MenuBuilderClient({
                     lifecycle: "persistent",
                   }
                 : message
-                  ? {
-                      variant: messageWarning ? "warning" : "success",
-                      title: messageWarning ? "تم الحفظ مع تنبيه" : "تم الحفظ",
-                      message,
-                      layout: "inline",
-                      dismissible: true,
-                      lifecycle: "manual",
-                      dismissSearchParams: ["message", "notice"],
-                    }
+                  ? resolveAdminNoticeFeedback(MENU_BUILDER_NOTICE_CODES, messageNotice ?? "saved", message)
                   : null
             }
           />

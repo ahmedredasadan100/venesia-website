@@ -1,6 +1,6 @@
 import {CORE_DOWNLOAD_MEDIA_HREF,CORE_DOWNLOAD_LINK} from './fixtures/admin-core-download-media-adoption.mjs';
 import {recordCoreDownloadCheckpoint,prepareCoreDownloadMediaFixture,assertCoreDownloadMediaUnchanged} from './verify-admin-core-download-media-isolated.mts';
-import {CORE_NAVIGATION_MENU_FOOTER_SELECTION,isCoreNavigationExistingSelection,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
+import {CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,isCoreNavigationExistingSelection,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -18,7 +18,7 @@ export const NAVIGATION_SETTINGS_PHASES = {
   footer: ["baseline", "draft", "delete-cancelled", "draft-final", "visibility-draft", "rejected", "saved", "reloaded", "visibility-shown-draft", "shown-saved", "shown-reloaded", "restore-cancelled", "restore-rejected", "restored", "restore-reloaded"],
 } as const;
 type Entity = keyof typeof NAVIGATION_SETTINGS_PHASES;
-export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));return isCoreNavigationExistingSelection(selection)?{page:selection===CORE_NAVIGATION_MENU_FOOTER_SELECTION?[]:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
+export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));return isCoreNavigationExistingSelection(selection)?{page:[CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?[]:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?NAVIGATION_SETTINGS_PHASES.menu.slice(3,16):NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
 export const CORE_NAVIGATION_RECIPE = {
   page: { title: "صفحة إثبات التنقل", path: "/qa-core-navigation-page", slug: "qa-core-navigation-page", seoTitle: "صفحة إثبات التنقل وإدارة المعلومات في الاختبار المعزول", seoDescription: "إثبات التنقل يراجع حفظ بيانات الصفحة والوصف والكلمات المفتاحية داخل البيئة المعزولة، مع بقاء الصفحة غير منشورة والتحقق من سجل التدقيق بعد الحفظ.", focusKeyword: "إثبات التنقل", seoKeywords: ["إثبات التنقل", "اختبار معزول"], canonicalUrl: "https://example.invalid/qa-core-navigation-page" },
   menu: { name: "قائمة إثبات التنقل", editedName: "قائمة إثبات التنقل المعدلة", slug: "qa-core-navigation-menu", a: "أصل التنقل الأول", b: "أصل التنقل الثاني", c: "فرع التنقل", editedC: "فرع التنقل المعدل", href: "https://example.invalid/navigation/child", editedHref: "https://example.invalid/navigation/edited", css: "qa-navigation-child" },
@@ -147,7 +147,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
   const allItems = (await handle.query("select * from public.menu_items order by id")).rows;
   const allPages = (await handle.query("select * from public.pages order by id")).rows;
   const newPages = allPages.filter(row => !state.originalPages.some(old => old.id === row.id));
-  if(state.selection===CORE_NAVIGATION_MENU_FOOTER_SELECTION)assert.deepEqual(newPages,state.last.page,'Retained Page SEO is not replayed; owned prerequisite Page stays byte-identical during Menu/Footer work.');
+  if([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(state.selection??""))assert.deepEqual(newPages,state.last.page,'Retained Page SEO is not replayed; owned prerequisite Page stays byte-identical during Menu/Footer work.');
   const newMenus = allMenus.filter(row => !state.originalMenus.some(old => old.id === row.id));
   assert.deepEqual(allMenus.filter(row => state.originalMenus.some(old => old.id === row.id)), state.originalMenus, "Other menus unchanged.");
   assert.deepEqual(allItems.filter(row => state.originalItems.some(old => old.id === row.id)), state.originalItems, "Other menu graphs unchanged.");
@@ -191,6 +191,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
   } else {
     assert.ok(state.menuId && state.pageId); assert.equal(state.phase.menu, coreNavigationPhases(state.selection).menu.length); assert.equal(state.phase.page, coreNavigationPhases(state.selection).page.length);
     assert.equal(newMenus.length, 1); assertCoreNavigationGraph(allItems.filter(row => Number(row.menu_id) === state.menuId), state.menuId, "duplicate-deleted", state.itemIds);
+    if(state.selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION) assert.deepEqual({menus:newMenus,items:allItems.filter(row=>newMenus.some(menu=>menu.id===row.menu_id))},state.last.menu,"Completed owned Menu graph and metadata remain unchanged through Footer work.");
     const footer = await footerRows(handle); snapshot = footer;
     const restored = phase === 'restored' || phase === 'restore-reloaded';
     const saved = ['saved','reloaded','visibility-shown-draft','shown-saved','shown-reloaded','restore-cancelled','restore-rejected'].includes(phase);
