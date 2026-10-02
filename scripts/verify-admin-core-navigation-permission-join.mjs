@@ -1,4 +1,4 @@
-import {CORE_NAVIGATION_FOLLOWUP_SELECTION,CORE_NAVIGATION_EXISTING_SELECTION,isCoreNavigationFollowupSelection,coreNavigationSelectedIds} from './fixtures/admin-core-navigation-settings-journeys.mjs';
+import {CORE_NAVIGATION_EXISTING_SELECTION,isCoreNavigationFollowupSelection,coreNavigationSelectedIds} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
