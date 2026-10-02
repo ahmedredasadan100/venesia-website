@@ -1481,11 +1481,27 @@ assert.ok(
     ]),
   "Video URL, duration, and thumbnail must bind errors to their visible controls.",
 );
+// Preserve explicit error-focus IDs and the generated fallback used by ordinary pickers.
+const mediaTriggerId = collectNodes(adminMediaImageField, ts.isVariableDeclaration)
+  .filter((node) => ts.isIdentifier(node.name) && node.name.text === "triggerId");
+const generatedMediaTriggerId = collectNodes(adminMediaImageField, ts.isVariableDeclaration)
+  .filter((node) => ts.isIdentifier(node.name) && node.name.text === "generatedFocusTargetId");
+assert.equal(mediaTriggerId.length, 1);
+assert.equal(generatedMediaTriggerId.length, 1);
+const triggerIdExpression = mediaTriggerId[0].initializer;
+const generatedIdExpression = generatedMediaTriggerId[0].initializer;
+assert.ok(triggerIdExpression && ts.isBinaryExpression(triggerIdExpression));
+assert.equal(triggerIdExpression.operatorToken.kind, ts.SyntaxKind.QuestionQuestionToken);
+assert.deepEqual(expressionPath(triggerIdExpression.left), ["focusTargetId"]);
+assert.deepEqual(expressionPath(triggerIdExpression.right), ["generatedFocusTargetId"]);
+assert.ok(generatedIdExpression && ts.isCallExpression(generatedIdExpression));
+assert.equal(callName(generatedIdExpression), "useId");
+assert.equal(generatedIdExpression.arguments.length, 0);
 const actionableMediaPickerControls = jsxElements(
   adminMediaImageField,
   "button",
 ).filter((element) =>
-  jsxAttributePathIs(element, "id", ["focusTargetId"]),
+  jsxAttributePathIs(element, "id", ["triggerId"]),
 );
 const mediaPickerFieldGroups = jsxElements(
   adminMediaImageField,
@@ -1501,8 +1517,9 @@ assert.ok(
     mediaPickerFieldGroups.every((element) =>
       jsxHasAttributes(element, ["role", "aria-invalid", "aria-describedby"]),
     ) &&
-    actionableMediaPickerControls.length > 0 &&
+    actionableMediaPickerControls.length === 4 &&
     actionableMediaPickerControls.every((element) =>
+      jsxAttributeStaticString(element, "type") === "button" &&
       !jsxAttribute(element, "role") &&
       !jsxAttribute(element, "aria-invalid") &&
       jsxHasAttributes(element, [

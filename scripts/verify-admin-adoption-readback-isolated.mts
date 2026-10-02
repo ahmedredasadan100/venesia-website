@@ -1,5 +1,5 @@
 import {isCoreTopicControlsSelection,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
-import {CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,assertCoreTemplateControlsRetryReceipt} from "./fixtures/admin-core-template-controls-contract.mjs";
+import {isCoreTemplateControlSelection,assertCoreTemplateControlsRetryReceipt} from "./fixtures/admin-core-template-controls-contract.mjs";
 import {CORE_PROJECT_EDITOR_SELECTION,assertCoreProjectEditorSelectionReceipt} from "./fixtures/admin-core-project-controls-contract.mjs";
 import {CORE_NAVIGATION_FOLLOWUP_SELECTION,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import {CORE_TEMPLATE_HERO_BULK_SELECTION,assertCoreTemplateHeroBulkReceipt} from './fixtures/admin-core-template-bulk-journeys.mjs';
@@ -239,7 +239,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       const source = JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
       previewImpactContext = {fixtures,previewMatrix,canonicalRequiredCases,sourceSha256:source.sourceSha256};
     }
-    const isTemplateControlsRetry = browser.journeySelection === CORE_TEMPLATE_CONTROLS_RETRY_SELECTION;
+    const isTemplateControlsRetry = isCoreTemplateControlSelection(browser.journeySelection);
     const isTopicControlsRetry = isCoreTopicControlsSelection(browser.journeySelection);
     const isProjectEditors = browser.journeySelection === CORE_PROJECT_EDITOR_SELECTION;
     const isNavigationFollowup = browser.journeySelection === CORE_NAVIGATION_FOLLOWUP_SELECTION;

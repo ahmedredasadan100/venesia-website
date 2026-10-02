@@ -1,10 +1,12 @@
 import {exerciseCoreDownloadField,CORE_DOWNLOAD_MEDIA_HREF} from './admin-core-download-media-adoption.mjs';
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
+import {readFileSync} from "node:fs";
+import {selectCoreLinkPreviewAction,assertCoreReadOnlyEditRequests} from "./admin-core-template-library-presentation-journeys.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
-import { buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_VALUES as values, TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS, assertCoreTemplateFeedbackAdapter } from "./admin-core-template-controls-contract.mjs";
+import { coreTemplateFeedbackLinkValues, buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_VALUES as values, TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS, assertCoreTemplateFeedbackAdapter } from "./admin-core-template-controls-contract.mjs";
 
 /** Only finite owned templates. No generic capability/axis is promoted here. */
 export async function runCoreTemplateControlsJourneys(ctx) {
@@ -306,18 +308,21 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     const entry=()=>page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="'+channel+'"]');
     await expect(entry()).toHaveCount(1);await expect(entry()).toBeVisible();const actualAcceptedVariant=await entry().getAttribute('data-admin-feedback-variant');assert.ok(['success','warning'].includes(actualAcceptedVariant));
     const original=new URL(page.url());assert.equal(original.pathname,routePathname);const clean=new URL(original);for(const key of ['saved','notice','cache_warning'])clean.searchParams.delete(key);
-    let additionalActionPosts=0;const count=req=>{if(new URL(req.url()).origin===origin&&req.method()==='POST'&&req.headers()['next-action'])additionalActionPosts++;};page.on('request',count);
+    const expectedValues=coreTemplateFeedbackLinkValues(recipe.kind);let ownerProjection=null;
+    const actionId=expectedValues.length?selectCoreLinkPreviewAction(JSON.parse(readFileSync(new URL('../../.next/server/server-reference-manifest.json',import.meta.url),'utf8')),'app/admin/pages-blocks/blocks/'+recipe.kind+'/[id]/page',{buildMetadata:JSON.parse(readFileSync(new URL('../../.next/required-server-files.json',import.meta.url),'utf8')),recordProjection:projection=>{ownerProjection=projection;console.log('core-template-feedback-read-projection '+JSON.stringify(projection));}}):null;
+    const requests=[],responses=new Map(),readLegs=[];const count=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)requests.push({request,method:request.method(),url:request.url(),actionId:request.headers()['next-action'],contentType:request.headers()['content-type']??'',body:request.postData()});};const onResponse=response=>{if(requests.some(row=>row.request===response.request()))responses.set(response.request(),response);};page.on('request',count);page.on('response',onResponse);
+    async function settleReadLeg(id,start){const expectedCount=start+expectedValues.length;await expect.poll(()=>requests.length,{timeout:60000}).toBe(expectedCount);await expect.poll(()=>requests.slice(start).filter(row=>responses.has(row.request)).length,{timeout:60000}).toBe(expectedValues.length);const rows=requests.slice(start);for(const row of rows){const response=responses.get(row.request);assert.equal(response.status(),200);assert.equal(await response.finished(),null,"The resolver response must finish before navigation.");}const proof=assertCoreReadOnlyEditRequests(rows,{origin,pathname:routePathname,actionId,expectedValues});readLegs.push({id,...proof,responsesCompleted:rows.length,responsesOk:true});}
     const scenarios=[];
     try{for(const spec of TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS){
       const target=new URL(clean);for(const[key,value]of Object.entries(spec.query))target.searchParams.set(key,value);
-      await observe('template-feedback-adapter-'+recipe.kind+'-'+spec.id,()=>page.goto(target.href,{waitUntil:'domcontentloaded'}));
+      const openedAt=requests.length;await observe('template-feedback-adapter-'+recipe.kind+'-'+spec.id,()=>page.goto(target.href,{waitUntil:'domcontentloaded'}));await settleReadLeg(spec.id+':open',openedAt);
       await expect(entry()).toHaveCount(1);await expect(entry()).toBeVisible();await expect(entry()).toHaveAttribute('data-admin-feedback-variant',spec.variant);await expect(entry()).toContainText(spec.text);
       const dismiss=entry().getByRole('button',{name:'إغلاق الإشعار',exact:true});await expect(dismiss).toBeVisible();await dismiss.click();await expect(entry()).toHaveCount(0);
       const after=new URL(page.url());for(const key of ['saved','notice','cache_warning'])assert.equal(after.searchParams.has(key),false);assert.equal(after.pathname,clean.pathname);assert.equal(after.hash,clean.hash);assert.equal(after.search,clean.search);
-      await observe('template-feedback-dismissed-reload',()=>page.reload({waitUntil:'domcontentloaded'}));await expect(entry()).toHaveCount(0);
+      const reloadAt=requests.length;await observe('template-feedback-dismissed-reload',()=>page.reload({waitUntil:'domcontentloaded'}));await settleReadLeg(spec.id+':reloaded',reloadAt);await expect(entry()).toHaveCount(0);
       scenarios.push({id:spec.id,variant:spec.variant,visibleCount:1,messageText:spec.text,dismissButtonVisible:true,dismissed:true,savedRemoved:true,noticeRemoved:true,cacheWarningRemoved:true,unrelatedQueryPreserved:true,samePathAndHash:true,absentAfterReload:true});
-    }}finally{page.off('request',count);}
-    const proof={kind:recipe.kind,templateId:recipe.template.id,channel,routePathname,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,actualAcceptedSaveVisible:true,actualAcceptedVariant,scenarios,additionalActionPosts,adapterOnly:true,backendFailureClaim:false,nativeBefore:nativeBefore.id,nativeAfter:null,automaticCoverage:[],globalClosed:false};
+    }}finally{page.off('request',count);page.off('response',onResponse);}
+    const proof={kind:recipe.kind,templateId:recipe.template.id,channel,routePathname,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,actualAcceptedSaveVisible:true,actualAcceptedVariant,scenarios,additionalActionPosts:requests.length,linkReadActions:{ownerProjection,legs:readLegs,mutatingOrUnknownActionPosts:requests.filter(request=>request.actionId!==actionId).length},adapterOnly:true,backendFailureClaim:false,nativeBefore:nativeBefore.id,nativeAfter:null,automaticCoverage:[],globalClosed:false};
     return assertCoreTemplateFeedbackAdapter(proof,recipe.kind,recipe.template.id,process.env.QA_ADMIN_SOURCE_SHA256);
   }
   for (const recipe of plan.recipes) await run("core-template-controls-" + recipe.kind, [], async () => {
