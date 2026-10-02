@@ -1,3 +1,4 @@
+import {coreTemplateControlKinds} from './admin-core-template-controls-contract.mjs';
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
 import {expect} from 'playwright/test';
@@ -43,7 +44,7 @@ export function assertCoreDownloadJoin({browser,nativeRecords,ownedRecords,asset
  assert.deepEqual(nativeRecords.filter(row=>row.kind===kind),ownedRecords,'Saved native artifacts must match every fixed checkpoint captured by the owned verifier.');
  for(const row of ownedRecords){assert.equal(row.status,'pass');assert.equal(row.downloadMedia.status,'pass');assert.deepEqual(row.downloadMedia.asset,asset);assert.equal(row.downloadMedia.fileUnchanged,true);assert.equal(row.downloadMedia.catalogRowsUnchanged,true);assert.match(row.downloadMedia.catalogAssetsSha256,/^[a-f0-9]{64}$/u);}
  const specs=browser.cohort==='template-controls'
- ? [['cards','item_0','block-template-cards-editor'],['breadcrumb','manual_item_0','block-template-breadcrumb-editor'],['cta','primary_cta','block-template-cta-editor']]
+ ? [['cards','item_0','block-template-cards-editor'],['breadcrumb','manual_item_0','block-template-breadcrumb-editor'],['cta','primary_cta','block-template-cta-editor']].filter(([kind])=>coreTemplateControlKinds(browser.journeySelection??null).includes(kind))
  : [['menu','menu_link','menu-builder'],['footer','footer_manual_link','footer-builder']];
  const results=[];
  for(const [entity,field,consumer]of specs){

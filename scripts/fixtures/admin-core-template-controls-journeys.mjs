@@ -3,10 +3,13 @@ import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admi
 import {readFileSync} from "node:fs";
 import {selectCoreLinkPreviewAction,assertCoreReadOnlyEditRequests} from "./admin-core-template-library-presentation-journeys.mjs";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 import { coreTemplateFeedbackLinkValues, buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_VALUES as values, TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS, assertCoreTemplateFeedbackAdapter } from "./admin-core-template-controls-contract.mjs";
+
+/** Diagnostic only: preserve known transport codes without exposing arbitrary error text. */
+export function coreTemplateReadFailureDiagnostic(failure){if(failure===null)return{code:null};const code=String(failure?.errorText??'');const allowed=['net::ERR_ABORTED','net::ERR_FAILED','net::ERR_CONNECTION_RESET','net::ERR_CONNECTION_CLOSED','net::ERR_NETWORK_CHANGED','net::ERR_INTERNET_DISCONNECTED','net::ERR_TIMED_OUT'];return allowed.includes(code)?{code}:{code:'OTHER',sha256:createHash('sha256').update(code).digest('hex')};}
 
 /** Finish every admitted read or fail the leg within the existing 60-second verification bound. */
 export async function finishCoreTemplateReadResponses(responses,{schedule=(callback,ms)=>setTimeout(callback,ms),cancel=timer=>clearTimeout(timer)}={}){
@@ -317,10 +320,11 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     const original=new URL(page.url());assert.equal(original.pathname,routePathname);const clean=new URL(original);for(const key of ['saved','notice','cache_warning'])clean.searchParams.delete(key);
     const expectedValues=coreTemplateFeedbackLinkValues(recipe.kind);let ownerProjection=null;
     const actionId=expectedValues.length?selectCoreLinkPreviewAction(JSON.parse(readFileSync(new URL('../../.next/server/server-reference-manifest.json',import.meta.url),'utf8')),'app/admin/pages-blocks/blocks/'+recipe.kind+'/[id]/page',{buildMetadata:JSON.parse(readFileSync(new URL('../../.next/required-server-files.json',import.meta.url),'utf8')),recordProjection:projection=>{ownerProjection=projection;console.log('core-template-feedback-read-projection '+JSON.stringify(projection));}}):null;
-    const requests=[],responses=new Map(),readLegs=[];const count=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)requests.push({request,method:request.method(),url:request.url(),actionId:request.headers()['next-action'],contentType:request.headers()['content-type']??'',body:request.postData()});};const onResponse=response=>{if(requests.some(row=>row.request===response.request()))responses.set(response.request(),response);};page.on('request',count);page.on('response',onResponse);
+    let frameNavigationSequence=0,navigationPhase="before-first-navigation";const navigated=frame=>{if(frame===page.mainFrame()){frameNavigationSequence++;navigationPhase="main-frame-navigated";}};
+    const requests=[],responses=new Map(),readLegs=[];const count=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)requests.push({request,frameNavigationSequence,navigationPhase,observedAt:Date.now(),method:request.method(),url:request.url(),actionId:request.headers()['next-action'],contentType:request.headers()['content-type']??'',body:request.postData()});};const onResponse=response=>{if(requests.some(row=>row.request===response.request()))responses.set(response.request(),response);};page.on('request',count);page.on('response',onResponse);page.on('framenavigated',navigated);
     async function settleReadLeg(id,start){
       const startedAt=Date.now(),expectedCount=start+expectedValues.length;let stage='start',proof=null,finishedCount=0;
-      const diagnostic=reason=>console.log('core-template-feedback-read-leg '+JSON.stringify({kind:recipe.kind,leg:id,stage,reason,elapsedMs:Date.now()-startedAt,expectedCount:expectedValues.length,requestCount:requests.length-start,responseCount:requests.slice(start).filter(row=>responses.has(row.request)).length,failedCount:requests.slice(start).filter(row=>row.request.failure()!==null).length,finishedCount,statuses:requests.slice(start).filter(row=>responses.has(row.request)).map(row=>responses.get(row.request).status()),readProof:proof,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256}));
+      const diagnostic=reason=>console.log('core-template-feedback-read-leg '+JSON.stringify({kind:recipe.kind,leg:id,stage,reason,elapsedMs:Date.now()-startedAt,expectedCount:expectedValues.length,requestCount:requests.length-start,responseCount:requests.slice(start).filter(row=>responses.has(row.request)).length,failedCount:requests.slice(start).filter(row=>row.request.failure()!==null).length,finishedCount,frameNavigationSequence,navigationPhase,requestTimeline:requests.slice(start).map((row,index)=>({index,frameNavigationSequence:row.frameNavigationSequence,navigationPhase:row.navigationPhase,observedAt:row.observedAt,startedAt:row.request.timing().startTime,payloadSha256:createHash("sha256").update(row.body??"").digest("hex"),failure:coreTemplateReadFailureDiagnostic(row.request.failure()),contentType:responses.has(row.request)?responses.get(row.request).headers()["content-type"]??null:null})),statuses:requests.slice(start).filter(row=>responses.has(row.request)).map(row=>responses.get(row.request).status()),readProof:proof,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256}));
       try{
         diagnostic('BEGIN');await expect.poll(()=>requests.length,{timeout:60000}).toBe(expectedCount);stage='request-count';diagnostic('OBSERVED');
         await expect.poll(()=>requests.slice(start).filter(row=>responses.has(row.request)).length,{timeout:60000}).toBe(expectedValues.length);stage='response-count';diagnostic('OBSERVED');
@@ -333,13 +337,13 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     const scenarios=[];
     try{for(const spec of TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS){
       const target=new URL(clean);for(const[key,value]of Object.entries(spec.query))target.searchParams.set(key,value);
-      const openedAt=requests.length;await observe('template-feedback-adapter-'+recipe.kind+'-'+spec.id,()=>page.goto(target.href,{waitUntil:'domcontentloaded'}));await settleReadLeg(spec.id+':open',openedAt);
+      const openedAt=requests.length;navigationPhase='goto-requested';await observe('template-feedback-adapter-'+recipe.kind+'-'+spec.id,()=>page.goto(target.href,{waitUntil:'domcontentloaded'}));await settleReadLeg(spec.id+':open',openedAt);
       await expect(entry()).toHaveCount(1);await expect(entry()).toBeVisible();await expect(entry()).toHaveAttribute('data-admin-feedback-variant',spec.variant);await expect(entry()).toContainText(spec.text);
       const dismiss=entry().getByRole('button',{name:'إغلاق الإشعار',exact:true});await expect(dismiss).toBeVisible();await dismiss.click();await expect(entry()).toHaveCount(0);
       const after=new URL(page.url());for(const key of ['saved','notice','cache_warning'])assert.equal(after.searchParams.has(key),false);assert.equal(after.pathname,clean.pathname);assert.equal(after.hash,clean.hash);assert.equal(after.search,clean.search);
-      const reloadAt=requests.length;await observe('template-feedback-dismissed-reload',()=>page.reload({waitUntil:'domcontentloaded'}));await settleReadLeg(spec.id+':reloaded',reloadAt);await expect(entry()).toHaveCount(0);
+      const reloadAt=requests.length;navigationPhase='reload-requested';await observe('template-feedback-dismissed-reload',()=>page.reload({waitUntil:'domcontentloaded'}));await settleReadLeg(spec.id+':reloaded',reloadAt);await expect(entry()).toHaveCount(0);
       scenarios.push({id:spec.id,variant:spec.variant,visibleCount:1,messageText:spec.text,dismissButtonVisible:true,dismissed:true,savedRemoved:true,noticeRemoved:true,cacheWarningRemoved:true,unrelatedQueryPreserved:true,samePathAndHash:true,absentAfterReload:true});
-    }}finally{page.off('request',count);page.off('response',onResponse);}
+    }}finally{page.off('request',count);page.off('response',onResponse);page.off('framenavigated',navigated);}
     const proof={kind:recipe.kind,templateId:recipe.template.id,channel,routePathname,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,actualAcceptedSaveVisible:true,actualAcceptedVariant,scenarios,additionalActionPosts:requests.length,linkReadActions:{ownerProjection,legs:readLegs,mutatingOrUnknownActionPosts:requests.filter(request=>request.actionId!==actionId).length},adapterOnly:true,backendFailureClaim:false,nativeBefore:nativeBefore.id,nativeAfter:null,automaticCoverage:[],globalClosed:false};
     return assertCoreTemplateFeedbackAdapter(proof,recipe.kind,recipe.template.id,process.env.QA_ADMIN_SOURCE_SHA256);
   }

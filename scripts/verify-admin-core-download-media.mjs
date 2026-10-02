@@ -1,3 +1,4 @@
+import {CORE_TEMPLATE_DUAL_LINK_CONTROLS_SELECTION} from './fixtures/admin-core-template-controls-contract.mjs';
 import {coreDownloadFixture} from './verify-admin-core-download-media-isolated.mts';
 
 import assert from 'node:assert/strict';import {randomUUID}from'node:crypto';import {readFileSync}from'node:fs';import {resolve}from'node:path';import{createJiti}from'jiti';
@@ -43,5 +44,8 @@ for(const[browser,rows,count]of[[tb,trows,3],[nb,navrows,7]]){
  ];
  for(const[name,mutate]of mutations)test(browser.cohort+' rejects '+name,()=>{const changed=structuredClone(args);mutate(changed);assert.throws(()=>assertCoreDownloadJoin(changed));});
 }
+function dualDownloadArgs(){const browser=structuredClone(tb);browser.journeySelection=CORE_TEMPLATE_DUAL_LINK_CONTROLS_SELECTION;browser.evidence=browser.evidence.filter(r=>r.id!=='core-template-controls-cta');browser.templateControls.outcomes=browser.templateControls.outcomes.filter(r=>r.kind!=='cta');const rows=structuredClone(trows.filter(r=>r.recipe!=='cta'));return{browser,nativeRecords:rows,ownedRecords:structuredClone(rows),asset,sourceSha256};}
+test('Original two remaining link recipes require both real PDF joins without CTA replay',()=>{const joined=assertCoreDownloadJoin(dualDownloadArgs());assert.equal(joined.fieldCount,2);assert.deepEqual(joined.observations.map(r=>r.journeyId),['core-template-controls-cards','core-template-controls-breadcrumb']);assert.equal(joined.globalClosed,false);});
+for(const[name,edit]of [['missing remaining PDF',a=>a.browser.templateControls.outcomes.pop()],['CTA replay',a=>a.browser.templateControls.outcomes.push(tb.templateControls.outcomes[2])],['false saved hash',a=>{a.nativeRecords.find(r=>r.recipe==='cards'&&r.phase==='reloaded').rowHash='other';a.ownedRecords=structuredClone(a.nativeRecords);}],['unknown selection',a=>a.browser.journeySelection='unregistered-selection']])test('Dual PDF join rejects '+name,()=>{const a=dualDownloadArgs();edit(a);assert.throws(()=>assertCoreDownloadJoin(a));});
 console.log(JSON.stringify({status:'pass',controls:cases.length,cases,actualAuthenticatedBrowser:false,actualNativeDatabase:false,globalClosed:false}));
 

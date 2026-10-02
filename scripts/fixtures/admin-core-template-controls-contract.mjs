@@ -17,11 +17,12 @@ export const TEMPLATE_CONTROL_RECIPES = {
 };
 export const CORE_TEMPLATE_CONTROLS_RETRY_SELECTION="template-controls-followup";
 export const CORE_TEMPLATE_LINK_CONTROLS_SELECTION="template-link-controls-followup";
-export const isCoreTemplateControlSelection=selection=>[CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,CORE_TEMPLATE_LINK_CONTROLS_SELECTION].includes(selection);
+export const CORE_TEMPLATE_DUAL_LINK_CONTROLS_SELECTION="template-dual-link-controls-followup";
+export const isCoreTemplateControlSelection=selection=>[CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,CORE_TEMPLATE_LINK_CONTROLS_SELECTION,CORE_TEMPLATE_DUAL_LINK_CONTROLS_SELECTION].includes(selection);
 export const CORE_TEMPLATE_CONTROLS_RETRY_KINDS=Object.freeze(["cards","breadcrumb","cta","media-hub"]);
 export const CORE_TEMPLATE_CONTROLS_RETRY_IDS=Object.freeze(CORE_TEMPLATE_CONTROLS_RETRY_KINDS.map(kind=>"core-template-controls-"+kind));
 /** @param {string|null} [selection] */
-export function coreTemplateControlKinds(selection=null){if(selection===null)return Object.keys(TEMPLATE_CONTROL_RECIPES);assert.ok(isCoreTemplateControlSelection(selection));return CORE_TEMPLATE_CONTROLS_RETRY_KINDS.filter(kind=>selection!==CORE_TEMPLATE_LINK_CONTROLS_SELECTION||kind!=="media-hub");}
+export function coreTemplateControlKinds(selection=null){if(selection===null)return Object.keys(TEMPLATE_CONTROL_RECIPES);assert.ok(isCoreTemplateControlSelection(selection));return CORE_TEMPLATE_CONTROLS_RETRY_KINDS.filter(kind=>selection===CORE_TEMPLATE_CONTROLS_RETRY_SELECTION||kind!=="media-hub").filter(kind=>selection!==CORE_TEMPLATE_DUAL_LINK_CONTROLS_SELECTION||kind!=="cta");}
 export const TEMPLATE_CONTROL_PHASES = ["baseline", "draft", "negative", "saved", "reloaded"];
 export const TEMPLATE_CONTROL_VALUES = {
   cards: [
