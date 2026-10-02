@@ -100,7 +100,7 @@ export async function runCorePresentationControlsJourneys(ctx){
   await observe("presentation-controls-reload",()=>page.reload({waitUntil:"domcontentloaded"}));await tab("content");await assertUi();await checkpoint("reloaded");
   const result={renderedAdoption,kind:recipe.kind,consumer:recipe.consumer,surface:recipe.surface,nativeCheckpoints:6,nativePhases:[...PRESENTATION_CONTROL_PHASES],exactWrites:1,pendingRejection:rejected,pendingSave:saved,postRejectionDirtyNavigationCancelled:true,acceptedDiscard,controls:recipe.kind==="hero"?["five_text_fields","visibility_bold_alignment","current_variant_selection_restored","image_composition","desktop_add_replace_cancel_order_remove","optional_mobile_add_replace_empty","primary_link_replace_target_cancel","secondary_link_clear","mirrored_cta_controls"]:["four_generic_text_fields","visibility_bold_alignment","hidden_identity_preserved"],automaticAxisCoverage:[],globalClosed:false};outcomes.push(result);return result;
  });
- const contentScroll=await observeContentScrollVariant({...ctx,formManifest:manifest},f.contentScroll);
+ const contentScroll=ctx.journeySelection==='presentation-hero-followup'?null:await observeContentScrollVariant({...ctx,formManifest:manifest},f.contentScroll);
  return{planned:plan.recipes.length,completed:outcomes.length,outcomes,contentScroll,nonCapabilities:plan.nonCapabilities,nativeFinalityRequired:true,globalClosed:false};
 }
 

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
+import {readFileSync} from 'node:fs';
 import {expect} from 'playwright/test';
 
 const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
@@ -33,9 +34,17 @@ async function privateDraft(form){
  });
 }
 
+/** Failure-only public export labels; never persist the build manifest or secret fields. */
+function describeDiscardReopenRequests(requests){
+ try{
+  const raw=readFileSync(new URL('../../.next/server/server-reference-manifest.json',import.meta.url)),manifest=JSON.parse(raw.toString('utf8'));
+  return{manifestStatus:'read',manifestSha256:createHash('sha256').update(raw).digest('hex'),requests:requests.map(({method,actionId})=>{const entry=actionId?(manifest.node?.[actionId]??manifest.edge?.[actionId]):null;const name=entry?.exportedName,file=typeof entry?.filename==='string'?entry.filename.replaceAll('\\','/'):null,match=file?.match(/(?:^|\/)src\/(.+)$/u),filename=match?'src/'+match[1]:null;return{method,actionId,exportedName:typeof name==='string'&&/^[a-zA-Z_$][a-zA-Z0-9_$]{0,159}$/u.test(name)?name:null,filename:filename&&/^src\/[a-zA-Z0-9_./[\]()-]+\.tsx?$/u.test(filename)&&!filename.split('/').includes('..')?filename:null};})};
+ }catch{return{manifestStatus:'unavailable',requests};}
+}
+
 /** Shared accepted leave observation. Native no-write is settled before reauthoring. */
 export async function observeCoreAcceptedDraftDiscard({page,origin,nativeCheckpoint,form,submit,assertDraft,discardDirty,priorNative}){
- let phase='discard-input-validation';
+ let phase='discard-input-validation';const diagnostic={reopenPosts:0,requests:[]};
  try{
   const base=new URL(origin);assert.equal(base.origin,origin);assert.equal(base.protocol,'http:');assert.equal(base.hostname,'127.0.0.1');assert.ok(base.port);
   assert.equal(typeof nativeCheckpoint,'function');assert.ok(assertDraft===undefined||typeof assertDraft==='function');
@@ -60,12 +69,12 @@ export async function observeCoreAcceptedDraftDiscard({page,origin,nativeCheckpo
     }finally{page.off('request',discardListener);}
     const reopenCorrelationId=randomUUID(),readReopen=async step=>{const request={id:randomUUID(),kind:'form-permission-fingerprint',correlationId:reopenCorrelationId,phase:step};return fingerprint(await nativeCheckpoint(request),request);};
     const reopenBefore=discardDirty.verifyReopen?await readReopen('before'):null;if(reopenBefore)unchanged(discardBefore,reopenBefore);
-    let reopenPosts=0;const reopenListener=request=>{if(request.method()==='POST'&&new URL(request.url()).origin===origin)reopenPosts++;};if(reopenBefore)page.on('request',reopenListener);
-    try{phase='discard-reopen-refill';await discardDirty.reopenAndRefill();assert.equal(page.url(),originalUrl);await expect(form).toHaveCount(1);await expect(form).toHaveAttribute('data-admin-form-dirty','true');await expect(submit).toBeEnabled();if(assertDraft)await assertDraft();
-     if(reopenBefore){assert.equal(reopenPosts,0);const reopenAfter=await readReopen('after');unchanged(reopenBefore,reopenAfter);assert.equal(reopenPosts,0);acceptedDiscard.reopen={nativeBefore:reopenBefore.id,nativeAfter:reopenAfter.id,nativeCorrelationId:reopenCorrelationId,actionRequests:0,nativePublicStateUnchanged:true,draftReauthored:true,originalRouteRestored:true};}
+    let reopenPosts=0;const reopenListener=request=>{if(request.method()==='POST'&&new URL(request.url()).origin===origin){reopenPosts++;diagnostic.reopenPosts=reopenPosts;const action=request.headers()['next-action'];if(diagnostic.requests.length<32)diagnostic.requests.push({method:'POST',actionId:typeof action==='string'&&/^[a-f0-9]{40,64}$/u.test(action)?action:null});}};if(reopenBefore)page.on('request',reopenListener);
+    try{phase='discard-reopen-reauthor';await discardDirty.reopenAndRefill();phase='discard-reopen-route';assert.equal(page.url(),originalUrl);phase='discard-reopen-form';await expect(form).toHaveCount(1);phase='discard-reopen-dirty';await expect(form).toHaveAttribute('data-admin-form-dirty','true');phase='discard-reopen-submit';await expect(submit).toBeEnabled();phase='discard-reopen-authored-ui';if(assertDraft)await assertDraft();
+     if(reopenBefore){phase='discard-reopen-post-count-before-native';assert.equal(reopenPosts,0);phase='discard-reopen-native-after';const reopenAfter=await readReopen('after');unchanged(reopenBefore,reopenAfter);phase='discard-reopen-post-count-after-native';assert.equal(reopenPosts,0);acceptedDiscard.reopen={nativeBefore:reopenBefore.id,nativeAfter:reopenAfter.id,nativeCorrelationId:reopenCorrelationId,actionRequests:0,nativePublicStateUnchanged:true,draftReauthored:true,originalRouteRestored:true};}
     }finally{if(reopenBefore)page.off('request',reopenListener);}
   return acceptedDiscard;
- }catch{throw Error('Accepted draft discard proof failed at '+phase+'. No discard coverage granted.');}
+ }catch{throw Error('Accepted draft discard proof failed at '+phase+'. No discard coverage granted. Diagnostic: '+JSON.stringify({...diagnostic,...describeDiscardReopenRequests(diagnostic.requests)}));}
 }
 
 /** One known pre-delivery rejection, native no-write and submitted-draft proof; never SQL rollback. */
