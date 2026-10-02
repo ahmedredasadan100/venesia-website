@@ -28,7 +28,7 @@ export function validateCoreJourneySelection({ scope, cohort, selection }) {
   else if (["template-controls-followup","template-link-controls-followup","template-dual-link-controls-followup"].includes(selection)) assert.equal(cohort, "template-controls");
   else if (["topic-controls-followup", "topic-video-followup"].includes(selection)) assert.equal(cohort, "topic-controls");
   else if (selection === "project-editors-followup") assert.equal(cohort, "project-controls");
-  else if (["navigation-settings-followup","navigation-settings-existing-followup","navigation-settings-menu-footer-followup","navigation-settings-graph-footer-followup"].includes(selection)) assert.equal(cohort, "navigation-settings");
+  else if (["navigation-settings-followup","navigation-settings-existing-followup","navigation-settings-menu-footer-followup","navigation-settings-graph-footer-followup","navigation-settings-footer-followup"].includes(selection)) assert.equal(cohort, "navigation-settings");
   else if (selection === "template-hero-bulk-followup") assert.equal(cohort, "template-bulk");
   else if (selection === "specialized-settings-followup") assert.equal(cohort, "specialized-settings");
   else if (selection === "readonly-hubs-followup") assert.equal(cohort, "readonly-hubs");

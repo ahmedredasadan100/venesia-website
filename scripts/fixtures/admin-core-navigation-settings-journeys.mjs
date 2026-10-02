@@ -97,7 +97,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       return{type,id:String(id),label,routePathname:path,information,preview,copyHidden:true,informationReturnedFocus:true,actionRequests:0,externalDestinationFollowed:false};
     } finally {page.off('request',listener);}
   }
-  const existingOnly=isCoreNavigationExistingSelection(ctx.journeySelection),graphFooterOnly=ctx.journeySelection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,menuFooterOnly=graphFooterOnly||ctx.journeySelection===CORE_NAVIGATION_MENU_FOOTER_SELECTION;assert.equal(f.selection??null,ctx.journeySelection??null);
+  const existingOnly=isCoreNavigationExistingSelection(ctx.journeySelection),footerOnly=ctx.journeySelection===CORE_NAVIGATION_FOOTER_SELECTION,graphFooterOnly=ctx.journeySelection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,menuFooterOnly=footerOnly||graphFooterOnly||ctx.journeySelection===CORE_NAVIGATION_MENU_FOOTER_SELECTION;assert.equal(f.selection??null,ctx.journeySelection??null);
   let pageId=existingOnly?f.prepared.pageId:undefined,menuId=existingOnly?f.prepared.menuId:undefined,itemIds;
   if(existingOnly){assert.equal(f.prepared.kind,'owned-fixture-preparation');for(const id of[pageId,menuId])assert.ok(Number.isSafeInteger(id)&&id>0);}
   if (!isCoreNavigationFollowupSelection(ctx.journeySelection)) await runCoreDescendantPresentationJourneys(ctx,"navigation");
@@ -173,7 +173,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     return {acceptedFeedback,acceptedNativeId:acceptedNative.id,renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   assert.ok(menuId, "Menu creation must finish before dependent graph work.");
-  await run("core-navigation-menu-metadata-item-graph-commands", [], async () => {
+  if(!footerOnly) await run("core-navigation-menu-metadata-item-graph-commands", [], async () => {
     renderedAdoption=[];renderedOpened=new Set();
     const path = '/admin/pages-blocks/menus/'+menuId;
     await goto('/admin/pages-blocks/menus'+(existingOnly?'?q='+encodeURIComponent(r.menu.slug):''));
@@ -225,7 +225,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await more(rowById("menu_item", itemIds.b), "delete"); await action(() => confirm().click()); await expect(rowById("menu_item", itemIds.b)).toHaveCount(0); await expect(rowById("menu_item", itemIds.c)).toHaveCount(0); await checkpoint("menu", "subtree-deleted"); assert.equal(cycleFeedbackVariant, "danger", "A rejected cycle must not be displayed as a successful save."); completed.push("menu-graph");
     return {rowActionObservations:rowActionObservations.filter(row=>row.type!=="footer_manual_link"),renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
-  if(!graphFooterOnly) await run("core-navigation-menu-visibility-duplicate-delete", [], async () => {
+  if(!footerOnly&&!graphFooterOnly) await run("core-navigation-menu-visibility-duplicate-delete", [], async () => {
     await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); const acceptedFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"menu-builder:list",perform:()=>action(() => more(rowById("menu", menuId), 'visibility'))});
     await expect(rowById("menu",menuId).getByText("مخفية",{exact:true})).toBeVisible();await assertInverseVisibility(rowById("menu",menuId),"إظهار"); const acceptedNative=await checkpoint("menu", "menu-hidden");
     await more(rowById("menu", menuId), "duplicate"); await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/menus\/\d+$/u.test(url.pathname) && !url.pathname.endsWith(`/${menuId}`));
@@ -234,7 +234,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await more(rowById("menu", duplicateId), "delete"); await action(() => confirm().click()); await expect(rowById("menu", duplicateId)).toHaveCount(0); await checkpoint("menu", "duplicate-deleted");
     await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); await action(() => more(rowById("menu", menuId), 'visibility')); await expect(rowById("menu",menuId).getByText("ظاهرة",{exact:true})).toBeVisible();await assertInverseVisibility(rowById("menu",menuId),"إخفاء"); await checkpoint("menu", "menu-shown"); completed.push("menu-list");return{acceptedFeedback,acceptedNativeId:acceptedNative.id,menuId};
   });
-  assert.ok((graphFooterOnly?completed.includes("menu-graph"):completed.includes("menu-list")) && (menuFooterOnly?existingOnly&&pageId===f.prepared.pageId:completed.includes("page-seo")), "Footer references only a completed owned Menu recipe.");
+  assert.ok((footerOnly?existingOnly&&menuId===f.prepared.menuId:(graphFooterOnly?completed.includes("menu-graph"):completed.includes("menu-list"))) && (menuFooterOnly?existingOnly&&pageId===f.prepared.pageId:completed.includes("page-seo")), "Footer references the completed owned Menu recipe or the private uncredited terminal prerequisite.");
   await run("core-navigation-footer-aggregate-slots-manual-links-rejection-retry", [], async () => {
     renderedAdoption=[];renderedOpened=new Set();
     await goto("/admin/pages-blocks/footer"); await checkpoint("footer", "baseline");
@@ -261,8 +261,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await observeNavigationOpening({id:"navigation-footer-link-edit",consumer:"footer-builder",surface:"footer-link-edit",collections:["footer-manual-links","footer-builder-shell","footer-fixed-slots"],dialog,target:dialog.getByRole("button",{name:"اختيار الرابط",exact:true})});
     await dialog.getByLabel("اسم العنصر", { exact: true }).fill(r.footer.editedLink); await externalLink(dialog, r.footer.editedHref);
     downloadMedia.push(await exerciseCoreDownloadField({page,origin,owner:dialog,asset:f.downloadMedia,field:'footer_manual_link',originalHref:r.footer.editedHref,assertCurrent:async(href,kind)=>{
-      await expect(dialog.getByText(href || 'لم يتم اختيار رابط بعد.',{exact:true})).toBeVisible();
-      if(kind==='download')await expect(dialog.getByText('تنزيل',{exact:true})).toBeVisible();
+      await assertCoreNavigationFooterLinkDestination(dialog,href,kind);
     }}));
     await dialog.getByRole("button", { name: "حفظ", exact: true }).click(); await expect(dialog).toBeHidden();
     await rowByLabel(r.footer.editedLink).getByRole("button", { name: "تحريك لأعلى", exact: true }).click();
@@ -283,7 +282,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await goto("/admin/pages-blocks/footer"); await tab("column-1"); await expect(rowByLabel(r.footer.editedLink)).toBeVisible(); await expect(rowByLabel(r.footer.links[0])).toBeVisible(); await expect(rowByLabel(r.footer.links[2])).toHaveCount(0);
     await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إظهار '+r.footer.editedLink,exact:true})).toBeVisible();
     await rowByLabel(r.footer.editedLink).locator('[data-admin-row-action="edit"] button').click();
-    await expect(linkModal().getByText(CORE_DOWNLOAD_MEDIA_HREF,{exact:true})).toBeVisible();await expect(linkModal().getByText('تنزيل',{exact:true})).toBeVisible();
+    await assertCoreNavigationFooterLinkDestination(linkModal(),CORE_DOWNLOAD_MEDIA_HREF,'download');
     await linkModal().getByRole('button',{name:'إلغاء',exact:true}).click();await expect(linkModal()).toBeHidden();
     await tab("column-2"); await expect(panel().getByRole("textbox", { name: "النص / Tagline", exact: true })).toHaveValue(r.footer.body); await tab("social-legal"); await expect(panel().getByLabel("Copyright", { exact: true })).toHaveValue(r.footer.copyright); const hiddenReload=await checkpoint("footer", "reloaded");await tab('column-1');
     const footerObservation=await inspectRow({type:'footer_manual_link',id:'0:'+r.footer.editedLink,label:r.footer.editedLink,information:{'الرابط':CORE_DOWNLOAD_MEDIA_HREF,'الهدف':'نفس النافذة','الحالة':'مخفي'},preview:{access:'allowed',href:CORE_DOWNLOAD_MEDIA_HREF}});
@@ -327,7 +326,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       completed.push('footer-default-restore');return{confirmationCancelled:true,cancelledActionRequests:0,rejection,retry,actionRequests:2,explicitRetry:true,nativePhases:['restore-cancelled','restore-rejected','restored','restore-reloaded'],otherThreeRowsAndTimestampsUnchanged:true,automaticCoverage:[],globalClosed:false};
     } finally {page.off('request',listener);}
   });
-  assert.deepEqual(completed,graphFooterOnly?['menu-graph','footer-aggregate','footer-default-restore']:menuFooterOnly?['menu-graph','menu-list','footer-aggregate','footer-default-restore']:existingOnly?['page-seo','menu-graph','menu-list','footer-aggregate','footer-default-restore']:['page-create','page-seo','menu-create','menu-graph','menu-list','footer-aggregate','footer-default-restore']);
+  assert.deepEqual(completed,footerOnly?['footer-aggregate','footer-default-restore']:graphFooterOnly?['menu-graph','footer-aggregate','footer-default-restore']:menuFooterOnly?['menu-graph','menu-list','footer-aggregate','footer-default-restore']:existingOnly?['page-seo','menu-graph','menu-list','footer-aggregate','footer-default-restore']:['page-create','page-seo','menu-create','menu-graph','menu-list','footer-aggregate','footer-default-restore']);
   return { status: "pass", completed, plan, checkpoints, permissionEvidence, downloadMedia, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
 }
 
@@ -344,9 +343,10 @@ export const CORE_NAVIGATION_FOLLOWUP_IDS = [
 export const CORE_NAVIGATION_EXISTING_SELECTION='navigation-settings-existing-followup';
 export const CORE_NAVIGATION_MENU_FOOTER_SELECTION='navigation-settings-menu-footer-followup';
 export const CORE_NAVIGATION_GRAPH_FOOTER_SELECTION='navigation-settings-graph-footer-followup';
-export function isCoreNavigationExistingSelection(selection){return [CORE_NAVIGATION_EXISTING_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection);}
+export const CORE_NAVIGATION_FOOTER_SELECTION='navigation-settings-footer-followup';
+export function isCoreNavigationExistingSelection(selection){return [CORE_NAVIGATION_EXISTING_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION].includes(selection);}
 export function isCoreNavigationFollowupSelection(selection){return selection===CORE_NAVIGATION_FOLLOWUP_SELECTION||isCoreNavigationExistingSelection(selection);}
-export function coreNavigationSelectedIds(selection){assert.ok(isCoreNavigationFollowupSelection(selection));const excluded=['core-navigation-page-create-rejection-retry-reload','core-navigation-menu-create-rejection-retry-reload',...([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?['core-navigation-page-seo-validation-save-reload']:[]),...(selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?['core-navigation-menu-visibility-duplicate-delete']:[])];return isCoreNavigationExistingSelection(selection)?CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>!excluded.includes(id)):[...CORE_NAVIGATION_FOLLOWUP_IDS];}
+export function coreNavigationSelectedIds(selection){assert.ok(isCoreNavigationFollowupSelection(selection));if(selection===CORE_NAVIGATION_FOOTER_SELECTION)return CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>['core-navigation-footer-aggregate-slots-manual-links-rejection-retry','core-navigation-footer-default-restore-confirm-reject-retry'].includes(id));const excluded=['core-navigation-page-create-rejection-retry-reload','core-navigation-menu-create-rejection-retry-reload',...([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?['core-navigation-page-seo-validation-save-reload']:[]),...(selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?['core-navigation-menu-visibility-duplicate-delete']:[])];return isCoreNavigationExistingSelection(selection)?CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>!excluded.includes(id)):[...CORE_NAVIGATION_FOLLOWUP_IDS];}
 export function assertCoreNavigationFollowupReceipt(browser, requiredCases) {
   const selected=coreNavigationSelectedIds(browser.journeySelection);
   assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "navigation-settings");
@@ -361,4 +361,12 @@ export function assertCoreNavigationFollowupReceipt(browser, requiredCases) {
   assert.deepEqual(evidence.map(row => row.id), selected);
   assert.ok(evidence.every(row => row.status === "pass"));
   return { status: "pass", selection: browser.journeySelection, automaticCoverage: [], selectedJourneyIds: [...selected], executedJourneyIds: [...selected], retainedDescendantsReplayed: false, wholeCohortExecuted: false, globalClosed: false };
+}
+
+/** Check the existing card's destination, separately from its potentially equal title. */
+export async function assertCoreNavigationFooterLinkDestination(dialog,href,kind){
+ const destination=dialog.locator('p[dir="ltr"]');
+ if(kind==='none'){assert.equal(href,'');await expect(destination).toHaveCount(0);const empty=dialog.getByText('لم يتم اختيار رابط بعد.',{exact:true});await expect(empty).toHaveCount(1);await expect(empty).toBeVisible();}
+ else{assert.ok(href);await expect(destination).toHaveCount(1);await expect(destination).toHaveText(href);await expect(destination).toBeVisible();}
+ if(kind==='download'){const badge=dialog.getByText('تنزيل',{exact:true});await expect(badge).toHaveCount(1);await expect(badge).toBeVisible();}
 }

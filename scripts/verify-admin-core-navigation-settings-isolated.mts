@@ -1,6 +1,6 @@
 import {CORE_DOWNLOAD_MEDIA_HREF,CORE_DOWNLOAD_LINK} from './fixtures/admin-core-download-media-adoption.mjs';
 import {recordCoreDownloadCheckpoint,prepareCoreDownloadMediaFixture,assertCoreDownloadMediaUnchanged} from './verify-admin-core-download-media-isolated.mts';
-import {CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,isCoreNavigationExistingSelection,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
+import {CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,isCoreNavigationExistingSelection,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -18,7 +18,7 @@ export const NAVIGATION_SETTINGS_PHASES = {
   footer: ["baseline", "draft", "delete-cancelled", "draft-final", "visibility-draft", "rejected", "saved", "reloaded", "visibility-shown-draft", "shown-saved", "shown-reloaded", "restore-cancelled", "restore-rejected", "restored", "restore-reloaded"],
 } as const;
 type Entity = keyof typeof NAVIGATION_SETTINGS_PHASES;
-export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));return isCoreNavigationExistingSelection(selection)?{page:[CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?[]:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?NAVIGATION_SETTINGS_PHASES.menu.slice(3,16):NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
+export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));if(selection===CORE_NAVIGATION_FOOTER_SELECTION)return{page:[],menu:[],footer:NAVIGATION_SETTINGS_PHASES.footer};return isCoreNavigationExistingSelection(selection)?{page:[CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?[]:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?NAVIGATION_SETTINGS_PHASES.menu.slice(3,16):NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
 export const CORE_NAVIGATION_RECIPE = {
   page: { title: "صفحة إثبات التنقل", path: "/qa-core-navigation-page", slug: "qa-core-navigation-page", seoTitle: "صفحة إثبات التنقل وإدارة المعلومات في الاختبار المعزول", seoDescription: "إثبات التنقل يراجع حفظ بيانات الصفحة والوصف والكلمات المفتاحية داخل البيئة المعزولة، مع بقاء الصفحة غير منشورة والتحقق من سجل التدقيق بعد الحفظ.", focusKeyword: "إثبات التنقل", seoKeywords: ["إثبات التنقل", "اختبار معزول"], canonicalUrl: "https://example.invalid/qa-core-navigation-page" },
   menu: { name: "قائمة إثبات التنقل", editedName: "قائمة إثبات التنقل المعدلة", slug: "qa-core-navigation-menu", a: "أصل التنقل الأول", b: "أصل التنقل الثاني", c: "فرع التنقل", editedC: "فرع التنقل المعدل", href: "https://example.invalid/navigation/child", editedHref: "https://example.invalid/navigation/edited", css: "qa-navigation-child" },
@@ -64,15 +64,16 @@ export async function prepareCoreNavigationSettingsFixtures(handle: OwnedLocalHa
   if(isCoreNavigationExistingSelection(selection)){
     await handle.withDatabaseConnection(async connection=>{await connection.query('begin');try{
       const page=(await connection.query("insert into public.pages(title,slug,path,page_type,status) values($1,$2,$3,'static','unpublished') returning *",[CORE_NAVIGATION_RECIPE.page.title,CORE_NAVIGATION_RECIPE.page.slug,CORE_NAVIGATION_RECIPE.page.path])).rows;assert.equal(page.length,1);
-      const menu=(await connection.query("insert into public.menus(name,slug,location,is_active) values($1,$2,'custom',true) returning *",[CORE_NAVIGATION_RECIPE.menu.name,CORE_NAVIGATION_RECIPE.menu.slug])).rows;assert.equal(menu.length,1);
+      const menu=(await connection.query("insert into public.menus(name,slug,location,is_active) values($1,$2,'custom',true) returning *",[selection===CORE_NAVIGATION_FOOTER_SELECTION?CORE_NAVIGATION_RECIPE.menu.editedName:CORE_NAVIGATION_RECIPE.menu.name,CORE_NAVIGATION_RECIPE.menu.slug])).rows;assert.equal(menu.length,1);
       state.pageId=Number(page[0].id);state.menuId=Number(menu[0].id);for(const id of[state.pageId,state.menuId])assert.ok(Number.isSafeInteger(id)&&id>0);
+      if(selection===CORE_NAVIGATION_FOOTER_SELECTION){await connection.query("select public.mutate_menu_tree($1,'save_item',$2::jsonb,$3,$4)",[state.menuId,JSON.stringify({item:{parent_id:null,label:CORE_NAVIGATION_RECIPE.menu.a,href:'#',linked_type:null,linked_id:null,anchor:null,target:'_self',css_class:null,style_preset:'default',is_visible:true,item_type:'parent',sort_order:10}}),actor.id,actor.username]);const item=(await connection.query('select id from public.menu_items where menu_id=$1 order by id',[state.menuId])).rows;assert.equal(item.length,1);state.itemIds.a=Number(item[0].id);assert.ok(Number.isSafeInteger(state.itemIds.a)&&state.itemIds.a>0);}
       await connection.query('commit');
     }catch(error){await connection.query('rollback');throw error;}});
     assert.ok(state.pageId!==undefined&&state.menuId!==undefined);
     const pages=(await handle.query('select * from public.pages where id=$1',[state.pageId])).rows,menus=(await handle.query('select * from public.menus where id=$1',[state.menuId])).rows,items=(await handle.query('select * from public.menu_items where menu_id=$1',[state.menuId])).rows;
-    assert.equal(pages.length,1);assert.equal(menus.length,1);assert.deepEqual(items,[]);assert.equal(Number((await handle.query('select count(*)::int count from public.page_composition_assignments where page_id=$1',[state.pageId])).rows[0].count),0);
-    assert.deepEqual(select(pages[0],['title','slug','path','page_type','status']),{title:CORE_NAVIGATION_RECIPE.page.title,slug:CORE_NAVIGATION_RECIPE.page.slug,path:CORE_NAVIGATION_RECIPE.page.path,page_type:'static',status:'unpublished'});assert.deepEqual(select(menus[0],['name','slug','location','is_active']),{name:CORE_NAVIGATION_RECIPE.menu.name,slug:CORE_NAVIGATION_RECIPE.menu.slug,location:'custom',is_active:true});
-    assert.deepEqual((await handle.query('select * from public.pages where id<>$1 order by id',[state.pageId])).rows,originalPages);assert.deepEqual((await handle.query('select * from public.menus where id<>$1 order by id',[state.menuId])).rows,originalMenus);assert.deepEqual((await handle.query('select * from public.menu_items order by id')).rows,originalItems);
+    assert.equal(pages.length,1);assert.equal(menus.length,1);if(selection===CORE_NAVIGATION_FOOTER_SELECTION)assertCoreNavigationGraph(items,state.menuId,'subtree-deleted',state.itemIds);else assert.deepEqual(items,[]);assert.equal(Number((await handle.query('select count(*)::int count from public.page_composition_assignments where page_id=$1',[state.pageId])).rows[0].count),0);
+    assert.deepEqual(select(pages[0],['title','slug','path','page_type','status']),{title:CORE_NAVIGATION_RECIPE.page.title,slug:CORE_NAVIGATION_RECIPE.page.slug,path:CORE_NAVIGATION_RECIPE.page.path,page_type:'static',status:'unpublished'});assert.deepEqual(select(menus[0],['name','slug','location','is_active']),{name:selection===CORE_NAVIGATION_FOOTER_SELECTION?CORE_NAVIGATION_RECIPE.menu.editedName:CORE_NAVIGATION_RECIPE.menu.name,slug:CORE_NAVIGATION_RECIPE.menu.slug,location:'custom',is_active:true});
+    assert.deepEqual((await handle.query('select * from public.pages where id<>$1 order by id',[state.pageId])).rows,originalPages);assert.deepEqual((await handle.query('select * from public.menus where id<>$1 order by id',[state.menuId])).rows,originalMenus);assert.deepEqual((await handle.query('select * from public.menu_items where menu_id<>$1 order by id',[state.menuId])).rows,originalItems);
     state.last.page=structuredClone(pages);state.last.menu=structuredClone({menus,items});state.auditCursor.page=await auditHead(handle);state.auditCursor.menu=state.auditCursor.page;
     const prepared={kind:'owned-fixture-preparation',ownedRunId:handle.identity.runId,pageId:state.pageId,menuId:state.menuId,pageSnapshotHash:hash(state.last.page),menuSnapshotHash:hash(state.last.menu),uiCreateClaim:false,automaticCoverage:[],globalClosed:false};state.prepared=prepared;handle.record('navigation-existing-fixture-prepared',{kind:prepared.kind,ownedRunId:prepared.ownedRunId,pageId:prepared.pageId,menuId:prepared.menuId,pageSnapshotHash:prepared.pageSnapshotHash,menuSnapshotHash:prepared.menuSnapshotHash,uiCreateClaim:prepared.uiCreateClaim,globalClosed:prepared.globalClosed});
   }
@@ -147,7 +148,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
   const allItems = (await handle.query("select * from public.menu_items order by id")).rows;
   const allPages = (await handle.query("select * from public.pages order by id")).rows;
   const newPages = allPages.filter(row => !state.originalPages.some(old => old.id === row.id));
-  if([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(state.selection??""))assert.deepEqual(newPages,state.last.page,'Retained Page SEO is not replayed; owned prerequisite Page stays byte-identical during Menu/Footer work.');
+  if([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION].includes(state.selection??""))assert.deepEqual(newPages,state.last.page,'Retained Page SEO is not replayed; owned prerequisite Page stays byte-identical during Menu/Footer work.');
   const newMenus = allMenus.filter(row => !state.originalMenus.some(old => old.id === row.id));
   assert.deepEqual(allMenus.filter(row => state.originalMenus.some(old => old.id === row.id)), state.originalMenus, "Other menus unchanged.");
   assert.deepEqual(allItems.filter(row => state.originalItems.some(old => old.id === row.id)), state.originalItems, "Other menu graphs unchanged.");
@@ -191,7 +192,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
   } else {
     assert.ok(state.menuId && state.pageId); assert.equal(state.phase.menu, coreNavigationPhases(state.selection).menu.length); assert.equal(state.phase.page, coreNavigationPhases(state.selection).page.length);
     assert.equal(newMenus.length, 1); assertCoreNavigationGraph(allItems.filter(row => Number(row.menu_id) === state.menuId), state.menuId, "duplicate-deleted", state.itemIds);
-    if(state.selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION) assert.deepEqual({menus:newMenus,items:allItems.filter(row=>newMenus.some(menu=>menu.id===row.menu_id))},state.last.menu,"Completed owned Menu graph and metadata remain unchanged through Footer work.");
+    if([CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION].includes(state.selection??"")) assert.deepEqual({menus:newMenus,items:allItems.filter(row=>newMenus.some(menu=>menu.id===row.menu_id))},state.last.menu,"Completed owned Menu graph and metadata remain unchanged through Footer work.");
     const footer = await footerRows(handle); snapshot = footer;
     const restored = phase === 'restored' || phase === 'restore-reloaded';
     const saved = ['saved','reloaded','visibility-shown-draft','shown-saved','shown-reloaded','restore-cancelled','restore-rejected'].includes(phase);
@@ -282,31 +283,36 @@ export function assertCoreNavigationRowActionsCompletion(browser: Row, native: R
   for(const [entity,phases]of Object.entries(coreNavigationPhases((browser.journeySelection as string|null)??null)))assert.deepEqual(states.filter(row=>row.entity===entity).map(row=>row.phase),phases);
   const state=(entity:string,phase:string)=>{const found=states.filter(row=>row.entity===entity&&row.phase===phase);assert.equal(found.length,1);assert.match(String(found[0].snapshotHash),/^[a-f0-9]{64}$/u);return found[0];};
   const existingOnly=isCoreNavigationExistingSelection(browser.journeySelection);if(existingOnly){assert.ok(prepared);assert.equal(prepared.kind,'owned-fixture-preparation');assert.equal(prepared.ownedRunId,ownedRunId);assert.equal(prepared.uiCreateClaim,false);assert.deepEqual(prepared.automaticCoverage,[]);assert.equal(prepared.globalClosed,false);assert.match(String(prepared.menuSnapshotHash),/^[a-f0-9]{64}$/u);}else assert.equal(prepared,null);
-  const menu=existingOnly?{snapshotHash:prepared!.menuSnapshotHash,menuId:prepared!.menuId}:state('menu','created'),menuRead=state('menu','created-row-inspected'),items=state('menu','item-c'),itemRead=state('menu','items-inspected');
+  const footerOnly=browser.journeySelection===CORE_NAVIGATION_FOOTER_SELECTION;
+  let menuRead:Row|null=null,itemRead:Row|null=null,menuId=Number(prepared?.menuId),ids:Row={};
+  if(!footerOnly){
+  const menu=existingOnly?{snapshotHash:prepared!.menuSnapshotHash,menuId:prepared!.menuId}:state('menu','created');menuRead=state('menu','created-row-inspected');const items=state('menu','item-c');itemRead=state('menu','items-inspected');
   for(const[a,b]of [[menu,menuRead],[items,itemRead]]){assert.equal(a.snapshotHash,b.snapshotHash);assert.equal(b.actorBoundAuditCount,0);}
-  const menuId=Number(menu.menuId);assert.ok(Number.isSafeInteger(menuId)&&menuId>0);const ids=itemRead.itemIds as Row;
+  menuId=Number(menu.menuId);assert.ok(Number.isSafeInteger(menuId)&&menuId>0);ids=itemRead.itemIds as Row;
   for(const key of ['a','b','c'])assert.ok(Number.isSafeInteger(ids[key])&&Number(ids[key])>0);
+  }else{assert.ok(prepared);assert.ok(Number.isSafeInteger(menuId)&&menuId>0);}
   const evidence=browser.evidence as Row[];
   const journey=(id:string)=>{const found=evidence.filter(row=>row.id===id);assert.equal(found.length,1);assert.equal(found[0].status,'pass');assert.deepEqual(found[0].automaticCoverage,[]);return found[0];};
-  const graph=journey('core-navigation-menu-metadata-item-graph-commands'),footer=journey('core-navigation-footer-aggregate-slots-manual-links-rejection-retry');
-  const observations=[...(graph.rowActionObservations as Row[]),...(footer.rowActionObservations as Row[])];assert.equal(observations.length,4);
-  assert.equal(new Set(observations.map(row=>String(row.type)+':'+String(row.id))).size,4);
+  const graph=footerOnly?null:journey('core-navigation-menu-metadata-item-graph-commands'),footer=journey('core-navigation-footer-aggregate-slots-manual-links-rejection-retry');
+  const observations=[...(graph?(graph.rowActionObservations as Row[]):[]),...(footer.rowActionObservations as Row[])];assert.equal(observations.length,footerOnly?1:4);
+  assert.equal(new Set(observations.map(row=>String(row.type)+':'+String(row.id))).size,footerOnly?1:4);
   const r=CORE_NAVIGATION_RECIPE;
-  const expected=[
-    {type:'menu',id:String(menuId),label:r.menu.name,routePathname:'/admin/pages-blocks/menus',information:{Slug:r.menu.slug,'الموقع':'Custom','عدد العناصر':'0','الحالة':'ظاهرة'},preview:{access:'disabled',reason:'القائمة لا تملك مسار معاينة عامًا خاصًا بها.'},edit:{mode:'navigation',pathname:'/admin/pages-blocks/menus/'+menuId,opened:true},nativeCheckpointId:menuRead.id},
-    {type:'menu_item',id:String(ids.a),label:r.menu.a,routePathname:'/admin/pages-blocks/menus/'+menuId,information:{'الرابط':'#','الحالة':'ظاهر'},preview:{access:'disabled',reason:'لا يملك العنصر مسارًا عامًا مستقلاً يمكن معاينته من هنا.'},nativeCheckpointId:itemRead.id},
-    {type:'menu_item',id:String(ids.c),label:r.menu.c,routePathname:'/admin/pages-blocks/menus/'+menuId,information:{'الرابط':r.menu.href,'الحالة':'ظاهر'},preview:{access:'allowed',href:r.menu.href},edit:{mode:'dialog',opened:true},nativeCheckpointId:itemRead.id},
+  const expected=[...(!footerOnly?[
+    {type:'menu',id:String(menuId),label:r.menu.name,routePathname:'/admin/pages-blocks/menus',information:{Slug:r.menu.slug,'الموقع':'Custom','عدد العناصر':'0','الحالة':'ظاهرة'},preview:{access:'disabled',reason:'القائمة لا تملك مسار معاينة عامًا خاصًا بها.'},edit:{mode:'navigation',pathname:'/admin/pages-blocks/menus/'+menuId,opened:true},nativeCheckpointId:menuRead!.id},
+    {type:'menu_item',id:String(ids.a),label:r.menu.a,routePathname:'/admin/pages-blocks/menus/'+menuId,information:{'الرابط':'#','الحالة':'ظاهر'},preview:{access:'disabled',reason:'لا يملك العنصر مسارًا عامًا مستقلاً يمكن معاينته من هنا.'},nativeCheckpointId:itemRead!.id},
+    {type:'menu_item',id:String(ids.c),label:r.menu.c,routePathname:'/admin/pages-blocks/menus/'+menuId,information:{'الرابط':r.menu.href,'الحالة':'ظاهر'},preview:{access:'allowed',href:r.menu.href},edit:{mode:'dialog',opened:true},nativeCheckpointId:itemRead!.id},
+  ]:[]),
     {type:'footer_manual_link',id:'0:'+r.footer.editedLink,label:r.footer.editedLink,routePathname:'/admin/pages-blocks/footer',information:{'الرابط':CORE_DOWNLOAD_MEDIA_HREF,'الهدف':'نفس النافذة','الحالة':'مخفي'},preview:{access:'allowed',href:CORE_DOWNLOAD_MEDIA_HREF},edit:{mode:'dialog-reloaded',opened:true},nativeCheckpointId:state('footer','reloaded').id},
   ].map(row=>({...row,copyHidden:true,informationReturnedFocus:true,actionRequests:0,externalDestinationFollowed:false}));
   assert.deepEqual(observations,expected);
-  assert.equal((graph.rowActionObservations as Row[]).length,3);assert.equal((footer.rowActionObservations as Row[]).length,1);
+  if(graph)assert.equal((graph.rowActionObservations as Row[]).length,3);assert.equal((footer.rowActionObservations as Row[]).length,1);
   const phases=['visibility-draft','saved','reloaded','visibility-shown-draft','shown-saved','shown-reloaded'];
   assert.deepEqual(footer.manualVisibility,{hiddenSavedReloaded:true,shownSavedReloaded:true,extraAcceptedSaves:1,nativePhases:phases});
   assert.deepEqual(phases.map(phase=>state('footer',phase).actorBoundAuditCount),[0,1,0,0,1,0]);
   assert.equal(state('footer','draft-final').snapshotHash,state('footer','visibility-draft').snapshotHash);
   for(const[a,b]of [['saved','reloaded'],['reloaded','visibility-shown-draft'],['shown-saved','shown-reloaded']])assert.equal(state('footer',a).snapshotHash,state('footer',b).snapshotHash);
   assert.notEqual(state('footer','saved').snapshotHash,state('footer','shown-saved').snapshotHash);
-  return{status:'pass',rowObservations:4,readOnlyMenuCheckpoints:2,additionalFooterWrites:1,manualVisibilityPersistedBothDirections:true,externalPreviewBoundary:'declared href/target/rel only; no external destination was followed',automaticCoverage:[],globalClosed:false};
+  return{status:'pass',rowObservations:footerOnly?1:4,readOnlyMenuCheckpoints:footerOnly?0:2,additionalFooterWrites:1,manualVisibilityPersistedBothDirections:true,externalPreviewBoundary:'declared href/target/rel only; no external destination was followed',automaticCoverage:[],globalClosed:false};
 }
 
 export function coreNavigationPreparedBaseline(handle:OwnedLocalHandle){assertOwnedLocalHandle(handle);const state=states.get(handle);assert.ok(state);return clone(state.prepared);}
