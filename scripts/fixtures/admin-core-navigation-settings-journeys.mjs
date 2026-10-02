@@ -96,9 +96,11 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       return{type,id:String(id),label,routePathname:path,information,preview,copyHidden:true,informationReturnedFocus:true,actionRequests:0,externalDestinationFollowed:false};
     } finally {page.off('request',listener);}
   }
-  let pageId, menuId, itemIds;
-  if (ctx.journeySelection !== CORE_NAVIGATION_FOLLOWUP_SELECTION) await runCoreDescendantPresentationJourneys(ctx,"navigation");
-  await run("core-navigation-page-create-rejection-retry-reload", plan.pageCoverage, async () => {
+  const existingOnly=ctx.journeySelection===CORE_NAVIGATION_EXISTING_SELECTION;assert.equal(f.selection??null,ctx.journeySelection??null);
+  let pageId=existingOnly?f.prepared.pageId:undefined,menuId=existingOnly?f.prepared.menuId:undefined,itemIds;
+  if(existingOnly){assert.equal(f.prepared.kind,'owned-fixture-preparation');for(const id of[pageId,menuId])assert.ok(Number.isSafeInteger(id)&&id>0);}
+  if (!isCoreNavigationFollowupSelection(ctx.journeySelection)) await runCoreDescendantPresentationJourneys(ctx,"navigation");
+  if(!existingOnly) await run("core-navigation-page-create-rejection-retry-reload", plan.pageCoverage, async () => {
     renderedAdoption=[];renderedOpened=new Set();
     await goto("/admin/pages-blocks/pages"); await checkpoint("page", "baseline");
     await page.getByRole("button", { name: "إضافة صفحة", exact: true }).click(); const form = page.locator("#create-page-form");
@@ -153,9 +155,9 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await expect(page.locator('[name="seo_title"]')).toHaveValue(r.page.seoTitle); await expect(page.locator('[name="canonical_url"]')).toHaveValue(r.page.canonicalUrl);
     await checkpoint("page", "seo-saved"); completed.push("page-seo");
   });
-  await run("core-navigation-menu-create-rejection-retry-reload", plan.menuCoverage, async () => {
+  if(!existingOnly) await run("core-navigation-menu-create-rejection-retry-reload", plan.menuCoverage, async () => {
     renderedAdoption=[];renderedOpened=new Set();
-    await goto("/admin/pages-blocks/menus"); await checkpoint("menu", "baseline");
+    await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); await checkpoint("menu", "baseline");
     await page.getByRole("button", { name: "إضافة منيو", exact: true }).click(); const form = page.locator("#create-menu-form");
     await observeNavigationOpening({id:"navigation-menu-create",consumer:"menu-quick-create",surface:"menu-create",collections:["menus-list"],dialog:page.getByRole("dialog",{name:"إضافة قائمة جديدة",exact:true}),form,trigger:page.getByRole("button",{name:"إضافة منيو",exact:true}),target:form.getByRole("button",{name:"إنشاء وفتح القائمة",exact:true})});
     await form.locator('[name="name"]').fill(r.menu.name); await form.locator('[name="slug"]').fill(f.duplicateMenuSlug); await select(form, "مكان الاستخدام", "Custom");
@@ -173,7 +175,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
   await run("core-navigation-menu-metadata-item-graph-commands", [], async () => {
     renderedAdoption=[];renderedOpened=new Set();
     const path = '/admin/pages-blocks/menus/'+menuId;
-    await goto('/admin/pages-blocks/menus');
+    await goto('/admin/pages-blocks/menus'+(existingOnly?'?q='+encodeURIComponent(r.menu.slug):''));
     const menuObservation=await inspectRow({type:'menu',id:menuId,label:r.menu.name,information:{Slug:r.menu.slug,'الموقع':'Custom','عدد العناصر':'0','الحالة':'ظاهرة'},preview:{access:'disabled',reason:'القائمة لا تملك مسار معاينة عامًا خاصًا بها.'}});
     const menuEdit=rowById('menu',menuId).locator('[data-admin-row-action="edit"] a');await expect(menuEdit).toHaveAttribute('href',path);await menuEdit.click();await expect(page).toHaveURL(origin+path);await tab('menu-settings');await expect(page.locator('input[name="name"]')).toHaveValue(r.menu.name);
     rowActionObservations.push({...menuObservation,edit:{mode:'navigation',pathname:path,opened:true},nativeCheckpointId:(await checkpoint('menu','created-row-inspected')).id});
@@ -223,13 +225,13 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     return {rowActionObservations:rowActionObservations.filter(row=>row.type!=="footer_manual_link"),renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   await run("core-navigation-menu-visibility-duplicate-delete", [], async () => {
-    await goto("/admin/pages-blocks/menus"); const acceptedFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"menu-builder:list",perform:()=>action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click())});
+    await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); const acceptedFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"menu-builder:list",perform:()=>action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click())});
     await expect(rowById("menu", menuId).getByRole("button", { name: `إظهار ${r.menu.editedName}`, exact: true })).toBeVisible(); const acceptedNative=await checkpoint("menu", "menu-hidden");
     await more(rowById("menu", menuId), "duplicate"); await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/menus\/\d+$/u.test(url.pathname) && !url.pathname.endsWith(`/${menuId}`));
     const duplicateId = Number(new URL(page.url()).pathname.split("/").at(-1)); assert.equal((await checkpoint("menu", "duplicated")).duplicateMenuId, duplicateId);
-    await goto("/admin/pages-blocks/menus"); await more(rowById("menu", duplicateId), "delete"); await cancel().click(); await expect(confirm()).toBeHidden(); await checkpoint("menu", "duplicate-delete-cancelled");
+    await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); await more(rowById("menu", duplicateId), "delete"); await cancel().click(); await expect(confirm()).toBeHidden(); await checkpoint("menu", "duplicate-delete-cancelled");
     await more(rowById("menu", duplicateId), "delete"); await action(() => confirm().click()); await expect(rowById("menu", duplicateId)).toHaveCount(0); await checkpoint("menu", "duplicate-deleted");
-    await goto("/admin/pages-blocks/menus"); await action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click()); await expect(rowById("menu", menuId).getByRole("button", { name: `إخفاء ${r.menu.editedName}`, exact: true })).toBeVisible(); await checkpoint("menu", "menu-shown"); completed.push("menu-list");return{acceptedFeedback,acceptedNativeId:acceptedNative.id,menuId};
+    await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); await action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click()); await expect(rowById("menu", menuId).getByRole("button", { name: `إخفاء ${r.menu.editedName}`, exact: true })).toBeVisible(); await checkpoint("menu", "menu-shown"); completed.push("menu-list");return{acceptedFeedback,acceptedNativeId:acceptedNative.id,menuId};
   });
   assert.ok(completed.includes("menu-list") && completed.includes("page-seo"), "Footer references only a completed owned Menu recipe.");
   await run("core-navigation-footer-aggregate-slots-manual-links-rejection-retry", [], async () => {
@@ -324,7 +326,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       completed.push('footer-default-restore');return{confirmationCancelled:true,cancelledActionRequests:0,rejection,retry,actionRequests:2,explicitRetry:true,nativePhases:['restore-cancelled','restore-rejected','restored','restore-reloaded'],otherThreeRowsAndTimestampsUnchanged:true,automaticCoverage:[],globalClosed:false};
     } finally {page.off('request',listener);}
   });
-  assert.equal(completed.length, 7);
+  assert.deepEqual(completed,existingOnly?['page-seo','menu-graph','menu-list','footer-aggregate','footer-default-restore']:['page-create','page-seo','menu-create','menu-graph','menu-list','footer-aggregate','footer-default-restore']);
   return { status: "pass", completed, plan, checkpoints, permissionEvidence, downloadMedia, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
 }
 
@@ -338,17 +340,21 @@ export const CORE_NAVIGATION_FOLLOWUP_IDS = [
   "core-navigation-footer-aggregate-slots-manual-links-rejection-retry",
   "core-navigation-footer-default-restore-confirm-reject-retry"
 ];
+export const CORE_NAVIGATION_EXISTING_SELECTION='navigation-settings-existing-followup';
+export function isCoreNavigationFollowupSelection(selection){return [CORE_NAVIGATION_FOLLOWUP_SELECTION,CORE_NAVIGATION_EXISTING_SELECTION].includes(selection);}
+export function coreNavigationSelectedIds(selection){assert.ok(isCoreNavigationFollowupSelection(selection));return selection===CORE_NAVIGATION_EXISTING_SELECTION?CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>!['core-navigation-page-create-rejection-retry-reload','core-navigation-menu-create-rejection-retry-reload'].includes(id)):[...CORE_NAVIGATION_FOLLOWUP_IDS];}
 export function assertCoreNavigationFollowupReceipt(browser, requiredCases) {
+  const selected=coreNavigationSelectedIds(browser.journeySelection);
   assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "navigation-settings");
-  assert.equal(browser.journeySelection, CORE_NAVIGATION_FOLLOWUP_SELECTION);
+  assert.ok(isCoreNavigationFollowupSelection(browser.journeySelection));
   assert.equal(browser.status, "pass"); assert.equal(browser.driverCompleted, true);
   assert.equal(browser.inventoryOnly, false); assert.equal(browser.wholeCohortExecuted, false);
   assert.deepEqual(browser.errors, []); assert.equal(browser.globalClosed, false);
   assert.deepEqual(browser.requiredCases, requiredCases);
-  assert.deepEqual(browser.selectedJourneyIds, CORE_NAVIGATION_FOLLOWUP_IDS);
-  assert.deepEqual(browser.executedJourneyIds, CORE_NAVIGATION_FOLLOWUP_IDS);
+  assert.deepEqual(browser.selectedJourneyIds, selected);
+  assert.deepEqual(browser.executedJourneyIds, selected);
   const evidence = browser.evidence.filter(row => row.id !== "existing-auth-login");
-  assert.deepEqual(evidence.map(row => row.id), CORE_NAVIGATION_FOLLOWUP_IDS);
+  assert.deepEqual(evidence.map(row => row.id), selected);
   assert.ok(evidence.every(row => row.status === "pass"));
-  return { status: "pass", selection: CORE_NAVIGATION_FOLLOWUP_SELECTION, automaticCoverage: [], selectedJourneyIds: [...CORE_NAVIGATION_FOLLOWUP_IDS], executedJourneyIds: [...CORE_NAVIGATION_FOLLOWUP_IDS], retainedDescendantsReplayed: false, wholeCohortExecuted: false, globalClosed: false };
+  return { status: "pass", selection: browser.journeySelection, automaticCoverage: [], selectedJourneyIds: [...selected], executedJourneyIds: [...selected], retainedDescendantsReplayed: false, wholeCohortExecuted: false, globalClosed: false };
 }

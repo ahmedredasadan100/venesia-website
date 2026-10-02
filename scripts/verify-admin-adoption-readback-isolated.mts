@@ -1,7 +1,7 @@
 import {isCoreTopicControlsSelection,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
 import {isCoreTemplateControlSelection,assertCoreTemplateControlsRetryReceipt} from "./fixtures/admin-core-template-controls-contract.mjs";
 import {CORE_PROJECT_EDITOR_SELECTION,assertCoreProjectEditorSelectionReceipt} from "./fixtures/admin-core-project-controls-contract.mjs";
-import {CORE_NAVIGATION_FOLLOWUP_SELECTION,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
+import {CORE_NAVIGATION_EXISTING_SELECTION,isCoreNavigationFollowupSelection,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import {CORE_TEMPLATE_HERO_BULK_SELECTION,assertCoreTemplateHeroBulkReceipt} from './fixtures/admin-core-template-bulk-journeys.mjs';
 import {CORE_SPECIALIZED_FOLLOWUP_SELECTION,assertCoreSpecializedFollowupReceipt} from './fixtures/admin-core-specialized-settings-journeys.mjs';
 import {CORE_PAGE_COMPOSITION_SEO_SELECTION,isCorePageCompositionFollowupSelection,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
@@ -38,7 +38,7 @@ import { assertOwnedCoreMediaCheckpointCompletion } from "./verify-admin-core-me
 import { assertOwnedCoreMediaRecoveryCompletion } from "./verify-admin-core-media-recovery-isolated.mts";
 import { verifyCoreQueryPresentationCompletion } from "./verify-admin-core-query-presentation-isolated.mts";
 import { assertCoreAuthEntryCompleted } from "./verify-admin-core-auth-entry-isolated.mts";
-import { assertCoreNavigationSettingsCompleted, assertCoreFooterRestoreCompletion, assertCoreNavigationRowActionsCompletion, NAVIGATION_SETTINGS_PHASES, CORE_NAVIGATION_RECIPE } from "./verify-admin-core-navigation-settings-isolated.mts";
+import { assertCoreNavigationSettingsCompleted, assertCoreFooterRestoreCompletion, assertCoreNavigationRowActionsCompletion, coreNavigationPhases, coreNavigationPreparedBaseline, CORE_NAVIGATION_RECIPE } from "./verify-admin-core-navigation-settings-isolated.mts";
 import assert from "node:assert/strict";
 import { assertCorePageSeoCompleted } from "./verify-admin-core-page-seo-isolated.mts";
 import { assertPageSeoReceiptJoin } from "./fixtures/admin-core-page-seo-contract.mjs";
@@ -130,11 +130,18 @@ export function assertCoreNavigationPermissionReceipts(handle: OwnedLocalHandle,
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
   for (const row of records) assert.match(String(row.id), uuid);
   assert.equal(new Set(records.map(row => row.id)).size, records.length, "Duplicate native request identity cannot add proof.");
-  const expectedPhases = Object.entries(NAVIGATION_SETTINGS_PHASES).flatMap(([entity, phases]) => phases.map(phase => ({ entity, phase })));
+  const existingOnly=browser.journeySelection===CORE_NAVIGATION_EXISTING_SELECTION;
+  const expectedPhases = Object.entries(coreNavigationPhases((browser.journeySelection as string|null)??null)).flatMap(([entity, phases]) => phases.map(phase => ({ entity, phase })));
   const stateRecords = records.filter(row => row.kind === "navigation-settings-state");
   assert.deepEqual(stateRecords.map(row => ({ entity: row.entity, phase: row.phase })), expectedPhases);
   for (const row of stateRecords) assert.equal(row.status, "pass");
   assert.deepEqual(checkpoints, stateRecords, "Every real Navigation checkpoint must join its exact native result.");
+  if(existingOnly){
+    assert.deepEqual(result.permissionEvidence,[]);assert.deepEqual(result.permissionCandidateKeys,[]);assert.deepEqual(browser.databaseReadback,[]);assert.deepEqual(records,stateRecords);assert.equal(stateRecords.length,35);
+    if(draftRestorationInput!==undefined&&draftRestorationInput!==null)assert.deepEqual(object(draftRestorationInput).receipts,[]);
+    for(const row of rows(browser.evidence)){assert.equal(String(row.id).includes('create-rejection-retry-reload'),false);if(row.permissionEvidence!==undefined)assert.deepEqual(row.permissionEvidence,[]);}
+    return{status:'pass',ownedRunId:handle.identity.runId,navigationCheckpoints:stateRecords.length,pagePermissionIntents:0,nativeCheckpoints:records.length,candidateRequiredCase:null,automaticCoverage:[],globalClosed:false};
+  }
   const proofs = rows(result.permissionEvidence); assert.equal(proofs.length, 1); const proof = proofs[0];
   const caseId = "core-navigation-page-create-accepted-save", formConsumer = "pages-quick-create", surface = "create";
   assert.equal(proof.status, "pass"); assert.equal(proof.caseId, caseId); assert.equal(proof.formConsumer, formConsumer); assert.equal(proof.surface, surface);
@@ -242,7 +249,8 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     const isTemplateControlsRetry = isCoreTemplateControlSelection(browser.journeySelection);
     const isTopicControlsRetry = isCoreTopicControlsSelection(browser.journeySelection);
     const isProjectEditors = browser.journeySelection === CORE_PROJECT_EDITOR_SELECTION;
-    const isNavigationFollowup = browser.journeySelection === CORE_NAVIGATION_FOLLOWUP_SELECTION;
+    const isNavigationFollowup = isCoreNavigationFollowupSelection(browser.journeySelection);
+    const isNavigationExisting = browser.journeySelection === CORE_NAVIGATION_EXISTING_SELECTION;
     const isTemplateHeroBulk = browser.journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION;
     const isSpecializedFollowup = browser.journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION;
     const isPageCompositionFollowup = isCorePageCompositionFollowupSelection(browser.journeySelection);
@@ -282,9 +290,10 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.ok(browser.previewMatrix.every(row => row.status === "behavior_verified"));
     }
     const draftFile=join(artifactDir,"admin-core-draft-restoration.json");
-    const draftRequired=!isPreviewImpact&&["preview-recovery-templates","recovery-templates","domain-forms","navigation-settings"].includes(browser.cohort ?? "");
+    const draftRequired=!isPreviewImpact&&!isNavigationExisting&&["preview-recovery-templates","recovery-templates","domain-forms","navigation-settings"].includes(browser.cohort ?? "");
     if(draftRequired)assert.equal(existsSync(draftFile),true,"Prepared Form restoration must retain its sanitized same-run receipt.");
     const draftArtifact=existsSync(draftFile)?JSON.parse(readFileSync(draftFile,"utf8")):null;
+    if(isNavigationExisting&&draftArtifact)assert.deepEqual(draftArtifact.receipts,[],"Existing Navigation fixtures cannot imply a create draft proof.");
     let draftRestoration=null;
     if(draftRequired || draftArtifact?.receipts?.length) {
       const draftNative=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));
@@ -324,7 +333,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
         cohortNative = nativeWithoutFaults;
         footerRestore = restoreProof;
         navigationPermission = assertCoreNavigationPermissionReceipts(handle, browser, cohortNative, draftArtifact);
-        navigationRowActions = assertCoreNavigationRowActionsCompletion(browser,cohortNative,handle.identity.runId,source.sourceSha256);
+        navigationRowActions = assertCoreNavigationRowActionsCompletion(browser,cohortNative,handle.identity.runId,source.sourceSha256,coreNavigationPreparedBaseline(handle));
       }
       else if (browser.cohort === "page-composition") { const {ADMIN_COLLECTION_SURFACE_ADOPTION}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import("../src/lib/admin/interaction-system/adoption-manifest.ts")>("../src/lib/admin/interaction-system/adoption-manifest.ts"); const source=JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")); pageSeo = assertPageSeoReceiptJoin(browser, cohortNative, JSON.parse(readFileSync(join(artifactDir, "core-native-write-faults.json"), "utf8")), assertCorePageSeoCompleted(handle),{formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION,sourceSha256:source.sourceSha256});
         const registry=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import('../src/lib/page-composition/slot-module-registry.ts')>('../src/lib/page-composition/slot-module-registry.ts');

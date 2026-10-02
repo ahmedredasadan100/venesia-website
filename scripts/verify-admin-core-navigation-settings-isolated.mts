@@ -1,5 +1,6 @@
 import {CORE_DOWNLOAD_MEDIA_HREF,CORE_DOWNLOAD_LINK} from './fixtures/admin-core-download-media-adoption.mjs';
 import {recordCoreDownloadCheckpoint,prepareCoreDownloadMediaFixture,assertCoreDownloadMediaUnchanged} from './verify-admin-core-download-media-isolated.mts';
+import {CORE_NAVIGATION_EXISTING_SELECTION,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -17,6 +18,7 @@ export const NAVIGATION_SETTINGS_PHASES = {
   footer: ["baseline", "draft", "delete-cancelled", "draft-final", "visibility-draft", "rejected", "saved", "reloaded", "visibility-shown-draft", "shown-saved", "shown-reloaded", "restore-cancelled", "restore-rejected", "restored", "restore-reloaded"],
 } as const;
 type Entity = keyof typeof NAVIGATION_SETTINGS_PHASES;
+export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));return selection===CORE_NAVIGATION_EXISTING_SELECTION?{page:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
 export const CORE_NAVIGATION_RECIPE = {
   page: { title: "صفحة إثبات التنقل", path: "/qa-core-navigation-page", slug: "qa-core-navigation-page", seoTitle: "صفحة إثبات التنقل وإدارة المعلومات في الاختبار المعزول", seoDescription: "إثبات التنقل يراجع حفظ بيانات الصفحة والوصف والكلمات المفتاحية داخل البيئة المعزولة، مع بقاء الصفحة غير منشورة والتحقق من سجل التدقيق بعد الحفظ.", focusKeyword: "إثبات التنقل", seoKeywords: ["إثبات التنقل", "اختبار معزول"], canonicalUrl: "https://example.invalid/qa-core-navigation-page" },
   menu: { name: "قائمة إثبات التنقل", editedName: "قائمة إثبات التنقل المعدلة", slug: "qa-core-navigation-menu", a: "أصل التنقل الأول", b: "أصل التنقل الثاني", c: "فرع التنقل", editedC: "فرع التنقل المعدل", href: "https://example.invalid/navigation/child", editedHref: "https://example.invalid/navigation/edited", css: "qa-navigation-child" },
@@ -26,7 +28,7 @@ const hash = (value: unknown) => createHash("sha256").update(JSON.stringify(valu
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const select = (row: Row, keys: string[]) => Object.fromEntries(keys.map(key => [key, row[key]]));
 const graphSelect = (row: Row, keys: string[]) => Object.fromEntries(keys.map(key => [key, ["id", "menu_id", "parent_id", "linked_id"].includes(key) && row[key] != null ? Number(row[key]) : row[key]]));
-type State = { actor: { id: number; username: string }; originalFooter: Row[]; baselineFooter: Row[]; originalMenus: Row[]; originalItems: Row[]; originalPages: Row[]; phase: Record<Entity, number>; auditCursor: Record<Entity, number>; last: Partial<Record<Entity, unknown>>; pageId?: number; menuId?: number; duplicateId?: number; itemIds: Record<string, number>; cleanup: boolean };
+type State = { selection:string|null; prepared:Row|null; actor: { id: number; username: string }; originalFooter: Row[]; baselineFooter: Row[]; originalMenus: Row[]; originalItems: Row[]; originalPages: Row[]; phase: Record<Entity, number>; auditCursor: Record<Entity, number>; last: Partial<Record<Entity, unknown>>; pageId?: number; menuId?: number; duplicateId?: number; itemIds: Record<string, number>; cleanup: boolean };
 const states = new WeakMap<OwnedLocalHandle, State>();
 const footerRows = async (handle: OwnedLocalHandle) => (await handle.query("select key,value,updated_at from public.site_settings where key=any($1::text[]) order by key", [[...FOOTER_SETTING_KEYS]])).rows;
 const auditHead = async (handle: OwnedLocalHandle) => Number((await handle.query("select coalesce(max(id),0)::bigint id from public.admin_audit_logs")).rows[0].id);
@@ -34,8 +36,8 @@ const valuesOnly = (rows: Row[]) => rows.map(row => ({ key: row.key, value: row.
 const footerUtils = () => jiti.import<typeof import("../src/app/admin/pages-blocks/footer/footer-builder-utils.ts")>(resolve(root, "src/app/admin/pages-blocks/footer/footer-builder-utils.ts"));
 
 /** Fixed isolated preparation. Footer originals remain private and are never accepted from Browser. */
-export async function prepareCoreNavigationSettingsFixtures(handle: OwnedLocalHandle, credentials: { username: string }) {
-  assertOwnedLocalHandle(handle); assert.equal(states.has(handle), false);
+export async function prepareCoreNavigationSettingsFixtures(handle: OwnedLocalHandle, credentials: { username: string },selection:string|null=null) {
+  assertOwnedLocalHandle(handle); assert.equal(states.has(handle), false);coreNavigationPhases(selection);
   const actors = (await handle.query("select id,username from public.admin_users where username=$1 and is_active", [credentials.username])).rows;
   assert.equal(actors.length, 1); const actor = { id: Number(actors[0].id), username: String(actors[0].username) };
   const originalPages = (await handle.query("select * from public.pages order by id")).rows;
@@ -45,7 +47,7 @@ export async function prepareCoreNavigationSettingsFixtures(handle: OwnedLocalHa
   assert.ok(!originalMenus.some(row => row.slug === CORE_NAVIGATION_RECIPE.menu.slug));
   assert.ok(originalPages.length && originalMenus.length, "Canonical isolated baseline supplies duplicate identity controls.");
   const originalFooter = await footerRows(handle);
-  const state: State = { actor, originalFooter, baselineFooter: [], originalMenus, originalItems, originalPages, phase: { page: 0, menu: 0, footer: 0 }, auditCursor: { page: 0, menu: 0, footer: 0 }, last: {}, itemIds: {}, cleanup: false };
+  const state: State = { selection,prepared:null,actor, originalFooter, baselineFooter: [], originalMenus, originalItems, originalPages, phase: { page: 0, menu: 0, footer: 0 }, auditCursor: { page: 0, menu: 0, footer: 0 }, last: {}, itemIds: {}, cleanup: false };
   states.set(handle, state); // Retain restoration ownership even when later preparation fails.
   const { evaluateFooterReadiness } = await jiti.import<typeof import("../src/lib/footer/footer-settings-readiness.ts")>(resolve(root, "src/lib/footer/footer-settings-readiness.ts"));
   const value = (key: string) => originalFooter.find(row => row.key === key)?.value;
@@ -59,8 +61,23 @@ export async function prepareCoreNavigationSettingsFixtures(handle: OwnedLocalHa
     const baseline = [{ key: "footer.slots", value: { version: 1, slots: fresh } }, { key: "footer.contact_items", value: [] }, { key: "footer.social_links", value: [{ platform: "facebook", label: "QA baseline", href: "https://example.invalid/footer/baseline" }] }, { key: "footer.legal", value: { copyright: "QA baseline", tagline: "QA baseline" } }];
     await handle.query("select public.save_footer_settings($1::jsonb,$2,$3,'qa.navigation.footer.prepare','{}'::jsonb)", [JSON.stringify(baseline), actor.id, actor.username]);
   }
+  if(selection===CORE_NAVIGATION_EXISTING_SELECTION){
+    await handle.withDatabaseConnection(async connection=>{await connection.query('begin');try{
+      const page=(await connection.query("insert into public.pages(title,slug,path,page_type,status) values($1,$2,$3,'static','unpublished') returning *",[CORE_NAVIGATION_RECIPE.page.title,CORE_NAVIGATION_RECIPE.page.slug,CORE_NAVIGATION_RECIPE.page.path])).rows;assert.equal(page.length,1);
+      const menu=(await connection.query("insert into public.menus(name,slug,location,is_active) values($1,$2,'custom',true) returning *",[CORE_NAVIGATION_RECIPE.menu.name,CORE_NAVIGATION_RECIPE.menu.slug])).rows;assert.equal(menu.length,1);
+      state.pageId=Number(page[0].id);state.menuId=Number(menu[0].id);for(const id of[state.pageId,state.menuId])assert.ok(Number.isSafeInteger(id)&&id>0);
+      await connection.query('commit');
+    }catch(error){await connection.query('rollback');throw error;}});
+    assert.ok(state.pageId!==undefined&&state.menuId!==undefined);
+    const pages=(await handle.query('select * from public.pages where id=$1',[state.pageId])).rows,menus=(await handle.query('select * from public.menus where id=$1',[state.menuId])).rows,items=(await handle.query('select * from public.menu_items where menu_id=$1',[state.menuId])).rows;
+    assert.equal(pages.length,1);assert.equal(menus.length,1);assert.deepEqual(items,[]);assert.equal(Number((await handle.query('select count(*)::int count from public.page_composition_assignments where page_id=$1',[state.pageId])).rows[0].count),0);
+    assert.deepEqual(select(pages[0],['title','slug','path','page_type','status']),{title:CORE_NAVIGATION_RECIPE.page.title,slug:CORE_NAVIGATION_RECIPE.page.slug,path:CORE_NAVIGATION_RECIPE.page.path,page_type:'static',status:'unpublished'});assert.deepEqual(select(menus[0],['name','slug','location','is_active']),{name:CORE_NAVIGATION_RECIPE.menu.name,slug:CORE_NAVIGATION_RECIPE.menu.slug,location:'custom',is_active:true});
+    assert.deepEqual((await handle.query('select * from public.pages where id<>$1 order by id',[state.pageId])).rows,originalPages);assert.deepEqual((await handle.query('select * from public.menus where id<>$1 order by id',[state.menuId])).rows,originalMenus);assert.deepEqual((await handle.query('select * from public.menu_items order by id')).rows,originalItems);
+    state.last.page=structuredClone(pages);state.last.menu=structuredClone({menus,items});state.auditCursor.page=await auditHead(handle);state.auditCursor.menu=state.auditCursor.page;
+    const prepared={kind:'owned-fixture-preparation',ownedRunId:handle.identity.runId,pageId:state.pageId,menuId:state.menuId,pageSnapshotHash:hash(state.last.page),menuSnapshotHash:hash(state.last.menu),uiCreateClaim:false,automaticCoverage:[],globalClosed:false};state.prepared=prepared;handle.record('navigation-existing-fixture-prepared',{kind:prepared.kind,ownedRunId:prepared.ownedRunId,pageId:prepared.pageId,menuId:prepared.menuId,pageSnapshotHash:prepared.pageSnapshotHash,menuSnapshotHash:prepared.menuSnapshotHash,uiCreateClaim:prepared.uiCreateClaim,globalClosed:prepared.globalClosed});
+  }
   state.baselineFooter = await footerRows(handle);
-  return { footerRestore:{key:'footer.slots' as const}, downloadMedia:await prepareCoreDownloadMediaFixture(handle),recipe: clone(CORE_NAVIGATION_RECIPE), duplicatePagePath: String(originalPages[0].path), duplicateMenuSlug: String(originalMenus[0].slug), footerBaselineSeeded: !valid, originalFooterHash: hash(originalFooter), phaseCounts: Object.fromEntries(Object.entries(NAVIGATION_SETTINGS_PHASES).map(([key, phases]) => [key, phases.length])) };
+  return { selection,prepared:clone(state.prepared),footerRestore:{key:'footer.slots' as const}, downloadMedia:await prepareCoreDownloadMediaFixture(handle),recipe: clone(CORE_NAVIGATION_RECIPE), duplicatePagePath: String(originalPages[0].path), duplicateMenuSlug: String(originalMenus[0].slug), footerBaselineSeeded: !valid, originalFooterHash: hash(originalFooter), phaseCounts: Object.fromEntries(Object.entries(coreNavigationPhases(selection)).map(([key, phases]) => [key, phases.length])) };
 }
 
 export function validateCoreNavigationSettingsRequest(input: unknown) {
@@ -124,7 +141,7 @@ export function assertCoreFooterRestore(before: Row[], after: Row[], defaultSlot
 export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHandle, input: unknown) {
   assertOwnedLocalHandle(handle); const request = validateCoreNavigationSettingsRequest(input), state = states.get(handle); assert.ok(state);
   const { entity, phase } = request;
-  assert.equal(phase, NAVIGATION_SETTINGS_PHASES[entity][state.phase[entity]], "No skipped, repeated or out-of-order checkpoint may promote coverage.");
+  assert.equal(phase, coreNavigationPhases(state.selection)[entity][state.phase[entity]], "No skipped, repeated or out-of-order checkpoint may promote coverage.");
   if (phase === "baseline") state.auditCursor[entity] = await auditHead(handle);
   const allMenus = (await handle.query("select * from public.menus order by id")).rows;
   const allItems = (await handle.query("select * from public.menu_items order by id")).rows;
@@ -171,7 +188,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
     const actions: Record<string, string> = { created: "menu.create", "metadata-saved": "menu.update", "item-a": "menu.save_item", "item-b": "menu.save_item", "item-c": "menu.save_item", "item-edited": "menu.save_item", reparented: "menu.save_item", reordered: "menu.reorder", hidden: "menu_item.update", "subtree-deleted": "menu.delete_item", "menu-hidden": "menu.update", duplicated: "menu.duplicate_menu", "duplicate-deleted": "menu.delete_menu", "menu-shown": "menu.update" };
     writeAction = actions[phase]; snapshot = { menus: newMenus, items: allItems.filter(row => newMenus.some(menu => menu.id === row.menu_id)) };
   } else {
-    assert.ok(state.menuId && state.pageId); assert.equal(state.phase.menu, NAVIGATION_SETTINGS_PHASES.menu.length); assert.equal(state.phase.page, NAVIGATION_SETTINGS_PHASES.page.length);
+    assert.ok(state.menuId && state.pageId); assert.equal(state.phase.menu, coreNavigationPhases(state.selection).menu.length); assert.equal(state.phase.page, coreNavigationPhases(state.selection).page.length);
     assert.equal(newMenus.length, 1); assertCoreNavigationGraph(allItems.filter(row => Number(row.menu_id) === state.menuId), state.menuId, "duplicate-deleted", state.itemIds);
     const footer = await footerRows(handle); snapshot = footer;
     const restored = phase === 'restored' || phase === 'restore-reloaded';
@@ -193,7 +210,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
     assert.equal(audit.length, 0, "Draft/rejection/cancellation/reload must not write domain audit.");
     if (phase !== "baseline") assert.deepEqual(snapshot, state.last[entity], "Rejected and local-only changes must preserve exact persisted rows/revisions.");
   }
-  state.last[entity] = clone(snapshot); state.phase[entity]++; state.auditCursor[entity] = await auditHead(handle);
+  state.last[entity] = structuredClone(snapshot); state.phase[entity]++; state.auditCursor[entity] = await auditHead(handle);
   return recordCoreDownloadCheckpoint(handle,{ ...request, status: "pass", downloadMedia:await assertCoreDownloadMediaUnchanged(handle), actorBoundAuditCount: audit.length, snapshotHash: hash(snapshot), pageId: state.pageId ?? null, menuId: state.menuId ?? null, duplicateMenuId: state.duplicateId ?? null, itemIds: { ...state.itemIds }, globalClosed: false });
 }
 
@@ -249,20 +266,21 @@ export async function cleanupCoreNavigationSettingsFixtures(handle: OwnedLocalHa
 }
 export function assertCoreNavigationSettingsCompleted(handle: OwnedLocalHandle) {
   assertOwnedLocalHandle(handle); const state = states.get(handle); assert.ok(state);
-  for (const entity of Object.keys(NAVIGATION_SETTINGS_PHASES) as Entity[]) assert.equal(state.phase[entity], NAVIGATION_SETTINGS_PHASES[entity].length);
+  for (const entity of Object.keys(NAVIGATION_SETTINGS_PHASES) as Entity[]) assert.equal(state.phase[entity], coreNavigationPhases(state.selection)[entity].length);
   assert.equal(state.cleanup, true);
-  return { status: "pass", checkpoints: { ...state.phase }, footerRestored: true, globalClosed: false };
+  return { status: "pass", checkpoints: { ...state.phase }, ...(state.prepared?{prepared:clone(state.prepared)}:{}),footerRestored: true, globalClosed: false };
 }
 
 /** Scoped row-action fragments join only after the independently source-bound whole Navigation/native completion. */
-export function assertCoreNavigationRowActionsCompletion(browser: Row, native: Row, ownedRunId: string, sourceSha256: string) {
+export function assertCoreNavigationRowActionsCompletion(browser: Row, native: Row, ownedRunId: string, sourceSha256: string,prepared:Row|null=null) {
   assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.deepEqual(browser.errors,[]);assert.equal(browser.cohort,'navigation-settings');
   assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);assert.ok(Array.isArray(native.records));const records=native.records as Row[];
   assert.equal(new Set(records.map(row=>row.id)).size,records.length);for(const row of records)assert.equal(row.status,row.kind==='form-save-native'?'partial-not-global-pass':'pass');
   const states=records.filter(row=>row.kind==='navigation-settings-state');
-  for(const [entity,phases]of Object.entries(NAVIGATION_SETTINGS_PHASES))assert.deepEqual(states.filter(row=>row.entity===entity).map(row=>row.phase),phases);
+  for(const [entity,phases]of Object.entries(coreNavigationPhases((browser.journeySelection as string|null)??null)))assert.deepEqual(states.filter(row=>row.entity===entity).map(row=>row.phase),phases);
   const state=(entity:string,phase:string)=>{const found=states.filter(row=>row.entity===entity&&row.phase===phase);assert.equal(found.length,1);assert.match(String(found[0].snapshotHash),/^[a-f0-9]{64}$/u);return found[0];};
-  const menu=state('menu','created'),menuRead=state('menu','created-row-inspected'),items=state('menu','item-c'),itemRead=state('menu','items-inspected');
+  const existingOnly=browser.journeySelection===CORE_NAVIGATION_EXISTING_SELECTION;if(existingOnly){assert.ok(prepared);assert.equal(prepared.kind,'owned-fixture-preparation');assert.equal(prepared.ownedRunId,ownedRunId);assert.equal(prepared.uiCreateClaim,false);assert.deepEqual(prepared.automaticCoverage,[]);assert.equal(prepared.globalClosed,false);assert.match(String(prepared.menuSnapshotHash),/^[a-f0-9]{64}$/u);}else assert.equal(prepared,null);
+  const menu=existingOnly?{snapshotHash:prepared!.menuSnapshotHash,menuId:prepared!.menuId}:state('menu','created'),menuRead=state('menu','created-row-inspected'),items=state('menu','item-c'),itemRead=state('menu','items-inspected');
   for(const[a,b]of [[menu,menuRead],[items,itemRead]]){assert.equal(a.snapshotHash,b.snapshotHash);assert.equal(b.actorBoundAuditCount,0);}
   const menuId=Number(menu.menuId);assert.ok(Number.isSafeInteger(menuId)&&menuId>0);const ids=itemRead.itemIds as Row;
   for(const key of ['a','b','c'])assert.ok(Number.isSafeInteger(ids[key])&&Number(ids[key])>0);
@@ -288,3 +306,5 @@ export function assertCoreNavigationRowActionsCompletion(browser: Row, native: R
   assert.notEqual(state('footer','saved').snapshotHash,state('footer','shown-saved').snapshotHash);
   return{status:'pass',rowObservations:4,readOnlyMenuCheckpoints:2,additionalFooterWrites:1,manualVisibilityPersistedBothDirections:true,externalPreviewBoundary:'declared href/target/rel only; no external destination was followed',automaticCoverage:[],globalClosed:false};
 }
+
+export function coreNavigationPreparedBaseline(handle:OwnedLocalHandle){assertOwnedLocalHandle(handle);const state=states.get(handle);assert.ok(state);return clone(state.prepared);}

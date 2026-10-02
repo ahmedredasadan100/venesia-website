@@ -297,12 +297,12 @@ export async function seedOwnedCoreMediaFixture(handle: OwnedLocalHandle) {
 
 
 /** Explicit navigation-settings opt-in; the existing owner retains all private credentials. */
-export async function seedOwnedCoreNavigationSettingsFixtures(handle: OwnedLocalHandle) {
+export async function seedOwnedCoreNavigationSettingsFixtures(handle: OwnedLocalHandle,selection:string|null=null) {
   assertOwnedLocalHandle(handle);
   const credentials = credentialsByHandle.get(handle);
   assert.ok(credentials, "Prepare the canonical owned Admin account before navigation fixtures.");
   const { prepareCoreNavigationSettingsFixtures } = await import("../verify-admin-core-navigation-settings-isolated.mts");
-  return prepareCoreNavigationSettingsFixtures(handle, { username: credentials.username });
+  return prepareCoreNavigationSettingsFixtures(handle, { username: credentials.username },selection);
 }
 
 

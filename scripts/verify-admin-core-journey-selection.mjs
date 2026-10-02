@@ -1,7 +1,7 @@
 import {CORE_TOPIC_VIDEO_SELECTION,isCoreTopicControlsSelection,CORE_TOPIC_CONTROLS_RETRY_SELECTION,TOPIC_CONTROL_KINDS,TOPIC_CONTROL_PHASES,TOPIC_CONTROL_ASSET_KEYS,buildCoreTopicControlsPlan,coreTopicControlFixtureSlug,coreSelectedTopicControlKinds,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
 import {CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,isCoreTemplateControlSelection} from "./fixtures/admin-core-template-controls-contract.mjs";
 import {CORE_PROJECT_EDITOR_SELECTION} from "./fixtures/admin-core-project-controls-contract.mjs";
-import {CORE_NAVIGATION_FOLLOWUP_SELECTION} from './fixtures/admin-core-navigation-settings-journeys.mjs';
+import {CORE_NAVIGATION_FOLLOWUP_SELECTION,isCoreNavigationFollowupSelection} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import {CORE_TEMPLATE_HERO_BULK_SELECTION} from './fixtures/admin-core-template-bulk-journeys.mjs';
 import {CORE_SPECIALIZED_FOLLOWUP_SELECTION} from './fixtures/admin-core-specialized-settings-journeys.mjs';
 import {isCorePageCompositionFollowupSelection} from './fixtures/admin-core-page-composition-journeys.mjs';
@@ -128,7 +128,7 @@ async function verifyCollectorDomainTailSelection(text,{rejectActor=false}={}){
  const selected=one('selectedJourneys'),writes=one('writes');assert.ok(selected.getStart(ast)<writes.getStart(ast),'Selected native guard must run before final write readback.');
  assert.ok(writes.initializer&&ts.isAwaitExpression(writes.initializer)&&ts.isCallExpression(writes.initializer.expression));assert.equal(writes.initializer.expression.expression.getText(ast),'verifyCoreDomainWrites');
  const browser={},domainTailPlan={},canonicalRequiredCases=[],domainTailNative={},handle={identity:{runId:'owned-run'}},sourceSha256='a'.repeat(64),calls=[],receipt={selection:'domain-command-tail'};
- const ports={isCoreTopicControlsSelection,CORE_TOPIC_CONTROLS_RETRY_SELECTION,assertCoreTopicControlsRetryReceipt,CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,isCoreTemplateControlSelection,CORE_PROJECT_EDITOR_SELECTION,CORE_NAVIGATION_FOLLOWUP_SELECTION,CORE_TEMPLATE_HERO_BULK_SELECTION,CORE_SPECIALIZED_FOLLOWUP_SELECTION,isCorePageCompositionFollowupSelection,isReadonlyHubFollowup:false,isTemplateCards:false,isQueryLayout:false,isDomainTail:true,isPreviewImpact:false,isTemplateCreates:false,browser,domainTailPlan,canonicalRequiredCases,domainTailNative,handle,artifactDir:'owned-artifacts',
+ const ports={isCoreTopicControlsSelection,CORE_TOPIC_CONTROLS_RETRY_SELECTION,assertCoreTopicControlsRetryReceipt,CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,isCoreTemplateControlSelection,CORE_PROJECT_EDITOR_SELECTION,CORE_NAVIGATION_FOLLOWUP_SELECTION,isCoreNavigationFollowupSelection,CORE_TEMPLATE_HERO_BULK_SELECTION,CORE_SPECIALIZED_FOLLOWUP_SELECTION,isCorePageCompositionFollowupSelection,isReadonlyHubFollowup:false,isTemplateCards:false,isQueryLayout:false,isDomainTail:true,isPreviewImpact:false,isTemplateCreates:false,browser,domainTailPlan,canonicalRequiredCases,domainTailNative,handle,artifactDir:'owned-artifacts',
   join:(dir,name)=>{assert.equal(dir,'owned-artifacts');assert.equal(name,'public-source-manifest.json');return 'owned-source';},
   readFileSync:(name,encoding)=>{assert.equal(name,'owned-source');assert.equal(encoding,'utf8');calls.push('source');return JSON.stringify({sourceSha256});},
   readCoreFixedQaActor:async value=>{assert.equal(value,handle);calls.push('actor');if(rejectActor)throw Error('independent-actor-rejection');return 7;},
