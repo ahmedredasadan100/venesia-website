@@ -8,15 +8,16 @@ import {observeCoreScrollbarAdoption} from './admin-core-rendered-adoption.mjs';
 const escape=value=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 
 
-export function selectCoreLinkPreviewAction(manifest,worker,{buildMetadata,projectDirectory=process.cwd(),recordProjection=()=>{}}={}){
+export function selectCoreLinkPreviewAction(manifest,worker,{buildMetadata,projectDirectory=process.cwd(),recordProjection=()=>{},exportedName="resolveAdminLinkAjax"}={}){
+ assert.ok(['resolveAdminLinkAjax','browseAdminLinksAjax'].includes(exportedName));
  assert.ok(manifest&&manifest.node&&typeof worker==='string');assert.ok(buildMetadata&&typeof buildMetadata.appDir==='string');
  const project=realpathSync(projectDirectory),app=resolve(buildMetadata.appDir);assert.equal(app,project,'Compiled metadata must belong to this exact owned build project.');
  const config=buildMetadata.config;assert.ok(config&&typeof config.outputFileTracingRoot==='string');const root=realpathSync(config.turbopack?.root??config.outputFileTracingRoot);assert.equal(resolve(config.outputFileTracingRoot),root,'Compiled tracing and bundler roots must agree.');
  const relativeProject=relative(root,project),segments=relativeProject.split(/[\\/]/u);assert.equal(isAbsolute(relativeProject),false);assert.equal(segments.includes('..'),false,'The owned project must remain inside the compiled workspace root.');assert.equal(typeof buildMetadata.relativeAppDir,'string');assert.equal(buildMetadata.relativeAppDir.replaceAll('\\','/'),relativeProject.replaceAll('\\','/'));
  const owner='src/lib/admin/links/actions.ts',physicalOwner=resolve(project,owner);assert.equal(realpathSync(physicalOwner),physicalOwner,'The canonical resolver source must be owned by this build project.');
- const filenames=[...new Set([owner,relative(root,physicalOwner).replaceAll('\\','/')])],entries=Object.entries(manifest.node),matches=entries.filter(([,row])=>filenames.includes(row.filename)&&row.exportedName==='resolveAdminLinkAjax'&&Object.hasOwn(row.workers??{},worker));
+ const filenames=[...new Set([owner,relative(root,physicalOwner).replaceAll('\\','/')])],entries=Object.entries(manifest.node),matches=entries.filter(([,row])=>filenames.includes(row.filename)&&row.exportedName===exportedName&&Object.hasOwn(row.workers??{},worker));
  // Persist only this public identity projection before admission; never emit the manifest or encryption key.
- recordProjection({owner,exportedName:'resolveAdminLinkAjax',worker,allowedFilenames:filenames,sourceSha256:createHash('sha256').update(readFileSync(physicalOwner)).digest('hex'),candidates:entries.filter(([,row])=>row.exportedName==='resolveAdminLinkAjax'||filenames.includes(row.filename)).map(([id,row])=>({actionIdSha256:createHash('sha256').update(id).digest('hex'),filename:typeof row.filename==='string'?row.filename:null,exportedName:typeof row.exportedName==='string'?row.exportedName:null,workerPresent:Object.hasOwn(row.workers??{},worker)})),matches:matches.length});
+ recordProjection({owner,exportedName,worker,allowedFilenames:filenames,sourceSha256:createHash('sha256').update(readFileSync(physicalOwner)).digest('hex'),candidates:entries.filter(([,row])=>row.exportedName===exportedName||filenames.includes(row.filename)).map(([id,row])=>({actionIdSha256:createHash('sha256').update(id).digest('hex'),filename:typeof row.filename==='string'?row.filename:null,exportedName:typeof row.exportedName==='string'?row.exportedName:null,workerPresent:Object.hasOwn(row.workers??{},worker)})),matches:matches.length});
  assert.equal(matches.length,1,'Only the actual compiled resolver export for this exact edit worker may be admitted.');assert.match(matches[0][0],/^[a-f0-9]{40,64}$/u);return matches[0][0];
 }
 
