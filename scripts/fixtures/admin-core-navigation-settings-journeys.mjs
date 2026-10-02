@@ -53,6 +53,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
   const rowById = (type, id) => page.locator("article").filter({ has: page.locator(`[data-admin-entity-type="${type}"][data-admin-entity-id="${id}"]`) });
   const rowByLabel = label => page.locator("article").filter({ has: page.getByText(label, { exact: true }) });
   const more = async (row, kind) => { await row.locator('[data-admin-row-action="more"] button').click(); await page.locator(`[data-admin-row-action-menu-item="${kind}"]`).click(); };
+  const assertInverseVisibility=async(row,label)=>{const trigger=row.locator('[data-admin-row-action="more"] button');await trigger.click();const menu=page.locator('[data-admin-row-actions-menu]');await expect(menu.locator('[data-admin-row-action-menu-item="visibility"]')).toHaveText(label);await page.keyboard.press('Escape');await expect(menu).toHaveCount(0);await expect(trigger).toBeFocused();};
   const feedback = () => page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first();
   const externalLink = async (scope, href) => {
     await scope.getByRole("button", { name: "اختيار الرابط", exact: true }).click();
@@ -96,7 +97,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       return{type,id:String(id),label,routePathname:path,information,preview,copyHidden:true,informationReturnedFocus:true,actionRequests:0,externalDestinationFollowed:false};
     } finally {page.off('request',listener);}
   }
-  const existingOnly=ctx.journeySelection===CORE_NAVIGATION_EXISTING_SELECTION;assert.equal(f.selection??null,ctx.journeySelection??null);
+  const existingOnly=isCoreNavigationExistingSelection(ctx.journeySelection),menuFooterOnly=ctx.journeySelection===CORE_NAVIGATION_MENU_FOOTER_SELECTION;assert.equal(f.selection??null,ctx.journeySelection??null);
   let pageId=existingOnly?f.prepared.pageId:undefined,menuId=existingOnly?f.prepared.menuId:undefined,itemIds;
   if(existingOnly){assert.equal(f.prepared.kind,'owned-fixture-preparation');for(const id of[pageId,menuId])assert.ok(Number.isSafeInteger(id)&&id>0);}
   if (!isCoreNavigationFollowupSelection(ctx.journeySelection)) await runCoreDescendantPresentationJourneys(ctx,"navigation");
@@ -137,7 +138,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     return {acceptedFeedback,consumer:"pages-quick-create",surface:"create",permissionEvidence:[...permissionEvidence],renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   assert.ok(pageId, "Page creation must finish before dependent metadata work.");
-  await run("core-navigation-page-seo-validation-save-reload", [], async () => {
+  if(!menuFooterOnly) await run("core-navigation-page-seo-validation-save-reload", [], async () => {
     const path = `/admin/pages-blocks/pages/${pageId}?tab=seo`;
     const fillSeo = async canonical => {
       for (const [name, value] of Object.entries({ seo_title: r.page.seoTitle, seo_description: r.page.seoDescription, focus_keyword: r.page.focusKeyword, canonical_url: canonical })) await page.locator(`[name="${name}"]`).fill(value);
@@ -215,25 +216,25 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await expect(reopened.locator('[name="menu_link_link_href"]')).toHaveValue(CORE_DOWNLOAD_MEDIA_HREF);
     // Menu's physical schema may project Download as custom/legacy; persisted target must still survive editing.
     await expect(reopened.locator('[name="menu_link_link_target"]')).toHaveValue('_blank');
-    await reopened.getByRole('button',{name:'إلغاء',exact:true}).click();await expect(reopened).toBeHidden();
+    await reopened.getByRole('button',{name:'إغلاق',exact:true}).click();await expect(reopened).toBeHidden();
     await edit(itemIds.c, dialog => select(dialog, "Parent", r.menu.b), "reparented");
     await goto(path); await action(() => rowById("menu_item", itemIds.b).getByRole("button", { name: "تحريك لأعلى", exact: true }).click()); await expect(feedback()).toBeVisible(); await checkpoint("menu", "reordered");
-    await goto(path); await action(() => rowById("menu_item", itemIds.c).locator('[data-admin-row-action="visibility"] button').click()); await expect(rowById("menu_item", itemIds.c).getByRole("button", { name: `إظهار ${r.menu.editedC}`, exact: true })).toBeVisible(); await checkpoint("menu", "hidden");
+    await goto(path); await action(() => more(rowById("menu_item", itemIds.c), 'visibility')); await expect(rowById("menu_item",itemIds.c).getByText("مخفي",{exact:true})).toBeVisible();await assertInverseVisibility(rowById("menu_item",itemIds.c),"إظهار"); await checkpoint("menu", "hidden");
     await edit(itemIds.b, dialog => select(dialog, "Parent", r.menu.editedC), "cycle-rejected", true);
     await goto(path); await more(rowById("menu_item", itemIds.b), "delete"); await expect(confirm()).toBeVisible(); await cancel().click(); await expect(confirm()).toBeHidden(); await checkpoint("menu", "delete-cancelled");
     await more(rowById("menu_item", itemIds.b), "delete"); await action(() => confirm().click()); await expect(rowById("menu_item", itemIds.b)).toHaveCount(0); await expect(rowById("menu_item", itemIds.c)).toHaveCount(0); await checkpoint("menu", "subtree-deleted"); assert.equal(cycleFeedbackVariant, "danger", "A rejected cycle must not be displayed as a successful save."); completed.push("menu-graph");
     return {rowActionObservations:rowActionObservations.filter(row=>row.type!=="footer_manual_link"),renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   await run("core-navigation-menu-visibility-duplicate-delete", [], async () => {
-    await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); const acceptedFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"menu-builder:list",perform:()=>action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click())});
-    await expect(rowById("menu", menuId).getByRole("button", { name: `إظهار ${r.menu.editedName}`, exact: true })).toBeVisible(); const acceptedNative=await checkpoint("menu", "menu-hidden");
+    await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); const acceptedFeedback=await observeCoreVisibleAcceptedFeedback({page,channel:"menu-builder:list",perform:()=>action(() => more(rowById("menu", menuId), 'visibility'))});
+    await expect(rowById("menu",menuId).getByText("مخفية",{exact:true})).toBeVisible();await assertInverseVisibility(rowById("menu",menuId),"إظهار"); const acceptedNative=await checkpoint("menu", "menu-hidden");
     await more(rowById("menu", menuId), "duplicate"); await expect(page).toHaveURL(url => /^\/admin\/pages-blocks\/menus\/\d+$/u.test(url.pathname) && !url.pathname.endsWith(`/${menuId}`));
     const duplicateId = Number(new URL(page.url()).pathname.split("/").at(-1)); assert.equal((await checkpoint("menu", "duplicated")).duplicateMenuId, duplicateId);
     await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); await more(rowById("menu", duplicateId), "delete"); await cancel().click(); await expect(confirm()).toBeHidden(); await checkpoint("menu", "duplicate-delete-cancelled");
     await more(rowById("menu", duplicateId), "delete"); await action(() => confirm().click()); await expect(rowById("menu", duplicateId)).toHaveCount(0); await checkpoint("menu", "duplicate-deleted");
-    await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); await action(() => rowById("menu", menuId).locator('[data-admin-row-action="visibility"] button').click()); await expect(rowById("menu", menuId).getByRole("button", { name: `إخفاء ${r.menu.editedName}`, exact: true })).toBeVisible(); await checkpoint("menu", "menu-shown"); completed.push("menu-list");return{acceptedFeedback,acceptedNativeId:acceptedNative.id,menuId};
+    await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); await action(() => more(rowById("menu", menuId), 'visibility')); await expect(rowById("menu",menuId).getByText("ظاهرة",{exact:true})).toBeVisible();await assertInverseVisibility(rowById("menu",menuId),"إخفاء"); await checkpoint("menu", "menu-shown"); completed.push("menu-list");return{acceptedFeedback,acceptedNativeId:acceptedNative.id,menuId};
   });
-  assert.ok(completed.includes("menu-list") && completed.includes("page-seo"), "Footer references only a completed owned Menu recipe.");
+  assert.ok(completed.includes("menu-list") && (menuFooterOnly?existingOnly&&pageId===f.prepared.pageId:completed.includes("page-seo")), "Footer references only a completed owned Menu recipe.");
   await run("core-navigation-footer-aggregate-slots-manual-links-rejection-retry", [], async () => {
     renderedAdoption=[];renderedOpened=new Set();
     await goto("/admin/pages-blocks/footer"); await checkpoint("footer", "baseline");
@@ -326,7 +327,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       completed.push('footer-default-restore');return{confirmationCancelled:true,cancelledActionRequests:0,rejection,retry,actionRequests:2,explicitRetry:true,nativePhases:['restore-cancelled','restore-rejected','restored','restore-reloaded'],otherThreeRowsAndTimestampsUnchanged:true,automaticCoverage:[],globalClosed:false};
     } finally {page.off('request',listener);}
   });
-  assert.deepEqual(completed,existingOnly?['page-seo','menu-graph','menu-list','footer-aggregate','footer-default-restore']:['page-create','page-seo','menu-create','menu-graph','menu-list','footer-aggregate','footer-default-restore']);
+  assert.deepEqual(completed,menuFooterOnly?['menu-graph','menu-list','footer-aggregate','footer-default-restore']:existingOnly?['page-seo','menu-graph','menu-list','footer-aggregate','footer-default-restore']:['page-create','page-seo','menu-create','menu-graph','menu-list','footer-aggregate','footer-default-restore']);
   return { status: "pass", completed, plan, checkpoints, permissionEvidence, downloadMedia, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
 }
 
@@ -341,8 +342,10 @@ export const CORE_NAVIGATION_FOLLOWUP_IDS = [
   "core-navigation-footer-default-restore-confirm-reject-retry"
 ];
 export const CORE_NAVIGATION_EXISTING_SELECTION='navigation-settings-existing-followup';
-export function isCoreNavigationFollowupSelection(selection){return [CORE_NAVIGATION_FOLLOWUP_SELECTION,CORE_NAVIGATION_EXISTING_SELECTION].includes(selection);}
-export function coreNavigationSelectedIds(selection){assert.ok(isCoreNavigationFollowupSelection(selection));return selection===CORE_NAVIGATION_EXISTING_SELECTION?CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>!['core-navigation-page-create-rejection-retry-reload','core-navigation-menu-create-rejection-retry-reload'].includes(id)):[...CORE_NAVIGATION_FOLLOWUP_IDS];}
+export const CORE_NAVIGATION_MENU_FOOTER_SELECTION='navigation-settings-menu-footer-followup';
+export function isCoreNavigationExistingSelection(selection){return [CORE_NAVIGATION_EXISTING_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION].includes(selection);}
+export function isCoreNavigationFollowupSelection(selection){return selection===CORE_NAVIGATION_FOLLOWUP_SELECTION||isCoreNavigationExistingSelection(selection);}
+export function coreNavigationSelectedIds(selection){assert.ok(isCoreNavigationFollowupSelection(selection));const excluded=['core-navigation-page-create-rejection-retry-reload','core-navigation-menu-create-rejection-retry-reload',...(selection===CORE_NAVIGATION_MENU_FOOTER_SELECTION?['core-navigation-page-seo-validation-save-reload']:[])];return isCoreNavigationExistingSelection(selection)?CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>!excluded.includes(id)):[...CORE_NAVIGATION_FOLLOWUP_IDS];}
 export function assertCoreNavigationFollowupReceipt(browser, requiredCases) {
   const selected=coreNavigationSelectedIds(browser.journeySelection);
   assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "navigation-settings");

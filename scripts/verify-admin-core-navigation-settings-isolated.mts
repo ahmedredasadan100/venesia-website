@@ -1,6 +1,6 @@
 import {CORE_DOWNLOAD_MEDIA_HREF,CORE_DOWNLOAD_LINK} from './fixtures/admin-core-download-media-adoption.mjs';
 import {recordCoreDownloadCheckpoint,prepareCoreDownloadMediaFixture,assertCoreDownloadMediaUnchanged} from './verify-admin-core-download-media-isolated.mts';
-import {CORE_NAVIGATION_EXISTING_SELECTION,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
+import {CORE_NAVIGATION_MENU_FOOTER_SELECTION,isCoreNavigationExistingSelection,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -18,7 +18,7 @@ export const NAVIGATION_SETTINGS_PHASES = {
   footer: ["baseline", "draft", "delete-cancelled", "draft-final", "visibility-draft", "rejected", "saved", "reloaded", "visibility-shown-draft", "shown-saved", "shown-reloaded", "restore-cancelled", "restore-rejected", "restored", "restore-reloaded"],
 } as const;
 type Entity = keyof typeof NAVIGATION_SETTINGS_PHASES;
-export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));return selection===CORE_NAVIGATION_EXISTING_SELECTION?{page:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
+export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));return isCoreNavigationExistingSelection(selection)?{page:selection===CORE_NAVIGATION_MENU_FOOTER_SELECTION?[]:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
 export const CORE_NAVIGATION_RECIPE = {
   page: { title: "صفحة إثبات التنقل", path: "/qa-core-navigation-page", slug: "qa-core-navigation-page", seoTitle: "صفحة إثبات التنقل وإدارة المعلومات في الاختبار المعزول", seoDescription: "إثبات التنقل يراجع حفظ بيانات الصفحة والوصف والكلمات المفتاحية داخل البيئة المعزولة، مع بقاء الصفحة غير منشورة والتحقق من سجل التدقيق بعد الحفظ.", focusKeyword: "إثبات التنقل", seoKeywords: ["إثبات التنقل", "اختبار معزول"], canonicalUrl: "https://example.invalid/qa-core-navigation-page" },
   menu: { name: "قائمة إثبات التنقل", editedName: "قائمة إثبات التنقل المعدلة", slug: "qa-core-navigation-menu", a: "أصل التنقل الأول", b: "أصل التنقل الثاني", c: "فرع التنقل", editedC: "فرع التنقل المعدل", href: "https://example.invalid/navigation/child", editedHref: "https://example.invalid/navigation/edited", css: "qa-navigation-child" },
@@ -61,7 +61,7 @@ export async function prepareCoreNavigationSettingsFixtures(handle: OwnedLocalHa
     const baseline = [{ key: "footer.slots", value: { version: 1, slots: fresh } }, { key: "footer.contact_items", value: [] }, { key: "footer.social_links", value: [{ platform: "facebook", label: "QA baseline", href: "https://example.invalid/footer/baseline" }] }, { key: "footer.legal", value: { copyright: "QA baseline", tagline: "QA baseline" } }];
     await handle.query("select public.save_footer_settings($1::jsonb,$2,$3,'qa.navigation.footer.prepare','{}'::jsonb)", [JSON.stringify(baseline), actor.id, actor.username]);
   }
-  if(selection===CORE_NAVIGATION_EXISTING_SELECTION){
+  if(isCoreNavigationExistingSelection(selection)){
     await handle.withDatabaseConnection(async connection=>{await connection.query('begin');try{
       const page=(await connection.query("insert into public.pages(title,slug,path,page_type,status) values($1,$2,$3,'static','unpublished') returning *",[CORE_NAVIGATION_RECIPE.page.title,CORE_NAVIGATION_RECIPE.page.slug,CORE_NAVIGATION_RECIPE.page.path])).rows;assert.equal(page.length,1);
       const menu=(await connection.query("insert into public.menus(name,slug,location,is_active) values($1,$2,'custom',true) returning *",[CORE_NAVIGATION_RECIPE.menu.name,CORE_NAVIGATION_RECIPE.menu.slug])).rows;assert.equal(menu.length,1);
@@ -147,6 +147,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
   const allItems = (await handle.query("select * from public.menu_items order by id")).rows;
   const allPages = (await handle.query("select * from public.pages order by id")).rows;
   const newPages = allPages.filter(row => !state.originalPages.some(old => old.id === row.id));
+  if(state.selection===CORE_NAVIGATION_MENU_FOOTER_SELECTION)assert.deepEqual(newPages,state.last.page,'Retained Page SEO is not replayed; owned prerequisite Page stays byte-identical during Menu/Footer work.');
   const newMenus = allMenus.filter(row => !state.originalMenus.some(old => old.id === row.id));
   assert.deepEqual(allMenus.filter(row => state.originalMenus.some(old => old.id === row.id)), state.originalMenus, "Other menus unchanged.");
   assert.deepEqual(allItems.filter(row => state.originalItems.some(old => old.id === row.id)), state.originalItems, "Other menu graphs unchanged.");
@@ -279,7 +280,7 @@ export function assertCoreNavigationRowActionsCompletion(browser: Row, native: R
   const states=records.filter(row=>row.kind==='navigation-settings-state');
   for(const [entity,phases]of Object.entries(coreNavigationPhases((browser.journeySelection as string|null)??null)))assert.deepEqual(states.filter(row=>row.entity===entity).map(row=>row.phase),phases);
   const state=(entity:string,phase:string)=>{const found=states.filter(row=>row.entity===entity&&row.phase===phase);assert.equal(found.length,1);assert.match(String(found[0].snapshotHash),/^[a-f0-9]{64}$/u);return found[0];};
-  const existingOnly=browser.journeySelection===CORE_NAVIGATION_EXISTING_SELECTION;if(existingOnly){assert.ok(prepared);assert.equal(prepared.kind,'owned-fixture-preparation');assert.equal(prepared.ownedRunId,ownedRunId);assert.equal(prepared.uiCreateClaim,false);assert.deepEqual(prepared.automaticCoverage,[]);assert.equal(prepared.globalClosed,false);assert.match(String(prepared.menuSnapshotHash),/^[a-f0-9]{64}$/u);}else assert.equal(prepared,null);
+  const existingOnly=isCoreNavigationExistingSelection(browser.journeySelection);if(existingOnly){assert.ok(prepared);assert.equal(prepared.kind,'owned-fixture-preparation');assert.equal(prepared.ownedRunId,ownedRunId);assert.equal(prepared.uiCreateClaim,false);assert.deepEqual(prepared.automaticCoverage,[]);assert.equal(prepared.globalClosed,false);assert.match(String(prepared.menuSnapshotHash),/^[a-f0-9]{64}$/u);}else assert.equal(prepared,null);
   const menu=existingOnly?{snapshotHash:prepared!.menuSnapshotHash,menuId:prepared!.menuId}:state('menu','created'),menuRead=state('menu','created-row-inspected'),items=state('menu','item-c'),itemRead=state('menu','items-inspected');
   for(const[a,b]of [[menu,menuRead],[items,itemRead]]){assert.equal(a.snapshotHash,b.snapshotHash);assert.equal(b.actorBoundAuditCount,0);}
   const menuId=Number(menu.menuId);assert.ok(Number.isSafeInteger(menuId)&&menuId>0);const ids=itemRead.itemIds as Row;

@@ -1,7 +1,7 @@
 import {isCoreTopicControlsSelection,coreSelectedTopicControlKinds,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
 import {isCoreTemplateControlSelection,coreTemplateControlKinds,assertCoreTemplateControlsRetryReceipt} from "./fixtures/admin-core-template-controls-contract.mjs";
 import {CORE_PROJECT_EDITOR_SELECTION,CORE_PROJECT_EDITOR_IDS,assertCoreProjectEditorSelectionReceipt} from "./fixtures/admin-core-project-controls-contract.mjs";
-import {CORE_NAVIGATION_EXISTING_SELECTION,coreNavigationSelectedIds,isCoreNavigationFollowupSelection,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
+import {isCoreNavigationExistingSelection,coreNavigationSelectedIds,isCoreNavigationFollowupSelection,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import {CORE_TEMPLATE_HERO_BULK_SELECTION,CORE_TEMPLATE_HERO_BULK_IDS,assertCoreTemplateHeroBulkReceipt} from './fixtures/admin-core-template-bulk-journeys.mjs';
 import {CORE_SPECIALIZED_FOLLOWUP_SELECTION,loadCoreSpecializedFollowupIds,assertCoreSpecializedFollowupReceipt} from './fixtures/admin-core-specialized-settings-journeys.mjs';
 import {isCorePageCompositionFollowupSelection,loadCorePageCompositionFollowupIds,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
@@ -447,7 +447,7 @@ try {
     const { createCoreNativeCheckpoint } = await import("./fixtures/admin-core-form-permission-context.mjs");
     const { runCoreNavigationSettingsJourneys } = await import("./fixtures/admin-core-navigation-settings-journeys.mjs");
     const {createCoreFormPermissionContext}=await import("./fixtures/admin-core-form-permission-context.mjs");
-    if(journeySelection!==CORE_NAVIGATION_EXISTING_SELECTION) coreFormPermission=createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
+    if(!isCoreNavigationExistingSelection(journeySelection)) coreFormPermission=createCoreFormPermissionContext({page,origin,output,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,requiredCases});
     navigationSettingsResult = await runCoreNavigationSettingsJourneys({page,origin,fixtures,journeySelection,run,observe,requiredCases,actionResponse,assertActionAcknowledged,nativeCheckpoint:createCoreNativeCheckpoint({origin,output}),permissionReplay:coreFormPermission});
     if(coreFormPermission){coreFormPermission.close();coreFormPermission=null;}
    } else if (coreCohort === "media-library") {

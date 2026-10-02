@@ -1,7 +1,7 @@
 import {isCoreTopicControlsSelection,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
 import {isCoreTemplateControlSelection,assertCoreTemplateControlsRetryReceipt} from "./fixtures/admin-core-template-controls-contract.mjs";
 import {CORE_PROJECT_EDITOR_SELECTION,assertCoreProjectEditorSelectionReceipt} from "./fixtures/admin-core-project-controls-contract.mjs";
-import {CORE_NAVIGATION_EXISTING_SELECTION,isCoreNavigationFollowupSelection,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
+import {isCoreNavigationExistingSelection,isCoreNavigationFollowupSelection,assertCoreNavigationFollowupReceipt} from './fixtures/admin-core-navigation-settings-journeys.mjs';
 import {CORE_TEMPLATE_HERO_BULK_SELECTION,assertCoreTemplateHeroBulkReceipt} from './fixtures/admin-core-template-bulk-journeys.mjs';
 import {CORE_SPECIALIZED_FOLLOWUP_SELECTION,assertCoreSpecializedFollowupReceipt} from './fixtures/admin-core-specialized-settings-journeys.mjs';
 import {CORE_PAGE_COMPOSITION_SEO_SELECTION,isCorePageCompositionFollowupSelection,assertCorePageCompositionFollowupReceipt} from "./fixtures/admin-core-page-composition-journeys.mjs";
@@ -130,14 +130,14 @@ export function assertCoreNavigationPermissionReceipts(handle: OwnedLocalHandle,
   const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu;
   for (const row of records) assert.match(String(row.id), uuid);
   assert.equal(new Set(records.map(row => row.id)).size, records.length, "Duplicate native request identity cannot add proof.");
-  const existingOnly=browser.journeySelection===CORE_NAVIGATION_EXISTING_SELECTION;
+  const existingOnly=isCoreNavigationExistingSelection(browser.journeySelection);
   const expectedPhases = Object.entries(coreNavigationPhases((browser.journeySelection as string|null)??null)).flatMap(([entity, phases]) => phases.map(phase => ({ entity, phase })));
   const stateRecords = records.filter(row => row.kind === "navigation-settings-state");
   assert.deepEqual(stateRecords.map(row => ({ entity: row.entity, phase: row.phase })), expectedPhases);
   for (const row of stateRecords) assert.equal(row.status, "pass");
   assert.deepEqual(checkpoints, stateRecords, "Every real Navigation checkpoint must join its exact native result.");
   if(existingOnly){
-    assert.deepEqual(result.permissionEvidence,[]);assert.deepEqual(result.permissionCandidateKeys,[]);assert.deepEqual(browser.databaseReadback,[]);assert.deepEqual(records,stateRecords);assert.equal(stateRecords.length,35);
+    assert.deepEqual(result.permissionEvidence,[]);assert.deepEqual(result.permissionCandidateKeys,[]);assert.deepEqual(browser.databaseReadback,[]);assert.deepEqual(records,stateRecords);assert.equal(stateRecords.length,expectedPhases.length);
     if(draftRestorationInput!==undefined&&draftRestorationInput!==null)assert.deepEqual(object(draftRestorationInput).receipts,[]);
     for(const row of rows(browser.evidence)){assert.equal(String(row.id).includes('create-rejection-retry-reload'),false);if(row.permissionEvidence!==undefined)assert.deepEqual(row.permissionEvidence,[]);}
     return{status:'pass',ownedRunId:handle.identity.runId,navigationCheckpoints:stateRecords.length,pagePermissionIntents:0,nativeCheckpoints:records.length,candidateRequiredCase:null,automaticCoverage:[],globalClosed:false};
@@ -250,7 +250,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     const isTopicControlsRetry = isCoreTopicControlsSelection(browser.journeySelection);
     const isProjectEditors = browser.journeySelection === CORE_PROJECT_EDITOR_SELECTION;
     const isNavigationFollowup = isCoreNavigationFollowupSelection(browser.journeySelection);
-    const isNavigationExisting = browser.journeySelection === CORE_NAVIGATION_EXISTING_SELECTION;
+    const isNavigationExisting = isCoreNavigationExistingSelection(browser.journeySelection);
     const isTemplateHeroBulk = browser.journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION;
     const isSpecializedFollowup = browser.journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION;
     const isPageCompositionFollowup = isCorePageCompositionFollowupSelection(browser.journeySelection);
