@@ -194,4 +194,39 @@ await test('Menu Footer finite selection omits qualified SEO and native Page wor
 const remainingReceipt={...structuredClone(selectedReceipt),journeySelection:CORE_NAVIGATION_EXISTING_SELECTION,selectedJourneyIds:[...remainingIds],executedJourneyIds:[...remainingIds],evidence:remainingIds.map(id=>({id,status:'pass'}))};
 await test('Existing5 retain original canonical cells without create or descendant credit',()=>{const r=assertCoreNavigationFollowupReceipt(remainingReceipt,requiredCases);assert.deepEqual(r.selectedJourneyIds,remainingIds);assert.equal(r.globalClosed,false);assert.deepEqual(r.automaticCoverage,[]);});
 for(const[label,edit]of Object.entries({missing:(r:typeof remainingReceipt):unknown=>r.executedJourneyIds.pop(),createReplay:(r:typeof remainingReceipt):unknown=>r.executedJourneyIds.push('core-navigation-page-create-rejection-retry-reload'),descendantReplay:(r:typeof remainingReceipt):unknown=>r.evidence.push({id:'core-descendant-presentation-footer',status:'pass'}),lostCase:(r:typeof remainingReceipt):unknown=>r.requiredCases.pop(),failed:(r:typeof remainingReceipt):unknown=>r.evidence[0].status='fail',duplicate:(r:typeof remainingReceipt):unknown=>r.executedJourneyIds[1]=r.executedJourneyIds[0]}))await test('Existing5 rejects '+label,()=>{const r=structuredClone(remainingReceipt);edit(r);assert.throws(()=>assertCoreNavigationFollowupReceipt(r,requiredCases));});
+// Execute the existing command adapters and the shared viewport selector together.
+// This controlled projection proves placement, not authenticated Browser rendering.
+function navigationFeedbackDeclaration(source: string, name: string) {
+ const ast=ts.createSourceFile('feedback.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX),found:ts.FunctionDeclaration[]=[];
+ const visit=(node:ts.Node)=>{if(ts.isFunctionDeclaration(node)&&node.name?.text===name)found.push(node);ts.forEachChild(node,visit);};visit(ast);assert.equal(found.length,1);
+ return ts.transpileModule(found[0].getText(ast).replace(/^export /u,''),{compilerOptions:{target:ts.ScriptTarget.ES2022,jsx:ts.JsxEmit.React}}).outputText;
+}
+type NavigationFeedbackEntry={channel:string;placement:string;feedback:{variant:string;message:string;[key:string]:unknown}};
+type NavigationFeedbackTree={type:unknown;props:Record<string,unknown>;children:unknown[]};
+const feedbackOwnerSource=readFileSync(resolve(root,'src/components/admin/AdminFeedbackProvider.tsx'),'utf8');
+function navigationGlobalProjection(entries:NavigationFeedbackEntry[]){
+ const token=Symbol('actual-viewport-entry'),react={createElement:(type:unknown,props:Record<string,unknown>,...children:unknown[]):NavigationFeedbackTree=>({type,props,children})};
+ const render=new Function('useAdminFeedback','React','AdminFeedbackViewportEntry','createPortal',navigationFeedbackDeclaration(feedbackOwnerSource,'AdminFeedbackViewport')+';return AdminFeedbackViewport;')(()=>({entries,dismissFeedback:()=>{},modalHost:null}),react,token,()=>{throw Error('No modal host declared in this control.');});
+ const result:NavigationFeedbackEntry[]=[];const visit=(node:unknown)=>{if(Array.isArray(node)){node.forEach(visit);return;}if(!node||typeof node!=='object')return;const n=node as NavigationFeedbackTree;if(n.type===token)result.push(n.props.entry as NavigationFeedbackEntry);n.children?.forEach(visit);};visit(render());return result;
+}
+for(const[file,callback,channel,host]of[
+ ['MenusTableClient.tsx','runMenuMutation','menu-builder:list','MenusTableClient.tsx'],
+ ['MenuItemsTableClient.tsx','runMenuItemMutation','menu-builder:41','MenuBuilderClient.tsx'],
+]){
+ const source=readFileSync(resolve(root,'src/app/admin/pages-blocks/menus',file),'utf8');
+ const region=readFileSync(resolve(root,'src/app/admin/pages-blocks/menus',host),'utf8');assert.match(region,/placement="global"/u);assert.doesNotMatch(region,/AdminFeedbackChannelViewport/u);
+ for(const outcome of ['success','warning','error']){
+  const execute=async(code:string)=>{
+   let entries:NavigationFeedbackEntry[]=[{channel,placement:'global',feedback:{variant:'success',message:'previous'}}],mutations=0,refreshes=0;
+   const request={id:'controlled-request'},clearFeedback=(target:string)=>{assert.equal(target,channel);entries=entries.filter(e=>e.channel!==target);};
+   const instant={mutateAsync:async(actual:unknown)=>{mutations++;assert.equal(actual,request);if(outcome==='error')throw Error('controlled rejection');return{feedbackStatus:outcome,message:'controlled '+outcome};}};
+   const publishFeedback=(feedback:NavigationFeedbackEntry['feedback'],options:{channel:string;placement:string})=>{entries.push({...options,feedback});};
+   const router={refresh:()=>{refreshes++;}},run=new Function('clearFeedback','feedbackChannel','instant','publishFeedback','router',navigationFeedbackDeclaration(code,callback)+';return '+callback+';')(clearFeedback,channel,instant,publishFeedback,router);
+   await run(request);assert.equal(mutations,1);assert.equal(refreshes,outcome==='error'?0:1);assert.equal(entries.length,1);assert.equal(entries[0].feedback.variant,outcome==='error'?'danger':outcome);assert.equal(entries[0].feedback.message,outcome==='error'?'controlled rejection':'controlled '+outcome);return entries;
+  };
+  await test('Menu actual command '+callback+' '+outcome+' reaches declared shared global viewport',async()=>{const entries=await execute(source);assert.deepEqual(navigationGlobalProjection(entries),entries);});
+  await test('Menu placement regression '+callback+' '+outcome+' reproduces undisplayed result',async()=>{const old=source.replaceAll('placement: "global"','placement: "inline"');assert.notEqual(old,source);const entries=await execute(old);assert.deepEqual(navigationGlobalProjection(entries),[]);});
+ }
+}
+
 console.log(JSON.stringify({ status: "pass", controls: cases.length, cases, runtimeExecuted: false, globalClosed: false }));

@@ -249,7 +249,7 @@ export default function MenusTableClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline" },
+        { channel: feedbackChannel, placement: "global" },
       );
       options.onSuccess?.(result);
       if (options.refresh !== false) router.refresh();
@@ -268,7 +268,7 @@ export default function MenusTableClient({
         },
         {
           channel: feedbackChannel,
-          placement: "inline",
+          placement: "global",
           reveal: true,
         },
       );
