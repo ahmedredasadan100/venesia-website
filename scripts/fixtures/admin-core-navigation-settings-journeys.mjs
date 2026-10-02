@@ -3,8 +3,7 @@ import {exerciseCoreDownloadField,CORE_DOWNLOAD_MEDIA_HREF} from './admin-core-d
 import { runCoreDescendantPresentationJourneys } from './admin-core-descendant-presentation-journeys.mjs';
 import assert from "node:assert/strict";
 import { observeCoreAcceptedFormFeedback, observeCoreVisibleAcceptedFeedback, runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
-import { randomUUID, createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -98,7 +97,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       return{type,id:String(id),label,routePathname:path,information,preview,copyHidden:true,informationReturnedFocus:true,actionRequests:0,externalDestinationFollowed:false};
     } finally {page.off('request',listener);}
   }
-  const existingOnly=isCoreNavigationExistingSelection(ctx.journeySelection),restoreOnly=ctx.journeySelection===CORE_NAVIGATION_FOOTER_RESTORE_SELECTION,footerOnly=restoreOnly||ctx.journeySelection===CORE_NAVIGATION_FOOTER_SELECTION,graphFooterOnly=ctx.journeySelection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,menuFooterOnly=footerOnly||graphFooterOnly||ctx.journeySelection===CORE_NAVIGATION_MENU_FOOTER_SELECTION;assert.equal(f.selection??null,ctx.journeySelection??null);
+  const existingOnly=isCoreNavigationExistingSelection(ctx.journeySelection),footerOnly=ctx.journeySelection===CORE_NAVIGATION_FOOTER_SELECTION,graphFooterOnly=ctx.journeySelection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,menuFooterOnly=footerOnly||graphFooterOnly||ctx.journeySelection===CORE_NAVIGATION_MENU_FOOTER_SELECTION;assert.equal(f.selection??null,ctx.journeySelection??null);
   let pageId=existingOnly?f.prepared.pageId:undefined,menuId=existingOnly?f.prepared.menuId:undefined,itemIds;
   if(existingOnly){assert.equal(f.prepared.kind,'owned-fixture-preparation');for(const id of[pageId,menuId])assert.ok(Number.isSafeInteger(id)&&id>0);}
   if (!isCoreNavigationFollowupSelection(ctx.journeySelection)) await runCoreDescendantPresentationJourneys(ctx,"navigation");
@@ -236,7 +235,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await goto("/admin/pages-blocks/menus"+(existingOnly?"?q="+encodeURIComponent(r.menu.slug):"")); await action(() => more(rowById("menu", menuId), 'visibility')); await expect(rowById("menu",menuId).getByText("ظاهرة",{exact:true})).toBeVisible();await assertInverseVisibility(rowById("menu",menuId),"إخفاء"); await checkpoint("menu", "menu-shown"); completed.push("menu-list");return{acceptedFeedback,acceptedNativeId:acceptedNative.id,menuId};
   });
   assert.ok((footerOnly?existingOnly&&menuId===f.prepared.menuId:(graphFooterOnly?completed.includes("menu-graph"):completed.includes("menu-list"))) && (menuFooterOnly?existingOnly&&pageId===f.prepared.pageId:completed.includes("page-seo")), "Footer references the completed owned Menu recipe or the private uncredited terminal prerequisite.");
-  if(!restoreOnly) await run("core-navigation-footer-aggregate-slots-manual-links-rejection-retry", [], async () => {
+  await run("core-navigation-footer-aggregate-slots-manual-links-rejection-retry", [], async () => {
     renderedAdoption=[];renderedOpened=new Set();
     await goto("/admin/pages-blocks/footer"); await checkpoint("footer", "baseline");
     const panel = () => page.getByRole("tabpanel");
@@ -293,44 +292,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await goto('/admin/pages-blocks/footer');await tab('column-1');await expect(rowByLabel(r.footer.editedLink).getByText('ظاهر',{exact:true})).toBeVisible();await assertInverseVisibility(rowByLabel(r.footer.editedLink),'إخفاء');await checkpoint('footer','shown-reloaded');completed.push("footer-aggregate");
     return {rowActionObservations:rowActionObservations.filter(row=>row.type==='footer_manual_link'),manualVisibility:{hiddenSavedReloaded:true,shownSavedReloaded:true,extraAcceptedSaves:1,nativePhases:['visibility-draft','saved','reloaded','visibility-shown-draft','shown-saved','shown-reloaded']},renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
-  await run('core-navigation-footer-default-restore-confirm-reject-retry', [], async () => {
-    if(restoreOnly){assert.deepEqual(completed,[]);assert.equal(f.prepared.kind,'owned-fixture-preparation');assert.match(f.prepared.footerSnapshotHash,/^[a-f0-9]{64}$/u);assert.equal(f.prepared.footerUiSaveClaim,false);}else assert.ok(completed.includes('footer-aggregate')); assert.deepEqual(f.footerRestore,{key:'footer.slots'});
-    await goto('/admin/pages-blocks/footer');
-    const dialog=()=>page.getByRole('dialog',{name:'استعادة الفوتر الافتراضي',exact:true});
-    const open=()=>page.getByRole('button',{name:'استعادة الافتراضي',exact:true}).click();
-    const manifestBytes=readFileSync(new URL('../../.next/server/server-reference-manifest.json',import.meta.url)),actionManifest=JSON.parse(manifestBytes.toString('utf8'));
-    const postTrace=[];let postPhase='confirmation-cancel';
-    const posts=[],listener=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin){posts.push(request);const actionId=request.headers()['next-action'],entry=actionManifest.node?.[actionId]??actionManifest.edge?.[actionId];postTrace.push({ordinal:posts.length,phase:postPhase,pathname:new URL(request.url()).pathname,actionId,exportedName:typeof entry?.exportedName==='string'?entry.exportedName:null,filename:typeof entry?.filename==='string'?entry.filename:null});}};
-    page.on('request',listener);
-    try {
-      await open(); await expect(dialog()).toBeVisible(); await dialog().locator('[data-admin-confirm-cancel]').click();
-      await expect(dialog()).toHaveCount(0); assert.equal(posts.length,0); await checkpoint('footer','restore-cancelled');
-      const pending=async cancelled=>{
-        postPhase=cancelled?'rejection':'retry';
-        const token=randomUUID(),fault=async operation=>{const request={id:randomUUID(),kind:'domain-write-fault-'+operation,entity:'footer_restore',token};const result=await nativeCheckpoint(request);for(const key of Object.keys(request))assert.equal(result[key],request[key]);assert.equal(result.status,'pass');return result;};
-        let armed=false,responsePromise;const start=posts.length;
-        try {
-          await fault('arm'); armed=true;
-          responsePromise=page.waitForResponse(response=>response.request().method()==='POST'&&response.request().headers()['next-action']&&new URL(response.url()).origin===origin);void responsePromise.catch(()=>{});
-          await dialog().locator('[data-admin-confirm-submit]').click();
-          const first=await fault('observe-blocked');assert.equal(first.observedOneStatement,true);
-          await expect(dialog().locator('[data-admin-confirm-submit]')).toBeDisabled();await expect(dialog().locator('[data-admin-confirm-cancel]')).toBeDisabled();
-          await page.keyboard.press('Escape');await expect(dialog()).toBeVisible();await page.keyboard.press('Enter');await page.keyboard.press('Enter');
-          const second=await fault('observe-blocked');for(const key of ['backendPid','backendStartedAt','queryStartedAt','queryFingerprint','holderPid'])assert.equal(second[key],first[key]);assert.equal(posts.length,start+1);
-          if(cancelled)assert.equal((await fault('cancel')).cancelledOneStatement,true);
-          const released=await fault('release');armed=false;assert.equal(released.ownedLockRolledBack,true);assert.equal(released.cancellationObserved,cancelled);
-          const response=await responsePromise;if(cancelled)assert.equal(response.status(),500);else assert.ok(response.status()<400);return{token,actionRequests:posts.length-start,sameNativeStatementObservedTwice:true,actualStatementCancelled:cancelled,ownedLockReleased:true};
-        } finally { try{if(armed)await fault('release');}finally{if(responsePromise)await Promise.allSettled([responsePromise]);} }
-      };
-      await open();const rejection=await pending(true);
-      await expect(dialog()).toBeVisible();await expect(dialog().locator('[data-admin-confirm-submit]')).toBeEnabled();
-      await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible();await checkpoint('footer','restore-rejected');
-      const retry=await pending(false);await expect(dialog()).toHaveCount(0);await expect(feedback()).toContainText('تمت استعادة تخطيط الفوتر الافتراضي بنجاح.');await checkpoint('footer','restored');
-      postPhase='reload';await goto('/admin/pages-blocks/footer');await checkpoint('footer','restore-reloaded');assert.equal(posts.length,2,'Footer restore POST trace: '+JSON.stringify({manifestSha256:createHash('sha256').update(manifestBytes).digest('hex'),observed:posts.length,expected:2,requests:postTrace}));
-      completed.push('footer-default-restore');return{confirmationCancelled:true,cancelledActionRequests:0,rejection,retry,actionRequests:2,explicitRetry:true,nativePhases:['restore-cancelled','restore-rejected','restored','restore-reloaded'],otherThreeRowsAndTimestampsUnchanged:true,automaticCoverage:[],globalClosed:false};
-    } finally {page.off('request',listener);}
-  });
-  assert.deepEqual(completed,restoreOnly?['footer-default-restore']:footerOnly?['footer-aggregate','footer-default-restore']:graphFooterOnly?['menu-graph','footer-aggregate','footer-default-restore']:menuFooterOnly?['menu-graph','menu-list','footer-aggregate','footer-default-restore']:existingOnly?['page-seo','menu-graph','menu-list','footer-aggregate','footer-default-restore']:['page-create','page-seo','menu-create','menu-graph','menu-list','footer-aggregate','footer-default-restore']);
+  assert.deepEqual(completed,footerOnly?['footer-aggregate']:graphFooterOnly?['menu-graph','footer-aggregate']:menuFooterOnly?['menu-graph','menu-list','footer-aggregate']:existingOnly?['page-seo','menu-graph','menu-list','footer-aggregate']:['page-create','page-seo','menu-create','menu-graph','menu-list','footer-aggregate']);
   return { status: "pass", completed, plan, checkpoints, permissionEvidence, downloadMedia, permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase), requiresOwnedCleanupBeforePromotion: true, globalClosed: false };
 }
 
@@ -341,17 +303,15 @@ export const CORE_NAVIGATION_FOLLOWUP_IDS = [
   "core-navigation-menu-create-rejection-retry-reload",
   "core-navigation-menu-metadata-item-graph-commands",
   "core-navigation-menu-visibility-duplicate-delete",
-  "core-navigation-footer-aggregate-slots-manual-links-rejection-retry",
-  "core-navigation-footer-default-restore-confirm-reject-retry"
+  "core-navigation-footer-aggregate-slots-manual-links-rejection-retry"
 ];
 export const CORE_NAVIGATION_EXISTING_SELECTION='navigation-settings-existing-followup';
 export const CORE_NAVIGATION_MENU_FOOTER_SELECTION='navigation-settings-menu-footer-followup';
 export const CORE_NAVIGATION_GRAPH_FOOTER_SELECTION='navigation-settings-graph-footer-followup';
 export const CORE_NAVIGATION_FOOTER_SELECTION='navigation-settings-footer-followup';
-export const CORE_NAVIGATION_FOOTER_RESTORE_SELECTION='navigation-settings-footer-restore-followup';
-export function isCoreNavigationExistingSelection(selection){return [CORE_NAVIGATION_EXISTING_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_RESTORE_SELECTION].includes(selection);}
+export function isCoreNavigationExistingSelection(selection){return [CORE_NAVIGATION_EXISTING_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION].includes(selection);}
 export function isCoreNavigationFollowupSelection(selection){return selection===CORE_NAVIGATION_FOLLOWUP_SELECTION||isCoreNavigationExistingSelection(selection);}
-export function coreNavigationSelectedIds(selection){assert.ok(isCoreNavigationFollowupSelection(selection));if(selection===CORE_NAVIGATION_FOOTER_RESTORE_SELECTION)return CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>id==='core-navigation-footer-default-restore-confirm-reject-retry');if(selection===CORE_NAVIGATION_FOOTER_SELECTION)return CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>['core-navigation-footer-aggregate-slots-manual-links-rejection-retry','core-navigation-footer-default-restore-confirm-reject-retry'].includes(id));const excluded=['core-navigation-page-create-rejection-retry-reload','core-navigation-menu-create-rejection-retry-reload',...([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?['core-navigation-page-seo-validation-save-reload']:[]),...(selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?['core-navigation-menu-visibility-duplicate-delete']:[])];return isCoreNavigationExistingSelection(selection)?CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>!excluded.includes(id)):[...CORE_NAVIGATION_FOLLOWUP_IDS];}
+export function coreNavigationSelectedIds(selection){assert.ok(isCoreNavigationFollowupSelection(selection));if(selection===CORE_NAVIGATION_FOOTER_SELECTION)return CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>['core-navigation-footer-aggregate-slots-manual-links-rejection-retry'].includes(id));const excluded=['core-navigation-page-create-rejection-retry-reload','core-navigation-menu-create-rejection-retry-reload',...([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?['core-navigation-page-seo-validation-save-reload']:[]),...(selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?['core-navigation-menu-visibility-duplicate-delete']:[])];return isCoreNavigationExistingSelection(selection)?CORE_NAVIGATION_FOLLOWUP_IDS.filter(id=>!excluded.includes(id)):[...CORE_NAVIGATION_FOLLOWUP_IDS];}
 export function assertCoreNavigationFollowupReceipt(browser, requiredCases) {
   const selected=coreNavigationSelectedIds(browser.journeySelection);
   assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "navigation-settings");

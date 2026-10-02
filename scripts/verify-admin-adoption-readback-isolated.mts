@@ -38,7 +38,7 @@ import { assertOwnedCoreMediaCheckpointCompletion } from "./verify-admin-core-me
 import { assertOwnedCoreMediaRecoveryCompletion } from "./verify-admin-core-media-recovery-isolated.mts";
 import { verifyCoreQueryPresentationCompletion } from "./verify-admin-core-query-presentation-isolated.mts";
 import { assertCoreAuthEntryCompleted } from "./verify-admin-core-auth-entry-isolated.mts";
-import { assertCoreNavigationSettingsCompleted, assertCoreFooterRestoreCompletion, assertCoreNavigationRowActionsCompletion, coreNavigationPhases, coreNavigationPreparedBaseline, CORE_NAVIGATION_RECIPE } from "./verify-admin-core-navigation-settings-isolated.mts";
+import { assertCoreNavigationSettingsCompleted,  assertCoreNavigationRowActionsCompletion, coreNavigationPhases, coreNavigationPreparedBaseline, CORE_NAVIGATION_RECIPE } from "./verify-admin-core-navigation-settings-isolated.mts";
 import assert from "node:assert/strict";
 import { assertCorePageSeoCompleted } from "./verify-admin-core-page-seo-isolated.mts";
 import { assertPageSeoReceiptJoin } from "./fixtures/admin-core-page-seo-contract.mjs";
@@ -314,7 +314,6 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     let pageSeo = null, pageAssignmentRowActions = null;
     let navigationPermission: ReturnType<typeof assertCoreNavigationPermissionReceipts> | null = null;
     let navigationRowActions: ReturnType<typeof assertCoreNavigationRowActionsCompletion> | null = null;
-    let footerRestore: Omit<ReturnType<typeof assertCoreFooterRestoreCompletion>, "nativeWithoutFaults"> | null = null;
     if (browser.cohort === "page-composition" || browser.cohort === "readonly-hubs" || browser.cohort === "specialized-settings" || browser.cohort === "media-library" || browser.cohort === "navigation-settings" || browser.cohort === "auth-entry") {
       nativeCheckpoints = JSON.parse(readFileSync(join(artifactDir, "core-native-control-readback.json"), "utf8"));
       assert.equal(nativeCheckpoints.status, "pass", "Every joined fixed checkpoint must complete.");
@@ -328,10 +327,6 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       if (isPageCompositionFollowup || isNavigationFollowup) assert.ok(nativeCheckpoints.records.every((row: {kind: string}) => row.kind !== "descendant-presentation-state"), "Retained descendant proof must not replay.");
       if (browser.cohort === "navigation-settings") {
         const source = JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
-        const cleanup = JSON.parse(readFileSync(join(artifactDir,"core-native-write-faults.json"),"utf8"));
-        const { nativeWithoutFaults, ...restoreProof } = assertCoreFooterRestoreCompletion(browser,cohortNative,cleanup,handle.identity.runId,source.sourceSha256);
-        cohortNative = nativeWithoutFaults;
-        footerRestore = restoreProof;
         navigationPermission = assertCoreNavigationPermissionReceipts(handle, browser, cohortNative, draftArtifact);
         navigationRowActions = assertCoreNavigationRowActionsCompletion(browser,cohortNative,handle.identity.runId,source.sourceSha256,coreNavigationPreparedBaseline(handle));
       }
@@ -453,7 +448,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     const templateLibraryPresentation = browser.cohort === "template-libraries" ? verifyCoreTemplatePresentationCompletion(handle,browser) : null;
     const queryPresentation = browser.cohort === "query-presentation" ? verifyCoreQueryPresentationCompletion(handle,browser) : null;
     const authEntry = browser.cohort === "auth-entry" ? assertCoreAuthEntryCompleted(handle) : null;
-    const navigationSettings = browser.cohort === "navigation-settings" ? { ...assertCoreNavigationSettingsCompleted(handle), permission: navigationPermission, footerRestore, navigationRowActions } : null;
+    const navigationSettings = browser.cohort === "navigation-settings" ? { ...assertCoreNavigationSettingsCompleted(handle), permission: navigationPermission, navigationRowActions } : null;
     const specializedSettings = browser.cohort === "specialized-settings" ? assertCoreSpecializedSettingsCompleted(handle, isSpecializedFollowup ? CORE_SPECIALIZED_FOLLOWUP_SELECTION : null) : null;
     if (specializedSettings) assert.equal(browser.specializedSettings?.status,"pass");
     const writes = await verifyCoreDomainWrites(handle, browser);

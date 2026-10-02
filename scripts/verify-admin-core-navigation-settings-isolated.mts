@@ -1,6 +1,6 @@
 import {CORE_DOWNLOAD_MEDIA_HREF,CORE_DOWNLOAD_LINK} from './fixtures/admin-core-download-media-adoption.mjs';
 import {recordCoreDownloadCheckpoint,prepareCoreDownloadMediaFixture,assertCoreDownloadMediaUnchanged} from './verify-admin-core-download-media-isolated.mts';
-import {CORE_NAVIGATION_FOOTER_RESTORE_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,isCoreNavigationExistingSelection,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
+import {CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_MENU_FOOTER_SELECTION,isCoreNavigationExistingSelection,isCoreNavigationFollowupSelection} from "./fixtures/admin-core-navigation-settings-journeys.mjs";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
@@ -15,10 +15,10 @@ type Row = Record<string, unknown>;
 export const NAVIGATION_SETTINGS_PHASES = {
   page: ["baseline", "rejected", "created", "seo-rejected", "seo-saved"],
   menu: ["baseline", "rejected", "created", "created-row-inspected", "metadata-saved", "item-a", "item-b", "item-c", "items-inspected", "item-edited", "reparented", "reordered", "hidden", "cycle-rejected", "delete-cancelled", "subtree-deleted", "menu-hidden", "duplicated", "duplicate-delete-cancelled", "duplicate-deleted", "menu-shown"],
-  footer: ["baseline", "draft", "delete-cancelled", "draft-final", "visibility-draft", "rejected", "saved", "reloaded", "visibility-shown-draft", "shown-saved", "shown-reloaded", "restore-cancelled", "restore-rejected", "restored", "restore-reloaded"],
+  footer: ["baseline", "draft", "delete-cancelled", "draft-final", "visibility-draft", "rejected", "saved", "reloaded", "visibility-shown-draft", "shown-saved", "shown-reloaded"],
 } as const;
 type Entity = keyof typeof NAVIGATION_SETTINGS_PHASES;
-export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));if(selection===CORE_NAVIGATION_FOOTER_RESTORE_SELECTION)return{page:[],menu:[],footer:NAVIGATION_SETTINGS_PHASES.footer.slice(11)};if(selection===CORE_NAVIGATION_FOOTER_SELECTION)return{page:[],menu:[],footer:NAVIGATION_SETTINGS_PHASES.footer};return isCoreNavigationExistingSelection(selection)?{page:[CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?[]:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?NAVIGATION_SETTINGS_PHASES.menu.slice(3,16):NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
+export function coreNavigationPhases(selection:string|null=null):Record<Entity,readonly string[]>{if(selection===null)return NAVIGATION_SETTINGS_PHASES;assert.ok(isCoreNavigationFollowupSelection(selection));if(selection===CORE_NAVIGATION_FOOTER_SELECTION)return{page:[],menu:[],footer:NAVIGATION_SETTINGS_PHASES.footer};return isCoreNavigationExistingSelection(selection)?{page:[CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION].includes(selection)?[]:NAVIGATION_SETTINGS_PHASES.page.slice(3),menu:selection===CORE_NAVIGATION_GRAPH_FOOTER_SELECTION?NAVIGATION_SETTINGS_PHASES.menu.slice(3,16):NAVIGATION_SETTINGS_PHASES.menu.slice(3),footer:NAVIGATION_SETTINGS_PHASES.footer}:NAVIGATION_SETTINGS_PHASES;}
 export const CORE_NAVIGATION_RECIPE = {
   page: { title: "صفحة إثبات التنقل", path: "/qa-core-navigation-page", slug: "qa-core-navigation-page", seoTitle: "صفحة إثبات التنقل وإدارة المعلومات في الاختبار المعزول", seoDescription: "إثبات التنقل يراجع حفظ بيانات الصفحة والوصف والكلمات المفتاحية داخل البيئة المعزولة، مع بقاء الصفحة غير منشورة والتحقق من سجل التدقيق بعد الحفظ.", focusKeyword: "إثبات التنقل", seoKeywords: ["إثبات التنقل", "اختبار معزول"], canonicalUrl: "https://example.invalid/qa-core-navigation-page" },
   menu: { name: "قائمة إثبات التنقل", editedName: "قائمة إثبات التنقل المعدلة", slug: "qa-core-navigation-menu", a: "أصل التنقل الأول", b: "أصل التنقل الثاني", c: "فرع التنقل", editedC: "فرع التنقل المعدل", href: "https://example.invalid/navigation/child", editedHref: "https://example.invalid/navigation/edited", css: "qa-navigation-child" },
@@ -64,29 +64,21 @@ export async function prepareCoreNavigationSettingsFixtures(handle: OwnedLocalHa
   if(isCoreNavigationExistingSelection(selection)){
     await handle.withDatabaseConnection(async connection=>{await connection.query('begin');try{
       const page=(await connection.query("insert into public.pages(title,slug,path,page_type,status) values($1,$2,$3,'static','unpublished') returning *",[CORE_NAVIGATION_RECIPE.page.title,CORE_NAVIGATION_RECIPE.page.slug,CORE_NAVIGATION_RECIPE.page.path])).rows;assert.equal(page.length,1);
-      const menu=(await connection.query("insert into public.menus(name,slug,location,is_active) values($1,$2,'custom',true) returning *",[[CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_RESTORE_SELECTION].includes(selection??'')?CORE_NAVIGATION_RECIPE.menu.editedName:CORE_NAVIGATION_RECIPE.menu.name,CORE_NAVIGATION_RECIPE.menu.slug])).rows;assert.equal(menu.length,1);
+      const menu=(await connection.query("insert into public.menus(name,slug,location,is_active) values($1,$2,'custom',true) returning *",[[CORE_NAVIGATION_FOOTER_SELECTION].includes(selection??'')?CORE_NAVIGATION_RECIPE.menu.editedName:CORE_NAVIGATION_RECIPE.menu.name,CORE_NAVIGATION_RECIPE.menu.slug])).rows;assert.equal(menu.length,1);
       state.pageId=Number(page[0].id);state.menuId=Number(menu[0].id);for(const id of[state.pageId,state.menuId])assert.ok(Number.isSafeInteger(id)&&id>0);
-      if([CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_RESTORE_SELECTION].includes(selection??'')){await connection.query("select public.mutate_menu_tree($1,'save_item',$2::jsonb,$3,$4)",[state.menuId,JSON.stringify({item:{parent_id:null,label:CORE_NAVIGATION_RECIPE.menu.a,href:'#',linked_type:null,linked_id:null,anchor:null,target:'_self',css_class:null,style_preset:'default',is_visible:true,item_type:'parent',sort_order:10}}),actor.id,actor.username]);const item=(await connection.query('select id from public.menu_items where menu_id=$1 order by id',[state.menuId])).rows;assert.equal(item.length,1);state.itemIds.a=Number(item[0].id);assert.ok(Number.isSafeInteger(state.itemIds.a)&&state.itemIds.a>0);}
+      if([CORE_NAVIGATION_FOOTER_SELECTION].includes(selection??'')){await connection.query("select public.mutate_menu_tree($1,'save_item',$2::jsonb,$3,$4)",[state.menuId,JSON.stringify({item:{parent_id:null,label:CORE_NAVIGATION_RECIPE.menu.a,href:'#',linked_type:null,linked_id:null,anchor:null,target:'_self',css_class:null,style_preset:'default',is_visible:true,item_type:'parent',sort_order:10}}),actor.id,actor.username]);const item=(await connection.query('select id from public.menu_items where menu_id=$1 order by id',[state.menuId])).rows;assert.equal(item.length,1);state.itemIds.a=Number(item[0].id);assert.ok(Number.isSafeInteger(state.itemIds.a)&&state.itemIds.a>0);}
       await connection.query('commit');
     }catch(error){await connection.query('rollback');throw error;}});
     assert.ok(state.pageId!==undefined&&state.menuId!==undefined);
     const pages=(await handle.query('select * from public.pages where id=$1',[state.pageId])).rows,menus=(await handle.query('select * from public.menus where id=$1',[state.menuId])).rows,items=(await handle.query('select * from public.menu_items where menu_id=$1',[state.menuId])).rows;
-    assert.equal(pages.length,1);assert.equal(menus.length,1);if([CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_RESTORE_SELECTION].includes(selection??''))assertCoreNavigationGraph(items,state.menuId,'subtree-deleted',state.itemIds);else assert.deepEqual(items,[]);assert.equal(Number((await handle.query('select count(*)::int count from public.page_composition_assignments where page_id=$1',[state.pageId])).rows[0].count),0);
-    assert.deepEqual(select(pages[0],['title','slug','path','page_type','status']),{title:CORE_NAVIGATION_RECIPE.page.title,slug:CORE_NAVIGATION_RECIPE.page.slug,path:CORE_NAVIGATION_RECIPE.page.path,page_type:'static',status:'unpublished'});assert.deepEqual(select(menus[0],['name','slug','location','is_active']),{name:[CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_RESTORE_SELECTION].includes(selection??'')?CORE_NAVIGATION_RECIPE.menu.editedName:CORE_NAVIGATION_RECIPE.menu.name,slug:CORE_NAVIGATION_RECIPE.menu.slug,location:'custom',is_active:true});
+    assert.equal(pages.length,1);assert.equal(menus.length,1);if([CORE_NAVIGATION_FOOTER_SELECTION].includes(selection??''))assertCoreNavigationGraph(items,state.menuId,'subtree-deleted',state.itemIds);else assert.deepEqual(items,[]);assert.equal(Number((await handle.query('select count(*)::int count from public.page_composition_assignments where page_id=$1',[state.pageId])).rows[0].count),0);
+    assert.deepEqual(select(pages[0],['title','slug','path','page_type','status']),{title:CORE_NAVIGATION_RECIPE.page.title,slug:CORE_NAVIGATION_RECIPE.page.slug,path:CORE_NAVIGATION_RECIPE.page.path,page_type:'static',status:'unpublished'});assert.deepEqual(select(menus[0],['name','slug','location','is_active']),{name:[CORE_NAVIGATION_FOOTER_SELECTION].includes(selection??'')?CORE_NAVIGATION_RECIPE.menu.editedName:CORE_NAVIGATION_RECIPE.menu.name,slug:CORE_NAVIGATION_RECIPE.menu.slug,location:'custom',is_active:true});
     assert.deepEqual((await handle.query('select * from public.pages where id<>$1 order by id',[state.pageId])).rows,originalPages);assert.deepEqual((await handle.query('select * from public.menus where id<>$1 order by id',[state.menuId])).rows,originalMenus);assert.deepEqual((await handle.query('select * from public.menu_items where menu_id<>$1 order by id',[state.menuId])).rows,originalItems);
     state.last.page=structuredClone(pages);state.last.menu=structuredClone({menus,items});state.auditCursor.page=await auditHead(handle);state.auditCursor.menu=state.auditCursor.page;
     const prepared={kind:'owned-fixture-preparation',ownedRunId:handle.identity.runId,pageId:state.pageId,menuId:state.menuId,pageSnapshotHash:hash(state.last.page),menuSnapshotHash:hash(state.last.menu),uiCreateClaim:false,automaticCoverage:[],globalClosed:false};state.prepared=prepared;handle.record('navigation-existing-fixture-prepared',{kind:prepared.kind,ownedRunId:prepared.ownedRunId,pageId:prepared.pageId,menuId:prepared.menuId,pageSnapshotHash:prepared.pageSnapshotHash,menuSnapshotHash:prepared.menuSnapshotHash,uiCreateClaim:prepared.uiCreateClaim,globalClosed:prepared.globalClosed});
   }
   state.baselineFooter = await footerRows(handle);
-  if(selection===CORE_NAVIGATION_FOOTER_RESTORE_SELECTION){
-    assert.ok(state.menuId&&state.prepared);const settings=await buildExpectedCoreNavigationFooter(state.baselineFooter,state.menuId,true);
-    await handle.query("select public.save_footer_settings($1::jsonb,$2,$3,'qa.navigation.footer.restore.prepare','{}'::jsonb)",[JSON.stringify(settings),actor.id,actor.username]);
-    const preparedFooter=await footerRows(handle);assert.deepEqual(valuesOnly(preparedFooter),settings);
-    state.last.footer=structuredClone(preparedFooter);state.auditCursor.footer=await auditHead(handle);
-    Object.assign(state.prepared,{footerSnapshotHash:hash(preparedFooter),footerUiSaveClaim:false});
-    handle.record('navigation-footer-restore-prerequisite',{ownedRunId:handle.identity.runId,footerSnapshotHash:hash(preparedFooter),uiSaveClaim:false,globalClosed:false});
-  }
-  return { selection,prepared:clone(state.prepared),footerRestore:{key:'footer.slots' as const}, downloadMedia:await prepareCoreDownloadMediaFixture(handle),recipe: clone(CORE_NAVIGATION_RECIPE), duplicatePagePath: String(originalPages[0].path), duplicateMenuSlug: String(originalMenus[0].slug), footerBaselineSeeded: !valid, originalFooterHash: hash(originalFooter), phaseCounts: Object.fromEntries(Object.entries(coreNavigationPhases(selection)).map(([key, phases]) => [key, phases.length])) };
+  return { selection,prepared:clone(state.prepared),downloadMedia:await prepareCoreDownloadMediaFixture(handle),recipe: clone(CORE_NAVIGATION_RECIPE), duplicatePagePath: String(originalPages[0].path), duplicateMenuSlug: String(originalMenus[0].slug), footerBaselineSeeded: !valid, originalFooterHash: hash(originalFooter), phaseCounts: Object.fromEntries(Object.entries(coreNavigationPhases(selection)).map(([key, phases]) => [key, phases.length])) };
 }
 
 export function validateCoreNavigationSettingsRequest(input: unknown) {
@@ -135,17 +127,6 @@ export async function buildExpectedCoreNavigationFooter(baselineFooter: Row[], m
   return clone(valuesOnly([{ key: "footer.slots", value: normalizeSlotsForSave(slots) }, { key: "footer.contact_items", value: parseFooterContactItems(originalContacts, []) }, { key: "footer.social_links", value: [{ platform: "facebook", label: r.socialLabel, href: r.socialHref }] }, { key: "footer.legal", value: { copyright: r.copyright, tagline: r.tagline } }]));
 }
 
-/** Exact persisted defaults command: one owned slot row changes; the other three rows and their timestamps remain byte-equivalent. */
-export function assertCoreFooterRestore(before: Row[], after: Row[], defaultSlots: unknown, audit: Row[], actorId: number) {
-  for (const rows of [before,after]) assert.deepEqual(rows.map(row=>row.key).sort(), [...FOOTER_SETTING_KEYS].sort());
-  assert.deepEqual(after.filter(row=>row.key!=='footer.slots'), before.filter(row=>row.key!=='footer.slots'));
-  assert.deepEqual(after.find(row=>row.key==='footer.slots')!.value, defaultSlots);
-  assert.equal(audit.length,1); const entry=audit[0];
-  assert.equal(Number(entry.actor_admin_user_id),actorId); assert.equal(entry.action,'footer_settings.restore_default');
-  assert.equal(entry.entity_type,'footer_settings'); assert.equal(entry.entity_id,null);
-  const metadata=entry.metadata as Row; assert.equal(metadata.persistence_owner,'save_footer_settings'); assert.deepEqual(metadata.persisted_keys,['footer.slots']);
-}
-
 /** Browser names only a finite checkpoint; expected values and ownership stay server-side. */
 export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHandle, input: unknown) {
   assertOwnedLocalHandle(handle); const request = validateCoreNavigationSettingsRequest(input), state = states.get(handle); assert.ok(state);
@@ -156,7 +137,7 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
   const allItems = (await handle.query("select * from public.menu_items order by id")).rows;
   const allPages = (await handle.query("select * from public.pages order by id")).rows;
   const newPages = allPages.filter(row => !state.originalPages.some(old => old.id === row.id));
-  if([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_RESTORE_SELECTION].includes(state.selection??""))assert.deepEqual(newPages,state.last.page,'Retained Page SEO is not replayed; owned prerequisite Page stays byte-identical during Menu/Footer work.');
+  if([CORE_NAVIGATION_MENU_FOOTER_SELECTION,CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION].includes(state.selection??""))assert.deepEqual(newPages,state.last.page,'Retained Page SEO is not replayed; owned prerequisite Page stays byte-identical during Menu/Footer work.');
   const newMenus = allMenus.filter(row => !state.originalMenus.some(old => old.id === row.id));
   assert.deepEqual(allMenus.filter(row => state.originalMenus.some(old => old.id === row.id)), state.originalMenus, "Other menus unchanged.");
   assert.deepEqual(allItems.filter(row => state.originalItems.some(old => old.id === row.id)), state.originalItems, "Other menu graphs unchanged.");
@@ -200,52 +181,24 @@ export async function readCoreNavigationSettingsCheckpoint(handle: OwnedLocalHan
   } else {
     assert.ok(state.menuId && state.pageId); assert.equal(state.phase.menu, coreNavigationPhases(state.selection).menu.length); assert.equal(state.phase.page, coreNavigationPhases(state.selection).page.length);
     assert.equal(newMenus.length, 1); assertCoreNavigationGraph(allItems.filter(row => Number(row.menu_id) === state.menuId), state.menuId, "duplicate-deleted", state.itemIds);
-    if([CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_RESTORE_SELECTION].includes(state.selection??"")) assert.deepEqual({menus:newMenus,items:allItems.filter(row=>newMenus.some(menu=>menu.id===row.menu_id))},state.last.menu,"Completed owned Menu graph and metadata remain unchanged through Footer work.");
+    if([CORE_NAVIGATION_GRAPH_FOOTER_SELECTION,CORE_NAVIGATION_FOOTER_SELECTION].includes(state.selection??"")) assert.deepEqual({menus:newMenus,items:allItems.filter(row=>newMenus.some(menu=>menu.id===row.menu_id))},state.last.menu,"Completed owned Menu graph and metadata remain unchanged through Footer work.");
     const footer = await footerRows(handle); snapshot = footer;
-    const restored = phase === 'restored' || phase === 'restore-reloaded';
-    const saved = ['saved','reloaded','visibility-shown-draft','shown-saved','shown-reloaded','restore-cancelled','restore-rejected'].includes(phase);
-    const shown = ['shown-saved','shown-reloaded','restore-cancelled','restore-rejected'].includes(phase);
-    if (restored) {
-      const { DEFAULT_FOOTER_SLOTS } = await jiti.import<typeof import('../src/lib/footer/defaults.ts')>(resolve(root,'src/lib/footer/defaults.ts'));
-      if (phase==='restored') { assertCoreFooterRestore(state.last.footer as Row[],footer,clone(DEFAULT_FOOTER_SLOTS),audit,state.actor.id); writeAction='footer_settings.restore_default'; }
-      else assert.deepEqual(footer,state.last.footer);
-    } else assert.deepEqual(valuesOnly(footer), saved ? await buildExpectedCoreNavigationFooter(state.baselineFooter, state.menuId, shown) : valuesOnly(state.baselineFooter));
+    const saved = ['saved','reloaded','visibility-shown-draft','shown-saved','shown-reloaded'].includes(phase);
+    const shown = ['shown-saved','shown-reloaded'].includes(phase);
+    assert.deepEqual(valuesOnly(footer), saved ? await buildExpectedCoreNavigationFooter(state.baselineFooter, state.menuId, shown) : valuesOnly(state.baselineFooter));
     if (phase === "saved" || phase === "shown-saved") writeAction = "footer_settings.update";
   }
   if (writeAction) {
     assert.equal(audit.length, 1, "Each successful isolated UI command must commit exactly one actor-bound domain audit."); assert.equal(audit[0].action, writeAction);
     const ids: Array<number | null | undefined> = entity === "page" ? [state.pageId] : entity === "menu" ? [state.menuId, state.duplicateId, ...Object.values(state.itemIds)] : [null];
     assert.ok(ids.includes(audit[0].entity_id == null ? null : Number(audit[0].entity_id)));
-    if (entity === "footer") { const metadata = audit[0].metadata as Row; assert.equal(metadata.persistence_owner, "save_footer_settings"); assert.deepEqual(metadata.persisted_keys, writeAction==='footer_settings.restore_default' ? ['footer.slots'] : [...FOOTER_SETTING_KEYS].sort()); }
+    if (entity === "footer") { const metadata = audit[0].metadata as Row; assert.equal(metadata.persistence_owner, "save_footer_settings"); assert.deepEqual(metadata.persisted_keys, [...FOOTER_SETTING_KEYS].sort()); }
   } else {
     assert.equal(audit.length, 0, "Draft/rejection/cancellation/reload must not write domain audit.");
     if (phase !== "baseline") assert.deepEqual(snapshot, state.last[entity], "Rejected and local-only changes must preserve exact persisted rows/revisions.");
   }
   state.last[entity] = structuredClone(snapshot); state.phase[entity]++; state.auditCursor[entity] = await auditHead(handle);
   return recordCoreDownloadCheckpoint(handle,{ ...request, status: "pass", downloadMedia:await assertCoreDownloadMediaUnchanged(handle), actorBoundAuditCount: audit.length, snapshotHash: hash(snapshot), pageId: state.pageId ?? null, menuId: state.menuId ?? null, duplicateMenuId: state.duplicateId ?? null, itemIds: { ...state.itemIds }, globalClosed: false });
-}
-
-/** Join actual confirmation/fault evidence before partitioning it from the unchanged Navigation permission contract. */
-export function assertCoreFooterRestoreCompletion(browser: Row, native: Row, cleanup: Row, ownedRunId: string, sourceSha256: string) {
-  assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.equal(browser.cohort,'navigation-settings');assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.deepEqual(browser.errors,[]);
-  assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);assert.ok(Array.isArray(native.records));const records=native.records as Row[];
-  assert.equal(new Set(records.map(row=>row.id)).size,records.length);for(const row of records)assert.equal(row.status,row.kind==='form-save-native'?'partial-not-global-pass':'pass');
-  const matching=(browser.evidence as Row[]).filter(row=>row.id==='core-navigation-footer-default-restore-confirm-reject-retry');assert.equal(matching.length,1);const receipt=matching[0];assert.equal(receipt.status,'pass');
-  for(const key of ['confirmationCancelled','explicitRetry','otherThreeRowsAndTimestampsUnchanged'])assert.equal(receipt[key],true);assert.equal(receipt.cancelledActionRequests,0);assert.equal(receipt.actionRequests,2);assert.deepEqual(receipt.automaticCoverage,[]);assert.equal(receipt.globalClosed,false);
-  const phases=['restore-cancelled','restore-rejected','restored','restore-reloaded'];assert.deepEqual(receipt.nativePhases,phases);
-  const states=records.filter(row=>row.kind==='navigation-settings-state'&&row.entity==='footer'&&phases.includes(String(row.phase)));assert.deepEqual(states.map(row=>row.phase),phases);assert.deepEqual(states.map(row=>row.actorBoundAuditCount),[0,0,1,0]);assert.equal(states[0].snapshotHash,states[1].snapshotHash);assert.equal(states[2].snapshotHash,states[3].snapshotHash);
-  const faults=records.filter(row=>String(row.kind).startsWith('domain-write-fault-'));assert.equal(faults.length,9);assert.equal(cleanup.status,'closed');assert.equal(cleanup.activeLocks,0);assert.deepEqual(faults,cleanup.records);
-  const rejection=receipt.rejection as Row,retry=receipt.retry as Row;assert.notEqual(rejection.token,retry.token);
-  for(const [i,attempt]of [rejection,retry].entries()){
-    assert.match(String(attempt.token),/^[a-f0-9-]{36}$/u);assert.equal(attempt.actionRequests,1);assert.equal(attempt.sameNativeStatementObservedTwice,true);assert.equal(attempt.actualStatementCancelled,i===0);assert.equal(attempt.ownedLockReleased,true);
-    const batch=faults.filter(row=>row.token===attempt.token);assert.deepEqual(batch.map(row=>row.kind),['arm','observe-blocked','observe-blocked',...(i===0?['cancel']:[]),'release'].map(k=>'domain-write-fault-'+k));
-    for(const row of batch){assert.equal(row.entity,'footer_restore');if(row.kind!=='domain-write-fault-release'){assert.equal(row.table,'site_settings');assert.equal(row.fixtureId,'footer.slots');}}
-    for(const key of ['backendPid','backendStartedAt','queryStartedAt','queryFingerprint','holderPid'])assert.equal(batch[2][key],batch[1][key]);
-    for(const row of batch.filter(row=>row.kind==='domain-write-fault-observe-blocked')){assert.equal(row.observedOneStatement,true);assert.equal(row.cancelledOneStatement,false);assert.equal(row.fixedMutationSignatureMatched,true);assert.equal(row.holderLifetimeVerified,true);}
-    if(i===0)assert.equal(batch[3].cancelledOneStatement,true);const release=batch.at(-1)!;assert.equal(release.ownedLockRolledBack,true);assert.equal(release.cancellationObserved,i===0);
-    assert.ok(records.indexOf(states[i])<records.indexOf(batch[0])&&records.indexOf(release)<records.indexOf(states[i+1]));
-  }
-  return{status:'pass',faultRecords:9,nativePhases:phases,confirmedWrites:1,automaticCoverage:[],globalClosed:false,nativeWithoutFaults:{...native,records:records.filter(row=>!faults.includes(row))}};
 }
 
 /** Owned teardown restores captured four-key policy before deleting only identities created above. */
@@ -291,13 +244,6 @@ export function assertCoreNavigationRowActionsCompletion(browser: Row, native: R
   for(const [entity,phases]of Object.entries(coreNavigationPhases((browser.journeySelection as string|null)??null)))assert.deepEqual(states.filter(row=>row.entity===entity).map(row=>row.phase),phases);
   const state=(entity:string,phase:string)=>{const found=states.filter(row=>row.entity===entity&&row.phase===phase);assert.equal(found.length,1);assert.match(String(found[0].snapshotHash),/^[a-f0-9]{64}$/u);return found[0];};
   const existingOnly=isCoreNavigationExistingSelection(browser.journeySelection);if(existingOnly){assert.ok(prepared);assert.equal(prepared.kind,'owned-fixture-preparation');assert.equal(prepared.ownedRunId,ownedRunId);assert.equal(prepared.uiCreateClaim,false);assert.deepEqual(prepared.automaticCoverage,[]);assert.equal(prepared.globalClosed,false);assert.match(String(prepared.menuSnapshotHash),/^[a-f0-9]{64}$/u);}else assert.equal(prepared,null);
-  if(browser.journeySelection===CORE_NAVIGATION_FOOTER_RESTORE_SELECTION){
-    assert.ok(prepared);assert.match(String(prepared.footerSnapshotHash),/^[a-f0-9]{64}$/u);assert.equal(prepared.footerUiSaveClaim,false);
-    for(const phase of ['restore-cancelled','restore-rejected'])assert.equal(state('footer',phase).snapshotHash,prepared.footerSnapshotHash);
-    const evidence=browser.evidence as Row[];assert.deepEqual(evidence.filter(row=>row.id!=='existing-auth-login').map(row=>row.id),['core-navigation-footer-default-restore-confirm-reject-retry']);
-    for(const row of evidence){assert.equal(row.rowActionObservations,undefined);assert.equal(row.status,'pass');if(row.id!=='existing-auth-login')assert.deepEqual(row.automaticCoverage,[]);}
-    return{status:'pass',rowObservations:0,readOnlyMenuCheckpoints:0,additionalFooterWrites:0,manualVisibilityPersistedBothDirections:false,externalPreviewBoundary:'No fresh row preview in restore-only selection',retainedAggregateReplayed:false,automaticCoverage:[],globalClosed:false};
-  }
   const footerOnly=browser.journeySelection===CORE_NAVIGATION_FOOTER_SELECTION;
   let menuRead:Row|null=null,itemRead:Row|null=null,menuId=Number(prepared?.menuId),ids:Row={};
   if(!footerOnly){

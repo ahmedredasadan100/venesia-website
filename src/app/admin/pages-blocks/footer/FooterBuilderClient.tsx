@@ -10,7 +10,6 @@ import AdminModuleTabs from "../../../../components/admin/ui/AdminModuleTabs";
 import {
   AdminActionButton,
   AdminCard,
-  AdminConfirmDialog,
   AdminPageExperience,
   AdminPageHeader,
   AdminStatusPill,
@@ -21,7 +20,6 @@ import { FOOTER_SLOT_INDICES } from "../../../../lib/footer/footer-slot-types";
 import type { FooterSettings } from "../../../../lib/footer/types";
 
 import {
-  restoreDefaultFooterAction,
   saveFooterBuilderAction,
   type FooterMenuOption,
   type FooterQuickLinkInput,
@@ -75,7 +73,6 @@ export default function FooterBuilderClient({
   const [message, setMessage] = useState<string | null>(saved ? "تم حفظ إعدادات الفوتر بنجاح." : null);
   const [messageWarning, setMessageWarning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [restoreOpen, setRestoreOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const sourceKey = JSON.stringify({ slots: settings.slots.slots, contactItems: settings.contactItems,
@@ -140,26 +137,6 @@ export default function FooterBuilderClient({
         router.refresh();
       } catch (saveError) {
         setError(saveError instanceof Error ? saveError.message : "تعذر حفظ إعدادات الفوتر.");
-      }
-    });
-  }
-
-  function handleRestore() {
-    if (isPending) return;
-    resetAlerts();
-    startTransition(async () => {
-      try {
-        const result = await restoreDefaultFooterAction();
-        setSlots(structuredClone(result.slots.slots));
-        setSavedDraftKey((current) => JSON.stringify({
-          ...JSON.parse(current), slots: result.slots.slots,
-        }));
-        setRestoreOpen(false);
-        const warning = result.status === "warning";
-        setMessageWarning(warning);
-        setMessage(result.message);
-      } catch (restoreError) {
-        setError(restoreError instanceof Error ? restoreError.message : "تعذر استعادة الفوتر الافتراضي.");
       }
     });
   }
@@ -312,9 +289,6 @@ export default function FooterBuilderClient({
         meta={`مصدر الأعمدة: ${slotsSourceLabel}`}
         actions={
           <>
-            <AdminActionButton variant="dark" onClick={() => setRestoreOpen(true)} disabled={isPending}>
-              استعادة الافتراضي
-            </AdminActionButton>
             <AdminActionButton variant="primary" onClick={handleSave} disabled={isPending}>
               {isPending ? "جارٍ الحفظ..." : "حفظ الفوتر"}
             </AdminActionButton>
@@ -365,15 +339,6 @@ export default function FooterBuilderClient({
         />
 
       </AdminFormPendingFields>
-      <AdminConfirmDialog
-        open={restoreOpen}
-        title="استعادة الفوتر الافتراضي"
-        description="سيتم استبدال تخطيط الأعمدة الأربعة والعناوين المرتبطة بالقيم الافتراضية. لن تُحذف بيانات التواصل أو السوشيال أو الحقوق."
-        confirmLabel="تأكيد الاستعادة"
-        onCancel={() => setRestoreOpen(false)}
-        onConfirm={handleRestore}
-        pending={isPending}
-      />
     </AdminPageExperience>
   );
 }

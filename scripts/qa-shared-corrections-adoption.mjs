@@ -49,7 +49,7 @@ await writeFile(path.join(out, "image.tsx"), `import React from 'react'; export 
 const {loadBindings} = require("next/dist/build/swc"); await loadBindings();
 // Actual UI exports are used; only Action transports and the unrelated Menu items table are isolated.
 const webpack = require("next/dist/compiled/webpack/webpack").webpack;
-await writeFile(path.join(out,'actions.ts'), `const run=(...args)=>window.action(...args); export const updateMenu=run,createMenuItem=run,savePageSeoAction=run,saveFooterBuilderAction=run,restoreDefaultFooterAction=run,updateAdminSelfAccountAction=run,changeAdminPasswordAction=run,revokeAllAdminSessionsAction=run;`);
+await writeFile(path.join(out,'actions.ts'), `const run=(...args)=>window.action(...args); export const updateMenu=run,createMenuItem=run,savePageSeoAction=run,saveFooterBuilderAction=run,updateAdminSelfAccountAction=run,changeAdminPasswordAction=run,revokeAllAdminSessionsAction=run;`);
 await writeFile(path.join(out,'empty.tsx'), `import React from 'react'; export default function Empty(){return null;}`);
 await writeFile(path.join(out,"link-actions.ts"), "export const browseAdminLinksAjax=async()=>[];\nexport const browseMenusPickerAjax=async()=>[];\nexport const browseMenuItemsPickerAjax=async()=>[];\nexport const browseTopicCategoriesPickerAjax=async()=>[];\nexport const resolveAdminLinkAjax=async()=>[];");
 const compiler = webpack({mode:"development",target:"web",context:root,entry:path.join(out,"entry.tsx"),output:{path:out,filename:"fixture.js"},devtool:false,
@@ -102,14 +102,11 @@ await check('footer-slot-late-source',async p=>{
   assert.equal(await heading.inputValue(),'Unsaved slot heading');assert.equal(await heading.isDisabled(),true);
   await p.evaluate(()=>window.finish({ok:true,status:'success',code:'synced',message:'تم حفظ إعدادات الفوتر بنجاح.'}));await p.waitForFunction(()=>!document.querySelector('fieldset[disabled]'));
 });
-await check('footer-restore-baseline',async p=>{
-  const slots=await p.evaluate(()=>structuredClone(window.footerFixture.slots));slots.slots[0].heading='Custom persisted layout';
-  await mount(p,'footer',{slots});await p.getByRole('button',{name:'استعادة الافتراضي',exact:true}).click();
-  await p.getByRole('button',{name:'تأكيد الاستعادة',exact:true}).click();await p.waitForFunction(()=>window.calls===1);
-  await p.evaluate(()=>window.finish({ok:true,status:'success',code:'synced',message:'تمت استعادة تخطيط الفوتر الافتراضي بنجاح.',slots:window.footerFixture.slots}));
-  await p.waitForFunction(()=>!document.querySelector('fieldset[disabled]'));
-  await p.getByRole('tab',{name:'السوشيال والقانوني',exact:true}).click();
-  await mount(p,'footer',{legal:{copyright:'Clean after restore',tagline:''}});
-  assert.equal(await p.getByLabel('Copyright',{exact:true}).inputValue(),'Clean after restore');
+await check('footer-restore-removed',async p=>{
+  await mount(p,'footer');
+  assert.equal(await p.getByRole('button',{name:'استعادة الافتراضي',exact:true}).count(),0);
+  assert.equal(await p.getByRole('dialog',{name:'استعادة الفوتر الافتراضي',exact:true}).count(),0);
+  assert.equal(await p.getByRole('button',{name:'حفظ الفوتر',exact:true}).count(),1);
+  assert.equal(await p.evaluate(()=>window.calls),0);
 });
 }finally{await browser.close();await new Promise(resolve=>server.close(resolve));}

@@ -130,7 +130,6 @@ stubs.set("next/navigation", { redirect: (href: string) => { throw new Redirect(
 stubs.set("react", { ...require("react"), cache: (fn: unknown) => fn });
 
 const footerSave = load<typeof import("../src/app/admin/pages-blocks/footer/footer-actions/save.ts")>("src/app/admin/pages-blocks/footer/footer-actions/save.ts");
-const footerRestore = load<typeof import("../src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts")>("src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts");
 const general = load<typeof import("../src/app/admin/settings/general/actions.ts")>("src/app/admin/settings/general/actions.ts");
 const media = load<typeof import("../src/app/admin/settings/media/actions.ts")>("src/app/admin/settings/media/actions.ts");
 const menus = load<typeof import("../src/app/admin/pages-blocks/menus/menu-actions/save.ts")>("src/app/admin/pages-blocks/menus/menu-actions/save.ts");
@@ -167,7 +166,6 @@ async function check(name: string, action: () => Promise<void>) {
 
 for (const [label, invoke] of [
   ["footer-save", () => footerSave.saveFooterBuilderAction(structuredClone(footerInput))],
-  ["footer-restore", () => footerRestore.restoreDefaultFooterAction()],
 ] as const) {
   await check(`${label}: cache exhaustion preserves committed result`, async () => {
     state.cacheFailures = 99;

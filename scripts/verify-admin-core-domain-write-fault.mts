@@ -17,7 +17,7 @@ const fixtures = { topic: { id: 1 }, category: { id: 2 }, series: { id: 3 }, pag
   locations: ['governorate', 'city', 'main_area', 'sub_area'].map((level, index) => ({ entity: 'project_locations_' + level, level, id: 11 + index })),
 } };
 const candidate = () => ({ pid: 200, backend_start: '2026-01-01T00:00:00Z', query_start: '2026-01-01T01:00:00Z', application_name: 'PostgREST', usename: 'authenticator', datname: 'postgres', state: 'active', backend_type: 'client backend', wait_event_type: 'Lock', blockers: [100], query_fingerprint: 'a'.repeat(32), signature_matches: true });
-function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug:string}>}, topicControls?: {topics:Array<{id:number;kind:string;slug:string}>}, projectControls?: {projects:Array<{id:number;kind:string;slug:string}>}, presentationControls?: {templates:Array<{id:number;kind:string;slug:string}>}, navigationSettings?: {footerRestore:Record<string,unknown>}) {
+function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug:string}>}, topicControls?: {topics:Array<{id:number;kind:string;slug:string}>}, projectControls?: {projects:Array<{id:number;kind:string;slug:string}>}, presentationControls?: {templates:Array<{id:number;kind:string;slug:string}>}) {
   let clock = Date.now(), nextTimer = 0, active = true, liveConnections = 0, rollbacks = 0, cancels = 0, connectionOrdinal = 0;
   let rejectHolder!: (error: Error) => void;
   const holderEnded = new Promise<never>((_resolve, reject) => { rejectHolder = reject; });
@@ -64,7 +64,7 @@ function fixture(templateControls?: {templates:Array<{id:number;kind:string;slug
     if (delay === 100) { clock += delay; queueMicrotask(callback); } else timers.set(id, callback);
     return id;
   }, (id: number) => timers.delete(id));
-  const owner = loaded.exports as Owner, broker = owner.createOwnedCoreDomainWriteFaults(handle, {...fixtures,...(templateControls?{templateControls}:{}),...(topicControls?{topicControls}:{}),...(projectControls?{projectControls,commercialProject:{id:401}}:{}),...(presentationControls?{presentationControls}:{}),...(navigationSettings?{navigationSettings}:{})});
+  const owner = loaded.exports as Owner, broker = owner.createOwnedCoreDomainWriteFaults(handle, {...fixtures,...(templateControls?{templateControls}:{}),...(topicControls?{topicControls}:{}),...(projectControls?{projectControls,commercialProject:{id:401}}:{}),...(presentationControls?{presentationControls}:{})});
   const token = randomUUID();
   const request = (kind: string, entity = 'categories', override: Record<string, unknown> = {}) => broker.handleRequest({ id: randomUUID(), kind: 'domain-write-fault-' + kind, token, entity, ...override });
   return { owner, handle, broker, request, faults, signatures, statements, diagnostics, counts: () => ({ liveConnections, rollbacks, cancels }),
@@ -91,15 +91,8 @@ try {
     assert.equal(f.counts().cancels,0);assert.equal(f.counts().liveConnections,0);await f.broker.close();
   });
 
-  await test('Footer opt-in locks only private literal footer.slots and admits exactly save_footer_settings RPC',async()=>{
-    const f=fixture(undefined,undefined,undefined,undefined,{footerRestore:{key:'footer.slots'}});const armed=await f.request('arm','footer_restore');assert.equal(armed.table,'site_settings');assert.equal(armed.fixtureId,'footer.slots');
-    assert.ok(f.statements.includes('select key as id from public.site_settings where key=$1 for update'));await f.request('observe-blocked','footer_restore');assert.equal(f.signatures.length,1);
-    for(const [query,expected]of [[`select public.save_footer_settings('[]')`,true],[`select public.save_footer_settings_other('[]')`,false],[`select foreign.save_footer_settings('[]')`,false],[`update public.site_settings set value='{}'`,false]]as const){const r=await db.query<{ok:boolean}>('select $1::text ~* $2::text ok',[query,f.signatures[0]]);assert.equal(r.rows[0].ok,expected);}
-    await f.request('cancel','footer_restore');await f.request('release','footer_restore');assert.deepEqual(f.counts(),{liveConnections:0,rollbacks:1,cancels:1});await f.broker.close();
-  });
-  await test('Footer omitted opt-in or foreign key/table/signature rejects before locking',async()=>{
+  await test('Removed Footer Restore fault target rejects before any lock',async()=>{
     const f=fixture();await assert.rejects(f.request('arm','footer_restore'));assert.equal(f.statements.length,0);await f.broker.close();
-    for(const footerRestore of [{key:'footer.legal'},{key:'footer.slots',table:'site_settings'},{key:'footer.slots',signature:'any'},{key:'footer.slots',id:1},{}])assert.throws(()=>fixture(undefined,undefined,undefined,undefined,{footerRestore}));
   });
   await test('Read-only observation retains one exact query, never cancels, and releases with normal success', async () => {
     const f = fixture(); await f.request('arm');
@@ -297,6 +290,6 @@ try {
     const f=fixture();const {TEMPLATE_CONTROL_RECIPES}=require(resolve(process.cwd(),'scripts/fixtures/admin-core-template-controls-contract.mjs'));const other=Object.keys(TEMPLATE_CONTROL_RECIPES).map((kind,index)=>({kind,id:600+index,slug:'qa-admin-page-interaction-'+kind+'-8'}));
     assert.throws(()=>f.owner.createOwnedCoreDomainWriteFaults(f.handle,{...fixtures,presentationControls:{templates},templateControls:{templates:[...other,{kind:'hero',id:501,slug:templates[0].slug}]}}));assert.equal(f.statements.length,0);await f.broker.close();
   });
-  assert.equal(checks.length, 32);
+  assert.equal(checks.length, 31);
   console.log(JSON.stringify({ status: 'pass', cases: checks.length, checks, scope: 'Actual producer control flow with bounded connection ports, plus PostgreSQL signature matching. Live PostgreSQL locking/cancellation and Browser outcomes remain pending.' }, null, 2));
 } finally { await db.close(); }

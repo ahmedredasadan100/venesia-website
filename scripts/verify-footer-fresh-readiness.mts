@@ -175,9 +175,6 @@ const forged = owner.projectFooterSettingsForPublic({ ...fresh, sourceStatus: "d
   readiness: { systemValid: true, publicationReady: true, issues: [] } } satisfies FooterSettings);
 check("Publication readiness is recomputed rather than trusted as stored truth", !forged.readiness?.publicationReady && forged.slots.slots.length === 0);
 const saveSource = readFileSync(path.join(root, "src/app/admin/pages-blocks/footer/footer-actions/save.ts"), "utf8");
-const restoreSource = readFileSync(path.join(root, "src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts"), "utf8");
 check("Save still enforces existing business requirements", saveSource.includes("usesGlobalContactPool(validatedSlots)")
   && saveSource.includes("!socialLinks.length") && saveSource.includes("saveFooterSettingsWithAudit"));
-check("Explicit Reset still uses only the existing reset payload and persistence owner", restoreSource.includes("structuredClone(DEFAULT_FOOTER_SLOTS)")
-  && restoreSource.includes("saveFooterSettingsWithAudit") && !restoreSource.includes("createFreshFooterSettings"));
 console.log(`PASS Footer fresh readiness: ${controls} controls; ${reads} mocked reads; zero database/environment access.`);

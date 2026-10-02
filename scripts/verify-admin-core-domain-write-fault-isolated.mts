@@ -7,7 +7,7 @@ import { PROJECT_CONTROL_KINDS, projectControlSlug } from "./fixtures/admin-core
 import { TEMPLATE_CONTROL_RECIPES } from "./fixtures/admin-core-template-controls-contract.mjs";
 
 type Row = Record<string, unknown>;
-type Target = { table: string; id: number | 'footer.slots'; signature: string; keyColumn?: 'key'; level?: string; slug?: string };
+type Target = { table: string; id: number; signature: string; level?: string; slug?: string };
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const object = (value: unknown): Row => { assert.ok(value && typeof value === 'object' && !Array.isArray(value)); return value as Row; };
@@ -84,11 +84,6 @@ function fixedTargets(input: unknown): Record<string, Target> {
     const controls=object(fixtures.presentationControls);assert.ok(Array.isArray(controls.templates));assert.equal(controls.templates.length,PRESENTATION_CONTROL_KINDS.length);
     for(const kind of PRESENTATION_CONTROL_KINDS as Array<keyof typeof PRESENTATION_CONTROL_TABLES>){const rows:Row[]=controls.templates.map(object).filter((row:Row)=>row.kind===kind);assert.equal(rows.length,1);const slug='qa-admin-page-interaction-'+kind+'-8';assert.equal(rows[0].slug,slug);targets['presentation_control_'+kind]={table:PRESENTATION_CONTROL_TABLES[kind],id:getId(rows[0]),slug,signature:rpc('mutate_page_composition')};}
   }
-  if (fixtures.navigationSettings !== undefined) {
-    const navigation = object(fixtures.navigationSettings), restore = object(navigation.footerRestore);
-    assert.deepEqual(Object.keys(restore), ['key']); assert.equal(restore.key, 'footer.slots');
-    targets.footer_restore = { table: 'site_settings', id: 'footer.slots', keyColumn: 'key', signature: rpc('save_footer_settings') };
-  }
   const identities = Object.values(targets).map(row => row.table + ':' + row.id);
   assert.equal(new Set(identities).size, identities.length);
   return targets;
@@ -134,10 +129,8 @@ export function createOwnedCoreDomainWriteFaults(handle: OwnedLocalHandle, fixtu
         current.holderPid = positive(Number(identity.pid)); current.holderBackendStart = String(identity.backend_start);
         assert.ok(Number.isFinite(Date.parse(current.holderBackendStart)));
         const target = current.target;
-        if (target.keyColumn) { assert.equal(target.table, 'site_settings'); assert.equal(target.id, 'footer.slots'); assert.equal(target.keyColumn, 'key'); }
-        const rows = (await connection.query('select ' + (target.keyColumn ? 'key as id' : 'id') + (target.level ? ',level' : '') + (target.slug ? ',slug' : '') + ' from public.' + target.table + ' where ' + (target.keyColumn ?? 'id') + '=$1 for update', [target.id])).rows;
+        const rows = (await connection.query('select id' + (target.level ? ',level' : '') + (target.slug ? ',slug' : '') + ' from public.' + target.table + ' where id=$1 for update', [target.id])).rows;
         assert.equal(rows.length, 1, 'The owned fault target must be one existing fixture row.');
-        if (target.keyColumn) assert.equal(rows[0].id, target.id, 'The row lock must return the exact privately admitted fixture key.');
         if (target.level) assert.equal(rows[0].level, target.level);
         if (target.slug) assert.equal(rows[0].slug, target.slug);
         current.state = 'armed'; current.deadline = Date.now() + 45_000;

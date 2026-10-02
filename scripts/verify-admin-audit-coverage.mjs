@@ -39,7 +39,6 @@ const TARGET_FILES = [
   "src/app/admin/pages-blocks/menus/menu-actions/items-delete.ts",
   "src/app/admin/pages-blocks/menus/menu-actions/items-status.ts",
   "src/app/admin/pages-blocks/footer/footer-actions/save.ts",
-  "src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts",
   "src/app/admin/pages-blocks/blocks/breadcrumb/actions.ts",
   "src/app/admin/pages-blocks/blocks/cards/actions.ts",
   "src/app/admin/pages-blocks/blocks/cta/actions.ts",

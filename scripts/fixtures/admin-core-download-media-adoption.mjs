@@ -45,7 +45,7 @@ export function assertCoreDownloadJoin({browser,nativeRecords,ownedRecords,asset
  for(const row of ownedRecords){assert.equal(row.status,'pass');assert.equal(row.downloadMedia.status,'pass');assert.deepEqual(row.downloadMedia.asset,asset);assert.equal(row.downloadMedia.fileUnchanged,true);assert.equal(row.downloadMedia.catalogRowsUnchanged,true);assert.match(row.downloadMedia.catalogAssetsSha256,/^[a-f0-9]{64}$/u);}
  const specs=browser.cohort==='template-controls'
  ? [['cards','item_0','block-template-cards-editor'],['breadcrumb','manual_item_0','block-template-breadcrumb-editor'],['cta','primary_cta','block-template-cta-editor']].filter(([kind])=>coreTemplateControlKinds(browser.journeySelection??null).includes(kind))
- : (browser.journeySelection==='navigation-settings-footer-restore-followup'?[]:browser.journeySelection==='navigation-settings-footer-followup'?[['footer','footer_manual_link','footer-builder']]:[['menu','menu_link','menu-builder'],['footer','footer_manual_link','footer-builder']]);
+ : (browser.journeySelection==='navigation-settings-footer-followup'?[['footer','footer_manual_link','footer-builder']]:[['menu','menu_link','menu-builder'],['footer','footer_manual_link','footer-builder']]);
  const results=[];
  for(const [entity,field,consumer]of specs){
   const records=ownedRecords.filter(row=>browser.cohort==='template-controls'?row.recipe===entity:row.entity===entity);
