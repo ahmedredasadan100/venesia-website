@@ -269,7 +269,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await more(rowByLabel(r.footer.links[2]), "delete"); await confirm().click(); await expect(rowByLabel(r.footer.links[2])).toHaveCount(0);
     await tab("column-1"); await page.getByRole("button", { name: "تحريك للخلف", exact: true }).click();
     await expect(rowByLabel(r.footer.editedLink)).toBeVisible(); await checkpoint("footer", "draft-final");
-    await rowByLabel(r.footer.editedLink).locator('[data-admin-row-action="visibility"] button').click();await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إظهار '+r.footer.editedLink,exact:true})).toBeVisible();await checkpoint('footer','visibility-draft');
+    await more(rowByLabel(r.footer.editedLink),'visibility');await expect(rowByLabel(r.footer.editedLink).getByText('مخفي',{exact:true})).toBeVisible();await assertInverseVisibility(rowByLabel(r.footer.editedLink),'إظهار');await checkpoint('footer','visibility-draft');
     await tab("social-legal");
     const labels = panel().getByLabel("التسمية", { exact: true }); const existing = await labels.count(); assert.ok(existing > 0 && existing < 30);
     for (let i = 0; i < existing; i++) await page.getByRole("button", { name: "حذف", exact: true }).first().click();
@@ -280,16 +280,16 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await select(page, "المنصة", "Facebook"); await panel().getByLabel("التسمية", { exact: true }).fill(r.footer.socialLabel); await panel().getByLabel("الرابط", { exact: true }).fill(r.footer.socialHref);
     await action(() => page.getByRole("button", { name: "حفظ الفوتر", exact: true }).click()); await expect(feedback()).toContainText("تم حفظ إعدادات الفوتر بنجاح."); await checkpoint("footer", "saved");
     await goto("/admin/pages-blocks/footer"); await tab("column-1"); await expect(rowByLabel(r.footer.editedLink)).toBeVisible(); await expect(rowByLabel(r.footer.links[0])).toBeVisible(); await expect(rowByLabel(r.footer.links[2])).toHaveCount(0);
-    await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إظهار '+r.footer.editedLink,exact:true})).toBeVisible();
+    await expect(rowByLabel(r.footer.editedLink).getByText('مخفي',{exact:true})).toBeVisible();await assertInverseVisibility(rowByLabel(r.footer.editedLink),'إظهار');
     await rowByLabel(r.footer.editedLink).locator('[data-admin-row-action="edit"] button').click();
     await assertCoreNavigationFooterLinkDestination(linkModal(),CORE_DOWNLOAD_MEDIA_HREF,'download');
     await linkModal().getByRole('button',{name:'إلغاء',exact:true}).click();await expect(linkModal()).toBeHidden();
     await tab("column-2"); await expect(panel().getByRole("textbox", { name: "النص / Tagline", exact: true })).toHaveValue(r.footer.body); await tab("social-legal"); await expect(panel().getByLabel("Copyright", { exact: true })).toHaveValue(r.footer.copyright); const hiddenReload=await checkpoint("footer", "reloaded");await tab('column-1');
     const footerObservation=await inspectRow({type:'footer_manual_link',id:'0:'+r.footer.editedLink,label:r.footer.editedLink,information:{'الرابط':CORE_DOWNLOAD_MEDIA_HREF,'الهدف':'نفس النافذة','الحالة':'مخفي'},preview:{access:'allowed',href:CORE_DOWNLOAD_MEDIA_HREF}});
     rowActionObservations.push({...footerObservation,edit:{mode:'dialog-reloaded',opened:true},nativeCheckpointId:hiddenReload.id});
-    await tab('column-1');await rowByLabel(r.footer.editedLink).locator('[data-admin-row-action="visibility"] button').click();await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إخفاء '+r.footer.editedLink,exact:true})).toBeVisible();await checkpoint('footer','visibility-shown-draft');
+    await tab('column-1');await more(rowByLabel(r.footer.editedLink),'visibility');await expect(rowByLabel(r.footer.editedLink).getByText('ظاهر',{exact:true})).toBeVisible();await assertInverseVisibility(rowByLabel(r.footer.editedLink),'إخفاء');await checkpoint('footer','visibility-shown-draft');
     await action(()=>page.getByRole('button',{name:'حفظ الفوتر',exact:true}).click());await expect(feedback()).toContainText('تم حفظ إعدادات الفوتر بنجاح.');await checkpoint('footer','shown-saved');
-    await goto('/admin/pages-blocks/footer');await tab('column-1');await expect(rowByLabel(r.footer.editedLink).getByRole('button',{name:'إخفاء '+r.footer.editedLink,exact:true})).toBeVisible();await checkpoint('footer','shown-reloaded');completed.push("footer-aggregate");
+    await goto('/admin/pages-blocks/footer');await tab('column-1');await expect(rowByLabel(r.footer.editedLink).getByText('ظاهر',{exact:true})).toBeVisible();await assertInverseVisibility(rowByLabel(r.footer.editedLink),'إخفاء');await checkpoint('footer','shown-reloaded');completed.push("footer-aggregate");
     return {rowActionObservations:rowActionObservations.filter(row=>row.type==='footer_manual_link'),manualVisibility:{hiddenSavedReloaded:true,shownSavedReloaded:true,extraAcceptedSaves:1,nativePhases:['visibility-draft','saved','reloaded','visibility-shown-draft','shown-saved','shown-reloaded']},renderedAdoption:[...renderedAdoption],automaticCoverage:[]};
   });
   await run('core-navigation-footer-default-restore-confirm-reject-retry', [], async () => {
