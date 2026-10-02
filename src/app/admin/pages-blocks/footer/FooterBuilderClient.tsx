@@ -129,6 +129,10 @@ export default function FooterBuilderClient({
           socialLinks,
           legal,
         });
+        if (!result.ok) {
+          setError(result.message);
+          return;
+        }
         const warning = result.status === "warning";
         setSavedDraftKey(draftKey);
         setMessageWarning(warning);
