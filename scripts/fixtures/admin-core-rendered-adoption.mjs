@@ -33,9 +33,9 @@ async function remember(page,container){
  return async()=>{try{if(viewport)await page.setViewportSize(viewport);if(container&&await container.count()===1)await container.evaluate((node,pos)=>node.scrollTo(pos.x,pos.y),position);await page.evaluate(pos=>scrollTo(pos.x,pos.y),documentPosition);await active.evaluate(node=>{if(node instanceof HTMLElement&&node.isConnected)node.focus({preventScroll:true});});await frames(page);}finally{await active.dispose();}};
 }
 
-async function actuallyReachable(container,target){
- const owner=await container.elementHandle(),child=await target.elementHandle();assert.ok(owner&&child);
- try{return await container.page().evaluate(({owner,child})=>{const a=child.getBoundingClientRect(),b=owner.getBoundingClientRect(),left=Math.max(0,a.left,b.left),right=Math.min(innerWidth,a.right,b.right),top=Math.max(0,a.top,b.top),bottom=Math.min(innerHeight,a.bottom,b.bottom);if(right-left<2||bottom-top<2)return false;for(const fraction of [0.5,0.2,0.8]){const hit=document.elementFromPoint(left+(right-left)*fraction,top+(bottom-top)*0.5);if(hit&&child.contains(hit))return true;}return false;},{owner,child});}finally{await owner.dispose();await child.dispose();}
+async function actuallyReachable(container,target,pinned=null){
+ const owner=await container.elementHandle(),child=pinned??await target.elementHandle();assert.ok(owner&&child);
+ try{return await container.page().evaluate(({owner,child})=>{const a=child.getBoundingClientRect(),b=owner.getBoundingClientRect(),left=Math.max(0,a.left,b.left),right=Math.min(innerWidth,a.right,b.right),top=Math.max(0,a.top,b.top),bottom=Math.min(innerHeight,a.bottom,b.bottom);if(right-left<2||bottom-top<2)return false;for(const fraction of [0.5,0.2,0.8]){const hit=document.elementFromPoint(left+(right-left)*fraction,top+(bottom-top)*0.5);if(hit&&child.contains(hit))return true;}return false;},{owner,child});}finally{await owner.dispose();if(!pinned)await child.dispose();}
 }
 
 /** Failure-only geometry, captured before restoration. No DOM writes, content, or changed assertions. */
@@ -47,9 +47,9 @@ export function snapshotCoreScrollbarFailure({owner,child,axis}){
  const ancestors=[];let node=child.parentElement;for(;node&&ancestors.length<12;node=node.parentElement)ancestors.push(describe(node));
  const section=child.closest('section');return{axis,viewport:{width:innerWidth,height:innerHeight},documentX:scrollX,documentY:scrollY,owner:describe(owner),target:describe(child),ownerContainsTarget:owner.contains(child),intersection:{left,right,top,bottom},hits,ancestors,ancestorsTruncated:!!node,mediaUsageLoading:section?[...section.querySelectorAll('p')].some(p=>p.textContent?.trim()==='جارٍ البحث عن الاستخدامات…'):null};
 }
-async function captureScrollbarFailureGeometry(container,target,axis){
- let owner,child;try{owner=await container.elementHandle({timeout:1000});child=await target.elementHandle({timeout:1000});if(!owner||!child)return{available:false};return await container.page().evaluate(snapshotCoreScrollbarFailure,{owner,child,axis});}
- finally{if(owner)await owner.dispose();if(child)await child.dispose();}
+async function captureScrollbarFailureGeometry(container,target,axis,pinned=null){
+ let owner,child;try{owner=await container.elementHandle({timeout:1000});child=pinned??await target?.elementHandle({timeout:1000});if(!owner||!child)return{available:false};return await container.page().evaluate(snapshotCoreScrollbarFailure,{owner,child,axis});}
+ finally{if(owner)await owner.dispose();if(child&&!pinned)await child.dispose();}
 }
 
 function parentScrollState(node,axis){const rows=[];let current=node.parentElement,depth=0;while(current){const style=getComputedStyle(current),extent=axis==='x'?current.scrollWidth:current.scrollHeight,client=axis==='x'?current.clientWidth:current.clientHeight;if(extent-client>2&&['auto','scroll'].includes(axis==='x'?style.overflowX:style.overflowY))rows.push({depth,extent,client,position:axis==='x'?current.scrollLeft:current.scrollTop});current=current.parentElement;depth++;if(depth>32)throw Error('Unexpected scroll ancestor depth.');}return{ancestors:rows,documentX:scrollX,documentY:scrollY};}
@@ -65,14 +65,20 @@ export function pickCoreScrollbarWheelPoint(owner,axis){
  return null;
 }
 
+/** Choose a real terminal endpoint before wheel movement, independent of hit-test success. */
+export async function resolveCoreScrollbarTerminalTarget({container,candidates,axis}){
+ assert.equal(axis,'y');assert.ok(Array.isArray(candidates)&&candidates.length>0&&candidates.length<=8);const owner=await container.elementHandle();assert.ok(owner);const measured=[];
+ try{for(const[index,target]of candidates.entries()){await expect(target).toHaveCount(1);const value=await target.evaluate((node,{owner})=>{const rect=node.getBoundingClientRect(),bounds=owner.getBoundingClientRect(),style=getComputedStyle(node);return{inside:owner.contains(node),visible:style.display!=='none'&&style.visibility==='visible'&&!node.closest('[hidden],[aria-hidden="true"],[inert]'),width:rect.width,height:rect.height,end:rect.bottom-bounds.top+owner.scrollTop};},{owner,axis});assert.equal(value.inside,true);assert.equal(value.visible,true);assert.ok(value.width>=2&&value.height>=2&&Number.isFinite(value.end));measured.push({index,end:value.end,target});}}finally{await owner.dispose();}
+ measured.sort((a,b)=>b.end-a.end||a.index-b.index);return measured[0].target;
+}
+
 /** Real wheel movement and real content only; no style/content mutation to create overflow. */
 export async function observeCoreScrollbarAdoption(input){
- const receipt=scope(input,'scrollbar'),{page,container,target,axis,containment}=input;
- assert.ok(['x','y'].includes(axis));assert.ok(['overscroll-contain','modal-lock','default-chaining'].includes(containment));await expect(container).toHaveCount(1);await expect(container).toBeVisible();await expect(target).toHaveCount(1);
- const handle=await target.elementHandle();assert.ok(handle);try{assert.equal(await container.evaluate((node,child)=>node.contains(child),handle),true);}finally{await handle.dispose();}
- const restore=await remember(page,container),restoreParents=containment==='default-chaining'?await retainParentScroll(container):async()=>{},observations=[];let wheelDiagnostic=null;
+ const receipt=scope(input,'scrollbar'),{page,container,target:targetInput,axis,containment}=input;let target=typeof targetInput==='function'?null:targetInput;const pinnedTargets=[];
+ assert.ok(['x','y'].includes(axis));assert.ok(['overscroll-contain','modal-lock','default-chaining'].includes(containment));await expect(container).toHaveCount(1);await expect(container).toBeVisible();
+ const restore=await remember(page,container),restoreParents=containment==='default-chaining'?await retainParentScroll(container):async()=>{},observations=[];let wheelDiagnostic=null,currentPinned=null;
  try{for(const viewport of viewports){
-  wheelDiagnostic=null;await page.setViewportSize({width:viewport.width,height:viewport.height});await frames(page);await expect(container).toBeVisible();await target.scrollIntoViewIfNeeded();
+  wheelDiagnostic=null;currentPinned=null;await page.setViewportSize({width:viewport.width,height:viewport.height});await frames(page);await expect(container).toBeVisible();target=typeof targetInput==='function'?await targetInput({viewport,container,axis}):targetInput;await expect(target).toHaveCount(1);const pinned=await target.elementHandle();assert.ok(pinned);pinnedTargets.push(pinned);currentPinned=pinned;assert.equal(await container.evaluate((node,child)=>node.contains(child),pinned),true);const assertPinned=async()=>assert.equal(await target.evaluate((node,prior)=>node===prior,pinned),true,'Far target identity must remain the one selected before wheel movement.');await target.scrollIntoViewIfNeeded();
   const measure=()=>container.evaluate((node,axis)=>{const style=getComputedStyle(node),rect=node.getBoundingClientRect();return{extent:axis==='x'?node.scrollWidth:node.scrollHeight,client:axis==='x'?node.clientWidth:node.clientHeight,position:axis==='x'?node.scrollLeft:node.scrollTop,direction:style.direction,overflow:axis==='x'?style.overflowX:style.overflowY,overscroll:axis==='x'?style.overscrollBehaviorX:style.overscrollBehaviorY,scrollbarWidth:style.scrollbarWidth,visible:rect.width>0&&rect.height>0,documentX:scrollX,documentY:scrollY,bodyOverflow:getComputedStyle(document.body).overflow,htmlOverflow:getComputedStyle(document.documentElement).overflow};},axis);
   const before=await measure();assert.ok(['auto','scroll'].includes(before.overflow),'Observe the actual overflow owner.');assert.equal(before.scrollbarWidth,'thin','Canonical thin scrollbar must be computed on the owner.');assert.ok(before.visible&&before.client>0);
   if(containment==='overscroll-contain')assert.ok(['contain','none'].includes(before.overscroll));else if(containment==='default-chaining')assert.equal(before.overscroll,'auto','Only the existing browser-default owner policy may use this observation.');else assert.equal(before.bodyOverflow==='hidden'&&before.htmlOverflow==='hidden',true,'Modal background must actually be locked.');
@@ -83,18 +89,18 @@ export async function observeCoreScrollbarAdoption(input){
    const delta=axis==='x'&&start.direction==='rtl'?-Math.max(1200,start.extent*2):Math.max(1200,start.extent*2);
    await page.mouse.wheel(axis==='x'?delta:0,axis==='y'?delta:0);await expect.poll(async()=>Math.abs((await measure()).position-start.position),{timeout:3000}).toBeGreaterThan(2);
    await expect.poll(async()=>Math.abs((await measure()).position),{timeout:3000}).toBeGreaterThanOrEqual(start.extent-start.client-2);
-   const end=await measure();if(containment==='default-chaining')assert.equal(await actuallyReachable(container,target),true,'Far content must be reachable before legitimate parent chaining.');await page.mouse.wheel(axis==='x'?delta:0,axis==='y'?delta:0);await frames(page);
-   const contained=await measure(),defaultChaining=containment==='default-chaining';
-   if(!defaultChaining){assert.equal(contained.documentX,start.documentX);assert.equal(contained.documentY,start.documentY);assert.equal(await actuallyReachable(container,target),true,'Actual far content must be visible and hit-test reachable inside its owner and viewport.');}
+   const end=await measure();await assertPinned();if(containment==='default-chaining')assert.equal(await actuallyReachable(container,target,currentPinned),true,'Far content must be reachable before legitimate parent chaining.');await page.mouse.wheel(axis==='x'?delta:0,axis==='y'?delta:0);await frames(page);
+   const contained=await measure(),defaultChaining=containment==='default-chaining';await assertPinned();
+   if(!defaultChaining){assert.equal(contained.documentX,start.documentX);assert.equal(contained.documentY,start.documentY);assert.equal(await actuallyReachable(container,target,currentPinned),true,'Actual far content must be visible and hit-test reachable inside its owner and viewport.');}
    const parentAfter=defaultChaining?await container.evaluate(parentScrollState,axis):null;
-   const chaining=defaultChaining?{containmentNotClaimed:true,computedBrowserDefaultChaining:true,targetReachabilityPhase:'inner-boundary-before-parent-wheel',targetReachableAfterParentWheel:await actuallyReachable(container,target),parentChaining:{policy:'browser-default',wheelBoundaryExercised:true,before:parentBefore,after:parentAfter,positionChanged:JSON.stringify(parentBefore)!==JSON.stringify(parentAfter)}}:{backgroundPositionRetained:true};
+   const chaining=defaultChaining?{containmentNotClaimed:true,computedBrowserDefaultChaining:true,targetReachabilityPhase:'inner-boundary-before-parent-wheel',targetReachableAfterParentWheel:await actuallyReachable(container,target,currentPinned),parentChaining:{policy:'browser-default',wheelBoundaryExercised:true,before:parentBefore,after:parentAfter,positionChanged:JSON.stringify(parentBefore)!==JSON.stringify(parentAfter)}}:{backgroundPositionRetained:true};
    observations.push({viewport:viewport.name,width:viewport.width,height:viewport.height,state:'overflow-observed',axis,extent:start.extent,client:start.client,actualWheelMoved:true,farBoundaryReached:Math.abs(end.position)>=start.extent-start.client-2,targetReachable:true,targetHitTestPassed:true,...chaining,computedCanonicalThin:true});
   }else{
-   assert.equal(await actuallyReachable(container,target),true,'Non-overflow cannot excuse hidden or occluded content.');
+   await assertPinned();assert.equal(await actuallyReachable(container,target,currentPinned),true,'Non-overflow cannot excuse hidden or occluded content.');
    const chaining=containment==='default-chaining'?{containmentNotClaimed:true,computedBrowserDefaultChaining:true,parentChaining:{policy:'browser-default',wheelBoundaryExercised:false,before:parentBefore,after:await container.evaluate(parentScrollState,axis),positionChanged:false}}:{};
    observations.push({...chaining,viewport:viewport.name,width:viewport.width,height:viewport.height,state:'non-overflow-observed',axis,extent:start.extent,client:start.client,targetReachable:true,targetHitTestPassed:true,computedCanonicalThin:true,limitation:'Real fixture content does not overflow here. Wheel/overflow behavior is not proved at this viewport.'});
   }
- }}catch(error){if(error instanceof Error){if(wheelDiagnostic)error.message+="\nPre-wheel diagnostic: "+JSON.stringify(wheelDiagnostic);try{error.message+="\nFailure-time geometry: "+JSON.stringify(await captureScrollbarFailureGeometry(container,target,axis));}catch{error.message+="\nFailure-time geometry unavailable.";}}throw error;}finally{try{await restoreParents();}finally{await restore();}}
+ }}catch(error){if(error instanceof Error){if(wheelDiagnostic)error.message+="\nPre-wheel diagnostic: "+JSON.stringify(wheelDiagnostic);try{error.message+="\nFailure-time geometry: "+JSON.stringify(await captureScrollbarFailureGeometry(container,target,axis,currentPinned));}catch{error.message+="\nFailure-time geometry unavailable.";}}throw error;}finally{try{await restoreParents();}finally{try{await restore();}finally{for(const handle of pinnedTargets)await handle.dispose();}}}
  return{...receipt,status:'rendered-fragments-observed',observations,containment,proofBoundary:'Actual rendered surface and wheel interaction where real content overflows. No complete capability credit or invented non-applicability.'};
 }
 

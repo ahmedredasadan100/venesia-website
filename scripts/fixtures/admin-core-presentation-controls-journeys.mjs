@@ -1,5 +1,6 @@
+import {selectCoreTopicAssetForScrollProof} from './admin-core-topic-controls-journeys.mjs';
 import {observeCoreAcceptedDraftDiscard} from './admin-core-form-draft-restoration.mjs';
-import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
+import {resolveCoreScrollbarTerminalTarget,observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {createJiti} from "jiti";
@@ -11,7 +12,7 @@ export async function runCorePresentationControlsJourneys(ctx){
  const{page,origin,fixtures,run,observe,actionResponse,assertActionAcknowledged,nativeCheckpoint,requiredCases}=ctx;
  assert.equal(new URL(origin).hostname,"127.0.0.1");const f=fixtures.presentationControls;assert.ok(f);
  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});const{ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:manifest}=await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
- const plan=buildCorePresentationControlsPlan({manifest,fixtures:f}),builders=await loadPresentationControlBuilders(),outcomes=[];let current,renderedAdoption=[],renderedSeen=new Set();
+ const plan=buildCorePresentationControlsPlan({manifest,fixtures:f,selection:ctx.journeySelection??null}),builders=await loadPresentationControlBuilders(),outcomes=[];let current,renderedAdoption=[],renderedSeen=new Set();
  const form=()=>page.locator('form[data-admin-form-runtime]').filter({has:page.locator('input[name="id"][value="'+current.id+'"]')});
  const field=(name,scope=form())=>scope.locator('[name="'+name+'"]');
  const save=()=>form().locator('button[type="submit"]');
@@ -45,16 +46,17 @@ export async function runCorePresentationControlsJourneys(ctx){
  }
  const gallery=name=>form().locator('[data-admin-media-gallery-mode="paths"]').filter({has:page.locator('input[name="'+name+'"]')});
  const cards=name=>gallery(name).locator('[data-admin-media-gallery-card="image"]');
+ const mediaTerminalTarget=dialog=>({container,axis})=>resolveCoreScrollbarTerminalTarget({container,axis,candidates:[dialog.getByRole('navigation',{name:'مجلدات الوسائط',exact:true}).getByRole('button').last(),dialog.getByRole('button',{name:'إلغاء',exact:true}),dialog.locator('[data-media-picker-scroll] aside').last().locator('p,dd').last()]});
  async function chooseAsset(trigger,index,cancel=false){
   const asset=f.assets[index],match=response=>{const url=new URL(response.url());return url.origin===origin&&url.pathname==="/api/admin/media-library"&&response.request().method()==="GET";};
   const[initial]=await Promise.all([page.waitForResponse(match),trigger.click()]);assert.equal(initial.status(),200);const data=await initial.json(),root=data.folders.find(row=>row.path==="images");assert.ok(root);
   const dialog=page.getByRole("dialog",{name:"اختيار صورة من المكتبة",exact:true});await expect(dialog).toBeVisible();await dialog.getByRole("navigation",{name:"مجلدات الوسائط",exact:true}).getByRole("button").filter({has:page.getByText(root.displayName,{exact:true})}).click();
   const[found]=await Promise.all([page.waitForResponse(response=>match(response)&&new URL(response.url()).searchParams.get("q")===asset.objectKey&&new URL(response.url()).searchParams.get("folder")==="images"),dialog.getByPlaceholder("ابحث بالاسم أو المسار أو الوصف البديل…",{exact:true}).fill(asset.objectKey)]);assert.equal(found.status(),200);assert.deepEqual((await found.json()).assets.map(row=>row.publicUrl),[asset.publicUrl]);
-  const choice=dialog.locator('button[aria-pressed]').filter({has:page.getByText(asset.displayName,{exact:true})});await expect(choice).toHaveCount(1);await choice.click();await expect(choice).toHaveAttribute("aria-pressed","true");
+  const choice=dialog.locator('button[aria-pressed]').filter({has:page.getByText(asset.displayName,{exact:true})});await expect(choice).toHaveCount(1);if(!renderedSeen.has('media-picker')){await expect(choice).toHaveAttribute('aria-pressed','false');await selectCoreTopicAssetForScrollProof({page,origin,dialog,button:choice,asset});}else await choice.click();await expect(choice).toHaveAttribute('aria-pressed','true');
   if(!renderedSeen.has('media-picker')){
    const common={page,origin,requiredCases,formManifest:manifest,bindings:[{boundary:'form',consumer:current.consumer,surface:current.surface}]};
    renderedAdoption.push(await observeCoreModalFocusAdoption({...common,id:'presentation-'+current.kind+'-media-focus',dialog,escape:'not-exercised'}));
-   const container=dialog.locator('[data-media-picker-scroll]'),target=dialog.getByRole("button",{name:"إلغاء",exact:true});
+   const container=dialog.locator('[data-media-picker-scroll]'),target=mediaTerminalTarget(dialog);
    renderedAdoption.push(await observeCoreScrollbarAdoption({...common,id:'presentation-'+current.kind+'-media-scroll',container,target,axis:'y',containment:'overscroll-contain'}));renderedSeen.add('media-picker');
   }
   await dialog.getByRole("button",{name:cancel?"إلغاء":"تأكيد الاختيار",exact:true}).click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();
@@ -99,7 +101,7 @@ export async function runCorePresentationControlsJourneys(ctx){
   const result={renderedAdoption,kind:recipe.kind,consumer:recipe.consumer,surface:recipe.surface,nativeCheckpoints:6,nativePhases:[...PRESENTATION_CONTROL_PHASES],exactWrites:1,pendingRejection:rejected,pendingSave:saved,postRejectionDirtyNavigationCancelled:true,acceptedDiscard,controls:recipe.kind==="hero"?["five_text_fields","visibility_bold_alignment","current_variant_selection_restored","image_composition","desktop_add_replace_cancel_order_remove","optional_mobile_add_replace_empty","primary_link_replace_target_cancel","secondary_link_clear","mirrored_cta_controls"]:["four_generic_text_fields","visibility_bold_alignment","hidden_identity_preserved"],automaticAxisCoverage:[],globalClosed:false};outcomes.push(result);return result;
  });
  const contentScroll=await observeContentScrollVariant({...ctx,formManifest:manifest},f.contentScroll);
- return{planned:2,completed:outcomes.length,outcomes,contentScroll,nonCapabilities:plan.nonCapabilities,nativeFinalityRequired:true,globalClosed:false};
+ return{planned:plan.recipes.length,completed:outcomes.length,outcomes,contentScroll,nonCapabilities:plan.nonCapabilities,nativeFinalityRequired:true,globalClosed:false};
 }
 
 /** Existing conditional Content descendant, opened and cancelled without changing its draft. */
@@ -114,7 +116,7 @@ async function observeContentScrollVariant(ctx,fixture){
    await form.locator('[data-admin-tab-id="content"]').click();const owner=form.locator('[data-admin-media-image-field="image_main"]'),original=await owner.locator('input[name="image_main"]').inputValue(),trigger=owner.getByRole('button').first();await expect(owner).toHaveCount(1);
    const [initial]=await Promise.all([page.waitForResponse(response=>response.request().method()==='GET'&&new URL(response.url()).origin===origin&&new URL(response.url()).pathname==='/api/admin/media-library'),trigger.click()]);assert.equal(initial.status(),200);
    const picker=page.getByRole('dialog',{name:'اختيار صورة من المكتبة',exact:true});await expect(picker).toBeVisible();const required=requiredCases.filter(row=>row.boundary==='form'&&row.consumer==='block-template-content-editor'&&row.axis==='scrollbar');assert.equal(required.length,1);
-   const renderedAdoption=[await observeCoreScrollbarAdoption({page,origin,requiredCases,formManifest,bindings:[{boundary:'form',consumer:'block-template-content-editor',surface:'content:template-edit'}],id:'presentation-content-single-image-media-scroll',container:picker.locator('[data-media-picker-scroll]'),target:picker.getByRole("button",{name:"إلغاء",exact:true}),axis:'y',containment:'overscroll-contain'})];
+   const renderedAdoption=[await observeCoreScrollbarAdoption({page,origin,requiredCases,formManifest,bindings:[{boundary:'form',consumer:'block-template-content-editor',surface:'content:template-edit'}],id:'presentation-content-single-image-media-scroll',container:picker.locator('[data-media-picker-scroll]'),target:({container,axis})=>resolveCoreScrollbarTerminalTarget({container,axis,candidates:[picker.getByRole('navigation',{name:'مجلدات الوسائط',exact:true}).getByRole('button').last(),picker.getByRole('button',{name:'إلغاء',exact:true}),picker.locator('[data-media-picker-scroll] aside').last().locator('p,dd').last()]}),axis:'y',containment:'overscroll-contain'})];
    await picker.getByRole('button',{name:'إلغاء',exact:true}).click();await expect(picker).toHaveCount(0);await expect(trigger).toBeFocused();await expect(owner.locator('input[name="image_main"]')).toHaveValue(original);await expect(form).toHaveAttribute('data-admin-form-dirty','false');
    await observe('content-scroll-variant-reload',()=>page.reload({waitUntil:'domcontentloaded'}));await expect(variant).toHaveValue(fixture.variant);await expect(owner.locator('input[name="image_main"]')).toHaveValue(original);await expect(form).toHaveAttribute('data-admin-form-dirty','false');assert.equal(new URL(page.url()).pathname,fixture.editPath);assert.equal(actionRequests,0);
    const after=await checkpoint('after');assertContentScrollFingerprints(before,after);completed={fixture,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,routePathname:fixture.editPath,readOnly:true,saveNotInvoked:true,reloadVariantRetained:true,pickerCancelled:true,exactTriggerFocusRestored:true,nativeIds:[before.id,after.id],ownedRunId:before.ownedRunId,automaticCoverage:[],globalClosed:false};return{contentScroll:completed,renderedAdoption,automaticCoverage:[]};

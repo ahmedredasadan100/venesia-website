@@ -27,6 +27,7 @@ export function validateCoreJourneySelection({ scope, cohort, selection }) {
   else if (selection === "page-composition-followup" || selection === "page-composition-content-seo-followup" || selection === "page-composition-seo-followup") assert.equal(cohort, "page-composition");
   else if (["template-controls-followup","template-link-controls-followup","template-dual-link-controls-followup"].includes(selection)) assert.equal(cohort, "template-controls");
   else if (["topic-controls-followup", "topic-video-followup"].includes(selection)) assert.equal(cohort, "topic-controls");
+  else if (selection === "presentation-hero-scroll-followup") assert.equal(cohort, "presentation-controls");
   else if (selection === "project-editors-followup") assert.equal(cohort, "project-controls");
   else if (["navigation-settings-followup","navigation-settings-existing-followup","navigation-settings-menu-footer-followup","navigation-settings-graph-footer-followup","navigation-settings-footer-followup"].includes(selection)) assert.equal(cohort, "navigation-settings");
   else if (selection === "template-hero-bulk-followup") assert.equal(cohort, "template-bulk");
