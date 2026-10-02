@@ -18,6 +18,27 @@ export async function finishCoreTemplateReadResponses(responses,{schedule=(callb
   try{await Promise.race([completion,new Promise((_,reject)=>{timer=schedule(()=>reject(Error('TEMPLATE_READ_FINISH_DEADLINE')),60000);})]);}finally{cancel(timer);}
 }
 
+
+/** Observation only: associate a read transport with its real Chromium document. */
+async function installCoreTemplateReadDocumentDiagnostic(page,origin,kind){
+ const session=await page.context().newCDPSession(page),requests=new Map();let mainFrameId=null,eventCount=0;
+ const sha=value=>createHash('sha256').update(String(value)).digest('hex');
+ const emit=(event,details)=>{if(eventCount++<150)console.log('core-template-read-document '+JSON.stringify({kind,event,...details,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256}));};
+ const urlProjection=value=>{const url=new URL(value);return{originMatches:url.origin===origin,urlSha256:sha(value)};};
+ session.on('Page.frameNavigated',({frame,type})=>{if(frame.parentId)return;mainFrameId=frame.id;emit('document-navigated',{frameId:frame.id,loaderId:frame.loaderId,type,...urlProjection(frame.url)});});
+ session.on('Page.navigatedWithinDocument',event=>{if(event.frameId===mainFrameId)emit('same-document-navigated',{frameId:event.frameId,navigationType:event.navigationType,...urlProjection(event.url)});});
+ session.on('Network.requestWillBeSent',event=>{const request=event.request,url=new URL(request.url);if(url.origin!==origin)return;
+  if(event.type==='Document'&&event.frameId===mainFrameId)emit('document-request',{requestId:event.requestId,loaderId:event.loaderId,frameId:event.frameId,timestamp:event.timestamp,...urlProjection(request.url)});
+  const actionKey=Object.keys(request.headers).find(key=>key.toLowerCase()==='next-action');if(request.method!=='POST'||!actionKey)return;
+  const row={requestId:event.requestId,loaderId:event.loaderId,frameId:event.frameId,timestamp:event.timestamp,wallTime:event.wallTime,actionIdSha256:sha(request.headers[actionKey]),postDataAvailable:typeof request.postData==='string',payloadSha256:typeof request.postData==='string'?sha(request.postData):null,documentUrlSha256:sha(event.documentURL),...urlProjection(request.url)};requests.set(event.requestId,row);emit('action-request',row);
+ });
+ session.on('Network.responseReceived',event=>{if(requests.has(event.requestId))emit('action-response',{requestId:event.requestId,loaderId:event.loaderId,frameId:event.frameId,timestamp:event.timestamp,status:event.response.status,mimeType:event.response.mimeType,hasActionRedirect:Object.keys(event.response.headers).some(key=>key.toLowerCase()==='x-action-redirect')});});
+ session.on('Network.loadingFinished',event=>{if(requests.has(event.requestId))emit('action-finished',{requestId:event.requestId,timestamp:event.timestamp,encodedDataLength:event.encodedDataLength});});
+ session.on('Network.loadingFailed',event=>{if(requests.has(event.requestId))emit('action-failed',{requestId:event.requestId,timestamp:event.timestamp,canceled:typeof event.canceled==='boolean'?event.canceled:null,failure:coreTemplateReadFailureDiagnostic({errorText:event.errorText}),blockedReason:event.blockedReason??null});});
+ await session.send('Page.enable');await session.send('Network.enable');const initial=await session.send('Page.getFrameTree');mainFrameId=initial.frameTree.frame.id;emit('initial-document',{frameId:mainFrameId,loaderId:initial.frameTree.frame.loaderId,...urlProjection(initial.frameTree.frame.url)});
+ return{close:async()=>{console.log('core-template-read-document '+JSON.stringify({kind,event:'diagnostic-end',events:eventCount,truncated:eventCount>150,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256}));try{await session.detach();}catch(error){console.log('core-template-read-document '+JSON.stringify({kind,event:'diagnostic-close-failed',messageSha256:sha(error instanceof Error?error.message:String(error)),sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256}));}}};
+}
+
 /** Only finite owned templates. No generic capability/axis is promoted here. */
 export async function runCoreTemplateControlsJourneys(ctx) {
   const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, nativeCheckpoint, requiredCases } = ctx;
@@ -320,6 +341,7 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     const original=new URL(page.url());assert.equal(original.pathname,routePathname);const clean=new URL(original);for(const key of ['saved','notice','cache_warning'])clean.searchParams.delete(key);
     const expectedValues=coreTemplateFeedbackLinkValues(recipe.kind);let ownerProjection=null;
     const actionId=expectedValues.length?selectCoreLinkPreviewAction(JSON.parse(readFileSync(new URL('../../.next/server/server-reference-manifest.json',import.meta.url),'utf8')),'app/admin/pages-blocks/blocks/'+recipe.kind+'/[id]/page',{buildMetadata:JSON.parse(readFileSync(new URL('../../.next/required-server-files.json',import.meta.url),'utf8')),recordProjection:projection=>{ownerProjection=projection;console.log('core-template-feedback-read-projection '+JSON.stringify(projection));}}):null;
+    const documentDiagnostic=await installCoreTemplateReadDocumentDiagnostic(page,origin,recipe.kind);
     let frameNavigationSequence=0,navigationPhase="before-first-navigation";const navigated=frame=>{if(frame===page.mainFrame()){frameNavigationSequence++;navigationPhase="main-frame-navigated";}};
     const requests=[],responses=new Map(),readLegs=[];const count=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)requests.push({request,frameNavigationSequence,navigationPhase,observedAt:Date.now(),method:request.method(),url:request.url(),actionId:request.headers()['next-action'],contentType:request.headers()['content-type']??'',body:request.postData()});};const onResponse=response=>{if(requests.some(row=>row.request===response.request()))responses.set(response.request(),response);};page.on('request',count);page.on('response',onResponse);page.on('framenavigated',navigated);
     async function settleReadLeg(id,start){
@@ -343,7 +365,7 @@ export async function runCoreTemplateControlsJourneys(ctx) {
       const after=new URL(page.url());for(const key of ['saved','notice','cache_warning'])assert.equal(after.searchParams.has(key),false);assert.equal(after.pathname,clean.pathname);assert.equal(after.hash,clean.hash);assert.equal(after.search,clean.search);
       const reloadAt=requests.length;navigationPhase='reload-requested';await observe('template-feedback-dismissed-reload',()=>page.reload({waitUntil:'domcontentloaded'}));await settleReadLeg(spec.id+':reloaded',reloadAt);await expect(entry()).toHaveCount(0);
       scenarios.push({id:spec.id,variant:spec.variant,visibleCount:1,messageText:spec.text,dismissButtonVisible:true,dismissed:true,savedRemoved:true,noticeRemoved:true,cacheWarningRemoved:true,unrelatedQueryPreserved:true,samePathAndHash:true,absentAfterReload:true});
-    }}finally{page.off('request',count);page.off('response',onResponse);page.off('framenavigated',navigated);}
+    }}finally{page.off('request',count);page.off('response',onResponse);page.off('framenavigated',navigated);await documentDiagnostic.close();}
     const proof={kind:recipe.kind,templateId:recipe.template.id,channel,routePathname,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,actualAcceptedSaveVisible:true,actualAcceptedVariant,scenarios,additionalActionPosts:requests.length,linkReadActions:{ownerProjection,legs:readLegs,mutatingOrUnknownActionPosts:requests.filter(request=>request.actionId!==actionId).length},adapterOnly:true,backendFailureClaim:false,nativeBefore:nativeBefore.id,nativeAfter:null,automaticCoverage:[],globalClosed:false};
     return assertCoreTemplateFeedbackAdapter(proof,recipe.kind,recipe.template.id,process.env.QA_ADMIN_SOURCE_SHA256);
   }
