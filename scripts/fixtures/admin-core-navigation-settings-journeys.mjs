@@ -3,7 +3,8 @@ import {exerciseCoreDownloadField,CORE_DOWNLOAD_MEDIA_HREF} from './admin-core-d
 import { runCoreDescendantPresentationJourneys } from './admin-core-descendant-presentation-journeys.mjs';
 import assert from "node:assert/strict";
 import { observeCoreAcceptedFormFeedback, observeCoreVisibleAcceptedFeedback, runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -297,12 +298,15 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
     await goto('/admin/pages-blocks/footer');
     const dialog=()=>page.getByRole('dialog',{name:'استعادة الفوتر الافتراضي',exact:true});
     const open=()=>page.getByRole('button',{name:'استعادة الافتراضي',exact:true}).click();
-    const posts=[],listener=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)posts.push(request);};
+    const manifestBytes=readFileSync(new URL('../../.next/server/server-reference-manifest.json',import.meta.url)),actionManifest=JSON.parse(manifestBytes.toString('utf8'));
+    const postTrace=[];let postPhase='confirmation-cancel';
+    const posts=[],listener=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin){posts.push(request);const actionId=request.headers()['next-action'],entry=actionManifest.node?.[actionId]??actionManifest.edge?.[actionId];postTrace.push({ordinal:posts.length,phase:postPhase,pathname:new URL(request.url()).pathname,actionId,exportedName:typeof entry?.exportedName==='string'?entry.exportedName:null,filename:typeof entry?.filename==='string'?entry.filename:null});}};
     page.on('request',listener);
     try {
       await open(); await expect(dialog()).toBeVisible(); await dialog().locator('[data-admin-confirm-cancel]').click();
       await expect(dialog()).toHaveCount(0); assert.equal(posts.length,0); await checkpoint('footer','restore-cancelled');
       const pending=async cancelled=>{
+        postPhase=cancelled?'rejection':'retry';
         const token=randomUUID(),fault=async operation=>{const request={id:randomUUID(),kind:'domain-write-fault-'+operation,entity:'footer_restore',token};const result=await nativeCheckpoint(request);for(const key of Object.keys(request))assert.equal(result[key],request[key]);assert.equal(result.status,'pass');return result;};
         let armed=false,responsePromise;const start=posts.length;
         try {
@@ -322,7 +326,7 @@ export async function runCoreNavigationSettingsJourneys(ctx) {
       await expect(dialog()).toBeVisible();await expect(dialog().locator('[data-admin-confirm-submit]')).toBeEnabled();
       await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="danger"]').first()).toBeVisible();await checkpoint('footer','restore-rejected');
       const retry=await pending(false);await expect(dialog()).toHaveCount(0);await expect(feedback()).toContainText('تمت استعادة تخطيط الفوتر الافتراضي بنجاح.');await checkpoint('footer','restored');
-      await goto('/admin/pages-blocks/footer');await checkpoint('footer','restore-reloaded');assert.equal(posts.length,2);
+      postPhase='reload';await goto('/admin/pages-blocks/footer');await checkpoint('footer','restore-reloaded');assert.equal(posts.length,2,'Footer restore POST trace: '+JSON.stringify({manifestSha256:createHash('sha256').update(manifestBytes).digest('hex'),observed:posts.length,expected:2,requests:postTrace}));
       completed.push('footer-default-restore');return{confirmationCancelled:true,cancelledActionRequests:0,rejection,retry,actionRequests:2,explicitRetry:true,nativePhases:['restore-cancelled','restore-rejected','restored','restore-reloaded'],otherThreeRowsAndTimestampsUnchanged:true,automaticCoverage:[],globalClosed:false};
     } finally {page.off('request',listener);}
   });
