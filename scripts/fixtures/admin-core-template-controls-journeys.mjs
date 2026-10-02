@@ -8,6 +8,13 @@ import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 import { coreTemplateFeedbackLinkValues, buildCoreTemplateControlsPlan, TEMPLATE_CONTROL_VALUES as values, TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS, assertCoreTemplateFeedbackAdapter } from "./admin-core-template-controls-contract.mjs";
 
+/** Finish every admitted read or fail the leg within the existing 60-second verification bound. */
+export async function finishCoreTemplateReadResponses(responses,{schedule=(callback,ms)=>setTimeout(callback,ms),cancel=timer=>clearTimeout(timer)}={}){
+  assert.ok(Array.isArray(responses));let timer;
+  const completion=Promise.all(responses.map(async response=>{assert.equal(response.status(),200);if(response.request().failure()!==null)throw Error('TEMPLATE_READ_REQUEST_FAILED');assert.equal(await response.finished(),null,'TEMPLATE_READ_RESPONSE_FAILED');if(response.request().failure()!==null)throw Error('TEMPLATE_READ_REQUEST_FAILED');}));
+  try{await Promise.race([completion,new Promise((_,reject)=>{timer=schedule(()=>reject(Error('TEMPLATE_READ_FINISH_DEADLINE')),60000);})]);}finally{cancel(timer);}
+}
+
 /** Only finite owned templates. No generic capability/axis is promoted here. */
 export async function runCoreTemplateControlsJourneys(ctx) {
   const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, nativeCheckpoint, requiredCases } = ctx;
@@ -311,7 +318,18 @@ export async function runCoreTemplateControlsJourneys(ctx) {
     const expectedValues=coreTemplateFeedbackLinkValues(recipe.kind);let ownerProjection=null;
     const actionId=expectedValues.length?selectCoreLinkPreviewAction(JSON.parse(readFileSync(new URL('../../.next/server/server-reference-manifest.json',import.meta.url),'utf8')),'app/admin/pages-blocks/blocks/'+recipe.kind+'/[id]/page',{buildMetadata:JSON.parse(readFileSync(new URL('../../.next/required-server-files.json',import.meta.url),'utf8')),recordProjection:projection=>{ownerProjection=projection;console.log('core-template-feedback-read-projection '+JSON.stringify(projection));}}):null;
     const requests=[],responses=new Map(),readLegs=[];const count=request=>{if(request.method()==='POST'&&request.headers()['next-action']&&new URL(request.url()).origin===origin)requests.push({request,method:request.method(),url:request.url(),actionId:request.headers()['next-action'],contentType:request.headers()['content-type']??'',body:request.postData()});};const onResponse=response=>{if(requests.some(row=>row.request===response.request()))responses.set(response.request(),response);};page.on('request',count);page.on('response',onResponse);
-    async function settleReadLeg(id,start){const expectedCount=start+expectedValues.length;await expect.poll(()=>requests.length,{timeout:60000}).toBe(expectedCount);await expect.poll(()=>requests.slice(start).filter(row=>responses.has(row.request)).length,{timeout:60000}).toBe(expectedValues.length);const rows=requests.slice(start);for(const row of rows){const response=responses.get(row.request);assert.equal(response.status(),200);assert.equal(await response.finished(),null,"The resolver response must finish before navigation.");}const proof=assertCoreReadOnlyEditRequests(rows,{origin,pathname:routePathname,actionId,expectedValues});readLegs.push({id,...proof,responsesCompleted:rows.length,responsesOk:true});}
+    async function settleReadLeg(id,start){
+      const startedAt=Date.now(),expectedCount=start+expectedValues.length;let stage='start',proof=null,finishedCount=0;
+      const diagnostic=reason=>console.log('core-template-feedback-read-leg '+JSON.stringify({kind:recipe.kind,leg:id,stage,reason,elapsedMs:Date.now()-startedAt,expectedCount:expectedValues.length,requestCount:requests.length-start,responseCount:requests.slice(start).filter(row=>responses.has(row.request)).length,failedCount:requests.slice(start).filter(row=>row.request.failure()!==null).length,finishedCount,statuses:requests.slice(start).filter(row=>responses.has(row.request)).map(row=>responses.get(row.request).status()),readProof:proof,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256}));
+      try{
+        diagnostic('BEGIN');await expect.poll(()=>requests.length,{timeout:60000}).toBe(expectedCount);stage='request-count';diagnostic('OBSERVED');
+        await expect.poll(()=>requests.slice(start).filter(row=>responses.has(row.request)).length,{timeout:60000}).toBe(expectedValues.length);stage='response-count';diagnostic('OBSERVED');
+        const rows=requests.slice(start);proof=assertCoreReadOnlyEditRequests(rows,{origin,pathname:routePathname,actionId,expectedValues});for(const row of rows)assert.equal(responses.get(row.request).status(),200);stage='payload-and-owner';diagnostic('VERIFIED');
+        const tracked=rows.map(row=>{const response=responses.get(row.request);return{status:()=>response.status(),request:()=>row.request,finished:async()=>{const result=await response.finished();if(result===null)finishedCount++;return result;}};});
+        stage='transport-finish';await finishCoreTemplateReadResponses(tracked);assert.equal(requests.length,expectedCount);assertCoreReadOnlyEditRequests(requests.slice(start),{origin,pathname:routePathname,actionId,expectedValues});assert.equal(finishedCount,expectedValues.length);
+        stage='complete';diagnostic('VERIFIED');readLegs.push({id,...proof,responsesCompleted:finishedCount,responsesOk:true});
+      }catch(error){diagnostic(error.message==='TEMPLATE_READ_FINISH_DEADLINE'?'FINISH_DEADLINE':error.message==='TEMPLATE_READ_REQUEST_FAILED'?'REQUEST_FAILED':'EVIDENCE_REJECTED');throw Error('TEMPLATE_FEEDBACK_READ_EVIDENCE_REJECTED:'+recipe.kind+':'+id+':'+stage);}
+    }
     const scenarios=[];
     try{for(const spec of TEMPLATE_FEEDBACK_ADAPTER_SCENARIOS){
       const target=new URL(clean);for(const[key,value]of Object.entries(spec.query))target.searchParams.set(key,value);

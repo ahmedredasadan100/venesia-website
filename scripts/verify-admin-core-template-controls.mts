@@ -1,3 +1,4 @@
+import {finishCoreTemplateReadResponses} from './fixtures/admin-core-template-controls-journeys.mjs';
 import {CORE_DOWNLOAD_MEDIA_HREF} from './fixtures/admin-core-download-media-adoption.mjs';
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
@@ -152,6 +153,14 @@ test('Original null template envelope wiring is rejected',()=>assert.throws(()=>
 test('Template collector detached final envelope is rejected',()=>{const wiring=templateCollectorWiring(templateCollectorSource);assert.equal(wiring.property,'nativeCheckpoints');assert.throws(()=>executeTemplateCollector(templateCollectorSource.replace(/readOnly, nativeCheckpoints, draftRestoration/u,'readOnly, nativeCheckpoints:null, draftRestoration')));});
 test('Template collector parses owned envelope before strict feedback join',()=>{const wiring=templateCollectorWiring(templateCollectorSource);assert.equal(wiring.branch.split(templateNativeAssignment).length,2);assert.ok(wiring.branch.indexOf(templateNativeAssignment)<wiring.branch.indexOf('assertCoreTemplateFeedbackCompletion'));assert.ok(wiring.branch.includes('assert.equal(nativeCheckpoints.status,"pass");'));assert.ok(wiring.branch.includes('assert.equal(nativeCheckpoints.ownedRunId,handle.identity.runId);'));});
 
+async function finishTest(name:string,task:()=>Promise<unknown>){await task();cases.push(name);}
+const readResponse=({status=200,failure=null,finished=null}:{status?:number;failure?:{errorText:string}|null;finished?:Error|null}={})=>({status:()=>status,request:()=>({failure:()=>failure}),finished:async()=>finished});
+function clockPort(expire=false){const calls:string[]=[];return{calls,schedule:(callback:()=>void,ms:number)=>{assert.equal(ms,60000);calls.push('scheduled');if(expire)queueMicrotask(callback);return 1 as unknown as ReturnType<typeof setTimeout>;},cancel:(timer:ReturnType<typeof setTimeout>|undefined)=>{assert.equal(timer,1);calls.push('cleared');}};}
+await finishTest('Read completion waits for every real response and clears its deadline',async()=>{const c=clockPort();await finishCoreTemplateReadResponses([readResponse(),readResponse()],c);assert.deepEqual(c.calls,['scheduled','cleared']);});
+for(const[name,response]of [['http error',readResponse({status:500})],['failed request',readResponse({failure:{errorText:'simulated failure'}})],['unfinished response error',readResponse({finished:Error('simulated failure')})]] as const)await finishTest('Read completion rejects '+name,async()=>{const c=clockPort();await assert.rejects(finishCoreTemplateReadResponses([response],c));assert.deepEqual(c.calls,['scheduled','cleared']);});
+await finishTest('Unresolved transport fails at the existing60second bound with no success receipt',async()=>{const c=clockPort(true);await assert.rejects(finishCoreTemplateReadResponses([{...readResponse(),finished:()=>new Promise(()=>{})}],c),/TEMPLATE_READ_FINISH_DEADLINE/);assert.deepEqual(c.calls,['scheduled','cleared']);});
+await finishTest('Target closure rejection cannot be transformed into transport success',async()=>{const c=clockPort();await assert.rejects(finishCoreTemplateReadResponses([{...readResponse(),finished:async()=>{throw Error('closed');}}],c));assert.deepEqual(c.calls,['scheduled','cleared']);});
+await finishTest('Failure arriving during completion still rejects',async()=>{let failed=false;const c=clockPort(),r={status:()=>200,request:()=>({failure:()=>failed?{errorText:'late failure'}:null}),finished:async()=>{failed=true;return null;}};await assert.rejects(finishCoreTemplateReadResponses([r],c),/TEMPLATE_READ_REQUEST_FAILED/);assert.deepEqual(c.calls,['scheduled','cleared']);});
 console.log(JSON.stringify({status:"pass",controls:cases.length,cases,runtimeExecuted:false,globalClosed:false}));
 
 
