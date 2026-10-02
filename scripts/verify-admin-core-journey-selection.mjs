@@ -1,3 +1,4 @@
+import {CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,CORE_MEDIA_RECOVERY_GROUPS,coreSelectedMediaRecoveryGroups,coreSelectedMediaRecoveryIds,assertCoreMediaRecoverySelectionReceipt} from './fixtures/admin-core-media-recovery-journeys.mjs';
 import {CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION} from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import {CORE_TOPIC_VIDEO_SELECTION,isCoreTopicControlsSelection,CORE_TOPIC_CONTROLS_RETRY_SELECTION,TOPIC_CONTROL_KINDS,TOPIC_CONTROL_PHASES,TOPIC_CONTROL_ASSET_KEYS,buildCoreTopicControlsPlan,coreTopicControlFixtureSlug,coreSelectedTopicControlKinds,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
 import {CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,isCoreTemplateControlSelection} from "./fixtures/admin-core-template-controls-contract.mjs";
@@ -129,7 +130,7 @@ async function verifyCollectorDomainTailSelection(text,{rejectActor=false}={}){
  const selected=one('selectedJourneys'),writes=one('writes');assert.ok(selected.getStart(ast)<writes.getStart(ast),'Selected native guard must run before final write readback.');
  assert.ok(writes.initializer&&ts.isAwaitExpression(writes.initializer)&&ts.isCallExpression(writes.initializer.expression));assert.equal(writes.initializer.expression.expression.getText(ast),'verifyCoreDomainWrites');
  const browser={},domainTailPlan={},canonicalRequiredCases=[],domainTailNative={},handle={identity:{runId:'owned-run'}},sourceSha256='a'.repeat(64),calls=[],receipt={selection:'domain-command-tail'};
- const ports={CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION,isCoreTopicControlsSelection,CORE_TOPIC_CONTROLS_RETRY_SELECTION,assertCoreTopicControlsRetryReceipt,CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,isCoreTemplateControlSelection,CORE_PROJECT_EDITOR_SELECTION,CORE_NAVIGATION_FOLLOWUP_SELECTION,isCoreNavigationFollowupSelection,CORE_TEMPLATE_HERO_BULK_SELECTION,CORE_SPECIALIZED_FOLLOWUP_SELECTION,isCorePageCompositionFollowupSelection,isReadonlyHubFollowup:false,isTemplateCards:false,isQueryLayout:false,isDomainTail:true,isPreviewImpact:false,isTemplateCreates:false,browser,domainTailPlan,canonicalRequiredCases,domainTailNative,handle,artifactDir:'owned-artifacts',
+ const ports={CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,assertCoreMediaRecoverySelectionReceipt,CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION,isCoreTopicControlsSelection,CORE_TOPIC_CONTROLS_RETRY_SELECTION,assertCoreTopicControlsRetryReceipt,CORE_TEMPLATE_CONTROLS_RETRY_SELECTION,isCoreTemplateControlSelection,CORE_PROJECT_EDITOR_SELECTION,CORE_NAVIGATION_FOLLOWUP_SELECTION,isCoreNavigationFollowupSelection,CORE_TEMPLATE_HERO_BULK_SELECTION,CORE_SPECIALIZED_FOLLOWUP_SELECTION,isCorePageCompositionFollowupSelection,isReadonlyHubFollowup:false,isTemplateCards:false,isQueryLayout:false,isDomainTail:true,isPreviewImpact:false,isTemplateCreates:false,browser,domainTailPlan,canonicalRequiredCases,domainTailNative,handle,artifactDir:'owned-artifacts',
   join:(dir,name)=>{assert.equal(dir,'owned-artifacts');assert.equal(name,'public-source-manifest.json');return 'owned-source';},
   readFileSync:(name,encoding)=>{assert.equal(name,'owned-source');assert.equal(encoding,'utf8');calls.push('source');return JSON.stringify({sourceSha256});},
   readCoreFixedQaActor:async value=>{assert.equal(value,handle);calls.push('actor');if(rejectActor)throw Error('independent-actor-rejection');return 7;},
@@ -405,6 +406,37 @@ for(const selector of [CORE_TOPIC_CONTROLS_RETRY_SELECTION,CORE_TOPIC_VIDEO_SELE
  await test('Actual Topic picker readiness binds exact response before click and verifies completed render',()=>exercise());
  for(const mode of ['http-error','body-count','body-error','still-loading','incomplete-list','wrong-rendered-asset','wrong-rendered-count'])await test('Actual Topic readiness rejects '+mode,()=>assert.rejects(()=>exercise(mode)));
  await test('Shared Topic picker awaits readiness only before its actual scrollbar observation',()=>{assert.ok(source.indexOf('await selectCoreTopicAssetForScrollProof({page,origin,dialog,button,asset})')<source.indexOf('renderedAdoption.push(await observeCoreScrollbarAdoption'));assert.ok(source.includes('if(!renderedPickerObserved) await selectCoreTopicAssetForScrollProof'));});
+}
+
+
+// Reuse the original eight recovery operations; the three retained groups have no dispatch credit.
+{
+ const selection=CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,selected=coreSelectedMediaRecoveryIds(selection);
+ await test('Media recovery default remains all original groups; followup selects original last eight in order',()=>{assert.deepEqual(coreSelectedMediaRecoveryGroups(),[...CORE_MEDIA_RECOVERY_GROUPS]);assert.deepEqual(selected,CORE_MEDIA_RECOVERY_GROUPS.slice(3).map(x=>'core-media-recovery-'+x));assert.equal(selected.length,8);});
+ await test('Actual driver selector returns only the original eight Media recovery ids',async()=>{const node=tree.statements.filter(ts.isVariableStatement).flatMap(n=>n.declarationList.declarations).find(n=>n.name.getText(tree)==='selectedJourneyIds');assert.ok(node?.initializer);const actual=await new Function('journeySelection','CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION','coreSelectedMediaRecoveryIds','return (async()=>('+node.initializer.getText(tree)+'))()')(selection,CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,coreSelectedMediaRecoveryIds);assert.deepEqual(actual,selected);});
+ await test('Media recovery finite selector requires original scope and cohort',()=>{validateCoreJourneySelection({scope:'core-closure',cohort:'media-recovery',selection});for(const input of[{scope:'audit2-selected',cohort:'media-recovery',selection},{scope:'core-closure',cohort:'media-library',selection},{scope:'core-closure',cohort:'media-recovery',selection:'invented'}])assert.throws(()=>validateCoreJourneySelection(input));assert.throws(()=>coreSelectedMediaRecoveryGroups('invented'));assert.throws(()=>coreSelectedMediaRecoveryIds(null));});
+ function selectedFixture(){const canonical=structuredClone(requiredCases),browser={scope:'core-closure',cohort:'media-recovery',journeySelection:selection,selectedJourneyIds:[...selected],executedJourneyIds:[...selected],status:'pass',driverCompleted:true,inventoryOnly:false,wholeCohortExecuted:false,globalClosed:false,errors:[],requiredCases:canonical.map(row=>({...row,status:'open',evidence:null})),evidence:[{id:'existing-auth-login',status:'pass',authenticated:true},...selected.map(id=>({id,status:'pass',coverage:[]}))]};return{browser,canonical};}
+ await test('Media selected receipt joins raw and decorated canonical inventories without credit',()=>{const f=selectedFixture();for(const canonical of[f.canonical,f.browser.requiredCases]){const out=assertCoreMediaRecoverySelectionReceipt(f.browser,canonical);assert.equal(out.retainedThreeReplayed,false);assert.deepEqual(out.automaticCoverage,[]);assert.equal(out.globalClosed,false);}});
+ for(const[name,mutate]of Object.entries({
+  'retained-prepare-replay':f=>{f.browser.evidence.push({id:'core-media-recovery-prepare',status:'pass',coverage:[]});},
+  'missing-operation':f=>f.browser.evidence.pop(),
+  'reordered-operation':f=>{f.browser.executedJourneyIds.reverse();},
+  'failed-operation':f=>{f.browser.evidence[1].status='fail';},
+  'automatic-axis-credit':f=>{f.browser.evidence[1].coverage.push('unproven');},
+  'missing-auth':f=>{f.browser.evidence.shift();},
+  'not-authenticated':f=>{f.browser.evidence[0].authenticated=false;},
+  'whole-cohort-credit':f=>{f.browser.wholeCohortExecuted=true;},
+  'global-credit':f=>{f.browser.globalClosed=true;},
+  'unfinished-driver':f=>{f.browser.driverCompleted=false;},
+  'extra-error':f=>{f.browser.errors.push({id:'failed'});},
+  'case-promoted':f=>{f.browser.requiredCases[0].status='behavior_verified';},
+  'case-evidence':f=>{f.browser.requiredCases[0].evidence='invented';},
+  'case-identity':f=>{f.browser.requiredCases[0].key='foreign';},
+  'missing-case':f=>{f.browser.requiredCases.pop();},
+  'duplicate-canonical-case':f=>{f.canonical.push({...f.canonical[0]});f.browser.requiredCases.push({...f.browser.requiredCases[0]});},
+  'canonical-promotion':f=>{Object.assign(f.canonical[0],{status:'behavior_verified',evidence:null});},
+  'unexpected-case-field':f=>{f.browser.requiredCases[0].unregistered=true;}
+ })){await test('Media followup receipt rejects '+name,()=>{const f=selectedFixture();mutate(f);assert.throws(()=>assertCoreMediaRecoverySelectionReceipt(f.browser,f.canonical));});}
 }
 
 console.log(JSON.stringify({status:"pass",controls:checks.length,checks,canonicalRequiredCases:requiredCases.length,selectedJourneyIds:ids,applicationBrowserExecuted:false,nativeDatabaseExecuted:false}));

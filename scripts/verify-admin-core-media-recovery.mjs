@@ -3,14 +3,16 @@ import { randomUUID, createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import ts from "typescript";
+import {pathToFileURL} from "node:url";
+import {resolve} from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { assertCoreRecoveryReservationAge, createCoreRecoveryQueueReadFault, assertCoreRecoveryReceipt, assertCoreRecoveryAudit, assertCoreRecoveryDomainUnchanged, assertCoreRecoveryQueue } from "./fixtures/admin-core-media-recovery-journeys.mjs";
 
 const require = createRequire(import.meta.url), checks = [];
 const check = async (name, execute) => { await execute(); checks.push({ name, status: "pass" }); };
 const path = "scripts/verify-admin-core-media-recovery-isolated.mts";
-const compiled = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-function fixture(changes = {}) {
+const compiled = ts.transpileModule(readFileSync(path, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true }, transformers:{before:[context=>{const visit=node=>ts.isMetaProperty(node)&&node.keywordToken===ts.SyntaxKind.ImportKeyword?context.factory.createIdentifier("__controlledImportMeta"):ts.visitEachChild(node,visit,context);return node=>ts.visitNode(node,visit);}]}}).outputText;
+function fixture(changes = {}, selection = null) {
   const faults = { ...changes }, timers = new Map(), statements = [], signatures = [];
   let nextPid = 100, cancels = 0, active = 0, rollbacks = 0, ended = false, storageCandidates = 0;
   const namespace = "qa-core-media-0123456789abcdef", assetIds = ["lease", "finalize", "missing", "cancel"].map(() => randomUUID());
@@ -55,15 +57,22 @@ function fixture(changes = {}) {
     try { const execution = execute({ query: (sql, params) => query(sql, params, pid) }); return await (pid === 101 ? Promise.race([execution, disconnected]) : execution); } finally { active--; }
   }};
   const loaded = { exports: {} };
-  new Function("require", "module", "exports", "setTimeout", "clearTimeout", compiled)((name) => {
+  new Function("require", "module", "exports", "setTimeout", "clearTimeout", "__controlledImportMeta", compiled)((name) => {
     if (name === "./lib/isolated-supabase.mts") return { assertOwnedLocalHandle: value => { assert.equal(value, handle); assert.equal(ended, false); } };
     if (name === "./verify-admin-core-media-isolated.mts") return { readCoreMediaCheckpoint: async () => structuredClone(media) };
     assert.ok(["node:assert/strict", "node:crypto"].includes(name)); return require(name);
-  }, loaded, loaded.exports, (callback, milliseconds) => { if (milliseconds === 60000) { const id = randomUUID(); timers.set(id, callback); return id; } return setTimeout(callback, milliseconds); }, id => { if (timers.has(id)) timers.delete(id); else clearTimeout(id); });
-  const broker = loaded.exports.createOwnedCoreMediaRecoveryProof(handle), token = randomUUID();
+  }, loaded, loaded.exports, (callback, milliseconds) => { if (milliseconds === 60000) { const id = randomUUID(); timers.set(id, callback); return id; } return setTimeout(callback, milliseconds); }, id => { if (timers.has(id)) timers.delete(id); else clearTimeout(id); }, {url:pathToFileURL(resolve(path)).href});
+  const broker = loaded.exports.createOwnedCoreMediaRecoveryProof(handle, selection), token = randomUUID();
   return { broker, faults, statements, signatures, media, request: (step, scenario = "lease", change = {}) => broker.handleRequest({ id: randomUUID(), kind: "media-recovery-fault-" + step, scenario, token, ...change }),
     disconnect, counts: () => ({ active, cancels, rollbacks }), expire: () => { for (const callback of [...timers.values()]) callback(); }, end: () => { ended = true; } };
 }
+
+await check('followup-refuses-state-and-fault-before-actual-prerequisite',async()=>{const f=fixture({},'media-recovery-followup');await assert.rejects(f.broker.handleRequest({id:randomUUID(),kind:'media-recovery-state'}));await assert.rejects(f.request('arm','cancel'));assert.deepEqual(f.counts(),{active:0,cancels:0,rollbacks:0});await f.broker.close();});
+await check('default-producer-rejects-followup-setup',async()=>{const f=fixture();await assert.rejects(f.broker.handleRequest({id:randomUUID(),kind:'media-recovery-followup-prepare'}));assert.deepEqual(f.counts(),{active:0,cancels:0,rollbacks:0});await f.broker.close();});
+await check('followup-setup-rejects-caller-selected-payload',async()=>{const f=fixture({},'media-recovery-followup');await assert.rejects(f.broker.handleRequest({id:randomUUID(),kind:'media-recovery-followup-prepare',articleId:91}));await f.broker.close();});
+await check('failed-actual-prerequisite-is-one-shot-and-cannot-unlock-followup',async()=>{const f=fixture({},'media-recovery-followup');const request=()=>({id:randomUUID(),kind:'media-recovery-followup-prepare'});await assert.rejects(f.broker.handleRequest(request()));await assert.rejects(f.broker.handleRequest(request()),/one-shot/u);await assert.rejects(f.request('arm','finalize'));assert.equal(f.counts().active,0);await f.broker.close();});
+await check('unknown-followup-selector-rejected',()=>assert.throws(()=>fixture({},'unregistered')));
+
 for (const scenario of ["lease", "finalize", "missing", "cancel"]) await check("actual-producer-" + scenario, async () => {
   const f = fixture(); await f.request("arm", scenario);
   if (scenario !== "lease") await f.request("switch", scenario);

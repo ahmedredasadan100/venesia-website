@@ -28,8 +28,8 @@ export async function runOwnedAdminCoreNativeControl<T>(handle: OwnedLocalHandle
   assertOwnedLocalHandle(handle);
   const fixtures = JSON.parse(readFileSync(join(artifactDir, "admin-adoption-fixtures.json"), "utf8"));
   const faults = fixtures.commandClosure ? createOwnedCoreDomainWriteFaults(handle, fixtures) : null;
-  const mediaRecovery=fixtures.mediaRecovery===true?createOwnedCoreMediaRecoveryProof(handle):null;
-  const recoveryKinds=["media-recovery-state","media-recovery-fault-arm","media-recovery-fault-switch","media-recovery-fault-cancel","media-recovery-fault-release"];
+  const mediaRecovery=fixtures.mediaRecovery===true?createOwnedCoreMediaRecoveryProof(handle,fixtures.mediaRecoverySelection??null):null;
+  const recoveryKinds=[...(fixtures.mediaRecoverySelection==="media-recovery-followup"?["media-recovery-followup-prepare"]:[]),"media-recovery-state","media-recovery-fault-arm","media-recovery-fault-switch","media-recovery-fault-cancel","media-recovery-fault-release"];
   const faultKinds = ["domain-write-fault-arm", "domain-write-fault-cancel", "domain-write-fault-release", "domain-write-fault-observe-blocked"];
   const processed = new Set<string>();
   const records: Array<Record<string, unknown>> = [];

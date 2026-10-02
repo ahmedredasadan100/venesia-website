@@ -42,7 +42,8 @@ assert.throws(() => new Function(legacyMetadata), SyntaxError);
 checks.push('legacy-CommonJS-loader-rejects-the-same-valid-ESM-metadata');
 const media=compile('verify-admin-core-media-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own}},'exports.__seed=(h,r)=>checkpointReceipts.set(h,new Map(r.map(x=>[String(x.id),hash(JSON.stringify(x))])));');
 const recovery=compile('verify-admin-core-media-recovery-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own}},'exports.__seed=(h,r,c)=>completionReceipts.set(h,{records:new Map(r.map(x=>[String(x.id),receiptHash(x)])),cleanup:receiptHash(c)});');
-const aggregate=compile('verify-admin-adoption-readback-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery});
+const recoverySelection=compile('fixtures/admin-core-media-recovery-journeys.mjs');
+const aggregate=compile('verify-admin-adoption-readback-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery,'./fixtures/admin-core-media-recovery-journeys.mjs':recoverySelection});
 const mediaGroups=['readiness','folders','upload-validation-retry','catalog-query','metadata-failure-retry','preview','picker-use','in-use-delete','physical-move','replace-references','detach-delete','permission'];
 const recoveryGroups=['prepare','queue-fetch-retry','committed-lease-warning','resolve-lease','produce-existing-object-reservation','produce-finalize','repair-finalize','produce-missing','repair-missing','repair-existing-object-reservation','permission'];
 function sourceGroups(file) {const source=fs.readFileSync(file,'utf8'),ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),groups=[];
@@ -56,13 +57,14 @@ const actualCheckpointProducers=[checkpointProducer('scripts/fixtures/admin-core
 function checkpointShape(isRecovery,row,label){return actualCheckpointProducers[Number(isRecovery)](label,row);}
 for(const isRecovery of [false,true]){const id=crypto.randomUUID(),row=checkpointShape(isRecovery,{id},'controlled');assert.deepEqual(row,isRecovery?{label:'controlled',id}:{label:'controlled',receiptId:id});checks.push((isRecovery?'recovery':'media')+'-receipt-shape-executed-from-actual-snapshot-producer');}
 
-function fixture(isRecovery=false){const handle={identity:{runId:'owned-control-run'}};active.add(handle);const groups=isRecovery?recoveryGroups:mediaGroups,kind=isRecovery?'media-recovery-state':'media-library-state',consumer=isRecovery?'media-recovery-queue':'media-library',field=isRecovery?'name':'group',prefix=isRecovery?'core-media-recovery-':'core-media-';
+function fixture(isRecovery=false,followup=false){assert.ok(!followup||isRecovery);const handle={identity:{runId:'owned-control-run'}};active.add(handle);const groups=isRecovery?(followup?recoverySelection.coreSelectedMediaRecoveryGroups(recoverySelection.CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION):recoveryGroups):mediaGroups,kind=isRecovery?'media-recovery-state':'media-library-state',consumer=isRecovery?'media-recovery-queue':'media-library',field=isRecovery?'name':'group',prefix=isRecovery?'core-media-recovery-':'core-media-';
 const completed=groups.map(name=>({[field]:name,consumer,automaticCoverage:[],asserted:true}));
 const states=[0,1].map(()=>({id:crypto.randomUUID(),kind,status:'pass',ownedRunId:handle.identity.runId,namespace:'qa-core-media-0123456789abcdef',qaActorId:7,articleId:91,automaticCoverage:[]}));
-const faults=[];if(isRecovery)for(const scenario of ['lease','cancel','finalize','missing']){const token=crypto.randomUUID();for(const step of scenario==='lease'?['arm','cancel','release']:['arm','switch','cancel','release'])faults.push({id:crypto.randomUUID(),kind:'media-recovery-fault-'+step,status:'pass',scenario,token,...(step==='release'?{activeLocks:0,ownedTransactionsRolledBack:true,cancellationAcknowledged:true}:{})});}
-const native={status:'pass',records:[...states,...faults]},cleanup=isRecovery?{status:'closed',activeLocks:0,records:faults,automaticCoverage:[]}:undefined;
-const result={completed,checkpoints:states.map((r,i)=>checkpointShape(isRecovery,r,'checkpoint-'+i)),automaticCoverage:[],globalClosed:false};
-const browser={status:'pass',driverCompleted:true,errors:[],scope:'core-closure',cohort:isRecovery?'media-recovery':'media-library',evidence:completed.map(r=>({id:prefix+r[field],status:'pass',coverage:[],...r})),[isRecovery?'mediaRecovery':'media']:result};
+const faults=[];if(isRecovery)for(const scenario of (followup?['cancel','finalize','missing']:['lease','cancel','finalize','missing'])){const token=crypto.randomUUID();for(const step of scenario==='lease'?['arm','cancel','release']:['arm','switch','cancel','release'])faults.push({id:crypto.randomUUID(),kind:'media-recovery-fault-'+step,status:'pass',scenario,token,...(step==='release'?{activeLocks:0,ownedTransactionsRolledBack:true,cancellationAcknowledged:true}:{})});}
+const prerequisite=followup?{id:crypto.randomUUID(),kind:'media-recovery-followup-prepare',status:'pass',ownedRunId:handle.identity.runId,namespace:states[0].namespace,qaActorId:states[0].qaActorId,articleId:states[0].articleId,selection:recoverySelection.CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,purpose:'uncredited-owned-fixture-prerequisite',uiCredit:false,automaticCoverage:[],globalClosed:false}:undefined;
+const native={status:'pass',records:[...(prerequisite?[prerequisite]:[]),...states,...faults]},cleanup=isRecovery?{status:'closed',activeLocks:0,records:faults,automaticCoverage:[]}:undefined;
+const result={...(prerequisite?{prerequisite}:{}),completed,checkpoints:states.map((r,i)=>checkpointShape(isRecovery,r,'checkpoint-'+i)),automaticCoverage:[],globalClosed:false};
+const browser={...(followup?{journeySelection:recoverySelection.CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION}:{}),status:'pass',driverCompleted:true,errors:[],scope:'core-closure',cohort:isRecovery?'media-recovery':'media-library',evidence:completed.map(r=>({id:prefix+r[field],status:'pass',coverage:[],...r})),[isRecovery?'mediaRecovery':'media']:result};
 if(isRecovery)recovery.__seed(handle,native.records,cleanup);else media.__seed(handle,native.records);
 return {handle,browser,native,cleanup,result,check:()=>aggregate.assertCoreMediaCompletionReceipts(handle,browser,native,cleanup)};}
 for(const isRecovery of [false,true]){const label=isRecovery?'recovery':'media';let f=fixture(isRecovery),r=f.check();assert.deepEqual(r.automaticCoverage,[]);assert.equal(r.globalClosed,false);assert.deepEqual(r.binding.automaticCoverage,[]);checks.push(label+'-positive-exact-controlled-join');
@@ -101,7 +103,31 @@ if(isRecovery)Object.assign(negatives,{
 });
 for(const [name,mutate]of Object.entries(negatives)){f=fixture(isRecovery);mutate(f);assert.throws(f.check,name);checks.push(label+'-'+name);}}
 
+
+// The actual new selector skips the three retained UI groups; setup is private prerequisite only.
+{const f=fixture(true,true),r=f.check();assert.deepEqual(r.groups,recoveryGroups.slice(3));assert.equal(r.binding.checkpoints,15);assert.equal(r.nativeCheckpoints,2);assert.deepEqual(r.automaticCoverage,[]);assert.equal(r.globalClosed,false);checks.push('followup-eight-actual-private-join-keeps-setup-uncredited');}
+for(const[name,mutate]of Object.entries({
+ 'missing-setup':f=>f.native.records.shift(),
+ 'duplicate-setup':f=>f.native.records.unshift({...f.native.records[0]}),
+ 'late-setup':f=>{const x=f.native.records.shift();f.native.records.splice(1,0,x);},
+ 'missing-browser-prerequisite':f=>{delete f.result.prerequisite;},
+ 'forged-prerequisite':f=>{f.result.prerequisite={...f.result.prerequisite,qaActorId:99};},
+ 'foreign-actor':f=>{f.native.records[1].qaActorId=99;},
+ 'foreign-article':f=>{f.native.records[1].articleId=99;},
+ 'foreign-namespace':f=>{f.native.records[1].namespace='foreign';},
+ 'setup-ui-credit':f=>{f.result.prerequisite.uiCredit=true;},
+ 'setup-coverage-credit':f=>{f.result.prerequisite.automaticCoverage.push('forbidden');},
+ 'setup-global-closed':f=>{f.result.prerequisite.globalClosed=true;},
+ 'retained-group-replay':f=>{f.result.completed.unshift({name:'prepare'});},
+ 'retained-lease-fault-replay':f=>{const row={...f.cleanup.records[0],id:crypto.randomUUID(),scenario:'lease'};f.native.records.push(row);f.cleanup.records.push(row);},
+ 'missing-fault':f=>{f.native.records.pop();f.cleanup.records.pop();},
+ 'unknown-native-record':f=>{const row={id:crypto.randomUUID(),kind:'foreign'};f.native.records.push(row);f.cleanup.records.push(row);},
+ 'unknown-selector':f=>{f.browser.journeySelection='invented';},
+ 'selector-missing-after-setup':f=>{delete f.browser.journeySelection;},
+ 'copied-unregistered-handle':f=>{f.handle={identity:f.handle.identity};active.add(f.handle);f.check=()=>aggregate.assertCoreMediaCompletionReceipts(f.handle,f.browser,f.native,f.cleanup);}
+})){const f=fixture(true,true);mutate(f);assert.throws(f.check,name);checks.push('followup-eight-'+name);}
+
 const canonicalAggregateSource=fs.readFileSync(path.join(sourceDirectory,'verify-admin-adoption-readback-isolated.mts'),'utf8'),currentField='const checkpointField = recovery ? "id" : "receiptId";';assert.equal(canonicalAggregateSource.split(currentField).length,2);
-const oldAggregate=compileSource(canonicalAggregateSource.replace(currentField,'const checkpointField = "id";'),path.join(sourceDirectory,'verify-admin-adoption-readback-isolated.mts'),{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery});const actualLibraryReceipt=fixture(false),actualRecoveryReceipt=fixture(true);assert.throws(()=>oldAggregate.assertCoreMediaCompletionReceipts(actualLibraryReceipt.handle,actualLibraryReceipt.browser,actualLibraryReceipt.native));assert.equal(oldAggregate.assertCoreMediaCompletionReceipts(actualRecoveryReceipt.handle,actualRecoveryReceipt.browser,actualRecoveryReceipt.native,actualRecoveryReceipt.cleanup).binding.checkpoints,actualRecoveryReceipt.native.records.length);checks.push('old-id-only-assumption-rejects-actual-library-producer-but-preserves-recovery');
+const oldAggregate=compileSource(canonicalAggregateSource.replace(currentField,'const checkpointField = "id";'),path.join(sourceDirectory,'verify-admin-adoption-readback-isolated.mts'),{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery,'./fixtures/admin-core-media-recovery-journeys.mjs':recoverySelection});const actualLibraryReceipt=fixture(false),actualRecoveryReceipt=fixture(true);assert.throws(()=>oldAggregate.assertCoreMediaCompletionReceipts(actualLibraryReceipt.handle,actualLibraryReceipt.browser,actualLibraryReceipt.native));assert.equal(oldAggregate.assertCoreMediaCompletionReceipts(actualRecoveryReceipt.handle,actualRecoveryReceipt.browser,actualRecoveryReceipt.native,actualRecoveryReceipt.cleanup).binding.checkpoints,actualRecoveryReceipt.native.records.length);checks.push('old-id-only-assumption-rejects-actual-library-producer-but-preserves-recovery');
 
 const sources=['verify-admin-core-media-isolated.mts','verify-admin-core-media-recovery-isolated.mts','verify-admin-adoption-readback-isolated.mts'];const result={status:'pass',count:checks.length,checks,sourceSha256:Object.fromEntries(sources.map(p=>["scripts/"+p,hash(fs.readFileSync(path.join(sourceDirectory,p)))])),helperSources:Object.fromEntries(['scripts/fixtures/admin-core-media-journeys.mjs','scripts/fixtures/admin-core-media-recovery-journeys.mjs'].map(p=>[p,hash(fs.readFileSync(p))])),boundary:'Actual canonical aggregate and private receipt-completion functions, executed with controlled ports and test-only private capture setup. No native database/browser proof or capability coverage.',automaticCoverage:[],globalClosed:false};const output=path.resolve('.tmp-qa/core-final-closure/media-completion-controls.json');fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify({status:result.status,count:result.count}));

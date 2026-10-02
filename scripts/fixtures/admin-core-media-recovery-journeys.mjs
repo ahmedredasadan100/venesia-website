@@ -4,7 +4,15 @@ import { createHash, randomUUID } from "node:crypto";
 import { createJiti } from "jiti";
 import { expect, request as http } from "playwright/test";
 import { registerCorePageRoute } from "./admin-core-form-permission-context.mjs";
-import { matchesCoreMediaResponse, assertCoreMediaAsset } from "./admin-core-media-journeys.mjs";
+import { coreMediaSyntheticPng, matchesCoreMediaResponse, assertCoreMediaAsset } from "./admin-core-media-journeys.mjs";
+
+
+export const CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION='media-recovery-followup';
+export const CORE_MEDIA_RECOVERY_GROUPS=Object.freeze(['prepare','queue-fetch-retry','committed-lease-warning','resolve-lease','produce-existing-object-reservation','produce-finalize','repair-finalize','produce-missing','repair-missing','repair-existing-object-reservation','permission']);
+/** @param {string|null} selection */
+export function coreSelectedMediaRecoveryGroups(selection=null){assert.ok(selection===null||selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION);return selection===null?[...CORE_MEDIA_RECOVERY_GROUPS]:CORE_MEDIA_RECOVERY_GROUPS.slice(3);}
+export function coreSelectedMediaRecoveryIds(selection){assert.equal(selection,CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION);return coreSelectedMediaRecoveryGroups(selection).map(name=>'core-media-recovery-'+name);}
+export function assertCoreMediaRecoverySelectionReceipt(browser,requiredCases){const ids=coreSelectedMediaRecoveryIds(browser.journeySelection);assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'media-recovery');assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.errors,[]);const expectedCases=requiredCases.map(row=>{if(Object.hasOwn(row,'status')||Object.hasOwn(row,'evidence')){assert.equal(row.status,'open');assert.equal(row.evidence,null);}return{...row,status:'open',evidence:null};});assert.equal(new Set(expectedCases.map(row=>row.key)).size,expectedCases.length);assert.deepEqual(browser.requiredCases,expectedCases);assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);const login=browser.evidence.filter(r=>r.id==='existing-auth-login');assert.equal(login.length,1);assert.equal(login[0].status,'pass');assert.equal(login[0].authenticated,true);const rows=browser.evidence.filter(r=>r.id!=='existing-auth-login');assert.deepEqual(rows.map(r=>r.id),ids);assert.ok(rows.every(r=>r.status==='pass'&&r.coverage.length===0));return{status:'pass',selection:browser.journeySelection,selectedJourneyIds:ids,executedJourneyIds:ids,retainedThreeReplayed:false,automaticCoverage:[],wholeCohortExecuted:false,globalClosed:false};}
 
 const endpoint = "/api/admin/media-library/recovery";
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=", "base64");
@@ -76,6 +84,7 @@ export function assertCoreRecoveryQueue(queue, state) {
 export async function runCoreMediaRecoveryJourneys(ctx) {
   const { page, origin, fixtures, run, observe, recoveryCheckpoint, requiredCases, actionResponse, assertActionAcknowledged } = ctx;
   assert.equal(new URL(origin).origin, origin); assert.equal(new URL(origin).hostname, "127.0.0.1"); assert.equal(typeof recoveryCheckpoint, "function");
+  const selection=ctx.journeySelection??null;coreSelectedMediaRecoveryGroups(selection);assert.equal(fixtures.mediaRecoverySelection??null,selection);
   const fixture = fixtures.mediaClosure; assert.ok(fixture?.namespaceUnique && fixture.maximumAssets === 13);
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_COLLECTION_SURFACE_ADOPTION } = await jiti.import("../../src/lib/admin/interaction-system/adoption-manifest.ts");
@@ -92,7 +101,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
   const imageField = () => page.locator('[data-admin-media-image-field="image"]');
   const assetButton = (owner, name) => owner.locator("button[aria-pressed]").filter({ has: page.getByText(name, { exact: true }) });
   const specimens = [], completed = [], checkpoints = [], verifiedActions = new Set(), acceptedFeedback=[];
-  let pendingCancellation;
+  let pendingCancellation,prerequisite;
   async function snapshot(label) {
     const request = { id: randomUUID(), kind: "media-recovery-state" };
     const value = await observe("recovery-native-" + label, () => recoveryCheckpoint(request));
@@ -222,6 +231,15 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
   const group = (name, execute) => run("core-media-recovery-" + name, [], execute);
   const done = (name, fields) => { const result = { name, consumer: "media-recovery-queue", ...fields, automaticCoverage: [] }; completed.push(result); return result; };
   try {
+    if(selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION){
+      // Official authenticated API setup only; none of the retained three UI operations receives credit.
+      const call=async (options,status)=>{const response=await page.request.post(origin+'/api/admin/media-library',{...options,maxRedirects:0,timeout:60_000});try{assert.equal(response.status(),status);const data=await response.json();assert.equal(data.error,undefined);return data;}finally{await response.dispose();}};
+      for(const dryRun of[true,false]){const data=await call({data:{operation:'reconcile',dryRun}},200);assert.equal(data.dryRun,dryRun);assert.equal(data.complete,true);}
+      const folder='images/'+fixture.namespace,created=await call({data:{operation:'create_folder',folder,displayName:fixture.namespace}},201);assert.equal(created.created,true);assert.equal(created.folder.path,folder);assert.equal(created.folder.displayName,fixture.namespace);const apiAssets=[];
+      const bytes=coreMediaSyntheticPng();for(const role of['lease','finalize','missing','cancel']){const uploaded=await call({multipart:{file:{name:fixture.namespace+'-'+role+'.png',mimeType:'image/png',buffer:bytes},folder,kind:'image'}},201);assert.match(uploaded.asset.id,/^[a-f0-9-]{36}$/iu);assert.equal(uploaded.asset.displayName,fixture.namespace+'-'+role+'.png');assert.equal(uploaded.asset.folderPath,folder);assert.equal(uploaded.asset.catalogRegistered,true);apiAssets.push(uploaded.asset);}
+      const request={id:randomUUID(),kind:'media-recovery-followup-prepare'};prerequisite=await observe('recovery-uncredited-owned-prerequisite',()=>recoveryCheckpoint(request));assert.equal(prerequisite.id,request.id);assert.equal(prerequisite.kind,request.kind);assert.equal(prerequisite.status,'pass');assert.equal(prerequisite.namespace,fixture.namespace);assert.equal(prerequisite.articleId,fixture.article.id);assert.equal(prerequisite.selection,selection);assert.equal(prerequisite.uiCredit,false);assert.equal(prerequisite.purpose,'uncredited-owned-fixture-prerequisite');assert.equal(prerequisite.globalClosed,false);assert.deepEqual(prerequisite.automaticCoverage,[]);
+      assert.equal(new Set(apiAssets.map(a=>a.id)).size,4);assert.equal(prerequisite.assets.length,4);for(const actual of apiAssets){const rows=prerequisite.assets.filter(a=>a.id===actual.id);assert.equal(rows.length,1);for(const [api,db]of Object.entries({id:'id',provider:'provider',bucket:'bucket',objectKey:'object_key',publicUrl:'public_url',originalFilename:'original_filename',displayName:'display_name',kind:'media_kind',mimeType:'mime_type',sizeBytes:'byte_size',width:'width',height:'height',checksum:'checksum',folderPath:'folder_path',status:'status',uploadedBy:'uploaded_by',reconciliationState:'reconciliation_state',missingObject:'missing_object'})){const value=rows[0][db],expected=['sizeBytes','width','height','uploadedBy'].includes(api)&&value!==null?Number(value):value;if(typeof expected==='number')assert.ok(Number.isSafeInteger(expected));assert.deepEqual(actual[api],expected);}}
+    }else{
     await group("prepare", async () => {
       const before = await snapshot("initial"), initial = await settings();
       assert.equal(assertCoreRecoveryQueue(initial, before).length, 0);
@@ -298,6 +316,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       await expect(card(lease).getByRole("button", { name: labels.resolve_write_lease, exact: true })).toHaveCount(0);
       return done("committed-lease-warning", { domainCommit: true, warning: true, unresolvedLease: true, resolutionBeforeReconciliationBlocked: true });
     });
+    }
     await group("resolve-lease", async () => {
       await reconcile();
       const before = await snapshot("lease-reconciled"), queue = await refresh();
@@ -428,6 +447,6 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       return done("permission", { actualCookieFreeAuthBoundary: true, unchangedAllPublicAndStorage: true, uiDenialClaim: false });
     });
   } finally { for (const specimen of specimens) specimen.body.fill(0); }
-  return { acceptedFeedback, completed, checkpoints, relatedRequiredCases, automaticCoverage: [], globalClosed: false,
+  return { acceptedFeedback, completed, checkpoints, relatedRequiredCases, ...(selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION?{prerequisite}:{}), automaticCoverage: [], globalClosed: false,
     open: ["Active expired lease, queue truncation and missing-schema branches are not proved by these cases."] };
 }

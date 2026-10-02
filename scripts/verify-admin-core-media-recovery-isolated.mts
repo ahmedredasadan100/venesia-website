@@ -21,7 +21,8 @@ const completionReceipts = new WeakMap<OwnedLocalHandle, { records: Map<string, 
 const receiptHash = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 /** Fixed server-registered synthetic Media fixture; no caller-selected SQL or resource identity. */
-export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
+export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle, selection: string | null = null) {
+  assert.ok(selection === null || selection === "media-recovery-followup");
   assertOwnedLocalHandle(handle);
   assert.equal(completionReceipts.has(handle), false, "One Recovery producer per owned lifecycle.");
   const completion = { records: new Map<string, string>(), cleanup: null as string | null };
@@ -31,6 +32,7 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
     completion.records.set(id, receiptHash(record)); return record;
   };
   let live: Live | undefined, closed = false, cleanupFailure: unknown;
+  let setupStarted = false, setupCompleted = false;
   const used = new Set<string>(), records: Row[] = [];
   async function state() {
     const media = await readCoreMediaCheckpoint(handle, { id: randomUUID(), kind: "media-library-state" });
@@ -192,15 +194,99 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle) {
     current.phase = "cancelled";
     return { status: "pass", phase: current.phase, assetId: current.assetId, ...proof, domainCommitVerified: current.scenario === "lease" };
   }
+  async function prepareFollowup(): Promise<Row> {
+    assert.equal(selection, "media-recovery-followup");
+    assert.equal(setupStarted, false, "The uncredited prerequisite is one-shot, including failures.");
+    assert.equal(live, undefined); assert.equal(used.size, 0); setupStarted = true;
+    const before = await state();
+    assert.equal(before.assets.length, 4); assert.equal(before.references.length, 0);
+    assert.equal(before.leases.length, 0); assert.equal(before.reservations.length, 0);
+    const { createJiti } = await import("jiti");
+    const { resolve } = await import("node:path");
+    const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false, alias: { "server-only": resolve("node_modules/next/dist/compiled/server-only/empty.js") } });
+    const storage = await jiti.import<typeof import("../src/lib/admin/media-storage-adapter.ts")>("../src/lib/admin/media-storage-adapter.ts");
+    const providers = await jiti.import<typeof import("../src/lib/admin/media-catalog/reference-providers.ts")>("../src/lib/admin/media-catalog/reference-providers.ts");
+    const routes = await jiti.import<typeof import("../src/lib/content/public-content-path.ts")>("../src/lib/content/public-content-path.ts");
+    const { loadEntitySeoPersistenceOwner } = await import("./backfill-entity-seo-scores.mts");
+    const { coreMediaSyntheticPng } = await import("./fixtures/admin-core-media-journeys.mjs");
+    const seo = loadEntitySeoPersistenceOwner(), expectedChecksum = createHash("sha256").update(coreMediaSyntheticPng()).digest("hex");
+    const response = await handle.readDataApi("/rest/v1/media_assets?select=id&limit=1");
+    let origin: string;
+    try {
+      assert.equal(response.ok, true); const url = new URL(response.url);
+      assert.equal(url.protocol, "http:"); assert.equal(url.hostname, "127.0.0.1"); assert.ok(url.port);
+      assert.equal(url.pathname, "/rest/v1/media_assets"); assert.equal(url.username + url.password, ""); origin = url.origin;
+    } finally { await response.body?.cancel(); }
+    const context = storage.resolveMediaStorageRuntimeContext({ NODE_ENV: "production", NEXT_PUBLIC_SUPABASE_URL: origin });
+    const registryVersion = providers.MEDIA_REFERENCE_PROVIDER_REGISTRY_VERSION, runtime = before.runtime as Row;
+    assert.ok(context.identity); assert.equal(runtime.state, "synced"); assert.deepEqual(runtime.warnings, []);
+    for (const [key, value] of Object.entries({ provider: context.provider, environment: context.environment, environmentKey: context.identity, providerRegistryVersion: registryVersion })) assert.equal(runtime[key], value);
+    assert.ok(runtime.lastSuccessfulReconciliationRunIdentity); assert.ok(Number.isFinite(Date.parse(String(runtime.lastSuccessfulReconciliationAt))));
+    for (const key of ["storageAssetCount", "catalogAssetCount"]) assert.ok(Number.isSafeInteger(runtime[key]) && Number(runtime[key]) >= 0);
+    assert.equal(runtime.storageAssetCount, runtime.catalogAssetCount);
+    const roles = ["lease", "finalize", "missing", "cancel"];
+    for (const role of roles) {
+      const rows = before.assets.filter(row => row.display_name === before.namespace + "-" + role + ".png"); assert.equal(rows.length, 1);
+      const asset = rows[0]; assert.equal(asset.status, "active"); assert.equal(asset.missing_object, false);
+      assert.equal(asset.bucket, "cms-images"); assert.equal(asset.provider, context.provider); assert.equal(Number(asset.uploaded_by), before.qaActorId);
+      assert.equal(asset.folder_path, "images/" + before.namespace); assert.equal(asset.checksum, expectedChecksum);
+      assert.equal(before.objects.filter(row => row.bucket_id === asset.bucket && row.name === asset.object_key).length, 1);
+      const binaries = before.binaries.filter(row => row.publicUrl === asset.public_url); assert.equal(binaries.length, 1);
+      assert.equal(binaries[0].status, 200); assert.equal(binaries[0].sha256, expectedChecksum);
+    }
+    const asset = before.assets.find(row => row.display_name === before.namespace + "-lease.png")!;
+    const originals = (await handle.query("select * from public.topics where id=$1 and slug='qa-core-media-article' and content_type='article' and status='unpublished' and deleted_at is null", [before.articleId])).rows;
+    assert.equal(originals.length, 1); const original = originals[0]; assert.equal(original.image, "");
+    assert.deepEqual(providers.extractMediaCandidateValues([original.image, original.excerpt, original.content, original.media_payload, original.og_image]), [], "Never drop any preexisting media candidate from the fixture.");
+    assert.equal((await handle.query("select id from public.media_references where domain_key='topics' and entity_type='topic' and entity_identity=$1", [String(before.articleId)])).rows.length, 0);
+    const finalRow = { ...original, title: committedTitle, image: asset.public_url } as Row & import("../src/lib/admin/seo/entity-seo-persistence.ts").TopicSeoSource;
+    const tuple = seo.deriveEntitySeoScore(seo.toTopicSeoScoreInput(finalRow)); Object.assign(finalRow, tuple);
+    const targets = [{ provider: asset.provider, bucket: asset.bucket, objectKey: asset.object_key, domainKey: "topics", entityType: "topic", entityIdentity: String(before.articleId) }];
+    const requestIdentity = "qa-recovery-prerequisite:" + handle.identity.runId; assert.ok(requestIdentity.length <= 160);
+    const leases = (await handle.query("select * from public.acquire_media_reference_write_lease($1::jsonb,$2::bigint,$3::text,180,$4::text,$5::text,$6::text,$7::text)", [JSON.stringify(targets), before.qaActorId, requestIdentity, context.provider, context.environment, context.identity, registryVersion])).rows;
+    assert.equal(leases.length, 1); const acquired = leases[0]; assert.match(String(acquired.lease_token), UUID); assert.equal(Number(acquired.leased_asset_count), 1);
+    for (const key of ["lease_started_at", "lease_expires_at"]) assert.ok(Number.isFinite(new Date(String(acquired[key])).valueOf()));
+    const reference = { assetId: asset.id, entityType: "topic", entityIdentity: String(before.articleId), entityLabel: finalRow.title, fieldKey: "image", editHref: "/admin/content/topics/" + before.articleId, publicHref: routes.resolvePublicContentPath("article", String(finalRow.slug)), referenceState: "draft", restorable: false, metadata: {} };
+    await handle.withDatabaseConnection(async connection => {
+      await connection.query("begin"); let committed = false;
+      try {
+        await connection.query("set local statement_timeout='15000ms'");
+        const locked = (await connection.query("select * from public.topics where id=$1 for update", [before.articleId])).rows;
+        assert.deepEqual(locked, [original]);
+        const updated = (await connection.query("update public.topics set title=$2,image=$3,seo_score=$4,seo_score_version=$5,seo_score_input_hash=$6 where id=$1 returning *", [before.articleId, finalRow.title, finalRow.image, tuple.seo_score, tuple.seo_score_version, tuple.seo_score_input_hash])).rows;
+        assert.deepEqual(updated, [finalRow]);
+        const replaced = (await connection.query("select public.replace_media_references_for_entity('topics','topic',$1::text,$2::jsonb,$3::uuid,$1::text) inserted", [String(before.articleId), JSON.stringify([reference]), acquired.lease_token])).rows;
+        assert.equal(replaced.length, 1); assert.equal(replaced[0].inserted, 1);
+        await connection.query("commit"); committed = true;
+      } finally { if (!committed) await connection.query("rollback"); }
+    });
+    const committedArticle = (await handle.query("select * from public.topics where id=$1", [before.articleId])).rows; assert.deepEqual(committedArticle, [finalRow]);
+    const actualReferences = (await handle.query("select asset_id,domain_key,entity_type,entity_identity,entity_label,field_key,edit_href,public_href,reference_state,restorable,metadata from public.media_references where domain_key='topics' and entity_type='topic' and entity_identity=$1", [String(before.articleId)])).rows;
+    assert.deepEqual(actualReferences, [{ asset_id: asset.id, domain_key: "topics", entity_type: "topic", entity_identity: String(before.articleId), entity_label: finalRow.title, field_key: "image", edit_href: reference.editHref, public_href: reference.publicHref, reference_state: "draft", restorable: false, metadata: {} }]);
+    const failure = (await handle.query("select public.fail_media_reference_write_lease($1::uuid,$2::text,'qa_owned_followup_prerequisite',$3::jsonb,true) affected", [acquired.lease_token, String(before.articleId), JSON.stringify({ purpose: "uncredited owned fixture prerequisite", ownedRunId: handle.identity.runId })])).rows;
+    assert.equal(failure.length, 1); assert.equal(failure[0].affected, 1);
+    const after = await state(); assert.equal(after.leases.length, 1); const failed = after.leases[0];
+    assert.equal(failed.lease_token, acquired.lease_token); assert.equal(failed.asset_id, asset.id); assert.equal(failed.status, "failed"); assert.equal(failed.resolved_at, null); assert.equal(failed.domain_write_committed, true); assert.ok(Number.isFinite(Date.parse(String(failed.completed_at))));
+    const actorRows = (await handle.query("select actor_id from public.media_reference_write_leases where lease_token=$1::uuid", [acquired.lease_token])).rows; assert.equal(actorRows.length, 1); assert.equal(Number(actorRows[0].actor_id), before.qaActorId);
+    assert.equal(after.reservations.length, 0); assert.deepEqual(after.assets, before.assets); assert.deepEqual(after.objects, before.objects); assert.deepEqual(after.audits, before.audits); assert.deepEqual(after.binaries, before.binaries); assert.equal(after.references.length, 1);
+    return { ownedRunId: handle.identity.runId, namespace: before.namespace, articleId: before.articleId, qaActorId: before.qaActorId, purpose: "uncredited-owned-fixture-prerequisite", selection, uiCredit: false, context, registryVersion, assets: before.assets, binaries: after.binaries, acquired, reference: actualReferences[0], article: finalRow, seoSourceFingerprint: seo.sourceFingerprint, failedLease: failed, observedAt: after.observedAt, automaticCoverage: [], globalClosed: false };
+  }
+
   async function handleRequest(input: unknown): Promise<Row> {
     assertOwnedLocalHandle(handle); assert.equal(closed, false); assert.ok(input && typeof input === "object" && !Array.isArray(input));
     const request = input as Row; assert.match(String(request.id), UUID);
+    if (request.kind === "media-recovery-followup-prepare") {
+      assert.deepEqual(Object.keys(request).sort(), ["id", "kind"]);
+      const result = bind({ ...(await prepareFollowup()), id: request.id, kind: request.kind, status: "pass" }); setupCompleted = true; return result;
+    }
+    if (selection === "media-recovery-followup") assert.equal(setupCompleted, true, "Actual fixed prerequisite must complete before follow-up state or fault commands.");
     if (request.kind === "media-recovery-state") {
       assert.deepEqual(Object.keys(request).sort(), ["id", "kind"]); assert.equal(live, undefined, "No snapshot while a deliberately blocked writer is active.");
       return bind({ ...(await state()), id: request.id, kind: request.kind, status: "pass" });
     }
     assert.deepEqual(Object.keys(request).sort(), ["id", "kind", "scenario", "token"]);
     assert.match(String(request.token), UUID); assert.ok(["lease", "finalize", "missing", "cancel"].includes(String(request.scenario)));
+    if (selection === "media-recovery-followup") assert.notEqual(request.scenario, "lease", "Retained lease-failure UI is not replayed.");
     assert.ok(["media-recovery-fault-arm", "media-recovery-fault-switch", "media-recovery-fault-cancel", "media-recovery-fault-release"].includes(String(request.kind)));
     let outcome: Row;
     try {
