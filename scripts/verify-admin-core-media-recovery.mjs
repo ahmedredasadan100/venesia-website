@@ -6,7 +6,7 @@ import ts from "typescript";
 import {pathToFileURL} from "node:url";
 import {resolve} from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { assertCoreRecoveryReservationAge, createCoreRecoveryQueueReadFault, assertCoreRecoveryReceipt, assertCoreRecoveryAudit, assertCoreRecoveryDomainUnchanged, assertCoreRecoveryQueue } from "./fixtures/admin-core-media-recovery-journeys.mjs";
+import { CORE_MEDIA_RECOVERY_GROUPS, CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION, CORE_MEDIA_RECOVERY_MISSING_SELECTION, coreSelectedMediaRecoveryGroups, assertCoreRecoveryReservationAge, createCoreRecoveryQueueReadFault, assertCoreRecoveryReceipt, assertCoreRecoveryAudit, assertCoreRecoveryDomainUnchanged, assertCoreRecoveryQueue } from "./fixtures/admin-core-media-recovery-journeys.mjs";
 
 const require = createRequire(import.meta.url), checks = [];
 const check = async (name, execute) => { await execute(); checks.push({ name, status: "pass" }); };
@@ -172,6 +172,15 @@ await check("actual-native-clock-threshold-and-twelve-minute-bound", () => {
   assert.equal(assertCoreRecoveryReservationAge(nativeReceipt, reservation, true), 600000);
   for (const observedAt of ["2026-09-26T00:09:59.999Z", "2026-09-26T00:12:00.001Z", "2026-09-25T23:59:59.999Z", "invalid"]) assert.throws(() => assertCoreRecoveryReservationAge({ ...nativeReceipt, observedAt }, reservation, true));
   assert.throws(() => assertCoreRecoveryReservationAge(nativeReceipt, { started_at: null }));
+});
+await check('actual-media-group-dispatch-never-calls-retained-callbacks', async () => {
+  const source=readFileSync('scripts/fixtures/admin-core-media-recovery-journeys.mjs','utf8'),tree=ts.createSourceFile('fixture.mjs',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);
+  let declaration;const visit=node=>{if(ts.isVariableDeclaration(node)&&node.name.getText(tree)==='group')declaration=node;ts.forEachChild(node,visit);};visit(tree);assert.ok(declaration);
+  for(const selection of[null,CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,CORE_MEDIA_RECOVERY_MISSING_SELECTION]){
+    const executed=[],callbacks=[];const group=new Function('assert','CORE_MEDIA_RECOVERY_GROUPS','coreSelectedMediaRecoveryGroups','selection','run','return '+declaration.initializer.getText(tree))(assert,CORE_MEDIA_RECOVERY_GROUPS,coreSelectedMediaRecoveryGroups,selection,async(id,coverage,execute)=>{executed.push(id);assert.deepEqual(coverage,[]);await execute();});
+    for(const name of CORE_MEDIA_RECOVERY_GROUPS)await group(name,()=>callbacks.push(name));
+    const expected=coreSelectedMediaRecoveryGroups(selection);assert.deepEqual(callbacks,expected);assert.deepEqual(executed,expected.map(name=>'core-media-recovery-'+name));assert.throws(()=>group('unregistered',()=>{}));
+  }
 });
 const paths = [path, "scripts/fixtures/admin-core-media-recovery-journeys.mjs", "scripts/verify-admin-core-media-recovery.mjs"];
 const receipt = { status: "pass", count: checks.length, checks, sourceSha256: Object.fromEntries(paths.map(path => [path, createHash("sha256").update(readFileSync(path)).digest("hex")])), scope: "Actual producer control flow with scoped controlled SQL ports, PostgreSQL regex semantics, and actual Browser helper proof assertions. Native live locking, Storage deletion and Product Browser remain pending.", automaticCoverage: [], globalClosed: false };

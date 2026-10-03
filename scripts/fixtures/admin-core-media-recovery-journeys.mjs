@@ -254,7 +254,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       if (scenario === "lease") assert.equal(cancelled.domainCommitVerified, true);
     } finally { const released = await command("release"); assert.equal(released.activeLocks, 0); assert.equal(released.ownedTransactionsRolledBack, true); }
   }
-  const group = (name, execute) => run("core-media-recovery-" + name, [], execute);
+  const group = (name, execute) => { assert.ok(CORE_MEDIA_RECOVERY_GROUPS.includes(name)); return coreSelectedMediaRecoveryGroups(selection).includes(name) ? run("core-media-recovery-" + name, [], execute) : Promise.resolve(); };
   const done = (name, fields) => { const result = { name, consumer: "media-recovery-queue", ...fields, automaticCoverage: [] }; completed.push(result); return result; };
   try {
     if(selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION){
