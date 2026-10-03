@@ -1,6 +1,8 @@
 import {readFileSync} from 'node:fs';
 import {resolve,join} from 'node:path';
 import ts from 'typescript';
+import {CORE_MEDIA_FINAL_THREE_SELECTION,CORE_MEDIA_HELD_SELECTION,coreSelectedMediaGroups} from './fixtures/admin-core-media-journeys.mjs';
+import {validateCoreJourneySelection} from './fixtures/admin-core-domain-form-journeys.mjs';
 import {runCoreDescendantPresentationJourneys} from './fixtures/admin-core-descendant-presentation-journeys.mjs';
 import assert from 'node:assert/strict';
 import {randomUUID,createHash}from'node:crypto';
@@ -57,7 +59,7 @@ function assertCollectorResidualBinding(source){
  assert.equal(declarations.length,1);const declaration=declarations[0],statement=declaration.parent.parent,block=statement.parent;
  assert.ok(ts.isVariableStatement(statement)&&Boolean(statement.declarationList.flags&ts.NodeFlags.Const));assert.ok(ts.isBlock(block)&&ts.isIfStatement(block.parent));assert.equal(emit(block.parent.expression),'browser.scope==="core-closure"');assert.equal(block.parent.thenStatement,block);
  const init=declaration.initializer;assert.ok(init&&ts.isConditionalExpression(init));
- assert.equal(emit(init.condition),'["readonly-hubs","media-library"].includes(browser.cohort??"")');assert.equal(init.whenFalse.kind,ts.SyntaxKind.NullKeyword);
+ assert.equal(emit(init.condition),'(browser.cohort==="readonly-hubs"||(browser.cohort==="media-library"&&browser.journeySelection!==CORE_MEDIA_FINAL_THREE_SELECTION))');assert.equal(init.whenFalse.kind,ts.SyntaxKind.NullKeyword);
  assert.ok(ts.isAwaitExpression(init.whenTrue)&&ts.isCallExpression(init.whenTrue.expression));const call=init.whenTrue.expression;
  assert.equal(emit(call.expression),'assertCoreResidualSearchCompletion');assert.equal(call.arguments.length,3);
  assert.equal(emit(call.arguments[0]),'browser');assert.equal(emit(call.arguments[1]),'nativeCheckpoints');
@@ -70,7 +72,7 @@ function assertCollectorResidualBinding(source){
  assert.ok(declaration.end<result.pos);assert.ok(ts.isObjectLiteralExpression(result.initializer));
  const properties=result.initializer.properties.filter(node=>node.name?.getText(tree)==='residualSearch');assert.equal(properties.length,1);assert.ok(ts.isShorthandPropertyAssignment(properties[0]));
  assert.ok(block.statements.some(node=>ts.isReturnStatement(node)&&node.expression&&emit(node.expression)==='result'&&node.pos>result.end));
- return {initializer:init.getText(tree),statement:statement.getText(tree),importStatement:imports[0].getText(tree)};
+ return {initializer:init.getText(tree),condition:init.condition.getText(tree),statement:statement.getText(tree),importStatement:imports[0].getText(tree)};
 }
 const collectorBinding=assertCollectorResidualBinding(collectorSource);controls++;
 const replaceOnce=(source,from,to)=>{assert.equal(source.split(from).length,2);return source.replace(from,()=>to);};
@@ -85,31 +87,43 @@ const badCollectors=[
  source=>replaceOnce(source,collectorBinding.initializer,collectorBinding.initializer.replace('"public-source-manifest.json"','"admin-adoption-browser.json"')),
  source=>replaceOnce(source,collectorBinding.initializer,collectorBinding.initializer.replace('join(artifactDir, "public-source-manifest.json")','browser.sourceManifestPath')),
  source=>replaceOnce(source,collectorBinding.initializer,collectorBinding.initializer.replace(', JSON.parse(readFileSync(join(artifactDir, "public-source-manifest.json"), "utf8"))','')),
- source=>replaceOnce(source,collectorBinding.initializer,collectorBinding.initializer.replace('["readonly-hubs", "media-library"]','["readonly-hubs"]')),
- source=>replaceOnce(source,collectorBinding.initializer,collectorBinding.initializer.replace('["readonly-hubs", "media-library"]','["readonly-hubs", "media-library", "navigation-settings"]')),
- source=>replaceOnce(source,collectorBinding.initializer,collectorBinding.initializer.replace('["readonly-hubs", "media-library"]','["readonly-hubs", "media-recovery"]')),
+ source=>replaceOnce(source,collectorBinding.condition,'browser.cohort === "readonly-hubs"'),
+ source=>replaceOnce(source,collectorBinding.condition,'("navigation-settings" === browser.cohort || '+collectorBinding.condition+')'),
+ source=>replaceOnce(source,collectorBinding.condition,collectorBinding.condition.replace('"media-library"','"media-recovery"')),
+ source=>replaceOnce(source,collectorBinding.condition,'["readonly-hubs", "media-library"].includes(browser.cohort ?? "")'),
+ source=>replaceOnce(source,collectorBinding.condition,collectorBinding.condition.replace('!== CORE_MEDIA_FINAL_THREE_SELECTION','!== CORE_MEDIA_HELD_SELECTION')),
+ source=>replaceOnce(source,collectorBinding.condition,collectorBinding.condition.replace('!== CORE_MEDIA_FINAL_THREE_SELECTION','=== CORE_MEDIA_FINAL_THREE_SELECTION')),
+ source=>replaceOnce(source,'if (browser.scope === "core-closure") {','if (browser.scope === "foreign") {'),
  source=>replaceOnce(source,collectorBinding.initializer,collectorBinding.initializer.replace('browser.cohort','browser.scope')),
  source=>replaceOnce(source,collectorBinding.initializer,collectorBinding.initializer.replace('await assertCoreResidualSearchCompletion','assertCoreResidualSearchCompletion')),
- source=>replaceOnce(source,'status: "pass", residualSearch, downloadMedia','status: "pass", downloadMedia'),
- source=>replaceOnce(source,'status: "pass", residualSearch, downloadMedia','status: "pass", residualSearch: null, downloadMedia'),
+ source=>replaceOnce(source,'residualSearch, downloadMedia','downloadMedia'),
+ source=>replaceOnce(source,'residualSearch, downloadMedia','residualSearch: null, downloadMedia'),
  source=>{const removed=replaceOnce(source,collectorBinding.statement,'');return replaceOnce(removed,'const writes = await verifyCoreDomainWrites(handle, browser);',collectorBinding.statement+'\nconst writes = await verifyCoreDomainWrites(handle, browser);');},
  source=>replaceOnce(source,'const writes = await verifyCoreDomainWrites(handle, browser);','const writes = verifyCoreDomainWrites(handle, browser);'),
  source=>replaceOnce(source,'const mediaCompletion = browser.cohort === "media-library" ? assertCoreMediaCompletionReceipts(handle, browser, nativeCheckpoints) : null;','const mediaCompletion = null;'),
 ];
-for(const mutate of badCollectors)negative(()=>assertCollectorResidualBinding(mutate(collectorSource)));
+for(const mutate of badCollectors){const changed=mutate(collectorSource);assert.notEqual(changed,collectorSource,'Each negative must change its actual source anchor.');negative(()=>assertCollectorResidualBinding(changed));}
 const AsyncFunction=Object.getPrototypeOf(async function(){}).constructor;
-const executeCollectorHook=new AsyncFunction('browser','nativeCheckpoints','artifactDir','readFileSync','join','assertCoreResidualSearchCompletion','return '+collectorBinding.initializer+';');
+const executeCollectorHook=new AsyncFunction('browser','nativeCheckpoints','artifactDir','readFileSync','join','assertCoreResidualSearchCompletion','CORE_MEDIA_FINAL_THREE_SELECTION','return '+collectorBinding.initializer+';');
 async function executeBoundHook(browser,native){
  let reads=0,joins=0;const artifactDir=resolve(process.cwd(),'.tmp-qa','controlled-residual-source');
  const read=(file,encoding)=>{assert.equal(file,join(artifactDir,'public-source-manifest.json'));assert.equal(encoding,'utf8');reads++;return JSON.stringify(independentSource);};
  const complete=async(b,n,source)=>{assert.equal(b,browser);assert.equal(n,native);assert.deepEqual(source,independentSource);joins++;return assertCoreResidualSearchCompletion(b,n,source);};
- const result=await executeCollectorHook(browser,native,artifactDir,read,join,complete);return {result,reads,joins};
+ const result=await executeCollectorHook(browser,native,artifactDir,read,join,complete,CORE_MEDIA_FINAL_THREE_SELECTION);return {result,reads,joins};
 }
 for(const [browser,records]of [[integrationBrowser,integrationRecords],[mediaBrowser,mediaRecords]]){
  const native={...nativeBase,records},joined=await executeBoundHook(browser,native);assert.equal(joined.result.status,'search-fragments-joined');assert.equal(joined.reads,1);assert.equal(joined.joins,1);controls++;
  for(const mutate of [b=>b.sourceSha256='f'.repeat(64),b=>{b.sourceManifest=structuredClone(independentSource);b.sourceManifest.manifest.push({file:'foreign-owner.ts',sha256:'a'.repeat(64)});b.sourceManifest.sourceSha256=createHash('sha256').update(JSON.stringify(b.sourceManifest.manifest)).digest('hex');b.sourceSha256=b.sourceManifest.sourceSha256;}]){const bad=structuredClone(browser);mutate(bad);await assert.rejects(()=>executeBoundHook(bad,native));controls++;}
 }
 for(const cohort of ['navigation-settings','page-composition','media-recovery','template-libraries','domain-forms',undefined]){const other={...integrationBrowser,cohort};assert.deepEqual(await executeBoundHook(other,null),{result:null,reads:0,joins:0});controls++;}
+// Final-three has no Catalog behavior; retained source scope must not replay or claim it.
+positive(()=>{assert.deepEqual(coreSelectedMediaGroups(CORE_MEDIA_FINAL_THREE_SELECTION),['preview','detach-delete','permission']);for(const selection of [null,CORE_MEDIA_HELD_SELECTION])assert.ok(coreSelectedMediaGroups(selection).includes('catalog-query'));});
+const finalThreeBrowser={...mediaBrowser,journeySelection:CORE_MEDIA_FINAL_THREE_SELECTION,evidence:coreSelectedMediaGroups(CORE_MEDIA_FINAL_THREE_SELECTION).map(group=>({id:'core-media-'+group,status:'pass',coverage:[]}))};
+assert.deepEqual(await executeBoundHook(finalThreeBrowser,null),{result:null,reads:0,joins:0});controls++;
+for(const selection of [null,CORE_MEDIA_HELD_SELECTION]){const joined=await executeBoundHook({...mediaBrowser,journeySelection:selection},{...nativeBase,records:mediaRecords});assert.equal(joined.result.status,'search-fragments-joined');assert.equal(joined.reads,1);assert.equal(joined.joins,1);controls++;}
+for(const selection of [undefined,'readonly-hubs-followup']){const joined=await executeBoundHook({...integrationBrowser,journeySelection:selection},{...nativeBase,records:integrationRecords});assert.equal(joined.result.status,'search-fragments-joined');assert.equal(joined.reads,1);assert.equal(joined.joins,1);controls++;}
+for(const selection of [CORE_MEDIA_FINAL_THREE_SELECTION,CORE_MEDIA_HELD_SELECTION])positive(()=>assert.equal(validateCoreJourneySelection({scope:'core-closure',cohort:'media-library',selection}),selection));
+for(const value of [{scope:'foreign',cohort:'media-library',selection:CORE_MEDIA_FINAL_THREE_SELECTION},{scope:'core-closure',cohort:'domain-forms',selection:CORE_MEDIA_FINAL_THREE_SELECTION},{scope:'core-closure',cohort:'media-library',selection:'invented'}])negative(()=>validateCoreJourneySelection(value));
 const registeredPackage=JSON.parse(readFileSync(resolve(process.cwd(),'package.json'),'utf8'));
 function assertCanonicalRegistration(pkg){assert.equal(pkg.scripts['verify:admin-core-residual-search'],'node scripts/verify-admin-core-residual-search.mjs');const commands=pkg.scripts['verify:admin-core-closure'].split(' && ');assert.equal(commands.filter(command=>command==='npm run verify:admin-core-residual-search').length,1);assert.equal(commands.at(-1),'npm run verify:admin-core-residual-search');assert.ok(pkg.scripts['ci:check'].split(' && ').includes('npm run verify:admin-core-closure'));}
 positive(()=>assertCanonicalRegistration(registeredPackage));
