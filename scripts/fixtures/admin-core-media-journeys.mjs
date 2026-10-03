@@ -9,13 +9,17 @@ const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const searchLabel = "ابحث بالاسم أو المسار أو الوصف البديل…";
 const groupNames = ["readiness", "folders", "upload-validation-retry", "catalog-query", "metadata-failure-retry", "preview", "picker-use", "in-use-delete", "physical-move", "replace-references", "detach-delete", "permission"];
 export const CORE_MEDIA_HELD_SELECTION = "media-library-held-followup";
+export const CORE_MEDIA_FINAL_THREE_SELECTION = "media-library-final-three-followup";
+export function isCoreMediaSelection(selection) {
+  return selection === CORE_MEDIA_HELD_SELECTION || selection === CORE_MEDIA_FINAL_THREE_SELECTION;
+}
 /** @param {string|null} selection */
 export function coreSelectedMediaGroups(selection = null) {
-  assert.ok(selection === null || selection === CORE_MEDIA_HELD_SELECTION, "Unknown Media selection.");
-  return selection === null ? [...groupNames] : groupNames.slice(2);
+  assert.ok(selection === null || isCoreMediaSelection(selection), "Unknown Media selection.");
+  return selection === null ? [...groupNames] : selection === CORE_MEDIA_FINAL_THREE_SELECTION ? ["preview", "detach-delete", "permission"] : groupNames.slice(2);
 }
 export function coreSelectedMediaIds(selection) {
-  assert.equal(selection, CORE_MEDIA_HELD_SELECTION);
+  assert.ok(isCoreMediaSelection(selection));
   return coreSelectedMediaGroups(selection).map(name => "core-media-" + name);
 }
 export function assertCoreMediaSelectionReceipt(browser, requiredCases) {
@@ -39,7 +43,7 @@ export function assertCoreMediaSelectionReceipt(browser, requiredCases) {
   assert.deepEqual(rows.map(row => row.id), ids);
   assert.ok(rows.every(row => row.status === "pass" && row.coverage.length === 0));
   return { status: "pass", selection: browser.journeySelection, selectedJourneyIds: ids, executedJourneyIds: ids,
-    retainedTwoReplayed: false, automaticCoverage: [], wholeCohortExecuted: false, globalClosed: false };
+    retainedTwoReplayed: false, ...(browser.journeySelection === CORE_MEDIA_FINAL_THREE_SELECTION ? { retainedSevenReplayed: false } : {}), automaticCoverage: [], wholeCohortExecuted: false, globalClosed: false };
 }
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==", "base64");
 export function coreMediaSyntheticPng() { return Buffer.from(png); }
@@ -117,6 +121,143 @@ export function assertCoreMediaHeldPrerequisite(result, records) {
   }
   return { nativeCheckpointIds: states.map(row => row.id), operations: [...p.operations], uiCredit: false, automaticCoverage: [], globalClosed: false };
 }
+
+const permissionOperations = ["upload", "create_folder", "reconcile", "update_metadata", "move_asset", "replace_all", "DELETE", "/api/admin/media-library", "/api/admin/media-usage"];
+const finalThreeSetupOperations = permissionOperations.filter(operation => operation !== "DELETE");
+function serializeCoreMediaSpecimen(specimen) {
+  return { ...specimen, body: specimen.body.toString("base64"), bodyEncoding: "base64" };
+}
+function readCoreMediaSpecimen(proof, origin) {
+  assert.equal(proof.bodyEncoding, "base64"); assert.equal(typeof proof.body, "string");
+  const body = Buffer.from(proof.body, "base64"); assert.equal(body.toString("base64"), proof.body);
+  const specimen = { ...proof, body }; validateCoreMediaReplaySpecimen(origin, specimen);
+  assert.equal(proof.provenance, "captured-current-request");
+  assert.ok(proof.status >= 200 && proof.status < 300);
+  const url = new URL(proof.url);
+  const operation = proof.method === "GET" ? url.pathname : proof.method === "POST" && !proof.headers["content-type"].includes("application/json") ? "upload" : (() => {
+    const value = JSON.parse(body.toString("utf8"));
+    return value.operation === "reconcile" && value.dryRun === true ? "reconcile_preview" : value.operation ?? proof.method;
+  })();
+  assert.equal(proof.operation, operation); return specimen;
+}
+export function assertCoreMediaFinalThreePrerequisite(result, records) {
+  const p = result.prerequisite; assert.ok(p); assert.equal(p.selection, CORE_MEDIA_FINAL_THREE_SELECTION);
+  assert.equal(p.purpose, "uncredited-owned-fixture-prerequisite"); assert.equal(p.uiCredit, false);
+  assert.deepEqual(p.automaticCoverage, []); assert.equal(p.globalClosed, false);
+  assert.deepEqual(p.operations, finalThreeSetupOperations);
+  assertCoreMediaHeldPrerequisite({ prerequisite: p.seed, checkpoints: result.checkpoints }, records);
+  const labels = [...p.seed.checkpoints.map(row => row.label), "prerequisite-uploaded", "prerequisite-metadata",
+    "prerequisite-picker", "prerequisite-usage", "prerequisite-moved", "prerequisite-replacement-staged", "prerequisite-replaced"];
+  assert.deepEqual(p.checkpoints, result.checkpoints.slice(0, labels.length));
+  assert.deepEqual(p.checkpoints.map(row => row.label), labels);
+  const states = p.checkpoints.map((point, index) => {
+    assert.deepEqual(Object.keys(point).sort(), ["label", "receiptId"]);
+    const row = records[index]; assert.ok(row); assert.equal(row.id, point.receiptId);
+    assertCoreMediaReceipt(row, { id: point.receiptId }, { namespace: p.namespace, article: { id: p.articleId } });
+    for (const key of ["ownedRunId", "namespace", "articleId", "qaActorId"]) { assert.equal(row[key], p[key]); assert.equal(p.seed[key], p[key]); }
+    assert.ok(row.assets.length <= 3); return row;
+  });
+  assert.equal(new Set(p.checkpoints.map(row => row.receiptId)).size, labels.length);
+  const [uploaded, metadata, picker, usage, moved, staged, replaced] = states.slice(6);
+  assert.deepEqual(states.slice(6).map(row => row.assets.length), [2, 2, 2, 2, 2, 3, 3]);
+  assert.notEqual(p.primaryId, p.documentId); assert.notEqual(p.primaryId, p.replacementId); assert.notEqual(p.documentId, p.replacementId);
+  const image = assertCoreMediaAsset(uploaded, p.primaryId, { status: "active", media_kind: "image", checksum: hash(png) });
+  assertCoreMediaAsset(uploaded, p.documentId, { status: "active", media_kind: "document", checksum: hash(coreMediaSyntheticPdf()) });
+  for (const asset of uploaded.assets) assertCoreMediaAudit(states[5], uploaded, "media_asset.create", row => row.metadata.objectKey === asset.object_key && row.metadata.bucket === asset.bucket);
+  const named = assertCoreMediaAsset(metadata, p.primaryId, { status: "active", object_key: image.object_key,
+    display_name: p.namespace + "-authored", default_alt_text: "QA synthetic pixel", default_title: "QA media title", default_caption: "QA media caption" });
+  assertCoreMediaAudit(uploaded, metadata, "media_asset.update", row => row.metadata.assetId === p.primaryId && row.metadata.operation === "metadata");
+  assert.equal(picker.article.image, named.public_url);
+  assert.ok(picker.references.some(row => row.asset_id === p.primaryId && String(row.entity_identity) === String(p.articleId) && row.field_key === "image"));
+  assertCoreMediaAudit(metadata, picker, "topic.update", row => String(row.entity_id) === String(p.articleId));
+  assertCoreMediaUnchanged(picker, usage, true);
+  const changed = assertCoreMediaAsset(moved, p.primaryId, { status: "active", checksum: image.checksum,
+    object_key: "images/" + p.namespace + "/moved/" + p.namespace + "-renamed.png" });
+  assert.equal(moved.article.image, changed.public_url);
+  const references = rows => rows.map(({ asset_id, domain_key, entity_type, entity_identity, field_key, reference_state }) => ({ asset_id, domain_key, entity_type, entity_identity, field_key, reference_state })).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+  assert.deepEqual(references(moved.references), references(usage.references));
+  assert.equal(moved.binaries.find(row => row.publicUrl === named.public_url)?.missing, true);
+  assertCoreMediaAudit(usage, moved, "media_asset.update", row => row.metadata.assetId === p.primaryId && row.metadata.operation === "move_physical_object");
+  const replacement = assertCoreMediaAsset(staged, p.replacementId, { status: "active", checksum: hash(png) });
+  assertCoreMediaAudit(moved, staged, "media_asset.create", row => row.metadata.objectKey === replacement.object_key && row.metadata.bucket === replacement.bucket);
+  assert.equal(staged.article.image, changed.public_url);
+  assert.equal(replaced.article.image, replacement.public_url); assert.equal(replaced.references.some(row => row.asset_id === p.primaryId), false);
+  assert.ok(replaced.references.some(row => row.asset_id === p.replacementId && String(row.entity_identity) === String(p.articleId) && row.field_key === "image"));
+  for (const asset of replaced.assets) assertCoreMediaAsset(replaced, asset.id, { status: "active" });
+  assertCoreMediaAudit(staged, replaced, "media_asset.update", row => row.metadata.previousAssetId === p.primaryId && row.metadata.nextAssetId === p.replacementId && row.metadata.operation === "replace_all_supported_references");
+  assert.deepEqual(p.specimens.map(row => row.operation).sort(), [...finalThreeSetupOperations].sort());
+  assert.equal(p.origin, new URL(p.seed.requests[0].url).origin);
+  const captured = p.specimens.map(row => readCoreMediaSpecimen(row, p.origin));
+  for (const operation of ["reconcile", "create_folder"]) assert.equal(captured.find(row => row.operation === operation).bodySha256, p.seed.requests.find(row => JSON.parse(row.body).operation === operation).bodySha256);
+  const upload = captured.find(row => row.operation === "upload"); assert.equal(upload.status, 201); assert.ok(upload.body.includes(png)); assert.ok(upload.body.includes(Buffer.from(p.namespace)));
+  const json = operation => JSON.parse(captured.find(row => row.operation === operation).body.toString("utf8"));
+  assert.deepEqual(json("update_metadata"), { operation: "update_metadata", assetId: p.primaryId, displayName: p.namespace + "-authored", defaultAltText: "QA synthetic pixel", defaultTitle: "QA media title", defaultCaption: "QA media caption" });
+  assert.deepEqual(json("move_asset"), { operation: "move_asset", assetId: p.primaryId, targetFolder: "images/" + p.namespace + "/moved", targetFilename: p.namespace + "-renamed.png" });
+  assert.deepEqual(json("replace_all"), { operation: "replace_all", previousAssetId: p.primaryId, nextAssetId: p.replacementId });
+  for (const operation of ["update_metadata", "move_asset", "replace_all"]) { const row = captured.find(row => row.operation === operation); assert.equal(row.method, "PATCH"); assert.equal(row.status, 200); }
+  const catalog = captured.find(row => row.operation === "/api/admin/media-library"), usageRequest = captured.find(row => row.operation === "/api/admin/media-usage");
+  assert.equal(new URL(catalog.url).searchParams.get("q"), p.namespace); assert.equal(catalog.body.length, 0);
+  assert.equal(new URL(usageRequest.url).searchParams.get("asset"), named.public_url); assert.equal(usageRequest.body.length, 0);
+  return { nativeCheckpointIds: states.map(row => row.id), operations: [...p.operations], assets: 3, uiCredit: false, automaticCoverage: [], globalClosed: false };
+}
+export function assertCoreMediaFinalThreePermission(result, records) {
+  assertCoreMediaFinalThreePrerequisite(result, records);
+  const p = result.prerequisite, proof = result.completed.find(row => row.group === "permission")?.requestProof;
+  assert.ok(proof); assert.equal(proof.origin, p.origin);
+  const specimens = proof.specimens.map(row => readCoreMediaSpecimen(row, p.origin));
+  assert.equal(new Set(specimens.map(row => row.operation)).size, specimens.length);
+  assertCoreMediaPermissionPrerequisites(specimens, new Set(proof.verifiedOperations));
+  assert.ok(specimens.every(row => permissionOperations.includes(row.operation) || row.operation === "reconcile_preview"));
+  assert.deepEqual([...proof.verifiedOperations].sort(), [...permissionOperations].sort());
+  for (const row of p.specimens) assert.deepEqual(proof.specimens.find(specimen => specimen.operation === row.operation), row);
+  assert.deepEqual(proof.denials.map(row => row.operation), specimens.map(row => row.operation));
+  for (const [index, denial] of proof.denials.entries()) {
+    assert.equal(denial.bodySha256, specimens[index].bodySha256); assertCoreMediaPermissionResponse(denial.status, denial.value);
+  }
+  const expectedSuffix = ["preview", "detached", "delete-cancel", "delete-complete", "delete-next-ready", "delete-cancel", "delete-complete", "delete-next-ready", "delete-cancel", "delete-complete", "permission-before", "permission-after"];
+  assert.deepEqual(result.checkpoints.slice(p.checkpoints.length).map(row => row.label), expectedSuffix);
+  const tail = result.checkpoints.slice(p.checkpoints.length).map(point => records.find(row => row.id === point.receiptId));
+  assert.ok(tail.every(Boolean));
+  const prepared = records[p.checkpoints.length - 1]; assertCoreMediaUnchanged(prepared, tail[0], true);
+  let current = tail[1]; assert.ok(!current.article.image); assert.equal(current.references.length, 0); assert.equal(current.assets.length, 3);
+  assertCoreMediaAudit(prepared, current, "topic.update", row => String(row.entity_id) === String(p.articleId));
+  const deleteOrder = current.assets.filter(row => row.status === "active"); assert.equal(deleteOrder.length, 3);
+  const deletion = specimens.find(row => row.operation === "DELETE"); assert.equal(deletion.method, "DELETE"); assert.equal(deletion.status, 200);
+  assert.deepEqual(JSON.parse(deletion.body.toString("utf8")), { asset: deleteOrder[0].public_url });
+  for (const [index, asset] of deleteOrder.entries()) {
+    const cancelled = tail[2 + index * 3], deleted = tail[3 + index * 3];
+    assertCoreMediaUnchanged(current, cancelled, true); assertCoreMediaAsset(deleted, asset.id, { status: "deleted" });
+    assertCoreMediaAudit(current, deleted, "media_asset.delete", row => row.metadata.assetId === asset.id);
+    assert.ok(deleted.reservations.some(row => row.asset_id === asset.id && row.status === "completed"));
+    assert.equal(deleted.leases.some(row => row.asset_id === asset.id && (row.status === "active" || (["failed", "expired"].includes(row.status) && !row.resolved_at))), false);
+    for (const other of current.assets.filter(row => row.id !== asset.id)) assert.deepEqual(deleted.assets.find(row => row.id === other.id), other);
+    current = index < 2 ? tail[4 + index * 3] : deleted;
+  }
+  const beforePoint = result.checkpoints.filter(row => row.label === "permission-before"), afterPoint = result.checkpoints.filter(row => row.label === "permission-after");
+  assert.equal(beforePoint.length, 1); assert.equal(afterPoint.length, 1);
+  const before = records.find(row => row.id === beforePoint[0].receiptId), after = records.find(row => row.id === afterPoint[0].receiptId);
+  assert.ok(before && after); assertCoreMediaUnchanged(current, before, true); assertCoreMediaUnchanged(before, after, true);
+  assert.equal(before.assets.length, 3); assert.equal(before.references.length, 0); assert.ok(!before.article.image);
+  for (const asset of before.assets) { assertCoreMediaAsset(before, asset.id, { status: "deleted" }); assert.ok(before.reservations.some(row => row.asset_id === asset.id && row.status === "completed")); }
+  return { operations: [...permissionOperations], denialCount: proof.denials.length, nativeCheckpointIds: [before.id, after.id], automaticCoverage: [], globalClosed: false };
+}
+/** Intrinsic naturalWidth is density corrected; inspect the decoded pixels of this exact DOM image. */
+export async function observeCoreMediaPreviewImage(element, ownedUrl) {
+  const source = new URL(element.currentSrc || element.src, location.origin);
+  const actual = source.pathname === "/_next/image" ? source.searchParams.get("url") : source.href;
+  const box = element.getBoundingClientRect(), style = getComputedStyle(element);
+  const facts = { actual, exactOwnedUrl: actual === ownedUrl, complete: element.complete, visible: box.width > 0 && box.height > 0 && style.visibility === "visible",
+    naturalWidth: element.naturalWidth, naturalHeight: element.naturalHeight,
+    decoded: false, decodedWidth: 0, decodedHeight: 0, sourceStable: false, decodeError: null };
+  try {
+    await element.decode(); const bitmap = await createImageBitmap(element);
+    try { facts.decoded = true; facts.decodedWidth = bitmap.width; facts.decodedHeight = bitmap.height;
+      facts.sourceStable = (element.currentSrc || element.src) === source.href;
+    } finally { bitmap.close(); }
+  } catch (error) { facts.decodeError = error instanceof Error ? error.message : String(error); }
+  return facts;
+}
+
 export function assertCoreMediaUnchanged(before, after, allPublic = false) {
   for (const key of ["ownedRunId", "qaActorId", "namespace", "articleId", "article", "assets", "objects", "folders", "references", "leases", "reservations", "audits", "storageSha256"]) assert.deepEqual(after[key], before[key], "Unexpected Media change: " + key);
   if (allPublic) { assert.match(before.publicDataSha256, /^[a-f0-9]{64}$/u); assert.equal(after.publicDataSha256, before.publicDataSha256); assert.equal(after.publicTableInventorySha256, before.publicTableInventorySha256); }
@@ -152,7 +293,7 @@ export function validateCoreMediaReplaySpecimen(origin, specimen) {
   if (target.pathname.endsWith("media-usage")) assert.equal(specimen.method, "GET");
 }
 export function assertCoreMediaPermissionPrerequisites(specimens, verifiedOperations) {
-  for (const operation of ["upload", "create_folder", "reconcile", "update_metadata", "move_asset", "replace_all", "DELETE", "/api/admin/media-library", "/api/admin/media-usage"]) {
+  for (const operation of permissionOperations) {
     assert.ok(specimens.some(row => row.operation === operation), "Missing acknowledged specimen: " + operation);
     assert.ok(verifiedOperations.has(operation), "Missing joined UI/native operation proof: " + operation);
   }
@@ -199,7 +340,7 @@ export async function runCoreMediaJourneys(ctx) {
     validateCoreMediaReplaySpecimen(origin, specimen);
     const operation = method === "GET" ? url.pathname : method === "POST" && !headers["content-type"].includes("application/json") ? "upload" : (() => { try { const value = JSON.parse(body.toString()); return value.operation === "reconcile" && value.dryRun === true ? "reconcile_preview" : value.operation ?? method; } catch { return method; } })();
     if (specimens.some(row => row.operation === operation)) { specimen.body.fill(0); return; }
-    specimens.push({ ...specimen, operation });
+    specimens.push({ ...specimen, operation, status: response.status(), provenance: "captured-current-request" });
   }
   async function api(method, trigger, { operation, status = 200, path = "/api/admin/media-library", queryMatch = {}, receiptSink } = {}) {
     const wait = page.waitForResponse(response => matchesCoreMediaResponse(response, origin, method, { operation, path, queryMatch }), { timeout: 60_000 });
@@ -282,7 +423,7 @@ export async function runCoreMediaJourneys(ctx) {
     assertCoreMediaAudit(before, after, "media_folder.create", row => row.metadata.folder === root + "/" + plan.namespace);
   }
   async function prepareHeldPrerequisite() {
-    assert.equal(selection, CORE_MEDIA_HELD_SELECTION); assert.equal(checkpoints.length, 0);
+    assert.ok(isCoreMediaSelection(selection)); assert.equal(checkpoints.length, 0);
     const requests = [], capture = proof => requests.push(proof);
     const before = await snapshot("prerequisite-reconcile-before");
     await reconcile(capture); const after = await snapshot("prerequisite-reconciled");
@@ -293,7 +434,7 @@ export async function runCoreMediaJourneys(ctx) {
       const folderBefore = await snapshot("prerequisite-folder-before-" + root);
       await createFolderPositive(root, folderBefore, "prerequisite-", capture);
     }
-    const proof = { selection, purpose: "uncredited-owned-fixture-prerequisite", uiCredit: false,
+    const proof = { selection: CORE_MEDIA_HELD_SELECTION, purpose: "uncredited-owned-fixture-prerequisite", uiCredit: false,
       ownedRunId: before.ownedRunId, namespace: before.namespace, articleId: before.articleId, qaActorId: before.qaActorId,
       operations: ["reconcile", "create_folder"], checkpoints: checkpoints.map(row => ({ ...row })), requests,
       automaticCoverage: [], globalClosed: false };
@@ -306,7 +447,61 @@ export async function runCoreMediaJourneys(ctx) {
     }
     return proof;
   }
-  const group = (name, execute) => run("core-media-" + name, [], execute);
+
+  async function prepareFinalThreePrerequisite(seed) {
+    assert.equal(selection, CORE_MEDIA_FINAL_THREE_SELECTION);
+    await library(); await folder("images", true);
+    await upload([{ name: plan.namespace + ".png", mimeType: "image/png", buffer: png }]); primaryId = uploaded[0];
+    await library(); await folder("files", true);
+    await upload([{ name: plan.namespace + ".pdf", mimeType: "application/pdf", buffer: coreMediaSyntheticPdf() }]);
+    const uploadedState = await snapshot("prerequisite-uploaded"); assert.equal(uploadedState.assets.length, 2);
+    const image = assertCoreMediaAsset(uploadedState, primaryId, { status: "active", checksum: hash(png) });
+    const document = uploadedState.assets.find(row => row.media_kind === "document"); assert.ok(document);
+    await selectAsset(image);
+    const metadataForm = main().locator("form").filter({ has: page.locator('input[name="displayName"]') });
+    const values = { displayName: plan.namespace + "-authored", defaultAltText: "QA synthetic pixel", defaultTitle: "QA media title", defaultCaption: "QA media caption" };
+    for (const [name, value] of Object.entries(values)) await metadataForm.locator('[name="' + name + '"]').fill(value);
+    await api("PATCH", () => metadataForm.getByRole("button", { name: "حفظ البيانات", exact: true }).click(), { operation: "update_metadata" });
+    const metadata = await snapshot("prerequisite-metadata"), asset = assertCoreMediaAsset(metadata, primaryId, { display_name: values.displayName });
+    await selectAsset(asset); for (const [name, value] of Object.entries(values)) await expect(metadataForm.locator('[name="' + name + '"]')).toHaveValue(value);
+    await navigate(plan.article.editPath); await page.locator('[data-admin-tab-id="basic"]').click();
+    await imageField().getByRole("button").first().click();
+    let dialog = page.getByRole("dialog", { name: "اختيار صورة من المكتبة", exact: true }); await expect(dialog).toBeVisible();
+    await folder("images", true, dialog);
+    const pickerData = await api("GET", () => search(dialog).fill(asset.display_name), { queryMatch: { q: asset.display_name, folder: "images/" + plan.namespace } });
+    assert.deepEqual(pickerData.assets.map(row => row.id), [asset.id]); await assetButton(dialog, asset.display_name).click();
+    await dialog.getByRole("button", { name: "تأكيد الاختيار", exact: true }).click(); await expect(dialog).toHaveCount(0);
+    await page.locator('[name="image_alt"]').fill("QA synthetic image"); await articleSave(asset.public_url);
+    await snapshot("prerequisite-picker");
+    const usage = page.waitForResponse(response => matchesCoreMediaResponse(response, origin, "GET", { path: "/api/admin/media-usage" }) && response.status() === 200);
+    await selectAsset(asset); remember(await usage);
+    await expect(main().getByRole("link", { name: "فتح التحرير", exact: true })).toHaveAttribute("href", plan.article.editPath);
+    await expect(main().locator('[data-media-library-mode="manage"]')).toContainText(plan.article.title);
+    await snapshot("prerequisite-usage");
+    await main().getByRole("button", { name: "نقل / إعادة تسمية", exact: true }).click();
+    const moveForm = main().locator("form").filter({ has: page.locator('input[name="targetFolder"]') });
+    await moveForm.getByLabel("مجلد الوجهة", { exact: true }).fill("images/" + plan.namespace + "/moved");
+    await moveForm.getByLabel("اسم الملف الفعلي الجديد", { exact: true }).fill(plan.namespace + "-renamed.png");
+    await moveForm.getByRole("button", { name: "مراجعة العملية", exact: true }).click();
+    dialog = page.getByRole("dialog", { name: "تنفيذ تغيير فعلي لمسار التخزين؟", exact: true });
+    await api("PATCH", () => dialog.locator("[data-admin-confirm-submit]").click(), { operation: "move_asset" }); await expect(dialog).toHaveCount(0);
+    const moved = await snapshot("prerequisite-moved"); await selectAsset(moved.assets.find(row => row.id === primaryId));
+    const replacement = await upload([{ name: plan.namespace + "-replacement.png", mimeType: "image/png", buffer: png }], true);
+    await snapshot("prerequisite-replacement-staged");
+    dialog = page.getByRole("dialog", { name: "استبدال كل المراجع المدعومة؟", exact: true });
+    await api("PATCH", () => dialog.locator("[data-admin-confirm-submit]").click(), { operation: "replace_all" }); await expect(dialog).toHaveCount(0);
+    await snapshot("prerequisite-replaced"); currentId = replacement.id;
+    const proof = { selection, purpose: "uncredited-owned-fixture-prerequisite", uiCredit: false, seed,
+      ownedRunId: seed.ownedRunId, namespace: seed.namespace, articleId: seed.articleId, qaActorId: seed.qaActorId,
+      origin, primaryId, documentId: document.id, replacementId: replacement.id,
+      checkpoints: checkpoints.map(row => ({ ...row })), operations: [...finalThreeSetupOperations],
+      specimens: specimens.filter(row => finalThreeSetupOperations.includes(row.operation)).map(serializeCoreMediaSpecimen), automaticCoverage: [], globalClosed: false };
+    assertCoreMediaFinalThreePrerequisite({ prerequisite: proof, checkpoints }, nativeStates);
+    for (const operation of proof.operations) verifiedOperations.add(operation);
+    return proof;
+  }
+
+  const group = (name, execute) => plan.groups.includes(name) ? run("core-media-" + name, [], execute) : Promise.resolve();
   try {
     if (selection === null) {
     await group("readiness", async () => {
@@ -335,6 +530,7 @@ export async function runCoreMediaJourneys(ctx) {
     });
     } else {
       prerequisite = await prepareHeldPrerequisite();
+      if (selection === CORE_MEDIA_FINAL_THREE_SELECTION) prerequisite = await prepareFinalThreePrerequisite(prerequisite);
     }
     await group("upload-validation-retry", async () => {
       await library(); await folder("images", true);
@@ -437,11 +633,10 @@ export async function runCoreMediaJourneys(ctx) {
       const state = await snapshot("preview"), image = assertCoreMediaAsset(state, primaryId, { status: "active" }); await selectAsset(image);
       const preview = main().locator("section").filter({ has: page.getByRole("heading", { name: image.display_name, exact: true }) }).locator("img");
       await expect(preview).toHaveCount(1);
-      await expect.poll(() => preview.evaluate((element, ownedUrl) => {
-        const source = new URL(element.currentSrc || element.src, location.origin);
-        const actual = source.pathname === "/_next/image" ? source.searchParams.get("url") : source.href;
-        return actual === ownedUrl && element.complete && element.naturalWidth === 1 && element.naturalHeight === 1;
-      }, image.public_url)).toBe(true);
+      await expect(preview).toBeVisible();
+      await expect.poll(() => preview.evaluate(observeCoreMediaPreviewImage, image.public_url)).toMatchObject({
+        exactOwnedUrl: true, complete: true, visible: true, decoded: true, decodedWidth: 1, decodedHeight: 1, sourceStable: true, decodeError: null,
+      });
       const document = state.assets.find(row => row.media_kind === "document"); assert.ok(document); assertCoreMediaAsset(state, document.id, { status: "active" }); await selectAsset(document);
       await expect(main().getByTitle("معاينة " + document.display_name, { exact: true })).toHaveAttribute("src", document.public_url + "#page=1&view=FitH&toolbar=0&navpanes=0");
       return details("preview", ["loaded_image", "pdf_owned_iframe", "native_exact_binary_hashes"]);
@@ -550,17 +745,19 @@ export async function runCoreMediaJourneys(ctx) {
     });
     await group("permission", async () => {
       assertCoreMediaPermissionPrerequisites(specimens, verifiedOperations);
-      const before = await snapshot("permission-before"), client = await http.newContext({ storageState: { cookies: [], origins: [] } });
+      const before = await snapshot("permission-before"), client = await http.newContext({ storageState: { cookies: [], origins: [] } }), denials = [];
       try {
         for (const specimen of specimens) {
           validateCoreMediaReplaySpecimen(origin, specimen);
           const response = await client.fetch(specimen.url, { method: specimen.method, headers: specimen.headers, ...(specimen.method === "GET" ? {} : { data: specimen.body }), maxRedirects: 0, timeout: 30_000 });
-          assertCoreMediaPermissionResponse(response.status(), await response.json()); await response.dispose();
+          const value = await response.json(); assertCoreMediaPermissionResponse(response.status(), value);
+          denials.push({ operation: specimen.operation, bodySha256: specimen.bodySha256, status: response.status(), value }); await response.dispose();
         }
       } finally { await client.dispose(); }
       assertCoreMediaUnchanged(before, await snapshot("permission-after"), true);
-      return details("permission", ["actual_cookie_free_HTTP_Auth_boundary", "all_public_storage_unchanged"], { operations: specimens.map(row => row.operation), proofLimit: "No UI denial or internal Action execution claim." });
+      return details("permission", ["actual_cookie_free_HTTP_Auth_boundary", "all_public_storage_unchanged"], { operations: specimens.map(row => row.operation), ...(selection === CORE_MEDIA_FINAL_THREE_SELECTION ? { requestProof: { origin, specimens: specimens.map(serializeCoreMediaSpecimen), verifiedOperations: [...verifiedOperations], denials } } : {}), proofLimit: "No UI denial or internal Action execution claim." });
     });
+    if (selection === CORE_MEDIA_FINAL_THREE_SELECTION) assertCoreMediaFinalThreePermission({ prerequisite, completed, checkpoints }, nativeStates);
   } finally { for (const specimen of specimens) specimen.body.fill(0); }
   return { completed, checkpoints, ...(prerequisite ? { prerequisite } : {}), relatedRequiredCases: plan.relatedRequiredCases, automaticCoverage: [], globalClosed: false,
     limits: ["Media only; sibling Activity/Sitemap remain separate.", "No Production, original assets, external provider or generic Form/Row Actions closure."] };

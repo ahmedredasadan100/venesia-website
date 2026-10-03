@@ -83,10 +83,289 @@ export type PrivatePublicVerificationContext = {
   sanitize(value: string): string;
   record(stage: string, values: Record<string, string | number | boolean | null>): void;
 };
+
+type FinalQualityArtifactRef = { path: string; sha256: string };
+type FinalQualitySource = { invocationHeadSha: string; sourceSha256: string; manifest: Array<{ file: string; sha256: string }> };
+type FinalQualityOperation = { id: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string };
+type FinalQualityNamedCell = { key: string; disposition: string; evidence: FinalQualityArtifactRef[] };
+const FINAL_QUALITY_ACCOUNTING = ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/";
+const FINAL_QUALITY_READINESS = FINAL_QUALITY_ACCOUNTING + "final-quality-readiness.json";
+const RETAINED_FINAL_QUALITY_AUTHORITY = Object.freeze({
+  operationIdentitySha256: "15721c1324f7123bcdbb6d72669ff81cf34229ff748e0e04ffbd39709f42d517",
+  caseIdentitySha256: "f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",
+  priorAccounting: Object.freeze({
+    path: ".tmp-qa/core-final-closure/cumulative-accounting-stage/current77-retained84-partial79-85-86-application-stage/accounting-metadata-follow-on/current-accounting-successor.json",
+    sha256: "34f9f296582055191d68b8415f44324587b68a77d29169317f159c84d3f573ab",
+  }),
+});
+
+/** Exact retained source, with only the finite reviewed report delta admitted. */
+export function assertRetainedFinalQualitySource(impact: {
+  status: string; retained: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
+  candidate: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
+  changes: Array<{ path: string; beforeSha256: string | null; afterSha256: string; role: string }>;
+  retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
+}, retained: FinalQualitySource, candidate: FinalQualitySource) {
+  assert.equal(impact.status, "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT");
+  assert.equal(impact.retainedBehaviorRelabelled, false); assert.equal(impact.retainedBehaviorReexecuted, false);
+  assert.deepEqual(impact.automaticCoverage, []); assert.equal(impact.globalClosed, false);
+  for (const [binding, source] of [[impact.retained, retained], [impact.candidate, candidate]] as const) {
+    assert.match(source.invocationHeadSha, /^[a-f0-9]{40}$/u); assert.equal(binding.sourceHead, source.invocationHeadSha);
+    assert.equal(binding.sourceSha256, source.sourceSha256); assert.equal(source.sourceSha256, digest(JSON.stringify(source.manifest)));
+    assert.equal(new Set(source.manifest.map(row => row.file)).size, source.manifest.length);
+    for (const row of source.manifest) { assert.ok(sourceIncluded(row.file)); assert.match(row.sha256, /^[a-f0-9]{64}$/u); }
+  }
+  const prior = new Map(retained.manifest.map(row => [row.file, row.sha256]));
+  const next = new Map(candidate.manifest.map(row => [row.file, row.sha256]));
+  const changes = [...new Set([...prior.keys(), ...next.keys()])].sort().flatMap(path => {
+    if (prior.get(path) === next.get(path)) return [];
+    assert.ok(next.has(path), "A report-only source impact cannot delete a retained source file.");
+    assert.match(path, /^docs\/reports\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.(?:md|json)$/u,
+      "Executable, Product, Verification, migration, config and package source must remain equal to Final27.");
+    return [{ path, beforeSha256: prior.get(path) ?? null, afterSha256: next.get(path)!, role: "non-executable-closure-report" }];
+  });
+  assert.deepEqual(impact.changes, changes, "Every actual source difference needs its exact reviewed report path and before/after hash.");
+  return { originalSourceHead: retained.invocationHeadSha, originalSourceSha256: retained.sourceSha256,
+    currentSourceHead: candidate.invocationHeadSha, currentSourceSha256: candidate.sourceSha256, reportChanges: changes };
+}
+
+/** Consume the existing materializer's fixed, reviewed outputs; never recompute behavioral qualification. */
+export function loadRetainedFinalQualityAdmission(admissionSha256: string, expected: FinalQualitySource) {
+  assert.match(admissionSha256, /^[a-f0-9]{64}$/u);
+  const bindings = new Map<string, FinalQualityArtifactRef>();
+  const approvedTracked = new Map(expected.manifest.map(row => {
+    assert.ok(sourceIncluded(row.file)); assert.match(row.sha256, /^[a-f0-9]{64}$/u);
+    return [resolve(ROOT, row.file), row.sha256];
+  }));
+  const artifactPath = (ref: FinalQualityArtifactRef) => {
+    assert.equal(typeof ref.path, "string"); assert.match(ref.sha256, /^[a-f0-9]{64}$/u);
+    const path = resolve(ROOT, ref.path), boundary = resolve(ROOT, ".tmp-qa/core-final-closure") + sep;
+    assert.ok(path.startsWith(boundary) || approvedTracked.get(path) === ref.sha256,
+      "Evidence hashes outside the QA boundary require an exact finite current-source path and digest.");
+    assert.equal(realpathSync(path), path, "Evidence may not traverse a symlink or junction."); assert.ok(lstatSync(path).isFile());
+    return path;
+  };
+  const pin = (ref: FinalQualityArtifactRef) => {
+    const path = artifactPath(ref), bytes = readFileSync(path); assert.equal(digest(bytes), ref.sha256, ref.path);
+    const previous = bindings.get(path); if (previous) assert.equal(previous.sha256, ref.sha256, "Conflicting evidence pins.");
+    bindings.set(path, { path, sha256: ref.sha256 }); return bytes;
+  };
+  const read = <T,>(ref: FinalQualityArtifactRef): T => {
+    assert.ok(artifactPath(ref).startsWith(resolve(ROOT, ".tmp-qa/core-final-closure") + sep), "JSON authorities must remain inside the fixed QA evidence boundary.");
+    return JSON.parse(pin(ref).toString("utf8")) as T;
+  };
+  const fixed = <T,>(ref: FinalQualityArtifactRef, name: string) => { assert.equal(ref.path, FINAL_QUALITY_ACCOUNTING + name); return read<T>(ref); };
+  const admissionRef = { path: FINAL_QUALITY_READINESS, sha256: admissionSha256 };
+  const admission = read<{
+    status: string; sourceHead: string; sourceManifest: FinalQualityArtifactRef; accounting: FinalQualityArtifactRef;
+    operations: FinalQualityArtifactRef; integrity: FinalQualityArtifactRef; sourceCompatibility: FinalQualityArtifactRef;
+    accountingOwner: FinalQualityArtifactRef & { export: string }; producerExecution: FinalQualityArtifactRef;
+    closureEligible: boolean; closureBlockers: FinalQualityArtifactRef[];
+    final27: { qualification: FinalQualityArtifactRef; sourceManifest: FinalQualityArtifactRef; gateReceipt: FinalQualityArtifactRef; originalHookRun: string };
+    operationCounts: Record<string, number>; namedCellCounts: Record<string, number>; remainingPredicates: number;
+    incompleteDomainInventories: number; openPreviewStates: number; cleanup: { remainingOwnedResources: number; remainingOwnedProcesses: number };
+    automaticCoverage: unknown[]; globalClosed: boolean;
+  }>(admissionRef);
+  assert.equal(admission.status, "ROOT_REVIEWED_FINAL_BEHAVIOR_READY_FOR_QUALITY"); assert.equal(admission.sourceHead, expected.invocationHeadSha);
+  assert.deepEqual(admission.automaticCoverage, []); assert.equal(admission.globalClosed, false);
+  const candidate = fixed<FinalQualitySource & { inventoryOnly: boolean; buildClaimed: boolean }>(admission.sourceManifest, "final-source-manifest.json");
+  assert.equal(candidate.inventoryOnly, true); assert.equal(candidate.buildClaimed, false); assert.deepEqual(candidate.manifest, expected.manifest);
+  assert.equal(candidate.invocationHeadSha, expected.invocationHeadSha); assert.equal(candidate.sourceSha256, expected.sourceSha256);
+  const operations = fixed<{
+    status: string; sourceHead: string; originalIdentitySha256: string; retained73Authority: FinalQualityArtifactRef;
+    partitions: { qualified: FinalQualityOperation[]; notApplicable: Array<{ id: string; authority: FinalQualityArtifactRef; countsAsPass: boolean }>; hardOpen: unknown[]; held: unknown[] };
+    counts: Record<string, number>; globalClosed: boolean;
+  }>(admission.operations, "final-111-reconciliation.json");
+  assert.equal(operations.status, "EXACT_ORIGINAL111_RECONCILED"); assert.equal(operations.sourceHead, expected.invocationHeadSha); assert.equal(operations.globalClosed, false);
+  assert.equal(operations.retained73Authority.path, ".tmp-qa/core-final-closure/final-accounting-interim/progress-73-retained-1-na-0-hard-37-held-after-hard-open-2026-10-03.json");
+  const original = read<{ retained: Array<{ id: string; run: string; sourceHead: string; qualification: FinalQualityArtifactRef }>; held: Array<{ id: string; run: string }>; notApplicable: Array<{ id: string; disposition: FinalQualityArtifactRef }> }>(operations.retained73Authority);
+  const originalIds = [...original.retained, ...original.held, ...original.notApplicable].map(row => row.id).sort();
+  assert.equal(originalIds.length, 111); assert.equal(new Set(originalIds).size, 111);
+  assert.equal(digest(JSON.stringify(originalIds)), RETAINED_FINAL_QUALITY_AUTHORITY.operationIdentitySha256);
+  assert.equal(operations.originalIdentitySha256, digest(JSON.stringify(originalIds)));
+  const { qualified, notApplicable, hardOpen, held } = operations.partitions;
+  assert.deepEqual(hardOpen, []); assert.deepEqual(held, []); assert.equal(notApplicable.length, 1);
+  assert.deepEqual([...qualified, ...notApplicable].map(row => row.id).sort(), originalIds);
+  assert.equal(new Set(qualified.map(row => row.id)).size, qualified.length);
+  assert.equal(notApplicable[0].countsAsPass, false); assert.equal(notApplicable[0].id, original.notApplicable[0].id);
+  assert.deepEqual(notApplicable[0].authority, original.notApplicable[0].disposition); pin(notApplicable[0].authority);
+  const operationCounts = { qualified: qualified.length, notApplicable: notApplicable.length, hardOpen: hardOpen.length, held: held.length, total: originalIds.length };
+  assert.deepEqual(operations.counts, operationCounts); assert.deepEqual(admission.operationCounts, operationCounts);
+  for (const row of qualified) { assert.match(row.sourceHead, /^[a-f0-9]{40}$/u); assert.match(row.sourceSha256, /^[a-f0-9]{64}$/u); assert.ok(row.ownedRunId); pin(row.qualification); }
+  for (const originalRow of original.retained) {
+    const matches = qualified.filter(row => row.id === originalRow.id); assert.equal(matches.length, 1);
+    const row = matches[0]; assert.equal(row.run, originalRow.run); assert.equal(row.sourceHead, originalRow.sourceHead);
+    assert.deepEqual(row.qualification, originalRow.qualification, "Retained73 must keep their exact accepted qualification; no replacement or requalification.");
+    const q = read<{ sourceHead: string; sourceSha256: string; ownedRunId: string }>(originalRow.qualification);
+    assert.equal(row.sourceHead, q.sourceHead); assert.equal(row.sourceSha256, q.sourceSha256); assert.equal(row.ownedRunId, q.ownedRunId);
+  }
+  const mediaIds = original.held.filter(row => row.run === "browser-r101").map(row => row.id); assert.equal(mediaIds.length, 10);
+  const mediaQualifications = new Map<string, { run: string; sourceHead: string; sourceSha256: string; ownedRunId: string; globalClosed: boolean;
+    observations: Array<{ status: string; journeyId: string; sourceSha256: string; ownedRunId: string }> }>();
+  for (const id of mediaIds) {
+    const matches = qualified.filter(row => row.id === id); assert.equal(matches.length, 1); const row = matches[0];
+    const path = artifactPath(row.qualification);
+    const media = mediaQualifications.get(path) ?? read<{ run: string; sourceHead: string; sourceSha256: string; ownedRunId: string; globalClosed: boolean;
+      observations: Array<{ status: string; journeyId: string; sourceSha256: string; ownedRunId: string }> }>(row.qualification);
+    mediaQualifications.set(path, media);
+    assert.match(media.run, /^browser-r[1-9][0-9]*$/u); assert.notEqual(media.run, "browser-r101"); assert.equal(media.globalClosed, false);
+    assert.equal(row.run, media.run); assert.equal(row.sourceHead, media.sourceHead); assert.equal(row.sourceSha256, media.sourceSha256); assert.equal(row.ownedRunId, media.ownedRunId);
+    const observations = media.observations.filter(observation => observation.journeyId === id); assert.equal(observations.length, 1);
+    assert.equal(observations[0].status, "QUALIFIED_SCOPED_BEHAVIORAL_OBSERVATION");
+    assert.equal(observations[0].sourceSha256, media.sourceSha256); assert.equal(observations[0].ownedRunId, media.ownedRunId);
+  }
+  const admittedMediaIds = [...mediaQualifications.values()].flatMap(value => value.observations.map(row => row.journeyId)).sort();
+  assert.deepEqual(admittedMediaIds, [...mediaIds].sort(), "Exact Media identities must be conserved across the existing reviewed partial/follow-up qualifications.");
+  const final = admission.final27; assert.equal(final.originalHookRun, "browser-r52");
+  const q = read<{
+    status: string; statusEnvelope: string; cohort: string; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string;
+    originalHookRun: string; deferredFinalQuality: boolean; finalQuality: boolean; journeyCount: number; inputArtifacts: FinalQualityArtifactRef[];
+    observations: Array<{ status: string; journeyId: string; sourceSha256: string; ownedRunId: string }>; automaticCoverage: unknown[]; globalClosed: boolean;
+  }>(final.qualification);
+  assert.equal(q.status, "QUALIFIED_SCOPED_COHORT_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT"); assert.equal(q.statusEnvelope, "qualified-sealed-cohort-envelope");
+  assert.equal(q.cohort, "domain-forms"); assert.match(q.run, /^browser-r[1-9][0-9]*$/u); assert.notEqual(q.run, "browser-r52");
+  assert.ok([FINAL_QUALITY_ACCOUNTING, ".tmp-qa/core-final-closure/cumulative-accounting-stage/"].some(base => final.qualification.path === base + q.run + "-qualified-observations.json"));
+  assert.equal(q.originalHookRun, "browser-r52"); assert.equal(q.deferredFinalQuality, true); assert.equal(q.finalQuality, false);
+  assert.deepEqual(q.automaticCoverage, []); assert.equal(q.globalClosed, false);
+  const expectedIds = original.held.filter(row => row.run === "browser-r52").map(row => row.id);
+  assert.equal(expectedIds.length, 27); assert.equal(q.journeyCount, expectedIds.length); assert.deepEqual(q.observations.map(row => row.journeyId), expectedIds);
+  for (const row of q.observations) {
+    assert.equal(row.status, "QUALIFIED_SCOPED_BEHAVIORAL_OBSERVATION"); assert.equal(row.sourceSha256, q.sourceSha256); assert.equal(row.ownedRunId, q.ownedRunId);
+    const retained = qualified.filter(item => item.id === row.journeyId); assert.equal(retained.length, 1);
+    assert.deepEqual(retained[0], { id: row.journeyId, qualification: final.qualification, run: q.run, sourceHead: q.sourceHead, sourceSha256: q.sourceSha256, ownedRunId: q.ownedRunId });
+  }
+  const rawBase = ".tmp-qa/core-final-closure/" + q.run + "/";
+  assert.equal(final.sourceManifest.path, rawBase + "public-source-manifest.json"); assert.equal(final.gateReceipt.path, rawBase + "public-and-admin-adoption-gates.json");
+  const retainedSource = read<FinalQualitySource>(final.sourceManifest);
+  assert.equal(retainedSource.invocationHeadSha, q.sourceHead); assert.equal(retainedSource.sourceSha256, q.sourceSha256);
+  const gates = read<{ status: string; selection: string; sourceSha256: string; buildIdSha256: string; gates: Array<{ name: string; code: number }> }>(final.gateReceipt);
+  assert.equal(gates.status, "pass"); assert.equal(gates.selection, "admin-adoption"); assert.equal(gates.sourceSha256, q.sourceSha256); assert.match(gates.buildIdSha256, /^[a-f0-9]{64}$/u);
+  assert.deepEqual(gates.gates.map(row => row.name), ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]); assert.ok(gates.gates.every(row => row.code === 0));
+  assert.ok(q.inputArtifacts.length > 0); for (const ref of q.inputArtifacts) pin(ref);
+  const input = new Map(q.inputArtifacts.map(ref => [artifactPath(ref), ref.sha256]));
+  for (const ref of [final.sourceManifest, final.gateReceipt]) assert.equal(input.get(artifactPath(ref)), ref.sha256);
+  for (const name of ["admin-adoption-browser.json", "admin-adoption-database-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json"])
+    assert.ok(input.has(resolve(ROOT, rawBase + name)), "Qualified Final27 must seal its actual Browser/native/cleanup inputs.");
+  const impact = fixed<Parameters<typeof assertRetainedFinalQualitySource>[0]>(admission.sourceCompatibility, "source-impact-current-to-final.json");
+  assert.deepEqual(impact.retained.sourceManifest, final.sourceManifest); assert.deepEqual(impact.candidate.sourceManifest, admission.sourceManifest);
+  const sourceBinding = assertRetainedFinalQualitySource(impact, retainedSource, candidate);
+  const ledger = fixed<{
+    sourceHead: string; globalClosed: boolean; automaticCoverage: unknown[];
+    closureEligibility: { eligible: boolean; namedCells: FinalQualityNamedCell[]; namedCellCounts: Record<string, number>; remainingPredicates: number; incompleteDomainInventories: number; openPreviewStates: number;
+      domainInventories: Array<{ boundary: string; id: string; surfaces: string[]; asRecordedComplete: boolean; complete: boolean }> ;
+      previewStates: Array<{ consumer: string; publication: string; session: string; status: string; evidence: FinalQualityArtifactRef[] }> };
+    accounting: { historical: number; applicable: number; pendingNotApplicable: number; provenNotApplicable: number; pending: Array<{ key: string }>; proven: Array<{ key: string }> };
+    modules: Record<string, Array<{ key: string; status: string; completeNamedContract: boolean; qualifiedPredicates: Array<{ id: string }>; openPredicates: Array<{ id: string }>; dispositionEvidence?: { previousOpenPredicates?: Array<{ id: string }> } }>>;
+    U03: { cells: Array<{ key: string; status: string; qualifiedNamedCell: boolean; remainingConditions: unknown[] }> };
+    predicateCorrections: unknown[];
+    U01: { lifecycle: { denominator: number; qualified: number; remaining: number }; scopedFormRuntime: { denominator: number; qualified: number; open: number } };
+  }>(admission.accounting, "final-current-accounting-successor.json");
+  assert.equal(ledger.sourceHead, expected.invocationHeadSha); assert.equal(ledger.globalClosed, false); assert.deepEqual(ledger.automaticCoverage, []);
+  const eligibility = ledger.closureEligibility; assert.equal(typeof eligibility.eligible, "boolean");
+  const keys = eligibility.namedCells.map(row => row.key).sort(); assert.equal(keys.length, 959); assert.equal(new Set(keys).size, keys.length);
+  assert.equal(digest(JSON.stringify(keys)), RETAINED_FINAL_QUALITY_AUTHORITY.caseIdentitySha256);
+  for (const row of eligibility.namedCells) { assert.ok(["QUALIFIED", "PROVEN_NOT_APPLICABLE", "OPEN", "NOT_APPLICABLE_PENDING_PROOF"].includes(row.disposition)); if (["QUALIFIED", "PROVEN_NOT_APPLICABLE"].includes(row.disposition)) assert.ok(row.evidence.length > 0); for (const ref of row.evidence) pin(ref); }
+  const count = (disposition: string) => eligibility.namedCells.filter(row => row.disposition === disposition).length;
+  const namedCellCounts = { historical: keys.length, applicable: count("QUALIFIED") + count("OPEN"), qualifiedApplicable: count("QUALIFIED"), openApplicable: count("OPEN"), pendingNotApplicable: count("NOT_APPLICABLE_PENDING_PROOF"), provenNotApplicable: count("PROVEN_NOT_APPLICABLE") };
+  assert.deepEqual(eligibility.namedCellCounts, namedCellCounts); assert.deepEqual(admission.namedCellCounts, namedCellCounts);
+  assert.equal(namedCellCounts.applicable + namedCellCounts.pendingNotApplicable + namedCellCounts.provenNotApplicable, keys.length);
+  for (const key of ["historical", "applicable", "pendingNotApplicable", "provenNotApplicable"] as const) assert.equal(ledger.accounting[key], namedCellCounts[key]);
+  assert.deepEqual(ledger.accounting.pending.map(row => row.key).sort(), eligibility.namedCells.filter(row => row.disposition === "NOT_APPLICABLE_PENDING_PROOF").map(row => row.key).sort());
+  assert.deepEqual(ledger.accounting.proven.map(row => row.key).sort(), eligibility.namedCells.filter(row => row.disposition === "PROVEN_NOT_APPLICABLE").map(row => row.key).sort());
+  const accepted = read<typeof ledger>(RETAINED_FINAL_QUALITY_AUTHORITY.priorAccounting);
+  assert.deepEqual(ledger.predicateCorrections, accepted.predicateCorrections);
+  for (const moduleId of ["U02", "U04", "U05"]) {
+    const priorCells = accepted.modules[moduleId], cells = ledger.modules[moduleId];
+    assert.equal(new Set(cells.map(cell => cell.key)).size, cells.length);
+    assert.deepEqual(cells.map(cell => cell.key).sort(), priorCells.map(cell => cell.key).sort(), "Every existing module cell must remain present.");
+    for (const cell of cells) {
+      const prior = priorCells.find(row => row.key === cell.key)!;
+      const predicateIds = (value: typeof cell) => [...new Set([...value.qualifiedPredicates, ...value.openPredicates,
+        ...(value.status === "PROVEN_NOT_APPLICABLE" ? value.dispositionEvidence?.previousOpenPredicates ?? [] : [])].map(row => row.id))].sort();
+      assert.deepEqual(predicateIds(cell), predicateIds(prior), "Existing finite predicates cannot disappear behind a zero-open total.");
+      for (const predicate of prior.qualifiedPredicates) assert.deepEqual(cell.qualifiedPredicates.find(row => row.id === predicate.id), predicate, "Prior qualified proof is immutable.");
+      if (!["PROVEN_NOT_APPLICABLE", "NOT_APPLICABLE_PENDING_PROOF"].includes(cell.status))
+        assert.equal(cell.completeNamedContract, cell.openPredicates.length === 0);
+    }
+  }
+  assert.equal(new Set(ledger.U03.cells.map(cell => cell.key)).size, ledger.U03.cells.length);
+  assert.deepEqual(ledger.U03.cells.map(cell => cell.key).sort(), accepted.U03.cells.map(cell => cell.key).sort());
+  assert.equal(ledger.U01.lifecycle.denominator, accepted.U01.lifecycle.denominator);
+  assert.equal(ledger.U01.scopedFormRuntime.denominator, accepted.U01.scopedFormRuntime.denominator);
+  assert.equal(ledger.U01.lifecycle.qualified + ledger.U01.lifecycle.remaining, ledger.U01.lifecycle.denominator);
+  assert.equal(ledger.U01.scopedFormRuntime.qualified + ledger.U01.scopedFormRuntime.open, ledger.U01.scopedFormRuntime.denominator);
+  const remainingPredicates = ["U02", "U04", "U05"].reduce((sum, moduleId) => sum + ledger.modules[moduleId].reduce((n, cell) => n + cell.openPredicates.length, 0), 0);
+  assert.equal(eligibility.remainingPredicates, remainingPredicates);
+  const canonicalPath = rawBase + "selected-journey-canonical-inventory/admin-adoption-browser.json";
+  const canonicalSha = input.get(resolve(ROOT, canonicalPath)); assert.ok(canonicalSha);
+  const canonical = read<{ inventoryOnly: boolean; driverCompleted: boolean; globalClosed: boolean;
+    inventory: Array<{ boundary: string; id: string; surfaces: string[]; domainJourneyInventoryComplete: boolean }>;
+    previewMatrix: Array<{ consumer: string; publication: string; session: string }> } >({ path: canonicalPath, sha256: canonicalSha });
+  assert.equal(canonical.inventoryOnly, true); assert.equal(canonical.driverCompleted, false); assert.equal(canonical.globalClosed, false);
+  const domainIdentity = (row: { boundary: string; id: string; surfaces: string[] }) => ({ boundary: row.boundary, id: row.id, surfaces: row.surfaces });
+  assert.deepEqual(eligibility.domainInventories.map(domainIdentity), canonical.inventory.map(domainIdentity));
+  assert.equal(new Set(eligibility.domainInventories.map(row => row.boundary + ":" + row.id)).size, canonical.inventory.length);
+  for (const [index, row] of eligibility.domainInventories.entries()) { assert.equal(row.asRecordedComplete, canonical.inventory[index].domainJourneyInventoryComplete); assert.equal(typeof row.complete, "boolean"); }
+  const previewIdentity = (row: { consumer: string; publication: string; session: string }) => ({ consumer: row.consumer, publication: row.publication, session: row.session });
+  assert.deepEqual(eligibility.previewStates.map(previewIdentity), canonical.previewMatrix.map(previewIdentity));
+  assert.equal(new Set(eligibility.previewStates.map(row => JSON.stringify(previewIdentity(row)))).size, canonical.previewMatrix.length);
+  for (const row of eligibility.previewStates) { assert.ok(["pass", "open"].includes(row.status)); if (row.status === "pass") assert.ok(row.evidence.length > 0); for (const ref of row.evidence) pin(ref); }
+  assert.equal(eligibility.incompleteDomainInventories, eligibility.domainInventories.filter(row => !row.complete).length);
+  assert.equal(eligibility.openPreviewStates, eligibility.previewStates.filter(row => row.status !== "pass").length);
+  for (const key of ["remainingPredicates", "incompleteDomainInventories", "openPreviewStates"] as const) assert.equal(admission[key], eligibility[key]);
+  assert.equal(admission.closureEligible, eligibility.eligible); assert.ok(Array.isArray(admission.closureBlockers));
+  if (namedCellCounts.openApplicable || namedCellCounts.pendingNotApplicable || remainingPredicates || eligibility.incompleteDomainInventories || eligibility.openPreviewStates || ledger.U01.lifecycle.remaining || ledger.U01.scopedFormRuntime.open) {
+    assert.equal(eligibility.eligible, false); assert.ok(admission.closureBlockers.length > 0, "Open obligations need explicit retained Closure blockers, not a Quality failure.");
+  }
+  for (const ref of admission.closureBlockers) pin(ref);
+  const accountingState = { namedCellCounts, remainingPredicates, incompleteDomainInventories: eligibility.incompleteDomainInventories,
+    openPreviewStates: eligibility.openPreviewStates, lifecycle: ledger.U01.lifecycle, scopedFormRuntime: ledger.U01.scopedFormRuntime,
+    openFeedbackConditions: ledger.U03.cells.reduce((sum, cell) => sum + cell.remainingConditions.length, 0),
+    closureEligible: eligibility.eligible, closureBlockers: admission.closureBlockers };
+  assert.equal(admission.accountingOwner.path, ".tmp-qa/core-final-closure/cumulative-accounting-stage/current77-retained84-partial79-85-86-application-stage/accounting-metadata-follow-on/materialize.mjs");
+  assert.equal(admission.accountingOwner.export, "materializeFinalAccountingReviewed"); pin(admission.accountingOwner);
+  const producer = fixed<{ status: string; sourceHead: string; accountingOwner: typeof admission.accountingOwner; review: FinalQualityArtifactRef;
+    inputs: FinalQualityArtifactRef[]; outputs: { accounting: FinalQualityArtifactRef; operations: FinalQualityArtifactRef }; automaticCoverage: unknown[]; globalClosed: boolean }>(admission.producerExecution, "final-accounting-producer-execution.json");
+  assert.equal(producer.status, "FINAL_ACCOUNTING_MATERIALIZED_REVIEWED"); assert.equal(producer.sourceHead, expected.invocationHeadSha);
+  assert.deepEqual(producer.accountingOwner, admission.accountingOwner); assert.deepEqual(producer.outputs, { accounting: admission.accounting, operations: admission.operations });
+  assert.deepEqual(producer.automaticCoverage, []); assert.equal(producer.globalClosed, false);
+  const review = fixed<{ status: string; sourceHead: string; accountingOwner: typeof admission.accountingOwner; inputs: FinalQualityArtifactRef[];
+    qualifiedOperations: FinalQualityArtifactRef[] }>(producer.review, "final-accounting-root-review.json");
+  assert.equal(review.status, "ROOT_REVIEWED_FINAL_ACCOUNTING_MATERIALIZATION"); assert.equal(review.sourceHead, expected.invocationHeadSha);
+  assert.deepEqual(review.accountingOwner, admission.accountingOwner); assert.deepEqual(review.inputs, producer.inputs);
+  const qualifierRefs = [...new Map(qualified.map(row => [artifactPath(row.qualification), { path: artifactPath(row.qualification), sha256: row.qualification.sha256 }])).values()].sort((a, b) => a.path.localeCompare(b.path));
+  assert.deepEqual(review.qualifiedOperations.map(ref => ({ path: artifactPath(ref), sha256: ref.sha256 })).sort((a, b) => a.path.localeCompare(b.path)), qualifierRefs);
+  assert.ok(producer.inputs.length > 0); for (const ref of producer.inputs) pin(ref);
+  assert.deepEqual(admission.cleanup, { remainingOwnedResources: 0, remainingOwnedProcesses: 0 });
+  const integrity = fixed<{
+    status: string; sourceHead: string; requiredReferences: FinalQualityArtifactRef[]; checkedReferences: FinalQualityArtifactRef[]; failedReferences: unknown[];
+    historicalFailedSealsPreserved: boolean; qualifiedSourceIdentitiesPreserved: boolean; remainingOwnedResources: number; remainingOwnedProcesses: number;
+  }>(admission.integrity, "final-evidence-integrity.json");
+  assert.equal(integrity.status, "FINAL_EVIDENCE_INTEGRITY_PASS"); assert.equal(integrity.sourceHead, expected.invocationHeadSha);
+  assert.deepEqual(integrity.failedReferences, []); assert.equal(integrity.historicalFailedSealsPreserved, true); assert.equal(integrity.qualifiedSourceIdentitiesPreserved, true);
+  assert.equal(integrity.remainingOwnedResources, 0); assert.equal(integrity.remainingOwnedProcesses, 0);
+  const normalized = (refs: FinalQualityArtifactRef[]) => refs.map(ref => ({ path: artifactPath(ref), sha256: ref.sha256 })).sort((a, b) => a.path.localeCompare(b.path));
+  const required = normalized(integrity.requiredReferences), checked = normalized(integrity.checkedReferences);
+  assert.equal(new Set(required.map(ref => ref.path)).size, required.length); assert.deepEqual(checked, required); assert.ok(required.length > 0);
+  for (const ref of integrity.checkedReferences) pin(ref);
+  const covered = new Map(required.map(ref => [ref.path, ref.sha256]));
+  for (const [path, ref] of bindings) if (path !== artifactPath(admissionRef) && path !== artifactPath(admission.integrity))
+    assert.equal(covered.get(path), ref.sha256, "Final integrity must cover every consumed evidence binding.");
+  const verify = () => { for (const ref of bindings.values()) assert.equal(digest(readFileSync(artifactPath(ref))), ref.sha256, "Retained Quality admission changed during execution."); };
+  return { verify, receipt: { mode: "retained" as const, reexecuted: false, originalHookRun: "browser-r52", run: q.run,
+    ownedRunId: q.ownedRunId, sourceHead: q.sourceHead, sourceSha256: q.sourceSha256, buildIdSha256: gates.buildIdSha256,
+    qualification: final.qualification, sourceManifest: final.sourceManifest, gateReceipt: final.gateReceipt,
+    admission: admissionRef, accounting: admission.accounting, operations: admission.operations, integrity: admission.integrity,
+    sourceCompatibility: admission.sourceCompatibility, sourceBinding, accountingState, accountingOwner: admission.accountingOwner,
+    producerExecution: admission.producerExecution, qualifiedJourneyIds: expectedIds, automaticCoverage: [], globalClosed: false } };
+}
+
 export type PublicGateRequest = {
   additionalSourceFiles: readonly string[];
   /** Full ci:check prefix, followed once by the existing build/Public/Admin gates. */
   finalQualityGate?: true;
+  /** Explicit retained Final27 admission from the existing accounting owner; no Admin replay. */
+  retainedAdminBehaviorAdmissionSha256?: string;
   /** Fixed affected-build subset; omission retains the complete Public gate contract. */
   selection?: "build-contracts" | "admin-interactions" | "admin-adoption";
   /** Fixed follow-up journeys; retained Audit2 outcomes are not replayed. */
@@ -94,7 +373,7 @@ export type PublicGateRequest = {
   /** Bounded independent Core families; the final gate still runs the Public suite. */
   adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings" | "media-library" | "template-bulk" | "navigation-settings" | "auth-entry" | "media-recovery" | "query-presentation" | "template-controls" | "domain-bulk" | "topic-controls" | "project-controls" | "presentation-controls";
   /** Optional exact affected journeys within the existing domain-forms cohort. */
-  adoptionJourneySelection?: "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
+  adoptionJourneySelection?: "media-library-final-three-followup" | "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";
@@ -382,12 +661,20 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const measurement = request.selection === "admin-interactions" ? request.adminMeasurement : undefined;
   assert.equal(Boolean(request.adminMeasurement), Boolean(measurement));
   const adoption = request.selection === "admin-adoption";
+  const retainedQuality = request.retainedAdminBehaviorAdmissionSha256 !== undefined;
+  if (retainedQuality) {
+    assert.equal(request.finalQualityGate, true); assert.equal(request.selection, undefined);
+    assert.equal(request.adoptionScope, undefined); assert.equal(request.adoptionCohort, undefined);
+    assert.equal(request.adoptionJourneySelection, undefined); assert.equal(request.adminMeasurement, undefined);
+    assert.deepEqual(request.additionalSourceFiles, []);
+    assert.match(request.retainedAdminBehaviorAdmissionSha256!, /^[a-f0-9]{64}$/u);
+  }
   assert.ok(request.adoptionScope === undefined || (adoption && request.adoptionScope === "core-closure"), "Unknown fixed adoption scope.");
   assert.ok(request.adoptionCohort === undefined || (request.adoptionScope === "core-closure" && ["preview-recovery-templates", "domain-forms", "domain-commands", "page-composition", "template-libraries", "readonly-hubs", "recovery-templates", "specialized-settings", "media-library", "template-bulk", "navigation-settings", "auth-entry", "media-recovery", "query-presentation", "template-controls", "domain-bulk", "topic-controls", "project-controls", "presentation-controls"].includes(request.adoptionCohort)), "Unknown Core cohort.");
   if (request.adoptionJourneySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) validateCorePreviewPublicImpactSelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });
   else validateCoreJourneySelection({ scope: request.adoptionScope, cohort: request.adoptionCohort, selection: request.adoptionJourneySelection });
   if (request.adoptionJourneySelection !== undefined) assert.equal(request.selection, "admin-adoption");
-  assert.ok(request.finalQualityGate === undefined || (request.finalQualityGate === true && adoption), "Final Quality Gate requires the complete Admin adoption selection.");
+  assert.ok(request.finalQualityGate === undefined || (request.finalQualityGate === true && (adoption || retainedQuality)), "Final Quality Gate requires complete Admin adoption or the explicit retained Final27 admission.");
   const credentials = measurement || adoption ? adminCredentials.get(context) : undefined;
   if (adoption) assert.ok(credentials, "Owned Admin fixture preparation is required for adoption journeys.");
   const originalContext = context;
@@ -498,6 +785,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const reports: Array<{ name: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   const qualityReports: Array<{ script: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   let buildIdSha256: string | null = null;
+  let retainedAdmission: ReturnType<typeof loadRetainedFinalQualityAdmission> | undefined;
   const verifySource = () => {
     for (const row of manifest) { assert.equal(digest(readFileSync(sourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
     assert.equal(digest(readFileSync(join(sourceDirectory, imageConfig.file))), imageConfig.sha256,
@@ -559,6 +847,11 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       assert.ok(lstatSync(gitDirectory).isDirectory(), "Final gate requires canonical read-only Git provenance.");
       const scripts = JSON.parse(readFileSync(join(sourceDirectory, "package.json"), "utf8")).scripts as Record<string, string>;
       qualityScripts = finalQualityScriptNames(scripts);
+      if (retainedQuality) {
+        retainedAdmission = loadRetainedFinalQualityAdmission(request.retainedAdminBehaviorAdmissionSha256!,
+          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest });
+        execFileSync("git", ["merge-base", "--is-ancestor", retainedAdmission.receipt.sourceHead, headSha], gitOptions);
+      }
       const nodeDirectory = dirname(process.execPath);
       npmCli = [join(nodeDirectory, "node_modules/npm/bin/npm-cli.js"), resolve(nodeDirectory, "../lib/node_modules/npm/bin/npm-cli.js"), resolve(nodeDirectory, "../share/nodejs/npm/bin/npm-cli.js")]
         .find(candidate => existsSync(candidate) && lstatSync(candidate).isFile());
@@ -568,12 +861,13 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       qualityEnvironment = { ...context.cleanEnvironment(), GIT_DIR: gitDirectory, GIT_WORK_TREE: sourceDirectory,
         GIT_NO_LAZY_FETCH: "1", GIT_TERMINAL_PROMPT: "0", npm_config_userconfig: npmUserConfig, npm_config_globalconfig: npmGlobalConfig };
       receipt(context, "final-quality-plan.json", { headSha, sourceSha256: digest(JSON.stringify(manifest)),
-        prefix: qualityScripts, tail: GATES.map(gate => gate.name), adminAdoptionAfterPublic: true,
+        prefix: qualityScripts, tail: GATES.map(gate => gate.name), adminAdoptionAfterPublic: !retainedQuality,
+        ...(retainedAdmission ? { mode: "retained-admin-behavior", retainedAdminBehavior: retainedAdmission.receipt } : {}),
         environmentFilesCopied: false, prefixUsesDatabaseCredentials: false });
     }
     const executionGates = [...qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 })), ...gates];
     for (const gate of executionGates) {
-      verifySource(); await context.assertOwned(); signal.throwIfAborted();
+      verifySource(); retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
       let env: NodeJS.ProcessEnv = "qualityScript" in gate ? qualityEnvironment : context.cleanEnvironment();
       let gateApp: ChildProcess | undefined;
       if (gate.name === "normal-build") env = childEnvironment;
@@ -654,7 +948,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       context.record("public-gate-pass", { gate: gate.name });
       if (gateApp) await stopChild(gateApp, context.cleanEnvironment());
     }
-    verifySource();
+    verifySource(); retainedAdmission?.verify();
     assert.equal(await gitHead(context), headSha, "Repository HEAD changed during the source snapshot gates.");
     if (!frozenManifest) assert.deepEqual(await gitSourceInventory(context, request), files, "Git source membership changed during the source snapshot gates.");
     if (measurement) adminPhases.get(originalContext)!.add(measurement.phase);
@@ -684,6 +978,15 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   if (request.selection === "build-contracts") {
     const buildResult = { ...result, selection: "build-contracts", publicE2EReexecuted: false };
     receipt(context, "public-build-contract-gates.json", buildResult); return buildResult;
+  }
+  if (retainedAdmission) {
+    assert.deepEqual(reports.map(report => report.name), GATES.map(gate => gate.name));
+    const value = { ...result, mode: "retained-admin-behavior", globalClosedClaimed: false,
+      finalQualityGate: { status: "pass", mode: "retained-admin-behavior", prefix: qualityReports, tail: reports,
+        retainedAdminBehavior: retainedAdmission.receipt, sourceHead: retainedAdmission.receipt.sourceBinding.currentSourceHead,
+        sourceSha256: result.sourceSha256, buildIdSha256 } };
+    receipt(context, "final-quality-gate.json", value.finalQualityGate);
+    receipt(context, "public-four-gates.json", value); return value;
   }
   receipt(context, "public-four-gates.json", result); return result;
 }

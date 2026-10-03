@@ -8,7 +8,7 @@ import sharp from "sharp";
 import ts from "typescript";
 import { chromium } from "playwright";
 import { createJiti } from "jiti";
-import { buildCoreMediaPlan, matchesCoreMediaResponse, assertCoreMediaReceipt, assertCoreMediaUnchanged, assertCoreMediaAsset, assertCoreMediaAudit, validateCoreMediaReplaySpecimen, assertCoreMediaPermissionPrerequisites, assertCoreMediaPermissionResponse, coreMediaSyntheticPdf, coreMediaSyntheticPng } from "./fixtures/admin-core-media-journeys.mjs";
+import { buildCoreMediaPlan, matchesCoreMediaResponse, assertCoreMediaReceipt, assertCoreMediaUnchanged, assertCoreMediaAsset, assertCoreMediaAudit, validateCoreMediaReplaySpecimen, assertCoreMediaPermissionPrerequisites, assertCoreMediaPermissionResponse, coreMediaSyntheticPdf, coreMediaSyntheticPng, observeCoreMediaPreviewImage } from "./fixtures/admin-core-media-journeys.mjs";
 
 const checks = [], digest = input => createHash("sha256").update(input).digest("hex");
 const check = async (name, task) => { await task(); checks.push({ name, status: "pass" }); };
@@ -80,6 +80,7 @@ const nativePath = "scripts/verify-admin-core-media-isolated.mts";
 const nativeSource = readFileSync(nativePath, "utf8");
 const compiled = ts.transpileModule(nativeSource, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
 const pixel = coreMediaSyntheticPng();
+const twoPixel = await sharp(pixel).resize(2, 1, { fit: "fill" }).png().toBuffer();
 await check("synthetic-png-decodes-through-production-image-decoder", async () => {
   const { info } = await sharp(pixel).raw().toBuffer({ resolveWithObject: true });
   assert.equal(info.width, 1); assert.equal(info.height, 1);
@@ -94,6 +95,10 @@ const server = createServer((req, res) => {
     return;
   }
   if (req.url === "/") { res.writeHead(200, { "content-type": "text/html" }); res.end('<button id="save">Save</button><p id="result"></p><input id="draft" value="retained"><script>save.onclick=async()=>{save.disabled=true;try{const r=await fetch("/api/admin/media-library",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({operation:"update_metadata"})});result.textContent=String(r.status)}catch{result.textContent="failure"}finally{save.disabled=false}}</script>'); return; }
+  if (req.url.startsWith("/controlled-preview")) {
+    const bytes = req.url.includes("two") ? twoPixel : req.url.includes("broken") ? Buffer.from("invalid controlled image") : pixel;
+    res.writeHead(200, { "content-type": "image/png", "cache-control": "no-store" }); res.end(bytes); return;
+  }
   publicGets++;
   if (mode === "redirect") { res.writeHead(302, { location: "http://127.0.0.1:" + foreign.address().port + "/private" }); res.end(); return; }
   if (mode === "missing" || mode === "missing400") { res.writeHead(mode === "missing" ? 404 : 400, { "content-type": "application/json" }); res.end('{"statusCode":"404","error":"not_found"}'); return; }
@@ -184,6 +189,22 @@ try {
       const image = new Image(); const wait = new Promise(resolve => { image.onload = () => resolve(image.naturalWidth); image.onerror = () => resolve(0); }); image.src = data; return wait;
     }, "data:image/png;base64," + pixel.toString("base64"));
     await check("synthetic-png-is-actually-decodable", () => assert.equal(imageLoaded, 1));
+    for (const mode of ["valid-density", "wrong-url", "broken", "two-pixels", "hidden"]) {
+      const ownedUrl = origin + "/controlled-preview";
+      const actualUrl = ownedUrl + (mode === "wrong-url" ? "-other" : mode === "broken" ? "-broken" : mode === "two-pixels" ? "-two" : "");
+      await page.setContent('<img id="preview" style="width:220px;height:80px" sizes="220px" srcset="' + actualUrl + ' 256w" src="' + actualUrl + '">');
+      const preview = page.locator("#preview");
+      await preview.evaluate(async image => { try { await image.decode(); } catch { /* The broken-image control must be observable. */ } });
+      if (mode === "hidden") await preview.evaluate(image => { image.style.display = "none"; });
+      const observed = await preview.evaluate(observeCoreMediaPreviewImage, mode === "wrong-url" ? ownedUrl : actualUrl);
+      await check("actual-preview-observer-" + mode, () => {
+        const passes = observed.exactOwnedUrl && observed.complete && observed.visible && observed.decoded && observed.decodedWidth === 1 && observed.decodedHeight === 1 && observed.sourceStable && observed.decodeError === null;
+        assert.equal(passes, mode === "valid-density");
+        if (mode === "valid-density") { assert.equal(observed.naturalWidth, 0); assert.equal(observed.naturalHeight, 0); assert.equal(observed.decodedWidth, 1); }
+        if (mode === "two-pixels") { assert.equal(observed.decodedWidth, 2); assert.equal(observed.decodedHeight, 1); }
+        if (mode === "hidden") { assert.equal(observed.visible, false); assert.equal(observed.decoded, true); }
+      });
+    }
     await context.close();
   } finally { await browser.close(); }
 } finally {
