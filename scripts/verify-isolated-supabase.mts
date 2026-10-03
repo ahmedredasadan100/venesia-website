@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { createServer, type IncomingMessage } from "node:http";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -526,6 +530,118 @@ function verifyAdminMeasurementRestartPolicy() {
   cases.push("all failed Admin measurement drivers reject same-fixture restart; a successful driver continues");
 }
 
+/** Exercise the installed Next config loader, client validator and optimizer; no Product app or DB. */
+async function verifyOwnedPublicImageConfig(network = false) {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const builder = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "isolatedPublicImageConfigSource");
+  assert.ok(builder);
+  const code = ts.transpileModule(builder.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const build = new Function("assert", code + ";return isolatedPublicImageConfigSource;")(assert) as (port: number, sha: string) => string;
+  const originalConfig = readFileSync(path.join(root, "next.config.ts")), originalSha256 = sha256(originalConfig);
+  for (const port of [0, 80, 1023, 3000, 65536, NaN, 57604.5]) assert.throws(() => build(port, originalSha256));
+  assert.throws(() => build(57604, "invalid"));
+  const require = createRequire(import.meta.url);
+  const { CONFIG_FILES, PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER } = require("next/dist/shared/lib/constants.js");
+  assert.ok(CONFIG_FILES.indexOf("next.config.mjs") < CONFIG_FILES.indexOf("next.config.ts"));
+  const loadConfig = require("next/dist/server/config.js").default;
+  const loader = require("next/dist/shared/lib/image-loader.js").default;
+  const { ImageOptimizerCache, fetchExternalImage, imageOptimizer } = require("next/dist/server/image-optimizer.js");
+  const temporaryRoot = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-owned-image-config-")));
+  const beforeDirectory = path.join(temporaryRoot, "before"), afterDirectory = path.join(temporaryRoot, "after");
+  const png = readFileSync(path.join(root, "public/images/venesia-5.png"));
+  const requests: string[] = [];
+  const server = network ? createServer((req, res) => {
+    requests.push(req.url ?? "");
+    if (req.url === "/storage/v1/object/public/cms-images/redirect.png") {
+      res.writeHead(302, { Location: "/outside-owned-images.png" }); res.end(); return;
+    }
+    if (req.url !== "/storage/v1/object/public/cms-images/probe.png") { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { "Content-Type": "image/png", "Content-Length": png.length }); res.end(png);
+  }) : undefined;
+  const testEnvironment = process.env as Record<string, string | undefined>;
+  const originalNodeEnv = testEnvironment.NODE_ENV;
+  let apiPort = 57604, generatedConfigSha256 = "", optimizedBytes = 0, closed = false;
+  try {
+    if (server) {
+      await new Promise<void>((done, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", done); });
+      apiPort = (server.address() as AddressInfo).port;
+    }
+    for (const directory of [beforeDirectory, afterDirectory]) {
+      mkdirSync(directory); writeFileSync(path.join(directory, "next.config.ts"), originalConfig, { flag: "wx" });
+      symlinkSync(path.join(root, "node_modules"), path.join(directory, "node_modules"), "junction");
+    }
+    const generated = build(apiPort, originalSha256); generatedConfigSha256 = sha256(generated);
+    writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated, { flag: "wx" });
+    const before = await loadConfig(PHASE_PRODUCTION_BUILD, beforeDirectory, { silent: true });
+    const after = await loadConfig(PHASE_PRODUCTION_BUILD, afterDirectory, { silent: true });
+    const runtime = await loadConfig(PHASE_PRODUCTION_SERVER, afterDirectory, { silent: true });
+    assert.equal(before.configFileName, "next.config.ts"); assert.equal(after.configFileName, "next.config.mjs");
+    assert.deepEqual(after.images, runtime.images);
+    assert.deepEqual(await before.headers(), await after.headers());
+    for (const key of ["allowedDevOrigins", "outputFileTracingExcludes"]) assert.deepEqual(before[key], after[key]);
+    assert.equal(after.images.unoptimized, false); assert.deepEqual(after.images.domains, []);
+    assert.equal(after.images.dangerouslyAllowLocalIP, true); assert.equal(after.images.maximumRedirects, 0);
+    const origin = `http://127.0.0.1:${apiPort}`, imageUrl = `${origin}/storage/v1/object/public/cms-images/probe.png`;
+    const request = { headers: { accept: "image/webp" } } as IncomingMessage;
+    const validate = (url: string, config = after) => ImageOptimizerCache.validateParams(request, { url, w: "64", q: "75" }, config, false);
+    assert.equal(validate(imageUrl, before).errorMessage, '"url" parameter is not allowed');
+    const accepted = validate(imageUrl); assert.equal(accepted.errorMessage, undefined); assert.equal(accepted.href, imageUrl);
+    testEnvironment.NODE_ENV = "development";
+    assert.throws(() => loader({ config: before.images, src: imageUrl, width: 64, quality: 75 }), /not configured/u);
+    assert.match(loader({ config: after.images, src: imageUrl, width: 64, quality: 75 }), /^\/_next\/image\?/u);
+    const rejectedUrls = [imageUrl.replace("127.0.0.1", "127.0.0.2"), imageUrl.replace("127.0.0.1", "localhost"),
+      imageUrl.replace(`:${apiPort}/`, `:${apiPort === 65535 ? 65534 : apiPort + 1}/`), imageUrl.replace("http:", "https:"),
+      imageUrl.replace("cms-images", "cms-documents"), imageUrl.replace("/public/", "/sign/"), `${imageUrl}?download=1`,
+      `${origin}/outside-owned-images.png`, "https://unowned.supabase.co/storage/v1/object/public/cms-images/probe.png"];
+    for (const url of rejectedUrls) {
+      assert.equal(validate(url).errorMessage, '"url" parameter is not allowed');
+      assert.throws(() => loader({ config: after.images, src: url, width: 64, quality: 75 }), /not configured/u);
+    }
+    let verifyNode: ts.VariableDeclaration | undefined;
+    const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && node.name.getText(file) === "verifySource") verifyNode = node; ts.forEachChild(node, visit); };
+    visit(file); assert.ok(verifyNode?.initializer);
+    const verifyCode = ts.transpileModule("const verify = " + verifyNode.initializer.getText(file) + ";", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const verifySnapshot = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", verifyCode + ";return verify;")(
+      [{ file: "next.config.ts", sha256: originalSha256 }], sha256, readFileSync, () => path.join(beforeDirectory, "next.config.ts"),
+      path.join, afterDirectory, { file: "next.config.mjs", sha256: generatedConfigSha256 }, readdirSync, assert);
+    verifySnapshot();
+    writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated + "\n// tampered\n"); assert.throws(verifySnapshot, /changed after binding/u);
+    writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated);
+    writeFileSync(path.join(afterDirectory, "next.config.js"), "module.exports={};"); assert.throws(verifySnapshot, /precedence/u);
+    rmSync(path.join(afterDirectory, "next.config.js")); verifySnapshot();
+    if (network) {
+      await assert.rejects(fetchExternalImage(imageUrl, false, png.length + 1024, 0), { statusCode: 400 });
+      assert.deepEqual(requests, []);
+      const fetched = await fetchExternalImage(imageUrl, after.images.dangerouslyAllowLocalIP, png.length + 1024, after.images.maximumRedirects);
+      assert.equal(sha256(fetched.buffer), sha256(png));
+      const optimized = await imageOptimizer(fetched, accepted, after, { silent: true });
+      assert.equal(optimized.contentType, "image/webp"); assert.ok(optimized.buffer.length > 0); optimizedBytes = optimized.buffer.length;
+      await assert.rejects(fetchExternalImage(`${origin}/storage/v1/object/public/cms-images/redirect.png`, true, png.length + 1024, 0), { statusCode: 508 });
+      assert.deepEqual(requests, ["/storage/v1/object/public/cms-images/probe.png", "/storage/v1/object/public/cms-images/redirect.png"]);
+    }
+    assert.equal(sha256(readFileSync(path.join(root, "next.config.ts"))), originalSha256);
+    cases.push("installed Next config precedence and original TS delegation preserve Product config; owned image allowlist rejects nine origin/path/query negatives");
+    cases.push("actual snapshot guard rejects derived-config tampering and config-precedence shadowing");
+  } finally {
+    if (originalNodeEnv === undefined) delete testEnvironment.NODE_ENV; else testEnvironment.NODE_ENV = originalNodeEnv;
+    if (server?.listening) { server.closeAllConnections(); await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done())); }
+    if (server) {
+      const probe = createNetServer(); await new Promise<void>((done, reject) => { probe.once("error", reject); probe.listen(apiPort, "127.0.0.1", () => probe.close(error => error ? reject(error) : done())); });
+    }
+    assert.equal(realpathSync(temporaryRoot), temporaryRoot);
+    assert.equal(path.dirname(temporaryRoot), realpathSync(tmpdir()));
+    assert.ok(path.basename(temporaryRoot).startsWith("venisia-owned-image-config-"));
+    rmSync(temporaryRoot, { recursive: true, force: false }); closed = !existsSync(temporaryRoot) && !server?.listening;
+  }
+  assert.equal(closed, true);
+  return { status: "PASS", scope: "installed Next isolated image configuration", nextVersion: require("next/package.json").version,
+    originalConfigSha256: originalSha256, generatedConfigSha256, nativeValidationNegativeControls: 9,
+    clientValidationReproducedBefore: true, serverValidationReproducedBefore: true, buildAndRuntimeConfigEqual: true,
+    networkRequests: requests.length, actualOptimizerOutputBytes: optimizedBytes, redirectFollowed: false,
+    browserExecuted: false, databaseCalls: 0, productConfigUnchanged: true, remainingOwnedResources: 0, remainingOwnedProcesses: 0 };
+}
+
 function verifyFinalQualityGatePlan() {
   const source = readSource("scripts/lib/isolated-public-verification.mts");
   const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
@@ -631,6 +747,7 @@ async function main() {
   cases.push(...closure.cases);
   await verifyRestoreAclPolicy();
   verifyFinalQualityGatePlan();
+  await verifyOwnedPublicImageConfig();
   verifyScanner();
   const provenance = verifyReleaseLock();
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-public-application.mts", "scripts/lib/isolated-supabase-cli.mts"];
@@ -810,5 +927,5 @@ async function closureCheckpointsOnly() {
   console.log(JSON.stringify(await verifyApplicationClosureCheckpointsOffline(), null, 2));
 }
 
-const verification = process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+const verification = process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });

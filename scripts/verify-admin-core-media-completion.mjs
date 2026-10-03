@@ -43,7 +43,8 @@ checks.push('legacy-CommonJS-loader-rejects-the-same-valid-ESM-metadata');
 const media=compile('verify-admin-core-media-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own}},'exports.__seed=(h,r)=>checkpointReceipts.set(h,new Map(r.map(x=>[String(x.id),hash(JSON.stringify(x))])));');
 const recovery=compile('verify-admin-core-media-recovery-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own}},'exports.__seed=(h,r,c)=>completionReceipts.set(h,{records:new Map(r.map(x=>[String(x.id),receiptHash(x)])),cleanup:receiptHash(c)});');
 const recoverySelection=compile('fixtures/admin-core-media-recovery-journeys.mjs');
-const aggregate=compile('verify-admin-adoption-readback-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery,'./fixtures/admin-core-media-recovery-journeys.mjs':recoverySelection});
+const mediaSelection=compile('fixtures/admin-core-media-journeys.mjs');
+const aggregate=compile('verify-admin-adoption-readback-isolated.mts',{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery,'./fixtures/admin-core-media-recovery-journeys.mjs':recoverySelection,'./fixtures/admin-core-media-journeys.mjs':mediaSelection});
 const mediaGroups=['readiness','folders','upload-validation-retry','catalog-query','metadata-failure-retry','preview','picker-use','in-use-delete','physical-move','replace-references','detach-delete','permission'];
 const recoveryGroups=['prepare','queue-fetch-retry','committed-lease-warning','resolve-lease','produce-existing-object-reservation','produce-finalize','repair-finalize','produce-missing','repair-missing','repair-existing-object-reservation','permission'];
 function sourceGroups(file) {const source=fs.readFileSync(file,'utf8'),ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),groups=[];
@@ -127,7 +128,100 @@ for(const[name,mutate]of Object.entries({
  'copied-unregistered-handle':f=>{f.handle={identity:f.handle.identity};active.add(f.handle);f.check=()=>aggregate.assertCoreMediaCompletionReceipts(f.handle,f.browser,f.native,f.cleanup);}
 })){const f=fixture(true,true);mutate(f);assert.throws(f.check,name);checks.push('followup-eight-'+name);}
 
+function heldMediaFixture() {
+ const f=fixture(false),selection=mediaSelection.CORE_MEDIA_HELD_SELECTION;
+ f.browser.journeySelection=selection;f.browser.inventoryOnly=false;f.browser.wholeCohortExecuted=false;f.browser.globalClosed=false;
+ const ids=mediaSelection.coreSelectedMediaIds(selection);f.browser.selectedJourneyIds=ids;f.browser.executedJourneyIds=[...ids];
+ f.requiredCases=[{key:'controlled-media-required',consumer:'media-library'}];f.browser.requiredCases=f.requiredCases.map(row=>({...row,status:'open',evidence:null}));
+ f.result.completed=f.result.completed.slice(2);
+ f.browser.evidence=[{id:'existing-auth-login',status:'pass',authenticated:true},...f.result.completed.map(row=>({id:'core-media-'+row.group,status:'pass',coverage:[],...row}))];
+ const base={...f.native.records[0],article:{id:91},assets:[],objects:[],folders:[],references:[],leases:[],reservations:[],audits:[],binaries:[],
+  storageSha256:'a'.repeat(64),publicDataSha256:'b'.repeat(64),publicTableInventorySha256:'c'.repeat(64),runtime:{state:'synced'}};
+ const roots=['images/'+base.namespace,'files/'+base.namespace],states=Array.from({length:6},()=>({...structuredClone(base),id:crypto.randomUUID()}));
+ const folder=(root)=>({id:root,normalized_path:root,parent_path:root.split('/')[0],display_name:base.namespace,created_by:base.qaActorId});
+ const audit=(root,index)=>({id:index,action:'media_folder.create',actor_admin_user_id:base.qaActorId,metadata:{folder:root}});
+ states[3].folders=[folder(roots[0])];states[3].audits=[audit(roots[0],1)];
+ states[4].folders=structuredClone(states[3].folders);states[4].audits=structuredClone(states[3].audits);
+ states[5].folders=roots.map(folder);states[5].audits=roots.map((root,index)=>audit(root,index+1));
+ const labels=['prerequisite-reconcile-before','prerequisite-reconciled','prerequisite-folder-before-images','prerequisite-folder-after-images','prerequisite-folder-before-files','prerequisite-folder-after-files'];
+ const points=states.map((row,index)=>checkpointShape(false,row,labels[index]));
+ const requests=[{operation:'reconcile',dryRun:false},...roots.map(folder=>({operation:'create_folder',folder,displayName:base.namespace}))].map((body,index)=>{
+  const text=JSON.stringify(body);return{url:'http://127.0.0.1:65431/api/admin/media-library',method:'POST',status:index?201:200,body:text,bodySha256:hash(text),acknowledged:true,provenance:'captured-current-request'};});
+ f.result.prerequisite={selection,purpose:'uncredited-owned-fixture-prerequisite',uiCredit:false,globalClosed:false,automaticCoverage:[],
+  ownedRunId:base.ownedRunId,namespace:base.namespace,articleId:base.articleId,qaActorId:base.qaActorId,
+  operations:['reconcile','create_folder'],checkpoints:structuredClone(points),requests};
+ f.native.records=[...states,...f.native.records];f.result.checkpoints=[...points,...f.result.checkpoints];media.__seed(f.handle,f.native.records);
+ f.select=()=>mediaSelection.assertCoreMediaSelectionReceipt(f.browser,f.requiredCases);
+ return f;
+}
+{
+ const f=heldMediaFixture(),r=f.check(),selection=f.select();
+ assert.deepEqual(r.groups,mediaGroups.slice(2));assert.equal(r.prerequisite.nativeCheckpointIds.length,6);assert.equal(r.prerequisite.uiCredit,false);
+ assert.equal(r.binding.checkpoints,8);assert.equal(selection.selectedJourneyIds.length,10);assert.equal(selection.retainedTwoReplayed,false);
+ assert.deepEqual(mediaSelection.coreSelectedMediaGroups(),mediaGroups);
+ checks.push('held-media-ten-exact-native-prefix-and-selected-case-join-preserves-default-twelve');
+}
+
+for (const [name, mutate] of Object.entries({
+ 'missing-prerequisite':f=>{delete f.result.prerequisite;},
+ 'wrong-prerequisite-selection':f=>{f.result.prerequisite.selection='invented';},
+ 'retained-ui-credit':f=>{f.result.prerequisite.uiCredit=true;},
+ 'prerequisite-capability-credit':f=>{f.result.prerequisite.automaticCoverage=['unexecuted'];},
+ 'prerequisite-global-closure':f=>{f.result.prerequisite.globalClosed=true;},
+ 'foreign-prerequisite-run':f=>{f.result.prerequisite.ownedRunId='other';},
+ 'foreign-prerequisite-actor':f=>{f.result.prerequisite.qaActorId=9;},
+ 'foreign-prerequisite-namespace':f=>{f.result.prerequisite.namespace='qa-core-media-fedcba9876543210';},
+ 'wrong-prefix-order':f=>{f.result.prerequisite.checkpoints.reverse();},
+ 'missing-prerequisite-checkpoint':f=>{f.result.prerequisite.checkpoints.pop();},
+ 'borrowed-prerequisite-checkpoint':f=>{f.result.prerequisite.checkpoints[0].receiptId=f.native.records.at(-1).id;},
+ 'missing-acknowledged-request':f=>{f.result.prerequisite.requests.pop();},
+ 'replayed-request-provenance':f=>{f.result.prerequisite.requests[0].provenance='historical';},
+ 'unacknowledged-request':f=>{f.result.prerequisite.requests[0].acknowledged=false;},
+ 'non-successful-request':f=>{f.result.prerequisite.requests[1].status=500;},
+ 'body-digest-drift':f=>{f.result.prerequisite.requests[0].bodySha256='0'.repeat(64);},
+ 'wrong-canonical-body':f=>{const r=f.result.prerequisite.requests[0];r.body=JSON.stringify({operation:'reconcile',dryRun:true});r.bodySha256=hash(r.body);},
+ 'foreign-endpoint':f=>{f.result.prerequisite.requests[2].url='http://localhost:65431/api/admin/media-library';},
+ 'missing-operation-proof':f=>{f.result.prerequisite.operations.pop();},
+ 'drop-group-and-evidence':f=>{f.result.completed.pop();f.browser.evidence.pop();},
+ 'extra-retained-group':f=>{const row={group:'folders',consumer:'media-library',automaticCoverage:[]};f.result.completed.unshift(row);f.browser.evidence.splice(1,0,{...row,id:'core-media-folders',status:'pass',coverage:[]});},
+ 'selector-removed':f=>{delete f.browser.journeySelection;},
+ 'unknown-selector':f=>{f.browser.journeySelection='invented';},
+})) { const f=heldMediaFixture();mutate(f);assert.throws(f.check,name);checks.push('held-media-'+name); }
+for (const [name,mutate] of Object.entries({
+ 'dropped-selected-id':f=>{f.browser.selectedJourneyIds.pop();},
+ 'extra-executed-id':f=>{f.browser.executedJourneyIds.push('core-media-readiness');},
+ 'extra-retained-evidence':f=>{f.browser.evidence.push({id:'core-media-folders',status:'pass',coverage:[]});},
+ 'missing-login':f=>{f.browser.evidence.shift();},
+ 'unauthenticated-login':f=>{f.browser.evidence[0].authenticated=false;},
+ 'promoted-required-case':f=>{f.browser.requiredCases[0].status='behavior_verified';},
+ 'whole-cohort-claim':f=>{f.browser.wholeCohortExecuted=true;},
+ 'unknown-selection':f=>{f.browser.journeySelection='invented';},
+ 'blanket-coverage':f=>{f.browser.evidence[1].coverage.push('unexecuted');},
+})) { const f=heldMediaFixture();mutate(f);assert.throws(f.select,name);checks.push('held-media-selection-'+name); }
+
+{
+ const file='scripts/fixtures/admin-core-media-journeys.mjs',source=fs.readFileSync(file,'utf8'),ast=ts.createSourceFile(file,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),matches=[];
+ const visit=node=>{if(ts.isFunctionDeclaration(node)&&node.name?.text==='remember')matches.push(node);ts.forEachChild(node,visit);};visit(ast);assert.equal(matches.length,1);
+ const origin='http://127.0.0.1:65431',specimens=[];
+ const remember=new Function('origin','specimens','hash','validateCoreMediaReplaySpecimen',matches[0].getText(ast)+';return remember;')(origin,specimens,hash,mediaSelection.validateCoreMediaReplaySpecimen);
+ const response=dryRun=>{const body=JSON.stringify({operation:'reconcile',dryRun});return{status:()=>200,request:()=>({url:()=>origin+'/api/admin/media-library',method:()=>'POST',postDataBuffer:()=>Buffer.from(body),headers:()=>({'content-type':'application/json',origin})})};};
+ remember(response(true));remember(response(false));remember(response(false));
+ assert.deepEqual(specimens.map(row=>row.operation),['reconcile_preview','reconcile']);
+ const write=specimens.find(row=>row.operation==='reconcile'),confirmed=JSON.stringify({operation:'reconcile',dryRun:false});
+ assert.equal(write.body.toString('utf8'),confirmed);assert.equal(write.bodySha256,hash(confirmed));
+ assert.equal(JSON.parse(specimens[0].body.toString('utf8')).dryRun,true);
+ mediaSelection.validateCoreMediaReplaySpecimen(origin,write);
+ checks.push('actual-remember-preview-then-confirm-retains-distinct-acknowledged-write-body-without-dedup-drift');
+}
+{
+ const admission=compile('fixtures/admin-core-domain-form-journeys.mjs').validateCoreJourneySelection;
+ assert.equal(admission({scope:'core-closure',cohort:'media-library',selection:mediaSelection.CORE_MEDIA_HELD_SELECTION}),mediaSelection.CORE_MEDIA_HELD_SELECTION);
+ assert.equal(admission({scope:'core-closure',cohort:'media-library'}),null);
+ for(const value of [{scope:'audit2-selected',cohort:'media-library',selection:mediaSelection.CORE_MEDIA_HELD_SELECTION},{scope:'core-closure',cohort:'media-recovery',selection:mediaSelection.CORE_MEDIA_HELD_SELECTION},{scope:'core-closure',cohort:'media-library',selection:'invented'}])assert.throws(()=>admission(value));
+ checks.push('actual-fixed-selector-admission-rejects-wrong-scope-cohort-and-invented-selection');
+}
+
 const canonicalAggregateSource=fs.readFileSync(path.join(sourceDirectory,'verify-admin-adoption-readback-isolated.mts'),'utf8'),currentField='const checkpointField = recovery ? "id" : "receiptId";';assert.equal(canonicalAggregateSource.split(currentField).length,2);
-const oldAggregate=compileSource(canonicalAggregateSource.replace(currentField,'const checkpointField = "id";'),path.join(sourceDirectory,'verify-admin-adoption-readback-isolated.mts'),{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery,'./fixtures/admin-core-media-recovery-journeys.mjs':recoverySelection});const actualLibraryReceipt=fixture(false),actualRecoveryReceipt=fixture(true);assert.throws(()=>oldAggregate.assertCoreMediaCompletionReceipts(actualLibraryReceipt.handle,actualLibraryReceipt.browser,actualLibraryReceipt.native));assert.equal(oldAggregate.assertCoreMediaCompletionReceipts(actualRecoveryReceipt.handle,actualRecoveryReceipt.browser,actualRecoveryReceipt.native,actualRecoveryReceipt.cleanup).binding.checkpoints,actualRecoveryReceipt.native.records.length);checks.push('old-id-only-assumption-rejects-actual-library-producer-but-preserves-recovery');
+const oldAggregate=compileSource(canonicalAggregateSource.replace(currentField,'const checkpointField = "id";'),path.join(sourceDirectory,'verify-admin-adoption-readback-isolated.mts'),{'./lib/isolated-supabase.mts':{assertOwnedLocalHandle:own},'./verify-admin-core-media-isolated.mts':media,'./verify-admin-core-media-recovery-isolated.mts':recovery,'./fixtures/admin-core-media-recovery-journeys.mjs':recoverySelection,'./fixtures/admin-core-media-journeys.mjs':mediaSelection});const actualLibraryReceipt=fixture(false),actualRecoveryReceipt=fixture(true);assert.throws(()=>oldAggregate.assertCoreMediaCompletionReceipts(actualLibraryReceipt.handle,actualLibraryReceipt.browser,actualLibraryReceipt.native));assert.equal(oldAggregate.assertCoreMediaCompletionReceipts(actualRecoveryReceipt.handle,actualRecoveryReceipt.browser,actualRecoveryReceipt.native,actualRecoveryReceipt.cleanup).binding.checkpoints,actualRecoveryReceipt.native.records.length);checks.push('old-id-only-assumption-rejects-actual-library-producer-but-preserves-recovery');
 
 const sources=['verify-admin-core-media-isolated.mts','verify-admin-core-media-recovery-isolated.mts','verify-admin-adoption-readback-isolated.mts'];const result={status:'pass',count:checks.length,checks,sourceSha256:Object.fromEntries(sources.map(p=>["scripts/"+p,hash(fs.readFileSync(path.join(sourceDirectory,p)))])),helperSources:Object.fromEntries(['scripts/fixtures/admin-core-media-journeys.mjs','scripts/fixtures/admin-core-media-recovery-journeys.mjs'].map(p=>[p,hash(fs.readFileSync(p))])),boundary:'Actual canonical aggregate and private receipt-completion functions, executed with controlled ports and test-only private capture setup. No native database/browser proof or capability coverage.',automaticCoverage:[],globalClosed:false};const output=path.resolve('.tmp-qa/core-final-closure/media-completion-controls.json');fs.mkdirSync(path.dirname(output),{recursive:true});fs.writeFileSync(output,JSON.stringify(result,null,2)+'\n');console.log(JSON.stringify({status:result.status,count:result.count}));

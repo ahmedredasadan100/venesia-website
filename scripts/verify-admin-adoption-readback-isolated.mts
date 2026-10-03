@@ -1,3 +1,4 @@
+import {CORE_MEDIA_HELD_SELECTION,coreSelectedMediaGroups,assertCoreMediaSelectionReceipt,assertCoreMediaHeldPrerequisite} from "./fixtures/admin-core-media-journeys.mjs";
 import {assertCoreMediaRecoveryPermissionContinuation,CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,coreSelectedMediaRecoveryGroups,assertCoreMediaRecoverySelectionReceipt} from './fixtures/admin-core-media-recovery-journeys.mjs';
 import {assertCoreHeroPendingRequestSemantics,CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION,corePresentationSelectedKinds,assertCorePresentationSelectionReceipt} from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import {isCoreTopicControlsSelection,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
@@ -67,10 +68,10 @@ export function assertCoreMediaCompletionReceipts(handle: OwnedLocalHandle, brow
   const recovery = browser.cohort === "media-recovery";
   assert.ok(recovery || browser.cohort === "media-library");
   const selection=browser.journeySelection??null,followup=(selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||selection==="media-recovery-missing-followup");
-  if(recovery)coreSelectedMediaRecoveryGroups(selection);else assert.equal(selection,null);
+  if(recovery)coreSelectedMediaRecoveryGroups(selection);else coreSelectedMediaGroups(selection);
   const expectedGroups = recovery
     ? coreSelectedMediaRecoveryGroups(selection)
-    : ["readiness", "folders", "upload-validation-retry", "catalog-query", "metadata-failure-retry", "preview", "picker-use", "in-use-delete", "physical-move", "replace-references", "detach-delete", "permission"];
+    : coreSelectedMediaGroups(selection);
   const result = recovery ? browser.mediaRecovery : browser.media;
   assert.ok(result && Array.isArray(result.completed) && Array.isArray(result.checkpoints));
   assert.deepEqual(result.automaticCoverage, []); assert.equal(result.globalClosed, false);
@@ -99,7 +100,7 @@ export function assertCoreMediaCompletionReceipts(handle: OwnedLocalHandle, brow
   assert.deepEqual(ids, stateRecords.map((row: MediaJoinRow) => row.id), "Every Browser checkpoint must join the same native result in order.");
   assert.ok(ids.length > 0);
   for (const row of result.checkpoints) assert.ok(typeof row.label === "string" && row.label.length > 0);
-  let binding;
+  let binding, prerequisiteBinding;
   if (recovery) {
     assert.ok(cleanup); assert.equal(cleanup.status, "closed"); assert.equal(cleanup.activeLocks, 0);
     const setup=native.records.filter((row:MediaJoinRow)=>row.kind==='media-recovery-followup-prepare');
@@ -121,8 +122,10 @@ export function assertCoreMediaCompletionReceipts(handle: OwnedLocalHandle, brow
   } else {
     assert.equal(native.records.length, stateRecords.length);
     binding = assertOwnedCoreMediaCheckpointCompletion(handle, native.records);
+    if (selection === CORE_MEDIA_HELD_SELECTION) prerequisiteBinding = assertCoreMediaHeldPrerequisite(result, native.records);
+    else assert.equal(result.prerequisite, undefined, "Full Media cohort cannot claim selected setup.");
   }
-  return { groups: expectedGroups, nativeCheckpoints: ids.length, binding, ...(selection==="media-recovery-missing-followup"?{permissionBoundary:assertCoreMediaRecoveryPermissionContinuation(result,native)}:{}), automaticCoverage: [], globalClosed: false };
+  return { groups: expectedGroups, nativeCheckpoints: ids.length, binding, ...(prerequisiteBinding ? { prerequisite: prerequisiteBinding } : {}), ...(selection==="media-recovery-missing-followup"?{permissionBoundary:assertCoreMediaRecoveryPermissionContinuation(result,native)}:{}), automaticCoverage: [], globalClosed: false };
 }
 
 /** Only the Page create's one accepted save and its cookie-free denial pair may extend Navigation's native checkpoints. */
@@ -278,7 +281,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       domainTailPlan = (isReadonlyQueryProof ? buildCoreReadonlyQueryProofPlan : isTrackingPermissions ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),paths:{...location,...tracking}});
     }
     const domainTailNative = isDomainTail ? JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")) : null;
-    const selectedJourneys = (browser.journeySelection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||browser.journeySelection==="media-recovery-missing-followup") ? assertCoreMediaRecoverySelectionReceipt(browser,canonicalRequiredCases) : (browser.journeySelection===CORE_PRESENTATION_SCROLL_SELECTION||browser.journeySelection===CORE_PRESENTATION_HERO_SELECTION) ? assertCorePresentationSelectionReceipt(browser,canonicalRequiredCases) : isTopicControlsRetry ? assertCoreTopicControlsRetryReceipt(browser,canonicalRequiredCases) : isTemplateControlsRetry ? assertCoreTemplateControlsRetryReceipt(browser,canonicalRequiredCases) : isProjectEditors ? assertCoreProjectEditorSelectionReceipt(browser,canonicalRequiredCases) : isNavigationFollowup ? assertCoreNavigationFollowupReceipt(browser,canonicalRequiredCases) : isTemplateHeroBulk ? assertCoreTemplateHeroBulkReceipt(browser,canonicalRequiredCases) : isSpecializedFollowup ? await assertCoreSpecializedFollowupReceipt(browser,canonicalRequiredCases) : isPageCompositionFollowup ? await assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) : isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupReceipt(browser,canonicalRequiredCases) : isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
+    const selectedJourneys = browser.journeySelection === CORE_MEDIA_HELD_SELECTION ? assertCoreMediaSelectionReceipt(browser,canonicalRequiredCases) : (browser.journeySelection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||browser.journeySelection==="media-recovery-missing-followup") ? assertCoreMediaRecoverySelectionReceipt(browser,canonicalRequiredCases) : (browser.journeySelection===CORE_PRESENTATION_SCROLL_SELECTION||browser.journeySelection===CORE_PRESENTATION_HERO_SELECTION) ? assertCorePresentationSelectionReceipt(browser,canonicalRequiredCases) : isTopicControlsRetry ? assertCoreTopicControlsRetryReceipt(browser,canonicalRequiredCases) : isTemplateControlsRetry ? assertCoreTemplateControlsRetryReceipt(browser,canonicalRequiredCases) : isProjectEditors ? assertCoreProjectEditorSelectionReceipt(browser,canonicalRequiredCases) : isNavigationFollowup ? assertCoreNavigationFollowupReceipt(browser,canonicalRequiredCases) : isTemplateHeroBulk ? assertCoreTemplateHeroBulkReceipt(browser,canonicalRequiredCases) : isSpecializedFollowup ? await assertCoreSpecializedFollowupReceipt(browser,canonicalRequiredCases) : isPageCompositionFollowup ? await assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) : isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupReceipt(browser,canonicalRequiredCases) : isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
       native:domainTailNative,ownedRunId:handle.identity.runId,
       sourceSha256:JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,expectedActorId:await readCoreFixedQaActor(handle),
     }) : isPreviewImpact ? assertCorePreviewPublicImpactReceipt(browser, previewImpactContext!) : isTemplateCreates
@@ -309,7 +312,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(draftNative.status,"pass");
       draftRestoration=assertCoreFormDraftRestorationJoin({artifact:draftArtifact,browser,native:draftNative,ownedRunId:handle.identity.runId,sourceSha256:(browser as unknown as {sourceSha256:string}).sourceSha256});
     }
-    if (selectedJourneys && browser.journeySelection!==CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION && browser.journeySelection!=="media-recovery-missing-followup" && browser.journeySelection!==CORE_PRESENTATION_SCROLL_SELECTION && browser.journeySelection!==CORE_PRESENTATION_HERO_SELECTION && !isPreviewImpact && !isDomainTail && !isQueryLayout && !isTemplateCards && !isReadonlyHubFollowup && !isPageCompositionFollowup && !isSpecializedFollowup && !isTemplateHeroBulk && !isNavigationFollowup && !isProjectEditors && !isTemplateControlsRetry && !isTopicControlsRetry) {
+    if (selectedJourneys && browser.journeySelection!==CORE_MEDIA_HELD_SELECTION && browser.journeySelection!==CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION && browser.journeySelection!=="media-recovery-missing-followup" && browser.journeySelection!==CORE_PRESENTATION_SCROLL_SELECTION && browser.journeySelection!==CORE_PRESENTATION_HERO_SELECTION && !isPreviewImpact && !isDomainTail && !isQueryLayout && !isTemplateCards && !isReadonlyHubFollowup && !isPageCompositionFollowup && !isSpecializedFollowup && !isTemplateHeroBulk && !isNavigationFollowup && !isProjectEditors && !isTemplateControlsRetry && !isTopicControlsRetry) {
       assert.ok(draftRestoration);
       if (isTemplateCreates) assertCoreTemplateSelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration, {
         native: JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),

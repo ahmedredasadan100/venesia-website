@@ -8,6 +8,39 @@ import { expect, request as http } from "playwright/test";
 const hash = bytes => createHash("sha256").update(bytes).digest("hex");
 const searchLabel = "ابحث بالاسم أو المسار أو الوصف البديل…";
 const groupNames = ["readiness", "folders", "upload-validation-retry", "catalog-query", "metadata-failure-retry", "preview", "picker-use", "in-use-delete", "physical-move", "replace-references", "detach-delete", "permission"];
+export const CORE_MEDIA_HELD_SELECTION = "media-library-held-followup";
+/** @param {string|null} selection */
+export function coreSelectedMediaGroups(selection = null) {
+  assert.ok(selection === null || selection === CORE_MEDIA_HELD_SELECTION, "Unknown Media selection.");
+  return selection === null ? [...groupNames] : groupNames.slice(2);
+}
+export function coreSelectedMediaIds(selection) {
+  assert.equal(selection, CORE_MEDIA_HELD_SELECTION);
+  return coreSelectedMediaGroups(selection).map(name => "core-media-" + name);
+}
+export function assertCoreMediaSelectionReceipt(browser, requiredCases) {
+  const ids = coreSelectedMediaIds(browser.journeySelection);
+  assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "media-library");
+  assert.equal(browser.status, "pass"); assert.equal(browser.driverCompleted, true);
+  assert.equal(browser.inventoryOnly, false); assert.equal(browser.wholeCohortExecuted, false);
+  assert.equal(browser.globalClosed, false); assert.deepEqual(browser.errors, []);
+  const expectedCases = requiredCases.map(row => {
+    if (Object.hasOwn(row, "status") || Object.hasOwn(row, "evidence")) {
+      assert.equal(row.status, "open"); assert.equal(row.evidence, null);
+    }
+    return { ...row, status: "open", evidence: null };
+  });
+  assert.equal(new Set(expectedCases.map(row => row.key)).size, expectedCases.length);
+  assert.deepEqual(browser.requiredCases, expectedCases);
+  assert.deepEqual(browser.selectedJourneyIds, ids); assert.deepEqual(browser.executedJourneyIds, ids);
+  const login = browser.evidence.filter(row => row.id === "existing-auth-login");
+  assert.equal(login.length, 1); assert.equal(login[0].status, "pass"); assert.equal(login[0].authenticated, true);
+  const rows = browser.evidence.filter(row => row.id !== "existing-auth-login");
+  assert.deepEqual(rows.map(row => row.id), ids);
+  assert.ok(rows.every(row => row.status === "pass" && row.coverage.length === 0));
+  return { status: "pass", selection: browser.journeySelection, selectedJourneyIds: ids, executedJourneyIds: ids,
+    retainedTwoReplayed: false, automaticCoverage: [], wholeCohortExecuted: false, globalClosed: false };
+}
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==", "base64");
 export function coreMediaSyntheticPng() { return Buffer.from(png); }
 export function coreMediaSyntheticPdf() {
@@ -18,7 +51,7 @@ export function coreMediaSyntheticPdf() {
   data += "xref\n0 5\n0000000000 65535 f \n" + offsets.map(n => String(n).padStart(10, "0") + " 00000 n \n").join("");
   return Buffer.from(data + "trailer\n<< /Size 5 /Root 1 0 R >>\nstartxref\n" + offset + "\n%%EOF\n");
 }
-export function buildCoreMediaPlan({ fixtures, forms, collections, requiredCases }) {
+export function buildCoreMediaPlan({ fixtures, forms, collections, requiredCases, selection = null }) {
   const fixture = fixtures.mediaClosure;
   assert.ok(fixture?.namespaceUnique === true && fixture.maximumAssets === 13);
   assert.match(fixture.namespace, /^qa-core-media-[a-f0-9]{16}$/u);
@@ -30,7 +63,7 @@ export function buildCoreMediaPlan({ fixtures, forms, collections, requiredCases
   assert.equal(collections.filter(row => row.id === "media-library").length, 1);
   const relatedRequiredCases = requiredCases.filter(row => row.consumer === "media-library" || row.consumer === form[0].id).map(row => row.key);
   assert.ok(relatedRequiredCases.length > 0);
-  return { ...fixture, groups: [...groupNames], relatedRequiredCases, automaticCoverage: [] };
+  return { ...fixture, groups: coreSelectedMediaGroups(selection), relatedRequiredCases, automaticCoverage: [] };
 }
 export function assertCoreMediaReceipt(value, request, fixture) {
   assert.equal(value?.id, request.id); assert.equal(value.kind, "media-library-state"); assert.equal(value.status, "pass");
@@ -40,6 +73,49 @@ export function assertCoreMediaReceipt(value, request, fixture) {
   assert.ok(value.assets.length <= 13);
   for (const row of value.audits) assert.equal(Number(row.actor_admin_user_id), value.qaActorId);
   assert.match(value.storageSha256, /^[a-f0-9]{64}$/u);
+}
+export function assertCoreMediaHeldPrerequisite(result, records) {
+  const p = result.prerequisite;
+  assert.ok(p); assert.equal(p.selection, CORE_MEDIA_HELD_SELECTION);
+  assert.equal(p.purpose, "uncredited-owned-fixture-prerequisite");
+  assert.equal(p.uiCredit, false); assert.equal(p.globalClosed, false); assert.deepEqual(p.automaticCoverage, []);
+  assert.deepEqual(p.operations, ["reconcile", "create_folder"]);
+  const labels = ["prerequisite-reconcile-before", "prerequisite-reconciled", "prerequisite-folder-before-images",
+    "prerequisite-folder-after-images", "prerequisite-folder-before-files", "prerequisite-folder-after-files"];
+  assert.deepEqual(p.checkpoints, result.checkpoints.slice(0, 6));
+  assert.deepEqual(p.checkpoints.map(row => row.label), labels);
+  const states = p.checkpoints.map((point, index) => {
+    assert.deepEqual(Object.keys(point).sort(), ["label", "receiptId"]);
+    const matches = records.filter(row => row.id === point.receiptId); assert.equal(matches.length, 1);
+    const row = matches[0]; assert.equal(row, records[index], "Prerequisite must be the native prefix.");
+    assertCoreMediaReceipt(row, { id: point.receiptId }, { namespace: p.namespace, article: { id: p.articleId } });
+    for (const key of ["ownedRunId", "namespace", "articleId", "qaActorId"]) assert.equal(row[key], p[key]);
+    for (const key of ["assets", "objects", "references", "leases", "reservations", "binaries"]) assert.deepEqual(row[key], []);
+    return row;
+  });
+  assert.equal(new Set(p.checkpoints.map(row => row.receiptId)).size, 6);
+  assert.deepEqual(states[0].folders, []); assert.deepEqual(states[1].folders, []);
+  assert.equal(states[1].runtime?.state, "synced");
+  const roots = ["images/" + p.namespace, "files/" + p.namespace];
+  for (const [index, path] of roots.entries()) {
+    const before = states[2 + index * 2], after = states[3 + index * 2];
+    assert.equal(before.folders.some(row => row.normalized_path === path), false);
+    assert.deepEqual(after.folders.map(row => row.normalized_path).sort(), roots.slice(0, index + 1).sort());
+    const folder = after.folders.find(row => row.normalized_path === path);
+    assert.equal(Number(folder.created_by), p.qaActorId);
+    assert.equal(folder.display_name, p.namespace); assert.equal(folder.parent_path, path.split("/")[0]);
+    assertCoreMediaAudit(before, after, "media_folder.create", row => row.metadata.folder === path);
+  }
+  assert.equal(p.requests.length, 3);
+  const expected = [{ operation: "reconcile", dryRun: false }, ...roots.map(folder => ({ operation: "create_folder", folder, displayName: p.namespace }))];
+  const first = new URL(p.requests[0].url); assert.equal(first.protocol, "http:"); assert.equal(first.hostname, "127.0.0.1"); assert.ok(first.port);
+  for (const [index, proof] of p.requests.entries()) {
+    assert.equal(proof.url, first.origin + "/api/admin/media-library"); assert.equal(proof.method, "POST");
+    assert.equal(proof.acknowledged, true); assert.equal(proof.status, index === 0 ? 200 : 201);
+    assert.equal(proof.provenance, "captured-current-request"); assert.equal(hash(proof.body), proof.bodySha256);
+    assert.deepEqual(JSON.parse(proof.body), expected[index]);
+  }
+  return { nativeCheckpointIds: states.map(row => row.id), operations: [...p.operations], uiCredit: false, automaticCoverage: [], globalClosed: false };
 }
 export function assertCoreMediaUnchanged(before, after, allPublic = false) {
   for (const key of ["ownedRunId", "qaActorId", "namespace", "articleId", "article", "assets", "objects", "folders", "references", "leases", "reservations", "audits", "storageSha256"]) assert.deepEqual(after[key], before[key], "Unexpected Media change: " + key);
@@ -98,8 +174,10 @@ export async function runCoreMediaJourneys(ctx) {
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: forms } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
   const { ADMIN_COLLECTION_SURFACE_ADOPTION } = await jiti.import("../../src/lib/admin/interaction-system/adoption-manifest.ts");
-  const plan = buildCoreMediaPlan({ fixtures, forms, collections: ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces, requiredCases });
-  const completed = [], checkpoints = [], specimens = [], uploaded = [], payloads = new Map(), verifiedOperations = new Set();
+  const selection = ctx.journeySelection ?? null;
+  const plan = buildCoreMediaPlan({ fixtures, forms, collections: ADMIN_COLLECTION_SURFACE_ADOPTION.surfaces, requiredCases, selection });
+  const completed = [], checkpoints = [], nativeStates = [], specimens = [], uploaded = [], payloads = new Map(), verifiedOperations = new Set();
+  let prerequisite;
   let primaryId, currentId;
   const main = () => page.locator("main"), search = owner => owner.getByPlaceholder(searchLabel, { exact: true });
   const feedback = () => page.locator('[data-admin-feedback-entry][data-admin-feedback-channel="media-library"]');
@@ -107,7 +185,7 @@ export async function runCoreMediaJourneys(ctx) {
   const assetButton = (owner, name) => owner.locator('button[aria-pressed]').filter({ has: page.getByText(name, { exact: true }) });
   async function snapshot(label) {
     const request = { id: randomUUID(), kind: "media-library-state" }, value = await observe("media-native-" + label, () => mediaCheckpoint(request));
-    assertCoreMediaReceipt(value, request, plan); checkpoints.push({ label, receiptId: value.id }); return value;
+    assertCoreMediaReceipt(value, request, plan); checkpoints.push({ label, receiptId: value.id }); nativeStates.push(value); return value;
   }
   async function navigate(path) {
     const leave = async dialog => dialog.type() === "beforeunload" ? dialog.accept() : dialog.dismiss(); page.on("dialog", leave);
@@ -123,10 +201,12 @@ export async function runCoreMediaJourneys(ctx) {
     if (specimens.some(row => row.operation === operation)) { specimen.body.fill(0); return; }
     specimens.push({ ...specimen, operation });
   }
-  async function api(method, trigger, { operation, status = 200, path = "/api/admin/media-library", queryMatch = {} } = {}) {
+  async function api(method, trigger, { operation, status = 200, path = "/api/admin/media-library", queryMatch = {}, receiptSink } = {}) {
     const wait = page.waitForResponse(response => matchesCoreMediaResponse(response, origin, method, { operation, path, queryMatch }), { timeout: 60_000 });
     const [response] = await Promise.all([wait, trigger()]); assert.equal(response.status(), status);
-    const value = await response.json(); remember(response); return value;
+    const value = await response.json(); remember(response);
+    if (receiptSink) { const body = response.request().postDataBuffer(); assert.ok(body); receiptSink({ url: response.request().url(), method, status: response.status(), body: body.toString("utf8"), bodySha256: hash(body), acknowledged: true, provenance: "captured-current-request" }); }
+    return value;
   }
   async function library(query = plan.namespace) {
     await navigate("/admin/media-library?q=" + encodeURIComponent(query)); await expect(search(main())).toHaveValue(query);
@@ -151,10 +231,10 @@ export async function runCoreMediaJourneys(ctx) {
     const value = await api("POST", () => main().getByRole("button", { name: "معاينة الفحص", exact: true }).click(), { operation: "reconcile" });
     assert.equal(value.dryRun, true); assert.equal(value.complete, true);
   }
-  async function reconcile() {
+  async function reconcile(receiptSink) {
     await ready(); await main().getByRole("button", { name: "تنفيذ الفحص والمزامنة", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "تنفيذ الفحص والمزامنة؟", exact: true });
-    const value = await api("POST", () => dialog.locator("[data-admin-confirm-submit]").click(), { operation: "reconcile" });
+    const value = await api("POST", () => dialog.locator("[data-admin-confirm-submit]").click(), { operation: "reconcile", receiptSink });
     assert.equal(value.dryRun, false); assert.equal(value.complete, true); await expect(dialog).toHaveCount(0);
   }
   async function openDelete() {
@@ -194,8 +274,41 @@ export async function runCoreMediaJourneys(ctx) {
     for (const operation of operations[group] ?? []) verifiedOperations.add(operation);
     completed.push(value); return value;
   };
+  async function createFolderPositive(root, before, prefix = "", receiptSink) {
+    await main().getByPlaceholder("اسم المجلد", { exact: true }).fill(plan.namespace);
+    await api("POST", () => main().getByRole("button", { name: "إنشاء داخل " + root, exact: true }).click(), { operation: "create_folder", status: 201, receiptSink });
+    const after = await snapshot(prefix + "folder-after-" + root);
+    assert.ok(after.folders.some(row => row.normalized_path === root + "/" + plan.namespace));
+    assertCoreMediaAudit(before, after, "media_folder.create", row => row.metadata.folder === root + "/" + plan.namespace);
+  }
+  async function prepareHeldPrerequisite() {
+    assert.equal(selection, CORE_MEDIA_HELD_SELECTION); assert.equal(checkpoints.length, 0);
+    const requests = [], capture = proof => requests.push(proof);
+    const before = await snapshot("prerequisite-reconcile-before");
+    await reconcile(capture); const after = await snapshot("prerequisite-reconciled");
+    assert.equal(after.runtime?.state, "synced");
+    assert.equal((await library()).readiness.usageResultsAuthoritative, true);
+    for (const root of ["images", "files"]) {
+      await library(); await folder(root); await main().getByRole("button", { name: "+ جديد", exact: true }).click();
+      const folderBefore = await snapshot("prerequisite-folder-before-" + root);
+      await createFolderPositive(root, folderBefore, "prerequisite-", capture);
+    }
+    const proof = { selection, purpose: "uncredited-owned-fixture-prerequisite", uiCredit: false,
+      ownedRunId: before.ownedRunId, namespace: before.namespace, articleId: before.articleId, qaActorId: before.qaActorId,
+      operations: ["reconcile", "create_folder"], checkpoints: checkpoints.map(row => ({ ...row })), requests,
+      automaticCoverage: [], globalClosed: false };
+    assertCoreMediaHeldPrerequisite({ prerequisite: proof, checkpoints }, nativeStates);
+    for (const [index, operation] of proof.operations.entries()) {
+      const specimen = specimens.find(row => row.operation === operation); assert.ok(specimen);
+      validateCoreMediaReplaySpecimen(origin, specimen);
+      assert.equal(specimen.bodySha256, requests[index].bodySha256);
+      verifiedOperations.add(operation);
+    }
+    return proof;
+  }
   const group = (name, execute) => run("core-media-" + name, [], execute);
   try {
+    if (selection === null) {
     await group("readiness", async () => {
       const before = await snapshot("readiness-before"); await ready();
       assertCoreMediaUnchanged(before, await snapshot("preview-readonly"), true);
@@ -216,14 +329,13 @@ export async function runCoreMediaJourneys(ctx) {
         try { await main().getByRole("button", { name: "إنشاء داخل " + root, exact: true }).click(); }
         finally { page.off("request", listener); }
         assert.equal(posts, 0);
-        await main().getByPlaceholder("اسم المجلد", { exact: true }).fill(plan.namespace);
-        await api("POST", () => main().getByRole("button", { name: "إنشاء داخل " + root, exact: true }).click(), { operation: "create_folder", status: 201 });
-        const after = await snapshot("folder-after-" + root);
-        assert.ok(after.folders.some(row => row.normalized_path === root + "/" + plan.namespace));
-        assertCoreMediaAudit(before, after, "media_folder.create", row => row.metadata.folder === root + "/" + plan.namespace);
+        await createFolderPositive(root, before);
       }
       return details("folders", ["empty_no_post", "create_native_actor_audit"]);
     });
+    } else {
+      prerequisite = await prepareHeldPrerequisite();
+    }
     await group("upload-validation-retry", async () => {
       await library(); await folder("images", true);
       const before = await snapshot("upload-invalid-before"); let posts = 0;
@@ -450,6 +562,6 @@ export async function runCoreMediaJourneys(ctx) {
       return details("permission", ["actual_cookie_free_HTTP_Auth_boundary", "all_public_storage_unchanged"], { operations: specimens.map(row => row.operation), proofLimit: "No UI denial or internal Action execution claim." });
     });
   } finally { for (const specimen of specimens) specimen.body.fill(0); }
-  return { completed, checkpoints, relatedRequiredCases: plan.relatedRequiredCases, automaticCoverage: [], globalClosed: false,
+  return { completed, checkpoints, ...(prerequisite ? { prerequisite } : {}), relatedRequiredCases: plan.relatedRequiredCases, automaticCoverage: [], globalClosed: false,
     limits: ["Media only; sibling Activity/Sitemap remain separate.", "No Production, original assets, external provider or generic Form/Row Actions closure."] };
 }

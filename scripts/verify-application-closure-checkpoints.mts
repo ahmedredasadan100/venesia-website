@@ -72,6 +72,8 @@ function fixture(faults: Faults = {}) {
 }
 
 export async function verifyApplicationClosureCheckpointsOffline() {
+  const corpusSize = readdirSync(resolve(ROOT, "sql/migrations")).filter(file => /^\d{14}_[a-z0-9_]+\.sql$/u.test(file)).length;
+  assert.ok(corpusSize > 114, "The canonical corpus must include the suffix after the named closure checkpoints.");
   const checks: string[] = [];
   const test = async (name: string, run: () => Promise<void>) => { await run(); checks.push(name); };
   const blocked = async (f: ReturnType<typeof fixture>, observer: Parameters<Owner["runApplicationHandoff"]>[2] = {}) => {
@@ -88,9 +90,9 @@ export async function verifyApplicationClosureCheckpointsOffline() {
   await test("Omitted closure observer preserves the existing apply sequence and final Page SEO phase", async () => {
     const f = fixture(), report = await f.owner.runApplicationHandoff(f.handle);
     assert.equal(report.status, "complete");
-    assert.deepEqual(f.applied, [1, 104, 106, 107, 115]);
+    assert.deepEqual(f.applied, [1, 104, 106, 107, corpusSize]);
     assert.equal(report.closureCheckpointsVerified, undefined);
-    assert.ok(f.backfills.filter(row => row.entities.includes("pages")).every(row => row.registered === 115));
+    assert.ok(f.backfills.filter(row => row.entities.includes("pages")).every(row => row.registered === corpusSize));
   });
   await test("Actual callback flow visits112,113,114 once with ready Page SEO and frozen metadata", async () => {
     const f = fixture(), observed: Array<{ version: string; registered: number }> = [];
@@ -103,7 +105,7 @@ export async function verifyApplicationClosureCheckpointsOffline() {
       assert.ok(f.backfills.some(row => row.entities.includes("pages") && row.mode === "verify" && row.registered === 112));
       observed.push({ version: checkpoint.version, registered: checkpoint.registered });
     } });
-    assert.deepEqual(f.applied, [1, 104, 106, 107, 112, 113, 114, 115]);
+    assert.deepEqual(f.applied, [1, 104, 106, 107, 112, 113, 114, corpusSize]);
     assert.deepEqual(observed, [{ version: "20260925200723", registered: 112 }, { version: "20260926013156", registered: 113 }, { version: "20260926013216", registered: 114 }]);
     assert.equal(report.closureCheckpointsVerified, 3);
     assert.equal(report.status, "complete");
@@ -148,14 +150,14 @@ export async function verifyApplicationClosureCheckpointsOffline() {
     assert.equal(report.closureCheckpointsVerified, 1);
     assert.equal(f.applied.at(-1), 113);
   });
-  await test("Reviewed115 suffix failure preserves completed112-114 observations and does not claim complete", async () => {
-    const f = fixture({ failCliAt: 115 }), observed: number[] = [];
+  await test("Current corpus suffix failure preserves completed112-114 observations and does not claim complete", async () => {
+    const f = fixture({ failCliAt: corpusSize }), observed: number[] = [];
     const report = await blocked(f, { onClosureCheckpoint: async (_handle, checkpoint) => { observed.push(checkpoint.registered); } });
     assert.deepEqual(observed, [112, 113, 114]);
     assert.equal(report.registered, 114);
     assert.equal(report.closureCheckpointsVerified, 3);
     assert.equal(report.sqlState, "23514");
-    assert.equal(f.applied.at(-1), 115);
+    assert.equal(f.applied.at(-1), corpusSize);
   });
   await test("Page SEO readiness failure prevents the112 observation and later migrations", async () => {
     const f = fixture({ failPageVerify: true }), observed: number[] = [];

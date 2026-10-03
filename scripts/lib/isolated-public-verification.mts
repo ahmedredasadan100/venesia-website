@@ -46,6 +46,32 @@ export function finalQualityScriptNames(scripts: Readonly<Record<string, string>
   return prefix;
 }
 
+/** An owned build-only configuration; Product config remains byte-for-byte source evidence. */
+export function isolatedPublicImageConfigSource(apiPort: number, sourceConfigSha256: string) {
+  assert.ok(Number.isSafeInteger(apiPort) && apiPort >= 1024 && apiPort <= 65535 && apiPort !== 3000,
+    "Isolated image configuration requires the lifecycle-owned API port.");
+  assert.match(sourceConfigSha256, /^[a-f0-9]{64}$/u);
+  const images = { domains: [], remotePatterns: [{ protocol: "http", hostname: "127.0.0.1", port: String(apiPort),
+    pathname: "/storage/v1/object/public/cms-images/**", search: "" }], dangerouslyAllowLocalIP: true, maximumRedirects: 0 };
+  return [
+    'import assert from "node:assert/strict";',
+    'import { createHash } from "node:crypto";',
+    'import { readFileSync } from "node:fs";',
+    'import { dirname } from "node:path";',
+    'import { fileURLToPath } from "node:url";',
+    'import { transpileConfig } from "next/dist/build/next-config-ts/transpile-config.js";',
+    'import { normalizeConfig } from "next/dist/server/config-shared.js";',
+    'const nextConfigPath = fileURLToPath(new URL("./next.config.ts", import.meta.url));',
+    `assert.equal(createHash("sha256").update(readFileSync(nextConfigPath)).digest("hex"), ${JSON.stringify(sourceConfigSha256)});`,
+    'export default async function isolatedPublicConfig(phase) {',
+    '  const module = await transpileConfig({ nextConfigPath, dir: dirname(nextConfigPath) });',
+    '  const config = await normalizeConfig(phase, module.default ?? module);',
+    `  return { ...config, images: { ...config.images, ...${JSON.stringify(images)} } };`,
+    '}',
+    '',
+  ].join("\n");
+}
+
 /** Constructed only inside the canonical lifecycle; never returned by its handle. */
 export type PrivatePublicVerificationContext = {
   runDirectory: string;
@@ -68,7 +94,7 @@ export type PublicGateRequest = {
   /** Bounded independent Core families; the final gate still runs the Public suite. */
   adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings" | "media-library" | "template-bulk" | "navigation-settings" | "auth-entry" | "media-recovery" | "query-presentation" | "template-controls" | "domain-bulk" | "topic-controls" | "project-controls" | "presentation-controls";
   /** Optional exact affected journeys within the existing domain-forms cohort. */
-  adoptionJourneySelection?: "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
+  adoptionJourneySelection?: "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";
@@ -453,6 +479,14 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     if (frozenManifest) assert.equal(sha256, frozenManifest.find(row => row.file === file)!.sha256);
     return { file, sha256 };
   });
+  const sourceConfig = manifest.find(row => row.file === "next.config.ts");
+  assert.ok(sourceConfig, "The isolated image environment must derive from the canonical Product config.");
+  assert.equal(manifest.some(row => /^next\.config\.(?:js|mjs|mts|cts)$/u.test(row.file)), false,
+    "An additional Next config could shadow the isolated build configuration.");
+  const imageConfigSource = isolatedPublicImageConfigSource(context.apiPort, sourceConfig.sha256);
+  const imageConfig = { file: "next.config.mjs", sha256: digest(imageConfigSource), sourceConfig,
+    apiOrigin: `http://127.0.0.1:${context.apiPort}`, pathname: "/storage/v1/object/public/cms-images/**",
+    search: "", dangerouslyAllowLocalIP: true, maximumRedirects: 0, productConfigUnchanged: true };
   mkdirSync(sourceDirectory);
   const childEnvironment: NodeJS.ProcessEnv = { ...context.cleanEnvironment(), CI: "1", NODE_ENV: "production", NEXT_TELEMETRY_DISABLED: "1",
     NEXT_PUBLIC_SUPABASE_URL: `http://127.0.0.1:${context.apiPort}`, NEXT_PUBLIC_SUPABASE_ANON_KEY: context.anonKey,
@@ -466,7 +500,12 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   let buildIdSha256: string | null = null;
   const verifySource = () => {
     for (const row of manifest) { assert.equal(digest(readFileSync(sourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
-    for (const name of readdirSync(sourceDirectory)) assert.equal(/^\.env(?:\.|$)/iu.test(name), false);
+    assert.equal(digest(readFileSync(join(sourceDirectory, imageConfig.file))), imageConfig.sha256,
+      "The owned image environment configuration changed after binding.");
+    for (const name of readdirSync(sourceDirectory)) {
+      assert.equal(/^\.env(?:\.|$)/iu.test(name), false);
+      if (/^next\.config\./u.test(name)) assert.ok(["next.config.ts", imageConfig.file].includes(name), "Unexpected Next config precedence.");
+    }
   };
   const runChild = (args: string[], env: NodeJS.ProcessEnv, name: string, limitMs: number) => new Promise<{ code: number; stdout: string; stderr: string }>((done, reject) => {
     signal.throwIfAborted();
@@ -493,11 +532,18 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   });
   try {
     for (const row of manifest) { const target = join(sourceDirectory, row.file); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, readFileSync(sourcePath(row.file)), { flag: "wx" }); }
+    await context.assertOwned();
+    writeFileSync(join(sourceDirectory, imageConfig.file), imageConfigSource, { flag: "wx", mode: 0o600 });
     symlinkSync(join(ROOT, "node_modules"), join(sourceDirectory, "node_modules"), "junction");
     const headSha = await gitHead(context);
     const collectorSha256 = manifest.find(row => row.file === "scripts/lib/isolated-public-verification.mts")?.sha256;
     assert.match(collectorSha256 ?? "", /^[a-f0-9]{64}$/u, "Snapshot omits its own verification collector.");
-    receipt(context, "public-source-manifest.json", { invocationHeadSha: headSha, frozenProvenance: frozenProvenance ?? null,
+    receipt(context, "public-isolated-image-config.json", { ...imageConfig, generatedSource: imageConfigSource,
+      verificationOwner: { file: "scripts/lib/isolated-public-verification.mts", sha256: collectorSha256 },
+      scope: "Derived environment configuration only; canonical source manifest and Product config are unchanged." });
+    const imageConfigReceipt = { path: "public-isolated-image-config.json",
+      sha256: digest(readFileSync(ownedPath(context, "public-isolated-image-config.json"))) };
+    receipt(context, "public-source-manifest.json", { isolatedImageConfiguration: { ...imageConfig, receipt: imageConfigReceipt }, invocationHeadSha: headSha, frozenProvenance: frozenProvenance ?? null,
       inventoryBasis: frozenManifest ? "reviewed-frozen-manifest" : "git-index-plus-reviewed-additions",
       byteSource: frozenManifest ? "reviewed-frozen-directory" : "working-tree", additionalSourceFiles: request.additionalSourceFiles,
       fixtureContentSha256: readiness.fixtureContentSha256, collectorSha256,
@@ -626,7 +672,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     rmSync(sourceDirectory, { recursive: true, force: false });
     receipt(context, "public-process-cleanup.json", { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: !existsSync(sourceDirectory), otherResourcesTouched: false });
   }
-  const result = { status: "pass", gates: reports, buildIdSha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
+  const result = { status: "pass", gates: reports, buildIdSha256, isolatedImageConfigurationSha256: imageConfig.sha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
   if (measurement) { const value = { ...result, selection: "admin-interactions", phase: measurement.phase, ...(measurement.study ? { study: measurement.study } : {}), priorQualityGatesRerun: false };
     receipt(context, "admin-measurement-lifecycle.json", value); return value; }
   if (adoption) {
