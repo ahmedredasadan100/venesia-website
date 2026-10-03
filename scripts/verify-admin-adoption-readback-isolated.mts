@@ -13,7 +13,7 @@ import {CORE_QUERY_LAYOUT_SELECTION,loadCoreQueryPresentationPlan,assertCoreQuer
 import {assertCoreReadonlyQueryProofCompletion} from "./fixtures/admin-core-readonly-journeys.mjs";
 import {assertCoreProjectVisibilityGuardReceipt} from './fixtures/admin-core-domain-command-journeys.mjs';
 import {assertCorePageAssignmentRowActionsJoin} from './fixtures/admin-core-page-composition-journeys.mjs';
-import {assertCoreTemplateFeedbackCompletion} from "./fixtures/admin-core-template-controls-contract.mjs";
+import {assertCoreTemplateFeedbackCompletion,assertCoreTemplateReadApplicationCompletion,coreTemplateFeedbackLinkValues} from "./fixtures/admin-core-template-controls-contract.mjs";
 import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION, CORE_READONLY_QUERY_SELECTION, buildCoreReadonlyQueryProofPlan, buildCoreTrackingPermissionPlan, buildCoreDomainCommandTailPlan, assertCoreDomainCommandTailReceipt } from "./fixtures/admin-core-domain-terminal-journeys.mjs";
 import { isCoreTemplateCreateSelection, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import {assertCoreResidualSearchCompletion} from './fixtures/admin-core-residual-search.mjs';
@@ -370,6 +370,16 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assert.equal(new Set(result.outcomes.map(row=>row.kind)).size,completion.recipes);
       for(const row of result.outcomes){const proof=row.pendingProof as Record<string,unknown>;for(const key of ["nativeBlockedStatementObservedTwice","sameStatementIdentity","fieldsDisabledAndInert","keyboardRepeatDispatchedNoExtraAction","ownedLockReleased"])assert.equal(proof[key],true);assert.equal(proof.actionRequests,1);const evidence=browser.evidence.filter(item=>item.id==="core-template-controls-"+row.kind);assert.equal(evidence.length,1);assert.equal(evidence[0].status,"pass");}
       const cleanup=JSON.parse(readFileSync(join(artifactDir,"core-native-write-faults.json"),"utf8"));assert.equal(cleanup.status,"closed");assert.equal(cleanup.activeLocks,0);
+      for(const row of result.outcomes){
+        const proof=row.feedbackAdapter as {routePathname:string;linkReadActions?:{legs:Array<{actionIdSha256:string;applicationCompletion?:Awaited<ReturnType<typeof assertCoreTemplateReadApplicationCompletion>>}>}};
+        if(["cards","breadcrumb"].includes(String(row.kind)))assert.ok(proof.linkReadActions,"Current dual-link evidence must include its original-reader proofs.");
+        for(const leg of proof.linkReadActions?.legs??[]){
+          if(["cards","breadcrumb"].includes(String(row.kind)))assert.ok(leg.applicationCompletion,"Every current dual-link document needs original-reader completion.");
+          if(leg.applicationCompletion===undefined)continue;
+          const completion=leg.applicationCompletion,verified=await assertCoreTemplateReadApplicationCompletion(completion.sourceEvidence,{origin:completion.origin,pathname:proof.routePathname,actionIdSha256:leg.actionIdSha256,expectedValues:coreTemplateFeedbackLinkValues(row.kind)});
+          assert.deepEqual(verified,completion,"Saved original-reader proof must independently decode to the canonical result.");
+        }
+      }
       const feedbackAdapter=assertCoreTemplateFeedbackCompletion(browser,nativeCheckpoints,handle.identity.runId);
       templateControls={...result,completion,feedbackAdapter,cleanup};
     }
