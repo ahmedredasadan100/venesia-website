@@ -1,5 +1,5 @@
 import {assertCoreMediaRecoveryPermissionContinuation,CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,coreSelectedMediaRecoveryGroups,assertCoreMediaRecoverySelectionReceipt} from './fixtures/admin-core-media-recovery-journeys.mjs';
-import {CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION,corePresentationSelectedKinds,assertCorePresentationSelectionReceipt} from "./fixtures/admin-core-presentation-controls-contract.mjs";
+import {assertCoreHeroPendingRequestSemantics,CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION,corePresentationSelectedKinds,assertCorePresentationSelectionReceipt} from "./fixtures/admin-core-presentation-controls-contract.mjs";
 import {isCoreTopicControlsSelection,assertCoreTopicControlsRetryReceipt} from "./fixtures/admin-core-topic-controls-contract.mjs";
 import {isCoreTemplateControlSelection,assertCoreTemplateControlsRetryReceipt} from "./fixtures/admin-core-template-controls-contract.mjs";
 import {CORE_PROJECT_EDITOR_SELECTION,assertCoreProjectEditorSelectionReceipt} from "./fixtures/admin-core-project-controls-contract.mjs";
@@ -443,18 +443,26 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       const cleanup=JSON.parse(readFileSync(join(artifactDir,"core-native-write-faults.json"),"utf8"));assert.equal(cleanup.status,"closed");assert.equal(cleanup.activeLocks,0);
       const faults=contentNative.filter((r:Record<string,unknown>)=>String(r.kind).startsWith("domain-write-fault-"));assert.deepEqual(faults,cleanup.records);
       assert.ok(contentNative.every((r:Record<string,unknown>)=>r.kind==="presentation-controls-state"||faults.includes(r)));assert.equal(contentNative.filter((r:Record<string,unknown>)=>r.kind==="presentation-controls-state").length,completion.nativeCheckpoints);
+      const pendingRequestSemantics:Array<ReturnType<typeof assertCoreHeroPendingRequestSemantics>>=[];
       for(const row of result.outcomes){
         assert.equal(row.postRejectionDirtyNavigationCancelled,true);assert.equal(row.exactWrites,1);assert.equal(row.nativeCheckpoints,6);assert.deepEqual(row.nativePhases,PRESENTATION_CONTROL_PHASES);
         const states=contentNative.filter((r:Record<string,unknown>)=>r.kind==="presentation-controls-state"&&r.recipe===row.kind);assert.deepEqual(states.map((r:Record<string,unknown>)=>r.phase),PRESENTATION_CONTROL_PHASES);assert.ok(states.every((r:Record<string,unknown>)=>r.status==="pass"));
         const evidence=browser.evidence.filter(item=>item.id==="core-presentation-controls-"+row.kind);assert.equal(evidence.length,1);assert.equal(evidence[0].status,"pass");
         const actual=faults.filter((r:Record<string,unknown>)=>r.entity==="presentation_control_"+row.kind);const tokens=[...new Set(actual.map((r:Record<string,unknown>)=>r.token))];assert.equal(tokens.length,2);
+        let heroSaveIdentity:string|null=null;
         for(const [index,key]of ["pendingRejection","pendingSave"].entries()){
-          const proof=row[key] as Record<string,unknown>;for(const name of ["nativeStatementObservedTwice","sameStatementIdentity","normalKeyboardDedup","fieldsDisabled","ownedLockReleased"])assert.equal(proof[name],true);assert.equal(proof.closeControl,"not_declared");assert.equal(proof.actionRequests,1);assert.equal(proof.actualStatementCancelled,index===0);
+          const proof=row[key] as Record<string,unknown>;for(const name of ["nativeStatementObservedTwice","sameStatementIdentity","normalKeyboardDedup","fieldsDisabled","ownedLockReleased"])assert.equal(proof[name],true);assert.equal(proof.closeControl,"not_declared");assert.equal(proof.actualStatementCancelled,index===0);
+          if(row.kind==='hero'){
+            const readReceipt=(row.acceptedDiscard as {reopen:{readPosts:{pathname:string}}}).reopen.readPosts;
+            const semantic=assertCoreHeroPendingRequestSemantics({proof,readReceipt,sourceSha256:presentationSource.sourceSha256,pathname:readReceipt.pathname,phase:index===0?'rejection':'save'});
+            if(index===0)heroSaveIdentity=semantic.saveActionIdSha256;else assert.equal(semantic.saveActionIdSha256,heroSaveIdentity,'Both intervals must acknowledge the same built Hero save Action.');
+            pendingRequestSemantics.push(semantic);
+          }else assert.equal(proof.actionRequests,1);
           const sequence=actual.filter((r:Record<string,unknown>)=>r.token===tokens[index]);assert.deepEqual(sequence.map((r:Record<string,unknown>)=>r.kind),["arm","observe-blocked","observe-blocked",...(index===0?["cancel"]:[]),"release"].map(kind=>"domain-write-fault-"+kind));
           assert.equal(sequence.at(-1).ownedLockRolledBack,true);assert.equal(sequence.at(-1).cancellationObserved,index===0);
         }
       }
-      presentationControls={...result,completion,cleanup,contentScroll,contentScrollRendered,acceptedDiscard};
+      presentationControls={...result,completion,cleanup,contentScroll,contentScrollRendered,acceptedDiscard,pendingRequestSemantics};
     }
     const domainBulk=browser.cohort==="domain-bulk"?await verifyCoreDomainBulkCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"))):null;
     let trackingDates=null,trackingMedia=null,trackingMediaApplicability=null;

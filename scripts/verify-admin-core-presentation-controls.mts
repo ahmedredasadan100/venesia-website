@@ -1,9 +1,9 @@
 import{CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION}from'./fixtures/admin-core-media-recovery-journeys.mjs';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {assertCoreHeroReopenReadReceipt} from './fixtures/admin-core-form-draft-restoration.mjs';
+import {assertCoreHeroReopenReadReceipt,assertCoreHeroReadActionBinding,assertCoreHeroReadActionRequest} from './fixtures/admin-core-form-draft-restoration.mjs';
 import {selectCoreLinkPreviewAction} from './fixtures/admin-core-template-library-presentation-journeys.mjs';
 import {CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION,corePresentationSelectedKinds,corePresentationSelectedIds,assertCorePresentationSelectionReceipt} from "./fixtures/admin-core-presentation-controls-contract.mjs";
-import {assertPresentationAcceptedDiscardReceipts,partitionPresentationDiscardNativeRecords} from './fixtures/admin-core-presentation-controls-contract.mjs';
+import {assertCoreHeroPendingRequestSemantics,assertPresentationAcceptedDiscardReceipts,partitionPresentationDiscardNativeRecords} from './fixtures/admin-core-presentation-controls-contract.mjs';
 import {assertCoreRenderedAdoptionJoin} from './fixtures/admin-core-rendered-adoption.mjs';
 import {join} from 'node:path';
 import {partitionContentScrollNativeRecords} from './fixtures/admin-core-presentation-controls-contract.mjs';
@@ -168,6 +168,99 @@ test('Pending request diagnostic preserves two distinct wire identities and stag
 test('Pending request diagnostic records the actual acknowledged request, not the first request by assumption',()=>{const requests=[pendingRequest('a'.repeat(40)),pendingRequest('b'.repeat(40))],out=pendingDiagnostic(Buffer.from('{}'))({requests,phases:['held','released'],response:{request:()=>requests[1]},sourceSha256:'c'.repeat(64)});assert.equal(out.responseRequestIndex,1);assert.equal(out.requests[1].exportedName,null);assert.equal(out.requests[1].filename,null);});
 test('Unavailable pending manifest keeps raw counts and refuses inferred labels',()=>{const requests=[pendingRequest('a'.repeat(40))],out=pendingDiagnostic(Error('PRIVATE_ENV'))({requests,phases:['held'],response:{request:()=>requests[0]},sourceSha256:'c'.repeat(64)});assert.equal(out.manifestStatus,'unavailable');assert.equal(out.manifestSha256,null);assert.equal(out.requests.length,1);assert.equal(out.requests[0].exportedName,null);assert.doesNotMatch(JSON.stringify(out),/PRIVATE_ENV/u);});
 test('Pending diagnostic omits unsafe manifest labels and malformed action identifiers',()=>{const id='d'.repeat(40),requests=[pendingRequest(id),pendingRequest('private malformed value')],out=pendingDiagnostic(Buffer.from(JSON.stringify({node:{[id]:{exportedName:'bad name with secret',filename:'src/../private.env'}}})))({requests,phases:['held','acknowledged'],response:{request:()=>requests[0]},sourceSha256:'c'.repeat(64)});assert.equal(out.requests[0].exportedName,null);assert.equal(out.requests[0].filename,null);assert.equal(out.requests[1].actionId,null);});
-test('Pending diagnostic does not remove the existing one-request or collector dedup assertions',()=>{assert.match(browser,/assert\.equal\(posts\.length,1\)/u);assert.match(readFileSync(resolve(root,'scripts/verify-admin-adoption-readback-isolated.mts'),'utf8'),/assert\.equal\(proof\.actionRequests,1\)/u);});
+// Execute the current pending contract and collector with controlled same-build metadata only.
+function semanticPendingFrame(phase:'rejection'|'save'='save'){
+ const counter=counterPort();counter.track(readRequest(readIds[0]));counter.track(readRequest(readIds[1]));
+ const readReceipt=counter.receipt(),save={index:0,phase:'held',method:'POST',actionId:'a'.repeat(40),pathname:heroPath,searchKeys:[] as string[],exportedName:'updateHeroTemplateDetails',filename:'src/app/admin/pages-blocks/blocks/hero/actions.ts'},read={index:1,phase:'acknowledged',method:'POST',actionId:readIds[1],pathname:heroPath,searchKeys:['saved','tab'],exportedName:'resolveAdminLinkAjax',filename:readOwner};
+ return{sourceSha256:scrollSource,pathname:heroPath,phase,readReceipt,proof:{actualStatementCancelled:phase==='rejection',actionRequests:phase==='save'?2:1,nativeStatementObservedTwice:true,sameStatementIdentity:true,normalKeyboardDedup:true,fieldsDisabled:true,ownedLockReleased:true,closeControl:'not_declared',requestDiagnostic:{sourceSha256:scrollSource,manifestStatus:'read',manifestSha256:readReceipt.manifestSha256,responseRequestIndex:0,requests:phase==='save'?[save,read]:[save]}}};
+}
+for(const phase of ['rejection','save'] as const)test('Hero pending exact same-build identity preserves raw '+phase+' evidence',()=>{
+ const value=semanticPendingFrame(phase),before=structuredClone(value),result=assertCoreHeroPendingRequestSemantics(value);
+ assert.equal(result.rawActionPosts,phase==='save'?2:1);assert.equal(result.mutationCapableRequests,1);assert.equal(result.readOnlyActionPosts,phase==='save'?1:0);assert.equal(result.unknownActionPosts,0);assert.equal(result.responseRequestIndex,0);assert.equal(result.rawEvidenceUnchanged,true);assert.deepEqual(value,before);
+});
+test('Hero pending save without a follow-up read conserves one raw mutation',()=>{const value=semanticPendingFrame();value.proof.actionRequests=1;value.proof.requestDiagnostic.requests.pop();const result=assertCoreHeroPendingRequestSemantics(value);assert.equal(result.rawActionPosts,1);assert.equal(result.readOnlyActionPosts,0);});
+test('Hero read identity factors no counters and does not grant reopen success',()=>{const value=semanticPendingFrame(),binding=value.readReceipt;binding.totalPosts=99;assert.equal(assertCoreHeroReadActionBinding(binding,scrollSource),binding);assert.throws(()=>assertCoreHeroReopenReadReceipt(binding,scrollSource));const row=value.proof.requestDiagnostic.requests[1];assert.equal(assertCoreHeroReadActionRequest(row,binding),binding.actions[1]);assert.equal(assertCoreHeroReadActionRequest({...row,filename:readOwner.replaceAll('/','\\')},binding),binding.actions[1]);});
+const pendingSemanticMutants:Record<string,(value:ReturnType<typeof semanticPendingFrame>)=>void>={
+ 'missing diagnostic':x=>Reflect.deleteProperty(x.proof,'requestDiagnostic'),
+ 'raw count reduced':x=>{x.proof.actionRequests=1;},
+ 'raw count inflated':x=>{x.proof.actionRequests=3;},
+ 'zero actions':x=>{x.proof.actionRequests=0;x.proof.requestDiagnostic.requests=[];},
+ 'extra raw action':x=>{x.proof.requestDiagnostic.requests.push({...x.proof.requestDiagnostic.requests[1],index:2});x.proof.actionRequests=3;},
+ 'missing index':x=>Reflect.deleteProperty(x.proof.requestDiagnostic.requests[1],'index'),
+ 'duplicate index':x=>{x.proof.requestDiagnostic.requests[1].index=0;},
+ 'response joins resolver':x=>{x.proof.requestDiagnostic.responseRequestIndex=1;},
+ 'response absent':x=>Reflect.deleteProperty(x.proof.requestDiagnostic,'responseRequestIndex'),
+ 'unavailable manifest':x=>{x.proof.requestDiagnostic.manifestStatus='unavailable';},
+ 'foreign manifest':x=>{x.proof.requestDiagnostic.manifestSha256='f'.repeat(64);},
+ 'foreign diagnostic source':x=>{x.proof.requestDiagnostic.sourceSha256='f'.repeat(64);},
+ 'foreign binding source':x=>{x.readReceipt.sourceSha256='f'.repeat(64);},
+ 'foreign expected source':x=>{x.sourceSha256='f'.repeat(64);},
+ 'foreign binding owner hash':x=>{x.readReceipt.ownerSourceSha256='f'.repeat(64);},
+ 'foreign binding worker':x=>{x.readReceipt.worker='app/admin/foreign/page';},
+ 'foreign action worker':x=>{x.readReceipt.actions[1].worker='app/admin/foreign/page';},
+ 'foreign action owner':x=>{x.readReceipt.actions[1].owner='src/lib/admin/foreign/actions.ts';},
+ 'duplicate bound identity':x=>{x.readReceipt.actions[1].actionIdSha256=x.readReceipt.actions[0].actionIdSha256;},
+ 'foreign path':x=>{x.pathname='/admin/pages-blocks/blocks/hero/2';},
+ 'foreign resolver path':x=>{x.proof.requestDiagnostic.requests[1].pathname='/admin/pages-blocks/blocks/hero/2';},
+ 'resolver GET':x=>{x.proof.requestDiagnostic.requests[1].method='GET';},
+ 'save not held':x=>{x.proof.requestDiagnostic.requests[0].phase='acknowledged';},
+ 'save query':x=>{x.proof.requestDiagnostic.requests[0].searchKeys=['saved'];},
+ 'save wrong export':x=>{x.proof.requestDiagnostic.requests[0].exportedName='updateContentBlock';},
+ 'save wrong owner':x=>{x.proof.requestDiagnostic.requests[0].filename=readOwner;},
+ 'save is bound read':x=>{x.proof.requestDiagnostic.requests[0].actionId=readIds[1];},
+ 'resolver before acknowledgment':x=>{x.proof.requestDiagnostic.requests[1].phase='releasing';},
+ 'resolver without saved query':x=>{x.proof.requestDiagnostic.requests[1].searchKeys=['tab'];},
+ 'resolver foreign query':x=>{x.proof.requestDiagnostic.requests[1].searchKeys=['saved','foreign'];},
+ 'duplicate query key':x=>{x.proof.requestDiagnostic.requests[1].searchKeys=['saved','saved'];},
+ 'browse is not post-save resolver':x=>{Object.assign(x.proof.requestDiagnostic.requests[1],{actionId:readIds[0],exportedName:'browseAdminLinksAjax'});},
+ 'unknown raw action':x=>{x.proof.requestDiagnostic.requests[1].actionId='e'.repeat(40);},
+ 'malformed raw action':x=>{x.proof.requestDiagnostic.requests[1].actionId='not-an-action';},
+ 'wrong resolver export':x=>{x.proof.requestDiagnostic.requests[1].exportedName='browseAdminLinksAjax';},
+ 'wrong resolver owner':x=>{x.proof.requestDiagnostic.requests[1].filename='src/app/admin/foreign/actions.ts';},
+ 'resolver claimed as second save':x=>{Object.assign(x.proof.requestDiagnostic.requests[1],{exportedName:'updateHeroTemplateDetails',filename:'src/app/admin/pages-blocks/blocks/hero/actions.ts'});},
+ 'rejection cannot exempt resolver':x=>{x.phase='rejection';x.proof.actualStatementCancelled=true;},
+ 'cancel flag drift':x=>{x.proof.actualStatementCancelled=true;},
+};
+for(const [name,change]of Object.entries(pendingSemanticMutants))test('Hero pending classification fails closed: '+name,()=>{const value=semanticPendingFrame();change(value);assert.throws(()=>assertCoreHeroPendingRequestSemantics(value));});
+
+// Extract the whole maintained cleanup/native-fault/pending segment; none of its guards are copied.
+const pendingBlocks:ts.Block[]=[];function findPendingCollector(node:ts.Node){if(ts.isBlock(node)&&node.statements.some(statement=>ts.isVariableStatement(statement)&&statement.declarationList.declarations.some(declaration=>declaration.name.getText(collectorAst)==='pendingRequestSemantics')))pendingBlocks.push(node);ts.forEachChild(node,findPendingCollector);}findPendingCollector(collectorAst);assert.equal(pendingBlocks.length,1);
+const pendingStatements=pendingBlocks[0].statements,cleanupStart=pendingStatements.findIndex(statement=>ts.isVariableStatement(statement)&&statement.declarationList.declarations.some(declaration=>declaration.name.getText(collectorAst)==='cleanup')),outcomeLoop=pendingStatements.findIndex(statement=>ts.isForOfStatement(statement)&&statement.expression.getText(collectorAst)==='result.outcomes');assert.ok(cleanupStart>=0&&outcomeLoop>cleanupStart);
+const pendingCollectorCode=ts.transpileModule(pendingStatements.slice(cleanupStart,outcomeLoop+1).map(statement=>statement.getText(collectorAst)).join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText;
+const executePendingCollector=new Function('assert','readFileSync','join','artifactDir','contentNative','completion','result','browser','presentationSource','PRESENTATION_CONTROL_PHASES','assertCoreHeroPendingRequestSemantics',pendingCollectorCode+';return pendingRequestSemantics;');
+function pendingCollectorFrame(kind='hero'){
+ const rejection=semanticPendingFrame('rejection'),saved=semanticPendingFrame(),faults=[true,false].flatMap((cancel,index)=>['arm','observe-blocked','observe-blocked',...(cancel?['cancel']:[]),'release'].map(step=>({kind:'domain-write-fault-'+step,entity:'presentation_control_'+kind,token:'controlled-'+index,ownedLockRolledBack:step==='release',cancellationObserved:step==='release'&&cancel}))),states=PRESENTATION_CONTROL_PHASES.map(phase=>({kind:'presentation-controls-state',recipe:kind,phase,status:'pass'}));
+ if(kind!=='hero'){saved.proof.actionRequests=1;saved.proof.requestDiagnostic.requests.pop();}
+ return{sourceSha256:scrollSource,result:{outcomes:[{kind,postRejectionDirtyNavigationCancelled:true,exactWrites:1,nativeCheckpoints:6,nativePhases:[...PRESENTATION_CONTROL_PHASES],pendingRejection:rejection.proof,pendingSave:saved.proof,acceptedDiscard:{reopen:{readPosts:saved.readReceipt}}}]},native:{states,faults},cleanup:{status:'closed',activeLocks:0,records:structuredClone(faults)},browser:{evidence:[{id:'core-presentation-controls-'+kind,status:'pass'}]}};
+}
+function pendingCollectorPort(value:ReturnType<typeof pendingCollectorFrame>){return executePendingCollector(assert,(file:string,encoding:string)=>{assert.equal(file,join('controlled-pending','core-native-write-faults.json'));assert.equal(encoding,'utf8');return JSON.stringify(value.cleanup);},join,'controlled-pending',[...value.native.states,...value.native.faults],{nativeCheckpoints:6},value.result,value.browser,{sourceSha256:value.sourceSha256},PRESENTATION_CONTROL_PHASES,assertCoreHeroPendingRequestSemantics) as Array<ReturnType<typeof assertCoreHeroPendingRequestSemantics>>;}
+test('Actual Hero collector accepts raw two with one acknowledged save and exact resolver',()=>{const value=pendingCollectorFrame(),before=structuredClone(value),results=pendingCollectorPort(value);assert.deepEqual(results.map(row=>[row.phase,row.rawActionPosts,row.mutationCapableRequests,row.readOnlyActionPosts]),[['rejection',1,1,0],['save',2,1,1]]);assert.deepEqual(value,before);});
+test('Actual Content collector retains raw one and never borrows Hero exemption',()=>{const value=pendingCollectorFrame('content');assert.deepEqual(pendingCollectorPort(value),[]);value.result.outcomes[0].pendingSave.actionRequests=2;assert.throws(()=>pendingCollectorPort(value));});
+const pendingCollectorMutants:Record<string,(value:ReturnType<typeof pendingCollectorFrame>)=>void>={
+ 'save identity differs across intervals':x=>{x.result.outcomes[0].pendingSave.requestDiagnostic.requests[0].actionId='b'.repeat(40);},
+ 'missing canonical binding':x=>Reflect.deleteProperty(x.result.outcomes[0].acceptedDiscard.reopen,'readPosts'),
+ 'native statement observed once':x=>{x.result.outcomes[0].pendingSave.nativeStatementObservedTwice=false;},
+ 'different native statement':x=>{x.result.outcomes[0].pendingSave.sameStatementIdentity=false;},
+ 'keyboard dedup absent':x=>{x.result.outcomes[0].pendingSave.normalKeyboardDedup=false;},
+ 'fields enabled':x=>{x.result.outcomes[0].pendingSave.fieldsDisabled=false;},
+ 'lock release missing':x=>{x.result.outcomes[0].pendingSave.ownedLockReleased=false;},
+ 'unknown close control':x=>{x.result.outcomes[0].pendingSave.closeControl='enabled';},
+ 'extra accepted save':x=>{x.result.outcomes[0].exactWrites=2;},
+ 'dirty cancellation absent':x=>{x.result.outcomes[0].postRejectionDirtyNavigationCancelled=false;},
+ 'missing native phase':x=>{x.native.states.pop();},
+ 'failed native phase':x=>{x.native.states[3].status='fail';},
+ 'reordered native phases':x=>{x.native.states.reverse();},
+ 'missing browser outcome':x=>{x.browser.evidence=[];},
+ 'failed browser outcome':x=>{x.browser.evidence[0].status='fail';},
+ 'cleanup open':x=>{x.cleanup.status='open';},
+ 'active native lock':x=>{x.cleanup.activeLocks=1;},
+ 'cleanup records mismatch':x=>{x.cleanup.records.pop();},
+ 'cancel fault missing':x=>{x.native.faults=x.native.faults.filter(row=>row.kind!=='domain-write-fault-cancel');x.cleanup.records=structuredClone(x.native.faults);},
+ 'release rollback absent':x=>{x.native.faults.at(-1)!.ownedLockRolledBack=false;x.cleanup.records=structuredClone(x.native.faults);},
+ 'successful save claimed cancelled':x=>{x.native.faults.at(-1)!.cancellationObserved=true;x.cleanup.records=structuredClone(x.native.faults);},
+};
+for(const [name,change]of Object.entries(pendingCollectorMutants))test('Actual Hero collector preserves mandatory guard: '+name,()=>{const value=pendingCollectorFrame();change(value);assert.throws(()=>pendingCollectorPort(value));});
+for(const [name,change]of Object.entries(pendingSemanticMutants))test('Actual Hero collector invokes maintained semantic rejection: '+name,()=>{const value=pendingCollectorFrame(),semantic={...semanticPendingFrame(),proof:value.result.outcomes[0].pendingSave,readReceipt:value.result.outcomes[0].acceptedDiscard.reopen.readPosts,sourceSha256:value.sourceSha256};change(semantic);value.sourceSha256=semantic.sourceSha256;value.result.outcomes[0].pendingSave=semantic.proof;value.result.outcomes[0].acceptedDiscard.reopen.readPosts=semantic.readReceipt;if(name==='foreign path')semantic.readReceipt.pathname=semantic.pathname;assert.throws(()=>pendingCollectorPort(value));});
+test('Pending producer retains one held request; collector scopes semantic exception to Hero',()=>{assert.match(browser,/assert\.equal\(posts\.length,1\)/u);const branch=pendingCollectorCode;assert.match(branch,/row\.kind\s*===\s*['"]hero['"]/u);assert.match(branch,/assertCoreHeroPendingRequestSemantics\(/u);assert.match(branch,/else\s+assert\.equal\(proof\.actionRequests,\s*1\)/u);});
 
 console.log(JSON.stringify({status:"pass",controls:cases.length,cases,runtimeExecuted:false,globalClosed:false}));

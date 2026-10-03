@@ -47,10 +47,25 @@ function describeDiscardReopenRequests(requests){
 
 const HERO_REOPEN_READ_WORKER='app/admin/pages-blocks/blocks/hero/[id]/page';
 const HERO_REOPEN_READ_EXPORTS=Object.freeze(['browseAdminLinksAjax','resolveAdminLinkAjax']);
-export function assertCoreHeroReopenReadReceipt(value,sourceSha256){
+export function assertCoreHeroReadActionBinding(value,sourceSha256){
  assert.ok(value&&typeof value==='object');assert.equal(value.contract,'admin-links');assert.equal(value.sourceSha256,sourceSha256);assert.match(sourceSha256,hash);for(const key of ['manifestSha256','buildMetadataSha256','ownerSourceSha256'])assert.match(value[key],hash);assert.equal(value.ownerSourceSha256,createHash('sha256').update(readFileSync(new URL('../../src/lib/admin/links/actions.ts',import.meta.url))).digest('hex'));
  assert.equal(value.worker,HERO_REOPEN_READ_WORKER);assert.match(value.pathname,/^\/admin\/pages-blocks\/blocks\/hero\/[1-9][0-9]*$/u);assert.deepEqual(value.actions.map(r=>r.exportedName),HERO_REOPEN_READ_EXPORTS);assert.equal(new Set(value.actions.map(r=>r.actionIdSha256)).size,2);
  for(const a of value.actions){assert.deepEqual(Object.keys(a).sort(),['actionIdSha256','allowedFilenames','exportedName','filename','owner','worker']);assert.match(a.actionIdSha256,hash);assert.equal(a.owner,'src/lib/admin/links/actions.ts');assert.equal(a.worker,HERO_REOPEN_READ_WORKER);assert.ok(Array.isArray(a.allowedFilenames)&&a.allowedFilenames.length>=1&&a.allowedFilenames.length<=2);assert.equal(a.allowedFilenames[0],a.owner);for(const name of a.allowedFilenames){assert.equal(typeof name,'string');assert.equal(name.split('/').includes('..'),false);assert.ok(name===a.owner||/^\.tmp-qa\/core-final-closure\/browser-[a-z0-9-]+\/public-build-source\/src\/lib\/admin\/links\/actions\.ts$/u.test(name));}assert.ok(a.allowedFilenames.includes(a.filename));}
+ return value;
+}
+
+/** Join a recorded Action to the existing compiled Hero link-read binding. */
+export function assertCoreHeroReadActionRequest(request,binding){
+ assert.ok(request&&typeof request==='object');assertCoreHeroReadActionBinding(binding,binding?.sourceSha256);
+ assert.equal(request.method,'POST');assert.equal(request.pathname,binding.pathname);assert.match(request.actionId,/^[a-f0-9]{40,64}$/u);
+ const actionIdSha256=createHash('sha256').update(request.actionId).digest('hex'),matches=binding.actions.filter(action=>action.actionIdSha256===actionIdSha256);
+ assert.equal(matches.length,1,'Exactly one canonical Hero link-read Action must match the request.');const action=matches[0];
+ assert.equal(request.exportedName,action.exportedName);assert.equal(typeof request.filename,'string');assert.equal(request.filename.replaceAll('\\','/'),action.owner);
+ return action;
+}
+
+export function assertCoreHeroReopenReadReceipt(value,sourceSha256){
+ assertCoreHeroReadActionBinding(value,sourceSha256);
  assert.ok(Number.isSafeInteger(value.totalPosts)&&value.totalPosts>=0);assert.ok(Number.isSafeInteger(value.readPosts)&&value.readPosts>=0);assert.equal(value.forbiddenPosts,0);assert.equal(value.totalPosts,value.readPosts+value.forbiddenPosts);assert.equal(value.readActionIds.length,value.readPosts);for(const id of value.readActionIds)assert.ok(value.actions.some(a=>a.actionIdSha256===id));assert.equal(value.mutationCapableRequests,0);assert.equal(value.claimsZeroNetworkActions,false);return value;
 }
 function createHeroReopenReadCounter({origin,pathname,sourceSha256}){

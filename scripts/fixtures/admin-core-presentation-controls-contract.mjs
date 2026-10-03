@@ -1,9 +1,27 @@
-import {assertCoreHeroReopenReadReceipt} from './admin-core-form-draft-restoration.mjs';
+import {assertCoreHeroReopenReadReceipt,assertCoreHeroReadActionBinding,assertCoreHeroReadActionRequest} from './admin-core-form-draft-restoration.mjs';
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
 import {readFileSync} from "node:fs";
 import {resolve} from "node:path";
 import {createJiti} from "jiti";
 import ts from "typescript";
+/** Preserve wire counts; distinguish only the bound post-save resolver from the acknowledged Hero mutation. */
+export function assertCoreHeroPendingRequestSemantics({proof,readReceipt,sourceSha256,pathname,phase}){
+ assert.ok(phase==='rejection'||phase==='save');assert.equal(proof.actualStatementCancelled,phase==='rejection');
+ const binding=assertCoreHeroReadActionBinding(readReceipt,sourceSha256);assert.equal(binding.pathname,pathname);
+ const diagnostic=proof.requestDiagnostic;assert.ok(diagnostic&&typeof diagnostic==='object');assert.equal(diagnostic.sourceSha256,sourceSha256);assert.equal(diagnostic.manifestStatus,'read');assert.equal(diagnostic.manifestSha256,binding.manifestSha256);assert.equal(diagnostic.responseRequestIndex,0);
+ assert.ok(Array.isArray(diagnostic.requests));assert.ok(Number.isSafeInteger(proof.actionRequests)&&proof.actionRequests>=1&&proof.actionRequests<=2);assert.equal(proof.actionRequests,diagnostic.requests.length);
+ const requests=diagnostic.requests;for(const[index,row]of requests.entries()){assert.equal(row.index,index);assert.equal(row.method,'POST');assert.equal(row.pathname,pathname);assert.match(row.actionId,/^[a-f0-9]{40,64}$/u);assert.ok(Array.isArray(row.searchKeys));assert.equal(new Set(row.searchKeys).size,row.searchKeys.length);}
+ const save=requests[0];assert.equal(save.phase,'held');assert.deepEqual(save.searchKeys,[]);assert.equal(save.exportedName,'updateHeroTemplateDetails');assert.equal(save.filename,'src/app/admin/pages-blocks/blocks/hero/actions.ts');
+ const saveActionIdSha256=createHash('sha256').update(save.actionId).digest('hex');assert.ok(!binding.actions.some(action=>action.actionIdSha256===saveActionIdSha256),'An intended save cannot be a bound read Action.');
+ const readActionIdSha256=[];
+ for(const request of requests.slice(1)){
+  assert.equal(phase,'save');assert.equal(request.phase,'acknowledged');assert.ok(request.searchKeys.includes('saved'));assert.ok(request.searchKeys.every(key=>['saved','tab'].includes(key)));
+  const action=assertCoreHeroReadActionRequest(request,binding);assert.equal(action.exportedName,'resolveAdminLinkAjax');assert.ok(!readActionIdSha256.includes(action.actionIdSha256));readActionIdSha256.push(action.actionIdSha256);
+ }
+ return{status:'verified-semantic-pending-actions',sourceSha256,manifestSha256:binding.manifestSha256,pathname,phase,rawActionPosts:proof.actionRequests,mutationCapableRequests:1,readOnlyActionPosts:readActionIdSha256.length,unknownActionPosts:0,saveActionIdSha256,readActionIdSha256,responseRequestIndex:0,rawEvidenceUnchanged:true};
+}
+
 export const PRESENTATION_CONTROL_KINDS=Object.freeze(["hero","content"]);
 
 export const CORE_PRESENTATION_SCROLL_SELECTION='presentation-hero-scroll-followup';
