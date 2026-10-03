@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import { createHash } from "node:crypto";
 import { resolve } from "node:path";
-import { assertAbruptRecoveryBaseline, assertRecoveryCurrentInventory, assertRecoveryCleanupAuthorized, assertAbruptRecoveryArtifactLayout, assertAbruptRecoveryEvidence, IsolatedSupabaseError, observeApplicationClient } from "./lib/isolated-supabase.mts";
+import { assertAbruptRecoveryBaseline, assertRecoveryCurrentInventory, assertRecoveryCleanupAuthorized, assertAbruptRecoveryArtifactLayout, assertAbruptRecoveryEvidence, assertTerminalRecoveryFailure, readReleaseLock, IsolatedSupabaseError, observeApplicationClient } from "./lib/isolated-supabase.mts";
 
 let controls = 0;
 const passed = () => { controls++; };
@@ -77,6 +77,46 @@ for (const mutate of mutations) {
   assert.throws(() => assertAbruptRecoveryEvidence(changed), IsolatedSupabaseError);
   passed();
 }
+const terminalFailure = {
+  expectedRunId: runId,
+  failure: { stage: "application-handoff", code: "APPLICATION_CLIENT_DISCONNECTED", rawErrorRetained: false },
+  cleanup: { status: "blocked", code: "COMMAND_TIMEOUT", stage: "volume-inspect", complete: false },
+  result: { status: "needs_attention", platformReady: true, applicationHandoffRequested: true,
+    applicationHandoffComplete: false, failureInjection: null,
+    failure: { code: "APPLICATION_CLIENT_DISCONNECTED", stage: "application-handoff" },
+    cleanup: { status: "blocked", code: "COMMAND_TIMEOUT" },
+    releaseCommit: readReleaseLock(resolve("scripts/fixtures/isolated-supabase/stack.lock.json")).release.commit,
+    runId, retainedProofsReexecuted: false },
+};
+assert.doesNotThrow(() => assertTerminalRecoveryFailure(structuredClone(terminalFailure))); passed();
+const terminalMutations: Array<["failure" | "cleanup" | "result", string, unknown]> = [
+  ["failure", "stage", "ownership"], ["failure", "code", "UNEXPECTED_CONTAINER_MOUNT"],
+  ["failure", "rawErrorRetained", true], ["cleanup", "status", "complete"],
+  ["cleanup", "code", "UNCLASSIFIED_FAILURE"], ["cleanup", "stage", "owned-container-remove"],
+  ["cleanup", "complete", true], ["result", "status", "complete"],
+  ["result", "runId", "c".repeat(32)], ["result", "releaseCommit", "f".repeat(40)],
+  ["result", "platformReady", false], ["result", "applicationHandoffRequested", false],
+  ["result", "applicationHandoffComplete", true], ["result", "failureInjection", "before-handoff"],
+  ["result", "retainedProofsReexecuted", true], ["result", "failure", null],
+  ["result", "failure", { code: "APPLICATION_CLIENT_DISCONNECTED", stage: "application-query" }],
+  ["result", "cleanup", { status: "complete" }],
+  ["result", "cleanup", { status: "blocked", code: "FOREIGN_VOLUME_CONSUMER" }],
+];
+for (const [group, key, value] of terminalMutations) {
+  const changed = structuredClone(terminalFailure);
+  (changed[group] as Record<string, unknown>)[key] = value;
+  assert.throws(() => assertTerminalRecoveryFailure(changed), error => error instanceof IsolatedSupabaseError
+    && error.code === "UNAPPROVED_TERMINAL_FAILURE_RECOVERY" && error.stage === "cleanup-preflight"); passed();
+}
+for (const group of ["failure", "cleanup", "result"] as const) {
+  assert.throws(() => assertTerminalRecoveryFailure({ ...terminalFailure, [group]: undefined }), IsolatedSupabaseError); passed();
+}
+assert.throws(() => assertTerminalRecoveryFailure({ ...terminalFailure, expectedRunId: "invalid" }), IsolatedSupabaseError); passed();
+// Admitted terminal files do not replace the existing process, manifest and baseline gates.
+assert.doesNotThrow(() => { assertTerminalRecoveryFailure(terminalFailure); assertAbruptRecoveryEvidence(structuredClone(evidence)); }); passed();
+for (const mutate of mutations) { const changed = structuredClone(evidence); mutate(changed);
+  assert.throws(() => { assertTerminalRecoveryFailure(terminalFailure); assertAbruptRecoveryEvidence(changed); }, IsolatedSupabaseError); passed(); }
+
 const runnerPath = resolve(".tmp-qa/core-final-closure/run-browser-cohort.mts");
 const directDir = resolve(".tmp-qa/core-final-closure/browser-r57");
 const layoutInput = { runnerPath, runnerArgument: "browser-r57", artifactDir: directDir };

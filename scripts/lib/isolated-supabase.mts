@@ -433,6 +433,8 @@ export type IsolatedSupabaseOptions = {
     intentSha256: string;
     ownedResourcesSha256: string;
     postCreateBaselineSha256: string;
+    /** Existing terminal failure is preserved and hash-bound; absence is required only without this option. */
+    terminalFailure?: { failureSha256: string; cleanupSha256: string; resultSha256: string };
   };
   handoff?: (handle: OwnedLocalHandle) => Promise<unknown>;
 };
@@ -486,6 +488,25 @@ const VOLUME_FORMAT = '{"id":{{json .Name}},"name":{{json .Name}},"createdAt":{{
 const NETWORK_FORMAT = '{"id":{{json .Id}},"name":{{json .Name}},"createdAt":{{json .Created}},"driver":{{json .Driver}},"scope":{{json .Scope}},"internal":{{json .Internal}},"attachable":{{json .Attachable}},"ingress":{{json .Ingress}},"configOnly":{{json .ConfigOnly}},"configFrom":{{json .ConfigFrom}},"enableIPv4":{{json .EnableIPv4}},"enableIPv6":{{json .EnableIPv6}},"options":{{json .Options}},"ipam":{{json .IPAM}},"labels":{{json .Labels}},"containers":{{json .Containers}}}';
 type Inventory = { containers: JsonObject[]; volumes: JsonObject[]; networks: JsonObject[]; imageIds: string[] };
 type CapturedResource = { identity: OwnedResourceIdentity; service?: Service };
+
+/** Only the observed terminal client disconnect plus failed resource inspection admits this recovery form. */
+export function assertTerminalRecoveryFailure(input: {
+  expectedRunId: string; failure: unknown; cleanup: unknown; result: unknown;
+}) {
+  const failure = object(input.failure), cleanup = object(input.cleanup), result = object(input.result);
+  requireThat(/^[a-f0-9]{32}$/.test(input.expectedRunId)
+    && failure.stage === "application-handoff" && failure.code === "APPLICATION_CLIENT_DISCONNECTED"
+    && failure.rawErrorRetained === false
+    && cleanup.status === "blocked" && cleanup.code === "COMMAND_TIMEOUT"
+    && cleanup.stage === "volume-inspect" && cleanup.complete === false
+    && result.status === "needs_attention" && result.runId === input.expectedRunId
+    && result.releaseCommit === RELEASE_COMMIT && result.platformReady === true
+    && result.applicationHandoffRequested === true && result.applicationHandoffComplete === false
+    && result.failureInjection === null && result.retainedProofsReexecuted === false
+    && canonical(result.failure) === canonical({ code: failure.code, stage: failure.stage })
+    && canonical(result.cleanup) === canonical({ status: "blocked", code: cleanup.code }),
+  "UNAPPROVED_TERMINAL_FAILURE_RECOVERY", "cleanup-preflight");
+}
 
 export function assertAbruptRecoveryEvidence(input: {
   intent: JsonObject; owned: unknown; baseline: JsonObject; expectedRunId: string;
@@ -616,9 +637,16 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       && canonical(priorIntent.images) === canonical(lock.images), "UNAPPROVED_FAILED_CREATION_RECOVERY", "cleanup-preflight");
     if (abruptRecovery) {
       requireThat(process.platform === "win32" && !options.handoff && !options.failureInjection
-        && ["failure.json", "cleanup.json", "result.json"].every(name => !existsSync(resolve(artifactDir, name)))
         && priorIntent.lockSha256 === sha256(readFileSync(lockPath)) && priorIntent.artifacts === artifactDir,
       "AMBIGUOUS_ABRUPT_RECOVERY", "cleanup-preflight");
+      if (abruptRecovery.terminalFailure) {
+        const terminal = abruptRecovery.terminalFailure;
+        assertTerminalRecoveryFailure({ expectedRunId: String(priorIntent.runId),
+          failure: readRecoveryFile("failure.json", terminal.failureSha256),
+          cleanup: readRecoveryFile("cleanup.json", terminal.cleanupSha256),
+          result: readRecoveryFile("result.json", terminal.resultSha256) });
+      } else requireThat(["failure.json", "cleanup.json", "result.json"].every(name => !existsSync(resolve(artifactDir, name))),
+        "AMBIGUOUS_ABRUPT_RECOVERY", "cleanup-preflight");
       const runnerPath = resolve(abruptRecovery.runnerPath), runnerRelative = relative(ROOT, runnerPath).replace(/\\/g, "/");
       assertAbruptRecoveryArtifactLayout({ runnerPath, runnerArgument: abruptRecovery.runnerArgument, artifactDir,
         artifactLayout: abruptRecovery.artifactLayout });
@@ -940,7 +968,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     lockSha256: sha256(readFileSync(lockPath)), composeSha256: lock.compose.sha256, images: lock.images,
     sourceHashes: Object.fromEntries(["scripts/lib/isolated-supabase.mts", "scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-public-application.mts", "scripts/lib/isolated-supabase-cli.mts"].map(path => [path, sha256(readFileSync(resolve(ROOT, path)))])),
     ports, artifacts: artifactDir, cleanupOnly: Boolean(priorIntent), priorIntentSha256: priorIntent ? sha256(readFileSync(resolve(artifactDir, "intent.json"))) : null,
-    failureInjection: options.failureInjection ?? null, applicationHandoffRequested: !priorIntent && Boolean(options.handoff) });
+    failureInjection: options.failureInjection ?? null, applicationHandoffRequested: !priorIntent && Boolean(options.handoff),
+    ...(abruptRecovery?.terminalFailure ? { terminalFailureRecovery: abruptRecovery.terminalFailure } : {}) });
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
   try {
@@ -1010,7 +1039,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         reason: abruptRecovery!.baselineTransition!.reason, historicalDriftCause: "unretained",
         originalReceiptPreserved: true, cleanupAuthorized: true, originalOwnedResourcesVerified: captured.length });
       recordFile("owned-resources.json", captured);
-      safeRecord(recoveryManifest ? "abrupt-run-cleanup-verified" : "failed-creation-cleanup-verified", {
+      safeRecord(abruptRecovery?.terminalFailure ? "terminal-failure-cleanup-verified" : recoveryManifest ? "abrupt-run-cleanup-verified" : "failed-creation-cleanup-verified", {
         resources: captured.length, sqlExecuted: false, originalEvidencePreserved: true,
         exactOperationalBaseline: Boolean(recoveryBaseline) && !recoveryBaselineState?.baselineChangedBeforeRecovery,
         currentOperationalBaselinePinned: Boolean(recoveryCurrentInventorySha256), originalHostListenersAbsent: true });
