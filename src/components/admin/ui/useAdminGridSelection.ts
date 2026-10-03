@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 export type AdminGridId = string | number;
 
-export function useAdminGridSelection<T extends AdminGridId>(visibleIds: T[]) {
+export function useAdminGridSelection<T extends AdminGridId>(
+  visibleIds: T[],
+  { mutationPending = false }: { mutationPending?: boolean } = {},
+) {
   const [selectedIds, setSelectedIds] = useState<T[]>([]);
   const selectAllRef = useRef<HTMLInputElement | null>(null);
   const visibleSignature = JSON.stringify(visibleIds);
@@ -26,10 +29,12 @@ export function useAdminGridSelection<T extends AdminGridId>(visibleIds: T[]) {
   }, [isPartiallySelected]);
 
   useEffect(() => {
-    if (previousVisibleSignature.current === visibleSignature) return;
+    // Optimistic membership changes are provisional. Keep the settled baseline
+    // until the existing mutation owner has committed or restored its snapshot.
+    if (mutationPending || previousVisibleSignature.current === visibleSignature) return;
     previousVisibleSignature.current = visibleSignature;
     setSelectedIds([]);
-  }, [visibleSignature]);
+  }, [mutationPending, visibleSignature]);
 
   function toggleOne(id: T, checked: boolean) {
     setSelectedIds((current) => {

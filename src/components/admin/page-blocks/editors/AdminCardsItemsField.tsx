@@ -1,11 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
-import { linkDefaultFromContainer } from "../../../../lib/admin/links/link-defaults";
 import { fieldClassName } from "../../../../lib/page-blocks/admin-utils";
 import type { CardsBlockItem } from "../../../../lib/page-blocks/configs";
-import { AdminLinkField } from "../../ui";
 import {
   ModuleEditorRepeaterCard,
   ModuleEditorRepeaterGrid,
@@ -18,7 +16,7 @@ type AdminCardsItemsFieldProps = {
   minItems?: number;
   maxItems?: number;
   showIcon?: boolean;
-  showHref?: boolean;
+  renderHref?: (item: CardsBlockItem, index: number) => ReactNode;
 };
 
 type CardsEditorItem = CardsBlockItem & { clientKey: string };
@@ -37,7 +35,7 @@ export default function AdminCardsItemsField({
   minItems = 1,
   maxItems = 12,
   showIcon = true,
-  showHref = false,
+  renderHref,
 }: AdminCardsItemsFieldProps) {
   const [rows, setRows] = useState<CardsEditorItem[]>(() =>
     padItems(items, minItems).slice(0, maxItems),
@@ -114,15 +112,8 @@ export default function AdminCardsItemsField({
                 <span className="text-xs font-semibold text-white/55">{MODULE_EDITOR_TERMINOLOGY.shortDescription.labelAr}</span>
                 <textarea name={`item_${index}_body`} value={item.body ?? ""} onChange={(event) => updateItem(index, { body: event.target.value })} rows={2} className={fieldClassName("resize-y leading-7")} />
               </label>
-              {showHref ? (
-                <div>
-                  <AdminLinkField
-                    prefix={`item_${index}`}
-                    label="الرابط (اختياري)"
-                    defaultValue={linkDefaultFromContainer(item as Record<string, unknown>)}
-                    showAnchor
-                  />
-                </div>
+              {renderHref ? (
+                <div>{renderHref(item, index)}</div>
               ) : null}
             </div>
           </ModuleEditorRepeaterCard>

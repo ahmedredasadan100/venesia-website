@@ -1,5 +1,7 @@
 "use server";
 
+import { adminActionSuccess, adminActionWarning } from "../../../../../lib/admin/admin-action-result";
+
 import { runBoundedPublicCacheRevalidation } from "../../../../../lib/cache/revalidate-public-cache-tags";
 
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
@@ -26,7 +28,7 @@ import {
   slugify,
   withModuleEditorReturnContextFromForm,
 } from "../../../../../lib/page-blocks/admin-utils";
-import { revalidateBlockModulePaths } from "../../../../../lib/page-blocks/admin-revalidate";
+import { revalidateBlockModulePaths, revalidateCommittedPageBlockAction } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   parsePageIdsFromForm,
   saveModuleTemplateWithPageAssignments,
@@ -264,7 +266,8 @@ export async function toggleCtaBlockStatus(formData: FormData) {
     entityId: id,
     metadata: { blockType: "cta", status: nextStatus },
   }, actor);
-  await revalidateBlockModulePaths("cta");
+  const result = adminActionSuccess("تم الحفظ", "تم حفظ حالة القالب.", { code: "saved", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("cta"));
 }
 
 export async function deleteCtaBlock(formData: FormData) {
@@ -297,15 +300,10 @@ export async function deleteCtaBlock(formData: FormData) {
     null,
     [{ domainKey: "cta_block_templates", entityIdentity: cleanupIdentity }],
   );
-  if (mediaSynchronization.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateBlockModulePaths("cta");
-    } catch (revalidationError) {
-      console.error("CTA block delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
-    }
-    redirect("/admin/pages-blocks/blocks/cta?notice=saved_with_media_sync_warning");
-  }
-  await revalidateBlockModulePaths("cta");
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حذف القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: id })
+    : adminActionSuccess("تم الحفظ", "تم حذف القالب.", { code: "deleted", completion: "committed", entityId: id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("cta"));
 }
 
 export async function duplicateCtaBlock(formData: FormData) {
@@ -351,10 +349,10 @@ export async function duplicateCtaBlock(formData: FormData) {
     entityLabel: nextRow.name,
     metadata: { blockType: "cta", sourceId: id },
   }, actor);
-  await revalidateBlockModulePaths("cta");
-  if (coordinated.mediaSynchronization.status === "saved_with_media_sync_warning") {
-    redirect("/admin/pages-blocks/blocks/cta?notice=saved_with_media_sync_warning");
-  }
+  const result = coordinated.mediaSynchronization.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم نسخ القالب. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed", entityId: coordinated.value.id })
+    : adminActionSuccess("تم الحفظ", "تم نسخ القالب.", { code: "created", completion: "committed", entityId: coordinated.value.id });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("cta"));
 }
 
 export async function bulkCtaBlocks(formData: FormData) {
@@ -408,13 +406,8 @@ export async function bulkCtaBlocks(formData: FormData) {
     entityLabel: "cta_block_templates",
     metadata: { blockType: "cta", action, ids, count: ids.length },
   }, actor);
-  if (mediaSynchronization?.status === "saved_with_media_sync_warning") {
-    try {
-      await revalidateBlockModulePaths("cta");
-    } catch (revalidationError) {
-      console.error("CTA block bulk delete committed with a Media synchronization warning; cache revalidation also failed.", revalidationError);
-    }
-    redirect("/admin/pages-blocks/blocks/cta?notice=saved_with_media_sync_warning");
-  }
-  await revalidateBlockModulePaths("cta");
+  const result = mediaSynchronization?.status === "saved_with_media_sync_warning"
+    ? adminActionWarning("تم الحفظ مع تنبيه للميديا", "تم حفظ التغييرات المحددة. تعذرت مزامنة ارتباطات الميديا؛ راجع التنبيه قبل الحذف الآمن.", { code: "saved_with_media_sync_warning", completion: "committed" })
+    : adminActionSuccess("تم الحفظ", "تم حفظ التغييرات المحددة.", { code: "saved", completion: "committed" });
+  return revalidateCommittedPageBlockAction(result, () => revalidateBlockModulePaths("cta"));
 }

@@ -199,9 +199,9 @@ export default function MediaHubModuleEditClient({
               <input type="hidden" name="show_eyebrow" value={String(eyebrowFormat.visible)} />
               <input type="hidden" name="eyebrow_bold" value={String(eyebrowFormat.bold)} />
               <input type="hidden" name="eyebrow_alignment" value={eyebrowFormat.alignment} />
-              <input type="hidden" name="show_title" value={String(titleFormat.visible)} />
-              <input type="hidden" name="title_bold" value={String(titleFormat.bold)} />
-              <input type="hidden" name="title_alignment" value={titleFormat.alignment} />
+              <input type="hidden" name="show_section_title" value={String(titleFormat.visible)} />
+              <input type="hidden" name="section_title_bold" value={String(titleFormat.bold)} />
+              <input type="hidden" name="section_title_alignment" value={titleFormat.alignment} />
               <input type="hidden" name="show_description" value={String(descriptionFormat.visible)} />
               <input type="hidden" name="description_bold" value={String(descriptionFormat.bold)} />
               <input type="hidden" name="description_alignment" value={descriptionFormat.alignment} />
@@ -263,7 +263,7 @@ export default function MediaHubModuleEditClient({
                         </ModuleEditorField>
 
                         <ModuleEditorField nature="short-text" span={4}>
-                          <ModuleEditorVisibilityAlignRow label="عنوان السكشن" showName="show_title" boldName="title_bold" alignmentName="title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
+                          <ModuleEditorVisibilityAlignRow label="عنوان السكشن" showName="show_section_title" boldName="section_title_bold" alignmentName="section_title_alignment" showDefault={titleFormat.visible} boldDefault={titleFormat.bold} alignmentDefault={titleFormat.alignment}>
                             <input
                               name="title"
                               aria-label="عنوان السكشن"

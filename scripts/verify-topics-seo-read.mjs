@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { createClient } from "@supabase/supabase-js";
 
 // Executes the real read owner and Entity List adapter against an in-memory
 // query backend. This proves emitted requests and bounded read behavior; it
@@ -33,6 +34,7 @@ const version = scoreOwner.ENTITY_SEO_SCORE_VERSION;
 const originalAnalyze = scoreOwner.analyzeEntitySeo;
 let analysisCalls = 0;
 scoreOwner.analyzeEntitySeo = () => { analysisCalls += 1; throw new Error("Read-time SEO analysis is forbidden"); };
+const { buildAdminListSearchOrFilter } = actual("src/lib/admin/admin-list-search.ts");
 const loader = actual("src/lib/admin/content/load-unified-content.ts");
 const { loadTopicsEntityListResult, topicsEntityListAdapter } = actual("src/lib/admin/content/entity-list-adapters/topics.ts");
 const { normalizeAdminEntityListQuery } = actual("src/lib/admin/entity-list/data-engine/contracts.ts");
@@ -67,6 +69,14 @@ const baseFilters = { q: "", view: "active", contentType: "all", categoryId: nul
   status: "all", featured: "all", image: "all", sort: "seo_asc", page: 1, pageSize: 10 };
 const heavyFields = ["content", "excerpt", "faq", "seo_title", "seo_description", "seo_keywords", "focus_keyword", "media_payload", "og_image"];
 
+// This finite port supports only the ordinary words used by the existing SEO
+// fixtures. Literal wire behavior is checked separately with the installed SDK;
+// this is deliberately not a PostgREST filter parser.
+const ordinarySearchFilters = new Map([
+  ['title.ilike."%Alpha%"', 'Alpha'], ['title.ilike."%Guide%"', 'Guide'],
+  ['title.ilike."%No%"', 'No'], ['title.ilike."%matching%"', 'matching'],
+  ['title.ilike."%title%"', 'title'],
+]);
 function backend(options = {}) {
   const trace = [];
   const dataRows = structuredClone(options.rows ?? rows);
@@ -80,7 +90,6 @@ function backend(options = {}) {
         not(column, operator, value) { request.filters.push(["not", column, value, operator]); return query; },
         eq(column, value) { request.filters.push(["eq", column, value]); return query; },
         in(column, values) { request.filters.push(["in", column, values]); return query; },
-        ilike(column, value) { request.filters.push(["ilike", column, value]); return query; },
         or(value) { request.filters.push(["or", value]); return query; },
         order(column, orderOptions) { request.orders.push([column, orderOptions]); request.operations.push("order"); return query; },
         range(from, to) { request.range = [from, to]; request.operations.push("range"); return query; },
@@ -97,9 +106,10 @@ function backend(options = {}) {
               if (operator === "not") return row[key] !== value;
               if (operator === "eq") return row[key] === value;
               if (operator === "in") return value.includes(row[key]);
-              if (operator === "ilike") return String(row[key]).toLowerCase().includes(value.replaceAll("%", "").toLowerCase());
-              assert.equal(key, "image.is.null,image.eq.");
-              return row.image === null || row.image === "";
+              assert.equal(operator, "or");
+              if (key === "image.is.null,image.eq.") return row.image === null || row.image === "";
+              assert.ok(ordinarySearchFilters.has(key), "Unknown ordinary Topics search filter: " + key);
+              return String(row.title).toLowerCase().includes(ordinarySearchFilters.get(key).toLowerCase());
             }));
             if (countRead) return { data: null, count: selected.length, error: null };
             selected.sort((left, right) => {
@@ -144,6 +154,44 @@ async function check(label, run) {
   console.log(`PASS ${label}`);
 }
 try {
+  await check("Installed Supabase SDK retains literal title words as separate AND filters on both count and page reads", async () => {
+    const cases = [
+      { q: "%" }, { q: "_" }, { q: "*" }, { q: "quote'" },
+      { q: '"' }, { q: "\\" }, { q: "Alpha Guide" },
+      { q: "% _", image: "without" }, { q: "", image: "without" },
+    ];
+    for (const input of cases) {
+      const trace = [];
+      currentClient = createClient("https://abcdefghijklmnopqrst.supabase.co", "controlled-local-key", {
+        auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+        global: { fetch: async (url, init) => {
+          const request = { url: new URL(String(url)), method: init.method };
+          trace.push(request);
+          assert.equal(request.url.origin, "https://abcdefghijklmnopqrst.supabase.co");
+          assert.equal(request.url.pathname, "/rest/v1/admin_content_topics");
+          assert.ok(["HEAD", "GET"].includes(request.method));
+          return new Response(request.method === "HEAD" ? null : JSON.stringify([rows.find(row => row.id === 1)]), {
+            status: 200, headers: { "content-type": "application/json", "content-range": "0-0/1" },
+          });
+        } },
+      });
+      const result = await loader.loadUnifiedContentList({ ...baseFilters, ...input }, categories);
+      assert.equal(result.error, null);
+      assert.equal(result.totalCount, 1);
+      assert.deepEqual(result.rows.map(row => row.id), [1]);
+      assert.deepEqual(trace.map(request => request.method), ["HEAD", "GET"]);
+      const expected = input.q.split(" ").filter(Boolean).map(word => "(" + buildAdminListSearchOrFilter(["title"], word) + ")");
+      if (input.image === "without") expected.push("(image.is.null,image.eq.)");
+      for (const request of trace) {
+        assert.deepEqual(request.url.searchParams.getAll("or"), expected);
+        assert.equal(request.url.searchParams.has("title"), false, "No raw wildcard title filter may bypass the canonical owner");
+        assert.equal(request.url.searchParams.get("deleted_at"), "is.null");
+      }
+      assert.equal(trace[0].url.searchParams.get("select"), "id");
+      assert.equal(trace[1].url.searchParams.get("offset"), "0");
+      assert.equal(trace[1].url.searchParams.get("limit"), "10");
+    }
+  });
   await check("SEO ascending and descending order is requested from the backend before a bounded page with stable ties", async () => {
     for (const [sort, expected] of [
       ["seo_asc", [4, 8, 12, 16, 20, 24, 1, 5, 9, 13]],

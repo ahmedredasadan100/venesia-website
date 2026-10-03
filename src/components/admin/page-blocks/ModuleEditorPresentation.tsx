@@ -574,7 +574,7 @@ export function ModuleEditorVisibilityAlignRow({
     >
       {submittedValues}
       {controlsPlacement === "header" ? (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <span className="shrink-0 text-sm font-semibold text-white/78">
             {label}
           </span>

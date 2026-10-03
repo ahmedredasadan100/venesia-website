@@ -17,6 +17,13 @@ type BulkOption = {
   };
 };
 
+export type AdminBulkActionRequest<T extends AdminGridId = AdminGridId> = {
+  action: string;
+  ids: T[];
+  confirmation: BulkOption["confirmation"] | null;
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
+};
+
 type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
   selectedIds: T[];
   entityLabel: string;
@@ -24,6 +31,7 @@ type AdminBulkActionBarProps<T extends AdminGridId = AdminGridId> = {
   options: BulkOption[];
   onClearSelection: () => void;
   onExecute?: (action: string, ids: T[]) => void | Promise<void>;
+  onRequestExecution?: (request: AdminBulkActionRequest<T>) => void;
   isBusy?: boolean;
   actionFieldName?: string;
   idsFieldName?: string;
@@ -72,6 +80,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   options,
   onClearSelection,
   onExecute,
+  onRequestExecution,
   isBusy = false,
   actionFieldName = "bulk_action",
   idsFieldName = "ids",
@@ -103,6 +112,16 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     if (confirmedSubmitRef.current) {
       confirmedSubmitRef.current = false;
+      return;
+    }
+    if (onRequestExecution) {
+      event.preventDefault();
+      onRequestExecution({
+        action: resolvedAction,
+        ids: selectedIds,
+        confirmation: resolvedConfirmation,
+        returnFocusRef: submitRef,
+      });
       return;
     }
     if (resolvedConfirmation) {
@@ -182,7 +201,7 @@ export default function AdminBulkActionBar<T extends AdminGridId = AdminGridId>(
         </button>
       </div>
 
-      {resolvedConfirmation ? (
+      {resolvedConfirmation && !onRequestExecution ? (
         <AdminBulkActionConfirm
           open={confirmationOpen}
           confirmation={resolvedConfirmation}

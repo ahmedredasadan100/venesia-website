@@ -546,7 +546,7 @@ export const ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST = [
     ],
     surfaces: ["footer-compose", "footer-link-edit", "ordering"],
     rationale:
-      "Multi-slot footer composition is a specialized aggregate editor whose destructive interactions delegate to Shared Confirmation.",
+      "Multi-slot footer composition is an Edit/Save aggregate editor; manual-link deletion delegates to Shared Confirmation. Footer Restore Default was removed by explicit Product decision.",
     exceptionContract: {
       lowerLevelSharedCapabilities: [
         "feedback",

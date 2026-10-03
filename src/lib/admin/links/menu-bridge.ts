@@ -60,20 +60,17 @@ export function menuItemToAdminLink(item?: MenuItemLinkRow | null): AdminLinkVal
     };
   }
 
-  if (item.item_type === "page") {
-    return deserializeAdminLink({
+  if (item.item_type === "page" || item.href) {
+    const link = deserializeAdminLink({
       href: item.href,
       anchor: item.anchor,
       target: item.target,
     });
-  }
-
-  if (item.href) {
-    return deserializeAdminLink({
-      href: item.href,
-      anchor: item.anchor,
-      target: item.target,
-    });
+    // Menu rows store the target independently of the inferred link kind.
+    // Reopening an existing destination must not replace that saved choice.
+    return link.link_kind === "none"
+      ? link
+      : { ...link, target: item.target === "_blank" ? "_blank" : "_self" };
   }
 
   return emptyAdminLink();

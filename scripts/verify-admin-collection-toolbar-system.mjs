@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 /**
  * Static and pure-behavior guardrails for the shared Admin Collection
  * Toolbar/Search/Filter System. Live interaction remains Browser QA owned.
@@ -222,12 +223,10 @@ check(
     boundedClientController.includes("const applyQueryPatch = useCallback") &&
     boundedClientController.includes("filterValues") &&
     boundedClientController.includes("rows: paginatedRows") &&
-    boundedClientController.includes("useRouter") &&
-    boundedClientController.includes("router.push(href, { scroll: false })") &&
-    boundedClientController.includes(
-      "router.replace(href, { scroll: false })",
-    ) &&
-    !boundedClientController.includes("window.history"),
+    boundedClientController.includes("useSearchParams") &&
+    boundedClientController.includes("window.history[behavior") &&
+    boundedClientController.includes("window.history.replaceState(null") &&
+    !boundedClientController.includes("useRouter"),
 );
 check(
   "Eligible bounded adopters declare one contract and no local URL/query lifecycle",
@@ -287,6 +286,121 @@ check(
       "disabled: true",
     ),
 );
+
+// Execute the canonical hook with controlled React scheduling and the installed
+// Next History adapter. No DOM, RSC fetch, database or Browser claim is made.
+function verifyBoundedQueryHistory(ownerSource) {
+  const compile = (source, ports = {}) => {
+    const compiled = ts.transpileModule(source, {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    const compiledModule = { exports: {} };
+    Function("require", "exports", "module", compiled)((name) => {
+      assert.ok(Object.hasOwn(ports, name), `Unexpected bounded-owner import ${name}`);
+      return ports[name];
+    }, compiledModule.exports, compiledModule);
+    return compiledModule.exports;
+  };
+  const pagination = compile(read("src/lib/admin/entity-list/pagination.ts"));
+  const url = compile(urlState);
+  const nextSource = read("node_modules/next/dist/client/components/app-router.js");
+  const nextFile = ts.createSourceFile("app-router.js", nextSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+  const find = (predicate) => {
+    const found = [];
+    function visit(node) { if (predicate(node)) found.push(node); ts.forEachChild(node, visit); }
+    visit(nextFile); return found;
+  };
+  const historyEffects = find((node) => ts.isArrowFunction(node) && node.getText(nextFile).includes("const originalPushState"));
+  const copies = find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "copyNextJsInternalHistoryState");
+  assert.equal(historyEffects.length, 1); assert.equal(copies.length, 1);
+  function using(source, callback, options = {}) {
+    let actual = new URL(options.href ?? "http://127.0.0.1/admin/list?tab=owned&q=qa#details");
+    let subscribed = new URL(actual), pending = null, pointer = 0, refIndex = 0, effect = null;
+    const refs = [], transitions = [], routerRequests = [], listeners = new Map();
+    const initialState = { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["owned-tree"] };
+    const stack = [{ url: actual.href, state: initialState }];
+    const localWindow = {
+      get location() { return actual; },
+      history: {
+        get state() { return stack[pointer].state; },
+        pushState(state, unused, href) { actual = new URL(href, actual); stack.splice(++pointer); stack.push({ url: actual.href, state }); },
+        replaceState(state, unused, href) { actual = new URL(href, actual); stack[pointer] = { url: actual.href, state }; },
+      },
+      addEventListener(name, fn) { listeners.set(name, fn); },
+      removeEventListener(name, fn) { assert.equal(listeners.get(name), fn); listeners.delete(name); },
+    };
+    const schedule = (value) => { pending = new URL(value); transitions.push(pending.href); };
+    const uninstall = Function("window", "_react", "_useactionqueue", "_routerreducertypes", "_approuterinstance",
+      copies[0].getText(nextFile) + "; return (" + historyEffects[0].getText(nextFile) + ")();")(
+      localWindow, { startTransition: (fn) => fn() },
+      { dispatchAppRouterAction: (action) => { assert.equal(action.type, "restore"); schedule(action.url); } },
+      { ACTION_RESTORE: "restore" }, { dispatchTraverseAction: (href) => schedule(href) },
+    );
+    const oldWindow = globalThis.window;
+    globalThis.window = localWindow;
+    const reactPorts = {
+      useCallback: (fn) => fn,
+      useMemo: (fn) => fn(),
+      useRef: (value) => refs[refIndex++] ?? (refs[refIndex - 1] = { current: value }),
+      useEffect: (fn) => { effect = fn; },
+    };
+    const runtime = compile(source, {
+      react: reactPorts,
+      "next/navigation": { useSearchParams: () => new URLSearchParams(subscribed.search), useRouter: () => ({
+        push: (href) => routerRequests.push(href), replace: (href) => routerRequests.push(href),
+      }) },
+      "./pagination": pagination, "./url-state": url,
+    });
+    let rows = options.rows ?? Array.from({ length: 123 }, (_, id) => ({ id: id + 1, name: "qa " + (id + 1) }));
+    const contract = options.contract ?? { mode: "bounded-client", search: { paramKey: "q", minLength: 1 },
+      matchesRow: (row, query) => row.name.includes(query.search), getRowId: (row) => row.id };
+    const render = ({ effects = true } = {}) => {
+      if (pending) { subscribed = pending; pending = null; }
+      refIndex = 0;
+      const result = runtime.useAdminBoundedClientPagination({ rows, datasetKey: "owned-dataset", queryContract: contract, ...options.hook });
+      if (effects) effect(); return result;
+    };
+    try {
+      callback({ render, url: () => new URL(actual), transitions, routerRequests, stack,
+        effect: () => effect(), updateRows: (next) => { rows = next; },
+        travel: (direction) => { pointer += direction; assert.ok(stack[pointer]); actual = new URL(stack[pointer].url); listeners.get("popstate")({ state: stack[pointer].state }); },
+        external: (href) => localWindow.history.pushState(null, "", href),
+      });
+    } finally {
+      uninstall(); assert.equal(listeners.size, 0);
+      if (oldWindow === undefined) delete globalThis.window; else globalThis.window = oldWindow;
+    }
+  }
+  const scenarios = {
+    overlap(m) { const value = m.render(); value.setPageSize(50); value.applyQueryPatch({ q: "q" }, "replace"); assert.equal(m.url().searchParams.get("limit"), "50"); assert.equal(m.url().searchParams.get("q"), "q"); assert.equal(m.render().pageSize, 50); assert.equal(m.routerRequests.length, 0); },
+    reverse(m) { const value = m.render(); value.applyQueryPatch({ q: "qa 1" }, "replace"); value.setPageSize(50); assert.equal(m.url().searchParams.get("q"), "qa 1"); assert.equal(m.render().pageSize, 50); },
+    stalePage(m) { const value = m.render(); value.setPageSize(50); value.setPage(2); assert.equal(m.url().searchParams.get("limit"), "50"); const next = m.render(); assert.equal(next.pageSize, 50); assert.equal(next.page, 2); assert.equal(next.rows[0].id, 51); },
+    staleReset(m) { const value = m.render(); value.setPageSize(50); value.resetPage(); assert.equal(m.url().searchParams.get("limit"), "50"); assert.equal(m.render().pageSize, 50); },
+    staleEffect(m) { const value = m.render({ effects: false }); value.setPageSize(50); m.effect(); assert.equal(m.url().searchParams.get("limit"), "50"); assert.equal(m.render().pageSize, 50); },
+    integration(m) { const value = m.render(); value.setPageSize(50); assert.equal(m.transitions.length, 1); assert.equal(m.render().pageSize, 50); assert.deepEqual(m.stack.at(-1).state.__PRIVATE_NEXTJS_INTERNALS_TREE, ["owned-tree"]); },
+    history(m) { let value = m.render(); value.setPageSize(50); value = m.render(); value.setPage(2); assert.equal(m.render().page, 2); m.travel(-1); assert.equal(m.render().page, 1); assert.equal(m.render().pageSize, 50); m.travel(1); assert.equal(m.render().page, 2); assert.equal(m.url().hash, "#details"); assert.equal(m.url().searchParams.get("tab"), "owned"); },
+    constraints(m) { let value = m.render(); value.setPageSize(7); assert.equal(m.render().pageSize, 10); value = m.render(); value.setPage(999); value = m.render(); assert.equal(value.page, 13); assert.equal(m.url().searchParams.get("page"), "13"); m.updateRows(Array.from({ length: 3 }, (_, id) => ({ id: id + 1, name: "qa" }))); m.render(); assert.equal(m.render().page, 1); assert.equal(m.url().searchParams.has("page"), false); },
+    external(m) { m.render(); m.external("/admin/list?tab=external&q=qa&page=3&limit=20#external"); const restored = m.render(); assert.equal(restored.pageSize, 20); assert.equal(restored.page, 3); restored.setPage(2); assert.equal(m.url().searchParams.get("tab"), "external"); assert.equal(m.url().hash, "#external"); },
+  };
+  for (const scenario of Object.values(scenarios)) using(ownerSource, scenario);
+  using(ownerSource, (m) => {
+    const value = m.render(); value.setPageSize(20); value.setPage(2); assert.equal(m.url().searchParams.get("size"), "20");
+    value.applyQueryPatch({ term: "qa 1" }, "replace"); assert.equal(m.url().searchParams.has("p"), false); assert.equal(m.render().pageSize, 20); assert.equal(m.url().searchParams.get("tab"), "owned"); assert.equal(m.url().hash, "#details");
+  }, { href: "http://127.0.0.1/admin/list?tab=owned&term=qa#details", hook: { pageParamName: "p", limitParamName: "size", defaultPageSize: 5, pageSizeOptions: [5, 20] }, contract: { mode: "bounded-client", search: { paramKey: "term", minLength: 1 }, matchesRow: (r, q) => r.name.includes(q.search), getRowId: (r) => r.id } });
+  const mutations = [
+    ["internal history state skips Next synchronization", ownerSource.replaceAll('null,\n        "",', 'window.history.state,\n        "",'), scenarios.integration],
+    ["stale size closure", ownerSource.replaceAll('currentPageSize(), "push"', 'pagination.pageSize, "push"'), scenarios.stalePage],
+    ["stale reset closure", ownerSource.replaceAll('currentPageSize(), "replace"', 'pagination.pageSize, "replace"'), scenarios.staleReset],
+    ["stale render normalization", ownerSource.replace('if (current.toString() !== searchParams.toString()) return;', ''), scenarios.staleEffect],
+    ["stale committed-query source", ownerSource.replaceAll('new URLSearchParams(window.location.search)', 'new URLSearchParams(searchParams.toString())'), scenarios.overlap],
+    ["hash dropped", ownerSource.replace('${window.location.hash}', ''), scenarios.history],
+  ];
+  for (const [name, mutant, scenario] of mutations) { assert.notEqual(mutant, ownerSource, name); assert.throws(() => using(mutant, scenario), undefined, name); }
+  return { scenarios: Object.keys(scenarios).length + 1, negatives: mutations.length };
+}
+const boundedQueryProof = verifyBoundedQueryHistory(boundedClientController);
+check("Bounded accepted intents preserve URL/history through actual Next integration", boundedQueryProof.scenarios === 10 && boundedQueryProof.negatives === 6);
+
 
 if (failures.length) {
   console.error("verify-admin-collection-toolbar-system FAILED:");

@@ -20,8 +20,7 @@ import {
 import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
 import {
   adminActionFailure,
-  adminActionSuccess,
-  adminActionWarning,
+  withAdminActionSettledResult,
   type AdminActionResult,
 } from "../../../../lib/admin/admin-action-result";
 import type {
@@ -136,64 +135,69 @@ function createLocationRowActionsCapability(input: {
         ],
       },
       copyPublicLink: { access: "hidden" },
-      visibility: pending === "visibility"
-        ? {
-            access: "disabled",
-            disabledReason: "انتظر انتهاء الإجراء الحالي.",
-            pending: true,
-            isVisible: row.is_active,
-          }
-        : row.is_active && !visibilityEligibility.canDeactivate
+      visibility:
+        pending === "visibility"
           ? {
               access: "disabled",
-              disabledReason: visibilityEligibility.disabledReason ?? undefined,
+              disabledReason: "انتظر انتهاء الإجراء الحالي.",
+              pending: true,
               isVisible: row.is_active,
             }
-          : {
-            access: "allowed",
-            isVisible: row.is_active,
-            onSelect: async () => {
-              const result = await input.onToggle(row);
-              input.onMutationResult?.(result);
-              if (!result.ok) throw new Error(result.message);
-            },
-            confirmation: {
-              mode: "shared",
-              title: row.is_active ? "تعطيل الموقع؟" : "تفعيل الموقع؟",
-              description: row.is_active
-                ? "لن يظهر الموقع في الاختيارات الجديدة، وستبقى العلاقات الحالية محفوظة."
-                : "سيصبح الموقع متاحًا للاختيار وفق التسلسل الحالي.",
-              confirmLabel: row.is_active ? "تأكيد التعطيل" : "تأكيد التفعيل",
-            },
-            },
+          : row.is_active && !visibilityEligibility.canDeactivate
+            ? {
+                access: "disabled",
+                disabledReason:
+                  visibilityEligibility.disabledReason ?? undefined,
+                isVisible: row.is_active,
+              }
+            : {
+                access: "allowed",
+                isVisible: row.is_active,
+                onSelect: async () => {
+                  const result = await input.onToggle(row);
+                  input.onMutationResult?.(result);
+                  if (!result.ok) throw new Error(result.message);
+                },
+                confirmation: {
+                  mode: "shared",
+                  title: row.is_active ? "تعطيل الموقع؟" : "تفعيل الموقع؟",
+                  description: row.is_active
+                    ? "لن يظهر الموقع في الاختيارات الجديدة، وستبقى العلاقات الحالية محفوظة."
+                    : "سيصبح الموقع متاحًا للاختيار وفق التسلسل الحالي.",
+                  confirmLabel: row.is_active
+                    ? "تأكيد التعطيل"
+                    : "تأكيد التفعيل",
+                },
+              },
       featured: { access: "hidden" },
       duplicate: { access: "hidden" },
       archive: { access: "hidden" },
-      delete: pending === "delete"
-        ? {
-            access: "disabled",
-            disabledReason: "انتظر انتهاء الإجراء الحالي.",
-            pending: true,
-          }
-        : !deleteEligibility.canDelete
+      delete:
+        pending === "delete"
           ? {
               access: "disabled",
-              disabledReason: deleteEligibility.disabledReason ?? undefined,
+              disabledReason: "انتظر انتهاء الإجراء الحالي.",
+              pending: true,
             }
-          : {
-              access: "allowed",
-              onSelect: async () => {
-                const result = await input.onDelete(row);
-                input.onMutationResult?.(result);
-                if (!result.ok) throw new Error(result.message);
+          : !deleteEligibility.canDelete
+            ? {
+                access: "disabled",
+                disabledReason: deleteEligibility.disabledReason ?? undefined,
+              }
+            : {
+                access: "allowed",
+                onSelect: async () => {
+                  const result = await input.onDelete(row);
+                  input.onMutationResult?.(result);
+                  if (!result.ok) throw new Error(result.message);
+                },
+                confirmation: {
+                  mode: "shared",
+                  title: "حذف الموقع؟",
+                  description: `سيتم حذف «${row.name_ar}» نهائيًا من تسلسل مواقع المشاريع.`,
+                  confirmLabel: "تأكيد الحذف",
+                },
               },
-              confirmation: {
-                mode: "shared",
-                title: "حذف الموقع؟",
-                description: `سيتم حذف «${row.name_ar}» نهائيًا من تسلسل مواقع المشاريع.`,
-                confirmLabel: "تأكيد الحذف",
-              },
-            },
     },
   };
 }
@@ -264,7 +268,9 @@ function createColumns(input: {
       sortKey: "sort_order",
       minWidth: 100,
       width: 110,
-      renderCell: ({ row }) => <span className="font-en text-sm">{row.sort_order}</span>,
+      renderCell: ({ row }) => (
+        <span className="font-en text-sm">{row.sort_order}</span>
+      ),
     },
     {
       key: "relations",
@@ -355,118 +361,146 @@ export default function ProjectLocationsManagementClient({
     controller.query,
   );
   const [createOpen, setCreateOpen] = useState(false);
-  const [editing, setEditing] = useState<ProjectLocationManagementRow | null>(null);
+  const [editing, setEditing] = useState<ProjectLocationManagementRow | null>(
+    null,
+  );
 
-  const toggleActive = useCallback(async (row: ProjectLocationManagementRow) => {
-    const nextActive = !row.is_active;
-    try {
-      const result = await instant.mutateAsync({
-        rowId: row.id,
-        action: "visibility",
-        optimistic: (cache) => {
-          if (
-            controller.query.filters.status !== "all" &&
-            controller.query.filters.status !== (nextActive ? "active" : "inactive")
-          ) {
-            cache.removeRows(new Set([row.id]));
-            return;
-          }
-          cache.patchRows((current) => current.id === row.id
-            ? { ...current, is_active: nextActive }
-            : current);
-        },
-        execute: async () => {
-          const actionResult = await setProjectLocationActiveAction(
-            row.id,
-            level,
-            nextActive,
-          );
-          if (!actionResult.ok) {
-            return {
-              ok: false as const,
-              code: actionResult.code ?? "project_location_status_failed",
-              message: actionResult.message,
-            };
-          }
-          return {
-            ok: true as const,
-            message: actionResult.message,
-            feedbackStatus: actionResult.feedbackStatus === "warning" ? "warning" as const : "success" as const,
-            code: actionResult.code,
-            location:
-              "location" in actionResult ? actionResult.location : undefined,
-          };
-        },
-        reconcileSuccess: (confirmed, tools) => {
-          const location = confirmed.location;
-          if (!location || typeof location !== "object") return;
-          tools.cache.patchRows((current) => current.id === row.id
-            ? (location as ProjectLocationManagementRow)
-            : current);
-        },
-      });
-      return (result.feedbackStatus === "warning" ? adminActionWarning : adminActionSuccess)(
-        nextActive ? "تم تفعيل الموقع" : "تم تعطيل الموقع",
-        result.message,
-        { code: result.feedbackStatus === "warning" ? "saved" : nextActive ? "published" : "unpublished", entityId: row.id },
-      );
-    } catch (error) {
-      return adminActionFailure(
-        "تعذر تحديث حالة الموقع",
-        error instanceof Error ? error.message : "تعذر تحديث حالة الموقع.",
-        { entityId: row.id },
-      );
-    }
-  }, [controller.query.filters.status, instant, level]);
-
-  const deleteLocation = useCallback(async (row: ProjectLocationManagementRow) => {
-    try {
-      const result = await instant.mutateAsync({
-        rowId: row.id,
-        action: "delete",
-        optimistic: (cache) => cache.removeRows(new Set([row.id])),
-        execute: async () => {
-          const actionResult = await deleteProjectLocationAction(row.id, level);
-          return actionResult.ok
-            ? { ok: true as const, message: actionResult.message, feedbackStatus: actionResult.feedbackStatus === "warning" ? "warning" as const : "success" as const, code: actionResult.code }
-            : {
+  const toggleActive = useCallback(
+    async (row: ProjectLocationManagementRow) => {
+      const nextActive = !row.is_active;
+      let actionResult: AdminActionResult | null = null;
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "visibility",
+          optimistic: (cache) => {
+            if (
+              controller.query.filters.status !== "all" &&
+              controller.query.filters.status !==
+                (nextActive ? "active" : "inactive")
+            ) {
+              cache.removeRows(new Set([row.id]));
+              return;
+            }
+            cache.patchRows((current) =>
+              current.id === row.id
+                ? { ...current, is_active: nextActive }
+                : current,
+            );
+          },
+          execute: async () => {
+            actionResult = await setProjectLocationActiveAction(
+              row.id,
+              level,
+              nextActive,
+            );
+            if (!actionResult.ok) {
+              return {
                 ok: false as const,
-                code: actionResult.code ?? "project_location_delete_failed",
+                code: actionResult.code ?? "project_location_status_failed",
                 message: actionResult.message,
               };
-        },
-      });
-      return (result.feedbackStatus === "warning" ? adminActionWarning : adminActionSuccess)("تم حذف الموقع", result.message, {
-        code: "deleted",
-        entityId: row.id,
-      });
-    } catch (error) {
-      return adminActionFailure(
-        "تعذر حذف الموقع",
-        error instanceof Error ? error.message : "تعذر حذف الموقع.",
-        { entityId: row.id },
-      );
-    }
-  }, [instant, level]);
+            }
+            return {
+              ok: true as const,
+              message: actionResult.message,
+              feedbackStatus:
+                actionResult.feedbackStatus === "warning"
+                  ? ("warning" as const)
+                  : ("success" as const),
+              code: actionResult.code,
+              location:
+                "location" in actionResult ? actionResult.location : undefined,
+            };
+          },
+          reconcileSuccess: (confirmed, tools) => {
+            const location = confirmed.location;
+            if (!location || typeof location !== "object") return;
+            tools.cache.patchRows((current) =>
+              current.id === row.id
+                ? (location as ProjectLocationManagementRow)
+                : current,
+            );
+          },
+        });
+        return withAdminActionSettledResult(actionResult!, result);
+      } catch (error) {
+        return adminActionFailure(
+          "تعذر تحديث حالة الموقع",
+          error instanceof Error ? error.message : "تعذر تحديث حالة الموقع.",
+          { entityId: row.id },
+        );
+      }
+    },
+    [controller.query.filters.status, instant, level],
+  );
 
-  const columns = useMemo(() => createColumns({
-    level,
-    rowInteraction: instant.getRowInteraction,
-    onEdit: setEditing,
-    onToggle: toggleActive,
-    onDelete: deleteLocation,
-  }), [deleteLocation, instant.getRowInteraction, level, toggleActive]);
-  const hasFilters = Boolean(controller.query.search) || controller.query.filters.status !== "all";
+  const deleteLocation = useCallback(
+    async (row: ProjectLocationManagementRow) => {
+      let actionResult: AdminActionResult | null = null;
+      try {
+        const result = await instant.mutateAsync({
+          rowId: row.id,
+          action: "delete",
+          optimistic: (cache) => cache.removeRows(new Set([row.id])),
+          execute: async () => {
+            actionResult = await deleteProjectLocationAction(
+              row.id,
+              level,
+            );
+            return actionResult.ok
+              ? {
+                  ok: true as const,
+                  message: actionResult.message,
+                  feedbackStatus:
+                    actionResult.feedbackStatus === "warning"
+                      ? ("warning" as const)
+                      : ("success" as const),
+                  code: actionResult.code,
+                }
+              : {
+                  ok: false as const,
+                  code: actionResult.code ?? "project_location_delete_failed",
+                  message: actionResult.message,
+                };
+          },
+        });
+        return withAdminActionSettledResult(actionResult!, result);
+      } catch (error) {
+        return adminActionFailure(
+          "تعذر حذف الموقع",
+          error instanceof Error ? error.message : "تعذر حذف الموقع.",
+          { entityId: row.id },
+        );
+      }
+    },
+    [instant, level],
+  );
+
+  const columns = useMemo(
+    () =>
+      createColumns({
+        level,
+        rowInteraction: instant.getRowInteraction,
+        onEdit: setEditing,
+        onToggle: toggleActive,
+        onDelete: deleteLocation,
+      }),
+    [deleteLocation, instant.getRowInteraction, level, toggleActive],
+  );
+  const hasFilters =
+    Boolean(controller.query.search) ||
+    controller.query.filters.status !== "all";
   const basePath = projectLocationManagementPath(level);
   const initialFeedback = useMemo(() => {
     const errorMessage = controller.error?.message ?? initialPreferenceError;
     if (!errorMessage) return null;
-    return mapAdminActionResultToFeedback(adminActionFailure(
-      controller.error
-        ? "تعذر تحميل المواقع"
-        : "تعذر تحميل تفضيلات الأعمدة",
-      errorMessage,
-    ));
+    return mapAdminActionResultToFeedback(
+      adminActionFailure(
+        controller.error ? "تعذر تحميل المواقع" : "تعذر تحميل تفضيلات الأعمدة",
+        errorMessage,
+      ),
+    );
   }, [controller.error, initialPreferenceError]);
 
   return (
@@ -487,7 +521,10 @@ export default function ProjectLocationsManagementClient({
                   {PROJECT_LOCATION_NAV_LABELS[targetLevel]}
                 </AdminActionButton>
               ))}
-              <AdminActionButton variant="primary" onClick={() => setCreateOpen(true)}>
+              <AdminActionButton
+                variant="primary"
+                onClick={() => setCreateOpen(true)}
+              >
                 إضافة {config.singularLabel}
               </AdminActionButton>
             </div>
@@ -495,8 +532,17 @@ export default function ProjectLocationsManagementClient({
         />
 
         <AdminEntityListSurface consumer={entityKey}>
-          <AdminEntityListTableRegion data-admin-entity-list-pending={controller.queryPending ? "true" : "false"}>
-            <AdminEntityList<ProjectLocationManagementRow, ProjectLocationManagementColumnKey, ProjectLocationSortField, number>
+          <AdminEntityListTableRegion
+            data-admin-entity-list-pending={
+              controller.queryPending ? "true" : "false"
+            }
+          >
+            <AdminEntityList<
+              ProjectLocationManagementRow,
+              ProjectLocationManagementColumnKey,
+              ProjectLocationSortField,
+              number
+            >
               listId={`${entityKey}-table`}
               queryPending={controller.queryPending}
               sizingStrategy={{
@@ -534,31 +580,49 @@ export default function ProjectLocationsManagementClient({
               enableSelection={false}
               scrollLabel={`جدول ${config.label}`}
               mapResultToFeedback={mapAdminActionResultToFeedback}
-              sort={{ key: controller.query.sort.field, direction: controller.query.sort.direction }}
+              sort={{
+                key: controller.query.sort.field,
+                direction: controller.query.sort.direction,
+              }}
               sortMode={{
                 mode: "callback",
-                onToggle: (field) => controller.setSort({
-                  field,
-                  direction:
-                    controller.query.sort.field === field && controller.query.sort.direction === "asc"
-                      ? "desc"
-                      : "asc",
-                }),
+                onToggle: (field) =>
+                  controller.setSort({
+                    field,
+                    direction:
+                      controller.query.sort.field === field &&
+                      controller.query.sort.direction === "asc"
+                        ? "desc"
+                        : "asc",
+                  }),
               }}
               onSortColumnHidden={() =>
-                controller.setSort({ ...projectLocationsQueryContract.defaultSort })
+                controller.setSort({
+                  ...projectLocationsQueryContract.defaultSort,
+                })
               }
               actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
               initialFeedback={initialFeedback}
               emptyState={{
-                mode: controller.result.pagination.totalRows === 0 && !hasFilters ? "system" : "filtered",
+                mode:
+                  controller.result.pagination.totalRows === 0 && !hasFilters
+                    ? "system"
+                    : "filtered",
                 systemEmpty: (
                   <div>
-                    <p className="text-base font-semibold text-white">لا توجد بيانات لهذا المستوى</p>
-                    <p className="mt-2 text-sm text-white/45">أضف أول عنصر من زر الإضافة أعلى الصفحة.</p>
+                    <p className="text-base font-semibold text-white">
+                      لا توجد بيانات لهذا المستوى
+                    </p>
+                    <p className="mt-2 text-sm text-white/45">
+                      أضف أول عنصر من زر الإضافة أعلى الصفحة.
+                    </p>
                   </div>
                 ),
-                filteredEmpty: <p className="text-base font-semibold text-white">لا توجد نتائج مطابقة.</p>,
+                filteredEmpty: (
+                  <p className="text-base font-semibold text-white">
+                    لا توجد نتائج مطابقة.
+                  </p>
+                ),
               }}
             />
             <AdminTablePagination

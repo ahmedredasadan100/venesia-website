@@ -1363,6 +1363,90 @@ check(
     types.includes("AdminEntityFilterDef"),
 );
 
+// Execute the canonical table's real derived budget and rendered JSX values.
+// Geometry is exercised by the bounded Chromium regression; this gate keeps
+// the policy, both render branches, and resize lifecycle reachable in CI.
+function loadAdjacentPinningContract(source) {
+  const ast = ts.createSourceFile('AdminEntityListTable.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const declarations = new Map();
+  const rendered = [];
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && ['ADMIN_ENTITY_LIST_MINIMUM_FLEXIBLE_TRACK_WIDTH','stickyStartWidth','scrollableTrackWidth','pinAdjacentColumns'].includes(node.name.text)) declarations.set(node.name.text, node.initializer?.getText(ast));
+    if (ts.isJsxOpeningElement(node) && ['th','td'].includes(node.tagName.getText(ast))) {
+      const attrs = node.attributes.properties.filter(ts.isJsxAttribute);
+      const marker = attrs.find(a => a.name.getText(ast) === 'data-admin-grid-sticky');
+      if (marker && marker.initializer?.getText(ast).includes('inline-end-adjacent')) {
+        const expression = marker.initializer && ts.isJsxExpression(marker.initializer) ? marker.initializer.expression : null;
+        const style = attrs.find(a => a.name.getText(ast) === 'style')?.initializer;
+        const object = style && ts.isJsxExpression(style) && style.expression && ts.isObjectLiteralExpression(style.expression) ? style.expression : null;
+        const property = name => object?.properties.find(p => ts.isPropertyAssignment(p) && p.name.getText(ast) === name);
+        const position = property('position'), zIndex = property('zIndex');
+        if (!expression || !position || !zIndex) throw new Error('Missing actual adjacent marker/position/layer binding');
+        const evaluate = text => Function('pinAdjacentColumns', `return (${text});`);
+        rendered.push({ tag: node.tagName.getText(ast), marker: evaluate(expression.getText(ast)), position: evaluate(position.initializer.getText(ast)), zIndex: evaluate(zIndex.initializer.getText(ast)) });
+      }
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  if (declarations.size !== 4 || rendered.length !== 2 || rendered[0].tag !== 'th' || rendered[1].tag !== 'td') throw new Error('Missing canonical adjacent budget/header/body');
+  const body = [...declarations].map(([name,value]) => `const ${name} = ${value};`).join('\n') + '\nreturn pinAdjacentColumns;';
+  const output = ts.transpileModule(body, {compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
+  const evaluate = Function('columns','allocatedColumnWidths','primaryColumnsPinned','nextStickyEndOffset','selectionWidth','availableTableWidth',output);
+  return { evaluate, rendered };
+}
+
+const adjacentBudgetCases = [
+  { name:'unmeasured waits without pinning', width:null, end:354, start:72, pinned:false, selection:0, expected:false },
+  { name:'Stages narrow release', width:330, end:354, start:72, pinned:false, selection:0, expected:false },
+  { name:'Items narrow keeps readable content', width:330, end:318, start:72, pinned:false, selection:0, expected:false },
+  { name:'Pages selection reserves its width', width:330, end:232, start:240, pinned:false, selection:46, expected:false },
+  { name:'Pages without selection releases for full text', width:330, end:232, start:240, pinned:false, selection:0, expected:false },
+  { name:'hidden order still reserves actual Relations track', width:330, end:244, start:72, pinned:false, selection:0, expected:false },
+  { name:'641 pinned primary budget releases cramped owner', width:530, end:354, start:72, pinned:true, selection:0, expected:false },
+  { name:'641 primary static control', width:530, end:354, start:72, pinned:false, selection:0, expected:true },
+  { name:'selection is counted at exact boundary', width:600, end:354, start:72, pinned:true, selection:46, expected:false },
+  { name:'fit boundary retains pins', width:576, end:354, start:72, pinned:true, selection:0, expected:true },
+  { name:'one below boundary releases', width:575, end:354, start:72, pinned:true, selection:0, expected:false },
+  { name:'wide retains normal pins', width:1000, end:374, start:280, pinned:true, selection:46, expected:true },
+];
+function verifyAdjacentPinningContract(source) {
+  const contract = loadAdjacentPinningContract(source);
+  for (const sample of adjacentBudgetCases) {
+    const columns = [{key:'primary',sticky:'start'},{key:'content'},{key:'actions',sticky:'end'}];
+    const actual = contract.evaluate(columns,new Map([['primary',sample.start],['content',150],['actions',144]]),sample.pinned,sample.end,sample.selection,sample.width);
+    if (actual !== sample.expected) throw new Error(sample.name);
+  }
+  for (const branch of contract.rendered) {
+    if (branch.marker(true) !== 'inline-end-adjacent' || branch.marker(false) !== undefined || branch.position(true) !== 'sticky' || branch.position(false) !== 'static' || branch.zIndex(false) !== 'auto' || branch.zIndex(true) !== undefined) throw new Error(`${branch.tag} must expose actual pinning`);
+  }
+  return true;
+}
+check('Adjacent pinning executes exact current width budgets and both truthful render branches', verifyAdjacentPinningContract(entityTable));
+const adjacentMutants = [
+  entityTable.replace(/const pinAdjacentColumns =[^;]+;/u,'const pinAdjacentColumns = true;'),
+  entityTable.replace('      stickyStartWidth +','      0 +'),
+  entityTable.replace('      selectionWidth +','      0 +'),
+  entityTable.replace('scrollableTrackWidth <=','0 <='),
+  entityTable.replace('scrollableTrackWidth <=','scrollableTrackWidth >='),
+  entityTable.replace('position: pinAdjacentColumns ? "sticky" : "static"','position: "sticky"'),
+  entityTable.replaceAll('position: pinAdjacentColumns ? "sticky" : "static"','position: "static"'),
+  entityTable.replace('pinAdjacentColumns ? "inline-end-adjacent" : undefined','"inline-end-adjacent"'),
+  entityTable.replaceAll('zIndex: pinAdjacentColumns ? undefined : "auto"','zIndex: undefined'),
+];
+check('Adjacent budget guards reject exhausted content, missing selection/start widths and stale render branches', adjacentMutants.every(mutant => {
+  if (mutant === entityTable) return false;
+  try {verifyAdjacentPinningContract(mutant);return false;} catch {return true;}
+}));
+check('Actual primary pinning follows the existing responsive contract and removes its listener',
+  entityTable.includes('window.matchMedia("(min-width: 641px)")') &&
+  entityTable.includes('min-[641px]:sticky') &&
+  entityTable.includes('setPrimaryColumnsPinned(primaryStickyMedia.matches)') &&
+  entityTable.includes('primaryStickyMedia.addEventListener("change", updateAvailableWidth)') &&
+  entityTable.includes('primaryStickyMedia.removeEventListener("change", updateAvailableWidth)') &&
+  entityTable.includes('observer.disconnect()'));
+
+
 if (failures.length) {
   console.error("verify-admin-entity-list FAILED:");
   failures.forEach((failure) => console.error(` - ${failure}`));

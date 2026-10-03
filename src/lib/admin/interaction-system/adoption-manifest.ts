@@ -212,6 +212,7 @@ export const ADMIN_CURRENT_SHARED_CAPABILITY_SET =
       owner: "AdminEntityList",
       sourceFiles: [
         "src/components/admin/entity-list/AdminEntityList.tsx",
+        "src/components/admin/entity-list/AdminEntityListSurface.tsx",
         "src/components/admin/ui/AdminBulkActionBar.tsx",
         "src/lib/admin/entity-list/index.ts",
         "src/lib/admin/entity-list/data-engine/client-controller.ts",
@@ -2480,8 +2481,15 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
           ...ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
           date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
         },
-        {},
+        {
+          feedback: {
+            state: "not_applicable",
+            rationale: "Immutable activity rows expose query/retry and local column preferences, without domain mutation or result publication. The canonical AdminEntityList query notice and preference error remain local to their existing owners.",
+          },
+        },
       ),
+      feedbackOwner: "not_applicable",
+      confirmationOwner: "not_applicable",
       workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/activity-log"],
@@ -2710,7 +2718,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
             "src/components/admin/projects/tracking/TrackingCollections.tsx",
           applicability: adminConsumerCapabilityAudit(
             {
-              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+              ...ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+              media: {
+                state: "not_applicable",
+                rationale: "This exact child collection mounts only its scalar Tracking Profile/Stage Forms. Gallery and video belong to TrackingUpdateFormModal on the separate Updates route; no Update Media proof is inherited.",
+              },
               date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
             },
             {
@@ -2742,7 +2754,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
             "src/components/admin/projects/tracking/TrackingCollections.tsx",
           applicability: adminConsumerCapabilityAudit(
             {
-              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+              ...ADMIN_SWITCH_MODAL_LISTBOX_CONSUMER_CAPABILITIES,
+              media: {
+                state: "not_applicable",
+                rationale: "This exact child collection mounts only its scalar Tracking Item Forms. Gallery and video belong to TrackingUpdateFormModal on the separate Updates route; no Update Media proof is inherited.",
+              },
               date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
             },
             {
@@ -2916,7 +2932,12 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
             "src/app/admin/pages-blocks/blocks/BlockTemplateSummaryListClient.tsx",
           applicability: adminConsumerCapabilityAudit(
             ADMIN_SWITCH_CONSUMER_CAPABILITIES,
-            {},
+            {
+              confirmation: {
+                state: "not_applicable",
+                rationale: "The current Media summary consumers declare no confirmation intent: visibility and bulk publication are immediate, and duplicate/archive/delete are hidden. Canonical RowActions and Bulk owners retain their internal confirmation infrastructure, which is outside this consumer-owned boundary.",
+              },
+            },
           ),
           contracts: ADMIN_BLOCK_TEMPLATE_LIBRARY_CONTRACTS,
           executableBindings: ADMIN_BLOCK_TEMPLATE_LIBRARY_EXECUTABLE_BINDINGS,
@@ -3728,8 +3749,15 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
       id: "topics-without-image-report",
       capabilityAudit: adminConsumerCapabilityAudit(
         ADMIN_NO_EXPLICIT_CONSUMER_CAPABILITIES,
-        {},
+        {
+          feedback: {
+            state: "not_applicable",
+            rationale: "This report exposes read-only topic queries and edit navigation, without domain mutation or result publication. The canonical AdminEntityList query notice and preference error remain local to their existing owners.",
+          },
+        },
       ),
+      feedbackOwner: "not_applicable",
+      confirmationOwner: "not_applicable",
       workflowClassification: "full_collection_adoption",
       generic: true,
       routes: ["/admin/reports/topics-without-image"],

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAdminFeedback } from "../AdminFeedbackProvider";
 import AdminNotice from "../AdminNotice";
 import AdminActionButton from "../ui/AdminActionButton";
-import type { AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
+import { mapAdminActionResultToFeedback, type AdminActionFeedback } from "../../../lib/admin/admin-action-feedback";
 import type { AdminActionResult } from "../../../lib/admin/admin-action-result";
 import type { AdminInstantMutationBulkInteraction } from "../../../lib/admin/entity-list/data-engine/instant-mutation";
 import {
@@ -19,7 +19,9 @@ import {
   type AdminEntityListEmptyState,
   type AdminEntityPersistResult,
 } from "../../../lib/admin/entity-list";
-import AdminBulkActionBar from "../ui/AdminBulkActionBar";
+import AdminBulkActionBar, {
+  type AdminBulkActionRequest,
+} from "../ui/AdminBulkActionBar";
 import AdminColumnVisibilityMenu from "../ui/AdminColumnVisibilityMenu";
 import AdminListboxSelect from "../ui/AdminListboxSelect";
 import { ADMIN_SCROLLBAR_VISUAL_CLASSES } from "../ui/admin-scrollbar-styles";
@@ -103,7 +105,7 @@ export type AdminEntityListProps<
    * cache patches before revalidation.
    */
   onSuccessfulMutation?: (result?: AdminActionResult) => void | Promise<void>;
-  mapResultToFeedback: AdminEntityFeedbackMapper;
+  mapResultToFeedback?: AdminEntityFeedbackMapper;
   sort?: AdminEntitySortState<TSortKey> | null;
   sortMode?: AdminEntityListTableProps<TRow, TKey, TSortKey, TId>["sortMode"];
   onSortColumnHidden?: () => void;
@@ -277,7 +279,7 @@ function AdminEntityListInner<
     getBulkConfirmation,
     bulkAdditionalControls,
     onSuccessfulMutation,
-    mapResultToFeedback,
+    mapResultToFeedback = mapAdminActionResultToFeedback,
     sort,
     sortMode,
     onSortColumnHidden,
@@ -294,7 +296,9 @@ function AdminEntityListInner<
   const { publishFeedback, clearFeedback } = useAdminFeedback();
   const sortCorrectionRef = useRef(false);
   const feedbackChannel = `entity-list:${listId}`;
-  const selection = useAdminGridSelection(rows.map(getRowId));
+  const selection = useAdminGridSelection(rows.map(getRowId), {
+    mutationPending: bulkInteraction?.isBlocked ?? false,
+  });
   assertAdminEntityListContracts({
     listId,
     columns,
@@ -409,8 +413,14 @@ function AdminEntityListInner<
     }
   }
 
-  function requestBulkExecution(action: string, ids: TId[]) {
-    const confirmation = getBulkConfirmation?.(action, ids) ?? null;
+  function requestBulkExecution({
+    action,
+    ids,
+    confirmation: fallbackConfirmation,
+    returnFocusRef,
+  }: AdminBulkActionRequest<TId>) {
+    const confirmation =
+      getBulkConfirmation?.(action, ids) ?? fallbackConfirmation;
     if (!confirmation) {
       void executeBulk(action, ids);
       return;
@@ -429,6 +439,7 @@ function AdminEntityListInner<
 
     floating.openConfirmation({
       ...confirmation,
+      returnFocusRef,
       onConfirm: () => executeBulk(action, ids),
     });
   }
@@ -453,7 +464,7 @@ function AdminEntityListInner<
         entityLabel={bulkEntityLabel}
         options={[...bulkOptions]}
         onClearSelection={selection.clearSelection}
-        onExecute={requestBulkExecution}
+        onRequestExecution={requestBulkExecution}
         isBusy={bulkInteraction.isBlocked}
         actionValue={bulkAction}
         actionControl={

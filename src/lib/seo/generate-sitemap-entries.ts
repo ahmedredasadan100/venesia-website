@@ -49,14 +49,22 @@ function mapSourceFromRouteKind(kind: string | undefined, path: string): Sitemap
 
 /** Published catch-all CMS pages; reserved/static/project paths are excluded. */
 async function getPublishedCmsPageEntries(baseUrl: string): Promise<SitemapEntry[]> {
-  const { data, error } = await getSupabaseAdmin()
-    .from("pages")
-    .select("id, slug, path, status, updated_at, canonical_url, robots_index")
-    .eq("status", "published")
-    .not("path", "is", null);
-
-  if (error) {
-    throw new Error(error.message);
+  const data = [];
+  let afterId: number | undefined;
+  for (;;) {
+    const request = getSupabaseAdmin()
+      .from("pages")
+      .select("id, slug, path, status, updated_at, canonical_url, robots_index")
+      .eq("status", "published")
+      .not("path", "is", null)
+      .order("id", { ascending: true })
+      .limit(500);
+    if (afterId !== undefined) request.gt("id", afterId);
+    const result = await request;
+    if (result.error) throw new Error(result.error.message);
+    if (!result.data?.length) break;
+    data.push(...result.data);
+    afterId = result.data[result.data.length - 1].id;
   }
 
   const entries: SitemapEntry[] = [];

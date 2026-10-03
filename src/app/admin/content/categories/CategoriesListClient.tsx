@@ -161,6 +161,7 @@ export default function CategoriesListClient({
     async (category: CategoryListRow): Promise<CategoryStatusMutationResult> => {
       const nextActive = category.status !== "published";
       const nextStatus = nextActive ? "published" : "unpublished";
+      let actionResult: AdminActionResult | null = null;
       try {
         const result = await instant.mutateAsync({
           rowId: category.id,
@@ -177,25 +178,26 @@ export default function CategoriesListClient({
             );
           },
           execute: async () => {
-            const actionResult = await toggleCategoryStatusAjax(category.id);
-            if (!actionResult.ok) {
+            const confirmedResult = await toggleCategoryStatusAjax(category.id);
+            actionResult = confirmedResult;
+            if (!confirmedResult.ok) {
               return {
                 ok: false as const,
                 code: "category_status_failed",
-                message: actionResult.message,
+                message: confirmedResult.message,
               };
             }
             return {
               ok: true as const,
-              message: actionResult.message,
+              message: confirmedResult.message,
               feedbackStatus:
-                actionResult.feedbackStatus === "warning"
+                confirmedResult.feedbackStatus === "warning"
                   ? "warning" as const
                   : "success" as const,
-              isActive: actionResult.isActive,
-              status: actionResult.status,
-              publishedAt: actionResult.publishedAt,
-              updatedAt: actionResult.updatedAt,
+              isActive: confirmedResult.isActive,
+              status: confirmedResult.status,
+              publishedAt: confirmedResult.publishedAt,
+              updatedAt: confirmedResult.updatedAt,
             };
           },
           reconcileSuccess: (mutationResult, { cache }) => {
@@ -231,12 +233,6 @@ export default function CategoriesListClient({
           },
         });
         return {
-          ok: true,
-          title: "تم بنجاح",
-          message: result.message,
-          feedbackStatus: result.feedbackStatus,
-          code: nextActive ? "published" : "unpublished",
-          entityId: category.id,
           isActive:
             typeof result.isActive === "boolean" ? result.isActive : nextActive,
           status:
@@ -247,6 +243,7 @@ export default function CategoriesListClient({
               : undefined,
           updatedAt:
             typeof result.updatedAt === "string" ? result.updatedAt : undefined,
+          ...withAdminActionSettledResult(actionResult!, result),
         };
       } catch (error) {
         return {
@@ -265,41 +262,38 @@ export default function CategoriesListClient({
 
   const duplicate = useCallback(
     async (category: CategoryListRow): Promise<CategoryDuplicateMutationResult> => {
+      let actionResult: AdminActionResult | null = null;
       try {
         const result = await instant.mutateAsync({
           rowId: category.id,
           action: "duplicate",
           optimistic: () => undefined,
           execute: async () => {
-            const actionResult = await duplicateCategoryAjax(category.id);
-            if (!actionResult.ok) {
+            const confirmedResult = await duplicateCategoryAjax(category.id);
+            actionResult = confirmedResult;
+            if (!confirmedResult.ok) {
               return {
                 ok: false as const,
                 code: "category_duplicate_failed",
-                message: actionResult.message,
+                message: confirmedResult.message,
               };
             }
             return {
               ok: true as const,
-              message: actionResult.message,
+              message: confirmedResult.message,
               feedbackStatus:
-                actionResult.feedbackStatus === "warning"
+                confirmedResult.feedbackStatus === "warning"
                   ? "warning" as const
                   : "success" as const,
-              insertedId: actionResult.insertedId,
+              insertedId: confirmedResult.insertedId,
             };
           },
         });
         const insertedId =
           typeof result.insertedId === "number" ? result.insertedId : undefined;
         return {
-          ok: true,
-          title: "تم بنجاح",
-          message: result.message,
-          feedbackStatus: result.feedbackStatus,
-          code: "created",
-          entityId: insertedId,
           insertedId,
+          ...withAdminActionSettledResult(actionResult!, result),
         };
       } catch (error) {
         return {

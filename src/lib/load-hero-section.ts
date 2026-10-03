@@ -1,7 +1,8 @@
 import "server-only";
 
+import { cachePublicRead } from "./cache/public-cache-generation";
+
 import { cache } from "react";
-import { unstable_cache } from "next/cache";
 
 import { resolveHeroConfigLinks } from "./admin/links/hero-config";
 import type { Json, Tables } from "./database.types";
@@ -169,7 +170,7 @@ export const getDomainBackedHeroTemplateState = cache(
     variant: HeroDomainBackedTemplateVariant,
   ): Promise<DomainBackedHeroTemplateState> {
     try {
-      return await unstable_cache(
+      return await cachePublicRead(
         async () => {
           const state = await queryDomainBackedHeroTemplateState(variant);
           if (state.visibility === "error") throw new HeroReadFailure(state);
@@ -336,7 +337,7 @@ export const getHeroSectionState = cache(async function getHeroSectionState(
   pageSlug: string,
 ): Promise<HeroSectionState> {
   try {
-    return await unstable_cache(
+    return await cachePublicRead(
       async () => {
         const state = await queryHeroSectionState(pageSlug);
         if (state.visibility === "error") throw new HeroReadFailure(state);

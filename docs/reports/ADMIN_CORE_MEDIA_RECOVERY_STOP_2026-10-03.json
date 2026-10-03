@@ -1,0 +1,1373 @@
+{
+  "status": "INTENTIONAL_STOP_AFTER_MEDIA_RECOVERY_BEFORE_HARD_OPEN",
+  "sourceHead": "3ee22c80b3a973627827cf746a6a182becd3206b",
+  "sourceSha256": "27c86c5daa85032de39b1c9902251d1a7038e2109abcab101aa4d2dfd909ee5a",
+  "counts": {
+    "originalResumeCases": 111,
+    "qualified": 70,
+    "notApplicableRemoved": 1,
+    "open": 40,
+    "hardOpen": 3,
+    "held": 37,
+    "currentMediaRecoveryRequired": 8,
+    "currentMediaRecoveryQualified": 8,
+    "previousMediaRecoveryQualifiedRetained": 3
+  },
+  "globalClosed": false,
+  "automaticCoverage": [],
+  "progress": {
+    "path": ".tmp-qa/core-final-closure/final-accounting-interim/progress-70-retained-1-removed-3-hard-37-held-after142.json",
+    "sha256": "41dd91f509a7295f53e7dd6361a391e7c38bf7ac2330e2506a994be6fed2f9e7"
+  },
+  "mediaEvidence": {
+    "retainedFive": [
+      {
+        "id": "core-media-recovery-resolve-lease",
+        "run": "browser-r140",
+        "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+        "qualification": {
+          "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+          "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+        }
+      },
+      {
+        "id": "core-media-recovery-produce-existing-object-reservation",
+        "run": "browser-r140",
+        "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+        "qualification": {
+          "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+          "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+        }
+      },
+      {
+        "id": "core-media-recovery-produce-finalize",
+        "run": "browser-r140",
+        "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+        "qualification": {
+          "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+          "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+        }
+      },
+      {
+        "id": "core-media-recovery-repair-finalize",
+        "run": "browser-r140",
+        "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+        "qualification": {
+          "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+          "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+        }
+      },
+      {
+        "id": "core-media-recovery-repair-existing-object-reservation",
+        "run": "browser-r140",
+        "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+        "qualification": {
+          "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+          "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+        }
+      }
+    ],
+    "newThree": [
+      {
+        "id": "core-media-recovery-produce-missing",
+        "run": "browser-r142",
+        "sourceHead": "3ee22c80b3a973627827cf746a6a182becd3206b",
+        "qualification": {
+          "path": ".tmp-qa/core-final-closure/independent-retry142-stage/qualification-adoption/browser-r142-qualified-observations.json",
+          "sha256": "23836380b89ac2a8ddbbff786ecbc7a67ca0fbebdcdf7afeb9e0129fc76cc079"
+        }
+      },
+      {
+        "id": "core-media-recovery-repair-missing",
+        "run": "browser-r142",
+        "sourceHead": "3ee22c80b3a973627827cf746a6a182becd3206b",
+        "qualification": {
+          "path": ".tmp-qa/core-final-closure/independent-retry142-stage/qualification-adoption/browser-r142-qualified-observations.json",
+          "sha256": "23836380b89ac2a8ddbbff786ecbc7a67ca0fbebdcdf7afeb9e0129fc76cc079"
+        }
+      },
+      {
+        "id": "core-media-recovery-permission",
+        "run": "browser-r142",
+        "sourceHead": "3ee22c80b3a973627827cf746a6a182becd3206b",
+        "qualification": {
+          "path": ".tmp-qa/core-final-closure/independent-retry142-stage/qualification-adoption/browser-r142-qualified-observations.json",
+          "sha256": "23836380b89ac2a8ddbbff786ecbc7a67ca0fbebdcdf7afeb9e0129fc76cc079"
+        }
+      }
+    ],
+    "qualified142": {
+      "path": ".tmp-qa/core-final-closure/independent-retry142-stage/qualification-adoption/browser-r142-qualified-observations.json",
+      "sha256": "23836380b89ac2a8ddbbff786ecbc7a67ca0fbebdcdf7afeb9e0129fc76cc079"
+    },
+    "seal142": {
+      "path": ".tmp-qa/core-final-closure/r142-qualified-proof-manifest.json",
+      "sha256": "76bd37a312e4a56e90e9694d07520fa0a3b6631e2a9560e3d4d64772f2ec1f85"
+    },
+    "failed141": {
+      "path": ".tmp-qa/core-final-closure/r141-failed-proof-manifest.json",
+      "sha256": "259569390e6dd8e763471dca5221a801c9a00e7d007ae01a47a9203c3b2922e8"
+    },
+    "review142": {
+      "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r142-media-three-final-qualification.md",
+      "sha256": "24fd9cb12d5c1ed631049d114f5945d6cd0e0bd4a076bdd42f5d4991f059f72e"
+    }
+  },
+  "basicCoverage": {
+    "historicalCells": 959,
+    "unchanged": true,
+    "authority": {
+      "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/current77-retained84-partial79-85-86-application-stage/accounting-metadata-follow-on/current-accounting-successor.json",
+      "sha256": "34f9f296582055191d68b8415f44324587b68a77d29169317f159c84d3f573ab"
+    },
+    "noAutomaticCompleteAxisPromotion": true
+  },
+  "retained": [
+    {
+      "id": "core-template-content-create-reject-retry",
+      "run": "browser-r88",
+      "sourceHead": "091f8d14292386fdcf21666f086e928c07538251",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r88-qualified-observations.json",
+        "sha256": "887701db16160d69e504a50924c58f3baf9c922831ace8caf321bcbe44ada0e3"
+      }
+    },
+    {
+      "id": "core-template-breadcrumb-create-reject-retry",
+      "run": "browser-r88",
+      "sourceHead": "091f8d14292386fdcf21666f086e928c07538251",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r88-qualified-observations.json",
+        "sha256": "887701db16160d69e504a50924c58f3baf9c922831ace8caf321bcbe44ada0e3"
+      }
+    },
+    {
+      "id": "core-template-cards-create-reject-retry",
+      "run": "browser-r88",
+      "sourceHead": "091f8d14292386fdcf21666f086e928c07538251",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r88-qualified-observations.json",
+        "sha256": "887701db16160d69e504a50924c58f3baf9c922831ace8caf321bcbe44ada0e3"
+      }
+    },
+    {
+      "id": "core-template-featured-create-reject-retry",
+      "run": "browser-r88",
+      "sourceHead": "091f8d14292386fdcf21666f086e928c07538251",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r88-qualified-observations.json",
+        "sha256": "887701db16160d69e504a50924c58f3baf9c922831ace8caf321bcbe44ada0e3"
+      }
+    },
+    {
+      "id": "core-descendant-presentation-assignments",
+      "run": "browser-r42",
+      "sourceHead": "091f8d14292386fdcf21666f086e928c07538251",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r42-partial-stage/qualification.json",
+        "sha256": "0ac000de55503168b04b258b87766bac75973fabe29f4842648983601f54feb4"
+      }
+    },
+    {
+      "id": "core-page-composition-fixed-hero",
+      "run": "browser-r42",
+      "sourceHead": "091f8d14292386fdcf21666f086e928c07538251",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r42-partial-stage/qualification.json",
+        "sha256": "0ac000de55503168b04b258b87766bac75973fabe29f4842648983601f54feb4"
+      }
+    },
+    {
+      "id": "core-page-composition-cta-assignment",
+      "run": "browser-r92",
+      "sourceHead": "496b6c72745d5ec9878a806357b4eb2c5f2b5e11",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r92-partial-stage/qualification.json",
+        "sha256": "cad6b0085a7c39634d7b4b1cc49e1ad945f0d528652dc18abee954de88eb932d"
+      }
+    },
+    {
+      "id": "core-page-composition-cards-assignment",
+      "run": "browser-r92",
+      "sourceHead": "496b6c72745d5ec9878a806357b4eb2c5f2b5e11",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r92-partial-stage/qualification.json",
+        "sha256": "cad6b0085a7c39634d7b4b1cc49e1ad945f0d528652dc18abee954de88eb932d"
+      }
+    },
+    {
+      "id": "core-page-composition-breadcrumb-assignment",
+      "run": "browser-r92",
+      "sourceHead": "496b6c72745d5ec9878a806357b4eb2c5f2b5e11",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r92-partial-stage/qualification.json",
+        "sha256": "cad6b0085a7c39634d7b4b1cc49e1ad945f0d528652dc18abee954de88eb932d"
+      }
+    },
+    {
+      "id": "core-page-composition-feed-assignment",
+      "run": "browser-r92",
+      "sourceHead": "496b6c72745d5ec9878a806357b4eb2c5f2b5e11",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r92-partial-stage/qualification.json",
+        "sha256": "cad6b0085a7c39634d7b4b1cc49e1ad945f0d528652dc18abee954de88eb932d"
+      }
+    },
+    {
+      "id": "core-page-composition-featured-assignment",
+      "run": "browser-r92",
+      "sourceHead": "496b6c72745d5ec9878a806357b4eb2c5f2b5e11",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r92-partial-stage/qualification.json",
+        "sha256": "cad6b0085a7c39634d7b4b1cc49e1ad945f0d528652dc18abee954de88eb932d"
+      }
+    },
+    {
+      "id": "core-page-composition-media-sidebar-assignment",
+      "run": "browser-r92",
+      "sourceHead": "496b6c72745d5ec9878a806357b4eb2c5f2b5e11",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r92-partial-stage/qualification.json",
+        "sha256": "cad6b0085a7c39634d7b4b1cc49e1ad945f0d528652dc18abee954de88eb932d"
+      }
+    },
+    {
+      "id": "core-page-composition-media-hub-assignment",
+      "run": "browser-r92",
+      "sourceHead": "496b6c72745d5ec9878a806357b4eb2c5f2b5e11",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r92-partial-stage/qualification.json",
+        "sha256": "cad6b0085a7c39634d7b4b1cc49e1ad945f0d528652dc18abee954de88eb932d"
+      }
+    },
+    {
+      "id": "core-page-composition-layout-reject-retry",
+      "run": "browser-r92",
+      "sourceHead": "496b6c72745d5ec9878a806357b4eb2c5f2b5e11",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r92-partial-stage/qualification.json",
+        "sha256": "cad6b0085a7c39634d7b4b1cc49e1ad945f0d528652dc18abee954de88eb932d"
+      }
+    },
+    {
+      "id": "core-page-composition-content-assignment",
+      "run": "browser-r94",
+      "sourceHead": "438d470769e7f0feeb2a80ba4a2ce15f1f5266b6",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r94-partial-stage/qualification.json",
+        "sha256": "1fdb1a0807e87de213f16b8bbc5f47f40391fba8941e227ba14da05b3e6a4181"
+      }
+    },
+    {
+      "id": "core-page-composition-seo-reject-retry-reload",
+      "run": "browser-r95",
+      "sourceHead": "0ed976a4458bc5b3893cff9a589d73739441379f",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r95-seo-stage/qualification.json",
+        "sha256": "3a8f6c1f33dc42c1faad5ab4e860e310de84b4675f72ad9e918ef87f12ba09da"
+      }
+    },
+    {
+      "id": "core-specialized-maintenance-restored",
+      "run": "browser-r43",
+      "sourceHead": "36448f2a2ad2bd4e2e3e0bfa7fd2cee65b083d55",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r43-maintenance-stage/qualification.json",
+        "sha256": "f1b44ef93b28e0df500967e767a293df9ff241247a867b6737b88e7eae3c481d"
+      }
+    },
+    {
+      "id": "core-specialized-security-disposable-account",
+      "run": "browser-r99",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r99-qualified-observations.json",
+        "sha256": "54f24c4083903de71e98c730d01ed52eab26009fcdccde428e649643f358289d"
+      }
+    },
+    {
+      "id": "core-specialized-integration-google",
+      "run": "browser-r99",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r99-qualified-observations.json",
+        "sha256": "54f24c4083903de71e98c730d01ed52eab26009fcdccde428e649643f358289d"
+      }
+    },
+    {
+      "id": "core-specialized-integration-meta",
+      "run": "browser-r99",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r99-qualified-observations.json",
+        "sha256": "54f24c4083903de71e98c730d01ed52eab26009fcdccde428e649643f358289d"
+      }
+    },
+    {
+      "id": "core-specialized-integration-tiktok",
+      "run": "browser-r99",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r99-qualified-observations.json",
+        "sha256": "54f24c4083903de71e98c730d01ed52eab26009fcdccde428e649643f358289d"
+      }
+    },
+    {
+      "id": "core-specialized-integration-snapchat",
+      "run": "browser-r99",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r99-qualified-observations.json",
+        "sha256": "54f24c4083903de71e98c730d01ed52eab26009fcdccde428e649643f358289d"
+      }
+    },
+    {
+      "id": "template-library-content-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r44",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r44-partial-stage/qualification.json",
+        "sha256": "0e7b5a8d94013f71cb58f5406dc36850c3d9bf15e7faa86663790c437d8b604f"
+      }
+    },
+    {
+      "id": "template-library-breadcrumb-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r44",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r44-partial-stage/qualification.json",
+        "sha256": "0e7b5a8d94013f71cb58f5406dc36850c3d9bf15e7faa86663790c437d8b604f"
+      }
+    },
+    {
+      "id": "template-library-cards-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r44",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r44-partial-stage/qualification.json",
+        "sha256": "0e7b5a8d94013f71cb58f5406dc36850c3d9bf15e7faa86663790c437d8b604f"
+      }
+    },
+    {
+      "id": "template-library-cta-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r44",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r44-partial-stage/qualification.json",
+        "sha256": "0e7b5a8d94013f71cb58f5406dc36850c3d9bf15e7faa86663790c437d8b604f"
+      }
+    },
+    {
+      "id": "template-library-feed-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r44",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r44-partial-stage/qualification.json",
+        "sha256": "0e7b5a8d94013f71cb58f5406dc36850c3d9bf15e7faa86663790c437d8b604f"
+      }
+    },
+    {
+      "id": "template-library-featured-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r44",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r44-partial-stage/qualification.json",
+        "sha256": "0e7b5a8d94013f71cb58f5406dc36850c3d9bf15e7faa86663790c437d8b604f"
+      }
+    },
+    {
+      "id": "template-library-media-hub-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r44",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r44-partial-stage/qualification.json",
+        "sha256": "0e7b5a8d94013f71cb58f5406dc36850c3d9bf15e7faa86663790c437d8b604f"
+      }
+    },
+    {
+      "id": "template-library-media-sidebar-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r44",
+      "sourceHead": "425e03bce1a3843335eddb3a4ef41a1c6626b6f1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/r44-partial-stage/qualification.json",
+        "sha256": "0e7b5a8d94013f71cb58f5406dc36850c3d9bf15e7faa86663790c437d8b604f"
+      }
+    },
+    {
+      "id": "template-library-hero-actual-bulk-transport-retry-confirmation",
+      "run": "browser-r100",
+      "sourceHead": "e5398bcb643a32dfb93982f3315d757f0bb1d437",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/browser-r100-qualified-observations.json",
+        "sha256": "02c3c10c77d3c046e3f51718cc6e5020148489364263992d0179ac7be2cc7a2c"
+      }
+    },
+    {
+      "id": "core-media-readiness",
+      "run": "browser-r101",
+      "sourceHead": "d25d88fdfa6435d99ee53be5c51b2d90971674b2",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r101-media-repair/partial-qualification.json",
+        "sha256": "f658f9b5a0edad72cb2673cb2a56c5d88b361e689b5ab3aa79a22776f73d87b1"
+      }
+    },
+    {
+      "id": "core-media-folders",
+      "run": "browser-r101",
+      "sourceHead": "d25d88fdfa6435d99ee53be5c51b2d90971674b2",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r101-media-repair/partial-qualification.json",
+        "sha256": "f658f9b5a0edad72cb2673cb2a56c5d88b361e689b5ab3aa79a22776f73d87b1"
+      }
+    },
+    {
+      "id": "core-descendant-presentation-menus",
+      "run": "browser-r102",
+      "sourceHead": "0e917a5e83d55b9832db480725403397760bbbd1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r102-navigation-followup-repair/partial-qualification.json",
+        "sha256": "5b23583abe3b3082439ba88005b3bb4e28d367364cf5063a1d854f3f756192c6"
+      }
+    },
+    {
+      "id": "core-descendant-presentation-items",
+      "run": "browser-r102",
+      "sourceHead": "0e917a5e83d55b9832db480725403397760bbbd1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r102-navigation-followup-repair/partial-qualification.json",
+        "sha256": "5b23583abe3b3082439ba88005b3bb4e28d367364cf5063a1d854f3f756192c6"
+      }
+    },
+    {
+      "id": "core-descendant-presentation-footer",
+      "run": "browser-r102",
+      "sourceHead": "0e917a5e83d55b9832db480725403397760bbbd1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r102-navigation-followup-repair/partial-qualification.json",
+        "sha256": "5b23583abe3b3082439ba88005b3bb4e28d367364cf5063a1d854f3f756192c6"
+      }
+    },
+    {
+      "id": "core-navigation-page-create-rejection-retry-reload",
+      "run": "browser-r105",
+      "sourceHead": "a992cf6b8d986fd7878692a08a519b1927b5b013",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r105-navigation-repair/partial-qualification.json",
+        "sha256": "1e632e20782dfb288fefba20572a6c85b8a167f1693b61b6a59f9d3b805448f9"
+      }
+    },
+    {
+      "id": "core-navigation-menu-create-rejection-retry-reload",
+      "run": "browser-r105",
+      "sourceHead": "a992cf6b8d986fd7878692a08a519b1927b5b013",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r105-navigation-repair/partial-qualification.json",
+        "sha256": "1e632e20782dfb288fefba20572a6c85b8a167f1693b61b6a59f9d3b805448f9"
+      }
+    },
+    {
+      "id": "core-template-controls-feed",
+      "run": "browser-r106",
+      "sourceHead": "611fd19e2ba594158ef5e426534b43ef7a4e173f",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r106-template-controls-repair/partial-qualification.json",
+        "sha256": "b68bdffba1167c2ccde0bfa96acaaf3d7731b1de811b9a62d14beb4bc0c69391"
+      }
+    },
+    {
+      "id": "core-template-controls-featured",
+      "run": "browser-r106",
+      "sourceHead": "611fd19e2ba594158ef5e426534b43ef7a4e173f",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r106-template-controls-repair/partial-qualification.json",
+        "sha256": "b68bdffba1167c2ccde0bfa96acaaf3d7731b1de811b9a62d14beb4bc0c69391"
+      }
+    },
+    {
+      "id": "core-template-controls-media-sidebar",
+      "run": "browser-r106",
+      "sourceHead": "611fd19e2ba594158ef5e426534b43ef7a4e173f",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r106-template-controls-repair/partial-qualification.json",
+        "sha256": "b68bdffba1167c2ccde0bfa96acaaf3d7731b1de811b9a62d14beb4bc0c69391"
+      }
+    },
+    {
+      "id": "core-media-recovery-prepare",
+      "run": "browser-r47",
+      "sourceHead": "a992cf6b8d986fd7878692a08a519b1927b5b013",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r47-reconciliation-repair/partial-qualification.json",
+        "sha256": "430f0cafca6be6fe8a2ecf4504eb0720464d6657caf6f10421c42fe34cf4e73b"
+      }
+    },
+    {
+      "id": "core-media-recovery-queue-fetch-retry",
+      "run": "browser-r47",
+      "sourceHead": "a992cf6b8d986fd7878692a08a519b1927b5b013",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r47-reconciliation-repair/partial-qualification.json",
+        "sha256": "430f0cafca6be6fe8a2ecf4504eb0720464d6657caf6f10421c42fe34cf4e73b"
+      }
+    },
+    {
+      "id": "core-media-recovery-committed-lease-warning",
+      "run": "browser-r47",
+      "sourceHead": "a992cf6b8d986fd7878692a08a519b1927b5b013",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r47-reconciliation-repair/partial-qualification.json",
+        "sha256": "430f0cafca6be6fe8a2ecf4504eb0720464d6657caf6f10421c42fe34cf4e73b"
+      }
+    },
+    {
+      "id": "domain-projects-residential-hide-confirmation-reload-audit",
+      "run": "browser-r50",
+      "sourceHead": "6e69f3728c9477895c8feb610ee9c7359deaf3b1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r50-project-controls-repair/partial-qualification.json",
+        "sha256": "29517bd15106ce25af2ae5fd1843c46f9f060a1b410d475438f592c76c7b12b9"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r50-visibility-and-r107-held-repairs.md",
+        "sha256": "cbd0bfc06115117159507e099b2c9b7868ca7eeb57ae30ed7b7137962f289e6d"
+      }
+    },
+    {
+      "id": "domain-projects-commercial-hide-confirmation-reload-audit",
+      "run": "browser-r50",
+      "sourceHead": "6e69f3728c9477895c8feb610ee9c7359deaf3b1",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r50-project-controls-repair/partial-qualification.json",
+        "sha256": "29517bd15106ce25af2ae5fd1843c46f9f060a1b410d475438f592c76c7b12b9"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r50-visibility-and-r107-held-repairs.md",
+        "sha256": "cbd0bfc06115117159507e099b2c9b7868ca7eeb57ae30ed7b7137962f289e6d"
+      }
+    },
+    {
+      "id": "core-topic-controls-article",
+      "run": "browser-r112",
+      "sourceHead": "fdf9a2aeb4d6d78e6a0fcf25eb58f9c7bb2f8e92",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r112-topic-partial/partial-qualification.json",
+        "sha256": "ee2b0bb157c5044715f035fcc75a4b1df4b5e55a5988c6d603b0aa13553b684a"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r112-four-topic-partial.md",
+        "sha256": "322be0902dc2391d0051b2051406d63cbc72812f1fa439377f32c6a50f6505c3"
+      }
+    },
+    {
+      "id": "core-topic-controls-news",
+      "run": "browser-r112",
+      "sourceHead": "fdf9a2aeb4d6d78e6a0fcf25eb58f9c7bb2f8e92",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r112-topic-partial/partial-qualification.json",
+        "sha256": "ee2b0bb157c5044715f035fcc75a4b1df4b5e55a5988c6d603b0aa13553b684a"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r112-four-topic-partial.md",
+        "sha256": "322be0902dc2391d0051b2051406d63cbc72812f1fa439377f32c6a50f6505c3"
+      }
+    },
+    {
+      "id": "core-topic-controls-press",
+      "run": "browser-r112",
+      "sourceHead": "fdf9a2aeb4d6d78e6a0fcf25eb58f9c7bb2f8e92",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r112-topic-partial/partial-qualification.json",
+        "sha256": "ee2b0bb157c5044715f035fcc75a4b1df4b5e55a5988c6d603b0aa13553b684a"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r112-four-topic-partial.md",
+        "sha256": "322be0902dc2391d0051b2051406d63cbc72812f1fa439377f32c6a50f6505c3"
+      }
+    },
+    {
+      "id": "core-topic-controls-gallery",
+      "run": "browser-r112",
+      "sourceHead": "fdf9a2aeb4d6d78e6a0fcf25eb58f9c7bb2f8e92",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r112-topic-partial/partial-qualification.json",
+        "sha256": "ee2b0bb157c5044715f035fcc75a4b1df4b5e55a5988c6d603b0aa13553b684a"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r112-four-topic-partial.md",
+        "sha256": "322be0902dc2391d0051b2051406d63cbc72812f1fa439377f32c6a50f6505c3"
+      }
+    },
+    {
+      "id": "core-topic-controls-site_update",
+      "run": "browser-r115",
+      "sourceHead": "3ad04591590f8887667ec0e2cb9f62713734fa74",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r115-topic-partial/partial-qualification.json",
+        "sha256": "7f404a3eea1be122cc814b01b5df692d775d3459f2148bb43d4849b7147c7753"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r115-video-readiness-and-site-partial.md",
+        "sha256": "8bcd3733e5085525211b08ed52cc51b56ff55c59c10af38265315f08e3bfc4e9"
+      }
+    },
+    {
+      "id": "core-topic-controls-video",
+      "run": "browser-r116",
+      "sourceHead": "5d2f084b59e51dfabd6cc01e0c7eb7d4182d1919",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/independent-retry116-stage/qualification-adoption/browser-r116-qualified-observations.json",
+        "sha256": "a5b895f5e0c5bf17a7e278b84547e865d0b16073ba4eabb73277f6fbfe1f59a2"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r116-video-qualified.md",
+        "sha256": "b9a880cdd579037e08df7680032769ccd8e5a6a6b30c048a05a937c4595cd06c"
+      }
+    },
+    {
+      "id": "core-project-controls-residential",
+      "run": "browser-r118",
+      "sourceHead": "882f8dd06549f49d96819ed412ee559f9fb838c4",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/independent-retry118-stage/qualification-adoption/browser-r118-qualified-observations.json",
+        "sha256": "a1dadc0c4a53b980e2d28849c5f5ef3cfa0a6ca12a7fe17974a1b3f693824a02"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r118-project-editors-qualified.md",
+        "sha256": "6a200f106446620f6327f592f7a80cf6959f1a171acaf3e59359a925e8961578"
+      }
+    },
+    {
+      "id": "core-project-controls-commercial",
+      "run": "browser-r118",
+      "sourceHead": "882f8dd06549f49d96819ed412ee559f9fb838c4",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/independent-retry118-stage/qualification-adoption/browser-r118-qualified-observations.json",
+        "sha256": "a1dadc0c4a53b980e2d28849c5f5ef3cfa0a6ca12a7fe17974a1b3f693824a02"
+      },
+      "independentReview": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r118-project-editors-qualified.md",
+        "sha256": "6a200f106446620f6327f592f7a80cf6959f1a171acaf3e59359a925e8961578"
+      }
+    },
+    {
+      "id": "core-template-controls-media-hub",
+      "run": "browser-r121",
+      "sourceHead": "f11a0c421ba306c5c23a3e2a8c35081d7ef6dcd5",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r121-partial-media-hub/partial-qualification.json",
+        "sha256": "194d9c179361ccd4e1c1f4e13df1368670f19f9c798c53b529bc9df6386bfdc4"
+      },
+      "review": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r121-media-hub-partial-and-feedback-counter.md",
+        "sha256": "7570c3c361a4c99227f5994500e89e8debe36a1d6419c7964116b5ef2891bf5b"
+      }
+    },
+    {
+      "id": "core-template-controls-cta",
+      "run": "browser-r123",
+      "sourceHead": "98e657d60349335751f4c8dd4bd4b21871b0ff3b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r123-partial-cta/partial-qualification.json",
+        "sha256": "2a53e7b69533cee7bf7abac3d63dc0844e6434fbd71fbeaa0ae385f6f31d737a"
+      }
+    },
+    {
+      "id": "core-presentation-controls-content",
+      "run": "browser-r126",
+      "sourceHead": "26fb9e9ebec1fa3d73b0ec056aacb3095e81f906",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r126-partial-content/partial-qualification.json",
+        "sha256": "1dfd6bd4ede5f5a1adca04fa2f8133cdd5055a2c72dc587a09f358c5cee35424"
+      }
+    },
+    {
+      "id": "core-navigation-page-seo-validation-save-reload",
+      "run": "browser-r127",
+      "sourceHead": "b35787cc9877ce706ea10ddd2c339ee6d1250536",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r127-partial-page-seo/partial-qualification.json",
+        "sha256": "9a5e2e37288b212965b236af2aa025bc70ad757b3c958c864896b8f4ad7babbd"
+      }
+    },
+    {
+      "id": "core-navigation-menu-visibility-duplicate-delete",
+      "run": "browser-r129",
+      "sourceHead": "6057992ee0b09022834f5d8d21c4a6169f30ea48",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r129-partial-menu-list/partial-qualification.json",
+        "sha256": "1ea8dedcace9aa672d676fdf7e6d0f2cd97c38984722e89d42d80db09abc970b"
+      }
+    },
+    {
+      "id": "core-navigation-menu-metadata-item-graph-commands",
+      "run": "browser-r130",
+      "sourceHead": "b48357a72f2716bfdffa55c42dc1fb898fb6ccc5",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r130-partial-menu-graph/partial-qualification.json",
+        "sha256": "30c25e923253cb2a82634e77af5fd911dd68fab5433a7fc5d09280a8f8b4c792"
+      }
+    },
+    {
+      "id": "core-navigation-footer-aggregate-slots-manual-links-rejection-retry",
+      "run": "browser-r133",
+      "sourceHead": "92a458ac5c5be418b844d96ec8afbf2c9246254d",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r133-partial-footer-aggregate/partial-qualification.json",
+        "sha256": "a09f8af321554c16b6dba64d6aac75ff85d9e5f894898b73a674557be230cb39"
+      }
+    },
+    {
+      "id": "core-presentation-content-variant-scroll",
+      "run": "browser-r136",
+      "sourceHead": "f4091b493e5233fc7359e597464555392e0e5dce",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r136-partial-scroll/partial-qualification.json",
+        "sha256": "0f3d3653a885f3bc8dd7ad015367bd22b331da46309403eff1ed1f2a8882037e"
+      }
+    },
+    {
+      "id": "core-media-recovery-resolve-lease",
+      "run": "browser-r140",
+      "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+        "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+      }
+    },
+    {
+      "id": "core-media-recovery-produce-existing-object-reservation",
+      "run": "browser-r140",
+      "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+        "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+      }
+    },
+    {
+      "id": "core-media-recovery-produce-finalize",
+      "run": "browser-r140",
+      "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+        "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+      }
+    },
+    {
+      "id": "core-media-recovery-repair-finalize",
+      "run": "browser-r140",
+      "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+        "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+      }
+    },
+    {
+      "id": "core-media-recovery-repair-existing-object-reservation",
+      "run": "browser-r140",
+      "sourceHead": "f76f4d2885f61961255c0ee994219e03fb2f118b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/r140-partial-media/partial-qualification.json",
+        "sha256": "f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25"
+      }
+    },
+    {
+      "id": "core-media-recovery-produce-missing",
+      "run": "browser-r142",
+      "sourceHead": "3ee22c80b3a973627827cf746a6a182becd3206b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/independent-retry142-stage/qualification-adoption/browser-r142-qualified-observations.json",
+        "sha256": "23836380b89ac2a8ddbbff786ecbc7a67ca0fbebdcdf7afeb9e0129fc76cc079"
+      }
+    },
+    {
+      "id": "core-media-recovery-repair-missing",
+      "run": "browser-r142",
+      "sourceHead": "3ee22c80b3a973627827cf746a6a182becd3206b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/independent-retry142-stage/qualification-adoption/browser-r142-qualified-observations.json",
+        "sha256": "23836380b89ac2a8ddbbff786ecbc7a67ca0fbebdcdf7afeb9e0129fc76cc079"
+      }
+    },
+    {
+      "id": "core-media-recovery-permission",
+      "run": "browser-r142",
+      "sourceHead": "3ee22c80b3a973627827cf746a6a182becd3206b",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/independent-retry142-stage/qualification-adoption/browser-r142-qualified-observations.json",
+        "sha256": "23836380b89ac2a8ddbbff786ecbc7a67ca0fbebdcdf7afeb9e0129fc76cc079"
+      }
+    }
+  ],
+  "notApplicable": [
+    {
+      "id": "core-navigation-footer-default-restore-confirm-reject-retry",
+      "run": "browser-r46",
+      "status": "N/A / Removed by explicit product decision",
+      "disposition": {
+        "path": ".tmp-qa/core-final-closure/footer-restore-removal-stage/footer-restore-disposition.json",
+        "sha256": "5ec6664708eb7f5b8584fb8264770cfcbaa73f13f49c68d21b06dbee8eddbe3e"
+      },
+      "countsAsPass": false
+    }
+  ],
+  "open": [
+    {
+      "id": "core-media-upload-validation-retry",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-catalog-query",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-metadata-failure-retry",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-preview",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-picker-use",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-in-use-delete",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-physical-move",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-replace-references",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-detach-delete",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-permission",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-template-controls-cards",
+      "run": "browser-r48"
+    },
+    {
+      "id": "core-template-controls-breadcrumb",
+      "run": "browser-r48"
+    },
+    {
+      "id": "core-presentation-controls-hero",
+      "run": "browser-r51"
+    },
+    {
+      "id": "core-project-residential-full-create",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-project-commercial-full-create",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-category-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-series-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-article-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-news-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-press-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-site_update-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-video-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-gallery-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-project-residential-existing-form-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-project-commercial-existing-form-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-location-governorate-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-location-city-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-location-main_area-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-location-sub_area-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-redirect-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-profile-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-stage-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-item-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-update-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-user-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-user-current-identity-protection",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-company-settings-rejection-preservation-save-reload",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-global-seo-settings-rejection-save-reload",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-media-settings-range-rejection-save-reload",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-menu-quick-create-rejection-preservation-retry",
+      "run": "browser-r52"
+    }
+  ],
+  "held": [
+    {
+      "id": "core-media-upload-validation-retry",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-catalog-query",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-metadata-failure-retry",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-preview",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-picker-use",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-in-use-delete",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-physical-move",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-replace-references",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-detach-delete",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-media-permission",
+      "run": "browser-r101"
+    },
+    {
+      "id": "core-project-residential-full-create",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-project-commercial-full-create",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-category-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-series-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-article-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-news-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-press-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-site_update-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-video-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-gallery-content-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-project-residential-existing-form-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-project-commercial-existing-form-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-location-governorate-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-location-city-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-location-main_area-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-location-sub_area-form-create-edit",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-redirect-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-profile-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-stage-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-item-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-update-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-user-form-roundtrip",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-operational-user-current-identity-protection",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-company-settings-rejection-preservation-save-reload",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-global-seo-settings-rejection-save-reload",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-media-settings-range-rejection-save-reload",
+      "run": "browser-r52"
+    },
+    {
+      "id": "core-menu-quick-create-rejection-preservation-retry",
+      "run": "browser-r52"
+    }
+  ],
+  "hardOpen": {
+    "frozenSource": {
+      "path": ".tmp-qa/core-final-closure/final-accounting-interim/hard-open-queue-after139.json",
+      "sha256": "b356bf306d6b1925f7f1b9eb1d12737a17f05d30478c9607caeae28960a0efb5"
+    },
+    "reviewedOrRetriedInThisMediaStop": false,
+    "unchangedQueue": {
+      "status": "CURRENT_EXISTING_CASE_ORGANIZATION_ONLY",
+      "createdAt": "2026-10-02T02:23:20.063Z",
+      "progress": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/progress-62-retained-1-removed-11-independent-37-held-after139.json",
+        "sha256": "dfb67c3d4cb4e30a075760ec67c7ca983e656626cf5dae4e405d43e0ef953c7e"
+      },
+      "cases": [
+        {
+          "id": "core-template-controls-cards",
+          "status": "HARD_OPEN_NO_ROUTINE_RETRY",
+          "affectedOwners": [
+            "src/lib/admin/links/actions.ts::resolveAdminLinkAjax",
+            "src/components/admin/ui/AdminLinkField.tsx",
+            "scripts/fixtures/admin-core-template-controls-journeys.mjs::feedback read-leg observer"
+          ],
+          "lastSourceHead": "26fb9e9ebec1fa3d73b0ec056aacb3095e81f906",
+          "lastSourceSha256": "7c77212746ba84e621edaa6f8ae3fa48519b0a34d1ba46c21c2805b69849777c",
+          "documentedAttempts": [
+            123,
+            124,
+            125
+          ],
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/r123-failed-proof-manifest.json",
+              "sha256": "f97bb2e6534982bd8f6cfede6d02b0b8f3c0fd0dcba745e0af259b01b91bddda"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/r124-failed-proof-manifest.json",
+              "sha256": "53e371b435f7f8b70a7e2601373c9853c1d0eeb8b3bb1989ea341d32d002cf66"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/r125-failed-proof-manifest.json",
+              "sha256": "109f5201aab295718f0b139b573d9f8cf23a4c87e9389996aff83769b231d621"
+            }
+          ],
+          "diagnosis": {
+            "path": ".tmp-qa/core-final-closure/r125-read-diagnosis/classification.json",
+            "sha256": "7a5598ecf426b8d8475bfcb00803baf824417fca1c4d498c197d18cda986f3f8"
+          },
+          "independentReview": {
+            "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r125-read-request-abort-review.md",
+            "sha256": "b4b0544f4571d9109ea3796ba6432b6de328ed34de1cd15d160be43a71f82500"
+          },
+          "excludedBy125": [
+            "Prior-document Action request contamination: CDP loader/frame/document URL hash identifies the fresh initiating document.",
+            "Wrong readonly Action/input identity: exact owner and payload bound to both expected requests.",
+            "Missing HTTP acknowledgement or Action redirect: both return200, no redirect.",
+            "First download-read transport failure: loadingFinished captured.",
+            "Immediate effect of feedback dismissal/reload: external read cancellation occurs before those later actions."
+          ],
+          "notEstablished": [
+            "Internet cause or Product root cause.",
+            "Who cancels the second external read and why.",
+            "Whether the application fully consumed the canonical response stream despite host ERR_ABORTED.",
+            "Whether host network EOF is stricter than the existing application result contract."
+          ],
+          "unresolvedQuestion": "Why does the second exact fresh-document readonly external-link Action report200 then loadingFailed(canceled=true, net::ERR_ABORTED), and did the page consume its complete canonical result?",
+          "classification": "UNRESOLVED: Product / Verification / Environment",
+          "suspicions": [
+            "Browser/Playwright transport lifecycle vs actual application consumption remains an unconfirmed hypothesis.",
+            "No timing/cache workaround or upstream reporter issue constitutes local proof."
+          ],
+          "retryRule": "No routine replay. Only after queue-only independent higher-reasoning review identifies a specific new-evidence hypothesis and records why the retry will distinguish it.",
+          "automaticCoverage": [],
+          "globalClosed": false
+        },
+        {
+          "id": "core-template-controls-breadcrumb",
+          "status": "HARD_OPEN_NO_ROUTINE_RETRY",
+          "affectedOwners": [
+            "src/lib/admin/links/actions.ts::resolveAdminLinkAjax",
+            "src/components/admin/ui/AdminLinkField.tsx",
+            "scripts/fixtures/admin-core-template-controls-journeys.mjs::feedback read-leg observer"
+          ],
+          "lastSourceHead": "26fb9e9ebec1fa3d73b0ec056aacb3095e81f906",
+          "lastSourceSha256": "7c77212746ba84e621edaa6f8ae3fa48519b0a34d1ba46c21c2805b69849777c",
+          "documentedAttempts": [
+            123,
+            124,
+            125
+          ],
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/r123-failed-proof-manifest.json",
+              "sha256": "f97bb2e6534982bd8f6cfede6d02b0b8f3c0fd0dcba745e0af259b01b91bddda"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/r124-failed-proof-manifest.json",
+              "sha256": "53e371b435f7f8b70a7e2601373c9853c1d0eeb8b3bb1989ea341d32d002cf66"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/r125-failed-proof-manifest.json",
+              "sha256": "109f5201aab295718f0b139b573d9f8cf23a4c87e9389996aff83769b231d621"
+            }
+          ],
+          "diagnosis": {
+            "path": ".tmp-qa/core-final-closure/r125-read-diagnosis/classification.json",
+            "sha256": "7a5598ecf426b8d8475bfcb00803baf824417fca1c4d498c197d18cda986f3f8"
+          },
+          "independentReview": {
+            "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r125-read-request-abort-review.md",
+            "sha256": "b4b0544f4571d9109ea3796ba6432b6de328ed34de1cd15d160be43a71f82500"
+          },
+          "excludedBy125": [
+            "Prior-document Action request contamination: CDP loader/frame/document URL hash identifies the fresh initiating document.",
+            "Wrong readonly Action/input identity: exact owner and payload bound to both expected requests.",
+            "Missing HTTP acknowledgement or Action redirect: both return200, no redirect.",
+            "First download-read transport failure: loadingFinished captured.",
+            "Immediate effect of feedback dismissal/reload: external read cancellation occurs before those later actions."
+          ],
+          "notEstablished": [
+            "Internet cause or Product root cause.",
+            "Who cancels the second external read and why.",
+            "Whether the application fully consumed the canonical response stream despite host ERR_ABORTED.",
+            "Whether host network EOF is stricter than the existing application result contract."
+          ],
+          "unresolvedQuestion": "Why does the second exact fresh-document readonly external-link Action report200 then loadingFailed(canceled=true, net::ERR_ABORTED), and did the page consume its complete canonical result?",
+          "classification": "UNRESOLVED: Product / Verification / Environment",
+          "suspicions": [
+            "Browser/Playwright transport lifecycle vs actual application consumption remains an unconfirmed hypothesis.",
+            "No timing/cache workaround or upstream reporter issue constitutes local proof."
+          ],
+          "retryRule": "No routine replay. Only after queue-only independent higher-reasoning review identifies a specific new-evidence hypothesis and records why the retry will distinguish it.",
+          "automaticCoverage": [],
+          "globalClosed": false
+        },
+        {
+          "id": "core-presentation-controls-hero",
+          "status": "HARD_OPEN_NO_ROUTINE_RETRY",
+          "affectedOwners": [
+            "scripts/fixtures/admin-core-presentation-controls-journeys.mjs::pending",
+            "scripts/verify-admin-adoption-readback-isolated.mts::presentation pending receipt join",
+            "src/lib/admin/links/actions.ts::resolveAdminLinkAjax (identified read dependency, no Product change requested)"
+          ],
+          "lastSourceHead": "2fef037a41da14edadf0833a0314515461f27cd8",
+          "lastSourceSha256": "541ea0611ad2b297d8583df0161f3f5b895d1d4d610238011fe525b264af7a72",
+          "documentedAttempts": [
+            137,
+            138,
+            139
+          ],
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/r137-failed-proof-manifest.json",
+              "sha256": "5563c0e9f94596acddbda3f8a13f5d1ba28aa5838d806b4e5ac12e58036178ab"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/r138-failed-proof-manifest.json",
+              "sha256": "bfc7afbe9a0ca1dfeef48812790b7cb8b9c7bf8adfe7b81d74c1a3c7e6dddba0"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/r139-failed-proof-manifest.json",
+              "sha256": "29849b5ae757bbd77583088bed31bc8be9e15ef3c72f5d1357683f37ed7d5175"
+            }
+          ],
+          "independentReview": {
+            "path": ".tmp-qa/core-final-closure/final-accounting-interim/post-stop-independent-review/addendum-r139-pending-read-counter-hard-open.md",
+            "sha256": "2c82dfa04575be409c8c79d6be298248984804348331146ddc56c4fe05757b26"
+          },
+          "excludedBy139": [
+            "Unknown identity of the second pending-save POST: same-source/build exact canonical resolver hash is corroborated.",
+            "Extra POST as proof of a duplicate save: saved raw transcript has one acknowledged updateHeroTemplateDetails and one later canonical resolver read.",
+            "Driver raw/receipt shape mismatch: corrected;139 Browser passes.",
+            "Cleanup or missing native snapshots:19 records and complete owned cleanup retained."
+          ],
+          "establishedRootCause": "Existing broad same-origin Next Action POST count conflates one Hero save with the post-save canonical link resolver; raw2 reaches collector requiring1.",
+          "unresolvedQuestion": "Deferred queue review: can a narrowly corrected verification contract qualify the original139 evidence with conserved raw2/exactone acknowledged mutation/exactcanonical read/zero unknowns and all remaining native/rendered predicates, without replay?",
+          "classification": "Verification/Evidence debt",
+          "productBugProven": false,
+          "suspicions": [
+            "No Product duplicate or environmental cause is established.",
+            "138 second-request identity remains unknown;139 cannot retroactively supply it."
+          ],
+          "retryRule": "Retry139 was the last ordinary Hero attempt. No further ordinary retry; defer any offline correction to independent queue-only review after remaining original MediaRecovery8.",
+          "automaticCoverage": [],
+          "globalClosed": false
+        }
+      ],
+      "executionOrderChanged": false,
+      "proofConditionsChanged": false,
+      "qualifiedReplayed": false,
+      "excludedFromThisQueue": [
+        "core-presentation-content-variant-scroll"
+      ],
+      "presentationReason": "Scroll136 retained qualified. Hero139 now admitted to Hard Open by explicit last-ordinary-attempt decision; no additional ordinary Hero retry.",
+      "heldUnchanged": {
+        "Media": 10,
+        "Final52": 27
+      },
+      "beforeFinalClosure": "Review only this queue independently at higher reasoning before globalClosed=true or Production/Release. Do not rediscover or automatically rerun.",
+      "automaticCoverage": [],
+      "globalClosed": false,
+      "previousQueue": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/hard-open-queue-after126.json",
+        "sha256": "542b4be95b508995abf7a1cdbc6a34ead22b2e59b3da4404b65cd9f7b4475d1a"
+      },
+      "updatedAt": "2026-10-02T23:06:15.569Z"
+    }
+  },
+  "cleanup": {
+    "status": "complete",
+    "code": null,
+    "ownedResourcesRemoved": 10,
+    "remainingOwnedResources": 0,
+    "originalResourcesUnchanged": true,
+    "privateEnvRemoved": true,
+    "hostPortsReleased": [
+      57601,
+      57602,
+      57603,
+      57604
+    ],
+    "oldImagesRemoved": 0,
+    "engineStopped": false
+  },
+  "ci": {
+    "conclusion": "success",
+    "databaseId": 37084330797,
+    "headSha": "3ee22c80b3a973627827cf746a6a182becd3206b",
+    "status": "completed",
+    "url": "https://github.com/ahmedredasadan100/venesia-website/actions/runs/37084330797"
+  },
+  "release": {
+    "pr": 186,
+    "draft": true,
+    "ready": false,
+    "merged": false,
+    "finalGateExecuted": false,
+    "productionMutation": false,
+    "productionReverified": false,
+    "lastRecordedMainProduction": "b5aebb68721145626b5e7c1b796e79e55669efdd",
+    "lastRecordedProductionMigrationHistory": 112,
+    "repositoryPendingMigrations": [
+      113,
+      114,
+      115,
+      116
+    ]
+  },
+  "resume": "Await user model change and explicit continuation; focused review of the frozen Cards/Breadcrumb/Hero evidence first. No new discovery, automatic retries, Held/Final52 or release."
+}

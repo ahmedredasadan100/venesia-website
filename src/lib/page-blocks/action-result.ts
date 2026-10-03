@@ -1,5 +1,6 @@
 export type PageBlockActionResult = {
   ok: boolean;
+  feedbackStatus?: "success" | "warning";
   message: string | null;
   /** Optional post-action navigation (e.g. open duplicated module editor). */
   redirectTo?: string | null;

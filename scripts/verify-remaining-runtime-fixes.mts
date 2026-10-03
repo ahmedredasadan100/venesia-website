@@ -48,7 +48,19 @@ class Query {
     return Promise.resolve().then(() => respond(this)).then(fulfilled, rejected);
   }
 }
-stub("src/lib/supabase-admin.ts", { getSupabaseAdmin: () => ({ from: (table: string) => new Query(table) }) });
+let generationMode: "available" | "unavailable" | "malformed" = "available";
+let generationReads = 0;
+stub("src/lib/supabase-admin.ts", { getSupabaseAdmin: () => ({
+  from: (table: string) => new Query(table),
+  rpc: (name: string) => {
+    assert.equal(name, "read_public_cache_generation", "only the read-only generation RPC is configured");
+    return { throwOnError: async () => {
+      generationReads++;
+      if (generationMode === "unavailable") throw new Error("isolated generation outage");
+      return { data: generationMode === "malformed" ? "invalid-generation" : "1" };
+    } };
+  },
+}) });
 
 async function cronBoundary() {
   let maintenance = false; let syncCalls = 0;
@@ -101,12 +113,14 @@ async function cacheBoundaries() {
   // storage adapter substitutes persistence only, not callback/revalidation logic.
   type Entry = { value: { kind: string; data: { body: string } }; isStale: boolean };
   const entries = new Map<string, Entry>();
-  let writes = 0;
+  let writes = 0; let reads = 0;
   const globalCache = globalThis as unknown as { __incrementalCache: unknown };
   const previous = globalCache.__incrementalCache;
+  const previousOrigin = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  process.env.NEXT_PUBLIC_SUPABASE_URL = "https://aaaaaaaaaaaaaaaaaaaa.supabase.co";
   globalCache.__incrementalCache = {
     generateSimpleCacheKey: async (key: string) => key,
-    get: async (key: string) => entries.get(key),
+    get: async (key: string) => { reads++; return entries.get(key); },
     set: async (key: string, value: Entry["value"]) => { entries.set(key, { value, isStale: false }); writes++; },
   };
   stubs.set("next/cache", { ...require("next/cache"), unstable_noStore() {} });
@@ -130,13 +144,26 @@ async function cacheBoundaries() {
   try {
     for (const item of cases) {
       entries.clear(); let calls = 0; let failure = false;
+      generationMode = "available"; const beforeGeneration = generationReads;
       respond = q => { calls++; return failure ? { data: null, error: { message: "isolated outage" } } : { data: item.data(q), error: null }; };
       const invoke = () => load<Record<string, (arg?: unknown) => Promise<unknown>>>(item.file)[item.name](item.arg);
       const wire = (value: unknown) => JSON.parse(JSON.stringify(value));
       const good = wire(await invoke()); const initialWrites = writes; const initialCalls = calls;
       if (item.name === "loadFooterSettings") assert.equal(good.sourceStatus, "database");
       assert.equal(entries.size, 1, `${item.name}: successful source must be cached`);
+      assert.ok(generationReads > beforeGeneration, `${item.name}: actual generation RPC must participate`);
       assert.deepEqual(wire(await invoke()), good); assert.equal(calls, initialCalls, `${item.name}: fresh hit`);
+      for (const mode of ["unavailable", "malformed"] as const) {
+        generationMode = mode;
+        const beforeCalls = calls; const beforeReads = reads; const beforeWrites = writes;
+        assert.deepEqual(wire(await invoke()), good, item.name + ": " + mode + " generation uses the direct source");
+        assert.ok(calls > beforeCalls, item.name + ": " + mode + " generation cannot serve a persistent hit");
+        assert.equal(reads, beforeReads, item.name + ": " + mode + " generation cannot read persistent cache");
+        assert.equal(writes, beforeWrites, item.name + ": " + mode + " generation cannot fill persistent cache");
+      }
+      generationMode = "available";
+      const afterFallbackCalls = calls;
+      assert.deepEqual(wire(await invoke()), good); assert.equal(calls, afterFallbackCalls, item.name + ": recovery retains the cached success");
       for (const entry of entries.values()) entry.isStale = true;
       failure = true;
       const store = { pendingRevalidates: {} as Record<string, Promise<unknown>>, isStaticGeneration: false };
@@ -157,7 +184,12 @@ async function cacheBoundaries() {
       assert.equal((await hero.getDomainBackedHeroTemplateState("project-detail")).visibility, hidden ? "hidden" : "none");
       assert.equal(entries.size, 1);
     }
-  } finally { globalCache.__incrementalCache = previous; }
+  } finally {
+    globalCache.__incrementalCache = previous;
+    generationMode = "available";
+    if (previousOrigin === undefined) delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+    else process.env.NEXT_PUBLIC_SUPABASE_URL = previousOrigin;
+  }
 }
 
 async function exportCompleteness() {

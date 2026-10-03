@@ -1,5 +1,7 @@
 "use client";
 
+import type { AdminActionResult } from "../../../../../lib/admin/admin-action-result";
+
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import AdminEntityListFilters from "../../../../../components/admin/entity-list/AdminEntityListFilters";
@@ -247,12 +249,12 @@ export default function HeroManagerClient({
   async function runMutation(
     rowId: number | null,
     mutationAction: "duplicate" | "delete" | "bulk",
-    action: () => Promise<void>,
+    action: () => Promise<void | AdminActionResult>,
     successMessage: string,
   ): Promise<boolean> {
     clearFeedback(feedbackChannel);
     try {
-      await instant.mutateAsync({
+      const settled = await instant.mutateAsync({
         rowId: rowId ?? undefined,
         action: mutationAction,
         bulk: rowId === null,
@@ -262,20 +264,21 @@ export default function HeroManagerClient({
           }
         },
         execute: async () => {
-          await action();
-          return { ok: true as const, message: successMessage };
+          const response = await action();
+          if (response && !response.ok) throw Object.assign(new Error(response.message), response);
+          return { ok: true as const, message: response?.message ?? successMessage, feedbackStatus: response?.feedbackStatus === "warning" ? "warning" as const : "success" as const };
         },
       });
       publishFeedback(
         {
-          variant: "success",
-          title: "تم تنفيذ الإجراء",
-          message: successMessage,
+          variant: settled.feedbackStatus === "warning" ? "warning" : "success",
+          title: settled.feedbackStatus === "warning" ? "تم الحفظ مع تنبيه" : "تم تنفيذ الإجراء",
+          message: settled.message,
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline" },
+        { channel: feedbackChannel, placement: "global" },
       );
       return true;
     } catch (error) {
@@ -291,7 +294,7 @@ export default function HeroManagerClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline", reveal: true },
+        { channel: feedbackChannel, placement: "global", reveal: true },
       );
       return false;
     }
@@ -305,7 +308,7 @@ export default function HeroManagerClient({
       nextStatus === "published" ? "تم نشر الهيرو." : "أصبح الهيرو غير منشور.";
     clearFeedback(feedbackChannel);
     try {
-      await instant.mutateAsync({
+      const settled = await instant.mutateAsync({
         rowId: hero.id,
         action: "visibility",
         optimistic: (cache) =>
@@ -315,22 +318,23 @@ export default function HeroManagerClient({
               : candidate,
           ),
         execute: async () => {
-          await toggleHeroTemplate(
+          const response = await toggleHeroTemplate(
             mutationFormData({ id: hero.id, next_status: nextStatus }),
           );
-          return { ok: true, message: successMessage };
+          if (response && !response.ok) throw Object.assign(new Error(response.message), response);
+          return { ok: true as const, message: response?.message ?? successMessage, feedbackStatus: response?.feedbackStatus === "warning" ? "warning" as const : "success" as const };
         },
       });
       publishFeedback(
         {
-          variant: "success",
-          title: "تم تنفيذ الإجراء",
-          message: successMessage,
+          variant: settled.feedbackStatus === "warning" ? "warning" : "success",
+          title: settled.feedbackStatus === "warning" ? "تم الحفظ مع تنبيه" : "تم تنفيذ الإجراء",
+          message: settled.message,
           layout: "inline",
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline" },
+        { channel: feedbackChannel, placement: "global" },
       );
     } catch (error) {
       publishFeedback(
@@ -345,7 +349,7 @@ export default function HeroManagerClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline", reveal: true },
+        { channel: feedbackChannel, placement: "global", reveal: true },
       );
     }
   }

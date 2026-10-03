@@ -4,6 +4,7 @@
  * This intentionally avoids network access so it can run in CI. Live schema
  * contracts are covered separately by verify-unified-content-database.mjs.
  */
+import assert from "node:assert/strict";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -362,13 +363,75 @@ const loader = read("src/lib/admin/content/load-unified-content.ts");
 const persistedSeoOwner = read("src/lib/admin/seo/entity-seo-persistence.ts");
 const topicListSelectedColumns = loader.match(/const CONTENT_LIST_SELECT\s*=\s*"([^"]+)"/)?.[1].split(",") ?? [];
 check("Unified query must use the admin read model", loader.includes('.from("admin_content_topics")'));
-check(
-  "Search must target title only",
-  loader.includes('.ilike("title"') &&
-    !loader.includes('.ilike("slug"') &&
-    !loader.includes('.ilike("excerpt"') &&
-    !loader.includes('.ilike("category_name"'),
-);
+function assertTopicsTitleSearchContract(source) {
+  const parsed = ts.createSourceFile("load-unified-content.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const ownerImport = parsed.statements.find(statement => ts.isImportDeclaration(statement)
+    && statement.moduleSpecifier.text === "../admin-list-search");
+  const elements = ownerImport?.importClause?.namedBindings;
+  assert.ok(elements && ts.isNamedImports(elements), "Canonical Admin search owner import is required");
+  const binding = elements.elements.find(element => (element.propertyName?.text ?? element.name.text) === "buildAdminListSearchOrFilter");
+  assert.ok(binding, "Canonical Admin search export must be bound");
+  const declaration = parsed.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === "applyFilters");
+  assert.ok(declaration, "The existing count/page filter owner is required");
+  const emitted = ts.transpileModule(declaration.getText(parsed), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const canonical = loadPureTypeScriptModule("src/lib/admin/admin-list-search.ts").buildAdminListSearchOrFilter;
+  let calls;
+  const apply = Function(binding.name.text, "getCategoryAndDescendantIds", emitted + "\nreturn applyFilters;")(
+    (fields, word) => { calls.push({ fields: [...fields], word }); return canonical(fields, word); },
+    () => { throw new Error("Unrelated category traversal in title-only fixture"); },
+  );
+  for (const q of ["", "Alpha Guide", "% _", "* quote'", '" \\']) {
+    for (const image of ["all", "without"]) {
+      calls = [];
+      const emittedFilters = [];
+      const query = {
+        is(column, value) { emittedFilters.push(["is", column, value]); return this; },
+        or(filter) { emittedFilters.push(["or", filter]); return this; },
+      };
+      const filters = { q, view: "active", contentType: "all", categoryId: null, seriesId: null, status: "all", featured: "all", image };
+      assert.equal(apply(query, filters, []), query);
+      const words = q.split(" ").filter(Boolean);
+      assert.deepEqual(calls, words.map(word => ({ fields: ["title"], word })));
+      const expected = [["is", "deleted_at", null], ...words.map(word => ["or", canonical(["title"], word)])];
+      if (image === "without") expected.push(["or", "image.is.null,image.eq."]);
+      assert.deepEqual(emittedFilters, expected, "Each word must remain an independent AND predicate alongside the image filter");
+    }
+  }
+}
+function rewriteTopicsSearchCall(source, kind) {
+  const parsed = ts.createSourceFile("load-unified-content.ts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  let replaced = 0;
+  const transformed = ts.transform(parsed, [context => {
+    const visit = node => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+        && node.expression.text === "buildAdminListSearchOrFilter") {
+        replaced++;
+        if (kind === "raw") return ts.factory.createStringLiteral('title.ilike."%_%"');
+        if (kind === "joined-words") return ts.factory.updateCallExpression(node, node.expression, node.typeArguments,
+          [node.arguments[0], ts.factory.createPropertyAccessExpression(ts.factory.createIdentifier("filters"), "q")]);
+        const fields = ts.factory.createArrayLiteralExpression([ts.factory.createStringLiteral("slug")]);
+        return ts.factory.updateCallExpression(node, node.expression, node.typeArguments, [fields, node.arguments[1]]);
+      }
+      return ts.visitEachChild(node, visit, context);
+    };
+    return node => ts.visitNode(node, visit);
+  }]);
+  assert.equal(replaced, 1, "Controlled mutation must alter the actual search call once");
+  const result = ts.createPrinter().printFile(transformed.transformed[0]);
+  transformed.dispose();
+  return result;
+}
+try {
+  assertTopicsTitleSearchContract(loader);
+  check("Topic title search executes its canonical owner once per AND word on the real filter function", true);
+  for (const kind of ["wrong-field", "raw", "joined-words"]) {
+    assert.throws(() => assertTopicsTitleSearchContract(rewriteTopicsSearchCall(loader, kind)));
+    check("Topic title search rejects " + kind + " owner bypass", true);
+  }
+} catch (error) {
+  check("Topic title-only literal AND contract: " + error.message, false);
+}
+
 check(
   "Hierarchical filter must resolve descendant IDs",
   loader.includes("getCategoryAndDescendantIds(categories, filters.categoryId)"),

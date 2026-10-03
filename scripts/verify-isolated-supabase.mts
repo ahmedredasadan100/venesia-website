@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { createServer, type IncomingMessage } from "node:http";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { verifyIsolatedApplicationCliPulse } from "./verify-isolated-application-cli-pulse.mjs";
+import { verifyApplicationClosureCheckpointsOffline } from "./verify-application-closure-checkpoints.mts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const sha256 = (bytes: string | Buffer) => createHash("sha256").update(bytes).digest("hex");
@@ -112,6 +118,7 @@ type StackLock = {
   compose: { path: string; sha256: string };
   transport: { path: string; sha256: string };
   applicationMigrationTool: import("./lib/isolated-supabase-cli.mts").ApplicationMigrationTool;
+  applicationMigrationToolLinuxX64: import("./lib/isolated-supabase-cli.mts").ApplicationMigrationTool;
 };
 
 function verifyReleaseLock(): { lock: StackLock; hash: string } {
@@ -368,6 +375,8 @@ async function networkBoundaryOnly() {
 }
 
 async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/isolated-supabase.mts")) {
+  const cliControl = await verifyIsolatedApplicationCliPulse();
+  cases.push(...cliControl.names.map((name: string) => `CLI control pulse: ${name}`));
   // Exercise the real private receipt validator as well as the exported lease.
   // No socket, database, clock wait, environment loader or lifecycle is started.
   const source = readSource("scripts/lib/isolated-supabase.mts");
@@ -459,9 +468,30 @@ async function verifyAdminMeasurementControlLease(owner: typeof import("./lib/is
     t.setTime(239_999); await t.lease.renewIfDue(true); assert.equal(t.connections(), 0);
     cases.push("control lease does no connection or probe outside active Admin jobs or before renewal is due");
   }
+  {
+    const t = setup(); t.setTime(1); t.setError();
+    await t.lease.renewIfDue(false, true); assert.equal(t.connections(), 0);
+    await t.lease.renewIfDue(true, true);
+    assert.equal(t.connections(), 1); assert.equal(t.first.closed, true); assert.equal(t.lease.client, t.second);
+    assert.equal(t.records[0].previousAgeMs, 1);
+    cases.push("explicit verified idle phase renews early through the same healthy identity and closes the prior socket");
+  }
+  {
+    const t = setup(); t.setTime(1);
+    await assert.rejects(t.lease.renewIfDue(true, true), /ECONNRESET/);
+    assert.equal(t.connections(), 1); assert.equal(t.first.closed, false); assert.equal(t.records.length, 0);
+    cases.push("explicit idle phase cannot continue on a deferred fresh socket failure");
+  }
+  {
+    const t = setup(); t.setTime(480_000); t.setError();
+    await assert.rejects(t.lease.renewIfDue(true, true), /ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE/);
+    assert.equal(t.connections(), 0);
+    cases.push("explicit idle phase preserves the existing lease deadline without reconnecting an expired control socket");
+  }
 }
 
 async function adminControlLeaseOnly() {
+  await verifyRestoreAclPolicy();
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/lib/isolated-public-verification.mts", "scripts/verify-isolated-supabase.mts"];
   const sourceHashes = Object.fromEntries(sources.map(file => [file, sha256(readSource(file))]));
   await verifyAdminMeasurementControlLease(await import("./lib/isolated-supabase.mts"));
@@ -500,7 +530,479 @@ function verifyAdminMeasurementRestartPolicy() {
   cases.push("all failed Admin measurement drivers reject same-fixture restart; a successful driver continues");
 }
 
+/** Exercise the installed Next config loader, client validator and optimizer; no Product app or DB. */
+async function verifyOwnedPublicImageConfig(network = false) {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const builder = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "isolatedPublicImageConfigSource");
+  assert.ok(builder);
+  const code = ts.transpileModule(builder.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const build = new Function("assert", code + ";return isolatedPublicImageConfigSource;")(assert) as (port: number, sha: string) => string;
+  const originalConfig = readFileSync(path.join(root, "next.config.ts")), originalSha256 = sha256(originalConfig);
+  for (const port of [0, 80, 1023, 3000, 65536, NaN, 57604.5]) assert.throws(() => build(port, originalSha256));
+  assert.throws(() => build(57604, "invalid"));
+  const require = createRequire(import.meta.url);
+  const { CONFIG_FILES, PHASE_PRODUCTION_BUILD, PHASE_PRODUCTION_SERVER } = require("next/dist/shared/lib/constants.js");
+  assert.ok(CONFIG_FILES.indexOf("next.config.mjs") < CONFIG_FILES.indexOf("next.config.ts"));
+  const loadConfig = require("next/dist/server/config.js").default;
+  const loader = require("next/dist/shared/lib/image-loader.js").default;
+  const { ImageOptimizerCache, fetchExternalImage, imageOptimizer } = require("next/dist/server/image-optimizer.js");
+  const temporaryRoot = realpathSync(mkdtempSync(path.join(tmpdir(), "venisia-owned-image-config-")));
+  const beforeDirectory = path.join(temporaryRoot, "before"), afterDirectory = path.join(temporaryRoot, "after");
+  const png = readFileSync(path.join(root, "public/images/venesia-5.png"));
+  const requests: string[] = [];
+  const server = network ? createServer((req, res) => {
+    requests.push(req.url ?? "");
+    if (req.url === "/storage/v1/object/public/cms-images/redirect.png") {
+      res.writeHead(302, { Location: "/outside-owned-images.png" }); res.end(); return;
+    }
+    if (req.url !== "/storage/v1/object/public/cms-images/probe.png") { res.writeHead(404); res.end(); return; }
+    res.writeHead(200, { "Content-Type": "image/png", "Content-Length": png.length }); res.end(png);
+  }) : undefined;
+  const testEnvironment = process.env as Record<string, string | undefined>;
+  const originalNodeEnv = testEnvironment.NODE_ENV;
+  let apiPort = 57604, generatedConfigSha256 = "", optimizedBytes = 0, closed = false;
+  try {
+    if (server) {
+      await new Promise<void>((done, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", done); });
+      apiPort = (server.address() as AddressInfo).port;
+    }
+    for (const directory of [beforeDirectory, afterDirectory]) {
+      mkdirSync(directory); writeFileSync(path.join(directory, "next.config.ts"), originalConfig, { flag: "wx" });
+      symlinkSync(path.join(root, "node_modules"), path.join(directory, "node_modules"), "junction");
+    }
+    const generated = build(apiPort, originalSha256); generatedConfigSha256 = sha256(generated);
+    writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated, { flag: "wx" });
+    const before = await loadConfig(PHASE_PRODUCTION_BUILD, beforeDirectory, { silent: true });
+    const after = await loadConfig(PHASE_PRODUCTION_BUILD, afterDirectory, { silent: true });
+    const runtime = await loadConfig(PHASE_PRODUCTION_SERVER, afterDirectory, { silent: true });
+    assert.equal(before.configFileName, "next.config.ts"); assert.equal(after.configFileName, "next.config.mjs");
+    assert.deepEqual(after.images, runtime.images);
+    assert.deepEqual(await before.headers(), await after.headers());
+    for (const key of ["allowedDevOrigins", "outputFileTracingExcludes"]) assert.deepEqual(before[key], after[key]);
+    assert.equal(after.images.unoptimized, false); assert.deepEqual(after.images.domains, []);
+    assert.equal(after.images.dangerouslyAllowLocalIP, true); assert.equal(after.images.maximumRedirects, 0);
+    const origin = `http://127.0.0.1:${apiPort}`, imageUrl = `${origin}/storage/v1/object/public/cms-images/probe.png`;
+    const request = { headers: { accept: "image/webp" } } as IncomingMessage;
+    const validate = (url: string, config = after) => ImageOptimizerCache.validateParams(request, { url, w: "64", q: "75" }, config, false);
+    assert.equal(validate(imageUrl, before).errorMessage, '"url" parameter is not allowed');
+    const accepted = validate(imageUrl); assert.equal(accepted.errorMessage, undefined); assert.equal(accepted.href, imageUrl);
+    testEnvironment.NODE_ENV = "development";
+    assert.throws(() => loader({ config: before.images, src: imageUrl, width: 64, quality: 75 }), /not configured/u);
+    assert.match(loader({ config: after.images, src: imageUrl, width: 64, quality: 75 }), /^\/_next\/image\?/u);
+    const rejectedUrls = [imageUrl.replace("127.0.0.1", "127.0.0.2"), imageUrl.replace("127.0.0.1", "localhost"),
+      imageUrl.replace(`:${apiPort}/`, `:${apiPort === 65535 ? 65534 : apiPort + 1}/`), imageUrl.replace("http:", "https:"),
+      imageUrl.replace("cms-images", "cms-documents"), imageUrl.replace("/public/", "/sign/"), `${imageUrl}?download=1`,
+      `${origin}/outside-owned-images.png`, "https://unowned.supabase.co/storage/v1/object/public/cms-images/probe.png"];
+    for (const url of rejectedUrls) {
+      assert.equal(validate(url).errorMessage, '"url" parameter is not allowed');
+      assert.throws(() => loader({ config: after.images, src: url, width: 64, quality: 75 }), /not configured/u);
+    }
+    let verifyNode: ts.VariableDeclaration | undefined;
+    const visit = (node: ts.Node) => { if (ts.isVariableDeclaration(node) && node.name.getText(file) === "verifySource") verifyNode = node; ts.forEachChild(node, visit); };
+    visit(file); assert.ok(verifyNode?.initializer);
+    const verifyCode = ts.transpileModule("const verify = " + verifyNode.initializer.getText(file) + ";", { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const verifySnapshot = new Function("manifest", "digest", "readFileSync", "sourcePath", "join", "sourceDirectory", "imageConfig", "readdirSync", "assert", verifyCode + ";return verify;")(
+      [{ file: "next.config.ts", sha256: originalSha256 }], sha256, readFileSync, () => path.join(beforeDirectory, "next.config.ts"),
+      path.join, afterDirectory, { file: "next.config.mjs", sha256: generatedConfigSha256 }, readdirSync, assert);
+    verifySnapshot();
+    writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated + "\n// tampered\n"); assert.throws(verifySnapshot, /changed after binding/u);
+    writeFileSync(path.join(afterDirectory, "next.config.mjs"), generated);
+    writeFileSync(path.join(afterDirectory, "next.config.js"), "module.exports={};"); assert.throws(verifySnapshot, /precedence/u);
+    rmSync(path.join(afterDirectory, "next.config.js")); verifySnapshot();
+    if (network) {
+      await assert.rejects(fetchExternalImage(imageUrl, false, png.length + 1024, 0), { statusCode: 400 });
+      assert.deepEqual(requests, []);
+      const fetched = await fetchExternalImage(imageUrl, after.images.dangerouslyAllowLocalIP, png.length + 1024, after.images.maximumRedirects);
+      assert.equal(sha256(fetched.buffer), sha256(png));
+      const optimized = await imageOptimizer(fetched, accepted, after, { silent: true });
+      assert.equal(optimized.contentType, "image/webp"); assert.ok(optimized.buffer.length > 0); optimizedBytes = optimized.buffer.length;
+      await assert.rejects(fetchExternalImage(`${origin}/storage/v1/object/public/cms-images/redirect.png`, true, png.length + 1024, 0), { statusCode: 508 });
+      assert.deepEqual(requests, ["/storage/v1/object/public/cms-images/probe.png", "/storage/v1/object/public/cms-images/redirect.png"]);
+    }
+    assert.equal(sha256(readFileSync(path.join(root, "next.config.ts"))), originalSha256);
+    cases.push("installed Next config precedence and original TS delegation preserve Product config; owned image allowlist rejects nine origin/path/query negatives");
+    cases.push("actual snapshot guard rejects derived-config tampering and config-precedence shadowing");
+  } finally {
+    if (originalNodeEnv === undefined) delete testEnvironment.NODE_ENV; else testEnvironment.NODE_ENV = originalNodeEnv;
+    if (server?.listening) { server.closeAllConnections(); await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done())); }
+    if (server) {
+      const probe = createNetServer(); await new Promise<void>((done, reject) => { probe.once("error", reject); probe.listen(apiPort, "127.0.0.1", () => probe.close(error => error ? reject(error) : done())); });
+    }
+    assert.equal(realpathSync(temporaryRoot), temporaryRoot);
+    assert.equal(path.dirname(temporaryRoot), realpathSync(tmpdir()));
+    assert.ok(path.basename(temporaryRoot).startsWith("venisia-owned-image-config-"));
+    rmSync(temporaryRoot, { recursive: true, force: false }); closed = !existsSync(temporaryRoot) && !server?.listening;
+  }
+  assert.equal(closed, true);
+  return { status: "PASS", scope: "installed Next isolated image configuration", nextVersion: require("next/package.json").version,
+    originalConfigSha256: originalSha256, generatedConfigSha256, nativeValidationNegativeControls: 9,
+    clientValidationReproducedBefore: true, serverValidationReproducedBefore: true, buildAndRuntimeConfigEqual: true,
+    networkRequests: requests.length, actualOptimizerOutputBytes: optimizedBytes, redirectFollowed: false,
+    browserExecuted: false, databaseCalls: 0, productConfigUnchanged: true, remainingOwnedResources: 0, remainingOwnedProcesses: 0 };
+}
+
+
+/** Full admission controls use the maintained function, real SHA256 and memory-only artifact ports. */
+async function verifyRetainedFinalQualityAdmissionControls() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const statement = (name: string) => {
+    const rows = file.statements.filter(node => ts.isFunctionDeclaration(node) ? node.name?.text === name : ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === name));
+    assert.equal(rows.length, 1, name); return rows[0];
+  };
+  const compile = (value: string) => ts.transpileModule(value, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const constants = ["FINAL_QUALITY_ACCOUNTING", "FINAL_QUALITY_READINESS", "RETAINED_FINAL_QUALITY_AUTHORITY"].map(name => statement(name).getText(file)).join("\n");
+  const config = new Function(compile(constants) + ";return {base:FINAL_QUALITY_ACCOUNTING,admission:FINAL_QUALITY_READINESS,authority:RETAINED_FINAL_QUALITY_AUTHORITY};")() as {
+    base: string; admission: string; authority: { operationIdentitySha256: string; caseIdentitySha256: string; priorAccounting: { path: string; sha256: string }; final27Plan: { path: string; sha256: string } };
+  };
+  assert.equal(config.authority.operationIdentitySha256, "15721c1324f7123bcdbb6d72669ff81cf34229ff748e0e04ffbd39709f42d517");
+  assert.equal(config.authority.caseIdentitySha256, "f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71");
+  assert.equal(config.authority.priorAccounting.sha256, "34f9f296582055191d68b8415f44324587b68a77d29169317f159c84d3f573ab");
+  assert.ok(!statement("loadRetainedFinalQualityAdmission").getText(file).includes("process.env"));
+  const { sourceIncluded } = await import("./lib/verification-source-inventory.mts");
+  type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
+  const memoryRoot = path.resolve(tmpdir(), "venisia-memory-only-quality-contract");
+  const base = ".tmp-qa/core-final-closure/", b = config.base, h = "b".repeat(40), oldHead = "a".repeat(40);
+  const operationIds = [...Array.from({ length: 73 }, (_, index) => "retained-" + index), ...Array.from({ length: 10 }, (_, index) => "media-" + index), ...Array.from({ length: 27 }, (_, index) => "final-" + index), "footer-na"];
+  const caseKeys = Array.from({ length: 959 }, (_, index) => "case-" + String(index).padStart(3, "0"));
+  const rolePaths: Record<string, string> = { admission: config.admission, candidate: b + "final-source-manifest.json", ledger: b + "final-current-accounting-successor.json", operations: b + "final-111-reconciliation.json", integrity: b + "final-evidence-integrity.json", impact: b + "source-impact-current-to-final.json", producer: b + "final-accounting-producer-execution.json", review: b + "final-accounting-root-review.json", parent: config.authority.priorAccounting.path,
+    progress: base + "final-accounting-interim/progress-73-retained-1-na-0-hard-37-held-after-hard-open-2026-10-03.json", old: b + "retained-qualification.json", media7: b + "r144-partial/partial-qualification.json", media3: b + "browser-r145-qualified-observations.json", final: b + "browser-r146-qualified-observations.json", owner: path.posix.dirname(config.authority.priorAccounting.path) + "/materialize.mjs", blocker: b + "domain-blocker.json", na: b + "footer-disposition.json", proof: b + "scoped-proof.json", log: base + "browser-r146/public-admin-adoption.stdout.log", product: "src/app/page.tsx", package: "package.json" };
+  for (const name of ["public-source-manifest.json", "public-and-admin-adoption-gates.json", "admin-adoption-browser.json", "admin-adoption-database-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json", "selected-journey-canonical-inventory/admin-adoption-browser.json"]) rolePaths[name] = base + "browser-r146/" + name;
+  Object.assign(rolePaths, { partial: b + "browser-r148-qualified-observations.json", composition: b + "final27-composite-qualification.json", compositeImpact: b + "source-impact-partial148-to-final-six.json", originalPlan: config.authority.final27Plan.path, verifyowner: "scripts/verify-admin-core-date-controls.mjs" });
+  for (const name of ["public-source-manifest.json", "admin-adoption-browser.json", "partial-native-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json", "public-normal-build.json", "public-product-surface-build.json", "public-platform-contracts.json", "public-admin-adoption.json"]) rolePaths["partial-" + name] = base + "browser-r148/" + name;
+  for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) for (const stream of ["stdout", "stderr"]) rolePaths["partial-public-" + name + "." + stream + ".log"] = base + "browser-r148/public-" + name + "." + stream + ".log";
+  const marker = (role: string): Json => ({ fixtureRef: role });
+  const fixture = (mutate?: (edit: (role: string, keys: Array<string | number>, value: Json | undefined) => void) => void, composite = false) => {
+    const models = new Map<string, Json | Buffer>();
+    const put = (role: string, value: Json | Buffer) => models.set(role, value);
+    put("package", Buffer.from('{}\n')); put("product", Buffer.from('export default function Page() { return null; }\n'));
+    if (composite) put("verifyowner", Buffer.from("revised-verification-owner"));
+    const manifest = ["package", "product", ...(composite ? ["verifyowner"] : [])].map(role => ({ file: rolePaths[role], sha256: sha256(models.get(role) as Buffer) }));
+    const sourceSha = sha256(JSON.stringify(manifest)), expected = { invocationHeadSha: h, sourceSha256: sourceSha, manifest };
+    const oldSourceSha = sha256("retained-source"), oldOwned = "owned-retained", owned = "owned-final";
+    put("candidate", { ...expected, inventoryOnly: true, buildClaimed: false }); put("public-source-manifest.json", expected);
+    for (const role of ["na", "proof", "blocker"]) put(role, { status: "controlled-evidence", globalClosed: false });
+    put("log", Buffer.from("not JSON: captured synthetic log\n")); put("owner", Buffer.from("export function materializeFinalAccountingReviewed() {}\n"));
+    put("old", { run: "browser-r90", sourceHead: oldHead, sourceSha256: oldSourceSha, ownedRunId: oldOwned });
+    const retained = operationIds.slice(0, 73).map(id => ({ id, run: "browser-r90", sourceHead: oldHead, qualification: marker("old") }));
+    const mediaIds = operationIds.slice(73, 83), finalIds = operationIds.slice(83, 110);
+    put("progress", { retained, held: [...mediaIds.map(id => ({ id, run: "browser-r101" })), ...finalIds.map(id => ({ id, run: "browser-r52" }))], notApplicable: [{ id: "footer-na", disposition: marker("na") }] });
+    const observation = (id: string, sha: string, runId: string) => ({ status: "QUALIFIED_SCOPED_BEHAVIORAL_OBSERVATION", journeyId: id, sourceSha256: sha, ownedRunId: runId });
+    for (const [role, ids, run] of [["media7", mediaIds.slice(0, 7), "browser-r144"], ["media3", mediaIds.slice(7), "browser-r145"]] as const) put(role, { status: role === "media7" ? "SCOPED_MEDIA_SEVEN_QUALIFIED_ORIGINAL_FAILED" : "QUALIFIED_SCOPED_COHORT_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT", run, sourceHead: oldHead, sourceSha256: oldSourceSha, ownedRunId: "owned-" + role, observations: ids.map(id => observation(id, oldSourceSha, "owned-" + role)), globalClosed: false });
+    const rawRoles = Object.keys(rolePaths).filter(role => rolePaths[role].startsWith(base + "browser-r146/"));
+    for (const role of rawRoles.filter(role => !["log", "public-source-manifest.json"].includes(role))) put(role, { status: "pass" });
+    const inventory = [{ boundary: "form", id: "one", surfaces: ["edit"], domainJourneyInventoryComplete: true }, { boundary: "collection", id: "two", surfaces: ["list"], domainJourneyInventoryComplete: false }];
+    const preview = [{ consumer: "one", publication: "published", session: "authorized" }, { consumer: "one", publication: "unpublished", session: "authorized" }];
+    put("selected-journey-canonical-inventory/admin-adoption-browser.json", { inventoryOnly: true, driverCompleted: false, globalClosed: false, inventory, previewMatrix: preview });
+    put("public-and-admin-adoption-gates.json", { status: "pass", selection: "admin-adoption", sourceSha256: sourceSha, buildIdSha256: sha256("same-valid-build-id"), gates: ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"].map(name => ({ name, code: 0 })) });
+    put("final", { status: "QUALIFIED_SCOPED_COHORT_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT", statusEnvelope: "qualified-sealed-cohort-envelope", cohort: "domain-forms", run: "browser-r146", sourceHead: h, sourceSha256: sourceSha, ownedRunId: owned, originalHookRun: "browser-r52", deferredFinalQuality: true, finalQuality: false, journeyCount: 27, observations: finalIds.map(id => observation(id, sourceSha, owned)), inputArtifacts: rawRoles.map(marker), automaticCoverage: [], globalClosed: false });
+    const qualified = [...retained.map(row => ({ ...row, sourceSha256: oldSourceSha, ownedRunId: oldOwned })), ...mediaIds.map((id, index) => ({ id, qualification: marker(index < 7 ? "media7" : "media3"), run: index < 7 ? "browser-r144" : "browser-r145", sourceHead: oldHead, sourceSha256: oldSourceSha, ownedRunId: index < 7 ? "owned-media7" : "owned-media3" })), ...finalIds.map(id => ({ id, qualification: marker("final"), run: "browser-r146", sourceHead: h, sourceSha256: sourceSha, ownedRunId: owned }))];
+    const counts = { qualified: 110, notApplicable: 1, hardOpen: 0, held: 0, total: 111 };
+    put("operations", { status: "EXACT_ORIGINAL111_RECONCILED", sourceHead: h, originalIdentitySha256: sha256(JSON.stringify([...operationIds].sort())), retained73Authority: marker("progress"), partitions: { qualified, notApplicable: [{ id: "footer-na", authority: marker("na"), countsAsPass: false }], hardOpen: [], held: [] }, counts, globalClosed: false });
+    const modules = Object.fromEntries(["U02", "U04", "U05"].map((key, index) => [key, [{ key: caseKeys[index], status: "OPEN_WITH_EXACT_PREDICATES", completeNamedContract: false, qualifiedPredicates: [], openPredicates: [{ id: "predicate-" + index }] }]]));
+    const u01 = { lifecycle: { denominator: 2, qualified: 1, remaining: 1 }, scopedFormRuntime: { denominator: 2, qualified: 1, open: 1 } };
+    const u03 = { cells: [{ key: caseKeys[3], status: "OPEN", qualifiedNamedCell: false, remainingConditions: ["condition"] }] };
+    put("parent", { modules, U01: u01, U03: u03, predicateCorrections: [] });
+    const namedCells = caseKeys.map((key, index) => ({ key, disposition: index === 957 ? "PROVEN_NOT_APPLICABLE" : index === 958 ? "NOT_APPLICABLE_PENDING_PROOF" : "OPEN", evidence: index === 957 ? [marker("proof")] : [] }));
+    const namedCellCounts = { historical: 959, applicable: 957, qualifiedApplicable: 0, openApplicable: 957, pendingNotApplicable: 1, provenNotApplicable: 1 };
+    put("ledger", { sourceHead: h, globalClosed: false, automaticCoverage: [], modules: structuredClone(modules), U01: structuredClone(u01), U03: structuredClone(u03), predicateCorrections: [], accounting: { historical: 959, applicable: 957, pendingNotApplicable: 1, provenNotApplicable: 1, pending: [{ key: caseKeys[958] }], proven: [{ key: caseKeys[957] }] }, closureEligibility: { eligible: false, namedCells, namedCellCounts, remainingPredicates: 3, incompleteDomainInventories: 1, openPreviewStates: 1, domainInventories: inventory.map(row => ({ boundary: row.boundary, id: row.id, surfaces: row.surfaces, asRecordedComplete: row.domainJourneyInventoryComplete, complete: row.domainJourneyInventoryComplete })), previewStates: preview.map((row, index) => ({ ...row, status: index === 0 ? "pass" : "open", evidence: index === 0 ? [marker("proof")] : [] })) } });
+    put("impact", { status: "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT", retained: { sourceHead: h, sourceSha256: sourceSha, sourceManifest: marker("public-source-manifest.json") }, candidate: { sourceHead: h, sourceSha256: sourceSha, sourceManifest: marker("candidate") }, changes: [], retainedBehaviorRelabelled: false, retainedBehaviorReexecuted: false, automaticCoverage: [], globalClosed: false });
+    const ownerRef = { fixtureRef: "owner", export: "materializeFinalAccountingReviewed" };
+    const producerInputs = ["progress", "parent", "old", "media7", "media3", "final", "impact", "proof"].map(marker);
+    put("review", { status: "ROOT_REVIEWED_FINAL_ACCOUNTING_MATERIALIZATION", sourceHead: h, accountingOwner: ownerRef, inputs: producerInputs, qualifiedOperations: ["old", "media7", "media3", "final"].map(marker) });
+    put("producer", { status: "FINAL_ACCOUNTING_MATERIALIZED_REVIEWED", sourceHead: h, accountingOwner: ownerRef, review: marker("review"), inputs: producerInputs, outputs: { accounting: marker("ledger"), operations: marker("operations") }, automaticCoverage: [], globalClosed: false });
+    if (composite) {
+      const fields = ["draftRestoration", "companyImages", "trackingDates", "trackingMedia", "trackingMediaApplicability", "writes"];
+      const failedIds = [0, 1, 17, 18, 19, 20].map(index => finalIds[index]), partialIds = finalIds.filter(id => !failedIds.includes(id));
+      const priorManifest = manifest.map(row => row.file === rolePaths.verifyowner ? { ...row, sha256: sha256("original-verification-owner") } : row);
+      const priorSource = { invocationHeadSha: oldHead, sourceSha256: sha256(JSON.stringify(priorManifest)), manifest: priorManifest };
+      put("originalPlan", { cohortHooks: [{ run: "browser-r52", cohort: "domain-forms", expectedJourneyIds: finalIds, privateCompletionFields: fields, finalQuality: true }] });
+      const partialRaw = ["public-source-manifest.json", "admin-adoption-browser.json", "partial-native-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json", "public-normal-build.json", "public-product-surface-build.json", "public-platform-contracts.json", "public-admin-adoption.json"];
+      for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) for (const stream of ["stdout", "stderr"]) partialRaw.push("public-" + name + "." + stream + ".log");
+      for (const name of partialRaw) put("partial-" + name, name.endsWith(".log") ? Buffer.from(name.includes(".stdout.") ? "stdout" : "stderr") : { status: "controlled-original-evidence" });
+      put("partial-public-source-manifest.json", priorSource);
+      put("partial-admin-adoption-browser.json", { status: "fail", sourceSha256: priorSource.sourceSha256, journeySelection: null,
+        evidence: [{ id: "existing-auth-login", status: "pass" }, ...finalIds.map(id => ({ id, status: failedIds.includes(id) ? "fail" : "pass" }))] });
+      for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) put("partial-public-" + name + ".json", { name, code: name === "admin-adoption" ? 1 : 0, stdoutSha256: sha256("stdout"), stderrSha256: sha256("stderr") });
+      const partialCompletion = { pointers: ["/draftRestoration", "/companyImages", "/writes", "/currentIdentityProtection"],
+        fields: { draftRestoration: { status: "scoped" }, companyImages: { status: "scoped" }, writes: [], currentIdentityProtection: { status: "scoped" } },
+        missingOriginalFields: ["trackingDates", "trackingMedia", "trackingMediaApplicability"] };
+      put("partial", { status: "QUALIFIED_SCOPED_DOMAIN_FORM_PARTIAL_OBSERVATIONS_ORIGINAL_FAILED", statusEnvelope: "qualified-sealed-partial-cohort-envelope", cohort: "domain-forms",
+        run: "browser-r148", sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, ownedRunId: "owned-partial", originalHookRun: "browser-r52", deferredFinalQuality: true, finalQuality: false,
+        partialOriginalHook: true, originalJourneyCount: 27, journeyCount: 21, originalPrivateCompletionFields: fields, completion: partialCompletion,
+        observations: partialIds.map(id => observation(id, priorSource.sourceSha256, "owned-partial")), inputArtifacts: partialRaw.map(name => marker("partial-" + name)), automaticCoverage: [], globalClosed: false });
+      const current = models.get("final") as Record<string, Json>; current.journeyCount = 6; current.observations = failedIds.map(id => observation(id, sourceSha, owned));
+      current.completion = { pointers: ["/selectedJourneys", "/draftRestoration", "/trackingDates", "/trackingMedia", "/trackingMediaApplicability", "/writes"] };
+      put("admin-adoption-browser.json", { status: "pass", sourceSha256: sourceSha, scope: "core-closure", cohort: "domain-forms", journeySelection: "domain-forms-final-six-followup",
+        driverCompleted: true, wholeCohortExecuted: false, selectedJourneyIds: failedIds, executedJourneyIds: failedIds,
+        evidence: [{ id: "existing-auth-login", status: "pass" }, ...failedIds.map(id => ({ id, status: "pass" }))] });
+      const operation = models.get("operations") as { partitions: { qualified: Array<Record<string, Json>> } };
+      for (const row of operation.partitions.qualified) if (partialIds.includes(row.id as string)) Object.assign(row, { qualification: marker("partial"), run: "browser-r148", sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, ownedRunId: "owned-partial" });
+      put("compositeImpact", { status: "ROOT_REVIEWED_EXACT_VERIFICATION_ONLY_SOURCE_IMPACT", retained: { sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, sourceManifest: marker("partial-public-source-manifest.json") },
+        candidate: { sourceHead: h, sourceSha256: sourceSha, sourceManifest: marker("public-source-manifest.json") },
+        changes: [{ path: rolePaths.verifyowner, beforeSha256: priorManifest.at(-1)!.sha256, afterSha256: manifest.at(-1)!.sha256, role: "verification-only-residual-correction" }],
+        retainedBehaviorRelabelled: false, retainedBehaviorReexecuted: false, automaticCoverage: [], globalClosed: false });
+      put("composition", { status: "QUALIFIED_SCOPED_DOMAIN_FORM_COMPOSITE_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT", statusEnvelope: "qualified-sealed-composite-cohort-envelope", cohort: "domain-forms", originalHookRun: "browser-r52",
+        originalPlan: marker("originalPlan"), originalProgress: marker("progress"), originalJourneyIds: finalIds, journeyCount: 27, sameRun: false, deferredFinalQuality: true, finalQuality: false,
+        qualifications: [{ role: "partial-original-failed", qualification: marker("partial"), run: "browser-r148", sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, ownedRunId: "owned-partial", sourceManifest: marker("partial-public-source-manifest.json"), rawArtifacts: partialRaw.map(name => marker("partial-" + name)) },
+          { role: "fresh-final-six", qualification: marker("final"), run: "browser-r146", sourceHead: h, sourceSha256: sourceSha, ownedRunId: owned, sourceManifest: marker("public-source-manifest.json"), gateReceipt: marker("public-and-admin-adoption-gates.json"), rawArtifacts: rawRoles.map(marker) }],
+        sourceCompatibility: marker("compositeImpact"), completionAssignments: fields.map(field => ({ field, qualifications: field === "draftRestoration" || field === "writes" ? [marker("partial"), marker("final")] : field === "companyImages" ? [marker("partial")] : [marker("final")] })), automaticCoverage: [], globalClosed: false });
+      producerInputs.push(marker("partial"), marker("composition"), marker("compositeImpact"), marker("originalPlan"));
+      (models.get("review") as { qualifiedOperations: Json[] }).qualifiedOperations.push(marker("partial"));
+    }
+    put("integrity", { status: "FINAL_EVIDENCE_INTEGRITY_PASS", sourceHead: h, requiredReferences: [...models.keys()].map(marker), checkedReferences: [...models.keys()].map(marker), failedReferences: [], historicalFailedSealsPreserved: true, qualifiedSourceIdentitiesPreserved: true, remainingOwnedResources: 0, remainingOwnedProcesses: 0 });
+    put("admission", { status: "ROOT_REVIEWED_FINAL_BEHAVIOR_READY_FOR_QUALITY", sourceHead: h, sourceManifest: marker("candidate"), accounting: marker("ledger"), operations: marker("operations"), integrity: marker("integrity"), sourceCompatibility: marker("impact"), accountingOwner: ownerRef, producerExecution: marker("producer"), closureEligible: false, closureBlockers: [marker("blocker")], final27: { qualification: marker("final"), sourceManifest: marker("public-source-manifest.json"), gateReceipt: marker("public-and-admin-adoption-gates.json"), originalHookRun: "browser-r52", ...(composite ? { composition: marker("composition") } : {}) }, operationCounts: counts, namedCellCounts, remainingPredicates: 3, incompleteDomainInventories: 1, openPreviewStates: 1, cleanup: { remainingOwnedResources: 0, remainingOwnedProcesses: 0 }, automaticCoverage: [], globalClosed: false });
+    const edit = (role: string, keys: Array<string | number>, value: Json | undefined) => {
+      let node = models.get(role) as Json;
+      for (const key of keys.slice(0, -1)) { assert.ok(node && typeof node === "object"); node = (node as Record<string, Json>)[String(key)]; }
+      assert.ok(node && typeof node === "object"); const key = String(keys.at(-1));
+      if (value === undefined) delete (node as Record<string, Json>)[key]; else (node as Record<string, Json>)[key] = value;
+    };
+    const bytes = new Map<string, Buffer>(), refs = new Map<string, { path: string; sha256: string }>();
+    const expand = (value: Json): Json => {
+      if (Array.isArray(value)) return value.map(expand);
+      if (value && typeof value === "object") { if (typeof value.fixtureRef === "string") { const { fixtureRef, ...extra } = value; return { ...seal(fixtureRef as string), ...extra }; } return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, expand(item)])); }
+      return value;
+    };
+    const seal = (role: string): { path: string; sha256: string } => {
+      const cached = refs.get(role); if (cached) return cached;
+      assert.ok(models.has(role), role); const value = models.get(role)!;
+      const raw = Buffer.isBuffer(value) ? value : Buffer.from(JSON.stringify(expand(value)));
+      const ref = { path: rolePaths[role], sha256: sha256(raw) }; assert.ok(ref.path, role); refs.set(role, ref); bytes.set(path.resolve(memoryRoot, ref.path), raw); return ref;
+    };
+    const priorAuthority = seal("parent");
+    const authority = { operationIdentitySha256: sha256(JSON.stringify([...operationIds].sort())), caseIdentitySha256: sha256(JSON.stringify(caseKeys)), priorAccounting: priorAuthority, final27Plan: composite ? seal("originalPlan") : config.authority.final27Plan };
+    mutate?.(edit); refs.clear(); bytes.clear(); const admission = seal("admission");
+    return { authority, expected, admission, bytes, refs, links: new Map<string, string>() };
+  };
+  const code = ["assertRetainedFinalQualitySource", "assertRetainedFinalQualityCompositeSource", "loadRetainedFinalQualityAdmission"].map(name => statement(name).getText(file).replace(/^export /u, "")).join("\n");
+  type Loaded = ReturnType<typeof import("./lib/isolated-public-verification.mts").loadRetainedFinalQualityAdmission>;
+  const invoke = (frame: ReturnType<typeof fixture>, expected = frame.expected) => {
+    const read = (name: string) => { const value = frame.bytes.get(name); assert.ok(value, "Missing memory-only artifact: " + name); return value; };
+    const ports = { assert, digest: sha256, ROOT: memoryRoot, sourceIncluded, resolve: path.resolve, sep: path.sep,
+      FINAL_QUALITY_ACCOUNTING: config.base, FINAL_QUALITY_READINESS: config.admission, RETAINED_FINAL_QUALITY_AUTHORITY: frame.authority,
+      readFileSync: read, realpathSync: (name: string) => frame.links.get(name) ?? name, lstatSync: (name: string) => ({ isFile: () => frame.bytes.has(name) }) };
+    const load = new Function(...Object.keys(ports), compile(code) + ";return loadRetainedFinalQualityAdmission;")(...Object.values(ports)) as (sha: string, source: typeof expected) => Loaded;
+    return load(frame.admission.sha256, expected);
+  };
+  check("retained Quality accepts sealed partial7 plus fresh3 and Final27 with honest OPEN959 and explicit Closure blockers", () => {
+    const f = fixture(), result = invoke(f); result.verify(); assert.equal(result.receipt.reexecuted, false);
+    assert.equal(result.receipt.accountingState.namedCellCounts.openApplicable, 957); assert.equal(result.receipt.accountingState.incompleteDomainInventories, 1); assert.equal(result.receipt.globalClosed, false);
+  });
+  check("retained admission hashes non-JSON raw logs/owner source and exact finite tracked source without executing or parsing them", () => { const f = fixture(); invoke(f).verify(); assert.ok(f.bytes.get(path.resolve(memoryRoot, rolePaths.log))!.toString().startsWith("not JSON")); });
+  const negatives: Array<[string, string, Array<string | number>, Json | undefined]> = [
+    ["unreviewed admission", "admission", ["status"], "DRAFT"], ["wrong current head", "admission", ["sourceHead"], oldHead],
+    ["stale source digest", "candidate", ["sourceSha256"], "0".repeat(64)], ["changed executable manifest", "candidate", ["manifest", 1, "sha256"], "0".repeat(64)],
+    ["invented Final27 journey", "final", ["observations", 0, "journeyId"], "foreign"], ["wrong Final27 source", "final", ["observations", 0, "sourceSha256"], "0".repeat(64)],
+    ["wrong Final27 owned run", "final", ["ownedRunId"], "foreign"], ["missing deferred Quality provenance", "final", ["deferredFinalQuality"], false],
+    ["substituted retained qualification", "operations", ["partitions", "qualified", 0, "qualification"], marker("media7")],
+    ["relabelled retained source", "operations", ["partitions", "qualified", 0, "sourceHead"], h],
+    ["relabelled retained owned run", "operations", ["partitions", "qualified", 0, "ownedRunId"], "foreign"],
+    ["misbound Media observation", "media7", ["observations", 0, "journeyId"], "foreign"],
+    ["unqualified Media observation", "media7", ["observations", 0, "status"], "pass"],
+    ["remaining held original operation", "operations", ["partitions", "held"], ["final-0"]], ["N/A counted as pass", "operations", ["partitions", "notApplicable", 0, "countsAsPass"], true],
+    ["falsified original111 total", "operations", ["counts", "total"], 110], ["missing raw native input", "final", ["inputArtifacts"], []],
+    ["failed original Admin gate", "public-and-admin-adoption-gates.json", ["gates", 3, "code"], 1], ["fabricated public gate in targeted behavior", "public-and-admin-adoption-gates.json", ["gates", 3, "name"], "public-e2e"],
+    ["falsified open959 count", "admission", ["namedCellCounts", "openApplicable"], 0], ["replaced canonical959 key", "ledger", ["closureEligibility", "namedCells", 0, "key"], "foreign"],
+    ["dropped module cell", "ledger", ["modules", "U04"], []], ["dropped predicate", "ledger", ["modules", "U04", 0, "openPredicates"], []],
+    ["shrunk lifecycle denominator", "ledger", ["U01", "lifecycle", "denominator"], 1], ["falsified open predicate total", "admission", ["remainingPredicates"], 0],
+    ["concealed domain inventory gap", "admission", ["incompleteDomainInventories"], 0], ["dropped domain identity", "ledger", ["closureEligibility", "domainInventories"], []],
+    ["concealed Preview gap", "admission", ["openPreviewStates"], 0], ["dropped Preview identity", "ledger", ["closureEligibility", "previewStates"], []],
+    ["false Closure eligibility", "admission", ["closureEligible"], true], ["missing Closure blockers", "admission", ["closureBlockers"], []],
+    ["changed producer export", "admission", ["accountingOwner", "export"], "parallelOwner"], ["unreviewed producer", "producer", ["status"], "PASS"],
+    ["missing producer qualifier", "review", ["qualifiedOperations"], [marker("final")]], ["incomplete integrity", "integrity", ["checkedReferences"], []],
+    ["failed integrity", "integrity", ["failedReferences"], ["changed"]], ["resource leak", "admission", ["cleanup", "remainingOwnedResources"], 1],
+  ];
+  for (const [name, role, keys, value] of negatives) check("retained admission rejects " + name + " after all artifact hashes are resealed", () => assert.throws(() => invoke(fixture(edit => edit(role, keys, value)))));
+  check("retained admission rejects artifact-byte mutation after admission and again before a later gate", () => {
+    const f = fixture(), admitted = invoke(f); f.bytes.set(path.resolve(memoryRoot, rolePaths.log), Buffer.from("changed raw log")); assert.throws(admitted.verify); assert.throws(() => invoke(f));
+  });
+  check("retained admission rejects a symlink/junction escape", () => { const f = fixture(); f.links.set(path.resolve(memoryRoot, rolePaths.final), path.resolve(memoryRoot, "outside.json")); assert.throws(() => invoke(f)); });
+  check("retained admission rejects a private environment reference even with a known hash", () => { const f = fixture(edit => edit("integrity", ["requiredReferences", 0], { path: ".env.local", sha256: "0".repeat(64) })); assert.throws(() => invoke(f)); });
+
+  check("retained Quality accepts exact composite21 plus fresh6 while preserving failed148 and every per-leaf111 identity", () => {
+    const f = fixture(undefined, true), result = invoke(f); result.verify();
+    assert.equal(result.receipt.composition?.sameRun, false); assert.equal(result.receipt.qualifiedJourneyIds.length, 27);
+    assert.equal(result.receipt.primaryQualificationJourneyIds?.length, 6); assert.equal(result.receipt.composition?.qualifications[0].run, "browser-r148");
+    assert.equal(JSON.parse(f.bytes.get(path.resolve(memoryRoot, rolePaths["partial-admin-adoption-browser.json"]))!.toString()).status, "fail");
+    assert.equal(JSON.parse(f.bytes.get(path.resolve(memoryRoot, rolePaths["partial-public-admin-adoption.json"]))!.toString()).code, 1);
+  });
+  const compositeNegatives: Array<[string, string, Array<string | number>, Json | undefined]> = [
+    ["missing composite authority", "admission", ["final27", "composition"], undefined],
+    ["fabricated one run", "composition", ["sameRun"], true], ["invented shared build", "composition", ["buildIdSha256"], "a".repeat(64)],
+    ["duplicate original27", "composition", ["originalJourneyIds", 0], "final-1"], ["missing original27", "composition", ["journeyCount"], 26],
+    ["wrong original progress", "composition", ["originalProgress"], marker("proof")], ["missing original plan", "composition", ["originalPlan"], marker("proof")],
+    ["partial relabelled complete", "partial", ["status"], "QUALIFIED_SCOPED_COHORT_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT"],
+    ["raw failed Browser relabelled PASS", "partial-admin-adoption-browser.json", ["status"], "pass"],
+    ["raw failed Admin relabelled success", "partial-public-admin-adoption.json", ["code"], 0],
+    ["partial build failed", "partial-public-normal-build.json", ["code"], 1],
+    ["resealed partial log digest differs from raw bytes", "partial-public-normal-build.json", ["stdoutSha256"], "0".repeat(64)],
+    ["partial build missing", "partial", ["inputArtifacts"], []], ["partial fabricated build", "partial", ["buildIdSha256"], "a".repeat(64)],
+    ["failed case promoted inside partial", "partial-admin-adoption-browser.json", ["evidence", 1, "status"], "pass"],
+    ["partial missing current identity proof", "partial", ["completion", "fields", "currentIdentityProtection"], undefined],
+    ["wrong leaf source", "composition", ["qualifications", 0, "sourceSha256"], "0".repeat(64)],
+    ["wrong partial observation source", "partial", ["observations", 0, "sourceSha256"], "0".repeat(64)],
+    ["partial row assigned latest run", "operations", ["partitions", "qualified", 85, "run"], "browser-r146"],
+    ["partial row assigned latest qualification", "operations", ["partitions", "qualified", 85, "qualification"], marker("final")],
+    ["fresh whole-cohort claim", "admin-adoption-browser.json", ["wholeCohortExecuted"], true],
+    ["wrong fresh selector", "admin-adoption-browser.json", ["journeySelection"], "text-topic-forms"],
+    ["fresh missing selected case", "admin-adoption-browser.json", ["selectedJourneyIds"], []],
+    ["fresh missing full gate", "public-and-admin-adoption-gates.json", ["gates"], []],
+    ["wrong completion assignment", "composition", ["completionAssignments", 1, "qualifications"], [marker("final")]],
+    ["missing fresh draft assignment", "composition", ["completionAssignments", 0, "qualifications"], [marker("partial")]],
+    ["missing fresh draft proof", "final", ["completion", "pointers"], ["/selectedJourneys", "/trackingDates", "/trackingMedia", "/trackingMediaApplicability", "/writes"]],
+    ["missing partial company proof", "partial", ["completion", "pointers"], ["/draftRestoration", "/writes", "/currentIdentityProtection"]],
+    ["unreviewed intermediate impact", "compositeImpact", ["status"], "DRAFT"],
+    ["omitted intermediate change", "compositeImpact", ["changes"], []],
+    ["wrong exact prior digest", "compositeImpact", ["changes", 0, "beforeSha256"], "0".repeat(64)],
+    ["wrong exact latest digest", "compositeImpact", ["changes", 0, "afterSha256"], "0".repeat(64)],
+    ["relabelled partial behavior", "compositeImpact", ["retainedBehaviorRelabelled"], true],
+    ["wrong latest docs-only impact", "impact", ["status"], "ROOT_REVIEWED_EXACT_VERIFICATION_ONLY_SOURCE_IMPACT"],
+  ];
+  for (const [name, role, keys, value] of compositeNegatives) check("composite Quality rejects " + name + " after resealing metadata", () => assert.throws(() => invoke(fixture(edit => edit(role, keys, value), true))));
+  check("composite source guard rejects a fully rehashed Product/config/migration delta and unrelated Verification owner", () => {
+    const body = compile(statement("assertRetainedFinalQualityCompositeSource").getText(file).replace(/^export /u, ""));
+    const guard = new Function("assert", "digest", "sourceIncluded", body + ";return assertRetainedFinalQualityCompositeSource;")(assert, sha256, sourceIncluded);
+    for (const name of ["src/app/page.tsx", "next.config.ts", "supabase/migrations/20261004000000_change.sql", "scripts/verify-platform.mts"]) {
+      const retained = { invocationHeadSha: oldHead, manifest: [{ file: name, sha256: sha256("before") }], sourceSha256: "" };
+      const candidate = { invocationHeadSha: h, manifest: [{ file: name, sha256: sha256("after") }], sourceSha256: "" };
+      retained.sourceSha256 = sha256(JSON.stringify(retained.manifest)); candidate.sourceSha256 = sha256(JSON.stringify(candidate.manifest));
+      assert.throws(() => guard({ status: "ROOT_REVIEWED_EXACT_VERIFICATION_ONLY_SOURCE_IMPACT", retained: { sourceHead: oldHead, sourceSha256: retained.sourceSha256 }, candidate: { sourceHead: h, sourceSha256: candidate.sourceSha256 }, changes: [{ path: name, beforeSha256: retained.manifest[0].sha256, afterSha256: candidate.manifest[0].sha256, role: "verification-only-residual-correction" }], retainedBehaviorRelabelled: false, retainedBehaviorReexecuted: false, automaticCoverage: [], globalClosed: false }, retained, candidate));
+    }
+  });
+  check("composite Quality rejects a missing individual build even when both raw-input lists agree", () => {
+    const refs = Object.keys(rolePaths).filter(role => role.startsWith("partial-") && role !== "partial-public-normal-build.json").map(marker);
+    assert.throws(() => invoke(fixture(edit => { edit("partial", ["inputArtifacts"], refs); edit("composition", ["qualifications", 0, "rawArtifacts"], refs); }, true)));
+  });
+  const run = statement("runOwnedPublicVerification") as ts.FunctionDeclaration; assert.ok(run.body);
+  const beforeContext = run.body.statements.findIndex(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "originalContext")); assert.ok(beforeContext > 0);
+  const requestCode = run.body.statements.slice(0, beforeContext).map(node => node.getText(file)).join("\n");
+  const guard = new Function("assert", "prepared", "adminCredentials", "CORE_PREVIEW_PUBLIC_IMPACT_SELECTION", "validateCorePreviewPublicImpactSelection", "validateCoreJourneySelection", compile("return async function(request) { const context={assertOwned:async()=>{}}; " + requestCode + ";return {adoption,retainedQuality}; }"))(assert, { get: () => ({}) }, { get: () => ({}) }, "preview-public-impact", () => undefined, () => undefined) as (request: Record<string, unknown>) => Promise<{ adoption: boolean; retainedQuality: boolean }>;
+  const requests = { retained: { additionalSourceFiles: [], finalQualityGate: true, retainedAdminBehaviorAdmissionSha256: "f".repeat(64) }, legacy: { additionalSourceFiles: [], finalQualityGate: true, selection: "admin-adoption", adoptionScope: "core-closure", adoptionCohort: "domain-forms" } };
+  assert.deepEqual(await guard(requests.retained), { adoption: false, retainedQuality: true }); assert.deepEqual(await guard(requests.legacy), { adoption: true, retainedQuality: false });
+  for (const patch of [{ finalQualityGate: undefined }, { selection: "admin-adoption" }, { selection: "build-contracts" }, { adoptionCohort: "domain-forms" }, { additionalSourceFiles: ["scripts/foreign.mts"] }, { retainedAdminBehaviorAdmissionSha256: "bad" }]) await assert.rejects(guard({ ...requests.retained, ...patch }));
+  await assert.rejects(guard({ additionalSourceFiles: [], finalQualityGate: true }));
+  cases.push("actual request guard preserves legacy combined Quality and rejects mixed retained/subset/measurement admission");
+  const gateDeclaration = run.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "gates")); assert.ok(gateDeclaration);
+  const gates = new Function("request", "adoption", "measurement", compile(statement("GATES").getText(file) + "\n" + gateDeclaration.getText(file)) + ";return gates;") as (request: object, adoption: boolean, measurement?: unknown) => Array<{ name: string }>;
+  assert.deepEqual(gates(requests.retained, false).map(row => row.name), ["normal-build", "product-surface-build", "platform-contracts", "public-e2e"]);
+  assert.deepEqual(gates(requests.legacy, true).map(row => row.name), ["normal-build", "product-surface-build", "platform-contracts", "public-e2e", "admin-adoption"]);
+  const finalBranch = run.body.statements.find(node => ts.isIfStatement(node) && node.expression.getText(file) === "retainedAdmission"); assert.ok(finalBranch);
+  const receipts: Array<[string, unknown]> = [], retained = invoke(fixture()), reports = gates(requests.retained, false).map(row => ({ ...row, code: 0 }));
+  const value = new Function("assert", "GATES", "reports", "retainedAdmission", "result", "qualityReports", "buildIdSha256", "receipt", "context", compile(finalBranch.getText(file)))(assert, reports, reports, retained, { status: "pass", gates: reports, sourceSha256: "a".repeat(64) }, [], retained.receipt.buildIdSha256, (_context: unknown, name: string, data: unknown) => receipts.push([name, data]), {}) as { finalQualityGate: { retainedAdminBehavior: { reexecuted: boolean }; buildIdSha256: string }; globalClosedClaimed: boolean };
+  assert.equal(value.finalQualityGate.retainedAdminBehavior.reexecuted, false); assert.equal(value.finalQualityGate.buildIdSha256, retained.receipt.buildIdSha256); assert.equal(value.globalClosedClaimed, false);
+  assert.deepEqual(receipts.map(row => row[0]), ["final-quality-gate.json", "public-four-gates.json"]);
+  cases.push("actual retained branch emits only real Public gate slots and separate behavior/build provenance; equal IDs alone are allowed, no fake Admin gate");
+}
+
+function verifyFinalQualityGatePlan() {
+  const source = readSource("scripts/lib/isolated-public-verification.mts");
+  const file = ts.createSourceFile("isolated-public-verification.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const gates = file.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(file) === "GATES"));
+  const planner = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "finalQualityScriptNames");
+  assert.ok(gates && planner);
+  const code = ts.transpileModule(gates.getText(file) + "\n" + planner.getText(file).replace(/^export /u, ""), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const plan = new Function("assert", code + ";return finalQualityScriptNames;")(assert) as (scripts: Record<string, string>) => string[];
+  const scripts = JSON.parse(readSource("package.json")).scripts as Record<string, string>;
+  const prefix = plan(scripts);
+  assert.equal(prefix.length + 4, scripts["ci:check"].split("&&").length);
+  assert.equal(prefix[0], "lint"); assert.equal(prefix[1], "typecheck");
+  for (const changed of [
+    { ...scripts, "ci:check": scripts["ci:check"] + " && npm run lint" },
+    { ...scripts, "ci:check": "npm run build && " + scripts["ci:check"] },
+    { ...scripts, "ci:check": scripts["ci:check"].replace("npm run lint", "npm run lint; echo bypass") },
+    { ...scripts, "test:e2e:public": "echo skipped" },
+  ]) assert.throws(() => plan(changed));
+  cases.push("Final Quality Gate derives every non-build step from ci:check and rejects skipped, duplicated, shell-injected or changed Public tails");
+}
+
+async function verifyMigrationToolPlatforms(lock: StackLock) {
+  const cli = await import("./lib/isolated-supabase-cli.mts");
+  check("migration tool selection preserves the exact existing Windows lock", () => {
+    assert.equal(cli.selectApplicationMigrationTool(lock, "win32", "x64"), lock.applicationMigrationTool);
+    assert.equal(lock.applicationMigrationTool.executableSha256, "5ccda93866ff48a3ec4a580679d71a44b9ee41150fb6143bdd4a6a57d3ecef1a");
+  });
+  check("Linux migration tool matches the independently verified npm package pin", () => {
+    const tool = cli.selectApplicationMigrationTool(lock, "linux", "x64");
+    const packageLock = JSON.parse(readSource("package-lock.json"));
+    const npm = packageLock.packages["node_modules/@supabase/cli-linux-x64"];
+    assert.equal(tool.packageIntegrity, npm.integrity);
+    assert.equal(tool.version, npm.version);
+    assert.equal(tool.executableSha256, "3cfb10e8cb7b8cb4d6807117865a2a39891178ec83f4d0c86ac49f633d2c43f4");
+    assert.equal(tool.executablePathInPackage, "package/bin/supabase");
+  });
+  for (const [platform, architecture] of [["darwin", "x64"], ["linux", "arm64"], ["win32", "arm64"]] as const) {
+    check("migration tool rejects unsupported host " + platform + "-" + architecture, () => {
+      assert.throws(() => cli.selectApplicationMigrationTool(lock, platform, architecture), { code: "UNSUPPORTED_CLI_PLATFORM" });
+    });
+  }
+  check("Linux selection cannot fall back to a Windows pin", () => {
+    assert.throws(() => cli.selectApplicationMigrationTool({ ...lock, applicationMigrationToolLinuxX64: lock.applicationMigrationTool }, "linux", "x64"), { code: "CLI_PLATFORM_LOCK_MISMATCH" });
+  });
+  check("Linux tool rejects a cross-platform package or executable path", () => {
+    for (const bad of [{ package: "@supabase/cli-windows-x64" }, { executablePathInPackage: "package/bin/supabase.exe" }]) {
+      assert.throws(() => cli.assertApplicationMigrationTool({ ...lock.applicationMigrationToolLinuxX64, ...bad }), { code: "INVALID_MIGRATION_TOOL_LOCK" });
+    }
+  });
+}
+
+async function verifyRestoreAclPolicy() {
+  const { planPublicSchemaUsageRestore } = await import("./lib/isolated-application-restore-verification.mts");
+  type Acl = import("./lib/isolated-application-restore-verification.mts").PublicSchemaAcl;
+  const publicGrant = { grantor: "pg_database_owner", grantee: "PUBLIC", privilege_type: "USAGE", is_grantable: false };
+  const before: Acl = { owner: "pg_database_owner", acl: [publicGrant,
+    { ...publicGrant, grantee: "pg_database_owner", privilege_type: "CREATE" },
+    { ...publicGrant, grantee: "pg_database_owner" }, { ...publicGrant, grantee: "anon" }] };
+  const after: Acl = { ...before, acl: before.acl.filter(row => row.grantee !== "PUBLIC") };
+  const security = [{ kind: "schema", name: "public", fingerprint: "a".repeat(32) },
+    { kind: "relation", name: "topics", fingerprint: "b".repeat(32) },
+    { kind: "default-acl", name: "postgres.public.r", fingerprint: "c".repeat(32) }];
+  const rawSecurity = security.map(row => row.kind === "schema" ? { ...row, fingerprint: "d".repeat(32) } : row);
+  check("restore ACL skips unchanged captured security", () => assert.deepEqual(planPublicSchemaUsageRestore(security, security, before, before), { restorePublicUsage: false }));
+  check("restore ACL permits only captured original PUBLIC USAGE", () => assert.deepEqual(planPublicSchemaUsageRestore(security, rawSecurity, before, after), { restorePublicUsage: true, recordedGrant: publicGrant }));
+  const reject = (name: string, first: Acl, second: Acl, earlier = security, later = rawSecurity) =>
+    check("restore ACL rejects " + name, () => assert.throws(() => planPublicSchemaUsageRestore(earlier, later, first, second)));
+  reject("different original owner", { ...before, owner: "postgres" }, after);
+  reject("changed restored owner", before, { ...after, owner: "postgres" });
+  reject("missing unrelated role", before, { ...before, acl: before.acl.filter(row => row.grantee !== "anon") });
+  reject("PUBLIC CREATE instead of captured USAGE", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, privilege_type: "CREATE" } : row) }, after);
+  reject("different original grantor", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, grantor: "postgres" } : row) }, after);
+  reject("original grant option", { ...before, acl: before.acl.map(row => row.grantee === "PUBLIC" ? { ...row, is_grantable: true } : row) }, after);
+  reject("no original PUBLIC grant", after, after);
+  reject("an extra missing grant", before, { ...after, acl: after.acl.filter(row => row.grantee !== "anon") });
+  reject("an added privilege", before, { ...after, acl: [...after.acl, { ...publicGrant, privilege_type: "CREATE" }] });
+  reject("another object's owner or ACL", before, after, security, rawSecurity.map(row => row.kind === "relation" ? { ...row, fingerprint: "e".repeat(32) } : row));
+  reject("default privilege drift", before, after, security, rawSecurity.map(row => row.kind === "default-acl" ? { ...row, fingerprint: "e".repeat(32) } : row));
+  reject("object membership loss", before, after, security, rawSecurity.filter(row => row.kind !== "relation"));
+  reject("duplicate ACL tuple", { ...before, acl: [...before.acl, publicGrant] }, after);
+  reject("expanded ACL disagrees with equal fingerprints", before, after, security, security);
+  reject("duplicate security object", before, after, security, [...rawSecurity, rawSecurity[0]]);
+  check("restore keeps exact other DDL and transactional ACL guards", () => {
+    const source = readSource("scripts/lib/isolated-application-restore-verification.mts");
+    const securityCheck = source.indexOf("assert.deepEqual(transactionSecurity, beforeSecurity");
+    const expandedCheck = source.indexOf("assert.deepEqual(transactionAcl.acl, beforePublicAcl.acl");
+    const commit = source.indexOf('await handle.query("commit")');
+    assert.ok(securityCheck >= 0 && expandedCheck >= 0 && commit >= 0);
+    assert.ok(securityCheck < commit && expandedCheck < commit);
+    assert.ok(source.includes('await handle.query("rollback")'));
+    assert.ok(source.includes('assert.equal(normalizeSchema(schemaAfter, after.identity), normalizeSchema(schemaBefore, before.identity)'));
+    assert.equal(source.includes('replace("REVOKE USAGE'), false);
+  });
+}
+
+async function restoreAclOnly() {
+  await verifyRestoreAclPolicy();
+  console.log(JSON.stringify({ status: "PASS", scope: "strict captured restore ACL policy", checks: cases.length, cases, dockerExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
+}
+
 async function main() {
+  const closure = await verifyApplicationClosureCheckpointsOffline();
+  cases.push(...closure.cases);
+  await verifyRestoreAclPolicy();
+  verifyFinalQualityGatePlan();
+  await verifyRetainedFinalQualityAdmissionControls();
+  await verifyOwnedPublicImageConfig();
   verifyScanner();
   const provenance = verifyReleaseLock();
   const sources = ["scripts/lib/isolated-supabase.mts", "scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-public-application.mts", "scripts/lib/isolated-supabase-cli.mts"];
@@ -514,6 +1016,7 @@ async function main() {
   // Importing the lifecycle owner must be passive. Only pure exported guards are
   // invoked below; run/start/cleanup, Docker, SQL and environment loaders are not.
   const owner = await import("./lib/isolated-supabase.mts");
+  await verifyMigrationToolPlatforms(provenance.lock);
   await verifyAdminMeasurementControlLease(owner);
   verifyAdminMeasurementRestartPolicy();
   verifyImageIdentity(owner, provenance.lock.images.db);
@@ -617,6 +1120,11 @@ async function main() {
   const forgedHandle: Parameters<typeof app.runApplicationHandoff>[0] = {
     identity: { runId, projectName, database: "postgres", host: "127.0.0.1", port: 55965, databaseContainerId: identity.id },
     async query() { queryCalls++; return { rows: [], rowCount: 0 }; },
+    async renewDatabaseControlConnection() { throw Error("Unowned handle must not renew its control connection."); },
+    async generateDatabaseTypes() { throw Error("Unowned handle must not generate database types."); },
+    async callDataApiRpc() { throw Error("Unowned handle must not invoke the Data API."); },
+    async readDataApi() { throw Error("Unowned handle must not read the Data API."); },
+    async withDatabaseConnection() { throw Error("Unowned handle must not open a database connection."); },
     async pushApplicationMigrations() { throw Error("Unowned handle must not reach the CLI."); },
     async runEntitySeoBackfill() { throw Error("Unowned handle must not reach the backfill."); },
     async preparePublicVerification() { throw Error("Unowned handle must not prepare Public verification."); },
@@ -670,5 +1178,14 @@ async function cliDiagnosticsOnly() {
     cliExecuted: false, databaseCalls: 0, networkRequests: 0, retainedNavigationGatesReexecuted: false }, null, 2));
 }
 
-const verification = process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
+async function closureCheckpointsOnly() {
+  console.log(JSON.stringify(await verifyApplicationClosureCheckpointsOffline(), null, 2));
+}
+
+async function retainedFinalQualityOnly() {
+  verifyFinalQualityGatePlan(); await verifyRetainedFinalQualityAdmissionControls();
+  console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, memoryOnlyArtifacts: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
+}
+
+const verification = process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;
 verification().catch(() => { console.error("FAIL isolated Supabase source/offline contract verification; raw error details suppressed."); process.exitCode = 1; });

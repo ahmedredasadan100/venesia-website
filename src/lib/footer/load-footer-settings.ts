@@ -1,7 +1,9 @@
 import "server-only";
 
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import { cache } from "react";
-import { unstable_cache, unstable_noStore as noStore } from "next/cache";
+import { unstable_noStore as noStore } from "next/cache";
 
 import { resolveFooterSettingsLinks } from "../admin/links/block-config-links";
 import { logError } from "../logging";
@@ -105,7 +107,7 @@ async function queryFooterSettings(publicOnly = false): Promise<FooterSettings> 
 
 export const loadFooterSettings = cache(async function loadFooterSettings(): Promise<FooterSettings> {
   try {
-    return await unstable_cache(
+    return await cachePublicRead(
       async () => queryFooterSettings(true),
       ["public-footer-settings-v2"],
       { revalidate: 300, tags: ["footer", "site-settings"] },

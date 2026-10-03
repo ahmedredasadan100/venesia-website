@@ -496,19 +496,6 @@
       "rationale": "The footer aggregate save coordinates all changed media-capable setting keys as one operation; the helper is only the lower-level persistence owner."
     },
     {
-      "id": "footer-default-restore",
-      "classification": "neutral",
-      "tables": ["site_settings"],
-      "mediaFields": ["site_settings.value"],
-      "acquiresWriteLease": false,
-      "completesReferenceSync": true,
-      "structuredWarning": true,
-      "sourceFiles": [
-        "src/app/admin/pages-blocks/footer/footer-actions/restore-default.ts"
-      ],
-      "rationale": "The canonical defaults restored by this command contain no managed media assets."
-    },
-    {
       "id": "company-and-seo-setting-writes",
       "classification": "adopted",
       "tables": ["site_settings"],

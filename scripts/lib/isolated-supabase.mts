@@ -6,11 +6,11 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 // @ts-expect-error The repository uses pg without separate declarations.
 import pg from "pg";
-import { assertApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicationMigrations, runOwnedEntitySeoBackfill,
+import { assertApplicationMigrationTool, selectApplicationMigrationTool, IsolatedSupabaseCliError, pushApplicationMigrations, runOwnedEntitySeoBackfill, generateOwnedDatabaseTypes,
   type ApplicationMigrationCliContext, type ApplicationMigrationCliResult,
   type ApplicationMigrationStage, type ApplicationMigrationTool, type EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
 export type { ApplicationMigrationCliResult, ApplicationMigrationStage, EntitySeoBackfillReport } from "./isolated-supabase-cli.mts";
-import { proveHostBoundary, startHostAccessBridge } from "./isolated-supabase-transport.mjs";
+import { proveHostBoundary, startHostAccessBridge, waitForOwnedDatabaseCapacity } from "./isolated-supabase-transport.mjs";
 import { prepareOwnedPublicVerification, registerOwnedAdminMeasurement, runOwnedPublicVerification,
   type PrivatePublicVerificationContext, type PublicFixtureReadiness, type PublicGateRequest } from "./isolated-public-verification.mts";
 import { prepareOwnedAdminMeasurementAccount } from "../fixtures/admin-interaction-fixtures.mts";
@@ -77,7 +77,7 @@ export function observeApplicationClient(client: Pick<PgConnection, "on">, recor
   };
 }
 
-/** Planned renewal of the Admin measurement control socket only. The pinned
+/** Planned renewal for Admin jobs and verified idle fixture boundaries. The pinned
  * transport's ten-minute hard lifetime and error handling remain unchanged. */
 export function createAdminMeasurementControlLease(initial: PgConnection, options: {
   connect(): Promise<PgConnection>;
@@ -92,9 +92,9 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
   let current=initial,bornAt=now(),renewing:Promise<void>|undefined;
   return {
     get client(){return current;},
-    async renewIfDue(adminJobActive:boolean) {
+    async renewIfDue(adminJobActive:boolean, explicitIdleBoundary = false) {
       options.assertHealthy();
-      if(!adminJobActive || now()-bornAt<240_000) return;
+      if(!adminJobActive || (!explicitIdleBoundary && now()-bornAt<240_000)) return;
       if(renewing) return renewing;
       requireThat(now()-bornAt<480_000,"ADMIN_CONTROL_LEASE_RENEWAL_OVERDUE","admin-measurement");
       renewing=(async()=>{
@@ -102,6 +102,7 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
         let next: PgConnection;
         try { next=await options.connect(); }
         catch(error) {
+          if (explicitIdleBoundary) throw error; // The next bounded phase requires an actually fresh healthy socket.
           // A fresh socket can be rejected while the pinned host bridge is at
           // capacity (for example, parallel Next build workers). Defer only
           // this connection reset; never reconnect a failed current session or
@@ -132,6 +133,69 @@ export function createAdminMeasurementControlLease(initial: PgConnection, option
     },
   };
 }
+
+/** Private CLI binding: fixed read-only traffic on the same healthy idle backend. */
+export async function createApplicationCliControlPulse(client: Pick<PgConnection, "query">, options: {
+  assertExclusive(): void;
+  assertHealthy(): void;
+  assertOwned(): Promise<void>;
+  assertIdle(pid: number): Promise<void>;
+}) {
+  let backendPid: number | undefined, busy = false;
+  const pulse = async () => {
+    requireThat(!busy, "CLI_CONTROL_PULSE_OVERLAP", "application-cli");
+    busy = true;
+    try {
+      options.assertExclusive(); options.assertHealthy(); await options.assertOwned();
+      options.assertExclusive(); options.assertHealthy();
+      const row = (await client.query("select current_database() as database,current_user as role,pg_backend_pid() as backend_pid")).rows[0];
+      options.assertExclusive(); options.assertHealthy(); await options.assertOwned();
+      options.assertExclusive(); options.assertHealthy();
+      const pid = Number(row?.backend_pid);
+      requireThat(row?.database === "postgres" && row.role === "postgres" && Number.isSafeInteger(pid) && pid > 0
+        && (backendPid === undefined || backendPid === pid), "CLI_CONTROL_IDENTITY_MISMATCH", "application-cli");
+      backendPid = pid;
+    } finally { busy = false; }
+  };
+  await pulse();
+  await options.assertIdle(backendPid!);
+  options.assertExclusive(); options.assertHealthy(); await options.assertOwned();
+  return pulse;
+}
+
+/** Fixed installed-pg messages only; never echo arbitrary driver text. */
+export function classifyOwnedPgConnectMessage(error: unknown) {
+  if (!(error instanceof Error)) return null;
+  const message = Object.getOwnPropertyDescriptor(error, "message")?.value;
+  switch (message) {
+    case "timeout expired": return { code: "DB_CONNECTION_TIMEOUT", messageClass: "pg_timeout_expired" };
+    case "Connection terminated unexpectedly": return { code: "DB_CONNECTION_EOF", messageClass: "pg_unexpected_end" };
+    case "Connection terminated": return { code: "DB_CONNECTION_ENDED", messageClass: "pg_requested_end" };
+    case "Connection terminated due to connection timeout": return { code: "DB_CONNECTION_TIMEOUT", messageClass: "pg_legacy_timeout" };
+    default: return null;
+  }
+}
+
+/** Snapshot totals describe this observation window, not the cause of a socket failure. */
+export function describeOwnedPgConnectFailure(error: unknown, elapsedMs: number, before: unknown, after: unknown): Record<string, SafeValue> {
+  const record: Record<string, SafeValue> = {
+    pgMessageClass: classifyOwnedPgConnectMessage(error)?.messageClass ?? "unclassified",
+    elapsedMs: Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs <= Number.MAX_SAFE_INTEGER ? Math.floor(elapsedMs) : null,
+  };
+  for (const [prefix, snapshot] of [["beforeBridge", before], ["afterBridge", after]] as const) {
+    for (const key of ["accepted", "rejected", "failed", "closed", "active", "localProcesses", "stopping"] as const) {
+      let value: SafeValue = null;
+      try {
+        const candidate = snapshot !== null && typeof snapshot === "object" ? (snapshot as Record<string, unknown>)[key] : undefined;
+        if (key === "stopping") { if (typeof candidate === "boolean") value = candidate; }
+        else if (Number.isSafeInteger(candidate) && Number(candidate) >= 0) value = Number(candidate);
+      } catch { /* Diagnostic snapshots cannot replace the original connect failure. */ }
+      record[prefix + key[0].toUpperCase() + key.slice(1)] = value;
+    }
+  }
+  return record;
+}
+
 const sha256 = (value: string | Buffer) => createHash("sha256").update(value).digest("hex");
 const sleep = (ms: number) => new Promise<void>(done => setTimeout(done, ms));
 const object = (value: unknown): JsonObject => {
@@ -184,6 +248,11 @@ export type ReleaseLock = {
   images: Record<ImageService, { reference: string; manifestDigest: string; configDigest: string }>;
   transport: { path: string; sha256: string };
   applicationMigrationTool: ApplicationMigrationTool;
+  applicationMigrationToolLinuxX64: ApplicationMigrationTool;
+};
+
+export type OwnedDatabaseConnection = {
+  query(sql: string, params?: unknown[]): Promise<QueryResult>;
 };
 
 export type OwnedLocalHandle = {
@@ -196,6 +265,11 @@ export type OwnedLocalHandle = {
     databaseContainerId: string;
   };
   query(sql: string, params?: unknown[]): Promise<QueryResult>;
+  renewDatabaseControlConnection(): Promise<void>;
+  generateDatabaseTypes(): ReturnType<typeof generateOwnedDatabaseTypes>;
+  callDataApiRpc(name: string, args: Record<string, unknown>): Promise<Response>;
+  readDataApi(path: string, headers?: HeadersInit, method?: "GET" | "HEAD"): Promise<Response>;
+  withDatabaseConnection<T>(run: (connection: OwnedDatabaseConnection) => Promise<T>): Promise<T>;
   pushApplicationMigrations(request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }): Promise<ApplicationMigrationCliResult>;
   runEntitySeoBackfill(request: { mode: "dry-run" | "apply" | "verify"; entities?: readonly ("topics" | "projects" | "pages")[] }): Promise<EntitySeoBackfillReport>;
   preparePublicVerification(): Promise<PublicFixtureReadiness>;
@@ -286,6 +360,8 @@ export function readReleaseLock(lockPath: string): ReleaseLock {
   requireThat(value.schemaVersion === 1 && object(value.release).commit === RELEASE_COMMIT, "UNAPPROVED_RELEASE", "provenance");
   const lock = value as unknown as ReleaseLock;
   assertApplicationMigrationTool(lock.applicationMigrationTool);
+  selectApplicationMigrationTool(lock, "win32", "x64");
+  selectApplicationMigrationTool(lock, "linux", "x64");
   requireThat(Array.isArray(lock.files) && lock.files.length > 0
     && lock.release.sourceBaseUrl === `https://raw.githubusercontent.com/supabase/supabase/${RELEASE_COMMIT}/`, "INCOMPLETE_RELEASE_LOCK", "provenance");
   requireThat(Object.keys(lock.images).sort().join(",") === [...IMAGE_SERVICES].sort().join(","), "INVALID_IMAGE_SET", "provenance");
@@ -349,12 +425,16 @@ export type IsolatedSupabaseOptions = {
   failureInjection?: "before-handoff";
   cleanupOnly?: boolean;
   abruptRecovery?: {
+    artifactLayout?: "nested-runtime" | "direct-runner-argument";
+    baselineTransition?: RecoveryBaselineTransition;
     runnerPath: string;
     runnerArgument: string;
     runnerSha256: string;
     intentSha256: string;
     ownedResourcesSha256: string;
     postCreateBaselineSha256: string;
+    /** Existing terminal failure is preserved and hash-bound; absence is required only without this option. */
+    terminalFailure?: { failureSha256: string; cleanupSha256: string; resultSha256: string };
   };
   handoff?: (handle: OwnedLocalHandle) => Promise<unknown>;
 };
@@ -409,6 +489,25 @@ const NETWORK_FORMAT = '{"id":{{json .Id}},"name":{{json .Name}},"createdAt":{{j
 type Inventory = { containers: JsonObject[]; volumes: JsonObject[]; networks: JsonObject[]; imageIds: string[] };
 type CapturedResource = { identity: OwnedResourceIdentity; service?: Service };
 
+/** Only the observed terminal client disconnect plus failed resource inspection admits this recovery form. */
+export function assertTerminalRecoveryFailure(input: {
+  expectedRunId: string; failure: unknown; cleanup: unknown; result: unknown;
+}) {
+  const failure = object(input.failure), cleanup = object(input.cleanup), result = object(input.result);
+  requireThat(/^[a-f0-9]{32}$/.test(input.expectedRunId)
+    && failure.stage === "application-handoff" && failure.code === "APPLICATION_CLIENT_DISCONNECTED"
+    && failure.rawErrorRetained === false
+    && cleanup.status === "blocked" && cleanup.code === "COMMAND_TIMEOUT"
+    && cleanup.stage === "volume-inspect" && cleanup.complete === false
+    && result.status === "needs_attention" && result.runId === input.expectedRunId
+    && result.releaseCommit === RELEASE_COMMIT && result.platformReady === true
+    && result.applicationHandoffRequested === true && result.applicationHandoffComplete === false
+    && result.failureInjection === null && result.retainedProofsReexecuted === false
+    && canonical(result.failure) === canonical({ code: failure.code, stage: failure.stage })
+    && canonical(result.cleanup) === canonical({ status: "blocked", code: cleanup.code }),
+  "UNAPPROVED_TERMINAL_FAILURE_RECOVERY", "cleanup-preflight");
+}
+
 export function assertAbruptRecoveryEvidence(input: {
   intent: JsonObject; owned: unknown; baseline: JsonObject; expectedRunId: string;
   matchedRunnerCount: number; unreadableNodeCount: number;
@@ -442,15 +541,64 @@ export function assertAbruptRecoveryEvidence(input: {
   }
 }
 
+export type RecoveryBaselineTransition = {
+  priorOperationalSha256: string;
+  currentOperationalSha256: string;
+  reason: "observed-pre-recovery-inventory-change";
+};
+
+export function assertAbruptRecoveryBaseline(priorSha256: string, currentSha256: string,
+  transition?: RecoveryBaselineTransition): { historicalBaselineUnchanged: boolean; baselineChangedBeforeRecovery: boolean } {
+  if (!transition) {
+    requireThat(priorSha256 === currentSha256, "PRIOR_BASELINE_CHANGED", "cleanup-preflight");
+    return { historicalBaselineUnchanged: true, baselineChangedBeforeRecovery: false };
+  }
+  requireThat(transition.reason === "observed-pre-recovery-inventory-change"
+    && /^[a-f0-9]{64}$/.test(transition.priorOperationalSha256)
+    && /^[a-f0-9]{64}$/.test(transition.currentOperationalSha256)
+    && transition.priorOperationalSha256 === priorSha256
+    && transition.currentOperationalSha256 === currentSha256 && priorSha256 !== currentSha256,
+  "UNBOUND_RECOVERY_BASELINE_TRANSITION", "cleanup-preflight");
+  return { historicalBaselineUnchanged: false, baselineChangedBeforeRecovery: true };
+}
+
+export function assertRecoveryCurrentInventory(expectedSha256: string | undefined, current: Inventory, projectName: string): void {
+  if (expectedSha256 === undefined) return;
+  const unowned: Inventory = { ...current };
+  for (const key of ["containers", "volumes", "networks"] as const) {
+    unowned[key] = current[key].filter(row => object(row.labels ?? {})[LABEL_RUN] !== projectName);
+  }
+  requireThat(sha256(canonical(unowned)) === expectedSha256, "RECOVERY_CURRENT_INVENTORY_CHANGED", "cleanup");
+}
+
+export function assertRecoveryCleanupAuthorized(recoveryRequested: boolean, recoveryAuthorized: boolean): void {
+  requireThat(!recoveryRequested || recoveryAuthorized, "RECOVERY_CLEANUP_NOT_AUTHORIZED", "cleanup");
+}
+
+export function assertAbruptRecoveryArtifactLayout(input: {
+  runnerPath: string; runnerArgument: string; artifactDir: string;
+  artifactLayout?: "nested-runtime" | "direct-runner-argument";
+}): void {
+  const layout = input.artifactLayout ?? "nested-runtime";
+  requireThat(layout === "nested-runtime" || layout === "direct-runner-argument",
+    "INVALID_RECOVERY_ARTIFACT_LAYOUT", "cleanup-preflight");
+  requireThat(/^[a-zA-Z0-9_-]+$/.test(input.runnerArgument), "UNBOUND_RECOVERY_RUNNER", "cleanup-preflight");
+  const expected = layout === "nested-runtime"
+    ? resolve(dirname(input.runnerPath), input.runnerArgument, "runtime")
+    : resolve(dirname(input.runnerPath), input.runnerArgument);
+  requireThat(input.artifactDir === expected, "UNBOUND_RECOVERY_RUNNER", "cleanup-preflight");
+}
+
 export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Promise<{ status: "complete"; artifactDir: string }> {
   const lockPath = resolve(options.lockPath);
   requireThat(relative(ROOT, lockPath).startsWith(`scripts${sep}fixtures${sep}`), "LOCK_OUTSIDE_FIXTURES", "preflight");
   const lock = readReleaseLock(lockPath);
+  const applicationTool = options.handoff ? selectApplicationMigrationTool(lock) : lock.applicationMigrationTool;
   if (options.handoff) {
     requireThat(options.cliBinary && isAbsolute(options.cliBinary), "CLI_BINARY_REQUIRED_FOR_HANDOFF", "preflight");
     const binary = resolve(options.cliBinary);
     requireThat(existsSync(binary) && lstatSync(binary).isFile() && !lstatSync(binary).isSymbolicLink()
-      && realpathSync(binary) === binary && sha256(readFileSync(binary)) === lock.applicationMigrationTool.executableSha256,
+      && realpathSync(binary) === binary && sha256(readFileSync(binary)) === applicationTool.executableSha256,
     "CLI_BINARY_DIGEST_MISMATCH", "preflight");
   }
   const artifactDir = resolve(options.artifactDir);
@@ -489,13 +637,21 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       && canonical(priorIntent.images) === canonical(lock.images), "UNAPPROVED_FAILED_CREATION_RECOVERY", "cleanup-preflight");
     if (abruptRecovery) {
       requireThat(process.platform === "win32" && !options.handoff && !options.failureInjection
-        && ["failure.json", "cleanup.json", "result.json"].every(name => !existsSync(resolve(artifactDir, name)))
         && priorIntent.lockSha256 === sha256(readFileSync(lockPath)) && priorIntent.artifacts === artifactDir,
       "AMBIGUOUS_ABRUPT_RECOVERY", "cleanup-preflight");
+      if (abruptRecovery.terminalFailure) {
+        const terminal = abruptRecovery.terminalFailure;
+        assertTerminalRecoveryFailure({ expectedRunId: String(priorIntent.runId),
+          failure: readRecoveryFile("failure.json", terminal.failureSha256),
+          cleanup: readRecoveryFile("cleanup.json", terminal.cleanupSha256),
+          result: readRecoveryFile("result.json", terminal.resultSha256) });
+      } else requireThat(["failure.json", "cleanup.json", "result.json"].every(name => !existsSync(resolve(artifactDir, name))),
+        "AMBIGUOUS_ABRUPT_RECOVERY", "cleanup-preflight");
       const runnerPath = resolve(abruptRecovery.runnerPath), runnerRelative = relative(ROOT, runnerPath).replace(/\\/g, "/");
+      assertAbruptRecoveryArtifactLayout({ runnerPath, runnerArgument: abruptRecovery.runnerArgument, artifactDir,
+        artifactLayout: abruptRecovery.artifactLayout });
       requireThat(/^\.tmp-qa\/[a-zA-Z0-9_./-]+\.(?:mjs|mts)$/.test(runnerRelative)
         && /^[a-zA-Z0-9_-]+$/.test(abruptRecovery.runnerArgument)
-        && artifactDir === resolve(dirname(runnerPath), abruptRecovery.runnerArgument, "runtime")
         && existsSync(runnerPath) && lstatSync(runnerPath).isFile() && !lstatSync(runnerPath).isSymbolicLink()
         && realpathSync(runnerPath) === runnerPath && /^[a-f0-9]{64}$/.test(abruptRecovery.runnerSha256)
         && sha256(readFileSync(runnerPath)) === abruptRecovery.runnerSha256,
@@ -531,7 +687,9 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const dockerHost = options.dockerHost ?? (process.platform === "win32" ? "npipe:////./pipe/dockerDesktopLinuxEngine" : "unix:///var/run/docker.sock");
   requireThat(["npipe:////./pipe/dockerDesktopLinuxEngine", "npipe:////./pipe/docker_engine", "unix:///var/run/docker.sock"].includes(dockerHost), "REMOTE_DOCKER_FORBIDDEN", "preflight");
   let interrupted = false, cleaning = false;
-  const interrupt = () => { interrupted = true; };
+  let cliJobAbort: AbortController | undefined;
+  let cliJob: Promise<ApplicationMigrationCliResult> | undefined;
+  const interrupt = () => { interrupted = true; cliJobAbort?.abort(); };
   const dc = (args: string[], stage: string, extra: { timeout?: number; allowFailure?: boolean } = {}) => {
     requireThat(cleaning || !interrupted, "INTERRUPTED", stage);
     return command(dockerBinary, ["--host", dockerHost, ...args], stage, extra);
@@ -559,6 +717,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const privateEnvPath = resolve(artifactDir, recoveryPrefix + "compose.private.env");
   const originalPrivateEnvPath = resolve(artifactDir, "compose.private.env");
   let recoveryAuthorized = false;
+  let recoveryBaselineState: ReturnType<typeof assertAbruptRecoveryBaseline> | undefined;
+  let recoveryCurrentInventorySha256: string | undefined;
   const removePrivateEnv = () => {
     requireThat(realpathSync(artifactDir) === artifactDir, "ARTIFACT_REPARSE_POINT", "cleanup");
     for (const path of new Set([privateEnvPath, ...(recoveryAuthorized ? [originalPrivateEnvPath] : [])])) {
@@ -576,6 +736,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   const captured: CapturedResource[] = [];
   let handle: OwnedLocalHandle | undefined;
   let appConnection: PgConnection | undefined;
+  const scopedConnections = new Set<PgConnection>();
+  let controlMaintenance = false, controlQueries = 0, pendingScopedConnections = 0;
   let publicJobAbort: AbortController | undefined;
   let publicJob: ReturnType<typeof runOwnedPublicVerification> | undefined;
   let hostBridge: HostBridge | undefined;
@@ -589,7 +751,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       : new IsolatedSupabaseError(typeof error === "object" && error !== null && "code" in error
       && typeof error.code === "string" && (/^[0-9A-Z]{5}$/.test(error.code) || transportCodes.has(error.code)) ? error.code
       : error instanceof Error && ownerTransportCodes.has(error.message) ? error.message
-        : error instanceof Error && error.message === "Connection terminated due to connection timeout" ? "DB_CONNECTION_TIMEOUT" : "PREREQUISITE_OR_OPERATION_FAILED", stage);
+        : error instanceof Error && error.message === "Connection terminated due to connection timeout" ? "DB_CONNECTION_TIMEOUT"
+          : stage === "database-connect" ? classifyOwnedPgConnectMessage(error)?.code ?? "PREREQUISITE_OR_OPERATION_FAILED" : "PREREQUISITE_OR_OPERATION_FAILED", stage);
 
   const inspect = async (kind: "container" | "volume" | "network", id: string): Promise<JsonObject> => {
     requireThat(kind === "volume" ? /^[a-zA-Z0-9_.-]+$/.test(id) : /^[a-f0-9]{64}$/.test(id), "INVALID_RESOURCE_ID", "inventory");
@@ -713,9 +876,24 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
   };
   const connect = async (username: "postgres" | "supabase_admin"): Promise<PgConnection> => {
     await inspectCaptured(serviceResource("db"));
-    const client = new pg.Client({ connectionString: databaseUrl(username), connectionTimeoutMillis: 5000, ssl: false, options: "",
-      statement_timeout: 30000, application_name: OWNER }) as PgConnection;
-    try { await client.connect(); } catch (error) { await client.end().catch(() => undefined); throw asSafeError(error, "database-connect"); }
+    let client: PgConnection | undefined;
+    const bridgeSnapshot = () => { try { return hostBridge?.snapshot() ?? null; } catch { return null; } };
+    const bridgeBefore = bridgeSnapshot(), started = performance.now();
+    try {
+      const connectionTimeoutMillis = hostBridge ? await waitForOwnedDatabaseCapacity(hostBridge) : 5000;
+      client = new pg.Client({ connectionString: databaseUrl(username), connectionTimeoutMillis, ssl: false, options: "",
+        statement_timeout: 30000, application_name: OWNER }) as PgConnection;
+      await client.connect();
+    } catch (error) {
+      const elapsedMs = performance.now() - started, safe = asSafeError(error, "database-connect");
+      const observation = describeOwnedPgConnectFailure(error, elapsedMs, bridgeBefore, bridgeSnapshot());
+      // Preserve the classified original failure even if its optional receipt
+      // cannot be written. This never retries or recovers the failed attempt.
+      try { safeRecord("database-connect-failed", { safeCode: safe.code, ...observation }); }
+      catch { /* The original failed attempt still rejects below. */ }
+      await client?.end().catch(() => undefined);
+      throw safe;
+    }
     return client;
   };
   const readonly = async (sql: string): Promise<QueryResult> => {
@@ -790,7 +968,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     lockSha256: sha256(readFileSync(lockPath)), composeSha256: lock.compose.sha256, images: lock.images,
     sourceHashes: Object.fromEntries(["scripts/lib/isolated-supabase.mts", "scripts/qa-isolated-supabase.mts", "scripts/lib/isolated-public-application.mts", "scripts/lib/isolated-supabase-cli.mts"].map(path => [path, sha256(readFileSync(resolve(ROOT, path)))])),
     ports, artifacts: artifactDir, cleanupOnly: Boolean(priorIntent), priorIntentSha256: priorIntent ? sha256(readFileSync(resolve(artifactDir, "intent.json"))) : null,
-    failureInjection: options.failureInjection ?? null, applicationHandoffRequested: !priorIntent && Boolean(options.handoff) });
+    failureInjection: options.failureInjection ?? null, applicationHandoffRequested: !priorIntent && Boolean(options.handoff),
+    ...(abruptRecovery?.terminalFailure ? { terminalFailureRecovery: abruptRecovery.terminalFailure } : {}) });
   process.on("SIGINT", interrupt);
   process.on("SIGTERM", interrupt);
   try {
@@ -826,7 +1005,15 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       const priorBaseline = recoveryBaseline ?? object(JSON.parse(readFileSync(resolve(artifactDir, "inventory-before.json"), "utf8")));
       recordFile("prior-baseline-comparison.json", { exact: priorBaseline.sha256 === inventoryReceipt(before).sha256,
         priorSha256: priorBaseline.sha256, currentSha256: inventoryReceipt(before).sha256 });
-      requireThat(priorBaseline.sha256 === inventoryReceipt(before).sha256, "PRIOR_BASELINE_CHANGED", "cleanup-preflight");
+      recoveryBaselineState = assertAbruptRecoveryBaseline(String(priorBaseline.sha256), inventoryReceipt(before).sha256,
+        abruptRecovery?.baselineTransition);
+      if (recoveryBaselineState.baselineChangedBeforeRecovery) {
+        recoveryCurrentInventorySha256 = abruptRecovery!.baselineTransition!.currentOperationalSha256;
+        recordFile("recovery-baseline-transition.json", { ...recoveryBaselineState,
+          priorOperationalSha256: priorBaseline.sha256, currentOperationalSha256: recoveryCurrentInventorySha256,
+          reason: abruptRecovery!.baselineTransition!.reason, historicalDriftCause: "unretained",
+          originalReceiptPreserved: true, cleanupAuthorized: false });
+      }
     }
     recordFile("inventory-before.json", inventoryReceipt(before));
     safeRecord("inventory-before", inventoryReceipt(before));
@@ -847,10 +1034,15 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         "RECOVERY_EVIDENCE_CHANGED", "cleanup-preflight");
       created = true;
       recoveryAuthorized = true;
+      if (recoveryCurrentInventorySha256) recordFile("recovery-baseline-transition.json", { ...recoveryBaselineState,
+        priorOperationalSha256: recoveryBaseline!.sha256, currentOperationalSha256: recoveryCurrentInventorySha256,
+        reason: abruptRecovery!.baselineTransition!.reason, historicalDriftCause: "unretained",
+        originalReceiptPreserved: true, cleanupAuthorized: true, originalOwnedResourcesVerified: captured.length });
       recordFile("owned-resources.json", captured);
-      safeRecord(recoveryManifest ? "abrupt-run-cleanup-verified" : "failed-creation-cleanup-verified", {
+      safeRecord(abruptRecovery?.terminalFailure ? "terminal-failure-cleanup-verified" : recoveryManifest ? "abrupt-run-cleanup-verified" : "failed-creation-cleanup-verified", {
         resources: captured.length, sqlExecuted: false, originalEvidencePreserved: true,
-        exactOperationalBaseline: Boolean(recoveryBaseline), originalHostListenersAbsent: true });
+        exactOperationalBaseline: Boolean(recoveryBaseline) && !recoveryBaselineState?.baselineChangedBeforeRecovery,
+        currentOperationalBaselinePinned: Boolean(recoveryCurrentInventorySha256), originalHostListenersAbsent: true });
     } else {
     for (const port of ports) {
       await new Promise<void>((done, reject) => {
@@ -1034,6 +1226,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       appConnection = await connect("postgres");
       const boundConnection = appConnection;
       const applicationClient = observeApplicationClient(boundConnection, () => {
+        cliJobAbort?.abort();
         if (handle) activeHandles.delete(handle);
         safeRecord("application-client-disconnected", { code: "APPLICATION_CLIENT_DISCONNECTED", errorDetailsRetained: false });
       });
@@ -1047,7 +1240,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       // and dry-run/apply sequencing. Neither it nor its credential is exposed.
       const cliContext: ApplicationMigrationCliContext = Object.freeze({ runDirectory: artifactDir,
         host: "127.0.0.1", port: run.pgPort, database: "postgres", password,
-        tool: Object.freeze({ ...lock.applicationMigrationTool }), sourceBinary: resolve(options.cliBinary),
+        tool: Object.freeze({ ...applicationTool }), sourceBinary: resolve(options.cliBinary),
+        generatorDocker: Object.freeze({ binary: dockerBinary, host: dockerHost, databaseContainerId: serviceResource("db").identity.id }),
         assertOwned: async () => {
           assertOwnedLocalHandle(handle);
           applicationClient.assertHealthy();
@@ -1068,20 +1262,142 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       let acceptedAdminFixtureHash: string | undefined;
       handle = Object.freeze({ identity: Object.freeze({ runId, projectName: run.projectName, database: "postgres" as const, host: "127.0.0.1" as const, port: run.pgPort, databaseContainerId: serviceResource("db").identity.id }),
         query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
-          assertOwnedLocalHandle(handle);
-          applicationClient.assertHealthy();
-          await inspectCaptured(serviceResource("db"));
+          requireThat(!controlMaintenance, "CONTROL_CONNECTION_MAINTENANCE", "application-query");
+          controlQueries++;
           try {
+            assertOwnedLocalHandle(handle);
+            applicationClient.assertHealthy();
+            await inspectCaptured(serviceResource("db"));
             const result = await applicationLease.client.query(sql, params);
             return Array.isArray(result) ? result[result.length - 1] as QueryResult : result;
           } catch (error) { throw asSafeError(error, "application-query"); }
+          finally { controlQueries--; }
+        },
+        renewDatabaseControlConnection: async (): Promise<void> => {
+          requireThat(!controlMaintenance && controlQueries === 0 && pendingScopedConnections === 0 && scopedConnections.size === 0 && !publicJob,
+            "CONTROL_CONNECTION_NOT_IDLE", "application-query");
+          controlMaintenance = true;
+          try {
+            await cliContext.assertOwned();
+            const pid = Number((await applicationLease.client.query("select pg_backend_pid() pid")).rows[0].pid);
+            const probe = await connect("postgres");
+            try {
+              const state = (await probe.query("select state from pg_stat_activity where pid=$1", [pid])).rows[0]?.state;
+              requireThat(state === "idle", "CONTROL_TRANSACTION_OPEN", "application-query");
+            } finally { await probe.end(); }
+            await applicationLease.renewIfDue(true, true);
+            await cliContext.assertOwned();
+            safeRecord("verification-control-lease-boundary", { idleVerified: true, scopedSessions: 0,
+              transportLifetimeUnchanged: true, failedTransportRecovered: false });
+          } finally { controlMaintenance = false; }
+        },
+        generateDatabaseTypes: () => {
+          requireThat(!cliJob, "CLI_CONTROL_BUSY", "application-cli");
+          return generateOwnedDatabaseTypes(cliContext);
+        },
+        callDataApiRpc: async (name: string, args: Record<string, unknown>): Promise<Response> => {
+          await publicContext.assertOwned();
+          requireThat(typeof name === "string" && /^[a-z][a-z0-9_]*$/u.test(name)
+            && args !== null && typeof args === "object" && !Array.isArray(args),
+            "INVALID_DATA_API_RPC", "data-api-rpc");
+          const body = JSON.stringify(args);
+          requireThat(Buffer.byteLength(body, "utf8") <= 1_000_000, "DATA_API_RPC_BODY_LIMIT", "data-api-rpc");
+          const response = await fetch("http://127.0.0.1:" + run.apiPort + "/rest/v1/rpc/" + name, {
+            method: "POST", body, headers: { apikey: serviceKey, Authorization: "Bearer " + serviceKey,
+              "Content-Type": "application/json" }, redirect: "error", signal: AbortSignal.timeout(30_000),
+          });
+          await publicContext.assertOwned();
+          return response;
+        },
+        readDataApi: async (path: string, headers?: HeadersInit, method: "GET" | "HEAD" = "GET"): Promise<Response> => {
+          await publicContext.assertOwned();
+          requireThat(method === "GET" || method === "HEAD", "INVALID_DATA_API_METHOD", "data-api-read");
+          const origin = "http://127.0.0.1:" + run.apiPort;
+          requireThat(typeof path === "string" && path.startsWith("/rest/v1/") && !path.includes("\\"),
+            "INVALID_DATA_API_PATH", "data-api-read");
+          const target = new URL(path, origin);
+          requireThat(target.origin === origin && /^\/rest\/v1\/[a-z][a-z0-9_]*$/u.test(target.pathname)
+            && !target.hash, "INVALID_DATA_API_PATH", "data-api-read");
+          const safeHeaders = new Headers({ apikey: serviceKey, Authorization: "Bearer " + serviceKey });
+          for (const [key, value] of new Headers(headers)) {
+            requireThat(["accept", "prefer", "range", "range-unit"].includes(key),
+              "INVALID_DATA_API_HEADER", "data-api-read");
+            safeHeaders.set(key, value);
+          }
+          const response = await fetch(target, { method, headers: safeHeaders,
+            redirect: "error", signal: AbortSignal.timeout(15_000) });
+          await publicContext.assertOwned();
+          return response;
+        },
+        withDatabaseConnection: async <T,>(run: (connection: OwnedDatabaseConnection) => Promise<T>): Promise<T> => {
+          requireThat(!controlMaintenance, "CONTROL_CONNECTION_MAINTENANCE", "application-query");
+          pendingScopedConnections++;
+          let client: PgConnection;
+          try {
+            await cliContext.assertOwned();
+            client = await connect("postgres");
+            scopedConnections.add(client);
+          } finally { pendingScopedConnections--; }
+          let open = true;
+          const observer = observeApplicationClient(client, () => { open = false; });
+          const connection: OwnedDatabaseConnection = Object.freeze({
+            query: async (sql: string, params?: unknown[]): Promise<QueryResult> => {
+              requireThat(open, "EXPIRED_DATABASE_CONNECTION", "application-query");
+              await cliContext.assertOwned(); observer.assertHealthy();
+              try {
+                const result = await client.query(sql, params);
+                await cliContext.assertOwned(); observer.assertHealthy();
+                return Array.isArray(result) ? result[result.length - 1] as QueryResult : result;
+              } catch (error) { throw asSafeError(error, "application-query"); }
+            },
+          });
+          try {
+            return await observer.run(async () => {
+              const result = await run(connection);
+              await cliContext.assertOwned(); observer.assertHealthy();
+              return result;
+            });
+          } finally {
+            open = false;
+            try { await client.end(); } finally { scopedConnections.delete(client); }
+          }
         },
         pushApplicationMigrations: async (request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }) => {
           assertOwnedLocalHandle(handle);
-          return pushApplicationMigrations(cliContext, request);
+          requireThat(!cliJob && !controlMaintenance && controlQueries === 0 && pendingScopedConnections === 0
+            && scopedConnections.size === 0 && !publicJob, "CLI_CONTROL_NOT_IDLE", "application-cli");
+          controlMaintenance = true;
+          const abort = new AbortController();
+          cliJobAbort = abort;
+          const client = applicationLease.client;
+          // Reserve synchronously before any await. The outer lifecycle retains
+          // this promise even if the application observer wins its failure race.
+          const job = Promise.resolve().then(async () => {
+            const pulse = await createApplicationCliControlPulse(client, {
+              assertExclusive: () => requireThat(controlMaintenance && cliJob === job && applicationLease.client === client
+                && controlQueries === 0 && pendingScopedConnections === 0 && scopedConnections.size === 0 && !publicJob
+                && !abort.signal.aborted, "CLI_CONTROL_NOT_IDLE", "application-cli"),
+              assertHealthy: () => applicationClient.assertHealthy(), assertOwned: () => cliContext.assertOwned(),
+              assertIdle: async pid => {
+                const probe = await connect("postgres");
+                try {
+                  const state = (await probe.query("select state from pg_stat_activity where pid=$1", [pid])).rows[0]?.state;
+                  requireThat(state === "idle", "CONTROL_TRANSACTION_OPEN", "application-cli");
+                } finally { await probe.end(); }
+              },
+            });
+            return pushApplicationMigrations(cliContext, request, { signal: abort.signal, pulse: async () => {
+              try { await pulse(); }
+              catch (error) { throw new IsolatedSupabaseCliError(asSafeError(error, "application-cli").code); }
+            } });
+          });
+          cliJob = job;
+          try { return await job; }
+          finally { if (cliJob === job) { cliJob = undefined; cliJobAbort = undefined; controlMaintenance = false; } }
         },
         runEntitySeoBackfill: async (request: { mode: "dry-run" | "apply" | "verify"; entities?: readonly ("topics" | "projects" | "pages")[] }) => {
           assertOwnedLocalHandle(handle);
+          requireThat(!cliJob, "CLI_CONTROL_BUSY", "application-cli");
           return runOwnedEntitySeoBackfill(cliContext, request);
         },
         preparePublicVerification: async () => {
@@ -1115,6 +1431,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
         runPublicVerification: async (request: PublicGateRequest) => {
           assertOwnedLocalHandle(handle);
           requireThat(!publicJob, "PUBLIC_JOB_ALREADY_STARTED", "public-verification");
+          requireThat(!controlMaintenance && !cliJob, "CLI_CONTROL_BUSY", "public-verification");
           publicJobAbort = new AbortController();
           let heartbeatActive = true, heartbeatBusy = false;
           let pulse = Promise.resolve();
@@ -1129,7 +1446,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               try {
                 // This timer has no application transaction or concurrent SQL
                 // operation: only this serialized ownership/heartbeat pulse.
-                await applicationLease.renewIfDue(request.selection==="admin-interactions");
+                await applicationLease.renewIfDue(request.selection==="admin-interactions" || request.selection==="admin-adoption");
                 await publicContext.assertOwned();
                 await handle!.query("select 1 as owned_public_job_heartbeat");
                 safeRecord("public-job-heartbeat", { active: true });
@@ -1143,7 +1460,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           try { const result = await publicJob; if (heartbeatFailure) throw heartbeatFailure; return result; }
           catch(error) {throw heartbeatFailure ?? error;}
           finally { heartbeatActive = false; clearInterval(timer); await pulse;
-            if (request.selection === "admin-interactions") publicJob = undefined; }
+            if (request.selection === "admin-interactions" || request.selection === "admin-adoption") publicJob = undefined; }
         }, record: safeRecord });
       activeHandles.add(handle);
       const boundHandle = handle;
@@ -1155,10 +1472,14 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
     primaryFailure = asSafeError(error, currentStage);
     recordFile("failure.json", { stage: primaryFailure.stage, code: primaryFailure.code, rawErrorRetained: false });
   } finally {
+    cliJobAbort?.abort();
+    if (cliJob) await cliJob.catch(() => undefined);
     publicJobAbort?.abort();
     if (publicJob) await publicJob.catch(() => undefined);
     cleaning = true;
     if (handle) activeHandles.delete(handle);
+    await Promise.all([...scopedConnections].map(client => client.end().catch(() => undefined)));
+    scopedConnections.clear();
     if (appConnection) await appConnection.end().catch(() => undefined);
     if (hostBridge) {
       try {
@@ -1171,13 +1492,18 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       }
     }
     try {
+      assertRecoveryCleanupAuthorized(Boolean(priorIntent), recoveryAuthorized);
       if (created) {
         // Discovery also handles a create operation that completed after its
         // client timed out. Every discovered resource must pass the same full
         // run/compose/image/mount checks before it can become cleanup-owned.
         for (const [path, expectedHash] of recoveryFiles) requireThat(sha256(readFileSync(path)) === expectedHash,
           "RECOVERY_EVIDENCE_CHANGED", "cleanup");
-        if (recoveryAuthorized) assertOriginalsUnchanged(await inventory());
+        if (recoveryAuthorized) {
+          const current = await inventory();
+          assertOriginalsUnchanged(current);
+          assertRecoveryCurrentInventory(recoveryCurrentInventorySha256, current, run.projectName);
+        }
         await discoverOwned();
         for (const item of captured) await inspectCaptured(item);
         for (const item of captured.filter(row => row.identity.kind === "container").reverse()) {
@@ -1201,6 +1527,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       removePrivateEnv();
       if (before) {
         const after = await inventory(); assertOriginalsUnchanged(after);
+        assertRecoveryCurrentInventory(recoveryCurrentInventorySha256, after, run.projectName);
         recordFile("inventory-after.json", inventoryReceipt(after));
       }
       const releasedPorts: number[] = [];
@@ -1219,7 +1546,10 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
       }
       recordFile("cleanup.json", { status: cleanupFailure ? "blocked" : "complete", code: cleanupFailure?.code ?? null,
         ownedResourcesRemoved: captured.length, remainingOwnedResources: 0,
-        originalResourcesUnchanged: Boolean(before), privateEnvRemoved: !existsSync(privateEnvPath)
+        originalResourcesUnchanged: Boolean(before) && !recoveryBaselineState?.baselineChangedBeforeRecovery,
+        ...(recoveryBaselineState ? { ...recoveryBaselineState,
+          ...(recoveryCurrentInventorySha256 ? { unchangedDuringRecovery: true } : {}) } : {}),
+        privateEnvRemoved: !existsSync(privateEnvPath)
           && (!recoveryAuthorized || !existsSync(originalPrivateEnvPath)), hostPortsReleased: releasedPorts, oldImagesRemoved: 0, engineStopped: false });
     } catch (error) {
       cleanupFailure = asSafeError(error, "cleanup");

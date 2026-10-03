@@ -1,0 +1,219 @@
+{
+  "status": "INTENTIONAL_STOP_AFTER_HARD_OPEN3_BEFORE_HELD_FINAL",
+  "date": "2026-10-03",
+  "baselineHead": "bcdbfd25e7fd1712f27ed75b894d872333efb147",
+  "verificationHead": "491a4e35cf5dcb00644472afd27c380e6e6dd313",
+  "pr": {
+    "number": 186,
+    "url": "https://github.com/ahmedredasadan100/venesia-website/pull/186",
+    "requiredState": "OPEN_DRAFT",
+    "ready": false,
+    "merge": false,
+    "autoMerge": false
+  },
+  "counts": {
+    "qualified": 73,
+    "notApplicable": 1,
+    "hardOpen": 0,
+    "held": 37,
+    "total": 111,
+    "open": 37
+  },
+  "globalClosed": false,
+  "progress": {
+    "path": ".tmp-qa/core-final-closure/final-accounting-interim/progress-73-retained-1-na-0-hard-37-held-after-hard-open-2026-10-03.json",
+    "sha256": "f7c1d1a25c334dbfb54c3e106087e600690b290b5a4439b4c580f10cbbe86815"
+  },
+  "hardOpenQueue": {
+    "path": ".tmp-qa/core-final-closure/final-accounting-interim/hard-open-queue-after-closure-2026-10-03.json",
+    "sha256": "d94962fb249a173db7db5c102182e0bd32b07a21de5b4d19ce130393a9827caf"
+  },
+  "reconciliation": {
+    "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/reconciliation.json",
+    "sha256": "5be7efc295bc6cb1a106a0c282253d00f677e2baa2b507c05edf364c89b58297"
+  },
+  "qualifications": {
+    "cardsBreadcrumb": {
+      "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/qualification-adoption/browser-r143-qualified-observations.json",
+      "sha256": "bbbd68678e306d3ab7fbdc85d78df9088f949115b9abbcf6f935c64896683731"
+    },
+    "hero": {
+      "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/hero-offline/hero-r139-qualified-observation.json",
+      "sha256": "66d48a00c53928f306610735cba33c5ac83202245458c7616a686ce1e11bc450"
+    }
+  },
+  "cases": [
+    {
+      "id": "core-template-controls-cards",
+      "status": "QUALIFIED_NEW_R143_OBSERVATION",
+      "classification": "Verification completion defect exposed by observed Chromium transport reporting anomaly",
+      "rootCause": "The old verifier used transport terminal success as a necessary proxy for application completion; original-reader EOF and canonical decoded results now prove completion despite measured no-store ERR_ABORTED.",
+      "owner": "scripts/fixtures/admin-core-template-controls-journeys.mjs + admin-core-template-controls-contract.mjs + existing joined collector",
+      "productBug": false,
+      "legs": 8,
+      "reads": 16,
+      "originalEof": 16,
+      "retainedAborts": 4,
+      "nativePhases": [
+        {
+          "phase": "baseline",
+          "auditCount": 0,
+          "status": "pass"
+        },
+        {
+          "phase": "draft",
+          "auditCount": 0,
+          "status": "pass"
+        },
+        {
+          "phase": "negative",
+          "auditCount": 0,
+          "status": "pass"
+        },
+        {
+          "phase": "saved",
+          "auditCount": 1,
+          "status": "pass"
+        },
+        {
+          "phase": "reloaded",
+          "auditCount": 0,
+          "status": "pass"
+        }
+      ],
+      "nativeSavedReloadedSameHash": true,
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/qualification-adoption/browser-r143-qualified-observations.json",
+        "sha256": "bbbd68678e306d3ab7fbdc85d78df9088f949115b9abbcf6f935c64896683731"
+      },
+      "originalFailuresUnchanged": [
+        123,
+        124,
+        125
+      ],
+      "historicalMissingEofRetrospectivelyInferred": false
+    },
+    {
+      "id": "core-template-controls-breadcrumb",
+      "status": "QUALIFIED_NEW_R143_OBSERVATION",
+      "classification": "Verification completion defect exposed by observed Chromium transport reporting anomaly",
+      "rootCause": "The old verifier used transport terminal success as a necessary proxy for application completion; original-reader EOF and canonical decoded results now prove completion despite measured no-store ERR_ABORTED.",
+      "owner": "scripts/fixtures/admin-core-template-controls-journeys.mjs + admin-core-template-controls-contract.mjs + existing joined collector",
+      "productBug": false,
+      "legs": 8,
+      "reads": 16,
+      "originalEof": 16,
+      "retainedAborts": 5,
+      "nativePhases": [
+        {
+          "phase": "baseline",
+          "auditCount": 0,
+          "status": "pass"
+        },
+        {
+          "phase": "draft",
+          "auditCount": 0,
+          "status": "pass"
+        },
+        {
+          "phase": "negative",
+          "auditCount": 0,
+          "status": "pass"
+        },
+        {
+          "phase": "saved",
+          "auditCount": 1,
+          "status": "pass"
+        },
+        {
+          "phase": "reloaded",
+          "auditCount": 0,
+          "status": "pass"
+        }
+      ],
+      "nativeSavedReloadedSameHash": true,
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/qualification-adoption/browser-r143-qualified-observations.json",
+        "sha256": "bbbd68678e306d3ab7fbdc85d78df9088f949115b9abbcf6f935c64896683731"
+      },
+      "originalFailuresUnchanged": [
+        123,
+        124,
+        125
+      ],
+      "historicalMissingEofRetrospectivelyInferred": false
+    },
+    {
+      "id": "core-presentation-controls-hero",
+      "status": "QUALIFIED_ADDITIVE_ORIGINAL139",
+      "classification": "Verification",
+      "rootCause": "Broad POST count conflated one acknowledged Hero save with one exact same-build readonly resolveAdminLinkAjax request.",
+      "rawSaveIntervalPosts": 2,
+      "mutationCapableRequests": 1,
+      "readOnlyPosts": 1,
+      "unknownPosts": 0,
+      "originalNativeRecords": 19,
+      "renderedProofs": 7,
+      "originalRunStatus": "failed",
+      "originalSourceHead": "2fef037a41da14edadf0833a0314515461f27cd8",
+      "qualificationHead": "491a4e35cf5dcb00644472afd27c380e6e6dd313",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/hero-offline/hero-r139-qualified-observation.json",
+        "sha256": "66d48a00c53928f306610735cba33c5ac83202245458c7616a686ce1e11bc450"
+      }
+    }
+  ],
+  "checks": {
+    "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/checks-summary.json",
+    "sha256": "b0ef7c5eba10281be073304a81a38edab6a1bab7dd706f7906fc6ac01769f091"
+  },
+  "cleanup": {
+    "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/final-cleanup.json",
+    "sha256": "d852318b9760c0f84b2d93ce13ebe0fa5cacf46b2a3679e408f56d534b52d418"
+  },
+  "historicalFrozenAuthority": {
+    "path": ".tmp-qa/core-final-closure/final-accounting-interim/hard-open-queue-after139.json",
+    "sha256": "b356bf306d6b1925f7f1b9eb1d12737a17f05d30478c9607caeae28960a0efb5"
+  },
+  "historicalFailuresUnchanged": true,
+  "productFilesChanged": [],
+  "sourceImpact": {
+    "path": ".tmp-qa/core-final-closure/hard-open-closure-2026-10-03/r143-source-impact.json",
+    "sha256": "0b5c3d9ac9f8d60f5e11550ce0ec655a99391245466db64d40b803a06318a25e"
+  },
+  "automaticCoverage": [],
+  "ownerAlerts": {
+    "newOwner": false,
+    "ownerChanged": false,
+    "contractDrift": false,
+    "secondSourceOfTruth": false,
+    "parallelImplementation": false,
+    "localPatch": false,
+    "workaround": false
+  },
+  "boundaries": {
+    "held37Started": false,
+    "final52Started": false,
+    "finalQualityGateStarted": false,
+    "finalClosureGateStarted": false,
+    "migrationReadinessStarted": false,
+    "productionMutated": false,
+    "productionVerified": false,
+    "productionDeployed": false,
+    "localhost3000Used": false,
+    "migrationFilesChanged": false,
+    "migration113To116WorkStarted": false,
+    "existingIsolatedCurrentCorpusBootstrapUsed": true
+  },
+  "productionHistoricalOnly": {
+    "migrationHistory": 112,
+    "repositoryMigrationsPending": [
+      113,
+      114,
+      115,
+      116
+    ],
+    "freshProof": false
+  },
+  "next": "STOP. Await a separate user instruction for Held37 and the bounded Final52 work; then Final Closure only after all required verification passes; Migration Readiness is a later separately authorized gate."
+}

@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidateCommittedPageBlockResult } from "./helpers";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { buildCmsAuditAction } from "../../../../../lib/admin/audit/cms-audit-actions";
 import { recordCmsAdminAudit } from "../../../../../lib/admin/audit-log";
@@ -9,7 +11,6 @@ import { MEDIA_SIDEBAR_TEMPLATE_TABLE } from "../../../../../lib/media-sidebar-m
 import type { TablesInsert } from "../../../../../lib/database.types";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
 import type { PageModuleTemplateTable } from "../../../../../lib/page-blocks/block-module-registry";
-import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import {
   cleanText,
   moduleEditHref,
@@ -61,6 +62,7 @@ export async function duplicateAssignedPageModule(formData: FormData): Promise<P
   if (error || !source) return failure(error?.message ?? "القالب غير موجود.");
   const provisionalIdentity = `duplicate:${templateId}:${crypto.randomUUID()}`;
 
+  let committedResult: PageBlockActionResult;
   try {
     const coordinated = await coordinateMediaReferenceEntityMutation({
       domainKey: owner,
@@ -126,8 +128,7 @@ export async function duplicateAssignedPageModule(formData: FormData): Promise<P
         console.error("Hero template duplicate audit failed after commit", auditError);
       }
     }
-    await revalidatePageBlocksPath(pageId);
-    return success({
+    committedResult = success({
       message: `${kind === "hero" ? "تم نسخ قالب Hero دون إنشاء ربط نشط ثانٍ." : "تم نسخ القالب والربط ذريًا."}${auditWarning ? " تعذر تسجيل حدث التدقيق؛ راجع السجل التشخيصي." : ""}`,
       redirectTo: redirectFor(
         kind,
@@ -139,4 +140,5 @@ export async function duplicateAssignedPageModule(formData: FormData): Promise<P
   } catch (caught) {
     return failure(caught instanceof Error ? caught.message : "تعذر إكمال النسخ.");
   }
+  return revalidateCommittedPageBlockResult(pageId, committedResult);
 }

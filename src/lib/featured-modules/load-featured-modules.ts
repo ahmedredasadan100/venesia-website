@@ -1,6 +1,7 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
+import { cachePublicRead } from "../cache/public-cache-generation";
+
 import { cache } from "react";
 
 import type { Json } from "../database.types";
@@ -44,7 +45,7 @@ export const loadFeaturedModuleStateForPageSlug = cache(
   ): Promise<FeaturedModuleLoadResult> {
     let cachedState: FeaturedModuleLoadResult;
     try {
-      cachedState = await unstable_cache(
+      cachedState = await cachePublicRead(
         async () => {
           const state = await queryFeaturedModuleStateForPageSlug(pageSlug);
           if (state.hasCompositionError) throw new FeaturedReadFailure(state);

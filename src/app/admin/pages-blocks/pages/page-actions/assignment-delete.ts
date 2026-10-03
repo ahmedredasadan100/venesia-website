@@ -1,8 +1,9 @@
 "use server";
 
+import { revalidateCommittedPageBlockResult } from "./helpers";
+
 import { requireAdminSession } from "../../../../../lib/admin/auth/require-admin-session";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
-import { revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { cleanText, parseNumber } from "../../../../../lib/page-blocks/admin-utils";
 import { databaseAssignmentKind, failure, mutatePageComposition, success } from "./helpers";
 
@@ -23,6 +24,5 @@ export async function detachPageBlockAssignment(formData: FormData): Promise<Pag
       error instanceof Error ? error.message : "تعذرت إزالة الربط من الصفحة.",
     );
   }
-  await revalidatePageBlocksPath(pageId);
-  return success();
+  return revalidateCommittedPageBlockResult(pageId, success());
 }

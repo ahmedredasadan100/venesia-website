@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import ts from "typescript";
 
 import {
   INTEGRATION_APP_CONFIGURATION_DEFINITIONS,
@@ -97,6 +99,22 @@ for (const action of ["Created", "Replaced", "Removed", "TestPassed", "TestFaile
 assert.match(route, /requireAdminApi/);
 assert.match(route, /requireAdminSession/);
 assert.match(route, /sameOriginMutation/);
+const routeAst = ts.createSourceFile("route.ts", route, ts.ScriptTarget.Latest, true);
+const originOwners = routeAst.statements.filter(ts.isFunctionDeclaration).filter(node => node.name?.text === "sameOriginMutation");
+assert.equal(originOwners.length, 1);
+const originCode = ts.transpileModule(originOwners[0].getText(routeAst), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+const sameOrigin = new Function("Request", "process", originCode + ";return sameOriginMutation;")(Request, { env: { NODE_ENV: "production" } }) as (request: Request) => boolean;
+const { NextRequest } = createRequire(import.meta.url)("next/server") as typeof import("next/server");
+for (const target of ["http://127.0.0.1:54321", "http://localhost:54321", "http://[::1]:54321", "https://owned.example"]) {
+  const request = (origin: string, site = "same-origin", host = "untrusted.invalid") => new NextRequest(target + "/api/admin/integrations/server-configuration/google", { method: "POST", headers: { origin, "sec-fetch-site": site, host, "x-forwarded-host": "untrusted.invalid" } });
+  assert.equal(sameOrigin(request(target)), true, "Exact original request origin must pass, including installed Next normalization.");
+  for (const origin of ["https://foreign.invalid", target.replace(":54321", ":54322"), target.replace("http:", "https:")].filter(value => value !== target)) assert.equal(sameOrigin(request(origin)), false);
+  assert.equal(sameOrigin(request(target, "cross-site")), false);
+  assert.equal(sameOrigin(request("null")), false);
+  assert.equal(sameOrigin(new NextRequest(target + "/api/admin/integrations/server-configuration/google", { method: "POST" })), false);
+}
+assert.equal(sameOrigin(new NextRequest("http://127.0.0.1:54321/api/test", { method: "POST", headers: { origin: "http://localhost:54321", "sec-fetch-site": "same-origin" } })), false, "Loopback aliases are different browser origins.");
+assert.equal(sameOrigin(new Request("https://owned.example/api/test", { method: "POST", headers: { origin: "https://owned.example", "sec-fetch-site": "same-origin" } })), true);
 assert.match(route, /z\.discriminatedUnion/);
 assert.match(route, /private, no-store/);
 assert.doesNotMatch(route, /console\.|accessToken|refreshToken|secretId/);

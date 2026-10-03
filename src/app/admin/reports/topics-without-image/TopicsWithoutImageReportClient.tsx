@@ -17,8 +17,6 @@ import {
   AdminTablePagination,
   type AdminRowActionsCapability,
 } from "../../../../components/admin/ui";
-import { mapAdminActionResultToFeedback } from "../../../../lib/admin/admin-action-feedback";
-import { adminActionFailure } from "../../../../lib/admin/admin-action-result";
 import {
   adminContentTopicPath,
 } from "../../../../lib/admin/content-routes";
@@ -301,18 +299,6 @@ export default function TopicsWithoutImageReportClient({
     Boolean(controller.query.search) ||
     controller.query.filters.status !== "all" ||
     controller.query.filters.contentType !== "all";
-  const initialFeedback = useMemo(
-    () =>
-      controller.error
-        ? mapAdminActionResultToFeedback(
-            adminActionFailure(
-              "تعذر تحميل تقرير الموضوعات بلا صورة",
-              controller.error.message,
-            ),
-          )
-        : null,
-    [controller.error],
-  );
 
   return (
     <AdminEntityListSurface consumer="topics-without-image">
@@ -329,6 +315,8 @@ export default function TopicsWithoutImageReportClient({
         >
           listId="topics-without-image-table"
           queryPending={controller.queryPending}
+          queryError={controller.error?.message}
+          onQueryRetry={() => { void controller.retry(); }}
           sizingStrategy={{ mode: "flexible", columnKey: "content_type" }}
           toolbar={{
             basePath: "/admin/reports/topics-without-image",
@@ -361,7 +349,6 @@ export default function TopicsWithoutImageReportClient({
           enableColumnManagement
           enableSelection={false}
           scrollLabel="جدول الموضوعات بلا صورة"
-          mapResultToFeedback={mapAdminActionResultToFeedback}
           sort={{
             key: controller.query.sort.field,
             direction: controller.query.sort.direction,
@@ -377,7 +364,6 @@ export default function TopicsWithoutImageReportClient({
             },
           }}
           actionsColumnWidth={ADMIN_DATA_GRID_ROW_ACTIONS_COLUMN_WIDTH}
-          initialFeedback={initialFeedback}
           emptyState={{
             mode:
               controller.result.pagination.totalRows === 0 && !hasFilters

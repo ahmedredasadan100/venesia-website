@@ -8,6 +8,7 @@ import {
   useAdminFeedback,
 } from "../AdminFeedbackProvider";
 import MediaSynchronizationWarningNotice from "../media/MediaSynchronizationWarningNotice";
+import AdminCardsItemsField from "./editors/AdminCardsItemsField";
 import {
   ADMIN_DATA_GRID_ACTION_COLUMNS,
   ADMIN_DATA_GRID_COLUMNS,
@@ -44,6 +45,8 @@ import { useAdminTable } from "../table-engine";
 import type { AdminFormRuntimeHandle } from "../ui/AdminFormRuntime";
 import { PlusIcon } from "../AdminRowActions";
 import type { AdminFormAction } from "../../../lib/admin/form-runtime";
+import { adminActionSuccess, withAdminActionSettledResult, type AdminActionResult } from "../../../lib/admin/admin-action-result";
+import { mapAdminActionResultToFeedback } from "../../../lib/admin/admin-action-feedback";
 import { MODULE_EDITOR_TERMINOLOGY } from "../../../lib/page-blocks/module-editor-presentation-contract";
 import {
   adminCollectionSearchIncludes,
@@ -81,10 +84,10 @@ type BlockModuleManagerClientProps = {
   moduleDescription: string;
   rows: BlockModuleRow[];
   createAction: AdminFormAction;
-  deleteAction: (formData: FormData) => Promise<void>;
-  duplicateAction: (formData: FormData) => Promise<void>;
-  toggleAction: (formData: FormData) => Promise<void>;
-  bulkAction: (formData: FormData) => Promise<void>;
+  deleteAction: (formData: FormData) => Promise<void | AdminActionResult>;
+  duplicateAction: (formData: FormData) => Promise<void | AdminActionResult>;
+  toggleAction: (formData: FormData) => Promise<void | AdminActionResult>;
+  bulkAction: (formData: FormData) => Promise<void | AdminActionResult>;
   defaultVariant: string;
   variantOptions: Array<[string, string]>;
   technicalIdentityMode?: "editable" | "internal";
@@ -267,12 +270,13 @@ export default function BlockModuleManagerClient({
   async function runMutation(
     rowId: number | null,
     mutationAction: "duplicate" | "delete" | "bulk",
-    action: () => Promise<void>,
+    action: () => Promise<void | AdminActionResult>,
     successMessage: string,
   ): Promise<boolean> {
     clearFeedback(feedbackChannel);
+    let actionResult = adminActionSuccess("تم تنفيذ الإجراء", successMessage);
     try {
-      await instant.mutateAsync({
+      const settledResult = await instant.mutateAsync({
         rowId: rowId ?? undefined,
         action: mutationAction,
         bulk: rowId === null,
@@ -282,20 +286,15 @@ export default function BlockModuleManagerClient({
           }
         },
         execute: async () => {
-          await action();
-          return { ok: true as const, message: successMessage };
+          actionResult = (await action()) ?? actionResult;
+          return actionResult.ok
+            ? { ...actionResult, ok: true as const, completion: actionResult.completion === "committed" ? "committed" as const : undefined, feedbackStatus: actionResult.feedbackStatus === "warning" ? "warning" as const : "success" as const }
+            : { ...actionResult, ok: false as const, code: actionResult.code ?? "template_mutation_failed" };
         },
       });
       publishFeedback(
-        {
-          variant: "success",
-          title: "تم تنفيذ الإجراء",
-          message: successMessage,
-          layout: "inline",
-          dismissible: true,
-          lifecycle: "manual",
-        },
-        { channel: feedbackChannel, placement: "inline" },
+        mapAdminActionResultToFeedback(withAdminActionSettledResult(actionResult, settledResult)),
+        { channel: feedbackChannel, placement: "global" },
       );
       return true;
     } catch (error) {
@@ -311,7 +310,7 @@ export default function BlockModuleManagerClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline", reveal: true },
+        { channel: feedbackChannel, placement: "global", reveal: true },
       );
       return false;
     }
@@ -324,8 +323,9 @@ export default function BlockModuleManagerClient({
     const successMessage =
       nextStatus === "published" ? "تم نشر البلوك." : "تم إخفاء البلوك.";
     clearFeedback(feedbackChannel);
+    let actionResult = adminActionSuccess("تم تنفيذ الإجراء", successMessage);
     try {
-      await instant.mutateAsync({
+      const settledResult = await instant.mutateAsync({
         rowId: row.id,
         action: "visibility",
         optimistic: (cache) =>
@@ -335,22 +335,17 @@ export default function BlockModuleManagerClient({
               : candidate,
           ),
         execute: async () => {
-          await toggleAction(
+          actionResult = (await toggleAction(
             mutationFormData({ id: row.id, next_status: nextStatus }),
-          );
-          return { ok: true, message: successMessage };
+          )) ?? actionResult;
+          return actionResult.ok
+            ? { ...actionResult, ok: true as const, completion: actionResult.completion === "committed" ? "committed" as const : undefined, feedbackStatus: actionResult.feedbackStatus === "warning" ? "warning" as const : "success" as const }
+            : { ...actionResult, ok: false as const, code: actionResult.code ?? "template_visibility_failed" };
         },
       });
       publishFeedback(
-        {
-          variant: "success",
-          title: "تم تنفيذ الإجراء",
-          message: successMessage,
-          layout: "inline",
-          dismissible: true,
-          lifecycle: "manual",
-        },
-        { channel: feedbackChannel, placement: "inline" },
+        mapAdminActionResultToFeedback(withAdminActionSettledResult(actionResult, settledResult)),
+        { channel: feedbackChannel, placement: "global" },
       );
     } catch (error) {
       publishFeedback(
@@ -365,7 +360,7 @@ export default function BlockModuleManagerClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline", reveal: true },
+        { channel: feedbackChannel, placement: "global", reveal: true },
       );
     }
   }
@@ -825,6 +820,9 @@ export default function BlockModuleManagerClient({
                     <AdminFormError name="limit" />
                   </label>
                 </>
+              ) : null}
+              {moduleKey === "cards" ? (
+                <AdminCardsItemsField items={[]} minItems={1} />
               ) : null}
               <input type="hidden" name="status" value="unpublished" />
               <input type="hidden" name="style_preset" value="premium-dark" />

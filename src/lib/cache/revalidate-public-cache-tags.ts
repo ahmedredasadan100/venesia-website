@@ -1,6 +1,7 @@
 import "server-only";
 
 import { revalidatePath, revalidateTag, updateTag } from "next/cache";
+import { advancePublicCacheGeneration } from "./public-cache-generation";
 
 export const PUBLIC_CACHE_TAG_GROUPS = {
   navigation: ["navigation", "menus"],
@@ -53,7 +54,8 @@ export function revalidatePublicCacheTags(tags: readonly string[]) {
   }
 }
 
-function updatePublicCacheTags(tags: readonly string[]) {
+async function updatePublicCacheTags(tags: readonly string[]) {
+  await advancePublicCacheGeneration();
   for (const tag of tags) {
     updateTag(tag);
   }
@@ -67,8 +69,8 @@ export function revalidateFooterCache() {
   revalidatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.footer);
 }
 
-export function revalidateProjectsCache() {
-  updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects);
+export async function revalidateProjectsCache() {
+  await updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.projects);
   revalidatePath("/sitemap.xml");
 }
 
@@ -95,41 +97,47 @@ export function revalidateGlobalSeoCaches() {
   revalidatePath("/admin/seo/sitemap");
 }
 
-export function revalidatePageCompositionCache() {
-  updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.pageComposition);
+export async function revalidatePageCompositionCache() {
+  await updatePublicCacheTags(PUBLIC_CACHE_TAG_GROUPS.pageComposition);
 }
 
-export function revalidateHeroCache() {
-  updatePublicCacheTags(["page-composition", "hero"]);
+export async function revalidateHeroCache() {
+  await updatePublicCacheTags(["page-composition", "hero"]);
 }
 
-export function revalidatePageBlocksCache() {
-  updatePublicCacheTags(["page-composition", "page-blocks"]);
+export async function revalidatePageBlocksCache() {
+  await updatePublicCacheTags(["page-composition", "page-blocks"]);
 }
 
-export function revalidateFeedModulesCache() {
-  updatePublicCacheTags(["page-composition", "feed-modules"]);
+export async function revalidateFeedModulesCache() {
+  await updatePublicCacheTags(["page-composition", "feed-modules"]);
 }
 
-export function revalidateMediaSidebarCache() {
-  updatePublicCacheTags(["page-composition", "media-center", "media-sidebar"]);
+export async function revalidateMediaSidebarCache() {
+  await updatePublicCacheTags(["page-composition", "media-center", "media-sidebar"]);
 }
 
-export function revalidateBlockModuleCache(modulePath: string) {
+export async function revalidateBlockModuleCache(modulePath: string) {
   if (modulePath === "feed") {
-    revalidateFeedModulesCache();
+    await revalidateFeedModulesCache();
     return;
   }
 
   if (modulePath === "media-sidebar") {
-    revalidateMediaSidebarCache();
+    await revalidateMediaSidebarCache();
     return;
   }
 
   if (modulePath === "hero") {
-    revalidateHeroCache();
+    await revalidateHeroCache();
     return;
   }
 
-  revalidatePageBlocksCache();
+  await revalidatePageBlocksCache();
+}
+
+/** Explicit expire:0 has the same immediate fence as updateTag. */
+export async function expirePublicCacheTags(tags: readonly string[]) {
+  await advancePublicCacheGeneration();
+  for (const tag of tags) revalidateTag(tag, { expire: 0 });
 }

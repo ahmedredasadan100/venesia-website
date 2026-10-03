@@ -1,3 +1,4 @@
+import { connection } from "next/server";
 import JsonLd from "../../components/seo/JsonLd";
 import AppChrome from "../../components/AppChrome";
 import { FooterSettingsProvider } from "../../components/FooterSettingsProvider";
@@ -22,6 +23,7 @@ export default async function SiteLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  await connection();
   const emptyNavigation: Awaited<ReturnType<typeof getPublicNavigationItems>> = [];
   const navigationPromise = Promise.all([
       getPublicNavigationItems("main"),

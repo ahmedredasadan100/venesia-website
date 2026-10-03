@@ -321,7 +321,7 @@ export default function MenuItemsTableClient({
           dismissible: true,
           lifecycle: "manual",
         },
-        { channel: feedbackChannel, placement: "inline" },
+        { channel: feedbackChannel, placement: "global" },
       );
       router.refresh();
     } catch (error) {
@@ -339,7 +339,7 @@ export default function MenuItemsTableClient({
         },
         {
           channel: feedbackChannel,
-          placement: "inline",
+          placement: "global",
           reveal: true,
         },
       );

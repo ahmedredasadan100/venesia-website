@@ -250,6 +250,7 @@ try {
     "Migration application preserves pre-existing counters and every existing Topic field");
 
   stub("src/lib/supabase-admin.ts", { getSupabaseAdmin: () => transport });
+  stub("src/lib/cache/public-cache-generation.ts", { cachePublicRead: (fn: unknown) => fn });
   stub("src/lib/logging/index.ts", { logError: () => undefined });
   stubs.set("server-only", {});
   const revalidated: string[] = [];
@@ -270,7 +271,11 @@ try {
     }),
   });
   stub("src/lib/admin/media-catalog/synchronization.ts", {});
-  stub("src/lib/cache/revalidate-public-cache-tags.ts", { revalidateHeroCache: () => revalidated.push("hero") });
+  const boundedCacheOwner = load("src/lib/cache/revalidate-public-cache-tags.ts") as typeof import("../src/lib/cache/revalidate-public-cache-tags.ts");
+  stub("src/lib/cache/revalidate-public-cache-tags.ts", {
+    runBoundedPublicCacheRevalidation: boundedCacheOwner.runBoundedPublicCacheRevalidation,
+    revalidateHeroCache: () => revalidated.push("hero"),
+  });
   stub("src/lib/media-center/revalidate-public-paths.ts", { revalidateMediaCenterPublicPaths: () => undefined });
   stub("src/lib/page-blocks/block-module-registry.ts", { BLOCK_MODULE_REGISTRY: {} });
   stub("src/lib/page-blocks/module-assignments-query.ts", {

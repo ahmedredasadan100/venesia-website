@@ -17,19 +17,21 @@ export default function AdminLoginForm() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    // Preserve values entered or autofilled before React attached its change handlers.
+    const submitted = new FormData(event.currentTarget);
     setLoading(true);
     setError(null);
 
     try {
-      const trimmedUsername = username.trim();
+      const trimmedUsername = String(submitted.get("username") ?? "").trim();
       const response = await fetch("/api/admin/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
           username: trimmedUsername,
-          password,
-          rememberMe,
+          password: String(submitted.get("password") ?? ""),
+          rememberMe: submitted.has("rememberMe"),
         }),
       });
 

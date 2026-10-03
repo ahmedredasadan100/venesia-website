@@ -63,7 +63,7 @@ export async function queryTopicsWithoutImagePage(input: {
     .order("updated_at", { ascending, nullsFirst: false })
     .order("id", { ascending })
     .range(from, from + pageSize - 1);
-  if (error) throw new Error(error.message);
+  if (error) throw Object.assign(new Error(error.message), { code: error.code });
   return {
     rows: (data ?? []).map((row) => ({
       id: Number(row.id),

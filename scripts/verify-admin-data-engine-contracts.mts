@@ -4,6 +4,9 @@ import ts from "typescript";
 import { fileURLToPath } from "node:url";
 import { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
+import { createClient } from "@supabase/supabase-js";
+import { CONTENT_STATUS_VALUES } from "../src/lib/admin/content/content-status-metadata.ts";
+import { isContentType } from "../src/lib/admin/content/content-types.ts";
 
 import {
   AdminEntityListQueryValidationError,
@@ -39,6 +42,7 @@ import {
   type AdminCollectionSurfaceInventoryEntry,
 } from "../src/lib/admin/interaction-system/adoption-manifest.ts";
 import { collectAdminNavigationAdoptionFailures } from "./lib/admin-navigation-source-proof.mts";
+import { withAdminActionSettledResult } from "../src/lib/admin/admin-action-result.ts";
 
 type Filters = { status: "all" | "published"; category: number | null };
 type SortField =
@@ -283,6 +287,148 @@ assert.throws(
   () => buildAdminListSearchOrFilter(["title,deleted_at"], "unsafe"),
   TypeError,
 );
+// The installed client transports the quoted operand unchanged. PostgreSQL
+// pattern behavior is tested independently in the existing search-boundary gate.
+const searchWireCases = [
+  ['qa plain', 'ilike', '%qa plain%'],
+  ['  عربية  ', 'ilike', '%عربية%'],
+  ['50%', 'ilike', String.raw`%50\%%`],
+  ['under_score', 'ilike', String.raw`%under\_score%`],
+  ['quote"mark', 'ilike', String.raw`%quote\"mark%`],
+  ['back\\slash', 'ilike', String.raw`%back\\slash%`],
+  ['a*b', 'imatch', String.raw`a\*b`],
+  ['*.[x]+?(a)|^$' + '{2}', 'imatch', String.raw`\*\.\[x\]\+\?\(a\)\|\^\$\{2\}`],
+  ['a*"\\b_%', 'imatch', String.raw`a\*"\\b_%`],
+] as const;
+const searchWireRequests: URL[] = [];
+const searchClient = createClient('https://abcdefghijklmnopqrst.supabase.co', 'controlled-public-key', {
+  auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  global: { fetch: async (input) => {
+    searchWireRequests.push(new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url));
+    return new Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  } },
+});
+for (const [term, operator, pattern] of searchWireCases) {
+  const fields = ['title', 'slug'];
+  const filter = buildAdminListSearchOrFilter(fields, term);
+  assert.equal(filter, fields.map(field => field + '.' + operator + '.' + JSON.stringify(pattern)).join(','));
+  const response = await searchClient.from('controlled_search_rows').select('id').or(filter);
+  assert.equal(response.error, null);
+  const request = searchWireRequests.at(-1)!;
+  assert.equal(request.origin, 'https://abcdefghijklmnopqrst.supabase.co');
+  assert.equal(request.pathname, '/rest/v1/controlled_search_rows');
+  assert.equal(request.searchParams.get('or'), '(' + filter + ')');
+  assert.equal(request.searchParams.get('select'), 'id');
+  assert.deepEqual([...request.searchParams.keys()].sort(), ['or', 'select']);
+}
+assert.equal(searchWireRequests.length, searchWireCases.length);
+for (const badField of ['title,deleted_at', 'title.ilike.x', 'title)', 'title\\', '1title']) {
+  assert.throws(() => buildAdminListSearchOrFilter([badField], 'literal*'), TypeError);
+}
+console.log(JSON.stringify({ searchWireContract: 'pass', cases: searchWireCases.length, invalidFields: 5, actualNetwork: false }));
+
+
+// Real installed SDK transport parsing plus the actual shared normalizer.
+// The controlled endpoint models retained r65 PGRST103; it is not a native API claim.
+function rangeFixture(totals: number[]) {
+  const requests: { offset: number; limit: number; status: number; search: string | null; order: string | null }[] = [];
+  const client = createClient("http://127.0.0.1:54321", "controlled-range-only", {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: async (input, init) => {
+      assert.equal(init?.method, "GET");
+      const url = new URL(String(input));
+      assert.equal(url.origin, "http://127.0.0.1:54321");
+      const offset = Number(url.searchParams.get("offset") ?? 0);
+      const limit = Number(url.searchParams.get("limit"));
+      const total = totals[Math.min(requests.length, totals.length - 1)];
+      const status = offset > 0 && offset >= total ? 416 : total > limit ? 206 : 200;
+      requests.push({ offset, limit, status, search: url.searchParams.get("or"), order: url.searchParams.get("order") });
+      if (status === 416) return new Response(JSON.stringify({ code: "PGRST103", message: "Requested range not satisfiable", details: "The error prose is deliberately not a count contract", hint: null }), { status, headers: { "content-type": "application/json", "content-range": "*/" + total } });
+      const rows = Array.from({ length: Math.min(limit, Math.max(0, total - offset)) }, (_, index) => ({ id: offset + index + 1, title: "Row " + (offset + index + 1), slug: "row-" + (offset + index + 1), status: "published", content_type: "article", category_slug: null, updated_at: "2026-01-01T00:00:00Z", actor_username: "qa", actor_admin_user_id: 1, action: "fixture_read", entity_type: null, entity_id: null, entity_label: null, metadata: {}, ip_address: null, user_agent: null, created_at: "2026-01-01T00:00:00Z" }));
+      return new Response(JSON.stringify(rows), { status, headers: { "content-type": "application/json", "content-range": rows.length ? `${offset}-${offset + rows.length - 1}/${total}` : `*/${total}` } });
+    } },
+  });
+  const loadPage = async (page: number) => {
+    const result = await client.from("range_fixture").select("id", { count: "exact" }).order("id").range((page - 1) * 10, page * 10 - 1);
+    if (result.error) {
+      assert.equal(result.count, null, "The installed SDK does not return a count on HTTP416.");
+      throw Object.assign(new Error(result.error.message), { code: result.error.code });
+    }
+    assert.notEqual(result.count, null);
+    return { rows: result.data, totalRows: result.count! };
+  };
+  return { client, requests, loadPage };
+}
+let rangeContractControls = 0;
+const overflowFixture = rangeFixture([23]);
+const overflow = await loadNormalizedAdminEntityListPage({ requestedPage: 999999, pageSize: 10, loadPage: overflowFixture.loadPage });
+assert.deepEqual(overflow.rows.map(row => row.id), [21, 22, 23]);
+assert.deepEqual({ page: overflow.page, totalRows: overflow.totalRows, totalPages: overflow.totalPages }, { page: 3, totalRows: 23, totalPages: 3 });
+assert.deepEqual(overflowFixture.requests.map(row => [row.offset, row.status]), [[9999980, 416], [0, 206], [20, 206]]);
+rangeContractControls += 3;
+const emptyRangeFixture = rangeFixture([0]);
+const emptyRange = await loadNormalizedAdminEntityListPage({ requestedPage: 999999, pageSize: 10, loadPage: emptyRangeFixture.loadPage });
+assert.deepEqual(emptyRange, { rows: [], page: 1, totalRows: 0, totalPages: 1 });
+assert.deepEqual(emptyRangeFixture.requests.map(row => row.offset), [9999980, 0]);
+rangeContractControls += 2;
+const validRangeFixture = rangeFixture([23]);
+const validRange = await loadNormalizedAdminEntityListPage({ requestedPage: 2, pageSize: 10, loadPage: validRangeFixture.loadPage });
+assert.deepEqual(validRange.rows.map(row => row.id), Array.from({ length: 10 }, (_, index) => index + 11));
+assert.deepEqual(validRangeFixture.requests.map(row => row.offset), [10]);
+rangeContractControls += 2;
+for (const maxReads of [1, 2]) {
+  const fixture = rangeFixture([23]);
+  await assert.rejects(loadNormalizedAdminEntityListPage({ requestedPage: 999999, pageSize: 10, loadPage: fixture.loadPage, maxReads }), AdminEntityListPageNormalizationError);
+  assert.equal(fixture.requests.length, maxReads);
+  rangeContractControls += 2;
+}
+const shrinkingRangeFixture = rangeFixture([23, 23, 9]);
+await assert.rejects(loadNormalizedAdminEntityListPage({ requestedPage: 999999, pageSize: 10, loadPage: shrinkingRangeFixture.loadPage }), AdminEntityListPageNormalizationError);
+assert.deepEqual(shrinkingRangeFixture.requests.map(row => [row.offset, row.status]), [[9999980, 416], [0, 206], [20, 416]]);
+rangeContractControls += 2;
+for (const error of [Object.assign(new Error("permission"), { code: "42501" }), Object.assign(new Error("parse"), { code: "PGRST100" }), Object.assign(new Error("timeout"), { code: "PGRST003" }), new Error("Requested range not satisfiable"), "PGRST103", null]) {
+  let calls = 0;
+  await assert.rejects(loadNormalizedAdminEntityListPage({ requestedPage: 999999, pageSize: 10, loadPage: async () => { calls++; throw error; } }), actual => actual === error);
+  assert.equal(calls, 1, "Unrelated failures must not be retried or reclassified as empty data.");
+  rangeContractControls += 2;
+}
+const firstPageError = Object.assign(new Error("invalid first range"), { code: "PGRST103" });
+let firstPageCalls = 0;
+await assert.rejects(loadNormalizedAdminEntityListPage({ requestedPage: 1, pageSize: 10, loadPage: async () => { firstPageCalls++; throw firstPageError; } }), error => error === firstPageError);
+assert.equal(firstPageCalls, 1);
+rangeContractControls += 2;
+
+// Execute both real lower readers with controlled SDK transport so accidentally
+// dropping code in their Error wrappers cannot silently disable normalization.
+function compileRangeReader(relativePath: string, client: ReturnType<typeof rangeFixture>["client"]) {
+  const source = readFileSync(new URL(relativePath, import.meta.url), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
+  const ports: Record<string, unknown> = {
+    "server-only": {},
+    "../../supabase-admin": { getSupabaseAdmin: () => client },
+    "../admin-list-search": { buildAdminListSearchOrFilter },
+    "../entity-list/data-engine/adapter": { loadNormalizedAdminEntityListPage },
+    "../content/content-status-metadata": { CONTENT_STATUS_VALUES },
+    "../content/content-types": { isContentType },
+  };
+  const exports: Record<string, (...args: never[]) => Promise<unknown>> = {};
+  new Function("require", "exports", compiled)((name: string) => { assert.ok(Object.hasOwn(ports, name), `Unexpected reader dependency ${name}`); return ports[name]; }, exports);
+  return exports;
+}
+for (const kind of ["audit", "report"] as const) {
+  const fixture = rangeFixture([23]);
+  const result = kind === "audit"
+    ? await compileRangeReader("../src/lib/admin/audit/list-admin-audit-logs.ts", fixture.client).listAdminAuditLogs({ query: "isolated", page: 999999, pageSize: 10 } as never)
+    : await loadNormalizedAdminEntityListPage({ requestedPage: 999999, pageSize: 10, loadPage: page => compileRangeReader("../src/lib/admin/media-catalog/reports.ts", fixture.client).queryTopicsWithoutImagePage({ query: "isolated", status: "all", contentType: "all", page, pageSize: 10, sortDirection: "asc" } as never) as Promise<{ rows: { id: number }[]; totalRows: number }> });
+  const pageResult = result as { rows?: { id: number }[]; items?: { id: number }[]; totalRows?: number; total?: number; page: number };
+  assert.deepEqual((pageResult.rows ?? pageResult.items ?? []).map(row => row.id), [21, 22, 23]);
+  assert.equal(pageResult.page, 3);
+  assert.deepEqual(fixture.requests.map(row => row.offset), [9999980, 0, 20]);
+  assert.equal(new Set(fixture.requests.map(row => row.search)).size, 1, "Same filters must survive normalization.");
+  assert.equal(new Set(fixture.requests.map(row => row.order)).size, 1, "Same ordering must survive normalization.");
+  rangeContractControls += 5;
+}
+console.log(JSON.stringify({ rangeContract: "pass", controls: rangeContractControls, installedSdk: true, nativeApi: false, maxReads: 3 }));
 
 const stablePageReads: number[] = [];
 const stablePage = await loadNormalizedAdminEntityListPage({
@@ -847,6 +993,7 @@ const committedWarning = { ok: true, feedbackStatus: "warning", message: "تم �
 let adapterWriteCalls = 0;
 const confirmedAction = async () => { adapterWriteCalls += 1; return committedWarning; };
 const adapterBindings = {
+  withAdminActionSettledResult,
   instant: { mutateAsync: async (options: { execute: () => Promise<unknown> }) => options.execute() },
   controller: { query: { filters: { status: "all" } } },
   toggleSeriesStatusAjax: confirmedAction,

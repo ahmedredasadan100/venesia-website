@@ -183,8 +183,8 @@ export async function duplicateProjectAjax(id: number) {
     actor,
   );
 
-  const cache = await runBoundedPublicCacheRevalidation(() => {
-    revalidateProjectPaths(
+  const cache = await runBoundedPublicCacheRevalidation(async () => {
+    await revalidateProjectPaths(
       duplicated.project_type,
       duplicated.project_id,
       duplicated.project_slug,

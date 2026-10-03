@@ -1,3 +1,5 @@
+import { adminActionSuccess, adminActionWarning } from "../../../../../lib/admin/admin-action-result";
+import { revalidateCommittedPageBlockAction, revalidatePageBlocksPath } from "../../../../../lib/page-blocks/admin-revalidate";
 import { BLOCK_MODULE_REGISTRY } from "../../../../../lib/page-blocks/block-module-registry";
 import { type PageBlockActionResult } from "../../../../../lib/page-blocks/action-result";
 import type { Json } from "../../../../../lib/database.types";
@@ -124,4 +126,21 @@ export function parseAssignmentKeys(formData: FormData): ParsedAssignmentKey[] {
       };
     })
     .filter((entry) => Number.isFinite(entry.assignmentId) && entry.moduleKind);
+}
+
+/** Keep the committed assignment payload while settling only its public cache. */
+export async function revalidateCommittedPageBlockResult(pageId: number, result: PageBlockActionResult) {
+  if (!result.ok) return result;
+  const settled = await revalidateCommittedPageBlockAction(
+    (result.feedbackStatus === "warning" ? adminActionWarning : adminActionSuccess)("تم الحفظ", result.message ?? "تم حفظ التغيير.", { completion: "committed" }),
+    () => revalidatePageBlocksPath(pageId),
+  );
+  let redirectTo = result.redirectTo;
+  if (redirectTo && settled.feedbackStatus === "warning") {
+    const destination = new URL(redirectTo, "http://internal.invalid");
+    destination.searchParams.set("cache_warning", "1");
+    redirectTo = `${destination.pathname}${destination.search}${destination.hash}`;
+  }
+  return { ...result, redirectTo, feedbackStatus: settled.feedbackStatus === "warning" ? "warning" as const : "success" as const,
+    message: settled.feedbackStatus === "warning" ? settled.message : result.message };
 }
