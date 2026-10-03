@@ -22,7 +22,7 @@ const receiptHash = (value: unknown) => createHash("sha256").update(JSON.stringi
 
 /** Fixed server-registered synthetic Media fixture; no caller-selected SQL or resource identity. */
 export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle, selection: string | null = null) {
-  assert.ok(selection === null || selection === "media-recovery-followup");
+  assert.ok(selection === null || selection === "media-recovery-followup" || selection === "media-recovery-missing-followup");
   assertOwnedLocalHandle(handle);
   assert.equal(completionReceipts.has(handle), false, "One Recovery producer per owned lifecycle.");
   const completion = { records: new Map<string, string>(), cleanup: null as string | null };
@@ -195,7 +195,7 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle, sele
     return { status: "pass", phase: current.phase, assetId: current.assetId, ...proof, domainCommitVerified: current.scenario === "lease" };
   }
   async function prepareFollowup(): Promise<Row> {
-    assert.equal(selection, "media-recovery-followup");
+    assert.ok(selection === "media-recovery-followup" || selection === "media-recovery-missing-followup");
     assert.equal(setupStarted, false, "The uncredited prerequisite is one-shot, including failures.");
     assert.equal(live, undefined); assert.equal(used.size, 0); setupStarted = true;
     const before = await state();
@@ -279,14 +279,15 @@ export function createOwnedCoreMediaRecoveryProof(handle: OwnedLocalHandle, sele
       assert.deepEqual(Object.keys(request).sort(), ["id", "kind"]);
       const result = bind({ ...(await prepareFollowup()), id: request.id, kind: request.kind, status: "pass" }); setupCompleted = true; return result;
     }
-    if (selection === "media-recovery-followup") assert.equal(setupCompleted, true, "Actual fixed prerequisite must complete before follow-up state or fault commands.");
+    if (selection === "media-recovery-followup" || selection === "media-recovery-missing-followup") assert.equal(setupCompleted, true, "Actual fixed prerequisite must complete before follow-up state or fault commands.");
     if (request.kind === "media-recovery-state") {
       assert.deepEqual(Object.keys(request).sort(), ["id", "kind"]); assert.equal(live, undefined, "No snapshot while a deliberately blocked writer is active.");
       return bind({ ...(await state()), id: request.id, kind: request.kind, status: "pass" });
     }
     assert.deepEqual(Object.keys(request).sort(), ["id", "kind", "scenario", "token"]);
     assert.match(String(request.token), UUID); assert.ok(["lease", "finalize", "missing", "cancel"].includes(String(request.scenario)));
-    if (selection === "media-recovery-followup") assert.notEqual(request.scenario, "lease", "Retained lease-failure UI is not replayed.");
+    if (selection === "media-recovery-followup" || selection === "media-recovery-missing-followup") assert.notEqual(request.scenario, "lease", "Retained lease-failure UI is not replayed.");
+    if(selection==="media-recovery-missing-followup")assert.equal(request.scenario,"missing","Only the original missing-production fault remains.");
     assert.ok(["media-recovery-fault-arm", "media-recovery-fault-switch", "media-recovery-fault-cancel", "media-recovery-fault-release"].includes(String(request.kind)));
     let outcome: Row;
     try {

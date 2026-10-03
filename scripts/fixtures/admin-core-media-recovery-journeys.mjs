@@ -8,12 +8,38 @@ import { coreMediaSyntheticPng, matchesCoreMediaResponse, assertCoreMediaAsset }
 
 
 export const CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION='media-recovery-followup';
+export const CORE_MEDIA_RECOVERY_MISSING_SELECTION='media-recovery-missing-followup';
 export const CORE_MEDIA_RECOVERY_GROUPS=Object.freeze(['prepare','queue-fetch-retry','committed-lease-warning','resolve-lease','produce-existing-object-reservation','produce-finalize','repair-finalize','produce-missing','repair-missing','repair-existing-object-reservation','permission']);
 /** @param {string|null} selection */
-export function coreSelectedMediaRecoveryGroups(selection=null){assert.ok(selection===null||selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION);return selection===null?[...CORE_MEDIA_RECOVERY_GROUPS]:CORE_MEDIA_RECOVERY_GROUPS.slice(3);}
-export function coreSelectedMediaRecoveryIds(selection){assert.equal(selection,CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION);return coreSelectedMediaRecoveryGroups(selection).map(name=>'core-media-recovery-'+name);}
+export function coreSelectedMediaRecoveryGroups(selection=null){assert.ok(selection===null||selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION);if(selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION)return CORE_MEDIA_RECOVERY_GROUPS.filter(name=>['produce-missing','repair-missing','permission'].includes(name));return selection===null?[...CORE_MEDIA_RECOVERY_GROUPS]:CORE_MEDIA_RECOVERY_GROUPS.slice(3);}
+export function coreSelectedMediaRecoveryIds(selection){assert.ok(selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION);return coreSelectedMediaRecoveryGroups(selection).map(name=>'core-media-recovery-'+name);}
 export function assertCoreMediaRecoverySelectionReceipt(browser,requiredCases){const ids=coreSelectedMediaRecoveryIds(browser.journeySelection);assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'media-recovery');assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.errors,[]);const expectedCases=requiredCases.map(row=>{if(Object.hasOwn(row,'status')||Object.hasOwn(row,'evidence')){assert.equal(row.status,'open');assert.equal(row.evidence,null);}return{...row,status:'open',evidence:null};});assert.equal(new Set(expectedCases.map(row=>row.key)).size,expectedCases.length);assert.deepEqual(browser.requiredCases,expectedCases);assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);const login=browser.evidence.filter(r=>r.id==='existing-auth-login');assert.equal(login.length,1);assert.equal(login[0].status,'pass');assert.equal(login[0].authenticated,true);const rows=browser.evidence.filter(r=>r.id!=='existing-auth-login');assert.deepEqual(rows.map(r=>r.id),ids);assert.ok(rows.every(r=>r.status==='pass'&&r.coverage.length===0));return{status:'pass',selection:browser.journeySelection,selectedJourneyIds:ids,executedJourneyIds:ids,retainedThreeReplayed:false,automaticCoverage:[],wholeCohortExecuted:false,globalClosed:false};}
 
+export function assertCoreMediaRecoveryPermissionHistory(value){assert.ok(value&&typeof value==='object');assert.equal(value.dataSha256,'f1baeff6d4b28fcad7f66d4582c13951ee896222c08e9303b460bb4fa6e54286');assert.equal(createHash('sha256').update(JSON.stringify(value.record)).digest('hex'),value.dataSha256);const h=value.record;assert.equal(h.status,'QUALIFIED_NATIVE_CANONICAL_PERMISSION_REQUESTS');assert.equal(h.run,'browser-r140');assert.equal(h.sourceHead,'f76f4d2885f61961255c0ee994219e03fb2f118b');assert.equal(h.sourceSha256,'116bd51e2c9a46ae41f308e852567f9391d361fec24d11adf68ed60a73c5870c');assert.equal(h.qualification.sha256,'f13850d97e96db95bfb5bce3d5f6f55c91a254ed6f37754692563bec3a526c25');assert.equal(h.review.sha256,'9eb85ce38242d53d8f9939b27b9a568d7830108e7cbab49c9b1eef150eea57df');assert.equal(h.inputSeal.sha256,'c4c47a5f8a729969fb5b17e1c9289dddadbd57df0c80a38082e012fd3456fc7c');assert.equal(h.originalRequestBytesCaptured,false);assert.equal(h.freshDenialsRequired,true);assert.equal(h.freshDomainUnchangedRequired,true);assert.equal(h.globalClosed,false);assert.deepEqual(h.automaticCoverage,[]);assert.deepEqual(h.requests.map(r=>r.action),['resolve_write_lease','retry_finalization','cancel_reservation']);for(const r of h.requests){assert.equal(r.path,'/api/admin/media-library/recovery');assert.equal(r.method,'POST');assert.equal(r.provenance,'canonical-reconstruction-from-qualified-native');assert.equal(r.capturedOriginalBytes,false);assert.equal(createHash('sha256').update(r.body).digest('hex'),r.bodySha256);assert.ok(Number.isSafeInteger(r.actorId)&&r.actorId>0);assert.match(r.beforeId,/^[a-f0-9-]{36}$/u);assert.match(r.afterId,/^[a-f0-9-]{36}$/u);const parsed=JSON.parse(r.body);assert.deepEqual(Object.keys(parsed).sort(),['action','target']);assert.equal(parsed.action,r.action);assert.deepEqual(Object.keys(parsed.target).sort(),['expectedUpdatedAt','id','kind']);assert.equal(parsed.target.kind,r.action==='resolve_write_lease'?'write_lease':'delete_reservation');assert.match(parsed.target.id,/^[a-f0-9-]{36}$/u);assert.equal(parsed.target.expectedUpdatedAt,r.canonicalUpdatedAt);assert.equal(Date.parse(r.canonicalUpdatedAt),Date.parse(r.originalUpdatedAtText));assert.equal(r.body,JSON.stringify({action:r.action,target:{kind:parsed.target.kind,id:parsed.target.id,expectedUpdatedAt:r.canonicalUpdatedAt}}));}return h.requests;}
+export function assertCoreMediaRecoveryPermissionContinuation(result,native){
+  const outcomes=result.completed.filter(r=>r.name==='permission');assert.equal(outcomes.length,1);const p=outcomes[0];
+  assert.equal(p.actualCookieFreeAuthBoundary,true);assert.equal(p.unchangedAllPublicAndStorage,true);assert.equal(p.uiDenialClaim,false);
+  const history=assertCoreMediaRecoveryPermissionHistory(p.historicalPermission);
+  const nativeById=id=>{const rows=native.records.filter(r=>r.id===id&&r.kind==='media-recovery-state');assert.equal(rows.length,1);assert.equal(rows[0].status,'pass');return rows[0];};
+  const get=label=>{const points=result.checkpoints.filter(r=>r.label===label);assert.equal(points.length,1);return nativeById(points[0].id);};
+  const before=get('permission-before'),after=get('permission-after');assertCoreRecoveryDomainUnchanged(before,after,true);
+  const current=['GET','retry_verification','preview_scoped_reconciliation','confirm_missing'];
+  assert.equal(p.currentRequestProofs.length,4);assert.deepEqual(p.currentRequestProofs.map(r=>r.action).sort(),[...current].sort());
+  for(const r of p.currentRequestProofs){
+    assert.equal(r.path,'/api/admin/media-library/recovery');assert.equal(r.method,r.action==='GET'?'GET':'POST');assert.equal(r.provenance,'captured-current-request');
+    assert.equal(createHash('sha256').update(r.body).digest('hex'),r.bodySha256);
+    if(r.action==='GET'){assert.equal(r.body,'');continue;}
+    const body=JSON.parse(r.body);assert.deepEqual(Object.keys(body).sort(),['action','target']);assert.equal(body.action,r.action);assert.deepEqual(Object.keys(body.target).sort(),['expectedUpdatedAt','id','kind']);assert.equal(body.target.kind,'delete_reservation');
+    const proof=result.acceptedFeedback.find(a=>a.action===r.action);assert.ok(proof);assert.equal(proof.targetId,body.target.id);
+    const previous=nativeById(proof.nativeBefore),next=nativeById(proof.nativeAfter);assert.equal(previous.ownedRunId,before.ownedRunId);assert.equal(previous.qaActorId,before.qaActorId);
+    const reservation=previous.reservations.find(v=>v.id===body.target.id);assert.ok(reservation);assert.match(reservation.updated_at,/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?\+00(?::00)?$/u);assert.equal(body.target.expectedUpdatedAt,reservation.updated_at.replace(' ','T').replace(/\+00$/u,'+00:00'));
+    assertCoreRecoveryAudit(previous,next,body.target,r.action,r.action==='confirm_missing'?'mutated':'verified');
+    if(r.action!=='confirm_missing')assertCoreRecoveryDomainUnchanged(previous,next);
+  }
+  assert.equal(p.denialReceipts.length,7);const expected=[...current,...history.map(r=>r.action)];assert.deepEqual(p.denialReceipts.map(r=>r.action).sort(),[...expected].sort());
+  for(const r of p.denialReceipts){assert.equal(r.status,401);assert.equal(r.error,'Unauthorized');assert.equal(r.method,r.action==='GET'?'GET':'POST');const sources=[...history,...p.currentRequestProofs].filter(v=>v.action===r.action);assert.equal(sources.length,1);assert.equal(r.requestBodySha256,sources[0].bodySha256);assert.equal(r.provenance,sources[0].provenance);}
+  return{status:'pass',freshDenials:7,historicalActions:3,currentActions:3,currentGet:1,unchangedNative:true,originalRequestBytesClaimed:false,automaticCoverage:[],globalClosed:false};
+}
 const endpoint = "/api/admin/media-library/recovery";
 const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=", "base64");
 const labels = { retry_verification: "التحقق من هذا الملف", preview_scoped_reconciliation: "فحص ارتباطات هذا الملف",
@@ -231,7 +257,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
   const group = (name, execute) => run("core-media-recovery-" + name, [], execute);
   const done = (name, fields) => { const result = { name, consumer: "media-recovery-queue", ...fields, automaticCoverage: [] }; completed.push(result); return result; };
   try {
-    if(selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION){
+    if(selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION){
       // Official authenticated API setup only; none of the retained three UI operations receives credit.
       const call=async (options,status)=>{const response=await page.request.post(origin+'/api/admin/media-library',{...options,maxRedirects:0,timeout:60_000});try{assert.equal(response.status(),status);const data=await response.json();assert.equal(data.error,undefined);return data;}finally{await response.dispose();}};
       for(const dryRun of[true,false]){const data=await call({data:{operation:'reconcile',dryRun}},200);assert.equal(data.dryRun,dryRun);assert.equal(data.complete,true);}
@@ -239,6 +265,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       const bytes=coreMediaSyntheticPng();for(const role of['lease','finalize','missing','cancel']){const uploaded=await call({multipart:{file:{name:fixture.namespace+'-'+role+'.png',mimeType:'image/png',buffer:bytes},folder,kind:'image'}},201);assert.match(uploaded.asset.id,/^[a-f0-9-]{36}$/iu);assert.equal(uploaded.asset.displayName,fixture.namespace+'-'+role+'.png');assert.equal(uploaded.asset.folderPath,folder);assert.equal(uploaded.asset.catalogRegistered,true);apiAssets.push(uploaded.asset);}
       const request={id:randomUUID(),kind:'media-recovery-followup-prepare'};prerequisite=await observe('recovery-uncredited-owned-prerequisite',()=>recoveryCheckpoint(request));assert.equal(prerequisite.id,request.id);assert.equal(prerequisite.kind,request.kind);assert.equal(prerequisite.status,'pass');assert.equal(prerequisite.namespace,fixture.namespace);assert.equal(prerequisite.articleId,fixture.article.id);assert.equal(prerequisite.selection,selection);assert.equal(prerequisite.uiCredit,false);assert.equal(prerequisite.purpose,'uncredited-owned-fixture-prerequisite');assert.equal(prerequisite.globalClosed,false);assert.deepEqual(prerequisite.automaticCoverage,[]);
       assert.equal(new Set(apiAssets.map(a=>a.id)).size,4);assert.equal(prerequisite.assets.length,4);for(const actual of apiAssets){const rows=prerequisite.assets.filter(a=>a.id===actual.id);assert.equal(rows.length,1);for(const [api,db]of Object.entries({id:'id',provider:'provider',bucket:'bucket',objectKey:'object_key',publicUrl:'public_url',originalFilename:'original_filename',displayName:'display_name',kind:'media_kind',mimeType:'mime_type',sizeBytes:'byte_size',width:'width',height:'height',checksum:'checksum',folderPath:'folder_path',status:'status',uploadedBy:'uploaded_by',reconciliationState:'reconciliation_state',missingObject:'missing_object'})){const value=rows[0][db],expected=['sizeBytes','width','height','uploadedBy'].includes(api)&&value!==null?Number(value):value;if(typeof expected==='number')assert.ok(Number.isSafeInteger(expected));assert.deepEqual(actual[api],expected);}}
+      if(selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION){assertCoreMediaRecoveryPermissionHistory(fixtures.mediaRecoveryHistoricalPermission);await reconcile();}
     }else{
     await group("prepare", async () => {
       const before = await snapshot("initial"), initial = await settings();
@@ -349,7 +376,7 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       assert.equal(after.leases.some(row => row.asset_id === asset.id), false);
       const initial = assertCoreRecoveryQueue(await settings(), after); assert.equal(initial.some(row => row.id === reservation.id), false);
       pendingCancellation = { assetId: asset.id, reservationId: reservation.id, startedAt: reservation.started_at, checksum: asset.checksum, publicUrl: asset.public_url, originalObject: before.objects.find(row => row.bucket_id === asset.bucket && row.name === asset.object_key) };
-      return done("produce-existing-object-reservation", { actualStorageAndCompensationFailures: true, reservation: "reserved", objectBytesPreserved: true, earlyQueueHidden: true, startedAt: reservation.started_at });
+      return done("produce-existing-object-reservation", { actualStorageAndCompensationFailures: true, reservation: "reserved", objectBytesPreserved: true, earlyQueueHidden: true, reservationStartedAt: reservation.started_at });
     });
     for (const scenario of ["finalize", "missing"]) {
       await group("produce-" + scenario, async () => {
@@ -430,23 +457,26 @@ export async function runCoreMediaRecoveryJourneys(ctx) {
       return done("repair-existing-object-reservation", { realAgeMs: assertCoreRecoveryReservationAge(state, reservation, true), cancelNoWrite: true, confirmedCancel: true, unchangedObjectIdentityAndBytes: true, exactActorAudits: true });
     });
     await group("permission", async () => {
+      const historical=selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION?assertCoreMediaRecoveryPermissionHistory(fixtures.mediaRecoveryHistoricalPermission):[];const historicalActions=new Set(historical.map(r=>r.action));
       for (const action of ["retry_verification", "preview_scoped_reconciliation", "resolve_write_lease", "retry_finalization", "confirm_missing", "cancel_reservation"]) {
-        assert.ok(verifiedActions.has(action) && specimens.some(row => row.action === action), "Actual native-backed original action is mandatory.");
+        assert.ok((verifiedActions.has(action)&&specimens.some(row=>row.action===action))||historicalActions.has(action),"Actual current or independently qualified original native-backed action is mandatory.");
       }
       assert.ok(specimens.some(row => row.action === "GET"));
+      for(const prior of historical){assert.equal(specimens.some(r=>r.action===prior.action),false);const body=Buffer.from(prior.body);specimens.push({action:prior.action,url:origin+endpoint,method:prior.method,headers:{"content-type":"application/json",origin},body,sha256:prior.bodySha256,provenance:prior.provenance});}
+      const denialReceipts=[];
       const before = await snapshot("permission-before"), client = await http.newContext({ storageState: { cookies: [], origins: [] } });
       try {
         for (const specimen of specimens) {
           assert.equal(createHash("sha256").update(specimen.body).digest("hex"), specimen.sha256);
           assert.equal(new URL(specimen.url).origin, origin); assert.equal(new URL(specimen.url).pathname, endpoint);
           const response = await client.fetch(specimen.url, { method: specimen.method, headers: specimen.headers, ...(specimen.method === "GET" ? {} : { data: specimen.body }), maxRedirects: 0, timeout: 30_000 });
-          assert.equal(response.status(), 401); assert.equal((await response.json()).error, "Unauthorized"); await response.dispose();
+          assert.equal(response.status(), 401); assert.equal((await response.json()).error, "Unauthorized");denialReceipts.push({action:specimen.action,method:specimen.method,requestBodySha256:specimen.sha256,status:401,error:"Unauthorized",provenance:specimen.provenance??"captured-current-request"}); await response.dispose();
         }
       } finally { await client.dispose(); }
       assertCoreRecoveryDomainUnchanged(before, await snapshot("permission-after"), true);
-      return done("permission", { actualCookieFreeAuthBoundary: true, unchangedAllPublicAndStorage: true, uiDenialClaim: false });
+      return done("permission", { actualCookieFreeAuthBoundary: true, unchangedAllPublicAndStorage: true, uiDenialClaim: false, ...(selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION?{denialReceipts,currentRequestProofs:specimens.filter(r=>r.provenance===undefined).map(r=>({action:r.action,path:new URL(r.url).pathname,method:r.method,body:r.body.toString("utf8"),bodySha256:r.sha256,provenance:"captured-current-request"})),historicalPermission:fixtures.mediaRecoveryHistoricalPermission}: {}) });
     });
   } finally { for (const specimen of specimens) specimen.body.fill(0); }
-  return { acceptedFeedback, completed, checkpoints, relatedRequiredCases, ...(selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION?{prerequisite}:{}), automaticCoverage: [], globalClosed: false,
+  return { acceptedFeedback, completed, checkpoints, relatedRequiredCases, ...((selection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||selection===CORE_MEDIA_RECOVERY_MISSING_SELECTION)?{prerequisite}:{}), automaticCoverage: [], globalClosed: false,
     open: ["Active expired lease, queue truncation and missing-schema branches are not proved by these cases."] };
 }
