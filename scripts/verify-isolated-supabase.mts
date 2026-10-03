@@ -654,7 +654,7 @@ async function verifyRetainedFinalQualityAdmissionControls() {
   const compile = (value: string) => ts.transpileModule(value, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
   const constants = ["FINAL_QUALITY_ACCOUNTING", "FINAL_QUALITY_READINESS", "RETAINED_FINAL_QUALITY_AUTHORITY"].map(name => statement(name).getText(file)).join("\n");
   const config = new Function(compile(constants) + ";return {base:FINAL_QUALITY_ACCOUNTING,admission:FINAL_QUALITY_READINESS,authority:RETAINED_FINAL_QUALITY_AUTHORITY};")() as {
-    base: string; admission: string; authority: { operationIdentitySha256: string; caseIdentitySha256: string; priorAccounting: { path: string; sha256: string } };
+    base: string; admission: string; authority: { operationIdentitySha256: string; caseIdentitySha256: string; priorAccounting: { path: string; sha256: string }; final27Plan: { path: string; sha256: string } };
   };
   assert.equal(config.authority.operationIdentitySha256, "15721c1324f7123bcdbb6d72669ff81cf34229ff748e0e04ffbd39709f42d517");
   assert.equal(config.authority.caseIdentitySha256, "f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71");
@@ -669,12 +669,16 @@ async function verifyRetainedFinalQualityAdmissionControls() {
   const rolePaths: Record<string, string> = { admission: config.admission, candidate: b + "final-source-manifest.json", ledger: b + "final-current-accounting-successor.json", operations: b + "final-111-reconciliation.json", integrity: b + "final-evidence-integrity.json", impact: b + "source-impact-current-to-final.json", producer: b + "final-accounting-producer-execution.json", review: b + "final-accounting-root-review.json", parent: config.authority.priorAccounting.path,
     progress: base + "final-accounting-interim/progress-73-retained-1-na-0-hard-37-held-after-hard-open-2026-10-03.json", old: b + "retained-qualification.json", media7: b + "r144-partial/partial-qualification.json", media3: b + "browser-r145-qualified-observations.json", final: b + "browser-r146-qualified-observations.json", owner: path.posix.dirname(config.authority.priorAccounting.path) + "/materialize.mjs", blocker: b + "domain-blocker.json", na: b + "footer-disposition.json", proof: b + "scoped-proof.json", log: base + "browser-r146/public-admin-adoption.stdout.log", product: "src/app/page.tsx", package: "package.json" };
   for (const name of ["public-source-manifest.json", "public-and-admin-adoption-gates.json", "admin-adoption-browser.json", "admin-adoption-database-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json", "selected-journey-canonical-inventory/admin-adoption-browser.json"]) rolePaths[name] = base + "browser-r146/" + name;
+  Object.assign(rolePaths, { partial: b + "browser-r148-qualified-observations.json", composition: b + "final27-composite-qualification.json", compositeImpact: b + "source-impact-partial148-to-final-six.json", originalPlan: config.authority.final27Plan.path, verifyowner: "scripts/verify-admin-core-date-controls.mjs" });
+  for (const name of ["public-source-manifest.json", "admin-adoption-browser.json", "partial-native-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json", "public-normal-build.json", "public-product-surface-build.json", "public-platform-contracts.json", "public-admin-adoption.json"]) rolePaths["partial-" + name] = base + "browser-r148/" + name;
+  for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) for (const stream of ["stdout", "stderr"]) rolePaths["partial-public-" + name + "." + stream + ".log"] = base + "browser-r148/public-" + name + "." + stream + ".log";
   const marker = (role: string): Json => ({ fixtureRef: role });
-  const fixture = (mutate?: (edit: (role: string, keys: Array<string | number>, value: Json | undefined) => void) => void) => {
+  const fixture = (mutate?: (edit: (role: string, keys: Array<string | number>, value: Json | undefined) => void) => void, composite = false) => {
     const models = new Map<string, Json | Buffer>();
     const put = (role: string, value: Json | Buffer) => models.set(role, value);
     put("package", Buffer.from('{}\n')); put("product", Buffer.from('export default function Page() { return null; }\n'));
-    const manifest = ["package", "product"].map(role => ({ file: rolePaths[role], sha256: sha256(models.get(role) as Buffer) }));
+    if (composite) put("verifyowner", Buffer.from("revised-verification-owner"));
+    const manifest = ["package", "product", ...(composite ? ["verifyowner"] : [])].map(role => ({ file: rolePaths[role], sha256: sha256(models.get(role) as Buffer) }));
     const sourceSha = sha256(JSON.stringify(manifest)), expected = { invocationHeadSha: h, sourceSha256: sourceSha, manifest };
     const oldSourceSha = sha256("retained-source"), oldOwned = "owned-retained", owned = "owned-final";
     put("candidate", { ...expected, inventoryOnly: true, buildClaimed: false }); put("public-source-manifest.json", expected);
@@ -708,8 +712,47 @@ async function verifyRetainedFinalQualityAdmissionControls() {
     const producerInputs = ["progress", "parent", "old", "media7", "media3", "final", "impact", "proof"].map(marker);
     put("review", { status: "ROOT_REVIEWED_FINAL_ACCOUNTING_MATERIALIZATION", sourceHead: h, accountingOwner: ownerRef, inputs: producerInputs, qualifiedOperations: ["old", "media7", "media3", "final"].map(marker) });
     put("producer", { status: "FINAL_ACCOUNTING_MATERIALIZED_REVIEWED", sourceHead: h, accountingOwner: ownerRef, review: marker("review"), inputs: producerInputs, outputs: { accounting: marker("ledger"), operations: marker("operations") }, automaticCoverage: [], globalClosed: false });
+    if (composite) {
+      const fields = ["draftRestoration", "companyImages", "trackingDates", "trackingMedia", "trackingMediaApplicability", "writes"];
+      const failedIds = [0, 1, 17, 18, 19, 20].map(index => finalIds[index]), partialIds = finalIds.filter(id => !failedIds.includes(id));
+      const priorManifest = manifest.map(row => row.file === rolePaths.verifyowner ? { ...row, sha256: sha256("original-verification-owner") } : row);
+      const priorSource = { invocationHeadSha: oldHead, sourceSha256: sha256(JSON.stringify(priorManifest)), manifest: priorManifest };
+      put("originalPlan", { cohortHooks: [{ run: "browser-r52", cohort: "domain-forms", expectedJourneyIds: finalIds, privateCompletionFields: fields, finalQuality: true }] });
+      const partialRaw = ["public-source-manifest.json", "admin-adoption-browser.json", "partial-native-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json", "public-normal-build.json", "public-product-surface-build.json", "public-platform-contracts.json", "public-admin-adoption.json"];
+      for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) for (const stream of ["stdout", "stderr"]) partialRaw.push("public-" + name + "." + stream + ".log");
+      for (const name of partialRaw) put("partial-" + name, name.endsWith(".log") ? Buffer.from(name.includes(".stdout.") ? "stdout" : "stderr") : { status: "controlled-original-evidence" });
+      put("partial-public-source-manifest.json", priorSource);
+      put("partial-admin-adoption-browser.json", { status: "fail", sourceSha256: priorSource.sourceSha256, journeySelection: null,
+        evidence: [{ id: "existing-auth-login", status: "pass" }, ...finalIds.map(id => ({ id, status: failedIds.includes(id) ? "fail" : "pass" }))] });
+      for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) put("partial-public-" + name + ".json", { name, code: name === "admin-adoption" ? 1 : 0, stdoutSha256: sha256("stdout"), stderrSha256: sha256("stderr") });
+      const partialCompletion = { pointers: ["/draftRestoration", "/companyImages", "/writes", "/currentIdentityProtection"],
+        fields: { draftRestoration: { status: "scoped" }, companyImages: { status: "scoped" }, writes: [], currentIdentityProtection: { status: "scoped" } },
+        missingOriginalFields: ["trackingDates", "trackingMedia", "trackingMediaApplicability"] };
+      put("partial", { status: "QUALIFIED_SCOPED_DOMAIN_FORM_PARTIAL_OBSERVATIONS_ORIGINAL_FAILED", statusEnvelope: "qualified-sealed-partial-cohort-envelope", cohort: "domain-forms",
+        run: "browser-r148", sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, ownedRunId: "owned-partial", originalHookRun: "browser-r52", deferredFinalQuality: true, finalQuality: false,
+        partialOriginalHook: true, originalJourneyCount: 27, journeyCount: 21, originalPrivateCompletionFields: fields, completion: partialCompletion,
+        observations: partialIds.map(id => observation(id, priorSource.sourceSha256, "owned-partial")), inputArtifacts: partialRaw.map(name => marker("partial-" + name)), automaticCoverage: [], globalClosed: false });
+      const current = models.get("final") as Record<string, Json>; current.journeyCount = 6; current.observations = failedIds.map(id => observation(id, sourceSha, owned));
+      current.completion = { pointers: ["/selectedJourneys", "/draftRestoration", "/trackingDates", "/trackingMedia", "/trackingMediaApplicability", "/writes"] };
+      put("admin-adoption-browser.json", { status: "pass", sourceSha256: sourceSha, scope: "core-closure", cohort: "domain-forms", journeySelection: "domain-forms-final-six-followup",
+        driverCompleted: true, wholeCohortExecuted: false, selectedJourneyIds: failedIds, executedJourneyIds: failedIds,
+        evidence: [{ id: "existing-auth-login", status: "pass" }, ...failedIds.map(id => ({ id, status: "pass" }))] });
+      const operation = models.get("operations") as { partitions: { qualified: Array<Record<string, Json>> } };
+      for (const row of operation.partitions.qualified) if (partialIds.includes(row.id as string)) Object.assign(row, { qualification: marker("partial"), run: "browser-r148", sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, ownedRunId: "owned-partial" });
+      put("compositeImpact", { status: "ROOT_REVIEWED_EXACT_VERIFICATION_ONLY_SOURCE_IMPACT", retained: { sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, sourceManifest: marker("partial-public-source-manifest.json") },
+        candidate: { sourceHead: h, sourceSha256: sourceSha, sourceManifest: marker("public-source-manifest.json") },
+        changes: [{ path: rolePaths.verifyowner, beforeSha256: priorManifest.at(-1)!.sha256, afterSha256: manifest.at(-1)!.sha256, role: "verification-only-residual-correction" }],
+        retainedBehaviorRelabelled: false, retainedBehaviorReexecuted: false, automaticCoverage: [], globalClosed: false });
+      put("composition", { status: "QUALIFIED_SCOPED_DOMAIN_FORM_COMPOSITE_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT", statusEnvelope: "qualified-sealed-composite-cohort-envelope", cohort: "domain-forms", originalHookRun: "browser-r52",
+        originalPlan: marker("originalPlan"), originalProgress: marker("progress"), originalJourneyIds: finalIds, journeyCount: 27, sameRun: false, deferredFinalQuality: true, finalQuality: false,
+        qualifications: [{ role: "partial-original-failed", qualification: marker("partial"), run: "browser-r148", sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, ownedRunId: "owned-partial", sourceManifest: marker("partial-public-source-manifest.json"), rawArtifacts: partialRaw.map(name => marker("partial-" + name)) },
+          { role: "fresh-final-six", qualification: marker("final"), run: "browser-r146", sourceHead: h, sourceSha256: sourceSha, ownedRunId: owned, sourceManifest: marker("public-source-manifest.json"), gateReceipt: marker("public-and-admin-adoption-gates.json"), rawArtifacts: rawRoles.map(marker) }],
+        sourceCompatibility: marker("compositeImpact"), completionAssignments: fields.map(field => ({ field, qualifications: field === "draftRestoration" || field === "writes" ? [marker("partial"), marker("final")] : field === "companyImages" ? [marker("partial")] : [marker("final")] })), automaticCoverage: [], globalClosed: false });
+      producerInputs.push(marker("partial"), marker("composition"), marker("compositeImpact"), marker("originalPlan"));
+      (models.get("review") as { qualifiedOperations: Json[] }).qualifiedOperations.push(marker("partial"));
+    }
     put("integrity", { status: "FINAL_EVIDENCE_INTEGRITY_PASS", sourceHead: h, requiredReferences: [...models.keys()].map(marker), checkedReferences: [...models.keys()].map(marker), failedReferences: [], historicalFailedSealsPreserved: true, qualifiedSourceIdentitiesPreserved: true, remainingOwnedResources: 0, remainingOwnedProcesses: 0 });
-    put("admission", { status: "ROOT_REVIEWED_FINAL_BEHAVIOR_READY_FOR_QUALITY", sourceHead: h, sourceManifest: marker("candidate"), accounting: marker("ledger"), operations: marker("operations"), integrity: marker("integrity"), sourceCompatibility: marker("impact"), accountingOwner: ownerRef, producerExecution: marker("producer"), closureEligible: false, closureBlockers: [marker("blocker")], final27: { qualification: marker("final"), sourceManifest: marker("public-source-manifest.json"), gateReceipt: marker("public-and-admin-adoption-gates.json"), originalHookRun: "browser-r52" }, operationCounts: counts, namedCellCounts, remainingPredicates: 3, incompleteDomainInventories: 1, openPreviewStates: 1, cleanup: { remainingOwnedResources: 0, remainingOwnedProcesses: 0 }, automaticCoverage: [], globalClosed: false });
+    put("admission", { status: "ROOT_REVIEWED_FINAL_BEHAVIOR_READY_FOR_QUALITY", sourceHead: h, sourceManifest: marker("candidate"), accounting: marker("ledger"), operations: marker("operations"), integrity: marker("integrity"), sourceCompatibility: marker("impact"), accountingOwner: ownerRef, producerExecution: marker("producer"), closureEligible: false, closureBlockers: [marker("blocker")], final27: { qualification: marker("final"), sourceManifest: marker("public-source-manifest.json"), gateReceipt: marker("public-and-admin-adoption-gates.json"), originalHookRun: "browser-r52", ...(composite ? { composition: marker("composition") } : {}) }, operationCounts: counts, namedCellCounts, remainingPredicates: 3, incompleteDomainInventories: 1, openPreviewStates: 1, cleanup: { remainingOwnedResources: 0, remainingOwnedProcesses: 0 }, automaticCoverage: [], globalClosed: false });
     const edit = (role: string, keys: Array<string | number>, value: Json | undefined) => {
       let node = models.get(role) as Json;
       for (const key of keys.slice(0, -1)) { assert.ok(node && typeof node === "object"); node = (node as Record<string, Json>)[String(key)]; }
@@ -729,11 +772,11 @@ async function verifyRetainedFinalQualityAdmissionControls() {
       const ref = { path: rolePaths[role], sha256: sha256(raw) }; assert.ok(ref.path, role); refs.set(role, ref); bytes.set(path.resolve(memoryRoot, ref.path), raw); return ref;
     };
     const priorAuthority = seal("parent");
-    const authority = { operationIdentitySha256: sha256(JSON.stringify([...operationIds].sort())), caseIdentitySha256: sha256(JSON.stringify(caseKeys)), priorAccounting: priorAuthority };
+    const authority = { operationIdentitySha256: sha256(JSON.stringify([...operationIds].sort())), caseIdentitySha256: sha256(JSON.stringify(caseKeys)), priorAccounting: priorAuthority, final27Plan: composite ? seal("originalPlan") : config.authority.final27Plan };
     mutate?.(edit); refs.clear(); bytes.clear(); const admission = seal("admission");
     return { authority, expected, admission, bytes, refs, links: new Map<string, string>() };
   };
-  const code = ["assertRetainedFinalQualitySource", "loadRetainedFinalQualityAdmission"].map(name => statement(name).getText(file).replace(/^export /u, "")).join("\n");
+  const code = ["assertRetainedFinalQualitySource", "assertRetainedFinalQualityCompositeSource", "loadRetainedFinalQualityAdmission"].map(name => statement(name).getText(file).replace(/^export /u, "")).join("\n");
   type Loaded = ReturnType<typeof import("./lib/isolated-public-verification.mts").loadRetainedFinalQualityAdmission>;
   const invoke = (frame: ReturnType<typeof fixture>, expected = frame.expected) => {
     const read = (name: string) => { const value = frame.bytes.get(name); assert.ok(value, "Missing memory-only artifact: " + name); return value; };
@@ -778,6 +821,60 @@ async function verifyRetainedFinalQualityAdmissionControls() {
   check("retained admission rejects a symlink/junction escape", () => { const f = fixture(); f.links.set(path.resolve(memoryRoot, rolePaths.final), path.resolve(memoryRoot, "outside.json")); assert.throws(() => invoke(f)); });
   check("retained admission rejects a private environment reference even with a known hash", () => { const f = fixture(edit => edit("integrity", ["requiredReferences", 0], { path: ".env.local", sha256: "0".repeat(64) })); assert.throws(() => invoke(f)); });
 
+  check("retained Quality accepts exact composite21 plus fresh6 while preserving failed148 and every per-leaf111 identity", () => {
+    const f = fixture(undefined, true), result = invoke(f); result.verify();
+    assert.equal(result.receipt.composition?.sameRun, false); assert.equal(result.receipt.qualifiedJourneyIds.length, 27);
+    assert.equal(result.receipt.primaryQualificationJourneyIds?.length, 6); assert.equal(result.receipt.composition?.qualifications[0].run, "browser-r148");
+    assert.equal(JSON.parse(f.bytes.get(path.resolve(memoryRoot, rolePaths["partial-admin-adoption-browser.json"]))!.toString()).status, "fail");
+    assert.equal(JSON.parse(f.bytes.get(path.resolve(memoryRoot, rolePaths["partial-public-admin-adoption.json"]))!.toString()).code, 1);
+  });
+  const compositeNegatives: Array<[string, string, Array<string | number>, Json | undefined]> = [
+    ["missing composite authority", "admission", ["final27", "composition"], undefined],
+    ["fabricated one run", "composition", ["sameRun"], true], ["invented shared build", "composition", ["buildIdSha256"], "a".repeat(64)],
+    ["duplicate original27", "composition", ["originalJourneyIds", 0], "final-1"], ["missing original27", "composition", ["journeyCount"], 26],
+    ["wrong original progress", "composition", ["originalProgress"], marker("proof")], ["missing original plan", "composition", ["originalPlan"], marker("proof")],
+    ["partial relabelled complete", "partial", ["status"], "QUALIFIED_SCOPED_COHORT_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT"],
+    ["raw failed Browser relabelled PASS", "partial-admin-adoption-browser.json", ["status"], "pass"],
+    ["raw failed Admin relabelled success", "partial-public-admin-adoption.json", ["code"], 0],
+    ["partial build failed", "partial-public-normal-build.json", ["code"], 1],
+    ["resealed partial log digest differs from raw bytes", "partial-public-normal-build.json", ["stdoutSha256"], "0".repeat(64)],
+    ["partial build missing", "partial", ["inputArtifacts"], []], ["partial fabricated build", "partial", ["buildIdSha256"], "a".repeat(64)],
+    ["failed case promoted inside partial", "partial-admin-adoption-browser.json", ["evidence", 1, "status"], "pass"],
+    ["partial missing current identity proof", "partial", ["completion", "fields", "currentIdentityProtection"], undefined],
+    ["wrong leaf source", "composition", ["qualifications", 0, "sourceSha256"], "0".repeat(64)],
+    ["wrong partial observation source", "partial", ["observations", 0, "sourceSha256"], "0".repeat(64)],
+    ["partial row assigned latest run", "operations", ["partitions", "qualified", 85, "run"], "browser-r146"],
+    ["partial row assigned latest qualification", "operations", ["partitions", "qualified", 85, "qualification"], marker("final")],
+    ["fresh whole-cohort claim", "admin-adoption-browser.json", ["wholeCohortExecuted"], true],
+    ["wrong fresh selector", "admin-adoption-browser.json", ["journeySelection"], "text-topic-forms"],
+    ["fresh missing selected case", "admin-adoption-browser.json", ["selectedJourneyIds"], []],
+    ["fresh missing full gate", "public-and-admin-adoption-gates.json", ["gates"], []],
+    ["wrong completion assignment", "composition", ["completionAssignments", 1, "qualifications"], [marker("final")]],
+    ["missing fresh draft assignment", "composition", ["completionAssignments", 0, "qualifications"], [marker("partial")]],
+    ["missing fresh draft proof", "final", ["completion", "pointers"], ["/selectedJourneys", "/trackingDates", "/trackingMedia", "/trackingMediaApplicability", "/writes"]],
+    ["missing partial company proof", "partial", ["completion", "pointers"], ["/draftRestoration", "/writes", "/currentIdentityProtection"]],
+    ["unreviewed intermediate impact", "compositeImpact", ["status"], "DRAFT"],
+    ["omitted intermediate change", "compositeImpact", ["changes"], []],
+    ["wrong exact prior digest", "compositeImpact", ["changes", 0, "beforeSha256"], "0".repeat(64)],
+    ["wrong exact latest digest", "compositeImpact", ["changes", 0, "afterSha256"], "0".repeat(64)],
+    ["relabelled partial behavior", "compositeImpact", ["retainedBehaviorRelabelled"], true],
+    ["wrong latest docs-only impact", "impact", ["status"], "ROOT_REVIEWED_EXACT_VERIFICATION_ONLY_SOURCE_IMPACT"],
+  ];
+  for (const [name, role, keys, value] of compositeNegatives) check("composite Quality rejects " + name + " after resealing metadata", () => assert.throws(() => invoke(fixture(edit => edit(role, keys, value), true))));
+  check("composite source guard rejects a fully rehashed Product/config/migration delta and unrelated Verification owner", () => {
+    const body = compile(statement("assertRetainedFinalQualityCompositeSource").getText(file).replace(/^export /u, ""));
+    const guard = new Function("assert", "digest", "sourceIncluded", body + ";return assertRetainedFinalQualityCompositeSource;")(assert, sha256, sourceIncluded);
+    for (const name of ["src/app/page.tsx", "next.config.ts", "supabase/migrations/20261004000000_change.sql", "scripts/verify-platform.mts"]) {
+      const retained = { invocationHeadSha: oldHead, manifest: [{ file: name, sha256: sha256("before") }], sourceSha256: "" };
+      const candidate = { invocationHeadSha: h, manifest: [{ file: name, sha256: sha256("after") }], sourceSha256: "" };
+      retained.sourceSha256 = sha256(JSON.stringify(retained.manifest)); candidate.sourceSha256 = sha256(JSON.stringify(candidate.manifest));
+      assert.throws(() => guard({ status: "ROOT_REVIEWED_EXACT_VERIFICATION_ONLY_SOURCE_IMPACT", retained: { sourceHead: oldHead, sourceSha256: retained.sourceSha256 }, candidate: { sourceHead: h, sourceSha256: candidate.sourceSha256 }, changes: [{ path: name, beforeSha256: retained.manifest[0].sha256, afterSha256: candidate.manifest[0].sha256, role: "verification-only-residual-correction" }], retainedBehaviorRelabelled: false, retainedBehaviorReexecuted: false, automaticCoverage: [], globalClosed: false }, retained, candidate));
+    }
+  });
+  check("composite Quality rejects a missing individual build even when both raw-input lists agree", () => {
+    const refs = Object.keys(rolePaths).filter(role => role.startsWith("partial-") && role !== "partial-public-normal-build.json").map(marker);
+    assert.throws(() => invoke(fixture(edit => { edit("partial", ["inputArtifacts"], refs); edit("composition", ["qualifications", 0, "rawArtifacts"], refs); }, true)));
+  });
   const run = statement("runOwnedPublicVerification") as ts.FunctionDeclaration; assert.ok(run.body);
   const beforeContext = run.body.statements.findIndex(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "originalContext")); assert.ok(beforeContext > 0);
   const requestCode = run.body.statements.slice(0, beforeContext).map(node => node.getText(file)).join("\n");

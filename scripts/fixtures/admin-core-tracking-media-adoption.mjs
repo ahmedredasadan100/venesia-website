@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {validateCoreJourneySelection} from './admin-core-domain-form-journeys.mjs';
 import {randomUUID} from 'node:crypto';
 import {expect} from 'playwright/test';
 import {chooseCoreImageAsset} from './admin-core-direct-image-adoption.mjs';
@@ -16,11 +17,23 @@ export async function assertCoreTrackingMediaUI(form,proof){
  const gallery=form.locator('[data-admin-media-gallery-mode="paths"]').filter({has:form.page().locator('[name="image_urls"]')});await expect(gallery.locator('[data-admin-media-gallery-card="image"]')).toHaveCount(2);
  await expect(gallery.locator('[data-admin-media-gallery-card="image"]').first().locator('[data-admin-media-gallery-action="move-up"]')).toBeDisabled();await expect(gallery.locator('[data-admin-media-gallery-card="image"]').last().locator('[data-admin-media-gallery-action="move-down"]')).toBeDisabled();
 }
+export function assertCoreTrackingPreservedFields(snapshot){
+ const names=['title','body','occurred_on','publication_status'];assert.deepEqual(snapshot.entries.map(row=>row[0]),names);
+ for(const[,values]of snapshot.entries.slice(0,3)){assert.equal(values.length,1);assert.equal(typeof values[0],'string');}
+ assert.equal(snapshot.publicationControls.length,2);const[hidden,toggle]=snapshot.publicationControls;
+ assert.deepEqual(hidden,{tag:'INPUT',type:'hidden',value:'draft',role:null,checked:null,disabled:false});
+ assert.equal(typeof toggle.checked,'boolean');assert.deepEqual(toggle,{tag:'INPUT',type:'checkbox',value:'published',role:'switch',checked:toggle.checked,disabled:false});
+ assert.deepEqual(snapshot.entries[3][1],toggle.checked?['draft','published']:['draft']);return snapshot;
+}
+export async function readCoreTrackingPreservedFields(form){
+ const snapshot=await form.evaluate(node=>{const names=['title','body','occurred_on','publication_status'],data=new FormData(node);return{entries:names.map(name=>[name,data.getAll(name)]),publicationControls:[...node.querySelectorAll('[name="publication_status"]')].map(control=>({tag:control.tagName,type:control.type,value:control.value,role:control.getAttribute('role'),checked:control.type==='checkbox'?control.checked:null,disabled:control.disabled}))};});
+ return assertCoreTrackingPreservedFields(snapshot);
+}
 export async function authorCoreTrackingMedia({page,origin,form,phase,prior=null}){
  assert.ok(['create','edit'].includes(phase));assert.equal(Boolean(prior),phase==='edit');
  const gallery=form.locator('[data-admin-media-gallery-mode="paths"]').filter({has:page.locator('[name="image_urls"]')}),images=form.locator('[name="image_urls"]'),videoOwner=form.locator('[data-project-tracking-video-fields]'),serialized=videoOwner.locator('[name="videos_json"]');
  await expect(gallery).toHaveCount(1);await expect(videoOwner).toHaveCount(1);
- const preservedNames=['title','body','occurred_on','publication_status'],readPreserved=async()=>{const result=[];for(const name of preservedNames)result.push([name,await form.locator('[name="'+name+'"]').inputValue()]);return result;};
+ const readPreserved=()=>readCoreTrackingPreservedFields(form);
  const preserved=await readPreserved(),assets=[],operations=[];
  const cards=()=>gallery.locator('[data-admin-media-gallery-card="image"]');
  const choose=async(trigger,index,cancel=false)=>{const before=await images.inputValue(),videoBefore=await serialized.inputValue(),asset=await chooseCoreImageAsset({page,origin,trigger,key:PRESENTATION_CONTROL_ASSETS[index],cancel});assets.push(asset);if(cancel){await expect(images).toHaveValue(before);await expect(serialized).toHaveValue(videoBefore);}assert.deepEqual(await readPreserved(),preserved);return asset;};
@@ -46,7 +59,7 @@ export async function authorCoreTrackingMedia({page,origin,form,phase,prior=null
  await assertCoreTrackingMediaUI(form,proof);assert.deepEqual(await readPreserved(),preserved);return proof;
 }
 export function assertCoreTrackingMediaCompletion({browser,native,sourceSha256,ownedRunId,actorId,formManifest,collectionManifest,fixtures}){
- assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'domain-forms');assert.equal(browser.journeySelection??null,null);assert.deepEqual(browser.errors,[]);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);assert.ok(Number.isSafeInteger(actorId)&&actorId>0);
+ assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'domain-forms');assert.ok(browser.journeySelection==null||validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection})==="domain-forms-final-six-followup");assert.deepEqual(browser.errors,[]);assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.equal(native.status,'pass');assert.equal(native.ownedRunId,ownedRunId);assert.ok(Number.isSafeInteger(actorId)&&actorId>0);
  const consumer='project-tracking-create-edit',forms=formManifest.filter(row=>row.id===consumer);assert.equal(forms.length,1);assert.ok(forms[0].sourceFiles.includes('src/components/admin/projects/tracking/TrackingForms.tsx'));for(const surface of['update-create','update-edit'])assert.ok(forms[0].surfaces.includes(surface));
  const declarations=collectionManifest.surfaces.flatMap(row=>row.consumerAdoptionEvidence?.length?row.consumerAdoptionEvidence:[row]),collections=declarations.filter(row=>row.id==='project-tracking-updates');assert.equal(collections.length,1);assert.ok(collections[0].executableBindings.some(row=>row.sourceFile==='src/components/admin/projects/tracking/TrackingCollections.tsx'&&row.exportNames.includes('TrackingUpdatesCollection')));
  const cases=['form:'+consumer+':capability:media','collection:project-tracking-updates:capability:media'];for(const key of cases)assert.equal(browser.requiredCases.filter(row=>row.key===key&&row.axis==='media').length,1);

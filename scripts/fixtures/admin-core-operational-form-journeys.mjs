@@ -1,7 +1,7 @@
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,observeCoreModalPendingDismissal} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import {authorCoreTrackingMedia,assertCoreTrackingMediaUI} from "./admin-core-tracking-media-adoption.mjs";
-import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
+import { runCoreFormPermissionIntent, validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createJiti } from "jiti";
@@ -40,13 +40,20 @@ export function buildCoreOperationalFormPlan({ manifest, requiredCases, fixtures
   return { recipes, tracking, profileProjectId: fixtures.project.id };
 }
 
+export function selectCoreOperationalFormPlan(plan, selection) {
+  if(selection===null||selection===undefined)return plan;
+  assert.equal(validateCoreJourneySelection({scope:"core-closure",cohort:"domain-forms",selection}),"domain-forms-final-six-followup");
+  const recipes=plan.recipes.filter(row=>row.consumer==="project-tracking-create-edit");assert.equal(recipes.length,4);assert.deepEqual(recipes.flatMap(row=>row.surfaces),families["project-tracking-create-edit"]);
+  return {...plan,recipes};
+}
+
 export async function runCoreOperationalFormJourneys(ctx) {
   const { page, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases } = ctx;
   assert.equal(new URL(origin).hostname, "127.0.0.1");
   assert.ok(Array.isArray(databaseReadback));
   const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
   const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: manifest } = await jiti.import("../../src/lib/admin/form-system/adoption-manifest.ts");
-  const plan = buildCoreOperationalFormPlan({ manifest, requiredCases, fixtures });
+  const plan = selectCoreOperationalFormPlan(buildCoreOperationalFormPlan({ manifest, requiredCases, fixtures }), ctx.journeySelection ?? null);
   const suffix = Date.now().toString(36), results = [], permissionEvidence = [], dateEvidence = [], mediaApplicabilityEvidence = [];
   let renderedRecipe, renderedSurface, renderedAdoption=[], renderedOpened=new Set(), renderedDirty=new Set();
   const permissionIntent = (recipe, surface, perform) => runCoreFormPermissionIntent({ permissionReplay: ctx.permissionReplay, mapping: { caseId: "core-operational-" + recipe.kind + "-" + surface, formConsumer: recipe.consumer, surface }, perform, permissionEvidence });
@@ -80,12 +87,12 @@ export async function runCoreOperationalFormJourneys(ctx) {
       await date.fill(seed); await date.focus(); await expect(date).toBeFocused();
       await date.press("ArrowUp"); await expect(date).not.toHaveValue(seed); const changed = await date.inputValue(); assert.match(changed, /^\d{4}-\d{2}-\d{2}$/u);
       await date.press("ArrowDown"); await expect(date).toHaveValue(seed);
-      await date.press("ControlOrMeta+A"); await date.press("Backspace"); await expect(date).toHaveValue("");
-      const required = await date.evaluate(node => node.required), clearValidity = await date.evaluate(node => ({ valid: node.validity.valid, valueMissing: node.validity.valueMissing }));
-      assert.equal(required, name === "occurred_on"); assert.deepEqual(clearValidity, {valid: !required, valueMissing: required});
+      await date.fill(""); await expect(date).toHaveValue("");
+      const required = await date.evaluate(node => node.required), clearValidity = await date.evaluate(node => ({ valid: node.validity.valid, valueMissing: node.validity.valueMissing, badInput: node.validity.badInput }));
+      assert.equal(required, name === "occurred_on"); assert.deepEqual(clearValidity, {valid: !required, valueMissing: required, badInput: false});
       await equal(unrelated); assert.deepEqual(await privateUnrelated(), beforeUnrelated, "Date interaction changed unrelated draft fields.");
       const value = values[name]; assert.equal(typeof value, "string"); if (value) await date.fill(value); await expect(date).toHaveValue(value);
-      observations.push({field:name,type:"date",focused:true,seed,keyboardChanged:changed,keyboardRestored:seed,clearedValue:"",clearValidity,required,finalValue:value,unrelatedFieldsPreserved:true});
+      observations.push({field:name,type:"date",focused:true,seed,keyboardChanged:changed,keyboardRestored:seed,clearedValue:"",clearMethod:"native-fill-empty",clearValidity,required,finalValue:value,unrelatedFieldsPreserved:true});
     }
     await equal(values); assert.deepEqual(await privateUnrelated(), beforeUnrelated, "Date repair changed unrelated draft fields.");
     const result = {caseId:"core-operational-"+recipe.kind+"-"+surface,surface,fields:observations,reloaded:false}; dateEvidence.push(result); return result;
@@ -318,7 +325,7 @@ export async function runCoreOperationalFormJourneys(ctx) {
     return complete(recipe, [id], Object.keys(values), { credentialBoundary: "Generated solely in private process memory; no credential artifact or password/hash readback. Separate existing command cohort owns synthetic status/delete." });
   });
 
-  await run("core-operational-user-current-identity-protection", [], async () => {
+  if (ctx.journeySelection == null) await run("core-operational-user-current-identity-protection", [], async () => {
     renderedRecipe={kind:"identity",consumer:"users-and-roles",surfaces:["identity-collection"]};renderedAdoption=[];renderedOpened=new Set();renderedDirty=new Set();
     await navigate("/admin/users-roles");
     const identity = page.locator("p").filter({ hasText: /^المستخدم الحالي:/u });
@@ -417,7 +424,7 @@ export function coreTrackingDateFields(kind) {
 
 /** Pure receipt join: actual seven accepted saves plus exact child observations; no new runtime or inferred axis credit. */
 export function assertCoreTrackingDateReceipts({browser,native,ownedRunId,sourceSha256,actorId,fixtures,formManifest,collectionManifest}) {
-  assert.equal(browser.status,"pass"); assert.equal(browser.driverCompleted,true); assert.equal(browser.inventoryOnly,false); assert.equal(browser.scope,"core-closure"); assert.equal(browser.cohort,"domain-forms"); assert.ok(browser.journeySelection==null); assert.deepEqual(browser.errors,[]);
+  assert.equal(browser.status,"pass"); assert.equal(browser.driverCompleted,true); assert.equal(browser.inventoryOnly,false); assert.equal(browser.scope,"core-closure"); assert.equal(browser.cohort,"domain-forms"); assert.ok(browser.journeySelection==null||validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection})==="domain-forms-final-six-followup"); assert.deepEqual(browser.errors,[]);
   assert.match(sourceSha256,/^[a-f0-9]{64}$/u); assert.equal(browser.sourceSha256,sourceSha256); assert.equal(native.status,"pass"); assert.equal(native.ownedRunId,ownedRunId); assert.ok(Number.isSafeInteger(actorId)&&actorId>0);
   const consumer="project-tracking-create-edit", entries=formManifest.filter(row=>row.id===consumer); assert.equal(entries.length,1);
   assert.deepEqual(entries[0].surfaces,families[consumer]); assert.ok(entries[0].sourceFiles.includes("src/components/admin/projects/tracking/TrackingForms.tsx"));
@@ -441,7 +448,7 @@ export function assertCoreTrackingDateReceipts({browser,native,ownedRunId,source
       assert.deepEqual(proof.fields.map(row=>row.field),coreTrackingDateFields(kind));
       for(const field of proof.fields){
         assert.equal(field.type,"date");assert.equal(field.focused,true);assert.equal(field.seed,field.field==="completion_date"?"2026-01-06":"2026-01-04");assert.match(field.keyboardChanged,/^\d{4}-\d{2}-\d{2}$/u);assert.notEqual(field.keyboardChanged,field.seed);assert.equal(field.keyboardRestored,field.seed);assert.equal(field.clearedValue,"");assert.equal(field.unrelatedFieldsPreserved,true);
-        const required=field.field==="occurred_on";assert.equal(field.required,required);assert.deepEqual(field.clearValidity,{valid:!required,valueMissing:required});
+        const required=field.field==="occurred_on";assert.equal(field.required,required);assert.equal(field.clearMethod,"native-fill-empty");assert.deepEqual(field.clearValidity,{valid:!required,valueMissing:required,badInput:false});
         const expected=kind==="profile"?(field.field==="project_receipt_date"?"2026-01-02":""):kind==="update"?(proof.surface==="update-create"?"2026-01-04":"2026-01-05"):field.field==="completion_date"||proof.surface.endsWith("-edit")?"":"2026-01-02";
         assert.equal(field.finalValue,expected);const key=required?"occurred_at":field.field;assert.ok(Object.hasOwn(write.actual,key));
         if(required){assert.equal(typeof write.actual[key],"string");assert.ok(Number.isFinite(Date.parse(write.actual[key])));assert.equal(Date.parse(write.actual[key]),Date.parse(expected+"T12:00:00Z"));}else assert.equal(write.actual[key],expected||null);

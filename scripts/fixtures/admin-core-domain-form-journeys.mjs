@@ -38,7 +38,7 @@ export function validateCoreJourneySelection({ scope, cohort, selection }) {
   else if (selection === "template-cards-presentation") assert.equal(cohort, "template-libraries");
   else if (selection === "query-layout-followup") assert.equal(cohort, "query-presentation");
   else if (selection === "template-form-creates" || selection === "template-form-creates-followup") assert.equal(cohort, "recovery-templates");
-  else { assert.equal(cohort, "domain-forms"); assert.equal(selection, "text-topic-forms", "Unknown affected journey selection."); }
+  else { assert.equal(cohort, "domain-forms"); assert.ok(["text-topic-forms", "domain-forms-final-six-followup"].includes(selection), "Unknown affected journey selection."); }
   return selection;
 }
 function isTextTopic(recipe) { return !["video", "gallery"].includes(recipe.kind); }
@@ -57,11 +57,13 @@ function buildCoreTopicFormRecipes(manifest, coverage) {
 export function coreSelectedTopicRecipes(selection, manifest) {
   if (selection === null) return [];
   validateCoreJourneySelection({ scope: "core-closure", cohort: "domain-forms", selection });
+  assert.equal(selection, "text-topic-forms");
   return buildCoreTopicFormRecipes(manifest, () => []).filter(isTextTopic);
 }
 export function selectCoreDomainFormPlan(plan, selection) {
   if (selection === null || selection === undefined) return plan;
   validateCoreJourneySelection({ scope: "core-closure", cohort: "domain-forms", selection });
+  assert.equal(selection, "text-topic-forms");
   return { ...plan, taxonomy: [], topics: plan.topics.filter(isTextTopic), projectEdits: [], locations: [], pending: [] };
 }
 export function coreTopicJourneyId(recipe) { return "core-" + recipe.kind + "-content-form-create-edit"; }
@@ -112,6 +114,46 @@ export function assertCoreJourneySelectionReceipt(browser, manifest, canonicalRe
     assert.deepEqual(draftRestoration.qualified.map(row=>({journeyId:row.journeyId,key:row.key})),expectedDrafts);
   }
   return { selection, selectedJourneyIds: ids, executedJourneyIds: [...browser.executedJourneyIds], wholeCohortExecuted: false, globalClosed: false };
+}
+
+/** Fixed remaining six, derived from the existing Project and Tracking plans. */
+export async function buildCoreDomainFinalSixPlan(input) {
+  const { buildCoreProjectCreatePlan } = await import("./admin-core-project-create-journeys.mjs");
+  const { buildCoreOperationalFormPlan, selectCoreOperationalFormPlan } = await import("./admin-core-operational-form-journeys.mjs");
+  const projects=buildCoreProjectCreatePlan(input), operational=selectCoreOperationalFormPlan(buildCoreOperationalFormPlan(input),"domain-forms-final-six-followup");
+  const recipes=[...projects.map(row=>({...row,surfaces:[row.surface],journeyId:"core-project-"+row.kind+"-full-create"})),...operational.recipes.map(row=>({...row,journeyId:"core-operational-"+row.kind+"-form-roundtrip"}))];
+  assert.equal(projects.length,2);assert.equal(operational.recipes.length,4);assert.equal(new Set(recipes.map(row=>row.journeyId)).size,6);
+  return {recipes,journeyIds:recipes.map(row=>row.journeyId)};
+}
+/** Selected execution only; existing native, draft, Tracking and write joins still qualify behavior.
+ * @param {object} browser
+ * @param {object} plan
+ * @param {ReadonlyArray<object>} canonicalRequiredCases
+ * @param {{globalClosed:boolean,automaticCoverage:unknown[],qualified:Array<{journeyId:string,key:string}>}|null} draftRestoration
+ */
+export function assertCoreDomainFinalSixReceipt(browser, plan, canonicalRequiredCases, draftRestoration = null) {
+  assert.equal(validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection}),"domain-forms-final-six-followup");
+  assert.equal(browser.inventoryOnly,false);assert.equal(browser.driverCompleted,true);assert.equal(browser.status,"pass");assert.deepEqual(browser.errors,[]);assert.equal(browser.globalClosed,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(plan.recipes.length,6);
+  const identities=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const result={...row};delete result.status;delete result.evidence;return result;}).sort((a,b)=>a.key.localeCompare(b.key));};
+  assert.deepEqual(identities(browser.requiredCases),identities(canonicalRequiredCases));assert.deepEqual(browser.selectedJourneyIds,plan.journeyIds);assert.deepEqual(browser.executedJourneyIds,plan.journeyIds);
+  assert.deepEqual(browser.evidence.map(row=>row.id),["existing-auth-login",...plan.journeyIds]);assert.ok(browser.evidence.every(row=>row.status==="pass"));
+  const allowed=new Set(),expectedDrafts=[],writes=[];
+  for(const[index,recipe]of plan.recipes.entries()){
+    const row=browser.evidence[index+1];assert.equal(row.consumer,recipe.consumer);assert.deepEqual(row.coverage,recipe.coverage);
+    const project=recipe.consumer==="projects-create-edit",entityId=project?row.entityId:row.ids?.[0];assert.ok(Number.isSafeInteger(entityId)&&entityId>0);
+    if(project){assert.equal(row.kind,recipe.kind);assert.equal(row.surface,recipe.surface);assert.equal(row.sourceFixtureId,recipe.fixture.id);assert.equal(row.publication,"unpublished");}
+    else{assert.equal(recipe.consumer,"project-tracking-create-edit");assert.deepEqual(row.surfaces,recipe.surfaces);assert.equal(row.ids.length,1);}
+    assert.deepEqual(row.permissionEvidence.map(proof=>proof.surface),recipe.surfaces);
+    for(const proof of row.permissionEvidence){assert.equal(proof.status,"pass");assert.equal(proof.formConsumer,recipe.consumer);assert.equal(proof.originalUiSuccessVerified,true);assert.equal(proof.originalNativeSaveVerified,true);}
+    for(const key of recipe.coverage){const cells=browser.requiredCases.filter(cell=>cell.key===key);assert.equal(cells.length,1);assert.equal(cells[0].status,"behavior_verified");assert.equal(cells[0].evidence,recipe.journeyId);assert.equal(allowed.has(key),false);allowed.add(key);}
+    for(const surface of recipe.surfaces){const cells=browser.requiredCases.filter(cell=>cell.boundary==="form"&&cell.consumer===recipe.consumer&&cell.surface===surface&&cell.scenario==="rollback");assert.equal(cells.length,1);expectedDrafts.push({journeyId:recipe.journeyId,key:cells[0].key});}
+    const table=project?"projects":"project_tracking_"+({profile:"profiles",stage:"stages",item:"items",update:"updates"}[recipe.kind]),actual=browser.databaseReadback.filter(write=>write.table===table&&write.id===entityId);assert.equal(actual.length,recipe.surfaces.length);writes.push(...actual);
+    assert.deepEqual(actual.map(write=>write.auditActions),recipe.surfaces.map(surface=>[project?"project.create":"project_children."+(surface.endsWith("-create")?"create":"update")]));if(project)assert.equal(actual[0].expected.publication_status,"unpublished");
+  }
+  assert.equal(new Set(writes).size,writes.length);assert.equal(browser.databaseReadback.length,writes.length);assert.equal(writes.length,9);
+  for(const cell of browser.requiredCases)if(!allowed.has(cell.key)){assert.equal(cell.status,"open");assert.equal(cell.evidence,null);}
+  if(draftRestoration!==null){assert.equal(draftRestoration.globalClosed,false);assert.deepEqual(draftRestoration.automaticCoverage,[]);assert.deepEqual(draftRestoration.qualified.map(row=>({journeyId:row.journeyId,key:row.key})),expectedDrafts);}
+  return {selection:browser.journeySelection,selectedJourneyIds:[...plan.journeyIds],executedJourneyIds:[...browser.executedJourneyIds],wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
 }
 
 export function buildCoreDomainFormPlan({ manifest, requiredCases, fixtures, locationConfig }) {

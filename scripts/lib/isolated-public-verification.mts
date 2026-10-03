@@ -91,6 +91,8 @@ type FinalQualityNamedCell = { key: string; disposition: string; evidence: Final
 const FINAL_QUALITY_ACCOUNTING = ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/";
 const FINAL_QUALITY_READINESS = FINAL_QUALITY_ACCOUNTING + "final-quality-readiness.json";
 const RETAINED_FINAL_QUALITY_AUTHORITY = Object.freeze({
+  final27Plan: { path: ".tmp-qa/core-final-closure/remaining-41-52-retry88-stage/qualification-adoption/selection-boundary-follow-on/qualification-plan.json",
+    sha256: "69c927001ed4fa447a8a752eb2017ef0c5b0d1d8ddbe051987c7aad5b75a95bc" },
   operationIdentitySha256: "15721c1324f7123bcdbb6d72669ff81cf34229ff748e0e04ffbd39709f42d517",
   caseIdentitySha256: "f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",
   priorAccounting: Object.freeze({
@@ -129,6 +131,41 @@ export function assertRetainedFinalQualitySource(impact: {
     currentSourceHead: candidate.invocationHeadSha, currentSourceSha256: candidate.sourceSha256, reportChanges: changes };
 }
 
+/** Retain the older partial leaf only across the finite reviewed Verification corrections. */
+export function assertRetainedFinalQualityCompositeSource(impact: {
+  status: string; retained: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
+  candidate: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
+  changes: Array<{ path: string; beforeSha256: string; afterSha256: string; role: string }>;
+  retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
+}, retained: FinalQualitySource, candidate: FinalQualitySource) {
+  assert.equal(impact.status, "ROOT_REVIEWED_EXACT_VERIFICATION_ONLY_SOURCE_IMPACT");
+  assert.equal(impact.retainedBehaviorRelabelled, false); assert.equal(impact.retainedBehaviorReexecuted, false);
+  assert.deepEqual(impact.automaticCoverage, []); assert.equal(impact.globalClosed, false);
+  const allowed = new Set([
+    "scripts/fixtures/admin-core-domain-form-journeys.mjs", "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+    "scripts/fixtures/admin-core-tracking-media-adoption.mjs", "scripts/fixtures/admin-core-project-create-journeys.mjs",
+    "scripts/qa-admin-adoption-journeys.mjs", "scripts/verify-admin-adoption-readback-isolated.mts",
+    "scripts/lib/isolated-public-verification.mts", "scripts/verify-isolated-supabase.mts",
+    "scripts/verify-admin-core-date-controls.mjs", "scripts/verify-admin-core-tracking-media-adoption.mjs",
+    "scripts/verify-admin-core-journey-selection.mjs",
+  ]);
+  for (const [recorded, source] of [[impact.retained, retained], [impact.candidate, candidate]] as const) {
+    assert.match(source.invocationHeadSha, /^[a-f0-9]{40}$/u); assert.equal(recorded.sourceHead, source.invocationHeadSha);
+    assert.equal(recorded.sourceSha256, source.sourceSha256); assert.equal(source.sourceSha256, digest(JSON.stringify(source.manifest)));
+    assert.equal(new Set(source.manifest.map(row => row.file)).size, source.manifest.length);
+    for (const row of source.manifest) { assert.ok(sourceIncluded(row.file)); assert.match(row.sha256, /^[a-f0-9]{64}$/u); }
+  }
+  const before = new Map(retained.manifest.map(row => [row.file, row.sha256])), after = new Map(candidate.manifest.map(row => [row.file, row.sha256]));
+  assert.deepEqual([...before.keys()].sort(), [...after.keys()].sort(), "Composite source retention may not add or delete source files.");
+  const changes = [...before.keys()].sort().filter(file => before.get(file) !== after.get(file)).map(file => {
+    assert.ok(allowed.has(file), "Only the finite reviewed Verification owners may differ from the partial source.");
+    return { path: file, beforeSha256: before.get(file)!, afterSha256: after.get(file)!, role: "verification-only-residual-correction" };
+  });
+  assert.deepEqual(impact.changes, changes);
+  return { originalSourceHead: retained.invocationHeadSha, originalSourceSha256: retained.sourceSha256,
+    currentSourceHead: candidate.invocationHeadSha, currentSourceSha256: candidate.sourceSha256, verificationChanges: changes };
+}
+
 /** Consume the existing materializer's fixed, reviewed outputs; never recompute behavioral qualification. */
 export function loadRetainedFinalQualityAdmission(admissionSha256: string, expected: FinalQualitySource) {
   assert.match(admissionSha256, /^[a-f0-9]{64}$/u);
@@ -161,7 +198,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     operations: FinalQualityArtifactRef; integrity: FinalQualityArtifactRef; sourceCompatibility: FinalQualityArtifactRef;
     accountingOwner: FinalQualityArtifactRef & { export: string }; producerExecution: FinalQualityArtifactRef;
     closureEligible: boolean; closureBlockers: FinalQualityArtifactRef[];
-    final27: { qualification: FinalQualityArtifactRef; sourceManifest: FinalQualityArtifactRef; gateReceipt: FinalQualityArtifactRef; originalHookRun: string };
+    final27: { qualification: FinalQualityArtifactRef; sourceManifest: FinalQualityArtifactRef; gateReceipt: FinalQualityArtifactRef; originalHookRun: string; composition?: FinalQualityArtifactRef };
     operationCounts: Record<string, number>; namedCellCounts: Record<string, number>; remainingPredicates: number;
     incompleteDomainInventories: number; openPreviewStates: number; cleanup: { remainingOwnedResources: number; remainingOwnedProcesses: number };
     automaticCoverage: unknown[]; globalClosed: boolean;
@@ -219,7 +256,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   const final = admission.final27; assert.equal(final.originalHookRun, "browser-r52");
   const q = read<{
     status: string; statusEnvelope: string; cohort: string; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string;
-    originalHookRun: string; deferredFinalQuality: boolean; finalQuality: boolean; journeyCount: number; inputArtifacts: FinalQualityArtifactRef[];
+    originalHookRun: string; deferredFinalQuality: boolean; finalQuality: boolean; journeyCount: number; inputArtifacts: FinalQualityArtifactRef[]; completion: { pointers: string[] };
     observations: Array<{ status: string; journeyId: string; sourceSha256: string; ownedRunId: string }>; automaticCoverage: unknown[]; globalClosed: boolean;
   }>(final.qualification);
   assert.equal(q.status, "QUALIFIED_SCOPED_COHORT_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT"); assert.equal(q.statusEnvelope, "qualified-sealed-cohort-envelope");
@@ -228,7 +265,92 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   assert.equal(q.originalHookRun, "browser-r52"); assert.equal(q.deferredFinalQuality, true); assert.equal(q.finalQuality, false);
   assert.deepEqual(q.automaticCoverage, []); assert.equal(q.globalClosed, false);
   const expectedIds = original.held.filter(row => row.run === "browser-r52").map(row => row.id);
-  assert.equal(expectedIds.length, 27); assert.equal(q.journeyCount, expectedIds.length); assert.deepEqual(q.observations.map(row => row.journeyId), expectedIds);
+  assert.equal(expectedIds.length, 27);
+  let admittedIds = expectedIds;
+  let compositionEvidence: { authority: FinalQualityArtifactRef; qualifications: Array<{ role: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string }>; sourceCompatibility: FinalQualityArtifactRef; sourceBinding: ReturnType<typeof assertRetainedFinalQualityCompositeSource>; sameRun: false } | undefined;
+  if (final.composition) {
+    const composition = fixed<{
+      status: string; statusEnvelope: string; cohort: string; originalHookRun: string; originalPlan: FinalQualityArtifactRef; originalProgress: FinalQualityArtifactRef;
+      originalJourneyIds: string[]; journeyCount: number; sameRun: boolean; deferredFinalQuality: boolean; finalQuality: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
+      qualifications: Array<{ role: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string; sourceManifest: FinalQualityArtifactRef; gateReceipt?: FinalQualityArtifactRef; rawArtifacts: FinalQualityArtifactRef[] }>;
+      sourceCompatibility: FinalQualityArtifactRef; completionAssignments: Array<{ field: string; qualifications: FinalQualityArtifactRef[] }>;
+    }>(final.composition, "final27-composite-qualification.json");
+    assert.equal(composition.status, "QUALIFIED_SCOPED_DOMAIN_FORM_COMPOSITE_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT");
+    assert.equal(composition.statusEnvelope, "qualified-sealed-composite-cohort-envelope"); assert.equal(composition.cohort, "domain-forms");
+    assert.equal(composition.originalHookRun, "browser-r52"); assert.equal(composition.journeyCount, 27); assert.deepEqual(composition.originalJourneyIds, expectedIds);
+    assert.equal(composition.sameRun, false); assert.equal(composition.deferredFinalQuality, true); assert.equal(composition.finalQuality, false);
+    assert.deepEqual(composition.automaticCoverage, []); assert.equal(composition.globalClosed, false);
+    for (const key of ["run", "sourceHead", "sourceSha256", "ownedRunId", "buildIdSha256", "gateReceipt"]) assert.ok(!Object.hasOwn(composition, key), "A composite cannot fabricate one run or one build for both leaves.");
+    assert.deepEqual(composition.originalPlan, RETAINED_FINAL_QUALITY_AUTHORITY.final27Plan);
+    assert.deepEqual(composition.originalProgress, operations.retained73Authority);
+    const plan = read<{ cohortHooks: Array<{ run: string; cohort: string; expectedJourneyIds: string[]; privateCompletionFields: string[]; finalQuality: boolean }> }>(composition.originalPlan);
+    const hooks = plan.cohortHooks.filter(row => row.run === "browser-r52"); assert.equal(hooks.length, 1); const hook = hooks[0];
+    assert.equal(hook.cohort, "domain-forms"); assert.equal(hook.finalQuality, true); assert.deepEqual(hook.expectedJourneyIds, expectedIds);
+    assert.deepEqual(composition.qualifications.map(row => row.role), ["partial-original-failed", "fresh-final-six"]);
+    const [priorLeaf, latestLeaf] = composition.qualifications;
+    assert.equal(priorLeaf.qualification.path, FINAL_QUALITY_ACCOUNTING + "browser-r148-qualified-observations.json");
+    assert.ok(!Object.hasOwn(priorLeaf, "gateReceipt")); assert.deepEqual(latestLeaf.qualification, final.qualification);
+    assert.deepEqual(latestLeaf.sourceManifest, final.sourceManifest); assert.deepEqual(latestLeaf.gateReceipt, final.gateReceipt);
+    const prior = read<typeof q & { partialOriginalHook: boolean; originalJourneyCount: number; originalPrivateCompletionFields: string[];
+      completion: { pointers: string[]; fields: Record<string, unknown>; missingOriginalFields: string[] } }>(priorLeaf.qualification);
+    assert.equal(prior.status, "QUALIFIED_SCOPED_DOMAIN_FORM_PARTIAL_OBSERVATIONS_ORIGINAL_FAILED");
+    assert.equal(prior.statusEnvelope, "qualified-sealed-partial-cohort-envelope"); assert.equal(prior.cohort, "domain-forms");
+    assert.equal(prior.run, "browser-r148"); assert.notEqual(q.run, prior.run); assert.equal(prior.originalHookRun, "browser-r52");
+    assert.equal(prior.partialOriginalHook, true); assert.equal(prior.originalJourneyCount, 27); assert.equal(prior.journeyCount, 21);
+    assert.equal(prior.deferredFinalQuality, true); assert.equal(prior.finalQuality, false); assert.deepEqual(prior.automaticCoverage, []); assert.equal(prior.globalClosed, false);
+    for (const key of ["buildIdSha256", "gateReceipt"]) assert.ok(!Object.hasOwn(prior, key));
+    assert.deepEqual(prior.originalPrivateCompletionFields, hook.privateCompletionFields);
+    assert.deepEqual(prior.completion.missingOriginalFields, ["trackingDates", "trackingMedia", "trackingMediaApplicability"]);
+    assert.deepEqual(Object.keys(prior.completion.fields).sort(), ["companyImages", "currentIdentityProtection", "draftRestoration", "writes"]);
+    const priorBase = ".tmp-qa/core-final-closure/" + prior.run + "/";
+    assert.equal(priorLeaf.sourceManifest.path, priorBase + "public-source-manifest.json");
+    const priorSource = read<FinalQualitySource>(priorLeaf.sourceManifest);
+    assert.equal(priorSource.invocationHeadSha, prior.sourceHead); assert.equal(priorSource.sourceSha256, prior.sourceSha256);
+    for (const [leaf, value] of [[priorLeaf, prior], [latestLeaf, q]] as const) {
+      for (const key of ["run", "sourceHead", "sourceSha256", "ownedRunId"] as const) assert.equal(leaf[key], value[key]);
+      assert.deepEqual(leaf.rawArtifacts, value.inputArtifacts); assert.ok(leaf.rawArtifacts.length > 0);
+      for (const ref of leaf.rawArtifacts) pin(ref);
+    }
+    const priorInput = new Map(prior.inputArtifacts.map(ref => [artifactPath(ref), ref.sha256]));
+    assert.equal(priorInput.get(artifactPath(priorLeaf.sourceManifest)), priorLeaf.sourceManifest.sha256);
+    const priorRaw = <T,>(name: string) => { const path = priorBase + name, sha256 = priorInput.get(resolve(ROOT, path)); assert.ok(sha256, "Missing original failed-leaf raw evidence: " + name); return read<T>({ path, sha256 }); };
+    for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) {
+      const receipt = priorRaw<{ name: string; code: number; stdoutSha256: string; stderrSha256: string }>("public-" + name + ".json");
+      assert.equal(receipt.name, name); assert.equal(receipt.code, name === "admin-adoption" ? 1 : 0);
+      assert.match(receipt.stdoutSha256, /^[a-f0-9]{64}$/u); assert.match(receipt.stderrSha256, /^[a-f0-9]{64}$/u);
+      for (const stream of ["stdout", "stderr"] as const) assert.equal(priorInput.get(resolve(ROOT, priorBase + "public-" + name + "." + stream + ".log")), receipt[stream === "stdout" ? "stdoutSha256" : "stderrSha256"], "Each original gate digest must bind its sealed raw log bytes.");
+    }
+    assert.ok(!priorInput.has(resolve(ROOT, priorBase + "public-and-admin-adoption-gates.json")), "The failed original leaf did not emit a successful full gate receipt.");
+    const browser = priorRaw<{ status: string; sourceSha256: string; journeySelection: string | null; evidence: Array<{ id: string; status: string }> }>("admin-adoption-browser.json");
+    assert.equal(browser.status, "fail"); assert.equal(browser.sourceSha256, prior.sourceSha256); assert.equal(browser.journeySelection, null);
+    assert.equal(browser.evidence[0].id, "existing-auth-login"); assert.equal(browser.evidence[0].status, "pass");
+    const originalRows = browser.evidence.slice(1); assert.deepEqual(originalRows.map(row => row.id), expectedIds);
+    assert.ok(originalRows.every(row => ["pass", "fail"].includes(row.status)));
+    const priorIds = originalRows.filter(row => row.status === "pass").map(row => row.id);
+    assert.equal(priorIds.length, 21); assert.deepEqual(prior.observations.map(row => row.journeyId), priorIds);
+    admittedIds = expectedIds.filter(id => !priorIds.includes(id)); assert.equal(admittedIds.length, 6);
+    assert.deepEqual(originalRows.filter(row => row.status === "fail").map(row => row.id), admittedIds);
+    for (const row of prior.observations) {
+      assert.equal(row.status, "QUALIFIED_SCOPED_BEHAVIORAL_OBSERVATION"); assert.equal(row.sourceSha256, prior.sourceSha256); assert.equal(row.ownedRunId, prior.ownedRunId);
+      const retained = qualified.filter(item => item.id === row.journeyId); assert.equal(retained.length, 1);
+      assert.deepEqual(retained[0], { id: row.journeyId, qualification: priorLeaf.qualification, run: prior.run, sourceHead: prior.sourceHead, sourceSha256: prior.sourceSha256, ownedRunId: prior.ownedRunId });
+    }
+    for (const name of ["partial-native-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json"])
+      assert.ok(priorInput.has(resolve(ROOT, priorBase + name)), "The partial qualification must preserve actual native/draft/cleanup artifacts.");
+    const assignments = hook.privateCompletionFields.map(field => ({ field, qualifications: field === "draftRestoration" || field === "writes"
+      ? [priorLeaf.qualification, latestLeaf.qualification] : field === "companyImages" ? [priorLeaf.qualification] : [latestLeaf.qualification] }));
+    assert.deepEqual(composition.completionAssignments, assignments);
+    for (const assignment of assignments) for (const ref of assignment.qualifications) {
+      const value = ref === priorLeaf.qualification ? prior : q;
+      assert.ok(value.completion.pointers.includes("/" + assignment.field), "Every original completion field must retain its actual owning leaf.");
+    }
+    const compatibility = fixed<Parameters<typeof assertRetainedFinalQualityCompositeSource>[0]>(composition.sourceCompatibility, "source-impact-partial148-to-final-six.json");
+    assert.deepEqual(compatibility.retained.sourceManifest, priorLeaf.sourceManifest); assert.deepEqual(compatibility.candidate.sourceManifest, final.sourceManifest);
+    const latestSource = read<FinalQualitySource>(final.sourceManifest);
+    const sourceBinding = assertRetainedFinalQualityCompositeSource(compatibility, priorSource, latestSource);
+    compositionEvidence = { authority: final.composition, qualifications: composition.qualifications.map(({ role, qualification, run, sourceHead, sourceSha256, ownedRunId }) => ({ role, qualification, run, sourceHead, sourceSha256, ownedRunId })), sourceCompatibility: composition.sourceCompatibility, sourceBinding, sameRun: false };
+  }
+  assert.equal(q.journeyCount, admittedIds.length); assert.deepEqual(q.observations.map(row => row.journeyId), admittedIds);
   for (const row of q.observations) {
     assert.equal(row.status, "QUALIFIED_SCOPED_BEHAVIORAL_OBSERVATION"); assert.equal(row.sourceSha256, q.sourceSha256); assert.equal(row.ownedRunId, q.ownedRunId);
     const retained = qualified.filter(item => item.id === row.journeyId); assert.equal(retained.length, 1);
@@ -246,6 +368,14 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   for (const ref of [final.sourceManifest, final.gateReceipt]) assert.equal(input.get(artifactPath(ref)), ref.sha256);
   for (const name of ["admin-adoption-browser.json", "admin-adoption-database-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json"])
     assert.ok(input.has(resolve(ROOT, rawBase + name)), "Qualified Final27 must seal its actual Browser/native/cleanup inputs.");
+  if (final.composition) {
+    const path = rawBase + "admin-adoption-browser.json", sha256 = input.get(resolve(ROOT, path)); assert.ok(sha256);
+    const browser = read<{ status: string; sourceSha256: string; scope: string; cohort: string; journeySelection: string; driverCompleted: boolean; wholeCohortExecuted: boolean; selectedJourneyIds: string[]; executedJourneyIds: string[]; evidence: Array<{ id: string; status: string }> }>({ path, sha256 });
+    assert.equal(browser.status, "pass"); assert.equal(browser.sourceSha256, q.sourceSha256); assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "domain-forms");
+    assert.equal(browser.journeySelection, "domain-forms-final-six-followup"); assert.equal(browser.driverCompleted, true); assert.equal(browser.wholeCohortExecuted, false);
+    assert.deepEqual(browser.selectedJourneyIds, admittedIds); assert.deepEqual(browser.executedJourneyIds, admittedIds);
+    assert.deepEqual(browser.evidence.map(row => row.id), ["existing-auth-login", ...admittedIds]); assert.ok(browser.evidence.every(row => row.status === "pass"));
+  }
   const impact = fixed<Parameters<typeof assertRetainedFinalQualitySource>[0]>(admission.sourceCompatibility, "source-impact-current-to-final.json");
   assert.deepEqual(impact.retained.sourceManifest, final.sourceManifest); assert.deepEqual(impact.candidate.sourceManifest, admission.sourceManifest);
   const sourceBinding = assertRetainedFinalQualitySource(impact, retainedSource, candidate);
@@ -355,6 +485,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   return { verify, receipt: { mode: "retained" as const, reexecuted: false, originalHookRun: "browser-r52", run: q.run,
     ownedRunId: q.ownedRunId, sourceHead: q.sourceHead, sourceSha256: q.sourceSha256, buildIdSha256: gates.buildIdSha256,
     qualification: final.qualification, sourceManifest: final.sourceManifest, gateReceipt: final.gateReceipt,
+    ...(compositionEvidence ? { composition: compositionEvidence, primaryQualificationJourneyIds: admittedIds } : {}),
     admission: admissionRef, accounting: admission.accounting, operations: admission.operations, integrity: admission.integrity,
     sourceCompatibility: admission.sourceCompatibility, sourceBinding, accountingState, accountingOwner: admission.accountingOwner,
     producerExecution: admission.producerExecution, qualifiedJourneyIds: expectedIds, automaticCoverage: [], globalClosed: false } };
@@ -373,7 +504,7 @@ export type PublicGateRequest = {
   /** Bounded independent Core families; the final gate still runs the Public suite. */
   adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings" | "media-library" | "template-bulk" | "navigation-settings" | "auth-entry" | "media-recovery" | "query-presentation" | "template-controls" | "domain-bulk" | "topic-controls" | "project-controls" | "presentation-controls";
   /** Optional exact affected journeys within the existing domain-forms cohort. */
-  adoptionJourneySelection?: "media-library-final-three-followup" | "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
+  adoptionJourneySelection?: "media-library-final-three-followup" | "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "domain-forms-final-six-followup" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";

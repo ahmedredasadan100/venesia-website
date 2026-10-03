@@ -26,7 +26,7 @@ import { verifyCoreDescendantPresentationCompletion, partitionCoreDescendantNati
 import { assertCoreTrackingDateReceipts, assertCoreTrackingMediaApplicability } from "./fixtures/admin-core-operational-form-journeys.mjs";
 import { verifyCoreTemplatePresentationCompletion } from './verify-admin-core-template-library-presentation-isolated.mts';
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
-import { assertCoreJourneySelectionReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
+import { assertCoreJourneySelectionReceipt, buildCoreDomainFinalSixPlan, assertCoreDomainFinalSixReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { execFileSync } from "node:child_process";
 import { resolve } from "node:path";
@@ -282,12 +282,14 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       domainTailPlan = (isReadonlyQueryProof ? buildCoreReadonlyQueryProofPlan : isTrackingPermissions ? buildCoreTrackingPermissionPlan : buildCoreDomainCommandTailPlan)({rowActions:ADMIN_ROW_ACTIONS_CAPABILITY_ADOPTION,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),paths:{...location,...tracking}});
     }
     const domainTailNative = isDomainTail ? JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")) : null;
+    const isDomainFinalSix = browser.journeySelection === "domain-forms-final-six-followup";
+    const domainFinalSixPlan = isDomainFinalSix ? await buildCoreDomainFinalSixPlan({manifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,requiredCases:canonicalRequiredCases,fixtures:JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8"))}) : null;
     const selectedJourneys = isCoreMediaSelection(browser.journeySelection) ? assertCoreMediaSelectionReceipt(browser,canonicalRequiredCases) : (browser.journeySelection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||browser.journeySelection==="media-recovery-missing-followup") ? assertCoreMediaRecoverySelectionReceipt(browser,canonicalRequiredCases) : (browser.journeySelection===CORE_PRESENTATION_SCROLL_SELECTION||browser.journeySelection===CORE_PRESENTATION_HERO_SELECTION) ? assertCorePresentationSelectionReceipt(browser,canonicalRequiredCases) : isTopicControlsRetry ? assertCoreTopicControlsRetryReceipt(browser,canonicalRequiredCases) : isTemplateControlsRetry ? assertCoreTemplateControlsRetryReceipt(browser,canonicalRequiredCases) : isProjectEditors ? assertCoreProjectEditorSelectionReceipt(browser,canonicalRequiredCases) : isNavigationFollowup ? assertCoreNavigationFollowupReceipt(browser,canonicalRequiredCases) : isTemplateHeroBulk ? assertCoreTemplateHeroBulkReceipt(browser,canonicalRequiredCases) : isSpecializedFollowup ? await assertCoreSpecializedFollowupReceipt(browser,canonicalRequiredCases) : isPageCompositionFollowup ? await assertCorePageCompositionFollowupReceipt(browser,canonicalRequiredCases) : isReadonlyHubFollowup ? assertCoreReadonlyHubFollowupReceipt(browser,canonicalRequiredCases) : isTemplateCards ? assertCoreTemplateCardsSelectionReceipt(browser,await loadCoreTemplatePresentationPlan(),canonicalRequiredCases) : isQueryLayout ? assertCoreQuerySelectionReceipt(browser,await loadCoreQueryPresentationPlan(),canonicalRequiredCases) : isDomainTail ? assertCoreDomainCommandTailReceipt(browser, domainTailPlan, canonicalRequiredCases, {
       native:domainTailNative,ownedRunId:handle.identity.runId,
       sourceSha256:JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256,expectedActorId:await readCoreFixedQaActor(handle),
     }) : isPreviewImpact ? assertCorePreviewPublicImpactReceipt(browser, previewImpactContext!) : isTemplateCreates
       ? assertCoreTemplateSelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases)
-      : assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases);
+      : isDomainFinalSix ? assertCoreDomainFinalSixReceipt(browser, domainFinalSixPlan!, canonicalRequiredCases) : assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases);
     const previewStates = browser.cohort === "preview-recovery-templates" ? await verifyCorePreviewStateReadback(handle, artifactDir, "after") : null;
     let publicPreviewImpact = null;
     if (isPreviewImpact) {
@@ -319,6 +321,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
         native: JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),
         ownedRunId: handle.identity.runId, sourceSha256: JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8")).sourceSha256, expectedActorId: await readCoreFixedQaActor(handle),
       });
+      else if (isDomainFinalSix) assertCoreDomainFinalSixReceipt(browser, domainFinalSixPlan!, canonicalRequiredCases, draftRestoration);
       else assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration);
     }
     const companyImages=browser.cohort==="domain-forms"&&!browser.journeySelection?assertCoreCompanyImageCompletion(browser,JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8")),handle.identity.runId):null;
@@ -470,7 +473,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     }
     const domainBulk=browser.cohort==="domain-bulk"?await verifyCoreDomainBulkCompletion(handle,browser,JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8")),JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"))):null;
     let trackingDates=null,trackingMedia=null,trackingMediaApplicability=null;
-    if(browser.cohort==='domain-forms'&&!browser.journeySelection){
+    if(browser.cohort==='domain-forms'&&(!browser.journeySelection||isDomainFinalSix)){
       const {ADMIN_COLLECTION_SURFACE_ADOPTION}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import('../src/lib/admin/interaction-system/adoption-manifest.ts')>('../src/lib/admin/interaction-system/adoption-manifest.ts');
       const source=JSON.parse(readFileSync(join(artifactDir,'public-source-manifest.json'),'utf8'));
       trackingDates=assertCoreTrackingDateReceipts({browser,native:JSON.parse(readFileSync(join(artifactDir,'core-native-control-readback.json'),'utf8')),ownedRunId:handle.identity.runId,sourceSha256:source.sourceSha256,actorId:await readCoreFixedQaActor(handle),fixtures:JSON.parse(readFileSync(join(artifactDir,'admin-adoption-fixtures.json'),'utf8')),formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,collectionManifest:ADMIN_COLLECTION_SURFACE_ADOPTION});

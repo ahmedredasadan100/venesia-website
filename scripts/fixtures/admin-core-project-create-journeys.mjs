@@ -76,7 +76,14 @@ export async function runCoreProjectCreateJourneys(ctx) {
       await button.click();
     }
     await picker.getByRole("button", { name: "قائمة", exact: true }).click();
-    await picker.getByPlaceholder("ابحث بالاسم أو المسار أو الوصف البديل…", { exact: true }).fill(segments.at(-1));
+    const objectKey = value.slice(1), folder = "images/projects/" + segments.slice(0, -1).join("/"), query = segments.at(-1);
+    const [response] = await Promise.all([
+      page.waitForResponse(response => { const url = new URL(response.url()); return response.request().method() === "GET" && url.origin === origin && url.pathname === "/api/admin/media-library" && url.searchParams.get("folder") === folder.replace(/\/$/u, "") && url.searchParams.get("q") === query && url.searchParams.get("kind") === "image"; }),
+      picker.getByPlaceholder("ابحث بالاسم أو المسار أو الوصف البديل…", { exact: true }).fill(query),
+    ]);
+    assert.equal(response.status(), 200); const payload = await response.json(); assert.equal(payload.error, undefined);
+    assert.deepEqual(payload.assets.map(asset => ({ objectKey: asset.objectKey, publicUrl: asset.publicUrl, status: asset.status, missingObject: asset.missingObject })), [{ objectKey, publicUrl: value, status: "active", missingObject: false }]);
+    await expect(picker.getByRole("status").filter({ hasText: "جارٍ تحميل الملفات…" })).toHaveCount(0);
     const row = picker.locator("button[aria-pressed]").filter({ has: page.getByText(value.slice(1), { exact: true }) });
     await expect(row).toHaveCount(1, { timeout: 60_000 });
     await expect(row).toBeEnabled();
