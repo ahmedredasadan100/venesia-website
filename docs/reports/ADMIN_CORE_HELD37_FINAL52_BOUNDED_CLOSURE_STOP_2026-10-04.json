@@ -1,0 +1,1537 @@
+{
+  "status": "PRE_FINAL_GATE_BEHAVIOR_COMPLETE_ACCOUNTING_PREVIEW_ONLY_QUALITY_PENDING_CLOSURE_BLOCKED",
+  "preparedAt": "2026-10-04T01:16:52.033Z",
+  "observedHead": "6fb6fe53e23a8e17870abf6845deec22d0c983bd",
+  "scope": "Offline report data only. No tracked report, frozen owner, raw evidence, Browser, DB, or gate mutation.",
+  "intendedTrackedReports": [
+    {
+      "path": "docs/reports/ADMIN_CORE_HELD37_FINAL52_BOUNDED_CLOSURE_STOP_2026-10-04.json",
+      "status": "PREPARED_FOR_ROOT_REVIEW_NOT_WRITTEN_BY_THIS_DRAFT",
+      "artifactClaimed": false
+    },
+    {
+      "path": "docs/reports/ADMIN_CORE_HELD37_FINAL52_BOUNDED_CLOSURE_STOP_2026-10-04.md",
+      "status": "PREPARED_FOR_ROOT_REVIEW_NOT_WRITTEN_BY_THIS_DRAFT",
+      "artifactClaimed": false
+    }
+  ],
+  "sections": {
+    "A": {
+      "title": "Starting authority",
+      "startingHead": "095ada2d50725ba5397ca014268647138925c568",
+      "pr": {
+        "number": 186,
+        "requiredState": "OPEN_DRAFT",
+        "liveFinalState": "PENDING_FINAL_READ"
+      },
+      "accounting": {
+        "qualified": 73,
+        "notApplicable": 1,
+        "hardOpen": 0,
+        "held": 37,
+        "total": 111
+      },
+      "checkpoint": [
+        {
+          "path": "docs/reports/ADMIN_CORE_HARD_OPEN_CLOSURE_STOP_2026-10-03.json",
+          "sha256": "e6b2e3dc7211347e0c872241ab6d5d802e616842533faeafd0bf4a5636a39197"
+        },
+        {
+          "path": "docs/reports/ADMIN_CORE_HARD_OPEN_CLOSURE_STOP_2026-10-03.md",
+          "sha256": "c722fa57aa041b09a6e9e7d95c2d7826c64bd8a89469ccb8096bb90b5a13b5d0"
+        }
+      ],
+      "originalProgress": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/progress-73-retained-1-na-0-hard-37-held-after-hard-open-2026-10-03.json",
+        "sha256": "f7c1d1a25c334dbfb54c3e106087e600690b290b5a4439b4c580f10cbbe86815"
+      },
+      "isolatedException": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/isolated-execution-authorization.json",
+        "sha256": "81d2bcd9cf5b084e3468eb5a891a735e862d382117d806d7dc61aa02815d2403"
+      },
+      "qualificationPreservation": "All73 original retained rows compare exactly equal with accepted current109 authority; Cards/Breadcrumb/Hero remain retained. No qualified operation replayed."
+    },
+    "B": {
+      "title": "Held37",
+      "dependencyMap": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/dependency-map.json",
+        "sha256": "02f263bc1d80e906c6c78762dd1abbc90ef4591f04beccf47ada1b428182627d"
+      },
+      "historicalAuthorizationCaveat": "The historical dependency map records the initial migration prohibition. Later isolated-only user exception clears that execution boundary; original map remains unchanged.",
+      "releasedAndQualified": 37,
+      "remaining": 0,
+      "media10": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/media10-qualified-reconciliation.json",
+        "sha256": "a31a9dc895976e7bdcb7f7e3e50eb4a36b7c50a0a1e105708e21e1c05bb8c9ee"
+      },
+      "rows": [
+        {
+          "id": "core-media-upload-validation-retry",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/r144-partial/partial-qualification.json",
+            "sha256": "6684eef321acb999429d71059b02d32f8638036ba14b7c36e116043d1514ab70"
+          },
+          "qualifiedRun": "browser-r144",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-catalog-query",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/r144-partial/partial-qualification.json",
+            "sha256": "6684eef321acb999429d71059b02d32f8638036ba14b7c36e116043d1514ab70"
+          },
+          "qualifiedRun": "browser-r144",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-metadata-failure-retry",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/r144-partial/partial-qualification.json",
+            "sha256": "6684eef321acb999429d71059b02d32f8638036ba14b7c36e116043d1514ab70"
+          },
+          "qualifiedRun": "browser-r144",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-preview",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r147-qualified-observations.json",
+            "sha256": "4e105dad397e1f4a76fd1e854ba8b90db07bd6df38ef0399c0b82e0bb0dbd34c"
+          },
+          "qualifiedRun": "browser-r147",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-picker-use",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/r144-partial/partial-qualification.json",
+            "sha256": "6684eef321acb999429d71059b02d32f8638036ba14b7c36e116043d1514ab70"
+          },
+          "qualifiedRun": "browser-r144",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-in-use-delete",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/r144-partial/partial-qualification.json",
+            "sha256": "6684eef321acb999429d71059b02d32f8638036ba14b7c36e116043d1514ab70"
+          },
+          "qualifiedRun": "browser-r144",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-physical-move",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/r144-partial/partial-qualification.json",
+            "sha256": "6684eef321acb999429d71059b02d32f8638036ba14b7c36e116043d1514ab70"
+          },
+          "qualifiedRun": "browser-r144",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-replace-references",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/r144-partial/partial-qualification.json",
+            "sha256": "6684eef321acb999429d71059b02d32f8638036ba14b7c36e116043d1514ab70"
+          },
+          "qualifiedRun": "browser-r144",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-detach-delete",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r147-qualified-observations.json",
+            "sha256": "4e105dad397e1f4a76fd1e854ba8b90db07bd6df38ef0399c0b82e0bb0dbd34c"
+          },
+          "qualifiedRun": "browser-r147",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-permission",
+          "originalHookRun": "browser-r101",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r147-qualified-observations.json",
+            "sha256": "4e105dad397e1f4a76fd1e854ba8b90db07bd6df38ef0399c0b82e0bb0dbd34c"
+          },
+          "qualifiedRun": "browser-r147",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-project-residential-full-create",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-project-create-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r149-qualified-observations.json",
+            "sha256": "e44168ecbb088404c21fc02ab13fc9643683a63aeb655f2ea27663d053c7a97c"
+          },
+          "qualifiedRun": "browser-r149",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-project-commercial-full-create",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-project-create-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r149-qualified-observations.json",
+            "sha256": "e44168ecbb088404c21fc02ab13fc9643683a63aeb655f2ea27663d053c7a97c"
+          },
+          "qualifiedRun": "browser-r149",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-category-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-series-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-article-content-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-news-content-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-press-content-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-site_update-content-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-video-content-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-gallery-content-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-project-residential-existing-form-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-project-commercial-existing-form-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-location-governorate-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-location-city-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-location-main_area-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-location-sub_area-form-create-edit",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-operational-redirect-form-roundtrip",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-operational-profile-form-roundtrip",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r149-qualified-observations.json",
+            "sha256": "e44168ecbb088404c21fc02ab13fc9643683a63aeb655f2ea27663d053c7a97c"
+          },
+          "qualifiedRun": "browser-r149",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-operational-stage-form-roundtrip",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r149-qualified-observations.json",
+            "sha256": "e44168ecbb088404c21fc02ab13fc9643683a63aeb655f2ea27663d053c7a97c"
+          },
+          "qualifiedRun": "browser-r149",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-operational-item-form-roundtrip",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r149-qualified-observations.json",
+            "sha256": "e44168ecbb088404c21fc02ab13fc9643683a63aeb655f2ea27663d053c7a97c"
+          },
+          "qualifiedRun": "browser-r149",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-operational-update-form-roundtrip",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r150-qualified-observations.json",
+            "sha256": "f7ec3e8d9b06207af1f0fcc66ff07b9c244e06613bc7f3786291f2753a8d3acd"
+          },
+          "qualifiedRun": "browser-r150",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-operational-user-form-roundtrip",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-operational-user-current-identity-protection",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-company-settings-rejection-preservation-save-reload",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-settings-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-global-seo-settings-rejection-save-reload",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-settings-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-media-settings-range-rejection-save-reload",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-settings-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        },
+        {
+          "id": "core-menu-quick-create-rejection-preservation-retry",
+          "originalHookRun": "browser-r52",
+          "owner": "scripts/fixtures/admin-core-settings-journeys.mjs",
+          "currentStatus": "QUALIFIED",
+          "qualification": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+            "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+          },
+          "qualifiedRun": "browser-r148",
+          "remainingDependency": null
+        }
+      ],
+      "final27": [
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final148-partial-root-review.json",
+          "sha256": "6f6ac6ae6a5f4bfa15fbfe9f66e20fe15e591df445290ea614bd7d2cfa24f70d"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final149-partial-root-review.json",
+          "sha256": "087738ad08478b7379ff42f49786c44ca3dcf749d0d83697132140b24ae8330d"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final150-root-review.json",
+          "sha256": "a6e8f3aebb62e7b6ad1d5cc0b76a9fdd2f831cc3c7acf77e5b74c34acd5a6b12"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final27-composite-qualification.json",
+          "sha256": "bc1aeceaf489e092a87989508c4eb3866d3a78344d8ce4d245cdd47aee713d6e"
+        }
+      ]
+    },
+    "C": {
+      "title": "Failures and actual corrections",
+      "runs": [
+        {
+          "run": "browser-r144",
+          "sourceHead": "41a274a5a11d558072897ca27b7349c057d72920",
+          "originalStatus": "failed",
+          "exitCode": 1,
+          "observations": {
+            "status": "failed",
+            "passed": 7,
+            "failed": 1,
+            "unexecuted": 2,
+            "qualified": 7
+          },
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r144-execution-result.json",
+            "sha256": "2047b61c1a4130b4000e2a520dd6f0bd00d6c20fc817e6c9293e12aa4ea61dda"
+          },
+          "originalCleanup": {
+            "status": "complete",
+            "code": null,
+            "ownedResourcesRemoved": 10,
+            "remainingOwnedResources": 0,
+            "originalResourcesUnchanged": true,
+            "privateEnvRemoved": true,
+            "hostPortsReleased": [
+              57601,
+              57602,
+              57603,
+              57604
+            ],
+            "oldImagesRemoved": 0,
+            "engineStopped": false,
+            "evidence": {
+              "path": ".tmp-qa/core-final-closure/browser-r144/cleanup.json",
+              "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+            }
+          },
+          "queueReleasedAsRecorded": true,
+          "finalRemainingOwnedResources": 0,
+          "sourceRelabelled": false
+        },
+        {
+          "run": "browser-r145",
+          "sourceHead": "b381f44affa2cc394c5839666bdf32777b4d481c",
+          "originalStatus": "failed",
+          "exitCode": 1,
+          "observations": {
+            "status": "failed",
+            "qualified": 0
+          },
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r145-execution-result.json",
+            "sha256": "3ae9b6a547fc1562653a566afbd6f0055598fe426eb9c9522c3d8c1818d33aa2"
+          },
+          "originalCleanup": {
+            "status": "blocked",
+            "code": "COMMAND_TIMEOUT",
+            "stage": "volume-inspect",
+            "complete": false,
+            "evidence": {
+              "path": ".tmp-qa/core-final-closure/browser-r145/cleanup.json",
+              "sha256": "f68b43cafab661f45db3d77b1298f76f12a1dd918a21c974f9966ca6ccc9dd5e"
+            }
+          },
+          "queueReleasedAsRecorded": null,
+          "laterRecovery": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r145-recovery-root-review.json",
+            "sha256": "aea006d3648d52e8e20d436afa51013014a44d74d5dc8b8eb4cf7319e8433639"
+          },
+          "laterRemainingOwnedResources": 0,
+          "laterRemainingOwnedProcesses": 0,
+          "originalBlockedCleanupPreserved": true,
+          "sourceRelabelled": false
+        },
+        {
+          "run": "browser-r146",
+          "sourceHead": "ec5ff83396e7348b431e40eb2ec15d94a5c3b4fe",
+          "originalStatus": "failed",
+          "exitCode": 1,
+          "observations": {
+            "status": "failed",
+            "qualified": 0
+          },
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r146-execution-result.json",
+            "sha256": "d3ad158858c24b7a55f25f289c3300d04e852d8435591c2cd642fffae5e715c9"
+          },
+          "originalCleanup": {
+            "status": "complete",
+            "code": null,
+            "ownedResourcesRemoved": 10,
+            "remainingOwnedResources": 0,
+            "originalResourcesUnchanged": true,
+            "privateEnvRemoved": true,
+            "hostPortsReleased": [
+              57601,
+              57602,
+              57603,
+              57604
+            ],
+            "oldImagesRemoved": 0,
+            "engineStopped": false,
+            "evidence": {
+              "path": ".tmp-qa/core-final-closure/browser-r146/cleanup.json",
+              "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+            }
+          },
+          "queueReleasedAsRecorded": true,
+          "finalRemainingOwnedResources": 0,
+          "sourceRelabelled": false
+        },
+        {
+          "run": "browser-r147",
+          "sourceHead": "e15306af2b83b89c8f83cbf02609be18cecdfd76",
+          "originalStatus": "passed",
+          "exitCode": 0,
+          "observations": {
+            "status": "passed",
+            "passed": 3,
+            "failed": 0,
+            "unexecuted": 0,
+            "qualified": 3
+          },
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r147-execution-result.json",
+            "sha256": "3b326a1f42b9c46ba70c774b18746b5788e90ff97305eb0030cccbc5de82d75a"
+          },
+          "originalCleanup": {
+            "status": "complete",
+            "code": null,
+            "ownedResourcesRemoved": 10,
+            "remainingOwnedResources": 0,
+            "originalResourcesUnchanged": true,
+            "privateEnvRemoved": true,
+            "hostPortsReleased": [
+              57601,
+              57602,
+              57603,
+              57604
+            ],
+            "oldImagesRemoved": 0,
+            "engineStopped": false,
+            "evidence": {
+              "path": ".tmp-qa/core-final-closure/browser-r147/cleanup.json",
+              "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+            }
+          },
+          "queueReleasedAsRecorded": true,
+          "finalRemainingOwnedResources": 0,
+          "sourceRelabelled": false
+        },
+        {
+          "run": "browser-r148",
+          "sourceHead": "31408af92166a474d45ffe25d4ff055d911bff5b",
+          "originalStatus": "failed",
+          "exitCode": 1,
+          "observations": {
+            "status": "failed",
+            "passed": 21,
+            "failed": 6,
+            "unexecuted": 0,
+            "qualified": 21
+          },
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r148-execution-result.json",
+            "sha256": "9e959cdef5c18fc6e0a278cb46b88b9ef686fc6b6006a63baf93e60bd89cb936"
+          },
+          "originalCleanup": {
+            "status": "complete",
+            "code": null,
+            "ownedResourcesRemoved": 10,
+            "remainingOwnedResources": 0,
+            "originalResourcesUnchanged": true,
+            "privateEnvRemoved": true,
+            "hostPortsReleased": [
+              57601,
+              57602,
+              57603,
+              57604
+            ],
+            "oldImagesRemoved": 0,
+            "engineStopped": false,
+            "evidence": {
+              "path": ".tmp-qa/core-final-closure/browser-r148/cleanup.json",
+              "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+            }
+          },
+          "queueReleasedAsRecorded": true,
+          "finalRemainingOwnedResources": 0,
+          "sourceRelabelled": false
+        },
+        {
+          "run": "browser-r149",
+          "sourceHead": "fe17e3053e429db7cd6ceae741eaf987e5374eff",
+          "originalStatus": "failed",
+          "exitCode": 1,
+          "observations": {
+            "status": "failed",
+            "passed": 5,
+            "failed": 1,
+            "unexecuted": 0,
+            "qualified": 5
+          },
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r149-execution-result.json",
+            "sha256": "af43ce4d581487eda6263f6c1e28b07872c4f3036fe94c06032e16b4a154ecec"
+          },
+          "originalCleanup": {
+            "status": "complete",
+            "code": null,
+            "ownedResourcesRemoved": 10,
+            "remainingOwnedResources": 0,
+            "originalResourcesUnchanged": true,
+            "privateEnvRemoved": true,
+            "hostPortsReleased": [
+              57601,
+              57602,
+              57603,
+              57604
+            ],
+            "oldImagesRemoved": 0,
+            "engineStopped": false,
+            "evidence": {
+              "path": ".tmp-qa/core-final-closure/browser-r149/cleanup.json",
+              "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+            }
+          },
+          "queueReleasedAsRecorded": true,
+          "finalRemainingOwnedResources": 0,
+          "sourceRelabelled": false
+        },
+        {
+          "run": "browser-r150",
+          "sourceHead": "6fb6fe53e23a8e17870abf6845deec22d0c983bd",
+          "originalStatus": "passed",
+          "exitCode": 0,
+          "observations": {
+            "status": "passed",
+            "passed": 1,
+            "failed": 0,
+            "unexecuted": 0,
+            "qualified": 1
+          },
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r150-execution-result.json",
+            "sha256": "fbe6371fc1a27141a67b6d30476c4fbc6756ffe2d012e5bec932e80b060acd75"
+          },
+          "rootReview": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final150-root-review.json",
+            "sha256": "a6e8f3aebb62e7b6ad1d5cc0b76a9fdd2f831cc3c7acf77e5b74c34acd5a6b12"
+          },
+          "cleanupReview": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r150-root-success-and-cleanup-review.json",
+            "sha256": "56bdbfab530a1da3007a349337fa93de5a9c2ebd4e95c8c43c7cb6e4b1cea994"
+          },
+          "queueReleasedAsRecorded": true,
+          "finalRemainingOwnedResources": 0,
+          "finalRemainingOwnedProcesses": 0,
+          "sourceRelabelled": false
+        }
+      ],
+      "failures": [
+        {
+          "id": "isolated-http-image-contract",
+          "classification": "Verification/Environment",
+          "owner": "scripts/lib/isolated-public-verification.mts",
+          "rootCause": "The disposable QA storage HTTP origin needs an exact owned build-only image contract; it is not a reason to broaden the canonical Product image policy.",
+          "correction": "Existing isolated verification owner supplies the exact local storage origin with strict hash binding; no redirects or arbitrary hosts.",
+          "productAllowlistChanged": false,
+          "evidence": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/media144-source-impact.json",
+            "sha256": "08fc2399679a66add8452d625b136ec3e6f37535db3fbcf55d40adb661e61264"
+          }
+        },
+        {
+          "id": "r144-preview",
+          "classification": "Verification",
+          "owner": "scripts/fixtures/admin-core-media-journeys.mjs",
+          "cause": "Next width descriptors and no-enlargement optimization preserve 1x1 physical pixels but Chromium density-corrected natural dimensions can truncate to 0x0. Existing preview assertion confuses density-corrected intrinsic size with decoded resource dimensions.",
+          "correction": "Validate the decoded current resource dimensions and exact request/response binding; retain UI and permission/native guards.",
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/media-preview-diagnosis/diagnosis.json",
+              "sha256": "9d878cabd40f6e6d19accc30e93d17dac6656ca5491b677b0d47108608be89c0"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/media-preview-diagnosis/controlled-next-image-density-adversarial.json",
+              "sha256": "cbe9dac900e66c8b55cf86bc179dcf89ec3163a7dc86480e7812d2b0c608c302"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/media10-root-review.json",
+              "sha256": "3b7b78bb33e1c7ef1d70a0707275497bb8a75ad3dd483e21d762a2409bc0d604"
+            }
+          ],
+          "disposition": "Seven successful operations qualified from failed144; only preview and two unfinished operations retried.147 completed those three."
+        },
+        {
+          "id": "r144-unfinished-tail",
+          "classification": "Verification execution limit",
+          "owner": "scripts/lib/isolated-public-verification.mts",
+          "cause": "The original Media10 run exhausted its Admin execution window after seven passes and preview failure; detach-delete and permission were unfinished.",
+          "correction": "Conserve proven7 through existing partial owner; execute exact residual3 with owned uncredited prerequisites.",
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/r144-partial/root-review.json",
+              "sha256": "59b9cecc2e7a214fa48641041eca8d756d60dcb967ef483c1fea1e5ae3600211"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/media10-root-review.json",
+              "sha256": "3b7b78bb33e1c7ef1d70a0707275497bb8a75ad3dd483e21d762a2409bc0d604"
+            }
+          ]
+        },
+        {
+          "id": "r145-host-interruption",
+          "classification": "Environment",
+          "owner": "Host power/network and existing isolated lifecycle",
+          "cause": "Host sleep/resume and clock correction interrupted network; ERR_NETWORK_IO_SUSPENDED and lease expiry were observed. The clock gap is not asserted to equal exact physical sleep duration.",
+          "correction": "Canonical terminal recovery removed owned resources and processes; retry only unqualified Media3 after host recovery.",
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r145-environment-failure.json",
+              "sha256": "54b5f274cd507adbb218c6f25a35db0b00ce21fe5c59e33b722d3aadda439ee3"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r145-recovery-root-review.json",
+              "sha256": "aea006d3648d52e8e20d436afa51013014a44d74d5dc8b8eb4cf7319e8433639"
+            }
+          ],
+          "qualificationDelta": 0
+        },
+        {
+          "id": "r146-host-interruption",
+          "classification": "Environment",
+          "owner": "Host power/application handoff",
+          "cause": "Recorded Button/Lid sleep and wake interrupted the application handoff before Browser execution: APPLICATION_CLIENT_DISCONNECTED.",
+          "correction": "Genuine STOP, canonical cleanup0, resume only after user reported host back.",
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r146-environment-failure.json",
+              "sha256": "4db7730f7e9a5daad40ba457c7f27c19d16bbb01c07b0c1d578fbfb970b0c0c8"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/resume-record.json",
+              "sha256": "17dc96abc4b8f5368c4fb4cb885405f705ff271acfbbd452245150ae8ba7565e"
+            }
+          ],
+          "qualificationDelta": 0
+        },
+        {
+          "id": "r148-verification-1",
+          "classification": "Verification",
+          "owner": "scripts/fixtures/admin-core-project-create-journeys.mjs#chooseImage",
+          "cases": [
+            "core-project-residential-full-create",
+            "core-project-commercial-full-create"
+          ],
+          "cause": "Existing row can be selected before debounced query patch resets selectedIds; observed transient selected then disabled confirm. Exact timer ordering inferred from canonical source and captured state, not an unavailable request timestamp trace.",
+          "productChangeRequired": false,
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r148-root-failure-and-cleanup-review.json",
+              "sha256": "646e46f26566d9da9344f194dbca72dcf4b2229eab93f40c603270f6b70fec75"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/final-six-corrections-root-review.json",
+              "sha256": "ac27dae017950a961f14bd2b7ce01c3db7dae139476cab8fd32533bcb25bf5af"
+            }
+          ],
+          "disposition": "21 passing original journeys retained by strict partial qualification. Only the six failed journeys were selected for149."
+        },
+        {
+          "id": "r148-verification-2",
+          "classification": "Verification",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs#trackingDates",
+          "cases": [
+            "core-operational-profile-form-roundtrip",
+            "core-operational-stage-form-roundtrip",
+            "core-operational-item-form-roundtrip"
+          ],
+          "cause": "Native segmented date Ctrl+A/Backspace can leave badInput=true despite empty value; independent exact canonical-control probe reproduces and complete fill-empty preserves validity criteria.",
+          "productChangeRequired": false,
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r148-root-failure-and-cleanup-review.json",
+              "sha256": "646e46f26566d9da9344f194dbca72dcf4b2229eab93f40c603270f6b70fec75"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/final-six-corrections-root-review.json",
+              "sha256": "ac27dae017950a961f14bd2b7ce01c3db7dae139476cab8fd32533bcb25bf5af"
+            }
+          ],
+          "disposition": "21 passing original journeys retained by strict partial qualification. Only the six failed journeys were selected for149."
+        },
+        {
+          "id": "r148-verification-3",
+          "classification": "Verification",
+          "owner": "scripts/fixtures/admin-core-tracking-media-adoption.mjs",
+          "cases": [
+            "core-operational-update-form-roundtrip"
+          ],
+          "cause": "inputValue assumes publication_status is one element but canonical switch intentionally emits hidden draft plus checkbox published; complete submitted values and actual checked state must be preserved.",
+          "productChangeRequired": false,
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r148-root-failure-and-cleanup-review.json",
+              "sha256": "646e46f26566d9da9344f194dbca72dcf4b2229eab93f40c603270f6b70fec75"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/final-six-corrections-root-review.json",
+              "sha256": "ac27dae017950a961f14bd2b7ce01c3db7dae139476cab8fd32533bcb25bf5af"
+            }
+          ],
+          "disposition": "21 passing original journeys retained by strict partial qualification. Only the six failed journeys were selected for149."
+        },
+        {
+          "id": "r149-update-reauthor",
+          "classification": "Verification",
+          "owner": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+          "cause": "The fixture retains original createMedia/editMedia proofs while discarding authorCoreTrackingMedia return values after accepted discard/reopen. Canonical Product creates a new unsaved video client_key using crypto.randomUUID. The unchanged strict comparison rejects the stale key.",
+          "evidenceLimit": "Raw outer failure does not expose the inner client_key assertion or UUID values. Attribution is based on deterministic source flow, screenshot and pure reproduction of the exact current assertion; fresh actual affected journey remains required.",
+          "correction": "Retain the returned new reauthor proof for subsequent strict UI/native comparisons; preserve the discarded-draft assertion until the explicit reauthor transition.",
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r149-update-root-cause-review.json",
+              "sha256": "2abea39ce2c4fc23091e07e2d63d99c4264cb2b77bfd1d0c0ce68b15dc1a0ac3"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/update-only-corrections-root-review.json",
+              "sha256": "f573654328f745e11b99da1f5724bc8e02faca02009c06638783b13226afb466"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final149-partial-root-review.json",
+              "sha256": "087738ad08478b7379ff42f49786c44ca3dcf749d0d83697132140b24ae8330d"
+            }
+          ],
+          "disposition": "Five149 passes qualified and original failed149 preserved. Fresh150 qualified only Update1 with exact two accepted intents/14 native records; canonical three-leaf composition conserves all original27 without a synthetic merged run."
+        },
+        {
+          "id": "post150-composer-path-contract",
+          "classification": "Verification",
+          "owner": ".tmp-qa/core-final-closure/cumulative-accounting-stage/qualify-sealed-cohort.mjs#composeRetainedFinal27ResidualQualifications",
+          "cause": "The fresh standard qualifier preserves absolute Windows physical artifact paths; the new three-leaf composer expected relative text despite identical actual bytes.",
+          "correction": "Resolve exact physical evidence boundary and reject symlink/junction/directory/traversal/conflicting hashes; return canonical relative source/gate refs while retaining each leaf rawArtifacts verbatim and rejecting duplicate physical aliases inside a leaf.",
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final150-composer-path-correction/applied.json",
+              "sha256": "1c897258fd6a7ac7c3a8ee340d13c6120b933fa77d7d940e0d0a9d2c3fc333b5"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final150-composer-path-correction/path-controls.json",
+              "sha256": "b7952388dd518466cc6f7c629cf99f86fb4271f7e4f9f14c79ebb06075d2d857"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final150-composer-path-correction/existing24-controls.json",
+              "sha256": "070ead502cc81bd764911c997ff91df0fbf7ea384e277f4879cc4bd2c66ed952"
+            }
+          ],
+          "qualificationUnchanged": true,
+          "trackedSourceChanged": false
+        }
+      ],
+      "productFailureProven": false,
+      "historicalFailuresRelabelled": false
+    },
+    "D": {
+      "title": "Final52",
+      "meaning": "Original browser-r52 hook, not52 cases; exact27 original domain-form operations.",
+      "originalObligations": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/final52-obligations.json",
+        "sha256": "7a1db93f2a672cba212c942cd086777febe27ba862e03d838e4e87989ca1aa38"
+      },
+      "originalFields": [
+        "draftRestoration",
+        "companyImages",
+        "trackingDates",
+        "trackingMedia",
+        "trackingMediaApplicability",
+        "writes"
+      ],
+      "qualifiedOriginalOperations": 27,
+      "qualificationLeaves": [
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r148-qualified-observations.json",
+          "sha256": "a2ac4d77c76d9be14f52ac253aa0082b6671243a96cc5ac4debfc8ebd6a32ef7"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r149-qualified-observations.json",
+          "sha256": "e44168ecbb088404c21fc02ab13fc9643683a63aeb655f2ea27663d053c7a97c"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r150-qualified-observations.json",
+          "sha256": "f7ec3e8d9b06207af1f0fcc66ff07b9c244e06613bc7f3786291f2753a8d3acd"
+        }
+      ],
+      "remainingOperation": null,
+      "remainingObligations": [
+        "Commit additive PRE_FINAL_GATE report to establish candidateHEAD",
+        "Materialize existing959 and exact111 final outputs on candidateHEAD, with finite physical evidence integrity",
+        "Run technical FinalQuality once on candidateHEAD after admission",
+        "Keep FinalClosure blocked while its explicit predicates and Domain inventory authority remain unresolved"
+      ],
+      "retainedNoReplay": 73,
+      "finalGateStatus": "PENDING_CANDIDATE_HEAD_ACCOUNTING_INTEGRITY_QUALITY",
+      "composition": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final27-composite-qualification.json",
+        "sha256": "bc1aeceaf489e092a87989508c4eb3866d3a78344d8ce4d245cdd47aee713d6e"
+      },
+      "sameRun": false
+    },
+    "E": {
+      "title": "CI and technical Quality",
+      "historicalCi314": {
+        "conclusion": "success",
+        "successfulJobs": 8,
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-31408af9-completed.json",
+          "sha256": "136e188051850aed342f7ac232026e809100a0997b858664af4662a0ed8fab11"
+        }
+      },
+      "currentAffectedChecks": {
+        "status": "PASS",
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/update-only-actual-checks/result.json",
+          "sha256": "80aa64ce393c904658a785064adbeaf9728cc68638a40d0e9aeef6721df34844"
+        }
+      },
+      "ciCorrections": [
+        "Affected AST-extracted test ports were missing canonical Media selection constants.",
+        "Whole-file assertion-count tests required exact owner-scoped checks for new uncredited prerequisites.",
+        "Preview/residual-search source guards needed selected-scope awareness while retaining original assertions.",
+        "The six-selection collector test compared a literal call and rejected necessary TypeScript NonNull narrowing; strict AST callee/arguments/two-call controls replaced that brittle comparison."
+      ],
+      "dockerRateLimit": {
+        "classification": "Environment",
+        "productFailureProven": false,
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/ci-b381f44a-taxonomy-disposition.json",
+          "sha256": "353571eb1f437f3b0e745955de9e20743a8608a255beacc3f4e12a360babfb57"
+        },
+        "disposition": "Current6fb6 taxonomy schema generation hit registry rate limit after database verification passed. Other jobs were still running at the saved inspection. No blanket CI PASS; inspect/handle only required final-candidate failures.",
+        "currentEvidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-6fb6fe53-first-inspection.json",
+          "sha256": "5adc222670d39144f0cdcefe73209c07c88ef32dce5430f4e5e5ee8d860a4625"
+        }
+      },
+      "references": [
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/ci-41a274a5-disposition.json",
+          "sha256": "fc3f4a7e3ee546e8d34b7bb4feb0499700cece40821437b898aa11ec7d2aa6b7"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/ci-b381f44a-taxonomy-disposition.json",
+          "sha256": "353571eb1f437f3b0e745955de9e20743a8608a255beacc3f4e12a360babfb57"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/ci-b381f44a-main-disposition.json",
+          "sha256": "69f34d7758c4e775fb893bf908669d94971b64bc7376ced9bb021678391c3c62"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/stop-preview-source-guard-correction.json",
+          "sha256": "28bda173c3955c8c65d9fd265b443bca82db5668a4b2ac36bac8b1557ea04ad9"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/residual-search-owner-correction.json",
+          "sha256": "81edd8eb2997bb2848f6f8c23345c7e09116056f424b20e2ff2d07c205f1da91"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-31408af9-completed.json",
+          "sha256": "136e188051850aed342f7ac232026e809100a0997b858664af4662a0ed8fab11"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-fe17e305-failed.log",
+          "sha256": "1a793d45c078d0c0274cf93f2366cfb43c3df9b99be498acf4fdbb14eb382ac8"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/final-six-collector-test-semantic-v3-controls.json",
+          "sha256": "4a1c3f18968a81ef3a14fed32c99d685cde8b47274dffa9b729e117e0e80dc9c"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/update-only-corrections-root-review.json",
+          "sha256": "f573654328f745e11b99da1f5724bc8e02faca02009c06638783b13226afb466"
+        }
+      ],
+      "currentWholeCI": "CURRENT6FB6_RECORDED_TAXONOMY_ENVIRONMENT_RATE_LIMIT; final candidate checks pending",
+      "finalQuality": "NOT_RUN_PENDING_REPORT_CANDIDATE_ACCOUNTING_AND_INTEGRITY",
+      "finalQualityIsClosure": false,
+      "currentHeadRecordedCi": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-6fb6fe53-first-inspection.json",
+        "sha256": "5adc222670d39144f0cdcefe73209c07c88ef32dce5430f4e5e5ee8d860a4625"
+      }
+    },
+    "F": {
+      "title": "FinalClosure",
+      "gate": "NOT_INVOKED",
+      "globalClosed": false,
+      "eligibility": "BLOCKED_BY_EXPLICIT_EXISTING_ACCOUNTING_PREDICATES",
+      "authority": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-closure-domain-inventory-blocker.json",
+        "sha256": "404778bc5b380e73566223fbd169b6482f4dbdcdd4b10e34081e6de52bb81569"
+      },
+      "existingDomainInventory": {
+        "registered": 78,
+        "asRecordedComplete": 18,
+        "incomplete": 60,
+        "domainOperationDenominator": null
+      },
+      "reason": "Exact111 qualification cannot replace missing complete Domain inventory authority or close unrelated959 predicates. No invented universe, new Discovery, or Product failure inferred.",
+      "technicalQualityCanProceedWithTruthfulOpenAccounting": true,
+      "preview": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-report-preparation/pre-final-gate-preview110.json",
+        "sha256": "9e3737052588acceecb04105a98869301a766fa87b249739bbba43ae8f6af5cd"
+      },
+      "remaining": {
+        "namedCellsOpen": 514,
+        "pendingNA": 2,
+        "predicateCount": 52,
+        "U01LifecycleRemaining": 2,
+        "U01RuntimeOpen": 7,
+        "U03OpenApplicable": 29,
+        "U03RemainingConditions": 29,
+        "incompleteDomainInventories": 60,
+        "openPreviewStates": 0
+      },
+      "exactUnresolvedReferences": {
+        "preview": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-report-preparation/pre-final-gate-preview110.json",
+          "sha256": "9e3737052588acceecb04105a98869301a766fa87b249739bbba43ae8f6af5cd"
+        },
+        "pointers": [
+          "/accounting/remainingReconciliation/predicateReconciliation",
+          "/accounting/remainingReconciliation/feedbackReconciliation",
+          "/accounting/remainingReconciliation/lifecycleReconciliation",
+          "/accounting/remainingReconciliation/runtimeReconciliation",
+          "/accounting/remainingReconciliation/remainingNamedCells",
+          "/accounting/remainingReconciliation/pendingNotApplicable",
+          "/accounting/closureEligibility/domainInventories"
+        ]
+      },
+      "noPretendGate": "The maintained closure-control test suite is not a live cumulative FinalClosure invocation; it cannot turn remaining OPEN/N/A authority gaps into PASS."
+    },
+    "G": {
+      "title": "Accounting",
+      "acceptedCurrent": {
+        "qualified": 110,
+        "notApplicable": 1,
+        "hardOpen": 0,
+        "held": 0,
+        "total": 111
+      },
+      "acceptedAuthority": {
+        "path": ".tmp-qa/core-final-closure/final-accounting-interim/progress-110-retained-1-na-0-hard-0-held-after150.json",
+        "sha256": "276234ccdd01590f9652552e464bc47093fbf493fa0b543191482f56cb4496b8"
+      },
+      "notApplicableCountsAsPass": false,
+      "finalAccounting": "PENDING_REPORT_CANDIDATE_HEAD_MATERIALIZATION",
+      "previewOnly": {
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-report-preparation/pre-final-gate-preview110.json",
+          "sha256": "9e3737052588acceecb04105a98869301a766fa87b249739bbba43ae8f6af5cd"
+        },
+        "status": "PRE_FINAL_GATE_PREVIEW_ONLY_NO_FIXED_FINAL_OUTPUTS",
+        "namedCellCounts": {
+          "historical": 959,
+          "applicable": 951,
+          "qualifiedApplicable": 437,
+          "openApplicable": 514,
+          "pendingNotApplicable": 2,
+          "provenNotApplicable": 6
+        },
+        "remainingPredicates": 52,
+        "accountingState": {
+          "U01LifecycleRemaining": 2,
+          "U01RuntimeOpen": 7,
+          "U03OpenApplicable": 29,
+          "U03RemainingConditions": 29
+        },
+        "incompleteDomainInventories": 60,
+        "openPreviewStates": 0
+      },
+      "automaticCoverage": [],
+      "globalClosed": false
+    },
+    "H": {
+      "title": "Changes",
+      "comparison": {
+        "from": "095ada2d50725ba5397ca014268647138925c568",
+        "to": "6fb6fe53e23a8e17870abf6845deec22d0c983bd"
+      },
+      "productFiles": [],
+      "verificationFiles": [
+        "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+        "scripts/fixtures/admin-core-media-journeys.mjs",
+        "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+        "scripts/fixtures/admin-core-project-create-journeys.mjs",
+        "scripts/fixtures/admin-core-tracking-media-adoption.mjs",
+        "scripts/lib/isolated-public-verification.mts",
+        "scripts/lib/isolated-supabase.mts",
+        "scripts/qa-admin-adoption-journeys.mjs",
+        "scripts/verify-admin-adoption-readback-isolated.mts",
+        "scripts/verify-admin-core-date-controls.mjs",
+        "scripts/verify-admin-core-journey-selection.mjs",
+        "scripts/verify-admin-core-media-completion.mjs",
+        "scripts/verify-admin-core-media-journeys.mjs",
+        "scripts/verify-admin-core-media-selector-scopes.mjs",
+        "scripts/verify-admin-core-presentation-controls.mts",
+        "scripts/verify-admin-core-preview-public-impact.mjs",
+        "scripts/verify-admin-core-residual-search.mjs",
+        "scripts/verify-admin-core-tracking-media-adoption.mjs",
+        "scripts/verify-application-closure-checkpoints.mts",
+        "scripts/verify-isolated-supabase-cleanup.mts",
+        "scripts/verify-isolated-supabase.mts"
+      ],
+      "migrationFilesChanged": false,
+      "contracts": "Existing selector, fixture, readback, partial qualifier, composite, accounting and Quality owners extended with finite scope, exact source/native joins and adversarial controls; full/default behavior retained.",
+      "allowlistExpanded": false,
+      "latest150ToFinalDocsOnlyGuardChanged": false,
+      "accountingAppliedReceipt": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-accounting-owner-applied-v7.json",
+        "sha256": "6cf9970f768207caf90bcb414adf421442adb4a75be6f81f498d3a069a6534ad"
+      },
+      "accountingControls": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-accounting-controls-applied-v7.json",
+        "sha256": "3486b79f890a420e08617cd649fb82b23efe05804ac16953d1885e45b85e4477"
+      },
+      "composerPathCorrection": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final150-composer-path-correction/applied.json",
+        "sha256": "1c897258fd6a7ac7c3a8ee340d13c6120b933fa77d7d940e0d0a9d2c3fc333b5"
+      }
+    },
+    "I": {
+      "title": "Cleanup",
+      "completedRunScope": "144 through150",
+      "runReceipts": [
+        {
+          "run": "browser-r144",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r144/cleanup.json",
+            "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+          },
+          "originalStatus": "complete",
+          "remaining": 0,
+          "recovery": null,
+          "laterRemainingOwnedResources": null,
+          "laterRemainingOwnedProcesses": null
+        },
+        {
+          "run": "browser-r145",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r145/cleanup.json",
+            "sha256": "f68b43cafab661f45db3d77b1298f76f12a1dd918a21c974f9966ca6ccc9dd5e"
+          },
+          "originalStatus": "blocked",
+          "remaining": null,
+          "recovery": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r145-recovery-root-review.json",
+            "sha256": "aea006d3648d52e8e20d436afa51013014a44d74d5dc8b8eb4cf7319e8433639"
+          },
+          "laterRemainingOwnedResources": 0,
+          "laterRemainingOwnedProcesses": 0
+        },
+        {
+          "run": "browser-r146",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r146/cleanup.json",
+            "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+          },
+          "originalStatus": "complete",
+          "remaining": 0,
+          "recovery": null,
+          "laterRemainingOwnedResources": null,
+          "laterRemainingOwnedProcesses": null
+        },
+        {
+          "run": "browser-r147",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r147/cleanup.json",
+            "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+          },
+          "originalStatus": "complete",
+          "remaining": 0,
+          "recovery": null,
+          "laterRemainingOwnedResources": null,
+          "laterRemainingOwnedProcesses": null
+        },
+        {
+          "run": "browser-r148",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r148/cleanup.json",
+            "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+          },
+          "originalStatus": "complete",
+          "remaining": 0,
+          "recovery": null,
+          "laterRemainingOwnedResources": null,
+          "laterRemainingOwnedProcesses": null
+        },
+        {
+          "run": "browser-r149",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r149/cleanup.json",
+            "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+          },
+          "originalStatus": "complete",
+          "remaining": 0,
+          "recovery": null,
+          "laterRemainingOwnedResources": null,
+          "laterRemainingOwnedProcesses": null
+        },
+        {
+          "run": "browser-r150",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r150/cleanup.json",
+            "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+          },
+          "originalStatus": "complete",
+          "remaining": 0,
+          "processCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r150/public-process-cleanup.json",
+            "sha256": "a124f46261486077d79b81aaf22814255151d7ee976a26cbde6183a68ab7a016"
+          },
+          "hostCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r150/host-access-closed.json",
+            "sha256": "84fe22441beb8dac5dc3fc8cd664b4b8552f4a5c56ab798f1cc26eb6e2549594"
+          }
+        }
+      ],
+      "historical145BlockedReceiptPreserved": true,
+      "allCompletedRunsRecoveredToZero": true,
+      "currentHostAllResourcesZeroClaimed": false,
+      "finalQueueAndOwnedProcessReconciliation": "All completed behavior cleanup verified; repeat final bounded owned reconciliation around later Quality lifecycle.",
+      "lastCompletedRun150": {
+        "remainingOwnedResources": 0,
+        "remainingOwnedProcesses": 0,
+        "queueFree": true,
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r150-root-success-and-cleanup-review.json",
+          "sha256": "56bdbfab530a1da3007a349337fa93de5a9c2ebd4e95c8c43c7cb6e4b1cea994"
+        }
+      }
+    },
+    "J": {
+      "title": "Git and PR",
+      "observedHead": "6fb6fe53e23a8e17870abf6845deec22d0c983bd",
+      "finalHead": "PENDING_PRE_FINAL_GATE_REPORT_COMMIT",
+      "finalRemoteAlignment": "PENDING_FINAL_READ",
+      "pr186": "MUST_REMAIN_OPEN_DRAFT",
+      "ready": false,
+      "merge": false,
+      "deploy": false,
+      "trackedHistoricalCheckpointPreserved": true
+    },
+    "K": {
+      "title": "Migration Readiness handoff",
+      "started": false,
+      "historicalProductionOnly": {
+        "migrationHistory": 112,
+        "repositoryPending": [
+          113,
+          114,
+          115,
+          116
+        ],
+        "freshProof": false,
+        "evidence": {
+          "path": "docs/reports/ADMIN_CORE_HARD_OPEN_CLOSURE_STOP_2026-10-03.json",
+          "sha256": "e6b2e3dc7211347e0c872241ab6d5d802e616842533faeafd0bf4a5636a39197"
+        }
+      },
+      "isolatedExistingCorpusException": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/isolated-execution-authorization.json",
+        "sha256": "81d2bcd9cf5b084e3468eb5a891a735e862d382117d806d7dc61aa02815d2403"
+      },
+      "productionMutation": false,
+      "productionSmoke": false,
+      "localhost3000Used": false,
+      "handoff": "STOP before Migration Readiness. Only a later separately authorized review can establish current Production state, migration impact/readiness and any subsequent execution. No readiness claim while globalClosed=false. Existing Closure blockers must be resolved before a successful closure handoff; no Migration Readiness begins in this round."
+    }
+  },
+  "ownerAndAdoptionAlert": {
+    "newOwner": {
+      "value": false,
+      "reason": "Existing runtime and verification authorities reused; preparation reports and immutable byte snapshots are evidence only."
+    },
+    "ownerChanged": {
+      "value": true,
+      "reason": "Existing Verification owner contracts were extended for exact residual selections, strict failed-run partial conservation, three-leaf qualification, and truthful accounting/Quality admission. Product ownership unchanged."
+    },
+    "contractDrift": {
+      "detectedAndCorrected": true,
+      "newOrUnresolvedProductDrift": false,
+      "reason": "Actual Verification assumptions mismatched HTTP/image environment, density-corrected preview dimensions, picker query readiness, native date validity, publication FormData, draft reauthor identity, AST formatting, and physical evidence path representation. Corrections preserve strict canonical Product/native criteria."
+    },
+    "secondSourceOfTruth": {
+      "value": false
+    },
+    "parallelImplementation": {
+      "value": false
+    },
+    "localPatch": {
+      "value": false,
+      "reason": "Corrections reside in existing shared Verification owners, not per-screen Product workarounds."
+    },
+    "workaround": {
+      "value": false,
+      "reason": "No raw status rewrite, fabricated PASS, Product-only QA switch, weakened native assertion, or automatic coverage. Frozen sources preserved; latest150-to-final source allowance remains docs-only."
+    }
+  },
+  "automaticCoverage": [],
+  "globalClosed": false,
+  "finalOutputClaims": [],
+  "sourceHead": "6fb6fe53e23a8e17870abf6845deec22d0c983bd",
+  "candidateHead": null,
+  "sourceHeadMeaning": "Last actual behavioral source. The later additive report commit will define the final candidateHEAD.",
+  "postCommitFinalArtifacts": [
+    {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-source-manifest.json",
+      "status": "PENDING_AFTER_REPORT_CANDIDATE_HEAD",
+      "existsAtPreparation": false,
+      "sha256": null
+    },
+    {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/source-impact-current-to-final.json",
+      "status": "PENDING_AFTER_REPORT_CANDIDATE_HEAD",
+      "existsAtPreparation": false,
+      "sha256": null
+    },
+    {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-current-accounting-successor.json",
+      "status": "PENDING_AFTER_REPORT_CANDIDATE_HEAD",
+      "existsAtPreparation": false,
+      "sha256": null
+    },
+    {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-111-reconciliation.json",
+      "status": "PENDING_AFTER_REPORT_CANDIDATE_HEAD",
+      "existsAtPreparation": false,
+      "sha256": null
+    },
+    {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-accounting-producer-execution.json",
+      "status": "PENDING_AFTER_REPORT_CANDIDATE_HEAD",
+      "existsAtPreparation": false,
+      "sha256": null
+    },
+    {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-evidence-integrity.json",
+      "status": "PENDING_AFTER_REPORT_CANDIDATE_HEAD",
+      "existsAtPreparation": false,
+      "sha256": null
+    },
+    {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-quality-readiness.json",
+      "status": "PENDING_AFTER_REPORT_CANDIDATE_HEAD",
+      "existsAtPreparation": false,
+      "sha256": null
+    },
+    {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-closure-current-blockers.json",
+      "status": "PENDING_AFTER_REPORT_CANDIDATE_HEAD",
+      "existsAtPreparation": false,
+      "sha256": null
+    }
+  ],
+  "authorityPreservation": {
+    "historicalCheckpointBytes": [
+      {
+        "path": "docs/reports/ADMIN_CORE_HARD_OPEN_CLOSURE_STOP_2026-10-03.json",
+        "sha256": "e6b2e3dc7211347e0c872241ab6d5d802e616842533faeafd0bf4a5636a39197"
+      },
+      {
+        "path": "docs/reports/ADMIN_CORE_HARD_OPEN_CLOSURE_STOP_2026-10-03.md",
+        "sha256": "c722fa57aa041b09a6e9e7d95c2d7826c64bd8a89469ccb8096bb90b5a13b5d0"
+      }
+    ],
+    "sourceQualification150": {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/browser-r150-qualified-observations.json",
+      "sha256": "f7ec3e8d9b06207af1f0fcc66ff07b9c244e06613bc7f3786291f2753a8d3acd"
+    },
+    "sourceImpacts": [
+      {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/source-impact-partial148-to-final-update.json",
+        "sha256": "23ba11eb8c1eb691c300295dc5fbba5d83eede00e7525e2c61aa41354d498f12"
+      },
+      {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/source-impact-partial149-to-final-update.json",
+        "sha256": "ce54010dc017c71d3e7baae09a02688a8400398ba0e2d1c8a71948f5a492e936"
+      }
+    ],
+    "originalFailedRuns": [
+      144,
+      145,
+      146,
+      148,
+      149
+    ],
+    "retained73Changed": false,
+    "qualifiedOperationsReplayed": false
+  },
+  "rootPreviewReview": {
+    "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-report-preparation/pre-final-gate-root-review.json",
+    "sha256": "38ec3708613720d605a23bf57e0b99a8ced003646dd2c0908b40a963c0ca211a"
+  }
+}
