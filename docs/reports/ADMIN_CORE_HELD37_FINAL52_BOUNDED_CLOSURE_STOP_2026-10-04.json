@@ -1,8 +1,8 @@
 {
-  "status": "PRE_FINAL_GATE_POST154_TRACKED_TEMPLATE_CORRECTION_APPLIED_QUALITY_RETRY_PENDING_CLOSURE_BLOCKED",
-  "preparedAt": "2026-10-04T06:16:07.074Z",
-  "observedHead": "f193aab54e276b52cd29a7cb966b29d0afc9acb8",
-  "scope": "Existing bounded closure checkpoint through actual failed154 and its applied exact tracked-template snapshot correction. New candidate accounting/integrity/CI/Quality remain pending; all earlier outcomes and raw failures are preserved.",
+  "status": "PRE_FINAL_GATE_POST155_CLI_COMPARISON_CORRECTION_APPLIED_QUALITY_RETRY_PENDING_CLOSURE_BLOCKED",
+  "preparedAt": "2026-10-04T09:50:14.719Z",
+  "observedHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
+  "scope": "Bounded closure through actual failed155 and its focused Verification correction. New candidate accounting/integrity/CI/Quality pending; all original behavioral qualifications and failed technical candidates preserved.",
   "intendedTrackedReports": [
     {
       "path": "docs/reports/ADMIN_CORE_HELD37_FINAL52_BOUNDED_CLOSURE_STOP_2026-10-04.json",
@@ -970,6 +970,48 @@
           "remainingOwnedResources": 0,
           "remainingOwnedProcesses": 0,
           "retainedEvidenceWorkerStopped": true
+        },
+        {
+          "run": "browser-r155",
+          "sourceHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
+          "originalStatus": "failed",
+          "exitCode": 1,
+          "classification": "Verification",
+          "productFailureProven": false,
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r155-execution-result.json",
+            "sha256": "a525dd087e497fcd539f881c8511a611fc8b5557ce0f99e03ef412c71fca2fd9"
+          },
+          "failureAndCleanup": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r155-root-failure-and-cleanup-review.json",
+            "sha256": "e42d22ae5ad7aed8f7bdaa28ffda890122db258c2930b6f801548246d5ebfc15"
+          },
+          "terminalSeal": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/manifest.json",
+            "sha256": "12c0189674577278399b7f8baccbbe86c72e1ae8cad0732a0ebb15447c52da2e"
+          },
+          "rootCause": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-cli-pulse-preparation/root-cause-and-controls.json",
+            "sha256": "ee5d824ce658116db4f1c3d80edfcfa37288115b7d607e9a51804fd5d4a5fe84"
+          },
+          "correction": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-root-preparation/root-applied.json",
+            "sha256": "1735d2c3909dc9e66835ee45919bf01ca1d4d1c28a7fb458e1730c7de7d9b984"
+          },
+          "actualAppliedChecks": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-cli-pulse-preparation/actual-affected-checks-review.json",
+            "sha256": "1e029956215d6a5c83a68b79d6aa054378e638291420e5597fb2c2c46d71e380"
+          },
+          "qualificationCredit": 0,
+          "originalFailurePreserved": true,
+          "failedGate": "verify:platform-performance",
+          "failedSubcommand": "verify:isolated-supabase -- --admin-control-lease-only",
+          "passedPrefixSteps": 42,
+          "failedPrefixStep": 43,
+          "reason": "The CLI pulse cleanup assertion compared a literal LF against the immutable CRLF lifecycle source. The identical Git LF source passed. The offline control failed before actual lease checks; no Product or transport behavior failed.",
+          "remainingOwnedResources": 0,
+          "remainingOwnedProcesses": 0,
+          "retainedEvidenceWorkerStopped": true
         }
       ],
       "failures": [
@@ -1230,6 +1272,33 @@
           ],
           "productChangeRequired": false,
           "rawFailurePromoted": false
+        },
+        {
+          "id": "r155-cli-cleanup-literal-eol",
+          "classification": "Verification",
+          "owner": "scripts/verify-isolated-application-cli-pulse.mjs",
+          "cause": "The CLI pulse cleanup assertion compared a literal LF against the immutable CRLF lifecycle source. The identical Git LF source passed. The offline control failed before actual lease checks; no Product or transport behavior failed.",
+          "correction": "Normalize CRLF only within that exact text comparison; retain raw source reads, all43 original CLI controls and cleanup-order/handle-revocation negatives. The existing strict retained source-proof admits only this exact seventh Verification correction.",
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r155-root-failure-and-cleanup-review.json",
+              "sha256": "e42d22ae5ad7aed8f7bdaa28ffda890122db258c2930b6f801548246d5ebfc15"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-cli-pulse-preparation/root-cause-and-controls.json",
+              "sha256": "ee5d824ce658116db4f1c3d80edfcfa37288115b7d607e9a51804fd5d4a5fe84"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-root-preparation/root-applied.json",
+              "sha256": "1735d2c3909dc9e66835ee45919bf01ca1d4d1c28a7fb458e1730c7de7d9b984"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-cli-pulse-preparation/actual-affected-checks-review.json",
+              "sha256": "1e029956215d6a5c83a68b79d6aa054378e638291420e5597fb2c2c46d71e380"
+            }
+          ],
+          "productChangeRequired": false,
+          "rawFailurePromoted": false
         }
       ],
       "productFailureProven": false,
@@ -1267,14 +1336,14 @@
       ],
       "remainingOperation": null,
       "remainingObligations": [
-        "Commit the applied exact source-template Verification correction and these checkpoint bytes to establish candidateHEAD",
-        "Preserve the sealed f193 generation and execute only the reviewed11-file rollover, then rematerialize existing959/exact111/integrity on candidateHEAD",
-        "Run all unchanged technical FinalQuality gates and observe exact candidateHEAD CI with retained Admin behavior",
-        "Keep FinalClosure NOT_INVOKED while explicit existing predicates and Domain authority remain unresolved",
-        "After terminal gates, create the local actual A–K supplement bound to finalHEAD and committed checkpoint hashes; no post-gate tracked report commit is implied"
+        "Commit the exact CLI comparison/source-proof correction and this checkpoint to establish candidateHEAD",
+        "Relocate only the11 preserved b1 candidate files and rematerialize existing959/exact111/integrity through existing owners",
+        "Execute unchanged69+4 technical FinalQuality and observe exactHEAD CI; retain all qualified Admin journeys",
+        "Keep FinalClosure NOT_INVOKED while explicit959 predicates and Domain authority remain unresolved",
+        "After terminal evidence create the local actual A–K supplement bound to exactHEAD and committed checkpoint hashes"
       ],
       "retainedNoReplay": 73,
-      "finalGateStatus": "FAILED154_AT_PREFIX20_MISSING_TRACKED_TEMPLATE_CORRECTED_PENDING_NEW_HEAD_RETRY",
+      "finalGateStatus": "FAILED155_AT_PREFIX43_CLI_LITERAL_EOL_CORRECTED_PENDING_NEW_HEAD_RETRY",
       "composition": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final27-composite-qualification.json",
         "sha256": "bc1aeceaf489e092a87989508c4eb3866d3a78344d8ce4d245cdd47aee713d6e"
@@ -1294,39 +1363,18 @@
       "currentAffectedChecks": {
         "status": "PASS",
         "review": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-root-preparation/actual-affected-checks-review.json",
-          "sha256": "7b88dfb6e0087412f5ff01f5e673ed28cb8dfe996747107bf59335a3b6d5270b"
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-cli-pulse-preparation/actual-affected-checks-review.json",
+          "sha256": "1e029956215d6a5c83a68b79d6aa054378e638291420e5597fb2c2c46d71e380"
         },
-        "actualAppliedControls": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-root-preparation/actual-affected-controls.stdout.log",
-          "sha256": "3d973de617d65f63ba08ce809e45f13665f47d74b25e2b0f1062336ce88b3020"
+        "rootCause": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-cli-pulse-preparation/root-cause-and-controls.json",
+          "sha256": "ee5d824ce658116db4f1c3d80edfcfa37288115b7d607e9a51804fd5d4a5fe84"
         },
-        "actualAppliedStderr": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-root-preparation/actual-affected-controls.stderr.log",
-          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        },
-        "actualSourceProof": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-contract-preparation/actual-source-proof-final.json",
-          "sha256": "aa3c76a2ddabe981695c6f7760f53c15c31ccdbf5e561a8ce4e0060037341e49"
-        },
-        "actualSourceProofControls": 16,
-        "infrastructure": "PASS",
-        "publicMediaTruth": "PASS",
-        "retainedControlCount": 248,
+        "verificationOnly": true,
+        "retainedControlCount": 256,
         "legacyUnchanged": 149,
-        "previousWorkerAndSourceChecks": 79,
-        "newTemplateProvenanceControls": 20,
-        "typescriptDiagnostics": 0,
-        "eslintErrors": 0,
-        "eslintWarnings": 0,
-        "templateReproduction": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-template-preparation/root-cause-and-controls.json",
-          "sha256": "c90fd949a632ee51b2ffd5c0e65b369e64ff799b4b0fc692fa158113ff6e660a"
-        },
-        "ownedDiagnosticCleanup": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-template-preparation/owned-copy-cleanup.json",
-          "sha256": "6d7ad42745e4e4496688d0dfd61529126e8a2e19c83f7d31a92a1db35686f367"
-        }
+        "previousControlsPreserved": 99,
+        "newCliExactSourceControls": 8
       },
       "ciCorrections": [
         "Affected AST-extracted test ports were missing canonical Media selection constants.",
@@ -1341,7 +1389,7 @@
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/ci-b381f44a-taxonomy-disposition.json",
           "sha256": "353571eb1f437f3b0e745955de9e20743a8608a255beacc3f4e12a360babfb57"
         },
-        "disposition": "Earlier233e/a334/d890 outcomes remain preserved. On f193 the only failed Topics job was retried once after the registry limit failure and passed; the other seven successful jobs were retained without reexecution. Exact f193 CI passed8/8. New candidateHEAD CI remains pending.",
+        "disposition": "Earlier233e/a334/d890 outcomes remain preserved. On f193 the only failed Topics job was retried once after the registry limit failure and passed; the other seven successful jobs were retained without reexecution. Exact f193 CI passed8/8. New candidateHEAD CI remains pending. Exact b1 CI completed8/8 without retry; its all eight original job identities and start times were retained. New candidate CI remains pending.",
         "currentEvidence": {
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-6fb6fe53-first-inspection.json",
           "sha256": "5adc222670d39144f0cdcefe73209c07c88ef32dce5430f4e5e5ee8d860a4625"
@@ -1415,34 +1463,46 @@
         {
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-template-preparation/root-cause-and-controls.json",
           "sha256": "c90fd949a632ee51b2ffd5c0e65b369e64ff799b4b0fc692fa158113ff6e660a"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-b1ceb1e6-final-review.json",
+          "sha256": "55ed6eebd17dc3442bd80e4bfbcddedcee66718af4fc488f1512114a770d3134"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-cli-pulse-preparation/actual-affected-checks-review.json",
+          "sha256": "1e029956215d6a5c83a68b79d6aa054378e638291420e5597fb2c2c46d71e380"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-cli-pulse-preparation/root-cause-and-controls.json",
+          "sha256": "ee5d824ce658116db4f1c3d80edfcfa37288115b7d607e9a51804fd5d4a5fe84"
         }
       ],
-      "currentWholeCI": "F193_RECORDED_8_SUCCESS_AFTER_ONLY_FAILED_TOPICS_JOB_RETRY; new candidate checks pending",
+      "currentWholeCI": "B1_RECORDED_8_SUCCESS_WITHOUT_RETRY; new candidate checks pending",
       "finalQuality": {
-        "lastAttempt": "browser-r154",
-        "lastStatus": "FAILED_VERIFICATION_PREFIX20_PUBLIC_MEDIA_TRUTH_MISSING_TEMPLATE",
-        "lastSourceHead": "f193aab54e276b52cd29a7cb966b29d0afc9acb8",
+        "lastAttempt": "browser-r155",
+        "lastStatus": "FAILED_VERIFICATION_PREFIX43_CLI_LITERAL_EOL",
+        "lastSourceHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
         "nextStatus": "PENDING_NEW_CANDIDATE_HEAD",
         "criteriaUnchanged": true,
         "adminBehaviorRetained": true,
         "freshAdminJourneyIds": [],
         "prefixCommands": 69,
         "publicTailGates": 4,
-        "passedPrefixCommands": 19,
-        "failedPrefixCommand": "verify:public-media-truth",
+        "passedPrefixCommands": 42,
+        "failedPrefixCommand": "verify:platform-performance",
         "failureAndCleanup": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r154-root-failure-and-cleanup-review.json",
-          "sha256": "582f77a9280f00b94d90a2e3b19e76ea993df28aa4d1614b074fdf3cb1e33e4d"
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r155-root-failure-and-cleanup-review.json",
+          "sha256": "e42d22ae5ad7aed8f7bdaa28ffda890122db258c2930b6f801548246d5ebfc15"
         },
         "terminalSeal": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r154-terminal-preimages/manifest.json",
-          "sha256": "08eb3839dc417bae66ef3c5a494bbf9758f5bb40567a33b543fa3b05e17c0f8d"
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/manifest.json",
+          "sha256": "12c0189674577278399b7f8baccbbe86c72e1ae8cad0732a0ebb15447c52da2e"
         }
       },
       "finalQualityIsClosure": false,
       "currentHeadRecordedCi": {
-        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-f193aab5-final-review.json",
-        "sha256": "a2264b34ff0371ec5de69e418103c2f505a35c5973f6f0219cda19db76125fca"
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-b1ceb1e6-final-review.json",
+        "sha256": "55ed6eebd17dc3442bd80e4bfbcddedcee66718af4fc488f1512114a770d3134"
       },
       "ci233e": {
         "status": "PASS",
@@ -1507,6 +1567,43 @@
           "eslintErrors": 0,
           "eslintWarnings": 0,
           "originalControlArtifactsUnchanged": true
+        },
+        {
+          "status": "PASS",
+          "review": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-root-preparation/actual-affected-checks-review.json",
+            "sha256": "7b88dfb6e0087412f5ff01f5e673ed28cb8dfe996747107bf59335a3b6d5270b"
+          },
+          "actualAppliedControls": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-root-preparation/actual-affected-controls.stdout.log",
+            "sha256": "3d973de617d65f63ba08ce809e45f13665f47d74b25e2b0f1062336ce88b3020"
+          },
+          "actualAppliedStderr": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-root-preparation/actual-affected-controls.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "actualSourceProof": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-contract-preparation/actual-source-proof-final.json",
+            "sha256": "aa3c76a2ddabe981695c6f7760f53c15c31ccdbf5e561a8ce4e0060037341e49"
+          },
+          "actualSourceProofControls": 16,
+          "infrastructure": "PASS",
+          "publicMediaTruth": "PASS",
+          "retainedControlCount": 248,
+          "legacyUnchanged": 149,
+          "previousWorkerAndSourceChecks": 79,
+          "newTemplateProvenanceControls": 20,
+          "typescriptDiagnostics": 0,
+          "eslintErrors": 0,
+          "eslintWarnings": 0,
+          "templateReproduction": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-template-preparation/root-cause-and-controls.json",
+            "sha256": "c90fd949a632ee51b2ffd5c0e65b369e64ff799b4b0fc692fa158113ff6e660a"
+          },
+          "ownedDiagnosticCleanup": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-template-preparation/owned-copy-cleanup.json",
+            "sha256": "6d7ad42745e4e4496688d0dfd61529126e8a2e19c83f7d31a92a1db35686f367"
+          }
         }
       ],
       "ciD890": {
@@ -1547,6 +1644,17 @@
         "onlyFailedTopicsRetried": true,
         "otherSevenReexecuted": false,
         "additionalRetryDispatched": false
+      },
+      "ciB1": {
+        "status": "EIGHT_PASS",
+        "sourceHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
+        "successfulJobs": 8,
+        "failedJobs": 0,
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-b1ceb1e6-final-review.json",
+          "sha256": "55ed6eebd17dc3442bd80e4bfbcddedcee66718af4fc488f1512114a770d3134"
+        },
+        "retryDispatched": false
       }
     },
     "F": {
@@ -1616,6 +1724,10 @@
       "actualF193Blockers": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r154-terminal-preimages/9e153a3cc24e183413d4aeddab62eb851d328576b28e14955c652968fd892c01.txt",
         "sha256": "9e153a3cc24e183413d4aeddab62eb851d328576b28e14955c652968fd892c01"
+      },
+      "actualB1Blockers": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/137db936af297d5bcfe03d0cbef367a244d8f2c50bc4456490b32dd923650501.txt",
+        "sha256": "137db936af297d5bcfe03d0cbef367a244d8f2c50bc4456490b32dd923650501"
       }
     },
     "G": {
@@ -1632,7 +1744,7 @@
         "sha256": "276234ccdd01590f9652552e464bc47093fbf493fa0b543191482f56cb4496b8"
       },
       "notApplicableCountsAsPass": false,
-      "finalAccounting": "ACTUAL_F193_MATERIALIZED_AND_VALIDATED_SEALED_NEW_CANDIDATE_REBIND_PENDING",
+      "finalAccounting": "ACTUAL_B1_MATERIALIZED_AND_VALIDATED_SEALED_NEW_CANDIDATE_REBIND_PENDING",
       "previewOnly": {
         "evidence": {
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-report-preparation/pre-final-gate-preview110.json",
@@ -1808,13 +1920,65 @@
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r154-terminal-preimages/manifest.json",
           "sha256": "08eb3839dc417bae66ef3c5a494bbf9758f5bb40567a33b543fa3b05e17c0f8d"
         }
+      },
+      "actualB1": {
+        "sourceHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
+        "accounting": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/62cf149a825ecc6f66df1fdacd14b57d676ef3342222cbd041e66e2d878faf55.txt",
+          "sha256": "62cf149a825ecc6f66df1fdacd14b57d676ef3342222cbd041e66e2d878faf55"
+        },
+        "exact111": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/ff365a6a1bf46cd200ccf90a92a1981242933520934b2f2a3a0b44b4b89f1986.txt",
+          "sha256": "ff365a6a1bf46cd200ccf90a92a1981242933520934b2f2a3a0b44b4b89f1986"
+        },
+        "producer": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/6018dbcede1ca60769428f4ea735234955f494d8530f05abc15926595566fce1.txt",
+          "sha256": "6018dbcede1ca60769428f4ea735234955f494d8530f05abc15926595566fce1"
+        },
+        "rootReview": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/cc126d9b3da3ffc45be40bcb8ce27d929e93670318d8cbf15395f281c4969a26.txt",
+          "sha256": "cc126d9b3da3ffc45be40bcb8ce27d929e93670318d8cbf15395f281c4969a26"
+        },
+        "sourceManifest": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/0473f03c297cd7499ad0272a4fb437cde04495e15f9febc494712b2c5ce2f325.txt",
+          "sha256": "0473f03c297cd7499ad0272a4fb437cde04495e15f9febc494712b2c5ce2f325"
+        },
+        "sourceCompatibility": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/0dc59b1a88e43a3ed29a54a2de5b49139eacba54ebaed5602d4407c271cbfa3a.txt",
+          "sha256": "0dc59b1a88e43a3ed29a54a2de5b49139eacba54ebaed5602d4407c271cbfa3a"
+        },
+        "integrity": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/114146d26e05005d0b678f7ec959efceb6061c5151998cfa8e83e64ba54c50b8.txt",
+          "sha256": "114146d26e05005d0b678f7ec959efceb6061c5151998cfa8e83e64ba54c50b8"
+        },
+        "readiness": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/9b449bdbae236f0c8cacdee4043af5fc0d1d6a06390093cc209b6f915efa5a8c.txt",
+          "sha256": "9b449bdbae236f0c8cacdee4043af5fc0d1d6a06390093cc209b6f915efa5a8c"
+        },
+        "blockers": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/137db936af297d5bcfe03d0cbef367a244d8f2c50bc4456490b32dd923650501.txt",
+          "sha256": "137db936af297d5bcfe03d0cbef367a244d8f2c50bc4456490b32dd923650501"
+        },
+        "physicalIntegrityRefs": 28484,
+        "hostGitAudit": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-correction-preparation/actual-after155-audit.json",
+          "sha256": "8fd8e33d0547f613f37fb52514cd17a2d7a749a741f1260fa1b438782c400262"
+        },
+        "independentReconciliationAudit": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/b1ceb1e6-final-reconciliation-independent-audit.json",
+          "sha256": "493da5ec671fb480a70ef64bdef40926204f84228567cf494117b07b14811ca6"
+        },
+        "sealedBeforeCorrection": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/manifest.json",
+          "sha256": "12c0189674577278399b7f8baccbbe86c72e1ae8cad0732a0ebb15447c52da2e"
+        }
       }
     },
     "H": {
       "title": "Changes",
       "comparison": {
         "from": "095ada2d50725ba5397ca014268647138925c568",
-        "to": "f193 plus exact applied4-file tracked-template/source-proof Verification correction and these two checkpoint reports"
+        "to": "b1 plus focused3-file CLI comparison/source-proof Verification correction and these two reports"
       },
       "productFiles": [],
       "verificationFiles": [
@@ -1841,12 +2005,13 @@
         "scripts/verify-isolated-supabase.mts",
         "scripts/verify-admin-core-navigation-permission-join.mjs",
         "scripts/lib/verification-source-inventory.mts",
-        "scripts/verify-verification-infrastructure.mts"
+        "scripts/verify-verification-infrastructure.mts",
+        "scripts/verify-isolated-application-cli-pulse.mjs"
       ],
       "migrationFilesChanged": false,
       "contracts": "Existing selector, fixture, readback, partial qualifier, composite, accounting and Quality owners extended with finite scope, exact source/native joins and adversarial controls; full/default behavior retained.",
       "allowlistExpanded": false,
-      "latest150ToFinalDocsOnlyGuardChanged": "The original report-only branch remains unchanged. The separate exact lifecycle/source correction proof admits six fixed Verification owners, these two reports, and only the unchanged pre-existing tracked root .env.example as new inventory membership. Historical1940 manifests remain immutable; current1941 manifests bind the template raw bytes and exact retained/baseline/candidate Git provenance. Canonical evidence loader, finite11 partial guard, gate list and Product/media policies remain unchanged.",
+      "latest150ToFinalDocsOnlyGuardChanged": "The existing exact correction branch admits seven fixed Verification owners, these two reports and one unchanged pre-existing tracked public environment template. All1941 raw source hash checks, template Git provenance, ordinary report-only proof, finite11 partial guard, worker, canonical loader,69+4 gate criteria and Product policies remain intact.",
       "accountingAppliedReceipt": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-accounting-owner-applied-v7.json",
         "sha256": "6cf9970f768207caf90bcb414adf421442adb4a75be6f81f498d3a069a6534ad"
@@ -1863,7 +2028,7 @@
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post151-lifecycle-correction-preparation/root-applied.json",
         "sha256": "09fc400e77148ef5a31cd09cd87687c2ae516c43c4e8b315af2cfcc24d9b40a4"
       },
-      "newQualitySourceProof": "The original report-only branch remains unchanged. The separate exact lifecycle/source correction proof admits six fixed Verification owners, these two reports, and only the unchanged pre-existing tracked root .env.example as new inventory membership. Historical1940 manifests remain immutable; current1941 manifests bind the template raw bytes and exact retained/baseline/candidate Git provenance. Canonical evidence loader, finite11 partial guard, gate list and Product/media policies remain unchanged.",
+      "newQualitySourceProof": "The existing exact correction branch admits seven fixed Verification owners, these two reports and one unchanged pre-existing tracked public environment template. All1941 raw source hash checks, template Git provenance, ordinary report-only proof, finite11 partial guard, worker, canonical loader,69+4 gate criteria and Product policies remain intact.",
       "post152Correction": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post152-config-correction-preparation/root-applied.json",
         "sha256": "5886c98d181640d9e38bdb3111b2b8c494c23a71f079300069fd7ecaaa88f1b0"
@@ -1898,11 +2063,20 @@
       "failed154EvidencePreservation": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-root-preparation/ignored-owners-applied.json",
         "sha256": "8475c75b8074dbfcd1eb7782a7b5b66c8767b046111c1cd5f7ccfc84f593be7f"
-      }
+      },
+      "post155Correction": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-root-preparation/root-applied.json",
+        "sha256": "1735d2c3909dc9e66835ee45919bf01ca1d4d1c28a7fb458e1730c7de7d9b984"
+      },
+      "failed155EvidencePreservation": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-root-preparation/ignored-owners-applied.json",
+        "sha256": "bdae55622ae9b5a32a24cc774bb6fe183e1c5bf5f780090627ac1abaf568d8fd"
+      },
+      "integrityRepresentation": "Existing constructor preserves original failed155 and all prior physical refs through exact pinned prior-integrity JSON pointers to avoid duplicate inherited-object growth; no evidence or gate omitted."
     },
     "I": {
       "title": "Cleanup",
-      "completedRunScope": "144 through154",
+      "completedRunScope": "144 through155",
       "runReceipts": [
         {
           "run": "browser-r144",
@@ -2054,6 +2228,21 @@
             "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r154-root-failure-and-cleanup-review.json",
             "sha256": "582f77a9280f00b94d90a2e3b19e76ea993df28aa4d1614b074fdf3cb1e33e4d"
           }
+        },
+        {
+          "run": "browser-r155",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r155/cleanup.json",
+            "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+          },
+          "originalStatus": "complete",
+          "remaining": 0,
+          "finalRemainingOwnedProcesses": 0,
+          "retainedEvidenceWorkerStopped": true,
+          "review": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r155-root-failure-and-cleanup-review.json",
+            "sha256": "e42d22ae5ad7aed8f7bdaa28ffda890122db258c2930b6f801548246d5ebfc15"
+          }
         }
       ],
       "historical145BlockedReceiptPreserved": true,
@@ -2097,12 +2286,22 @@
       "ownedDiagnosticSourceCopyCleanup": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-template-preparation/owned-copy-cleanup.json",
         "sha256": "6d7ad42745e4e4496688d0dfd61529126e8a2e19c83f7d31a92a1db35686f367"
+      },
+      "lastCompletedRun155": {
+        "remainingOwnedResources": 0,
+        "remainingOwnedProcesses": 0,
+        "queueFree": true,
+        "retainedEvidenceWorkerStopped": true,
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-correction-preparation/actual-after155-audit.json",
+          "sha256": "8fd8e33d0547f613f37fb52514cd17a2d7a749a741f1260fa1b438782c400262"
+        }
       }
     },
     "J": {
       "title": "Git and PR",
-      "observedHead": "f193aab54e276b52cd29a7cb966b29d0afc9acb8",
-      "finalHead": "PENDING_POST154_SOURCE_TEMPLATE_CORRECTION_CHECKPOINT_COMMIT",
+      "observedHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
+      "finalHead": "PENDING_POST155_CLI_COMPARISON_CORRECTION_CHECKPOINT_COMMIT",
       "finalRemoteAlignment": "PENDING_FINAL_READ",
       "pr186": "MUST_REMAIN_OPEN_DRAFT",
       "ready": false,
@@ -2110,17 +2309,17 @@
       "deploy": false,
       "trackedHistoricalCheckpointPreserved": true,
       "prCurrentRead": {
-        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/actual-f193-after154-audit.json",
-        "sha256": "4e9c517132ae40ca3799b4b27881e53af6fb68a07435f2fb2adbf8be62581a49"
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-correction-preparation/actual-after155-audit.json",
+        "sha256": "8fd8e33d0547f613f37fb52514cd17a2d7a749a741f1260fa1b438782c400262"
       },
       "lastObservedAlignment": {
-        "localHead": "f193aab54e276b52cd29a7cb966b29d0afc9acb8",
-        "trackingHead": "f193aab54e276b52cd29a7cb966b29d0afc9acb8",
-        "liveRemoteHead": "f193aab54e276b52cd29a7cb966b29d0afc9acb8",
+        "localHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
+        "trackingHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
+        "liveRemoteHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
         "pr186": "OPEN_DRAFT",
         "evidence": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/actual-f193-after154-audit.json",
-          "sha256": "4e9c517132ae40ca3799b4b27881e53af6fb68a07435f2fb2adbf8be62581a49"
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-correction-preparation/actual-after155-audit.json",
+          "sha256": "8fd8e33d0547f613f37fb52514cd17a2d7a749a741f1260fa1b438782c400262"
         }
       }
     },
@@ -2163,7 +2362,7 @@
     "contractDrift": {
       "detectedAndCorrected": true,
       "newOrUnresolvedProductDrift": false,
-      "reason": "Actual Verification assumptions mismatched HTTP/image environment, density-corrected preview dimensions, picker query readiness, native date validity, publication FormData, draft reauthor identity, AST formatting, and physical evidence path representation. Corrections preserve strict canonical Product/native criteria. The full synchronous evidence check starved the existing heartbeat. Existing transport limits, reconnect policy, evidence criteria and gate list remain unchanged. Post152 generated QA config binding conflicted with the unchanged Next ESLint rule; the exact local rename preserves all image semantics and existing lint criteria. Post154 exposed an omitted tracked verification template; only exact template membership and truthful private/template metadata changed, with credentials still excluded."
+      "reason": "Actual Verification assumptions mismatched HTTP/image environment, density-corrected preview dimensions, picker query readiness, native date validity, publication FormData, draft reauthor identity, AST formatting, and physical evidence path representation. Corrections preserve strict canonical Product/native criteria. The full synchronous evidence check starved the existing heartbeat. Existing transport limits, reconnect policy, evidence criteria and gate list remain unchanged. Post152 generated QA config binding conflicted with the unchanged Next ESLint rule; the exact local rename preserves all image semantics and existing lint criteria. Post154 exposed an omitted tracked verification template; only exact template membership and truthful private/template metadata changed, with credentials still excluded. Post155 proved a platform-dependent literal line-ending assertion; only its exact comparison was corrected."
     },
     "secondSourceOfTruth": {
       "value": false
@@ -2177,7 +2376,7 @@
     },
     "workaround": {
       "value": false,
-      "reason": "No raw status rewrite, fabricated PASS, Product-only QA switch, weakened native assertion, or automatic coverage. Frozen sources are preserved. The original report-only branch remains unchanged. The separate exact lifecycle/source correction proof admits six fixed Verification owners, these two reports, and only the unchanged pre-existing tracked root .env.example as new inventory membership. Historical1940 manifests remain immutable; current1941 manifests bind the template raw bytes and exact retained/baseline/candidate Git provenance. Canonical evidence loader, finite11 partial guard, gate list and Product/media policies remain unchanged."
+      "reason": "No raw failure rewrite, fabricated PASS, Product QA switch or weakened success criteria. The existing exact correction branch admits seven fixed Verification owners, these two reports and one unchanged pre-existing tracked public environment template. All1941 raw source hash checks, template Git provenance, ordinary report-only proof, finite11 partial guard, worker, canonical loader,69+4 gate criteria and Product policies remain intact."
     }
   },
   "automaticCoverage": [],
@@ -2185,53 +2384,53 @@
   "finalOutputClaims": [],
   "sourceHead": "6fb6fe53e23a8e17870abf6845deec22d0c983bd",
   "candidateHead": null,
-  "sourceHeadMeaning": "Last actual behavioral source remains6fb6.233e,a334,d890 andf193 are preserved failed151/152/153/154 technical candidates. The next correction/checkpoint commit defines candidateHead; no future HEAD or PASS is claimed.",
+  "sourceHeadMeaning": "Behavioral source remains6fb6;233e/a334/d890/f193/b1 are preserved failed151–155 technical candidates. The next correction/checkpoint commit defines candidateHEAD; no future PASS is claimed.",
   "postCommitFinalArtifacts": [
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-source-manifest.json",
-      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_F193_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_B1_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/source-impact-current-to-final.json",
-      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_F193_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_B1_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-current-accounting-successor.json",
-      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_F193_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_B1_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-111-reconciliation.json",
-      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_F193_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_B1_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-accounting-producer-execution.json",
-      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_F193_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_B1_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-evidence-integrity.json",
-      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_F193_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_B1_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-quality-readiness.json",
-      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_F193_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_B1_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-closure-current-blockers.json",
-      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_F193_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_B1_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     }
@@ -2270,7 +2469,8 @@
       151,
       152,
       153,
-      154
+      154,
+      155
     ],
     "retained73Changed": false,
     "qualifiedOperationsReplayed": false,
@@ -2333,8 +2533,8 @@
     "nextGenerationRollover": {
       "status": "PREPARED_ONLY_NOT_MOVED",
       "plan": {
-        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-correction-preparation/final-candidate-rollover-plan.json",
-        "sha256": "9b7938badc2cb9af8eb78064d26f8f6a342972cc9dba20b9cd76c92db7730b4f"
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post155-source-correction-preparation/final-candidate-rollover-plan.json",
+        "sha256": "8d3facfbd66d8bcc7b4b570963165ab97d0e2d4d2505b8eaaa580d37114935f5"
       },
       "actualMoves": 0
     },
@@ -2392,6 +2592,62 @@
       "sealedBeforeCorrection": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r154-terminal-preimages/manifest.json",
         "sha256": "08eb3839dc417bae66ef3c5a494bbf9758f5bb40567a33b543fa3b05e17c0f8d"
+      }
+    },
+    "failed155Seal": {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/manifest.json",
+      "sha256": "12c0189674577278399b7f8baccbbe86c72e1ae8cad0732a0ebb15447c52da2e"
+    },
+    "priorCandidateB1": {
+      "sourceHead": "b1ceb1e615eef579a47fd45c4433e95aa8b7bdd2",
+      "accounting": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/62cf149a825ecc6f66df1fdacd14b57d676ef3342222cbd041e66e2d878faf55.txt",
+        "sha256": "62cf149a825ecc6f66df1fdacd14b57d676ef3342222cbd041e66e2d878faf55"
+      },
+      "exact111": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/ff365a6a1bf46cd200ccf90a92a1981242933520934b2f2a3a0b44b4b89f1986.txt",
+        "sha256": "ff365a6a1bf46cd200ccf90a92a1981242933520934b2f2a3a0b44b4b89f1986"
+      },
+      "producer": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/6018dbcede1ca60769428f4ea735234955f494d8530f05abc15926595566fce1.txt",
+        "sha256": "6018dbcede1ca60769428f4ea735234955f494d8530f05abc15926595566fce1"
+      },
+      "rootReview": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/cc126d9b3da3ffc45be40bcb8ce27d929e93670318d8cbf15395f281c4969a26.txt",
+        "sha256": "cc126d9b3da3ffc45be40bcb8ce27d929e93670318d8cbf15395f281c4969a26"
+      },
+      "sourceManifest": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/0473f03c297cd7499ad0272a4fb437cde04495e15f9febc494712b2c5ce2f325.txt",
+        "sha256": "0473f03c297cd7499ad0272a4fb437cde04495e15f9febc494712b2c5ce2f325"
+      },
+      "sourceCompatibility": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/0dc59b1a88e43a3ed29a54a2de5b49139eacba54ebaed5602d4407c271cbfa3a.txt",
+        "sha256": "0dc59b1a88e43a3ed29a54a2de5b49139eacba54ebaed5602d4407c271cbfa3a"
+      },
+      "integrity": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/114146d26e05005d0b678f7ec959efceb6061c5151998cfa8e83e64ba54c50b8.txt",
+        "sha256": "114146d26e05005d0b678f7ec959efceb6061c5151998cfa8e83e64ba54c50b8"
+      },
+      "readiness": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/9b449bdbae236f0c8cacdee4043af5fc0d1d6a06390093cc209b6f915efa5a8c.txt",
+        "sha256": "9b449bdbae236f0c8cacdee4043af5fc0d1d6a06390093cc209b6f915efa5a8c"
+      },
+      "blockers": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/137db936af297d5bcfe03d0cbef367a244d8f2c50bc4456490b32dd923650501.txt",
+        "sha256": "137db936af297d5bcfe03d0cbef367a244d8f2c50bc4456490b32dd923650501"
+      },
+      "physicalIntegrityRefs": 28484,
+      "hostGitAudit": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post154-source-correction-preparation/actual-after155-audit.json",
+        "sha256": "8fd8e33d0547f613f37fb52514cd17a2d7a749a741f1260fa1b438782c400262"
+      },
+      "independentReconciliationAudit": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/b1ceb1e6-final-reconciliation-independent-audit.json",
+        "sha256": "493da5ec671fb480a70ef64bdef40926204f84228567cf494117b07b14811ca6"
+      },
+      "sealedBeforeCorrection": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r155-terminal-preimages/manifest.json",
+        "sha256": "12c0189674577278399b7f8baccbbe86c72e1ae8cad0732a0ebb15447c52da2e"
       }
     }
   },

@@ -232,6 +232,10 @@ export function assertRetainedFinalQualityLifecycleSource(impact: Parameters<typ
   assert.equal(digest(infrastructure.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.infrastructureAfterSha256);
   const expectedInfrastructure = exactReplace(infrastructure.before.text.replace(/\r\n/gu, "\n"), "assert.equal(sourceIncluded(\".env.local\"), false);", "assert.equal(sourceIncluded(\".env.example\"), true, \"The exact public template is eligible verification input.\");\nassert.deepEqual(selectSourceInventory([...required, \".env.example\"]), [...required, \".env.example\"].sort(),\n  \"Only the exact tracked template must enter the snapshot.\");\nassert.deepEqual(selectSourceInventory(required), required.slice().sort(), \"The template must not be synthesized when absent from Git.\");\nassert.throws(() => selectSourceInventory(required, [\".env.example\"]), /must be Git tracked/u);\nassert.throws(() => selectSourceInventory([...required, \".env.example\"], [\".env.example\"]), /must be Git tracked/u);\nfor (const file of [\".env\", \".env.local\", \".env.production\", \".env.production.local\", \".ENV.example\", \".env.EXAMPLE\",\n  \"nested/.env.example\", \"src/.env.example\", \".env.example.local\", \".env.example/child\", \"./.env.example\", \"../.env.example\",\n  \"/.env.example\", \"C:/.env.example\", \"C:\\\\.env.example\", \".env.example\\0\", \"private/.env.example\"]) {\n  assert.equal(sourceIncluded(file), false, `Private or aliased template path must stay excluded: ${file}`);\n  assert.equal(selectSourceInventory([...required, file]).includes(file), false);\n  assert.throws(() => selectSourceInventory(required, [file]), /Unsafe additional source/u);\n}\nassert.equal(sourceIncluded(\".env.local\"), false);");
   assert.equal(infrastructure.after.text.replace(/\r\n/gu, "\n"), expectedInfrastructure, "Every existing infrastructure assertion must remain intact beside the exact template controls.");
+  const cliPulse = parsed.get("scripts/verify-isolated-application-cli-pulse.mjs")!;
+  assert.equal(digest(cliPulse.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.cliPulseAfterSha256);
+  const expectedCliPulse = exactReplace(cliPulse.before.text, "assert.ok(source.includes('cliJobAbort?.abort();\\n        if (handle) activeHandles.delete(handle)'));", "assert.ok(source.replace(/\\r\\n/gu,'\\n').includes('cliJobAbort?.abort();\\n        if (handle) activeHandles.delete(handle)'));");
+  assert.equal(cliPulse.after.text, expectedCliPulse, "Only the exact CRLF comparison correction may change the CLI control proof; every original assertion and raw source read must remain intact.");
   const controls = parsed.get("scripts/verify-isolated-supabase.mts")!;
   assert.equal(digest(controls.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.controlsAfterSha256);
   const controlName = "verifyRetainedFinalQualityWorkerControls";
@@ -275,21 +279,23 @@ const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze({
     "scripts/verify-isolated-supabase.mts": "d09900fcd7405baeb02f70e86bbe77fc82a419ed326dd29c0e752e4c97b1882c",
     "scripts/verify-admin-core-navigation-permission-join.mjs": "820bbbf23f31291c0449798bd3e11e272344bbee39db6eee45eca4e8417d6b93",
     "scripts/lib/verification-source-inventory.mts": "f9733f5798f6360215d58820b3a7fcedfeb00225d04bd5a7721d277f00d68f4f",
-    "scripts/verify-verification-infrastructure.mts": "a59689a3faa08fecbd20eb9f183fe06717f58a841f0cbee562371d4ca6023eab"
+    "scripts/verify-verification-infrastructure.mts": "a59689a3faa08fecbd20eb9f183fe06717f58a841f0cbee562371d4ca6023eab",
+    "scripts/verify-isolated-application-cli-pulse.mjs": "ed8c845a55c25a81c7f6615102f846e4a2bd9107b0f36171878baa2319325567"
   },
   "workerStatementsSha256": "c0e3683cd91bfd6413fcbf59f488be8593f7fc65be52ce480aa204a3bfee6634",
-  "proofFunctionSha256": "f6806ea9b08c463dbdf4547491da218d92abfb99ab0a82e3f6a879a54e80876e",
+  "proofFunctionSha256": "aab18a7b5ddd412889f58831f0744a34052ad3bffba3c0d79d1a7334609a9304",
   "lifecycleBeforeLfSha256": "2973edeefb1bb931b453db333a89ab9d09b9b0044893c02ab917a3a057c1e6de",
   "lifecycleAfterLfSha256": "fa6507e20eb5d7636aecb807aada43c47aa8638d7473c4004a73607329b14eeb",
   "navigationAfterSha256": "765824e551d06e0879fc6dc1d2830bcde30bed1b77854749b89bf8567816f64c",
-  "controlsAfterSha256": "f007fd6cd55ba2a61f8077ab2d32fdf7444140cfbc6235f5cdc945d7cc1266a4",
+  "controlsAfterSha256": "450b70ede339aef3f119c919c7227521a96a36805479cc976806e45d942f7f89",
   "inventoryAfterSha256": "e0f484806258d05744d6fbf707570579ca111fc4894699e14a13055d8a88f897",
   "infrastructureAfterSha256": "10788b81821be2d3bc6fef3d3ca76558bc29df745cd45e812c9cad86291b17b4",
   "publicTemplate": {
     "path": ".env.example",
     "gitSha256": "4fdf4cae62b0073b860dccfced0d07aa485f139cf996e56c37850f89fcc0dea8",
     "workingTreeSha256": "d24dc04f7c75949da64afd12ab7255d8292ffbd9fbc3c031a8434303520e2bae"
-  }
+  },
+  "cliPulseAfterSha256": "330a62b5259d81d8c76b3f7c2e717953e5cb8a896ebb143e212b57c44b334bdf"
 });
 
 /** Exact retained source, with only the finite reviewed report delta admitted. */

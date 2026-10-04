@@ -1531,7 +1531,7 @@ function verifyRetainedPublicControlEligibility(source: string) {
     type Impact = Parameters<typeof import("./lib/isolated-public-verification.mts").assertRetainedFinalQualitySource>[0];
     type Owner = { path: string; beforeSource: string; afterSource: string; beforeSha256: string; afterSha256: string };
     type Authority = { sourceHead: string; sourceSha256: string; owners: Record<string, string>; workerStatementsSha256: string;
-      proofFunctionSha256: string; lifecycleBeforeLfSha256: string; lifecycleAfterLfSha256: string; controlsAfterSha256: string; navigationAfterSha256: string; inventoryAfterSha256: string; infrastructureAfterSha256: string;
+      proofFunctionSha256: string; lifecycleBeforeLfSha256: string; lifecycleAfterLfSha256: string; controlsAfterSha256: string; navigationAfterSha256: string; inventoryAfterSha256: string; infrastructureAfterSha256: string; cliPulseAfterSha256: string;
       publicTemplate: { path: string; gitSha256: string; workingTreeSha256: string } };
     const nodeName = (node: ts.Statement) => ts.isFunctionDeclaration(node) || ts.isTypeAliasDeclaration(node) ? node.name?.text
       : ts.isVariableStatement(node) && node.declarationList.declarations.length === 1 && ts.isIdentifier(node.declarationList.declarations[0].name)
@@ -1546,10 +1546,10 @@ function verifyRetainedPublicControlEligibility(source: string) {
         transformations.push({ from: node.arguments[1].text, to: node.arguments[2].text });
       ts.forEachChild(node, visit);
     };
-    visit(proofNode); assert.equal(transformations.length, 18);
+    visit(proofNode); assert.equal(transformations.length, 19);
     const undo = (source: string) => transformations.reduce((value, row) => value.split(row.to).join(row.from), source);
     const p = "scripts/lib/isolated-public-verification.mts", l = "scripts/lib/isolated-supabase.mts", c = "scripts/verify-isolated-supabase.mts", n = "scripts/verify-admin-core-navigation-permission-join.mjs";
-    const i = "scripts/lib/verification-source-inventory.mts", f = "scripts/verify-verification-infrastructure.mts";
+    const i = "scripts/lib/verification-source-inventory.mts", f = "scripts/verify-verification-infrastructure.mts", q = "scripts/verify-isolated-application-cli-pulse.mjs";
     const workerNames = ["RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS", "RETAINED_QUALITY_WORKER_SOURCE", "loadRetainedFinalQualityAdmissionAsync"];
     const priorPublic = [undo(text("isolatedPublicImageConfigSource")), undo(text("assertRetainedFinalQualitySource")), text("loadRetainedFinalQualityAdmission"), undo(text("runOwnedPublicVerification")), text("GATES")].join("\n\n");
     const oldMetadata = "memoryOnlyArtifacts: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0";
@@ -1561,6 +1561,8 @@ function verifyRetainedPublicControlEligibility(source: string) {
       .replace(oldMetadata, newMetadata) + '\nasync function verifyRetainedFinalQualityWorkerControls() { return; }';
     const priorLifecycle = 'export function healthyLease() { return "existing contract"; }\n';
     const nextLifecycle = 'export function healthyLease() { return "reviewed exact retained eligibility"; }\n';
+    const nextCliPulse = readSource(q), priorCliPulse = undo(nextCliPulse);
+    assert.notEqual(nextCliPulse, priorCliPulse);
     const nextNavigation = readSource(n), priorNavigation = undo(nextNavigation);
     assert.notEqual(nextNavigation, priorNavigation);
     const nextInventory = readSource(i), priorInventory = undo(nextInventory.replace(/\r\n/gu, "\n"));
@@ -1570,18 +1572,18 @@ function verifyRetainedPublicControlEligibility(source: string) {
     const templatePath = ".env.example", gitSource = "# Public template fixture\nPUBLIC_EXAMPLE=example\n", workingTreeSource = gitSource.replace(/\n/gu, "\r\n");
     const baselineManifest = [{ file: p, sha256: sha256(priorPublic) }, { file: l, sha256: sha256(priorLifecycle) },
       { file: c, sha256: sha256(priorControls) }, { file: n, sha256: sha256(priorNavigation) },
-      { file: i, sha256: sha256(priorInventory) }, { file: f, sha256: sha256(priorInfrastructure) }, { file: "src/app/page.tsx", sha256: "e".repeat(64) }].sort((a, b) => a.file.localeCompare(b.file));
+      { file: i, sha256: sha256(priorInventory) }, { file: f, sha256: sha256(priorInfrastructure) }, { file: q, sha256: sha256(priorCliPulse) }, { file: "src/app/page.tsx", sha256: "e".repeat(64) }].sort((a, b) => a.file.localeCompare(b.file));
     const authority: Authority = { sourceHead: "b".repeat(40), sourceSha256: sha256(JSON.stringify(baselineManifest)),
-      owners: { [p]: sha256(priorPublic), [l]: sha256(priorLifecycle), [c]: sha256(priorControls), [n]: sha256(priorNavigation), [i]: sha256(priorInventory), [f]: sha256(priorInfrastructure) },
+      owners: { [p]: sha256(priorPublic), [l]: sha256(priorLifecycle), [c]: sha256(priorControls), [n]: sha256(priorNavigation), [i]: sha256(priorInventory), [f]: sha256(priorInfrastructure), [q]: sha256(priorCliPulse) },
       workerStatementsSha256: sha256(workerNames.map(text).join("\n")), proofFunctionSha256: sha256(text("assertRetainedFinalQualityLifecycleSource")),
       lifecycleBeforeLfSha256: sha256(priorLifecycle), lifecycleAfterLfSha256: sha256(nextLifecycle), controlsAfterSha256: sha256(nextControls), navigationAfterSha256: sha256(nextNavigation),
-      inventoryAfterSha256: sha256(nextInventory), infrastructureAfterSha256: sha256(nextInfrastructure),
+      inventoryAfterSha256: sha256(nextInventory), infrastructureAfterSha256: sha256(nextInfrastructure), cliPulseAfterSha256: sha256(nextCliPulse),
       publicTemplate: { path: templatePath, gitSha256: sha256(gitSource), workingTreeSha256: sha256(workingTreeSource) } };
     const nextPublic = ['import { Worker } from "node:worker_threads";', 'import ts from "typescript";', ...workerNames.map(text),
       text("RetainedQualityLifecycleCorrection"), text("assertRetainedFinalQualityLifecycleSource"),
       "const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze(" + JSON.stringify(authority) + ");",
       text("isolatedPublicImageConfigSource"), text("assertRetainedFinalQualitySource"), text("loadRetainedFinalQualityAdmission"), text("runOwnedPublicVerification"), text("GATES")].join("\n\n");
-    const owners: Owner[] = [[p, priorPublic, nextPublic], [l, priorLifecycle, nextLifecycle], [c, priorControls, nextControls], [n, priorNavigation, nextNavigation], [i, priorInventory, nextInventory], [f, priorInfrastructure, nextInfrastructure]]
+    const owners: Owner[] = [[p, priorPublic, nextPublic], [l, priorLifecycle, nextLifecycle], [c, priorControls, nextControls], [n, priorNavigation, nextNavigation], [i, priorInventory, nextInventory], [f, priorInfrastructure, nextInfrastructure], [q, priorCliPulse, nextCliPulse]]
       .map(([file, beforeSource, afterSource]) => ({ path: file, beforeSource, afterSource, beforeSha256: sha256(beforeSource), afterSha256: sha256(afterSource) }));
     const retained: Source = { invocationHeadSha: "a".repeat(40), sourceSha256: authority.sourceSha256, manifest: baselineManifest };
     const baseline: Source = { ...retained, invocationHeadSha: authority.sourceHead };
@@ -1633,6 +1635,14 @@ function verifyRetainedPublicControlEligibility(source: string) {
       const originalGenerator = text("isolatedPublicImageConfigSource"); assert.ok(originalGenerator.includes(from));
       edit(value, p, originalGenerator, originalGenerator.replace(from, to));
     };
+    rejectSource("retained source rejects missing exact CLI pulse owner evidence", value => { value.impact.qualityLifecycleCorrection!.owners = value.impact.qualityLifecycleCorrection!.owners.filter(row => row.path !== q); });
+    rejectSource("retained source rejects reverting the CLI CRLF correction", value => edit(value, q, "assert.ok(source.replace(/\\r\\n/gu,'\\n').includes('cliJobAbort?.abort();\\n        if (handle) activeHandles.delete(handle)'));", "assert.ok(source.includes('cliJobAbort?.abort();\\n        if (handle) activeHandles.delete(handle)'));"));
+    rejectSource("retained source rejects broader CLI newline normalization", value => edit(value, q, "source.replace(/\\r\\n/gu,'\\n').includes", "source.replace(/\\r\\n?/gu,'\\n').includes"));
+    rejectSource("retained source rejects normalizing the raw CLI source read", value => edit(value, q, "readFileSync('scripts/lib/isolated-supabase.mts','utf8')", "readFileSync('scripts/lib/isolated-supabase.mts','utf8').replace(/\\r\\n/gu,'\\n')"));
+    rejectSource("retained source rejects dropping the CLI cleanup-order assertion", value => edit(value, q, "assert.ok(drain<cleaning&&drain<database);", "void drain;"));
+    rejectSource("retained source rejects dropping a CLI cleanup negative control", value => edit(value, q, "assert.throws(()=>assertCleanupDrain(mutant));", "void mutant;"));
+    rejectSource("retained source rejects altering the controlled CLI timeout", value => edit(value, q, "CLI_TIMEOUT_MS:180_000", "CLI_TIMEOUT_MS:900_000"));
+    rejectSource("retained source rejects an extra unreviewed CLI statement", value => { value.impact.qualityLifecycleCorrection!.owners.find(row => row.path === q)!.afterSource += "\nexport const unrelated = true;"; });
     rejectSource("retained source rejects missing tracked template provenance", value => { delete (value.impact.qualityLifecycleCorrection! as Partial<NonNullable<Impact["qualityLifecycleCorrection"]>>).trackedPublicEnvironmentTemplate; });
     rejectSource("retained source rejects a missing template inventory row", value => { value.candidate.manifest = value.candidate.manifest.filter(row => row.file !== templatePath); });
     rejectSource("retained source rejects a duplicate template inventory row", value => { value.candidate.manifest.push({ file: templatePath, sha256: sha256(workingTreeSource) }); });
