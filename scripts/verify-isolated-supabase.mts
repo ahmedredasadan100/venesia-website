@@ -1133,7 +1133,7 @@ async function main() {
   cases.push(...closure.cases);
   await verifyRestoreAclPolicy();
   verifyFinalQualityGatePlan();
-  await verifyRetainedFinalQualityAdmissionControls();
+  await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
   await verifyOwnedPublicImageConfig();
   verifyScanner();
   const provenance = verifyReleaseLock();
@@ -1314,9 +1314,329 @@ async function closureCheckpointsOnly() {
   console.log(JSON.stringify(await verifyApplicationClosureCheckpointsOffline(), null, 2));
 }
 
+async function verifyRetainedFinalQualityWorkerControls() {
+  const { Worker: NativeWorker } = await import("node:worker_threads");
+  const { pathToFileURL } = await import("node:url");
+  const ownerText = readSource("scripts/lib/isolated-public-verification.mts");
+  const ownerFile = ts.createSourceFile("isolated-public-verification.mts", ownerText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const names = ["RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS", "RETAINED_QUALITY_WORKER_SOURCE", "loadRetainedFinalQualityAdmissionAsync"];
+  const selected = ownerFile.statements.filter(statement => ts.isFunctionDeclaration(statement)
+    ? names.includes(statement.name?.text ?? "")
+    : ts.isVariableStatement(statement) && statement.declarationList.declarations.some(declaration => ts.isIdentifier(declaration.name) && names.includes(declaration.name.text)));
+  assert.equal(selected.length, 3);
+  const original = selected.map(statement => statement.getText(ownerFile)).join("\n");
+  assert.equal((original.match(/import\.meta\.url/g) ?? []).length, 1);
+  assert.match(original, /RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS = 300_000/);
+  // Only the fixed owner URL is substituted for a controlled worker module; the
+  // original bootstrap, sequencing, failure and cleanup implementation execute.
+  const javascript = ts.transpileModule(original.replace("import.meta.url", "ownerFixtureUrl"), {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 }
+  }).outputText.replace(/^export /gm, "");
+  type Admission = { receipt: { marker: string; threadId: number }; readonly workerStopped: boolean; verify(): Promise<void>; close(): Promise<void> };
+  type Expected = { invocationHeadSha: string; sourceSha256: string; manifest: { path: string; sha256: string } };
+  type Load = (sha: string, expected: Expected, signal: AbortSignal) => Promise<Admission>;
+  const directory = mkdtempSync(path.join(tmpdir(), "retained-quality-worker-controls-"));
+  const modulePath = path.join(directory, "controlled-owner.mjs");
+  const statePath = path.join(directory, "controlled-bytes.json");
+  const workers: Array<InstanceType<typeof NativeWorker> & { exitObserved: boolean; terminateCalls: number; terminated: boolean }> = [];
+  class TrackedWorker extends NativeWorker {
+    exitObserved = false; terminateCalls = 0; terminated = false;
+    constructor(...args: ConstructorParameters<typeof NativeWorker>) {
+      const options = args[1];
+      assert.equal(options?.eval, true); assert.equal(options?.stdout, true); assert.equal(options?.stderr, true);
+      assert.deepEqual(options?.env, {}); assert.deepEqual(options?.execArgv, ["--experimental-strip-types"]);
+      assert.deepEqual(Object.keys(options?.workerData ?? {}).sort(), ["admissionSha256", "expected", "ownerUrl"]);
+      super(...args); workers.push(this); this.once("exit", () => { this.exitObserved = true; });
+    }
+    override terminate() { this.terminateCalls++; return super.terminate().then(code => { this.terminated = true; return code; }); }
+  }
+  writeFileSync(modulePath, String.raw`import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { parentPort, threadId } from "node:worker_threads";
+const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+export function loadRetainedFinalQualityAdmission(sha, expected) {
+  assert.equal(sha, "a".repeat(64)); assert.equal(expected.invocationHeadSha, "b".repeat(40));
+  assert.equal(expected.sourceSha256, "c".repeat(64));
+  const original = readFileSync(expected.manifest.path), config = JSON.parse(original);
+  assert.equal(createHash("sha256").update(original).digest("hex"), expected.manifest.sha256);
+  pause(config.loadDelay ?? 0);
+  if (config.mode === "load-throw") throw Error("controlled canonical load failure");
+  if (config.mode === "load-exit") process.exit(0);
+  if (config.mode === "bad-sequence") { parentPort.postMessage({sequence:99,kind:"loaded",receipt:{}}); pause(100); }
+  if (config.mode === "extra-key") { parentPort.postMessage({sequence:1,kind:"loaded",receipt:{},unexpected:true}); pause(100); }
+  if (config.mode === "output") { process.stdout.write("x".repeat(70_000)); pause(100); }
+  if (config.mode === "late-frame") setTimeout(() => parentPort.postMessage({sequence:99,kind:"verified"}), 30);
+  if (config.mode === "late-exit") setTimeout(() => process.exit(0), 30);
+  return { receipt: {marker:"controlled canonical receipt",threadId}, verify() {
+    pause(config.verifyDelay ?? 0);
+    if (config.mode === "verify-throw") throw Error("controlled canonical verify failure");
+    assert.equal(createHash("sha256").update(readFileSync(expected.manifest.path)).digest("hex"), expected.manifest.sha256, "controlled evidence bytes changed");
+  }};
+}
+`);
+  const build = (timeoutPort: typeof setTimeout = setTimeout): Load => new Function("assert", "Worker", "ownerFixtureUrl", "setTimeout", "clearTimeout",
+    javascript + "\nreturn loadRetainedFinalQualityAdmissionAsync;")(assert, TrackedWorker, pathToFileURL(modulePath).href, timeoutPort, clearTimeout) as Load;
+  const prepare = (mode = "normal", loadDelay = 0, verifyDelay = 0) => {
+    const bytes = JSON.stringify({ mode, loadDelay, verifyDelay }); writeFileSync(statePath, bytes);
+    return { invocationHeadSha: "b".repeat(40), sourceSha256: "c".repeat(64), manifest: { path: statePath, sha256: sha256(bytes) } };
+  };
+  const settled = () => {
+    for (const worker of workers) { assert.equal(worker.exitObserved, true); assert.equal(worker.terminated, true); assert.equal(worker.terminateCalls, 1); }
+  };
+  const control = async (name: string, run: () => Promise<void>) => {
+    try { await run(); settled(); cases.push(name); } catch (error) { console.error(`FAIL ${name}`); throw error; }
+  };
+  const load = build();
+  try {
+    await control("retained worker returns exact receipt and rechecks in one persistent worker", async () => {
+      const before = workers.length, admission = await load("a".repeat(64), prepare(), new AbortController().signal);
+      assert.equal(admission.receipt.marker, "controlled canonical receipt"); assert.ok(admission.receipt.threadId > 0);
+      assert.equal(admission.workerStopped, false); await admission.verify(); await admission.verify();
+      assert.equal(workers.length, before + 1); await admission.close(); await admission.close(); assert.equal(admission.workerStopped, true);
+      await assert.rejects(admission.verify(), /closed/);
+    });
+    await control("retained worker rejects changed bytes on a later full verify and awaits failure cleanup", async () => {
+      const admission = await load("a".repeat(64), prepare(), new AbortController().signal); await admission.verify();
+      writeFileSync(statePath, "changed exact evidence"); await assert.rejects(admission.verify(), /evidence bytes changed/);
+      await assert.rejects(admission.close(), /evidence bytes changed/); assert.equal(admission.workerStopped, true);
+    });
+    await control("retained worker rejects overlapping checks without admitting a second request", async () => {
+      const admission = await load("a".repeat(64), prepare("normal", 0, 100), new AbortController().signal);
+      const first = admission.verify(); await assert.rejects(admission.verify(), /Only one exact evidence check/); await first;
+      await admission.verify(); await admission.close(); assert.equal(admission.workerStopped, true);
+    });
+    for (const [mode, pattern] of [["load-throw", /canonical load failure/], ["load-exit", /exited before disposal/],
+      ["bad-sequence", /99/], ["extra-key", /unexpected/], ["output", /output exceeded/]] as const) {
+      await control(`retained worker fails closed and disposes on ${mode}`, async () => {
+        await assert.rejects(load("a".repeat(64), prepare(mode), new AbortController().signal), pattern);
+      });
+    }
+    await control("retained worker propagates canonical verify failure after awaited disposal", async () => {
+      const admission = await load("a".repeat(64), prepare("verify-throw"), new AbortController().signal);
+      await assert.rejects(admission.verify(), /canonical verify failure/); await assert.rejects(admission.close(), /canonical verify failure/);
+      assert.equal(admission.workerStopped, true);
+    });
+    await control("retained worker starts no thread when already aborted", async () => {
+      const before = workers.length, controller = new AbortController(); controller.abort(Error("controlled pre-abort"));
+      await assert.rejects(load("a".repeat(64), prepare(), controller.signal), /controlled pre-abort/); assert.equal(workers.length, before);
+    });
+    await control("retained worker abort during load awaits its terminated worker", async () => {
+      const controller = new AbortController(), pending = load("a".repeat(64), prepare("normal", 500), controller.signal);
+      const rejected = assert.rejects(pending, /controlled load abort/); controller.abort(Error("controlled load abort")); await rejected;
+    });
+    await control("retained worker abort during verify disposes and preserves abort failure", async () => {
+      const controller = new AbortController(), admission = await load("a".repeat(64), prepare("normal", 0, 500), controller.signal);
+      const rejected = assert.rejects(admission.verify(), /controlled verify abort/); controller.abort(Error("controlled verify abort"));
+      await rejected; await assert.rejects(admission.close(), /controlled verify abort/); assert.equal(admission.workerStopped, true);
+    });
+    await control("retained worker close during verify rejects unfinished proof and awaits disposal", async () => {
+      const admission = await load("a".repeat(64), prepare("normal", 0, 500), new AbortController().signal);
+      const rejected = assert.rejects(admission.verify(), /unfinished check/); await assert.rejects(admission.close(), /unfinished check/); await rejected;
+      assert.equal(admission.workerStopped, true);
+    });
+    for (const [mode, pattern] of [["late-frame", /Unexpected evidence worker response/], ["late-exit", /exited before disposal/]] as const) {
+      await control(`retained worker rejects ${mode} even during otherwise idle disposal`, async () => {
+        const admission = await load("a".repeat(64), prepare(mode), new AbortController().signal);
+        await new Promise(resolve => setTimeout(resolve, 100)); await assert.rejects(admission.close(), pattern); assert.equal(admission.workerStopped, true);
+      });
+    }
+    await control("retained worker request bound terminates an unfinished check", async () => {
+      // Only the timer duration port is shortened; production constant and failure path are unchanged.
+      const boundedTimer = ((callback: (...args: unknown[]) => void, milliseconds?: number, ...args: unknown[]) => {
+        assert.equal(milliseconds, 300_000); return setTimeout(callback, 50, ...args);
+      }) as typeof setTimeout;
+      await assert.rejects(build(boundedTimer)("a".repeat(64), prepare("normal", 500), new AbortController().signal), /exceeded its worker bound/);
+    });
+    await control("retained worker leaves parent heartbeat responsive through synchronous load and verify", async () => {
+      let phase = "load", loadTicks = 0, verifyTicks = 0;
+      const timer = setInterval(() => { if (phase === "load") loadTicks++; else verifyTicks++; }, 10);
+      let admission: Admission | undefined;
+      try {
+        admission = await load("a".repeat(64), prepare("normal", 160, 160), new AbortController().signal);
+        phase = "verify"; await admission.verify(); assert.ok(loadTicks >= 3); assert.ok(verifyTicks >= 3);
+      } finally { clearInterval(timer); if (admission) await admission.close(); }
+      assert.equal(admission.workerStopped, true);
+    });
+  } finally {
+    await Promise.allSettled(workers.filter(worker => !worker.exitObserved).map(worker => worker.terminate()));
+    assert.ok(workers.every(worker => worker.exitObserved));
+    assert.ok(directory.startsWith(path.resolve(tmpdir()) + path.sep));
+    rmSync(directory, { recursive: true, force: true });
+  }
+
+function verifyRetainedPublicControlEligibility(source: string) {
+  const parsed = ts.createSourceFile("isolated-supabase.mts", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const handlers: ts.ArrowFunction[] = [];
+  const visitHandler = (node: ts.Node) => {
+    if (ts.isPropertyAssignment(node) && node.name.getText(parsed) === "runPublicVerification" && ts.isArrowFunction(node.initializer)) handlers.push(node.initializer);
+    ts.forEachChild(node, visitHandler);
+  };
+  visitHandler(parsed); assert.equal(handlers.length, 1);
+  const renewals: ts.CallExpression[] = [];
+  const visitRenewal = (node: ts.Node) => {
+    if (ts.isCallExpression(node) && node.expression.getText(parsed) === "applicationLease.renewIfDue") renewals.push(node);
+    ts.forEachChild(node, visitRenewal);
+  };
+  visitRenewal(handlers[0]); assert.equal(renewals.length, 1); assert.equal(renewals[0].arguments.length, 1);
+  const argument = renewals[0].arguments[0].getText(parsed);
+  const eligible = new Function("request", ts.transpileModule("return (" + argument + ");", {
+    compilerOptions: { target: ts.ScriptTarget.ES2022 },
+  }).outputText) as (request: Record<string, unknown>) => boolean;
+  const valid = { finalQualityGate: true, retainedAdminBehaviorAdmissionSha256: "a".repeat(64), additionalSourceFiles: [] };
+  assert.equal(eligible(valid), true); cases.push("retained Quality heartbeat renews only through the existing lease argument");
+  for (const selection of ["admin-interactions", "admin-adoption"]) {
+    assert.equal(eligible({ selection }), true); cases.push("unchanged legacy lease eligibility: " + selection);
+  }
+  const rejected: Array<[string, Record<string, unknown>]> = [
+    ["missing final Quality", { ...valid, finalQualityGate: undefined }],
+    ["false final Quality", { ...valid, finalQualityGate: false }],
+    ["truthy nonboolean final Quality", { ...valid, finalQualityGate: "true" }],
+    ["build subset", { ...valid, selection: "build-contracts" }],
+    ["foreign selector", { ...valid, selection: "foreign" }],
+    ["null selector", { ...valid, selection: null }],
+    ["absent admission", { ...valid, retainedAdminBehaviorAdmissionSha256: undefined }],
+    ["null admission", { ...valid, retainedAdminBehaviorAdmissionSha256: null }],
+    ["nonstring admission", { ...valid, retainedAdminBehaviorAdmissionSha256: 123 }],
+    ["short admission", { ...valid, retainedAdminBehaviorAdmissionSha256: "a".repeat(63) }],
+    ["long admission", { ...valid, retainedAdminBehaviorAdmissionSha256: "a".repeat(65) }],
+    ["uppercase admission", { ...valid, retainedAdminBehaviorAdmissionSha256: "A".repeat(64) }],
+    ["nonhex admission", { ...valid, retainedAdminBehaviorAdmissionSha256: "g".repeat(64) }],
+    ["cohort", { ...valid, adoptionCohort: "domain-forms" }],
+    ["scope", { ...valid, adoptionScope: "core-closure" }],
+    ["journey subset", { ...valid, adoptionJourneySelection: "domain-forms-update-followup" }],
+    ["measurement", { ...valid, adminMeasurement: {} }],
+    ["null measurement", { ...valid, adminMeasurement: null }],
+    ["additional source", { ...valid, additionalSourceFiles: ["scripts/foreign.mts"] }],
+    ["missing source list", { ...valid, additionalSourceFiles: undefined }],
+    ["array-like source list", { ...valid, additionalSourceFiles: { length: 0 } }],
+    ["string source list", { ...valid, additionalSourceFiles: "" }],
+    ["ordinary Public job", { additionalSourceFiles: [] }],
+  ];
+  for (const [name, request] of rejected) { assert.equal(eligible(request), false, name); cases.push("retained lease rejects " + name); }
+  const handler = handlers[0].getText(parsed);
+  assert.ok(handler.indexOf("applicationLease.renewIfDue") < handler.indexOf("await publicContext.assertOwned()"));
+  assert.ok(handler.indexOf("await publicContext.assertOwned()") < handler.indexOf('query("select 1 as owned_public_job_heartbeat")'));
+  assert.ok(handler.includes("}, 20_000)")); cases.push("existing serialized ownership and20second heartbeat order remains intact");
+  assert.ok(handler.includes('if (request.selection === "admin-interactions" || request.selection === "admin-adoption") publicJob = undefined;'));
+  cases.push("retained Quality does not clear the one-shot public job marker");
+}
+
+  verifyRetainedPublicControlEligibility(readSource("scripts/lib/isolated-supabase.mts"));
+
+  // The source guard executes with a controlled finite authority. All executable
+  // assertion bodies and transformation rules come from the maintained owner.
+  {
+    type Source = { invocationHeadSha: string; sourceSha256: string; manifest: Array<{ file: string; sha256: string }> };
+    type Impact = Parameters<typeof import("./lib/isolated-public-verification.mts").assertRetainedFinalQualitySource>[0];
+    type Owner = { path: string; beforeSource: string; afterSource: string; beforeSha256: string; afterSha256: string };
+    type Authority = { sourceHead: string; sourceSha256: string; owners: Record<string, string>; workerStatementsSha256: string;
+      proofFunctionSha256: string; lifecycleBeforeLfSha256: string; lifecycleAfterLfSha256: string; controlsAfterSha256: string };
+    const nodeName = (node: ts.Statement) => ts.isFunctionDeclaration(node) || ts.isTypeAliasDeclaration(node) ? node.name?.text
+      : ts.isVariableStatement(node) && node.declarationList.declarations.length === 1 && ts.isIdentifier(node.declarationList.declarations[0].name)
+        ? node.declarationList.declarations[0].name.text : undefined;
+    const declaration = (name: string) => { const value = ownerFile.statements.find(node => nodeName(node) === name); assert.ok(value); return value; };
+    const text = (name: string) => declaration(name).getText(ownerFile).replace(/\r\n/gu, "\n");
+    const proofNode = declaration("assertRetainedFinalQualityLifecycleSource");
+    const transformations: Array<{ from: string; to: string }> = [];
+    const visit = (node: ts.Node) => {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "exactReplace"
+        && node.arguments.length >= 3 && ts.isStringLiteralLike(node.arguments[1]) && ts.isStringLiteralLike(node.arguments[2]))
+        transformations.push({ from: node.arguments[1].text, to: node.arguments[2].text });
+      ts.forEachChild(node, visit);
+    };
+    visit(proofNode); assert.equal(transformations.length, 9);
+    const undo = (source: string) => transformations.reduce((value, row) => value.split(row.to).join(row.from), source);
+    const p = "scripts/lib/isolated-public-verification.mts", l = "scripts/lib/isolated-supabase.mts", c = "scripts/verify-isolated-supabase.mts";
+    const workerNames = ["RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS", "RETAINED_QUALITY_WORKER_SOURCE", "loadRetainedFinalQualityAdmissionAsync"];
+    const priorPublic = [undo(text("assertRetainedFinalQualitySource")), text("loadRetainedFinalQualityAdmission"), undo(text("runOwnedPublicVerification")), text("GATES")].join("\n\n");
+    const oldMetadata = "memoryOnlyArtifacts: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0";
+    const newMetadata = "memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0";
+    const priorControls = 'function retainedAssertion() { assert.equal("preserved", "preserved"); }\n'
+      + 'async function main() { await verifyRetainedFinalQualityAdmissionControls(); }\n'
+      + 'async function retainedFinalQualityOnly() { await verifyRetainedFinalQualityAdmissionControls(); console.log({' + oldMetadata + '}); }';
+    const nextControls = priorControls.replaceAll("await verifyRetainedFinalQualityAdmissionControls();", "await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();")
+      .replace(oldMetadata, newMetadata) + '\nasync function verifyRetainedFinalQualityWorkerControls() { return; }';
+    const priorLifecycle = 'export function healthyLease() { return "existing contract"; }\n';
+    const nextLifecycle = 'export function healthyLease() { return "reviewed exact retained eligibility"; }\n';
+    const baselineManifest = [{ file: p, sha256: sha256(priorPublic) }, { file: l, sha256: sha256(priorLifecycle) },
+      { file: c, sha256: sha256(priorControls) }, { file: "src/app/page.tsx", sha256: "e".repeat(64) }].sort((a, b) => a.file.localeCompare(b.file));
+    const authority: Authority = { sourceHead: "b".repeat(40), sourceSha256: sha256(JSON.stringify(baselineManifest)),
+      owners: { [p]: sha256(priorPublic), [l]: sha256(priorLifecycle), [c]: sha256(priorControls) },
+      workerStatementsSha256: sha256(workerNames.map(text).join("\n")), proofFunctionSha256: sha256(text("assertRetainedFinalQualityLifecycleSource")),
+      lifecycleBeforeLfSha256: sha256(priorLifecycle), lifecycleAfterLfSha256: sha256(nextLifecycle), controlsAfterSha256: sha256(nextControls) };
+    const nextPublic = ['import { Worker } from "node:worker_threads";', 'import ts from "typescript";', ...workerNames.map(text),
+      text("RetainedQualityLifecycleCorrection"), text("assertRetainedFinalQualityLifecycleSource"),
+      "const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze(" + JSON.stringify(authority) + ");",
+      text("assertRetainedFinalQualitySource"), text("loadRetainedFinalQualityAdmission"), text("runOwnedPublicVerification"), text("GATES")].join("\n\n");
+    const owners: Owner[] = [[p, priorPublic, nextPublic], [l, priorLifecycle, nextLifecycle], [c, priorControls, nextControls]]
+      .map(([file, beforeSource, afterSource]) => ({ path: file, beforeSource, afterSource, beforeSha256: sha256(beforeSource), afterSha256: sha256(afterSource) }));
+    const retained: Source = { invocationHeadSha: "a".repeat(40), sourceSha256: authority.sourceSha256, manifest: baselineManifest };
+    const baseline: Source = { ...retained, invocationHeadSha: authority.sourceHead };
+    const candidate: Source = { invocationHeadSha: "c".repeat(40), sourceSha256: "", manifest: structuredClone(baselineManifest) };
+    const ref = (name: string) => ({ path: ".tmp-qa/core-final-closure/" + name, sha256: "f".repeat(64) });
+    const binding = (source: Source, name: string) => ({ sourceHead: source.invocationHeadSha, sourceSha256: source.sourceSha256, sourceManifest: ref(name) });
+    const impact: Impact = { status: "ROOT_REVIEWED_EXACT_QUALITY_LIFECYCLE_SOURCE_IMPACT", retained: binding(retained, "retained.json"),
+      candidate: binding(candidate, "candidate.json"), changes: [], retainedBehaviorRelabelled: false, retainedBehaviorReexecuted: false, automaticCoverage: [], globalClosed: false,
+      qualityLifecycleCorrection: { baselineSource: baseline, baselineReportImpact: { status: "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT",
+        retained: binding(retained, "retained.json"), candidate: binding(baseline, "baseline.json"), changes: [],
+        retainedBehaviorRelabelled: false, retainedBehaviorReexecuted: false, automaticCoverage: [], globalClosed: false },
+        reviewStatus: "ROOT_REVIEWED_EXACT_POST151_LIFECYCLE_CORRECTION", owners } };
+    const reseal = (value: { impact: Impact; candidate: Source }) => {
+      const entries = value.impact.qualityLifecycleCorrection!.owners;
+      for (const row of entries) { row.afterSha256 = sha256(row.afterSource); const item = value.candidate.manifest.find(item => item.file === row.path); if (item) item.sha256 = row.afterSha256; }
+      value.candidate.sourceSha256 = sha256(JSON.stringify(value.candidate.manifest)); value.impact.candidate.sourceSha256 = value.candidate.sourceSha256;
+      const prior = new Map(retained.manifest.map(row => [row.file, row.sha256]));
+      value.impact.changes = [...new Set([...prior.keys(), ...value.candidate.manifest.map(row => row.file)])].sort().flatMap(file => {
+        const next = value.candidate.manifest.find(row => row.file === file)?.sha256;
+        return prior.get(file) === next ? [] : [{ path: file, beforeSha256: prior.get(file) ?? null, afterSha256: next ?? "0".repeat(64),
+          role: Object.hasOwn(authority.owners, file) ? "exact-quality-lifecycle-correction" : "non-executable-closure-report" }];
+      });
+    };
+    reseal({ impact, candidate });
+    const guardCode = [text("assertRetainedFinalQualitySource"), text("assertRetainedFinalQualityLifecycleSource")].join("\n");
+    const guardJs = ts.transpileModule(guardCode, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 } }).outputText.replace(/^export /gm, "");
+    const inventoryText = readSource("scripts/lib/verification-source-inventory.mts");
+    const inventoryFile = ts.createSourceFile("verification-source-inventory.mts", inventoryText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const inventoryNames = ["EXCLUDED_PART", "PRIVATE_FILE", "sourceIncluded"];
+    const inventoryNodes = inventoryFile.statements.filter(node => inventoryNames.includes(nodeName(node) ?? ""));
+    assert.equal(inventoryNodes.length, 3);
+    const inventoryCode = ts.transpileModule(inventoryNodes.map(node => node.getText(inventoryFile)).join("\n"), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 }
+    }).outputText.replace(/^export /gm, "");
+    const canonicalSourceIncluded = new Function(inventoryCode + ";return sourceIncluded;")() as (file: string) => boolean;
+    const guard = new Function("assert", "digest", "sourceIncluded", "ts", "RETAINED_QUALITY_LIFECYCLE_BASELINE", guardJs + ";return assertRetainedFinalQualitySource;")
+      (assert, sha256, canonicalSourceIncluded, ts, authority) as (impact: Impact, retained: Source, candidate: Source) => unknown;
+    check("retained lifecycle source admits only the exact reviewed async correction", () => guard(impact, retained, candidate));
+    const rejectSource = (name: string, mutate: (value: { impact: Impact; candidate: Source }) => void) => check(name, () => {
+      const value = structuredClone({ impact, candidate }); mutate(value); reseal(value); assert.throws(() => guard(value.impact, retained, value.candidate));
+    });
+    const edit = (value: { impact: Impact; candidate: Source }, file: string, from: string, to: string) => {
+      const row = value.impact.qualityLifecycleCorrection!.owners.find(row => row.path === file)!; assert.ok(row.afterSource.includes(from)); row.afterSource = row.afterSource.replace(from, to);
+    };
+    rejectSource("retained lifecycle source rejects changed canonical loader despite resealed manifests", value => edit(value, p, '"Retained Quality admission changed during execution."', '"weakened verifier"'));
+    rejectSource("retained lifecycle source rejects changed gate contract", value => edit(value, p, 'name: "normal-build"', 'name: "changed-build"'));
+    rejectSource("retained lifecycle source rejects removed awaited full verification", value => edit(value, p, "await retainedAdmission?.verify();", "void retainedAdmission?.verify();"));
+    rejectSource("retained lifecycle source rejects changed worker body", value => edit(value, p, "admission.verify();", "void admission;"));
+    rejectSource("retained lifecycle source rejects changed correction checker", value => edit(value, p, '"ROOT_REVIEWED_EXACT_POST151_LIFECYCLE_CORRECTION"', '"weakened review"'));
+    rejectSource("retained lifecycle source rejects changed lease implementation", value => edit(value, l, "reviewed exact retained eligibility", "arbitrary reconnect"));
+    rejectSource("retained lifecycle source rejects removed legacy controls", value => edit(value, c, 'assert.equal("preserved", "preserved");', "return;"));
+    rejectSource("retained lifecycle source rejects added Product delta", value => { value.candidate.manifest.find(row => row.file === "src/app/page.tsx")!.sha256 = "d".repeat(64); });
+    rejectSource("retained lifecycle source rejects deleted source", value => { value.candidate.manifest = value.candidate.manifest.filter(row => row.file !== "src/app/page.tsx"); });
+    rejectSource("retained lifecycle source rejects missing owner proof", value => { value.impact.qualityLifecycleCorrection!.owners.pop(); });
+    rejectSource("retained lifecycle source rejects duplicate owner proof", value => { value.impact.qualityLifecycleCorrection!.owners.push(structuredClone(value.impact.qualityLifecycleCorrection!.owners[0])); });
+    rejectSource("retained lifecycle source rejects foreign owner proof", value => { value.impact.qualityLifecycleCorrection!.owners[0].path = "scripts/lib/isolated-supabase-transport.mjs"; });
+    rejectSource("retained lifecycle source rejects substituted before bytes", value => { value.impact.qualityLifecycleCorrection!.owners[0].beforeSource += "\n"; });
+    rejectSource("retained lifecycle source rejects recursive predecessor status", value => { value.impact.qualityLifecycleCorrection!.baselineReportImpact.status = "ROOT_REVIEWED_EXACT_QUALITY_LIFECYCLE_SOURCE_IMPACT"; });
+    rejectSource("retained lifecycle source rejects nested predecessor correction", value => { Object.assign(value.impact.qualityLifecycleCorrection!.baselineReportImpact, { qualityLifecycleCorrection: {} }); });
+    rejectSource("retained lifecycle source rejects relabeling behavior", value => { value.impact.retainedBehaviorRelabelled = true; });
+    rejectSource("retained lifecycle source rejects unreviewed declaration", value => { value.impact.qualityLifecycleCorrection!.owners[0].afterSource += "\nexport const arbitraryRelaxation = true;"; });
+  }
+}
+
 async function retainedFinalQualityOnly() {
-  verifyFinalQualityGatePlan(); await verifyRetainedFinalQualityAdmissionControls();
-  console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, memoryOnlyArtifacts: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
+  verifyFinalQualityGatePlan(); await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();
+  console.log(JSON.stringify({ status: "PASS", checks: cases.length, cases, memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0 }, null, 2));
 }
 
 const verification = process.argv.includes("--retained-final-quality-only") ? retainedFinalQualityOnly : process.argv.includes("--public-image-config-only") ? async () => console.log(JSON.stringify(await verifyOwnedPublicImageConfig(true), null, 2)) : process.argv.includes("--cli-control-pulse-only") ? async () => console.log(JSON.stringify(await verifyIsolatedApplicationCliPulse(), null, 2)) : process.argv.includes("--closure-checkpoints-only") ? closureCheckpointsOnly : process.argv.includes("--restore-acl-only") ? restoreAclOnly : process.argv.includes("--admin-control-lease-only") ? adminControlLeaseOnly : process.argv.includes("--cli-diagnostics-only") ? cliDiagnosticsOnly : process.argv.includes("--network-boundary-only") ? networkBoundaryOnly : process.argv.includes("--current-infrastructure-only") ? currentInfrastructureOnly : process.argv.includes("--image-identity-only") ? imageIdentityOnly : main;

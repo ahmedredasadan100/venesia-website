@@ -1437,8 +1437,8 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           let pulse = Promise.resolve();
           let heartbeatFailure: IsolatedSupabaseError | undefined;
           // Only a bounded active gate job retains this existing control lease.
-          // A failed pulse aborts owned children. Admin measurement alone renews
-          // its healthy control socket proactively; errors never reconnect.
+          // A failed pulse aborts owned children. Admin jobs and the exact retained
+          // Quality request renew healthy control sockets; errors never reconnect.
           const timer = setInterval(() => {
             if (!heartbeatActive || heartbeatBusy || heartbeatFailure) return;
             heartbeatBusy = true;
@@ -1446,7 +1446,13 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               try {
                 // This timer has no application transaction or concurrent SQL
                 // operation: only this serialized ownership/heartbeat pulse.
-                await applicationLease.renewIfDue(request.selection==="admin-interactions" || request.selection==="admin-adoption");
+                await applicationLease.renewIfDue(request.selection === "admin-interactions" || request.selection === "admin-adoption"
+                  || (request.finalQualityGate === true && request.selection === undefined
+                    && typeof request.retainedAdminBehaviorAdmissionSha256 === "string"
+                    && /^[a-f0-9]{64}$/u.test(request.retainedAdminBehaviorAdmissionSha256)
+                    && request.adoptionScope === undefined && request.adoptionCohort === undefined
+                    && request.adoptionJourneySelection === undefined && request.adminMeasurement === undefined
+                    && Array.isArray(request.additionalSourceFiles) && request.additionalSourceFiles.length === 0));
                 await publicContext.assertOwned();
                 await handle!.query("select 1 as owned_public_job_heartbeat");
                 safeRecord("public-job-heartbeat", { active: true });

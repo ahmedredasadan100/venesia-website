@@ -6,6 +6,8 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import * as nodeModule from "node:module";
 import net from "node:net";
+import { Worker } from "node:worker_threads";
+import ts from "typescript";
 import { dirname, extname, isAbsolute, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadEntitySeoPersistenceOwner } from "../backfill-entity-seo-scores.mts";
@@ -101,13 +103,151 @@ const RETAINED_FINAL_QUALITY_AUTHORITY = Object.freeze({
   }),
 });
 
+type RetainedQualityLifecycleCorrection = {
+  baselineSource: FinalQualitySource;
+  baselineReportImpact: {
+    status: string; retained: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
+    candidate: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
+    changes: Array<{ path: string; beforeSha256: string | null; afterSha256: string; role: string }>;
+    retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
+  };
+  reviewStatus: string;
+  owners: Array<{ path: string; beforeSource: string; afterSource: string; beforeSha256: string; afterSha256: string }>;
+};
+
+/** Exact post151 lifecycle correction; the existing behavioral and report-only guards stay intact. */
+export function assertRetainedFinalQualityLifecycleSource(impact: Parameters<typeof assertRetainedFinalQualitySource>[0], retained: FinalQualitySource, candidate: FinalQualitySource): { originalSourceHead: string; originalSourceSha256: string; currentSourceHead: string; currentSourceSha256: string; reportChanges: Array<{ path: string; beforeSha256: string | null; afterSha256: string; role: string }> } {
+  assert.equal(impact.status, "ROOT_REVIEWED_EXACT_QUALITY_LIFECYCLE_SOURCE_IMPACT");
+  assert.equal(impact.retainedBehaviorRelabelled, false); assert.equal(impact.retainedBehaviorReexecuted, false);
+  assert.deepEqual(impact.automaticCoverage, []); assert.equal(impact.globalClosed, false);
+  const correction = impact.qualityLifecycleCorrection; assert.ok(correction);
+  assert.equal(correction.reviewStatus, "ROOT_REVIEWED_EXACT_POST151_LIFECYCLE_CORRECTION");
+  const baseline = correction.baselineSource;
+  assert.equal(baseline.invocationHeadSha, RETAINED_QUALITY_LIFECYCLE_BASELINE.sourceHead);
+  assert.equal(baseline.sourceSha256, RETAINED_QUALITY_LIFECYCLE_BASELINE.sourceSha256);
+  assert.equal(baseline.sourceSha256, digest(JSON.stringify(baseline.manifest)));
+  assert.equal(correction.baselineReportImpact.status, "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT");
+  assert.equal(Object.hasOwn(correction.baselineReportImpact, "qualityLifecycleCorrection"), false);
+  assert.deepEqual(correction.baselineReportImpact.retained, impact.retained);
+  const originalBinding = assertRetainedFinalQualitySource(correction.baselineReportImpact, retained, baseline);
+  assert.match(candidate.invocationHeadSha, /^[a-f0-9]{40}$/u);
+  assert.equal(impact.candidate.sourceHead, candidate.invocationHeadSha); assert.equal(impact.candidate.sourceSha256, candidate.sourceSha256);
+  assert.equal(candidate.sourceSha256, digest(JSON.stringify(candidate.manifest)));
+  assert.equal(new Set(candidate.manifest.map(row => row.file)).size, candidate.manifest.length);
+  for (const row of candidate.manifest) { assert.ok(sourceIncluded(row.file)); assert.match(row.sha256, /^[a-f0-9]{64}$/u); }
+  const before = new Map(baseline.manifest.map(row => [row.file, row.sha256])), after = new Map(candidate.manifest.map(row => [row.file, row.sha256]));
+  const owners = RETAINED_QUALITY_LIFECYCLE_BASELINE.owners;
+  assert.deepEqual(correction.owners.map(row => row.path).sort(), Object.keys(owners).sort());
+  const parsed = new Map<string, { before: ts.SourceFile; after: ts.SourceFile }>();
+  for (const row of correction.owners) {
+    const name = row.path as keyof typeof owners;
+    assert.equal(row.beforeSha256, owners[name]); assert.equal(before.get(name), row.beforeSha256);
+    assert.equal(row.afterSha256, after.get(name)); assert.notEqual(row.afterSha256, row.beforeSha256);
+    assert.equal(digest(row.beforeSource), row.beforeSha256); assert.equal(digest(row.afterSource), row.afterSha256);
+    const parse = (source: string) => ts.createSourceFile(name, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    parsed.set(name, { before: parse(row.beforeSource), after: parse(row.afterSource) });
+  }
+  const statementText = (node: ts.Node, file: ts.SourceFile) => node.getText(file).replace(/\r\n/gu, "\n");
+  const declarationName = (node: ts.Statement) => ts.isFunctionDeclaration(node) || ts.isTypeAliasDeclaration(node) ? node.name?.text
+    : ts.isVariableStatement(node) && node.declarationList.declarations.length === 1 && ts.isIdentifier(node.declarationList.declarations[0].name)
+      ? node.declarationList.declarations[0].name.text : undefined;
+  const exactReplace = (text: string, from: string, to: string, count = 1) => {
+    assert.equal(text.split(from).length - 1, count, "The reviewed lifecycle transformation no longer matches its exact predecessor.");
+    return text.split(from).join(to);
+  };
+  const pub = parsed.get("scripts/lib/isolated-public-verification.mts")!;
+  const workerNames = ["RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS", "RETAINED_QUALITY_WORKER_SOURCE", "loadRetainedFinalQualityAdmissionAsync"];
+  const addedNames = [...workerNames, "RetainedQualityLifecycleCorrection", "RETAINED_QUALITY_LIFECYCLE_BASELINE", "assertRetainedFinalQualityLifecycleSource"];
+  const added = pub.after.statements.filter(node => addedNames.includes(declarationName(node) ?? ""));
+  assert.deepEqual(added.map(node => declarationName(node)).sort(), [...addedNames].sort());
+  assert.equal(digest(added.filter(node => workerNames.includes(declarationName(node)!)).map(node => statementText(node, pub.after)).join("\n")), RETAINED_QUALITY_LIFECYCLE_BASELINE.workerStatementsSha256);
+  const proof = added.find(node => declarationName(node) === "assertRetainedFinalQualityLifecycleSource")!;
+  assert.equal(digest(statementText(proof, pub.after)), RETAINED_QUALITY_LIFECYCLE_BASELINE.proofFunctionSha256);
+  const declaredBaseline = added.find(node => declarationName(node) === "RETAINED_QUALITY_LIFECYCLE_BASELINE")! as ts.VariableStatement;
+  const initializer = declaredBaseline.declarationList.declarations[0].initializer;
+  assert.ok(initializer && ts.isCallExpression(initializer) && initializer.expression.getText(pub.after) === "Object.freeze" && initializer.arguments.length === 1);
+  assert.deepEqual(JSON.parse(initializer.arguments[0].getText(pub.after)), RETAINED_QUALITY_LIFECYCLE_BASELINE);
+  const additions = new Set(['import { Worker } from "node:worker_threads";', 'import ts from "typescript";']);
+  assert.deepEqual(pub.after.statements.filter(node => additions.has(statementText(node, pub.after))).map(node => statementText(node, pub.after)).sort(), [...additions].sort());
+  const preserved = pub.after.statements.filter(node => !addedNames.includes(declarationName(node) ?? "") && !additions.has(statementText(node, pub.after)));
+  assert.equal(preserved.length, pub.before.statements.length);
+  for (let index = 0; index < preserved.length; index++) {
+    const previous = pub.before.statements[index]; let expected = statementText(previous, pub.before);
+    if (declarationName(previous) === "assertRetainedFinalQualitySource") {
+      expected = exactReplace(expected, "  retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;", "  retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;\n  qualityLifecycleCorrection?: RetainedQualityLifecycleCorrection;");
+      expected = exactReplace(expected, '  assert.equal(impact.status, "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT");', '  if (impact.status === "ROOT_REVIEWED_EXACT_QUALITY_LIFECYCLE_SOURCE_IMPACT") return assertRetainedFinalQualityLifecycleSource(impact, retained, candidate);\n  assert.equal(impact.status, "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT");');
+    }
+    if (declarationName(previous) === "runOwnedPublicVerification") {
+      expected = exactReplace(expected, "let retainedAdmission: ReturnType<typeof loadRetainedFinalQualityAdmission> | undefined;", "let retainedAdmission: Awaited<ReturnType<typeof loadRetainedFinalQualityAdmissionAsync>> | undefined;");
+      expected = exactReplace(expected, "retainedAdmission = loadRetainedFinalQualityAdmission(request.retainedAdminBehaviorAdmissionSha256!,\n          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest });", "retainedAdmission = await loadRetainedFinalQualityAdmissionAsync(request.retainedAdminBehaviorAdmissionSha256!,\n          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest }, signal);");
+      expected = exactReplace(expected, "retainedAdmission?.verify();", "await retainedAdmission?.verify();", 2);
+      expected = exactReplace(expected, "    const childCleanup = await Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment())));", "    const [workerCleanup, childCleanup] = await Promise.all([\n      Promise.allSettled(retainedAdmission ? [retainedAdmission.close()] : []),\n      Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment()))),\n    ]);");
+      expected = exactReplace(expected, "otherResourcesTouched: false });\n  }\n  const result = { status:", "otherResourcesTouched: false,\n      ...(retainedAdmission ? { retainedEvidenceWorkerStopped: retainedAdmission.workerStopped } : {}) });\n    if (retainedAdmission) assert.equal(retainedAdmission.workerStopped, true, \"Retained evidence worker must stop before cleanup completes.\");\n    for (const settled of workerCleanup) if (settled.status === \"rejected\") throw settled.reason;\n  }\n  const result = { status:");
+    }
+    assert.equal(statementText(preserved[index], pub.after), expected, "An existing Quality assertion, gate or owner statement changed outside the reviewed lifecycle transform.");
+  }
+  const lifecycle = parsed.get("scripts/lib/isolated-supabase.mts")!;
+  const priorLifecycle = lifecycle.before.text.replace(/\r\n/gu, "\n");
+  const nextLifecycle = lifecycle.after.text.replace(/\r\n/gu, "\n");
+  assert.equal(digest(nextLifecycle), RETAINED_QUALITY_LIFECYCLE_BASELINE.lifecycleAfterLfSha256);
+  assert.equal(digest(priorLifecycle), RETAINED_QUALITY_LIFECYCLE_BASELINE.lifecycleBeforeLfSha256);
+  const controls = parsed.get("scripts/verify-isolated-supabase.mts")!;
+  assert.equal(digest(controls.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.controlsAfterSha256);
+  const controlName = "verifyRetainedFinalQualityWorkerControls";
+  assert.equal(controls.after.statements.filter(node => declarationName(node) === controlName).length, 1);
+  const retainedControls = controls.after.statements.filter(node => declarationName(node) !== controlName);
+  assert.equal(retainedControls.length, controls.before.statements.length);
+  let addedControlCalls = 0;
+  for (let index = 0; index < retainedControls.length; index++) {
+    let expected = statementText(controls.before.statements[index], controls.before);
+    const name = declarationName(controls.before.statements[index]);
+    if (name === "main" || name === "retainedFinalQualityOnly") {
+      expected = exactReplace(expected, "await verifyRetainedFinalQualityAdmissionControls();", "await verifyRetainedFinalQualityAdmissionControls(); await verifyRetainedFinalQualityWorkerControls();");
+      addedControlCalls++;
+      if (name === "retainedFinalQualityOnly") expected = exactReplace(expected,
+        "memoryOnlyArtifacts: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0",
+        "memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0");
+    }
+    assert.equal(statementText(retainedControls[index], controls.after), expected, "Existing maintained controls must remain intact.");
+  }
+  assert.equal(addedControlCalls, 2);
+  const original = new Map(retained.manifest.map(row => [row.file, row.sha256]));
+  const changes = [...new Set([...original.keys(), ...after.keys()])].sort().flatMap(path => {
+    if (original.get(path) === after.get(path)) return [];
+    assert.ok(after.has(path), "A Quality lifecycle correction may not delete source.");
+    const owner = Object.hasOwn(owners, path);
+    if (!owner) assert.match(path, /^docs\/reports\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.(?:md|json)$/u, "Only the exact reviewed Quality lifecycle owners and reports may differ from retained behavior.");
+    return [{ path, beforeSha256: original.get(path) ?? null, afterSha256: after.get(path)!, role: owner ? "exact-quality-lifecycle-correction" : "non-executable-closure-report" }];
+  });
+  assert.deepEqual(impact.changes, changes);
+  return { ...originalBinding, currentSourceHead: candidate.invocationHeadSha, currentSourceSha256: candidate.sourceSha256,
+    reportChanges: changes.filter(row => row.role === "non-executable-closure-report") };
+}
+
+const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze({
+  "sourceHead": "233e5da3c20395cbd30bd289aa2ed11415b4eeea",
+  "sourceSha256": "f0bdff669dafed8d11dff882bcdf802f2ac9e11a59e0e4736321105b35fd5fc1",
+  "owners": {
+    "scripts/lib/isolated-public-verification.mts": "42e7166eafc2f29176fa5be8b7e072b563b9b55d2ed2c682d31317d46afb6f3a",
+    "scripts/lib/isolated-supabase.mts": "1e463410e5af6b15223df1bc099554f23c0c026eed3c3757934dfe86213c962b",
+    "scripts/verify-isolated-supabase.mts": "d09900fcd7405baeb02f70e86bbe77fc82a419ed326dd29c0e752e4c97b1882c"
+  },
+  "workerStatementsSha256": "c0e3683cd91bfd6413fcbf59f488be8593f7fc65be52ce480aa204a3bfee6634",
+  "proofFunctionSha256": "19482b63501d48abb8be5c38754d9fd4336403d9286d25ff3ed9aa6cc9bc12a1",
+  "lifecycleBeforeLfSha256": "2973edeefb1bb931b453db333a89ab9d09b9b0044893c02ab917a3a057c1e6de",
+  "lifecycleAfterLfSha256": "fa6507e20eb5d7636aecb807aada43c47aa8638d7473c4004a73607329b14eeb",
+  "controlsAfterSha256": "a146769a3feff1aba2648c114341794d3049a29af9d33edfc32dd192aaeb31c9"
+});
+
 /** Exact retained source, with only the finite reviewed report delta admitted. */
 export function assertRetainedFinalQualitySource(impact: {
   status: string; retained: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
   candidate: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
   changes: Array<{ path: string; beforeSha256: string | null; afterSha256: string; role: string }>;
   retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
+  qualityLifecycleCorrection?: RetainedQualityLifecycleCorrection;
 }, retained: FinalQualitySource, candidate: FinalQualitySource) {
+  if (impact.status === "ROOT_REVIEWED_EXACT_QUALITY_LIFECYCLE_SOURCE_IMPACT") return assertRetainedFinalQualityLifecycleSource(impact, retained, candidate);
   assert.equal(impact.status, "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT");
   assert.equal(impact.retainedBehaviorRelabelled, false); assert.equal(impact.retainedBehaviorReexecuted, false);
   assert.deepEqual(impact.automaticCoverage, []); assert.equal(impact.globalClosed, false);
@@ -593,6 +733,89 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     producerExecution: admission.producerExecution, qualifiedJourneyIds: expectedIds, automaticCoverage: [], globalClosed: false } };
 }
 
+const RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS = 300_000;
+const RETAINED_QUALITY_WORKER_SOURCE = String.raw`const { parentPort, workerData } = require("node:worker_threads");
+const assert = require("node:assert/strict");
+void (async () => {
+  assert.ok(parentPort);
+  const owner = await import(workerData.ownerUrl);
+  let admission, sequence = 0;
+  parentPort.on("message", message => {
+    assert.deepEqual(Object.keys(message).sort(), ["action", "sequence"]);
+    assert.equal(message.sequence, ++sequence);
+    if (message.action === "load") {
+      assert.equal(sequence, 1); assert.equal(admission, undefined);
+      admission = owner.loadRetainedFinalQualityAdmission(workerData.admissionSha256, workerData.expected);
+      parentPort.postMessage({ sequence, kind: "loaded", receipt: admission.receipt });
+    } else {
+      assert.equal(message.action, "verify"); assert.ok(admission); assert.ok(sequence > 1);
+      admission.verify();
+      parentPort.postMessage({ sequence, kind: "verified" });
+    }
+  });
+})();`;
+
+/** Run the same complete admission and recheck off the transport's heartbeat event loop. */
+export async function loadRetainedFinalQualityAdmissionAsync(admissionSha256: string, expected: FinalQualitySource, signal: AbortSignal) {
+  signal.throwIfAborted();
+  const worker = new Worker(RETAINED_QUALITY_WORKER_SOURCE, { eval: true,
+    workerData: { ownerUrl: import.meta.url, admissionSha256, expected }, env: {},
+    execArgv: ["--experimental-strip-types"], stdout: true, stderr: true });
+  type Receipt = ReturnType<typeof loadRetainedFinalQualityAdmission>["receipt"];
+  type Reply = { sequence: number; kind: "loaded"; receipt: Receipt } | { sequence: number; kind: "verified" };
+  let sequence = 0, failed = false, failure: unknown, closing = false, workerStopped = false, outputBytes = 0;
+  let stopped: Promise<void> | undefined;
+  let pending: { sequence: number; kind: Reply["kind"]; resolve(value: Reply): void; reject(reason: unknown): void; timer: ReturnType<typeof setTimeout> } | undefined;
+  const stop = () => {
+    if (!stopped) {
+      closing = true; signal.removeEventListener("abort", abort);
+      stopped = worker.terminate().then(() => { workerStopped = true; });
+    }
+    return stopped;
+  };
+  const fail = (reason: unknown) => {
+    if (!failed) { failed = true; failure = reason; }
+    if (pending) { clearTimeout(pending.timer); pending.reject(failure); pending = undefined; }
+    void stop().catch(() => undefined);
+  };
+  const abort = () => fail(signal.reason);
+  const request = (action: "load" | "verify") => {
+    signal.throwIfAborted();
+    if (failed) return Promise.reject(failure);
+    assert.equal(closing, false, "Retained Quality evidence worker is closed.");
+    assert.equal(pending, undefined, "Only one exact evidence check may be active.");
+    return new Promise<Reply>((resolveReply, reject) => {
+      const current = ++sequence;
+      const timer = setTimeout(() => fail(new Error("Retained Quality exact evidence check exceeded its worker bound.")), RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS);
+      pending = { sequence: current, kind: action === "load" ? "loaded" : "verified", resolve: resolveReply, reject, timer };
+      try { worker.postMessage({ sequence: current, action }); } catch (error) { fail(error); }
+    });
+  };
+  worker.on("message", (message: Reply) => {
+    try {
+      assert.ok(pending, "Unexpected evidence worker response.");
+      assert.equal(message.sequence, pending.sequence); assert.equal(message.kind, pending.kind);
+      assert.deepEqual(Object.keys(message).sort(), message.kind === "loaded" ? ["kind", "receipt", "sequence"] : ["kind", "sequence"]);
+      const waiting = pending; pending = undefined; clearTimeout(waiting.timer); waiting.resolve(message);
+    } catch (error) { fail(error); }
+  });
+  worker.once("error", fail);
+  worker.once("exit", code => { if (!closing) fail(new Error("Retained Quality evidence worker exited before disposal: " + code)); });
+  const output = (chunk: Buffer) => { outputBytes += chunk.length; if (outputBytes > 65_536) fail(new Error("Retained Quality evidence worker output exceeded its bound.")); };
+  worker.stdout.on("data", output); worker.stderr.on("data", output);
+  signal.addEventListener("abort", abort, { once: true });
+  if (signal.aborted) abort();
+  try {
+    const loaded = await request("load"); assert.equal(loaded.kind, "loaded");
+    return { receipt: (loaded as Extract<Reply, { kind: "loaded" }>).receipt, get workerStopped() { return workerStopped; },
+      async verify() { const verified = await request("verify"); assert.equal(verified.kind, "verified"); },
+      async close() {
+        if (pending) fail(new Error("Retained Quality evidence worker disposed during an unfinished check."));
+        await stop(); if (failed) throw failure;
+      } };
+  } catch (error) { await stop(); throw error; }
+}
+
 export type PublicGateRequest = {
   additionalSourceFiles: readonly string[];
   /** Full ci:check prefix, followed once by the existing build/Public/Admin gates. */
@@ -1018,7 +1241,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
   const reports: Array<{ name: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   const qualityReports: Array<{ script: string; code: number; stdoutSha256: string; stderrSha256: string }> = [];
   let buildIdSha256: string | null = null;
-  let retainedAdmission: ReturnType<typeof loadRetainedFinalQualityAdmission> | undefined;
+  let retainedAdmission: Awaited<ReturnType<typeof loadRetainedFinalQualityAdmissionAsync>> | undefined;
   const verifySource = () => {
     for (const row of manifest) { assert.equal(digest(readFileSync(sourcePath(row.file))), row.sha256); assert.equal(digest(readFileSync(join(sourceDirectory, row.file))), row.sha256); }
     assert.equal(digest(readFileSync(join(sourceDirectory, imageConfig.file))), imageConfig.sha256,
@@ -1081,8 +1304,8 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       const scripts = JSON.parse(readFileSync(join(sourceDirectory, "package.json"), "utf8")).scripts as Record<string, string>;
       qualityScripts = finalQualityScriptNames(scripts);
       if (retainedQuality) {
-        retainedAdmission = loadRetainedFinalQualityAdmission(request.retainedAdminBehaviorAdmissionSha256!,
-          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest });
+        retainedAdmission = await loadRetainedFinalQualityAdmissionAsync(request.retainedAdminBehaviorAdmissionSha256!,
+          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest }, signal);
         execFileSync("git", ["merge-base", "--is-ancestor", retainedAdmission.receipt.sourceHead, headSha], gitOptions);
       }
       const nodeDirectory = dirname(process.execPath);
@@ -1100,7 +1323,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     }
     const executionGates = [...qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 })), ...gates];
     for (const gate of executionGates) {
-      verifySource(); retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
+      verifySource(); await retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
       let env: NodeJS.ProcessEnv = "qualityScript" in gate ? qualityEnvironment : context.cleanEnvironment();
       let gateApp: ChildProcess | undefined;
       if (gate.name === "normal-build") env = childEnvironment;
@@ -1181,13 +1404,16 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       context.record("public-gate-pass", { gate: gate.name });
       if (gateApp) await stopChild(gateApp, context.cleanEnvironment());
     }
-    verifySource(); retainedAdmission?.verify();
+    verifySource(); await retainedAdmission?.verify();
     assert.equal(await gitHead(context), headSha, "Repository HEAD changed during the source snapshot gates.");
     if (!frozenManifest) assert.deepEqual(await gitSourceInventory(context, request), files, "Git source membership changed during the source snapshot gates.");
     if (measurement) adminPhases.get(originalContext)!.add(measurement.phase);
     else completed.add(originalContext);
   } finally {
-    const childCleanup = await Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment())));
+    const [workerCleanup, childCleanup] = await Promise.all([
+      Promise.allSettled(retainedAdmission ? [retainedAdmission.close()] : []),
+      Promise.allSettled([...children].map(child => stopChild(child, context.cleanEnvironment()))),
+    ]);
     assert.ok(childCleanup.every(result => result.status === "fulfilled"), "An owned Public process could not be stopped.");
     if (appPort !== null) {
       const releasedPort = appPort;
@@ -1197,7 +1423,10 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     assert.equal(realpathSync(sourceDirectory), sourceDirectory);
     assert.ok(sourceDirectory.startsWith(realpathSync(context.runDirectory) + sep));
     rmSync(sourceDirectory, { recursive: true, force: false });
-    receipt(context, "public-process-cleanup.json", { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: !existsSync(sourceDirectory), otherResourcesTouched: false });
+    receipt(context, "public-process-cleanup.json", { ownedProcessesStopped: true, loopbackPortReleased: true, buildWorkspaceRemoved: !existsSync(sourceDirectory), otherResourcesTouched: false,
+      ...(retainedAdmission ? { retainedEvidenceWorkerStopped: retainedAdmission.workerStopped } : {}) });
+    if (retainedAdmission) assert.equal(retainedAdmission.workerStopped, true, "Retained evidence worker must stop before cleanup completes.");
+    for (const settled of workerCleanup) if (settled.status === "rejected") throw settled.reason;
   }
   const result = { status: "pass", gates: reports, buildIdSha256, isolatedImageConfigurationSha256: imageConfig.sha256, sourceSha256: digest(JSON.stringify(manifest)), retainedGatesRerun: false };
   if (measurement) { const value = { ...result, selection: "admin-interactions", phase: measurement.phase, ...(measurement.study ? { study: measurement.study } : {}), priorQualityGatesRerun: false };
