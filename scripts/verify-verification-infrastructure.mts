@@ -14,6 +14,19 @@ const required = ["package.json", "package-lock.json", "tsconfig.json"];
 assert.deepEqual(selectSourceInventory([...required, "new-root-config.mjs", "src/new-owner.ts"]),
   [...required, "new-root-config.mjs", "src/new-owner.ts"].sort(), "A valid new tracked source must enter the snapshot automatically.");
 assert.throws(() => selectSourceInventory(required.slice(1)), /Required tracked build input is missing: package.json/u);
+assert.equal(sourceIncluded(".env.example"), true, "The exact public template is eligible verification input.");
+assert.deepEqual(selectSourceInventory([...required, ".env.example"]), [...required, ".env.example"].sort(),
+  "Only the exact tracked template must enter the snapshot.");
+assert.deepEqual(selectSourceInventory(required), required.slice().sort(), "The template must not be synthesized when absent from Git.");
+assert.throws(() => selectSourceInventory(required, [".env.example"]), /must be Git tracked/u);
+assert.throws(() => selectSourceInventory([...required, ".env.example"], [".env.example"]), /must be Git tracked/u);
+for (const file of [".env", ".env.local", ".env.production", ".env.production.local", ".ENV.example", ".env.EXAMPLE",
+  "nested/.env.example", "src/.env.example", ".env.example.local", ".env.example/child", "./.env.example", "../.env.example",
+  "/.env.example", "C:/.env.example", "C:\\.env.example", ".env.example\0", "private/.env.example"]) {
+  assert.equal(sourceIncluded(file), false, `Private or aliased template path must stay excluded: ${file}`);
+  assert.equal(selectSourceInventory([...required, file]).includes(file), false);
+  assert.throws(() => selectSourceInventory(required, [file]), /Unsafe additional source/u);
+}
 assert.equal(sourceIncluded(".env.local"), false);
 assert.equal(sourceIncluded("scripts/private/secret.ts"), false);
 assert.equal(sourceIncluded("docs/new-contract.md"), true);

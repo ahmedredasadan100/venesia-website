@@ -111,6 +111,11 @@ type RetainedQualityLifecycleCorrection = {
     changes: Array<{ path: string; beforeSha256: string | null; afterSha256: string; role: string }>;
     retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
   };
+  trackedPublicEnvironmentTemplate: {
+    path: string;
+    retainedGit: { head: string; sha256: string }; baselineGit: { head: string; sha256: string }; candidateGit: { head: string; sha256: string };
+    gitSource: string; workingTreeSource: string; workingTreeSha256: string;
+  };
   reviewStatus: string;
   owners: Array<{ path: string; beforeSource: string; afterSource: string; beforeSha256: string; afterSha256: string }>;
 };
@@ -136,6 +141,20 @@ export function assertRetainedFinalQualityLifecycleSource(impact: Parameters<typ
   assert.equal(new Set(candidate.manifest.map(row => row.file)).size, candidate.manifest.length);
   for (const row of candidate.manifest) { assert.ok(sourceIncluded(row.file)); assert.match(row.sha256, /^[a-f0-9]{64}$/u); }
   const before = new Map(baseline.manifest.map(row => [row.file, row.sha256])), after = new Map(candidate.manifest.map(row => [row.file, row.sha256]));
+  const template = correction.trackedPublicEnvironmentTemplate;
+  assert.ok(template, "The sole public template addition requires its exact tracked byte provenance.");
+  const templateAuthority = RETAINED_QUALITY_LIFECYCLE_BASELINE.publicTemplate;
+  assert.equal(template.path, templateAuthority.path);
+  for (const [binding, source] of [[template.retainedGit, retained], [template.baselineGit, baseline], [template.candidateGit, candidate]] as const) {
+    assert.deepEqual(binding, { head: source.invocationHeadSha, sha256: templateAuthority.gitSha256 });
+  }
+  assert.equal(digest(template.gitSource), templateAuthority.gitSha256);
+  assert.equal(template.workingTreeSha256, templateAuthority.workingTreeSha256);
+  assert.equal(digest(template.workingTreeSource), template.workingTreeSha256);
+  assert.equal(template.workingTreeSource.replace(/\r\n/gu, "\n"), template.gitSource);
+  assert.equal(retained.manifest.some(row => row.file === template.path), false);
+  assert.equal(before.has(template.path), false);
+  assert.equal(after.get(template.path), template.workingTreeSha256);
   const owners = RETAINED_QUALITY_LIFECYCLE_BASELINE.owners;
   assert.deepEqual(correction.owners.map(row => row.path).sort(), Object.keys(owners).sort());
   const parsed = new Map<string, { before: ts.SourceFile; after: ts.SourceFile }>();
@@ -182,6 +201,8 @@ export function assertRetainedFinalQualityLifecycleSource(impact: Parameters<typ
       expected = exactReplace(expected, "'  const config = await normalizeConfig(phase, module.default ?? module);',", "'  const config = await normalizeConfig(phase, transpiledConfig.default ?? transpiledConfig);',");
     }
     if (declarationName(previous) === "runOwnedPublicVerification") {
+      expected = exactReplace(expected, "assert.equal(/^\\.env(?:\\.|$)/iu.test(name), false);", "assert.equal(/^\\.env(?:\\.|$)/iu.test(name) && !(name === \".env.example\" && manifest.some(row => row.file === name)), false);");
+      expected = exactReplace(expected, "environmentFilesCopied: false", "privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === \".env.example\")", 2);
       expected = exactReplace(expected, "let retainedAdmission: ReturnType<typeof loadRetainedFinalQualityAdmission> | undefined;", "let retainedAdmission: Awaited<ReturnType<typeof loadRetainedFinalQualityAdmissionAsync>> | undefined;");
       expected = exactReplace(expected, "retainedAdmission = loadRetainedFinalQualityAdmission(request.retainedAdminBehaviorAdmissionSha256!,\n          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest });", "retainedAdmission = await loadRetainedFinalQualityAdmissionAsync(request.retainedAdminBehaviorAdmissionSha256!,\n          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest }, signal);");
       expected = exactReplace(expected, "retainedAdmission?.verify();", "await retainedAdmission?.verify();", 2);
@@ -201,6 +222,16 @@ export function assertRetainedFinalQualityLifecycleSource(impact: Parameters<typ
   expectedNavigation = exactReplace(expectedNavigation, "const target='scripts/verify-admin-adoption-readback-isolated.mts',source=fs.readFileSync(target,'utf8');", "const target='scripts/verify-admin-adoption-readback-isolated.mts',sourceBytes=fs.readFileSync(target),source=sourceBytes.toString('utf8').replace(/\\r\\n/gu,'\\n');");
   expectedNavigation = exactReplace(expectedNavigation, "sourceSha256:crypto.createHash('sha256').update(source).digest('hex')", "sourceSha256:crypto.createHash('sha256').update(sourceBytes).digest('hex')");
   assert.equal(navigation.after.text, expectedNavigation, "Only the two reviewed Navigation control statements may change; raw source identity and every assertion must be preserved.");
+  const inventory = parsed.get("scripts/lib/verification-source-inventory.mts")!;
+  assert.equal(digest(inventory.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.inventoryAfterSha256);
+  let expectedInventory = inventory.before.text.replace(/\r\n/gu, "\n");
+  expectedInventory = exactReplace(expectedInventory, "  const parts = file.split(\"/\");", "  // The tracked public template is verification input, never an environment override.\n  if (file === \".env.example\") return true;\n  const parts = file.split(\"/\");");
+  expectedInventory = exactReplace(expectedInventory, "  for (const file of additional) assert.ok(sourceIncluded(file), `Unsafe additional source: ${file}`);", "  for (const file of additional) {\n    assert.notEqual(file, \".env.example\", \"The public environment template must be Git tracked.\");\n    assert.ok(sourceIncluded(file), `Unsafe additional source: ${file}`);\n  }");
+  assert.equal(inventory.after.text.replace(/\r\n/gu, "\n"), expectedInventory, "Only the exact tracked public template exception and additional-source rejection may change the inventory owner.");
+  const infrastructure = parsed.get("scripts/verify-verification-infrastructure.mts")!;
+  assert.equal(digest(infrastructure.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.infrastructureAfterSha256);
+  const expectedInfrastructure = exactReplace(infrastructure.before.text.replace(/\r\n/gu, "\n"), "assert.equal(sourceIncluded(\".env.local\"), false);", "assert.equal(sourceIncluded(\".env.example\"), true, \"The exact public template is eligible verification input.\");\nassert.deepEqual(selectSourceInventory([...required, \".env.example\"]), [...required, \".env.example\"].sort(),\n  \"Only the exact tracked template must enter the snapshot.\");\nassert.deepEqual(selectSourceInventory(required), required.slice().sort(), \"The template must not be synthesized when absent from Git.\");\nassert.throws(() => selectSourceInventory(required, [\".env.example\"]), /must be Git tracked/u);\nassert.throws(() => selectSourceInventory([...required, \".env.example\"], [\".env.example\"]), /must be Git tracked/u);\nfor (const file of [\".env\", \".env.local\", \".env.production\", \".env.production.local\", \".ENV.example\", \".env.EXAMPLE\",\n  \"nested/.env.example\", \"src/.env.example\", \".env.example.local\", \".env.example/child\", \"./.env.example\", \"../.env.example\",\n  \"/.env.example\", \"C:/.env.example\", \"C:\\\\.env.example\", \".env.example\\0\", \"private/.env.example\"]) {\n  assert.equal(sourceIncluded(file), false, `Private or aliased template path must stay excluded: ${file}`);\n  assert.equal(selectSourceInventory([...required, file]).includes(file), false);\n  assert.throws(() => selectSourceInventory(required, [file]), /Unsafe additional source/u);\n}\nassert.equal(sourceIncluded(\".env.local\"), false);");
+  assert.equal(infrastructure.after.text.replace(/\r\n/gu, "\n"), expectedInfrastructure, "Every existing infrastructure assertion must remain intact beside the exact template controls.");
   const controls = parsed.get("scripts/verify-isolated-supabase.mts")!;
   assert.equal(digest(controls.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.controlsAfterSha256);
   const controlName = "verifyRetainedFinalQualityWorkerControls";
@@ -226,8 +257,9 @@ export function assertRetainedFinalQualityLifecycleSource(impact: Parameters<typ
     if (original.get(path) === after.get(path)) return [];
     assert.ok(after.has(path), "A Quality lifecycle correction may not delete source.");
     const owner = Object.hasOwn(owners, path);
-    if (!owner) assert.match(path, /^docs\/reports\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.(?:md|json)$/u, "Only the exact reviewed Quality lifecycle owners and reports may differ from retained behavior.");
-    return [{ path, beforeSha256: original.get(path) ?? null, afterSha256: after.get(path)!, role: owner ? "exact-quality-lifecycle-correction" : "non-executable-closure-report" }];
+    const publicTemplate = path === template.path;
+    if (!owner && !publicTemplate) assert.match(path, /^docs\/reports\/(?:[a-zA-Z0-9_-]+\/)*[a-zA-Z0-9_-]+\.(?:md|json)$/u, "Only the exact reviewed Quality lifecycle owners and reports may differ from retained behavior.");
+    return [{ path, beforeSha256: original.get(path) ?? null, afterSha256: after.get(path)!, role: owner ? "exact-quality-lifecycle-correction" : publicTemplate ? "preexisting-tracked-public-environment-template" : "non-executable-closure-report" }];
   });
   assert.deepEqual(impact.changes, changes);
   return { ...originalBinding, currentSourceHead: candidate.invocationHeadSha, currentSourceSha256: candidate.sourceSha256,
@@ -241,14 +273,23 @@ const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze({
     "scripts/lib/isolated-public-verification.mts": "42e7166eafc2f29176fa5be8b7e072b563b9b55d2ed2c682d31317d46afb6f3a",
     "scripts/lib/isolated-supabase.mts": "1e463410e5af6b15223df1bc099554f23c0c026eed3c3757934dfe86213c962b",
     "scripts/verify-isolated-supabase.mts": "d09900fcd7405baeb02f70e86bbe77fc82a419ed326dd29c0e752e4c97b1882c",
-    "scripts/verify-admin-core-navigation-permission-join.mjs": "820bbbf23f31291c0449798bd3e11e272344bbee39db6eee45eca4e8417d6b93"
+    "scripts/verify-admin-core-navigation-permission-join.mjs": "820bbbf23f31291c0449798bd3e11e272344bbee39db6eee45eca4e8417d6b93",
+    "scripts/lib/verification-source-inventory.mts": "f9733f5798f6360215d58820b3a7fcedfeb00225d04bd5a7721d277f00d68f4f",
+    "scripts/verify-verification-infrastructure.mts": "a59689a3faa08fecbd20eb9f183fe06717f58a841f0cbee562371d4ca6023eab"
   },
   "workerStatementsSha256": "c0e3683cd91bfd6413fcbf59f488be8593f7fc65be52ce480aa204a3bfee6634",
-  "proofFunctionSha256": "6910502780b2214e41e2f0a23161e1e8a3a4a8e68991b1fefbde2c0af46b627b",
+  "proofFunctionSha256": "f6806ea9b08c463dbdf4547491da218d92abfb99ab0a82e3f6a879a54e80876e",
   "lifecycleBeforeLfSha256": "2973edeefb1bb931b453db333a89ab9d09b9b0044893c02ab917a3a057c1e6de",
   "lifecycleAfterLfSha256": "fa6507e20eb5d7636aecb807aada43c47aa8638d7473c4004a73607329b14eeb",
   "navigationAfterSha256": "765824e551d06e0879fc6dc1d2830bcde30bed1b77854749b89bf8567816f64c",
-  "controlsAfterSha256": "bc1300d5efa72d136bee94bdcaca0a5c28648f53f16a43391d6ecbb3f5cdc324"
+  "controlsAfterSha256": "f007fd6cd55ba2a61f8077ab2d32fdf7444140cfbc6235f5cdc945d7cc1266a4",
+  "inventoryAfterSha256": "e0f484806258d05744d6fbf707570579ca111fc4894699e14a13055d8a88f897",
+  "infrastructureAfterSha256": "10788b81821be2d3bc6fef3d3ca76558bc29df745cd45e812c9cad86291b17b4",
+  "publicTemplate": {
+    "path": ".env.example",
+    "gitSha256": "4fdf4cae62b0073b860dccfced0d07aa485f139cf996e56c37850f89fcc0dea8",
+    "workingTreeSha256": "d24dc04f7c75949da64afd12ab7255d8292ffbd9fbc3c031a8434303520e2bae"
+  }
 });
 
 /** Exact retained source, with only the finite reviewed report delta admitted. */
@@ -1259,7 +1300,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     assert.equal(digest(readFileSync(join(sourceDirectory, imageConfig.file))), imageConfig.sha256,
       "The owned image environment configuration changed after binding.");
     for (const name of readdirSync(sourceDirectory)) {
-      assert.equal(/^\.env(?:\.|$)/iu.test(name), false);
+      assert.equal(/^\.env(?:\.|$)/iu.test(name) && !(name === ".env.example" && manifest.some(row => row.file === name)), false);
       if (/^next\.config\./u.test(name)) assert.ok(["next.config.ts", imageConfig.file].includes(name), "Unexpected Next config precedence.");
     }
   };
@@ -1303,7 +1344,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       inventoryBasis: frozenManifest ? "reviewed-frozen-manifest" : "git-index-plus-reviewed-additions",
       byteSource: frozenManifest ? "reviewed-frozen-directory" : "working-tree", additionalSourceFiles: request.additionalSourceFiles,
       fixtureContentSha256: readiness.fixtureContentSha256, collectorSha256,
-      manifest, sourceSha256: digest(JSON.stringify(manifest)), environmentFilesCopied: false, generatedLocalCredentialsOnly: true });
+      manifest, sourceSha256: digest(JSON.stringify(manifest)), privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), generatedLocalCredentialsOnly: true });
     let qualityScripts: string[] = [];
     let qualityEnvironment = context.cleanEnvironment();
     let npmCli: string | undefined;
@@ -1331,7 +1372,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       receipt(context, "final-quality-plan.json", { headSha, sourceSha256: digest(JSON.stringify(manifest)),
         prefix: qualityScripts, tail: GATES.map(gate => gate.name), adminAdoptionAfterPublic: !retainedQuality,
         ...(retainedAdmission ? { mode: "retained-admin-behavior", retainedAdminBehavior: retainedAdmission.receipt } : {}),
-        environmentFilesCopied: false, prefixUsesDatabaseCredentials: false });
+        privateEnvironmentFilesCopied: false, publicEnvironmentTemplateCopied: manifest.some(row => row.file === ".env.example"), prefixUsesDatabaseCredentials: false });
     }
     const executionGates = [...qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 })), ...gates];
     for (const gate of executionGates) {
