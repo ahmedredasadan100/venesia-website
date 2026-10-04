@@ -1545,11 +1545,11 @@ function verifyRetainedPublicControlEligibility(source: string) {
         transformations.push({ from: node.arguments[1].text, to: node.arguments[2].text });
       ts.forEachChild(node, visit);
     };
-    visit(proofNode); assert.equal(transformations.length, 9);
+    visit(proofNode); assert.equal(transformations.length, 11);
     const undo = (source: string) => transformations.reduce((value, row) => value.split(row.to).join(row.from), source);
     const p = "scripts/lib/isolated-public-verification.mts", l = "scripts/lib/isolated-supabase.mts", c = "scripts/verify-isolated-supabase.mts";
     const workerNames = ["RETAINED_QUALITY_WORKER_REQUEST_LIMIT_MS", "RETAINED_QUALITY_WORKER_SOURCE", "loadRetainedFinalQualityAdmissionAsync"];
-    const priorPublic = [undo(text("assertRetainedFinalQualitySource")), text("loadRetainedFinalQualityAdmission"), undo(text("runOwnedPublicVerification")), text("GATES")].join("\n\n");
+    const priorPublic = [undo(text("isolatedPublicImageConfigSource")), undo(text("assertRetainedFinalQualitySource")), text("loadRetainedFinalQualityAdmission"), undo(text("runOwnedPublicVerification")), text("GATES")].join("\n\n");
     const oldMetadata = "memoryOnlyArtifacts: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0";
     const newMetadata = "memoryOnlyArtifacts: false, tempFixtureCleanupVerified: true, realWorkers: true, trackedArtifactsWritten: false, browserExecuted: false, databaseCalls: 0, networkRequests: 0";
     const priorControls = 'function retainedAssertion() { assert.equal("preserved", "preserved"); }\n'
@@ -1568,7 +1568,7 @@ function verifyRetainedPublicControlEligibility(source: string) {
     const nextPublic = ['import { Worker } from "node:worker_threads";', 'import ts from "typescript";', ...workerNames.map(text),
       text("RetainedQualityLifecycleCorrection"), text("assertRetainedFinalQualityLifecycleSource"),
       "const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze(" + JSON.stringify(authority) + ");",
-      text("assertRetainedFinalQualitySource"), text("loadRetainedFinalQualityAdmission"), text("runOwnedPublicVerification"), text("GATES")].join("\n\n");
+      text("isolatedPublicImageConfigSource"), text("assertRetainedFinalQualitySource"), text("loadRetainedFinalQualityAdmission"), text("runOwnedPublicVerification"), text("GATES")].join("\n\n");
     const owners: Owner[] = [[p, priorPublic, nextPublic], [l, priorLifecycle, nextLifecycle], [c, priorControls, nextControls]]
       .map(([file, beforeSource, afterSource]) => ({ path: file, beforeSource, afterSource, beforeSha256: sha256(beforeSource), afterSha256: sha256(afterSource) }));
     const retained: Source = { invocationHeadSha: "a".repeat(40), sourceSha256: authority.sourceSha256, manifest: baselineManifest };
@@ -1614,6 +1614,16 @@ function verifyRetainedPublicControlEligibility(source: string) {
     const edit = (value: { impact: Impact; candidate: Source }, file: string, from: string, to: string) => {
       const row = value.impact.qualityLifecycleCorrection!.owners.find(row => row.path === file)!; assert.ok(row.afterSource.includes(from)); row.afterSource = row.afterSource.replace(from, to);
     };
+    const editGenerator = (value: { impact: Impact; candidate: Source }, from: string, to: string) => {
+      const originalGenerator = text("isolatedPublicImageConfigSource"); assert.ok(originalGenerator.includes(from));
+      edit(value, p, originalGenerator, originalGenerator.replace(from, to));
+    };
+    rejectSource("retained source rejects the prior banned generated binding", value => editGenerator(value, "const transpiledConfig = await", "const module = await"));
+    rejectSource("retained source rejects a different generated binding rename", value => editGenerator(value, "const transpiledConfig = await", "const arbitraryConfig = await"));
+    rejectSource("retained source rejects a partial generated reference rename", value => editGenerator(value, "transpiledConfig.default ?? transpiledConfig", "module.default ?? module"));
+    rejectSource("retained source rejects changed generated normalization", value => editGenerator(value, "transpiledConfig.default ?? transpiledConfig", "transpiledConfig.default || transpiledConfig"));
+    rejectSource("retained source rejects a widened generated image boundary", value => editGenerator(value, "/storage/v1/object/public/cms-images/**", "/**"));
+    rejectSource("retained source rejects a removed generated source digest assertion", value => editGenerator(value, "assert.equal(createHash", "void(createHash"));
     rejectSource("retained lifecycle source rejects changed canonical loader despite resealed manifests", value => edit(value, p, '"Retained Quality admission changed during execution."', '"weakened verifier"'));
     rejectSource("retained lifecycle source rejects changed gate contract", value => edit(value, p, 'name: "normal-build"', 'name: "changed-build"'));
     rejectSource("retained lifecycle source rejects removed awaited full verification", value => edit(value, p, "await retainedAdmission?.verify();", "void retainedAdmission?.verify();"));
@@ -1631,6 +1641,34 @@ function verifyRetainedPublicControlEligibility(source: string) {
     rejectSource("retained lifecycle source rejects nested predecessor correction", value => { Object.assign(value.impact.qualityLifecycleCorrection!.baselineReportImpact, { qualityLifecycleCorrection: {} }); });
     rejectSource("retained lifecycle source rejects relabeling behavior", value => { value.impact.retainedBehaviorRelabelled = true; });
     rejectSource("retained lifecycle source rejects unreviewed declaration", value => { value.impact.qualityLifecycleCorrection!.owners[0].afterSource += "\nexport const arbitraryRelaxation = true;"; });
+  }
+
+  // Lint the complete generated config with the same effective repository rules
+  // and pathname as a real owned source snapshot; no rule overrides or ignores.
+  {
+    const { ESLint } = await import("eslint");
+    const builder = ownerFile.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "isolatedPublicImageConfigSource");
+    assert.ok(builder);
+    const code = ts.transpileModule(builder.getText(ownerFile).replace(/^export /u, ""), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022 }
+    }).outputText;
+    const build = new Function("assert", code + ";return isolatedPublicImageConfigSource;")(assert) as (port: number, sha: string) => string;
+    const generated = build(57604, sha256(readFileSync(path.join(root, "next.config.ts"))));
+    const eslint = new ESLint({ cwd: root }), filePath = path.join(root, "next.config.mjs");
+    const config = await eslint.calculateConfigForFile(filePath);
+    assert.ok(config); assert.equal(config.rules["@next/next/no-assign-module-variable"][0], 2);
+    cases.push("full generated config uses the effective enabled Next banned-module ESLint rule");
+    const result = await eslint.lintText(generated, { filePath, warnIgnored: true });
+    assert.equal(result.length, 1); assert.equal(result[0].errorCount, 0); assert.equal(result[0].warningCount, 0); assert.deepEqual(result[0].messages, []);
+    cases.push("full generated owned Next config passes actual repository ESLint with zero warnings");
+    assert.equal(generated.split("const transpiledConfig = await").length - 1, 1);
+    assert.equal(generated.split("transpiledConfig.default ?? transpiledConfig").length - 1, 1);
+    const original = generated.replace("const transpiledConfig = await", "const module = await")
+      .replace("transpiledConfig.default ?? transpiledConfig", "module.default ?? module");
+    const rejected = await eslint.lintText(original, { filePath, warnIgnored: true });
+    assert.equal(rejected.length, 1); assert.equal(rejected[0].errorCount, 1); assert.equal(rejected[0].warningCount, 0);
+    assert.deepEqual(rejected[0].messages.map(row => row.ruleId), ["@next/next/no-assign-module-variable"]);
+    cases.push("the original full generated config reproduces exactly the banned-module lint failure");
   }
 }
 

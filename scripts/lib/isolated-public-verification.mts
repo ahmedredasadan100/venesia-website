@@ -66,8 +66,8 @@ export function isolatedPublicImageConfigSource(apiPort: number, sourceConfigSha
     'const nextConfigPath = fileURLToPath(new URL("./next.config.ts", import.meta.url));',
     `assert.equal(createHash("sha256").update(readFileSync(nextConfigPath)).digest("hex"), ${JSON.stringify(sourceConfigSha256)});`,
     'export default async function isolatedPublicConfig(phase) {',
-    '  const module = await transpileConfig({ nextConfigPath, dir: dirname(nextConfigPath) });',
-    '  const config = await normalizeConfig(phase, module.default ?? module);',
+    '  const transpiledConfig = await transpileConfig({ nextConfigPath, dir: dirname(nextConfigPath) });',
+    '  const config = await normalizeConfig(phase, transpiledConfig.default ?? transpiledConfig);',
     `  return { ...config, images: { ...config.images, ...${JSON.stringify(images)} } };`,
     '}',
     '',
@@ -177,6 +177,10 @@ export function assertRetainedFinalQualityLifecycleSource(impact: Parameters<typ
       expected = exactReplace(expected, "  retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;", "  retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;\n  qualityLifecycleCorrection?: RetainedQualityLifecycleCorrection;");
       expected = exactReplace(expected, '  assert.equal(impact.status, "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT");', '  if (impact.status === "ROOT_REVIEWED_EXACT_QUALITY_LIFECYCLE_SOURCE_IMPACT") return assertRetainedFinalQualityLifecycleSource(impact, retained, candidate);\n  assert.equal(impact.status, "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT");');
     }
+    if (declarationName(previous) === "isolatedPublicImageConfigSource") {
+      expected = exactReplace(expected, "'  const module = await transpileConfig({ nextConfigPath, dir: dirname(nextConfigPath) });',", "'  const transpiledConfig = await transpileConfig({ nextConfigPath, dir: dirname(nextConfigPath) });',");
+      expected = exactReplace(expected, "'  const config = await normalizeConfig(phase, module.default ?? module);',", "'  const config = await normalizeConfig(phase, transpiledConfig.default ?? transpiledConfig);',");
+    }
     if (declarationName(previous) === "runOwnedPublicVerification") {
       expected = exactReplace(expected, "let retainedAdmission: ReturnType<typeof loadRetainedFinalQualityAdmission> | undefined;", "let retainedAdmission: Awaited<ReturnType<typeof loadRetainedFinalQualityAdmissionAsync>> | undefined;");
       expected = exactReplace(expected, "retainedAdmission = loadRetainedFinalQualityAdmission(request.retainedAdminBehaviorAdmissionSha256!,\n          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest });", "retainedAdmission = await loadRetainedFinalQualityAdmissionAsync(request.retainedAdminBehaviorAdmissionSha256!,\n          { invocationHeadSha: headSha, sourceSha256: digest(JSON.stringify(manifest)), manifest }, signal);");
@@ -233,10 +237,10 @@ const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze({
     "scripts/verify-isolated-supabase.mts": "d09900fcd7405baeb02f70e86bbe77fc82a419ed326dd29c0e752e4c97b1882c"
   },
   "workerStatementsSha256": "c0e3683cd91bfd6413fcbf59f488be8593f7fc65be52ce480aa204a3bfee6634",
-  "proofFunctionSha256": "19482b63501d48abb8be5c38754d9fd4336403d9286d25ff3ed9aa6cc9bc12a1",
+  "proofFunctionSha256": "72184d09e480341d9d0c945065b6f4ecdc59d357615520093b848f11c1bb8238",
   "lifecycleBeforeLfSha256": "2973edeefb1bb931b453db333a89ab9d09b9b0044893c02ab917a3a057c1e6de",
   "lifecycleAfterLfSha256": "fa6507e20eb5d7636aecb807aada43c47aa8638d7473c4004a73607329b14eeb",
-  "controlsAfterSha256": "a146769a3feff1aba2648c114341794d3049a29af9d33edfc32dd192aaeb31c9"
+  "controlsAfterSha256": "816c85215f8a00cb9e10e186b0083ef42ecf7f74a814bacdcc8d859bbc7e0e3a"
 });
 
 /** Exact retained source, with only the finite reviewed report delta admitted. */
