@@ -195,6 +195,12 @@ export function assertRetainedFinalQualityLifecycleSource(impact: Parameters<typ
   const nextLifecycle = lifecycle.after.text.replace(/\r\n/gu, "\n");
   assert.equal(digest(nextLifecycle), RETAINED_QUALITY_LIFECYCLE_BASELINE.lifecycleAfterLfSha256);
   assert.equal(digest(priorLifecycle), RETAINED_QUALITY_LIFECYCLE_BASELINE.lifecycleBeforeLfSha256);
+  const navigation = parsed.get("scripts/verify-admin-core-navigation-permission-join.mjs")!;
+  assert.equal(digest(navigation.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.navigationAfterSha256);
+  let expectedNavigation = navigation.before.text;
+  expectedNavigation = exactReplace(expectedNavigation, "const target='scripts/verify-admin-adoption-readback-isolated.mts',source=fs.readFileSync(target,'utf8');", "const target='scripts/verify-admin-adoption-readback-isolated.mts',sourceBytes=fs.readFileSync(target),source=sourceBytes.toString('utf8').replace(/\\r\\n/gu,'\\n');");
+  expectedNavigation = exactReplace(expectedNavigation, "sourceSha256:crypto.createHash('sha256').update(source).digest('hex')", "sourceSha256:crypto.createHash('sha256').update(sourceBytes).digest('hex')");
+  assert.equal(navigation.after.text, expectedNavigation, "Only the two reviewed Navigation control statements may change; raw source identity and every assertion must be preserved.");
   const controls = parsed.get("scripts/verify-isolated-supabase.mts")!;
   assert.equal(digest(controls.after.text), RETAINED_QUALITY_LIFECYCLE_BASELINE.controlsAfterSha256);
   const controlName = "verifyRetainedFinalQualityWorkerControls";
@@ -234,13 +240,15 @@ const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze({
   "owners": {
     "scripts/lib/isolated-public-verification.mts": "42e7166eafc2f29176fa5be8b7e072b563b9b55d2ed2c682d31317d46afb6f3a",
     "scripts/lib/isolated-supabase.mts": "1e463410e5af6b15223df1bc099554f23c0c026eed3c3757934dfe86213c962b",
-    "scripts/verify-isolated-supabase.mts": "d09900fcd7405baeb02f70e86bbe77fc82a419ed326dd29c0e752e4c97b1882c"
+    "scripts/verify-isolated-supabase.mts": "d09900fcd7405baeb02f70e86bbe77fc82a419ed326dd29c0e752e4c97b1882c",
+    "scripts/verify-admin-core-navigation-permission-join.mjs": "820bbbf23f31291c0449798bd3e11e272344bbee39db6eee45eca4e8417d6b93"
   },
   "workerStatementsSha256": "c0e3683cd91bfd6413fcbf59f488be8593f7fc65be52ce480aa204a3bfee6634",
-  "proofFunctionSha256": "72184d09e480341d9d0c945065b6f4ecdc59d357615520093b848f11c1bb8238",
+  "proofFunctionSha256": "6910502780b2214e41e2f0a23161e1e8a3a4a8e68991b1fefbde2c0af46b627b",
   "lifecycleBeforeLfSha256": "2973edeefb1bb931b453db333a89ab9d09b9b0044893c02ab917a3a057c1e6de",
   "lifecycleAfterLfSha256": "fa6507e20eb5d7636aecb807aada43c47aa8638d7473c4004a73607329b14eeb",
-  "controlsAfterSha256": "816c85215f8a00cb9e10e186b0083ef42ecf7f74a814bacdcc8d859bbc7e0e3a"
+  "navigationAfterSha256": "765824e551d06e0879fc6dc1d2830bcde30bed1b77854749b89bf8567816f64c",
+  "controlsAfterSha256": "bc1300d5efa72d136bee94bdcaca0a5c28648f53f16a43391d6ecbb3f5cdc324"
 });
 
 /** Exact retained source, with only the finite reviewed report delta admitted. */

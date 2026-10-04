@@ -1,8 +1,8 @@
 {
-  "status": "PRE_FINAL_GATE_POST152_GENERATED_CONFIG_CORRECTION_APPLIED_QUALITY_RETRY_PENDING_CLOSURE_BLOCKED",
-  "preparedAt": "2026-10-04T03:32:56.976Z",
-  "observedHead": "a3345f1f635270f003d34852d1a457b0470e7522",
-  "scope": "Existing bounded closure checkpoint through actual failed152 and its focused generated-config Verification correction. New candidate accounting/integrity/Quality remain pending; all old outcomes preserved.",
+  "status": "PRE_FINAL_GATE_POST153_NAVIGATION_EOL_CORRECTION_APPLIED_QUALITY_RETRY_PENDING_CLOSURE_BLOCKED",
+  "preparedAt": "2026-10-04T04:50:00.464Z",
+  "observedHead": "d890baea400f15877d203284a5ac4780759ebf62",
+  "scope": "Existing bounded closure checkpoint through actual failed153 and its applied Navigation test line-ending correction. New candidate accounting/integrity/CI/Quality remain pending; every earlier outcome and raw failure is preserved.",
   "intendedTrackedReports": [
     {
       "path": "docs/reports/ADMIN_CORE_HELD37_FINAL52_BOUNDED_CLOSURE_STOP_2026-10-04.json",
@@ -884,6 +884,51 @@
           },
           "remainingOwnedResources": 0,
           "remainingOwnedProcesses": 0
+        },
+        {
+          "run": "browser-r153",
+          "sourceHead": "d890baea400f15877d203284a5ac4780759ebf62",
+          "originalStatus": "failed",
+          "exitCode": 1,
+          "classification": "Verification",
+          "productFailureProven": false,
+          "execution": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/browser-r153-execution-result.json",
+            "sha256": "e5af8427fe987aa23a1b0e2473de198c34e3f3fcf7146e830da47781616685ff"
+          },
+          "failureAndCleanup": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r153-root-failure-and-cleanup-review.json",
+            "sha256": "96e7fe8344a73920ae2413ba0970ab5c84159ab1976607dd5f6adc535cea7b90"
+          },
+          "terminalSeal": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/manifest.json",
+            "sha256": "b79a75aba021289c2dd2b5bc88aa6d4ac2d1c2e722608cf15743059f4510f4ed"
+          },
+          "rootCause": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-permission-preparation/root-cause-and-controls.json",
+            "sha256": "464cfafef071a134c757d5032bd5ec20792e2f9cbf7b21f04431595cf22cb681"
+          },
+          "correction": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/root-applied.json",
+            "sha256": "b7bef47aca22c98e21ad52f71784b8c2aec7f9f8b931c13475cd35bd880d9cee"
+          },
+          "actualAppliedChecks": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/actual-affected-checks-review.json",
+            "sha256": "0835429463bcede7cad5d22532ad0568403e8d27393d21e155c187e4407be582"
+          },
+          "actualNavigationControls": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-permission-preparation/actual-applied-navigation-controls.json",
+            "sha256": "1f187eb063c3404ad874b0e99df8964e44c577c7c11bd3a5302526f9c8ecefb1"
+          },
+          "qualificationCredit": 0,
+          "originalFailurePreserved": true,
+          "failedGate": "verify:admin-core-closure",
+          "passedPrefixSteps": 6,
+          "failedPrefixStep": 7,
+          "reason": "Two LF-only multiline source mutations did not change the Windows CRLF collector text, so assert.notEqual failed before the intended negative behavior check. Git/CI LF and Windows CRLF have identical parsed semantics.",
+          "remainingOwnedResources": 0,
+          "remainingOwnedProcesses": 0,
+          "retainedEvidenceWorkerStopped": true
         }
       ],
       "failures": [
@@ -1085,6 +1130,33 @@
           ],
           "qualificationUnchanged": true,
           "trackedSourceChanged": false
+        },
+        {
+          "id": "r153-navigation-control-line-endings",
+          "classification": "Verification",
+          "owner": "scripts/verify-admin-core-navigation-permission-join.mjs",
+          "cause": "Two LF-only multiline source mutations did not change the Windows CRLF collector text, so assert.notEqual failed before the intended negative behavior check. Git/CI LF and Windows CRLF have identical parsed semantics.",
+          "correction": "The existing test owner retains raw sourceBytes for its SHA256 and normalizes only the AST/mutation working text to LF. Every original mutation and assertion is unchanged; all140 checks pass on both endings.",
+          "evidence": [
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r153-root-failure-and-cleanup-review.json",
+              "sha256": "96e7fe8344a73920ae2413ba0970ab5c84159ab1976607dd5f6adc535cea7b90"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-permission-preparation/root-cause-and-controls.json",
+              "sha256": "464cfafef071a134c757d5032bd5ec20792e2f9cbf7b21f04431595cf22cb681"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/root-applied.json",
+              "sha256": "b7bef47aca22c98e21ad52f71784b8c2aec7f9f8b931c13475cd35bd880d9cee"
+            },
+            {
+              "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/actual-affected-checks-review.json",
+              "sha256": "0835429463bcede7cad5d22532ad0568403e8d27393d21e155c187e4407be582"
+            }
+          ],
+          "productChangeRequired": false,
+          "rawFailurePromoted": false
         }
       ],
       "productFailureProven": false,
@@ -1122,13 +1194,14 @@
       ],
       "remainingOperation": null,
       "remainingObligations": [
-        "Commit focused existing Verification correction and checkpoint to establish the new candidateHEAD",
-        "Rematerialize existing959/exact111 and integrity for thatHEAD while preserving failed151/152/old candidate bytes",
-        "Run unchanged technical FinalQuality gates on newHEAD with retained Admin behavior",
-        "Keep FinalClosure not invoked while explicit existing predicates/domain authority remain unresolved"
+        "Commit the applied exact Navigation Verification correction and these checkpoint bytes to establish candidateHEAD",
+        "Preserve the sealed d890 generation and execute only the reviewed11-file rollover, then rematerialize existing959/exact111/integrity on candidateHEAD",
+        "Run all unchanged technical FinalQuality gates and observe exact candidateHEAD CI with retained Admin behavior",
+        "Keep FinalClosure NOT_INVOKED while explicit existing predicates and Domain authority remain unresolved",
+        "After terminal gates, create the local actual A–K supplement bound to finalHEAD and committed checkpoint hashes; no post-gate tracked report commit is implied"
       ],
       "retainedNoReplay": 73,
-      "finalGateStatus": "FAILED152_GENERATED_CONFIG_CORRECTED_PENDING_NEW_HEAD_RETRY",
+      "finalGateStatus": "FAILED153_AT_PREFIX7_NAVIGATION_EOL_CORRECTED_PENDING_NEW_HEAD_RETRY",
       "composition": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final27-composite-qualification.json",
         "sha256": "bc1aeceaf489e092a87989508c4eb3866d3a78344d8ce4d245cdd47aee713d6e"
@@ -1147,21 +1220,30 @@
       },
       "currentAffectedChecks": {
         "status": "PASS",
+        "review": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/actual-affected-checks-review.json",
+          "sha256": "0835429463bcede7cad5d22532ad0568403e8d27393d21e155c187e4407be582"
+        },
         "actualAppliedControls": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post152-config-correction-preparation/actual-affected-controls.log",
-          "sha256": "4c022d065997641f933a6acfdd9eb835f4e71dd04b27047e566acc774d4a1b20"
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/actual-affected-controls.stdout.log",
+          "sha256": "dab94b4ebe228082de592a69cc72ac13c77f84f345d8eb03c74e81d975516d5f"
         },
-        "reviewedCandidateChecks": {
-          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post152-config-correction-preparation/apply-ready.json",
-          "sha256": "38b33d1cb1440d564644f5ca3f14326f632c602cdf64e50e28e1b1ed53d88daf"
+        "actualAppliedStderr": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/actual-affected-controls.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         },
-        "retainedControlCount": 221,
+        "actualNavigationControls": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-permission-preparation/actual-applied-navigation-controls.json",
+          "sha256": "1f187eb063c3404ad874b0e99df8964e44c577c7c11bd3a5302526f9c8ecefb1"
+        },
+        "retainedControlCount": 228,
         "legacyUnchanged": 149,
-        "newFunctionControls": 72,
-        "actualImageOptimizer": "PASS",
+        "newFunctionControls": 79,
+        "navigationControls": 140,
         "typescriptDiagnostics": 0,
         "eslintErrors": 0,
-        "eslintWarnings": 0
+        "eslintWarnings": 0,
+        "originalControlArtifactsUnchanged": true
       },
       "ciCorrections": [
         "Affected AST-extracted test ports were missing canonical Media selection constants.",
@@ -1176,10 +1258,14 @@
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/ci-b381f44a-taxonomy-disposition.json",
           "sha256": "353571eb1f437f3b0e745955de9e20743a8608a255beacc3f4e12a360babfb57"
         },
-        "disposition": "233e failed Taxonomy registry pull was classified Environment. Its required failed-job-only retry passed; all8 checks then passed. New candidateHEAD CI remains pending.",
+        "disposition": "Historical233e failed-job-only retry passed and a334 passed8/8. On d890,seven jobs passed; Taxonomy registry rate limiting recurred on its one failed-job-only retry. No blanket workflow replay or second retry occurred. New candidateHEAD CI remains pending.",
         "currentEvidence": {
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-6fb6fe53-first-inspection.json",
           "sha256": "5adc222670d39144f0cdcefe73209c07c88ef32dce5430f4e5e5ee8d860a4625"
+        },
+        "latestD890Evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-d890baea-retry-failure-review.json",
+          "sha256": "a5aa29c5903f4ac1190e8715036855a0a5048995215d90551c98be50ca4a8180"
         }
       },
       "references": [
@@ -1218,24 +1304,46 @@
         {
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/update-only-corrections-root-review.json",
           "sha256": "f573654328f745e11b99da1f5724bc8e02faca02009c06638783b13226afb466"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-d890baea-after-taxonomy-retry.json",
+          "sha256": "4a3a6ec87724f8aeb0b8ad32d96963980ad68f77d277b6ae9b5ff047d437f97f"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-d890baea-retry-failure-review.json",
+          "sha256": "a5aa29c5903f4ac1190e8715036855a0a5048995215d90551c98be50ca4a8180"
+        },
+        {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/actual-affected-checks-review.json",
+          "sha256": "0835429463bcede7cad5d22532ad0568403e8d27393d21e155c187e4407be582"
         }
       ],
-      "currentWholeCI": "CURRENT6FB6_RECORDED_TAXONOMY_ENVIRONMENT_RATE_LIMIT; final candidate checks pending",
+      "currentWholeCI": "D890_RECORDED_7_SUCCESS_1_TAXONOMY_ENVIRONMENT_REGISTRY_FAILURE_AFTER_FAILED_JOB_ONLY_RETRY; new candidate checks pending",
       "finalQuality": {
-        "lastAttempt": "browser-r152",
-        "lastStatus": "FAILED_VERIFICATION_FIRST_PREFIX_LINT",
-        "lastSourceHead": "a3345f1f635270f003d34852d1a457b0470e7522",
+        "lastAttempt": "browser-r153",
+        "lastStatus": "FAILED_VERIFICATION_PREFIX7_ADMIN_CORE_CLOSURE",
+        "lastSourceHead": "d890baea400f15877d203284a5ac4780759ebf62",
         "nextStatus": "PENDING_NEW_CANDIDATE_HEAD",
         "criteriaUnchanged": true,
         "adminBehaviorRetained": true,
         "freshAdminJourneyIds": [],
         "prefixCommands": 69,
-        "publicTailGates": 4
+        "publicTailGates": 4,
+        "passedPrefixCommands": 6,
+        "failedPrefixCommand": "verify:admin-core-closure",
+        "failureAndCleanup": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r153-root-failure-and-cleanup-review.json",
+          "sha256": "96e7fe8344a73920ae2413ba0970ab5c84159ab1976607dd5f6adc535cea7b90"
+        },
+        "terminalSeal": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/manifest.json",
+          "sha256": "b79a75aba021289c2dd2b5bc88aa6d4ac2d1c2e722608cf15743059f4510f4ed"
+        }
       },
       "finalQualityIsClosure": false,
       "currentHeadRecordedCi": {
-        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-6fb6fe53-first-inspection.json",
-        "sha256": "5adc222670d39144f0cdcefe73209c07c88ef32dce5430f4e5e5ee8d860a4625"
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-d890baea-after-taxonomy-retry.json",
+        "sha256": "4a3a6ec87724f8aeb0b8ad32d96963980ad68f77d277b6ae9b5ff047d437f97f"
       },
       "ci233e": {
         "status": "PASS",
@@ -1254,6 +1362,44 @@
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-a3345f1f-status-2026-10-04T03-11-27-771Z.json",
           "sha256": "7c9e4ca0321343dd397bcb8a0feac5362e2046876accdb26993c8e7808c6ad4f"
         }
+      },
+      "previousAffectedChecks": [
+        {
+          "status": "PASS",
+          "actualAppliedControls": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post152-config-correction-preparation/actual-affected-controls.log",
+            "sha256": "4c022d065997641f933a6acfdd9eb835f4e71dd04b27047e566acc774d4a1b20"
+          },
+          "reviewedCandidateChecks": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post152-config-correction-preparation/apply-ready.json",
+            "sha256": "38b33d1cb1440d564644f5ca3f14326f632c602cdf64e50e28e1b1ed53d88daf"
+          },
+          "retainedControlCount": 221,
+          "legacyUnchanged": 149,
+          "newFunctionControls": 72,
+          "actualImageOptimizer": "PASS",
+          "typescriptDiagnostics": 0,
+          "eslintErrors": 0,
+          "eslintWarnings": 0
+        }
+      ],
+      "ciD890": {
+        "status": "SEVEN_PASS_ONE_ENVIRONMENT_FAILURE",
+        "successfulJobs": 7,
+        "failedJobs": 1,
+        "sourceHead": "d890baea400f15877d203284a5ac4780759ebf62",
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-d890baea-after-taxonomy-retry.json",
+          "sha256": "4a3a6ec87724f8aeb0b8ad32d96963980ad68f77d277b6ae9b5ff047d437f97f"
+        },
+        "retryReview": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/ci-d890baea-retry-failure-review.json",
+          "sha256": "a5aa29c5903f4ac1190e8715036855a0a5048995215d90551c98be50ca4a8180"
+        },
+        "onlyFailedTaxonomyRetried": true,
+        "otherSevenReexecuted": false,
+        "sameRegistryRateCause": true,
+        "secondRetryDispatched": false
       }
     },
     "F": {
@@ -1315,6 +1461,10 @@
       "actualA334Blockers": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r152-terminal-preimages/7dd0a73c02768bb99cbe38ac07a42547c3b09e5e6a972e034eccca93eaea8bad.txt",
         "sha256": "7dd0a73c02768bb99cbe38ac07a42547c3b09e5e6a972e034eccca93eaea8bad"
+      },
+      "actualD890Blockers": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/83cca05e1a4af4299338ee77edde16d22b5de39c13ae8d6bfcb6dcb66c00fb59.txt",
+        "sha256": "83cca05e1a4af4299338ee77edde16d22b5de39c13ae8d6bfcb6dcb66c00fb59"
       }
     },
     "G": {
@@ -1331,7 +1481,7 @@
         "sha256": "276234ccdd01590f9652552e464bc47093fbf493fa0b543191482f56cb4496b8"
       },
       "notApplicableCountsAsPass": false,
-      "finalAccounting": "ACTUAL_A334_MATERIALIZED_AND_VALIDATED_NEW_CANDIDATE_REBIND_PENDING",
+      "finalAccounting": "ACTUAL_D890_MATERIALIZED_AND_VALIDATED_SEALED_NEW_CANDIDATE_REBIND_PENDING",
       "previewOnly": {
         "evidence": {
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-report-preparation/pre-final-gate-preview110.json",
@@ -1403,13 +1553,65 @@
           "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/post151-correction-independent-accounting-audit.json",
           "sha256": "076b9a28b27a262c733b3555123f2ac7ddb63ac6073a947af1218c618f63b410"
         }
+      },
+      "actualD890": {
+        "sourceHead": "d890baea400f15877d203284a5ac4780759ebf62",
+        "accounting": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/9ad4f33b88f0b134ab8aa3e3b26b12daebeee240ac1c74145945de229d1677f0.txt",
+          "sha256": "9ad4f33b88f0b134ab8aa3e3b26b12daebeee240ac1c74145945de229d1677f0"
+        },
+        "exact111": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/5f23bcb79bc7997ef99edf6811960c03c16298ddf73807a6afa16124ea282093.txt",
+          "sha256": "5f23bcb79bc7997ef99edf6811960c03c16298ddf73807a6afa16124ea282093"
+        },
+        "producer": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/1b41e66b1b706ef1818c30d7b8f2b50ea83e27ece0075cfefc2c85f90b131631.txt",
+          "sha256": "1b41e66b1b706ef1818c30d7b8f2b50ea83e27ece0075cfefc2c85f90b131631"
+        },
+        "rootReview": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/97fc39a4f1fb42eaa8f863f88b3b0da4cf1b2c080ed43082db850f3b0ca581a6.txt",
+          "sha256": "97fc39a4f1fb42eaa8f863f88b3b0da4cf1b2c080ed43082db850f3b0ca581a6"
+        },
+        "sourceManifest": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/a8a6274fdac799eeaa914b672f1359649b837028443ed7bd30c6c7783cae62af.txt",
+          "sha256": "a8a6274fdac799eeaa914b672f1359649b837028443ed7bd30c6c7783cae62af"
+        },
+        "sourceCompatibility": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/cae2f5f12c72c61097e01d260d24d729456c4c76e53fafa6b4d25cb28d98b60c.txt",
+          "sha256": "cae2f5f12c72c61097e01d260d24d729456c4c76e53fafa6b4d25cb28d98b60c"
+        },
+        "integrity": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/9b513b2ae66a70b7bb2af9283fc5ff1ded018b9b2e2fc31f622073db3edb67d7.txt",
+          "sha256": "9b513b2ae66a70b7bb2af9283fc5ff1ded018b9b2e2fc31f622073db3edb67d7"
+        },
+        "readiness": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/07488cfd129604f7339e75d838f5a93d068b94944ef7a4e3333039a53055f641.txt",
+          "sha256": "07488cfd129604f7339e75d838f5a93d068b94944ef7a4e3333039a53055f641"
+        },
+        "blockers": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/83cca05e1a4af4299338ee77edde16d22b5de39c13ae8d6bfcb6dcb66c00fb59.txt",
+          "sha256": "83cca05e1a4af4299338ee77edde16d22b5de39c13ae8d6bfcb6dcb66c00fb59"
+        },
+        "physicalIntegrityRefs": 24667,
+        "hostGitAudit": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/final153-host-git-audit-preparation/actual-d890-after153-audit.json",
+          "sha256": "676bc452250f212ea2cd56244f623fcc53f6ca6f3b768f98ac4d9fc0a0f1748c"
+        },
+        "independentReconciliationAudit": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/d890-final-reconciliation-independent-audit.json",
+          "sha256": "0c6828a925658f2c8539b405191f01a3221b12606c97b69d252a299539937a9d"
+        },
+        "sealedBeforeCorrection": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/manifest.json",
+          "sha256": "b79a75aba021289c2dd2b5bc88aa6d4ac2d1c2e722608cf15743059f4510f4ed"
+        }
       }
     },
     "H": {
       "title": "Changes",
       "comparison": {
         "from": "095ada2d50725ba5397ca014268647138925c568",
-        "to": "a334 plus exact reviewed2-file generated-config correction and this checkpoint"
+        "to": "d890 plus exact applied3-file Navigation line-ending/source-proof correction and these two checkpoint reports"
       },
       "productFiles": [],
       "verificationFiles": [
@@ -1433,7 +1635,8 @@
         "scripts/verify-admin-core-tracking-media-adoption.mjs",
         "scripts/verify-application-closure-checkpoints.mts",
         "scripts/verify-isolated-supabase-cleanup.mts",
-        "scripts/verify-isolated-supabase.mts"
+        "scripts/verify-isolated-supabase.mts",
+        "scripts/verify-admin-core-navigation-permission-join.mjs"
       ],
       "migrationFilesChanged": false,
       "contracts": "Existing selector, fixture, readback, partial qualifier, composite, accounting and Quality owners extended with finite scope, exact source/native joins and adversarial controls; full/default behavior retained.",
@@ -1455,15 +1658,23 @@
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post151-lifecycle-correction-preparation/root-applied.json",
         "sha256": "09fc400e77148ef5a31cd09cd87687c2ae516c43c4e8b315af2cfcc24d9b40a4"
       },
-      "newQualitySourceProof": "Canonical loader, existing partial finite11 guard and gate constants unchanged. New source proof preserves every predecessor declaration except exact async lifecycle transforms and new controls. Post152 permits only the exact generated transpiledConfig binding rename; six additional source-drift negatives and full generated-config ESLint positive/original-negative controls are inside the existing new controls function.",
+      "newQualitySourceProof": "Canonical loader, existing partial finite11 guard and gate constants remain unchanged. The exact lifecycle source proof admits only four fixed existing Verification owners plus reports. The fourth Navigation owner is pinned before/after and permits only two exact statement substitutions; every mutation/assertion and the raw source byte hash are preserved. Existing worker/generated-config proofs remain intact.",
       "post152Correction": {
         "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post152-config-correction-preparation/root-applied.json",
         "sha256": "5886c98d181640d9e38bdb3111b2b8c494c23a71f079300069fd7ecaaa88f1b0"
+      },
+      "post153Correction": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/root-applied.json",
+        "sha256": "b7bef47aca22c98e21ad52f71784b8c2aec7f9f8b931c13475cd35bd880d9cee"
+      },
+      "failed153EvidencePreservation": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/constructor-applied.json",
+        "sha256": "063e2783ec2bfa4a081f6d36469ce7339e9f6d3b2e981f42215ca190706b2758"
       }
     },
     "I": {
       "title": "Cleanup",
-      "completedRunScope": "144 through152",
+      "completedRunScope": "144 through153",
       "runReceipts": [
         {
           "run": "browser-r144",
@@ -1585,6 +1796,21 @@
             "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r152-root-failure-and-cleanup-review.json",
             "sha256": "e1f62817226ddf769e8f91f30222b35c0dbf2a9ba876adb1a4b39008e2d3ecff"
           }
+        },
+        {
+          "run": "browser-r153",
+          "originalCleanup": {
+            "path": ".tmp-qa/core-final-closure/browser-r153/cleanup.json",
+            "sha256": "d37301949389251049d9110d3421cb53ba6aee9e8788077682b9276fadf0e222"
+          },
+          "originalStatus": "complete",
+          "remaining": 0,
+          "finalRemainingOwnedProcesses": 0,
+          "retainedEvidenceWorkerStopped": true,
+          "review": {
+            "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/r153-root-failure-and-cleanup-review.json",
+            "sha256": "96e7fe8344a73920ae2413ba0970ab5c84159ab1976607dd5f6adc535cea7b90"
+          }
         }
       ],
       "historical145BlockedReceiptPreserved": true,
@@ -1600,12 +1826,26 @@
           "sha256": "56bdbfab530a1da3007a349337fa93de5a9c2ebd4e95c8c43c7cb6e4b1cea994"
         }
       },
-      "nextQualityCleanup": "Required after new candidate run; no future cleanup claim"
+      "nextQualityCleanup": "Required after the next candidate Quality run; no future cleanup claim",
+      "lastCompletedRun153": {
+        "remainingOwnedResources": 0,
+        "remainingOwnedProcesses": 0,
+        "queueFree": true,
+        "hostActive": 0,
+        "localProcesses": 0,
+        "listeners": [],
+        "hostFailedRequests": 0,
+        "retainedEvidenceWorkerStopped": true,
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/final153-host-git-audit-preparation/actual-d890-after153-audit.json",
+          "sha256": "676bc452250f212ea2cd56244f623fcc53f6ca6f3b768f98ac4d9fc0a0f1748c"
+        }
+      }
     },
     "J": {
       "title": "Git and PR",
-      "observedHead": "a3345f1f635270f003d34852d1a457b0470e7522",
-      "finalHead": "PENDING_POST152_GENERATED_CONFIG_CORRECTION_CHECKPOINT_COMMIT",
+      "observedHead": "d890baea400f15877d203284a5ac4780759ebf62",
+      "finalHead": "PENDING_POST153_NAVIGATION_EOL_CORRECTION_CHECKPOINT_COMMIT",
       "finalRemoteAlignment": "PENDING_FINAL_READ",
       "pr186": "MUST_REMAIN_OPEN_DRAFT",
       "ready": false,
@@ -1613,8 +1853,18 @@
       "deploy": false,
       "trackedHistoricalCheckpointPreserved": true,
       "prCurrentRead": {
-        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/post151-current-pr-ci-read.json",
-        "sha256": "69088484b20bd6e7b025fddc90f0a6e48803ec23d62f477d05662be9e29f8dc2"
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/final153-host-git-audit-preparation/actual-d890-after153-audit.json",
+        "sha256": "676bc452250f212ea2cd56244f623fcc53f6ca6f3b768f98ac4d9fc0a0f1748c"
+      },
+      "lastObservedAlignment": {
+        "localHead": "d890baea400f15877d203284a5ac4780759ebf62",
+        "trackingHead": "d890baea400f15877d203284a5ac4780759ebf62",
+        "liveRemoteHead": "d890baea400f15877d203284a5ac4780759ebf62",
+        "pr186": "OPEN_DRAFT",
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/final153-host-git-audit-preparation/actual-d890-after153-audit.json",
+          "sha256": "676bc452250f212ea2cd56244f623fcc53f6ca6f3b768f98ac4d9fc0a0f1748c"
+        }
       }
     },
     "K": {
@@ -1678,53 +1928,53 @@
   "finalOutputClaims": [],
   "sourceHead": "6fb6fe53e23a8e17870abf6845deec22d0c983bd",
   "candidateHead": null,
-  "sourceHeadMeaning": "Last actual behavioral source remains6fb6.233e and a334 are preserved failed151/152 technical candidates. Next focused correction commit defines the new candidate.",
+  "sourceHeadMeaning": "Last actual behavioral source remains6fb6.233e,a334 andd890 are preserved failed151/152/153 technical candidates. The next correction/checkpoint commit defines candidateHead; no future HEAD or PASS is claimed.",
   "postCommitFinalArtifacts": [
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-source-manifest.json",
-      "status": "NEW_CANDIDATE_REGENERATION_PENDING_PRIOR_A334_AND_233E_BYTES_SEALED",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_D890_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/source-impact-current-to-final.json",
-      "status": "NEW_CANDIDATE_REGENERATION_PENDING_PRIOR_A334_AND_233E_BYTES_SEALED",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_D890_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-current-accounting-successor.json",
-      "status": "NEW_CANDIDATE_REGENERATION_PENDING_PRIOR_A334_AND_233E_BYTES_SEALED",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_D890_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-111-reconciliation.json",
-      "status": "NEW_CANDIDATE_REGENERATION_PENDING_PRIOR_A334_AND_233E_BYTES_SEALED",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_D890_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-accounting-producer-execution.json",
-      "status": "NEW_CANDIDATE_REGENERATION_PENDING_PRIOR_A334_AND_233E_BYTES_SEALED",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_D890_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-evidence-integrity.json",
-      "status": "NEW_CANDIDATE_REGENERATION_PENDING_PRIOR_A334_AND_233E_BYTES_SEALED",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_D890_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-quality-readiness.json",
-      "status": "NEW_CANDIDATE_REGENERATION_PENDING_PRIOR_A334_AND_233E_BYTES_SEALED",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_D890_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     },
     {
       "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-closure-current-blockers.json",
-      "status": "NEW_CANDIDATE_REGENERATION_PENDING_PRIOR_A334_AND_233E_BYTES_SEALED",
+      "status": "DESTINATION_FOR_NEXT_CANDIDATE_REGENERATION_D890_BYTES_SEALED_NOT_FUTURE_EVIDENCE",
       "existsAtPreparation": true,
       "sha256": null
     }
@@ -1759,13 +2009,109 @@
       145,
       146,
       148,
-      149
+      149,
+      151,
+      152,
+      153
     ],
     "retained73Changed": false,
-    "qualifiedOperationsReplayed": false
+    "qualifiedOperationsReplayed": false,
+    "failed153Seal": {
+      "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/manifest.json",
+      "sha256": "b79a75aba021289c2dd2b5bc88aa6d4ac2d1c2e722608cf15743059f4510f4ed"
+    },
+    "priorCandidateD890": {
+      "sourceHead": "d890baea400f15877d203284a5ac4780759ebf62",
+      "accounting": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/9ad4f33b88f0b134ab8aa3e3b26b12daebeee240ac1c74145945de229d1677f0.txt",
+        "sha256": "9ad4f33b88f0b134ab8aa3e3b26b12daebeee240ac1c74145945de229d1677f0"
+      },
+      "exact111": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/5f23bcb79bc7997ef99edf6811960c03c16298ddf73807a6afa16124ea282093.txt",
+        "sha256": "5f23bcb79bc7997ef99edf6811960c03c16298ddf73807a6afa16124ea282093"
+      },
+      "producer": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/1b41e66b1b706ef1818c30d7b8f2b50ea83e27ece0075cfefc2c85f90b131631.txt",
+        "sha256": "1b41e66b1b706ef1818c30d7b8f2b50ea83e27ece0075cfefc2c85f90b131631"
+      },
+      "rootReview": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/97fc39a4f1fb42eaa8f863f88b3b0da4cf1b2c080ed43082db850f3b0ca581a6.txt",
+        "sha256": "97fc39a4f1fb42eaa8f863f88b3b0da4cf1b2c080ed43082db850f3b0ca581a6"
+      },
+      "sourceManifest": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/a8a6274fdac799eeaa914b672f1359649b837028443ed7bd30c6c7783cae62af.txt",
+        "sha256": "a8a6274fdac799eeaa914b672f1359649b837028443ed7bd30c6c7783cae62af"
+      },
+      "sourceCompatibility": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/cae2f5f12c72c61097e01d260d24d729456c4c76e53fafa6b4d25cb28d98b60c.txt",
+        "sha256": "cae2f5f12c72c61097e01d260d24d729456c4c76e53fafa6b4d25cb28d98b60c"
+      },
+      "integrity": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/9b513b2ae66a70b7bb2af9283fc5ff1ded018b9b2e2fc31f622073db3edb67d7.txt",
+        "sha256": "9b513b2ae66a70b7bb2af9283fc5ff1ded018b9b2e2fc31f622073db3edb67d7"
+      },
+      "readiness": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/07488cfd129604f7339e75d838f5a93d068b94944ef7a4e3333039a53055f641.txt",
+        "sha256": "07488cfd129604f7339e75d838f5a93d068b94944ef7a4e3333039a53055f641"
+      },
+      "blockers": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/83cca05e1a4af4299338ee77edde16d22b5de39c13ae8d6bfcb6dcb66c00fb59.txt",
+        "sha256": "83cca05e1a4af4299338ee77edde16d22b5de39c13ae8d6bfcb6dcb66c00fb59"
+      },
+      "physicalIntegrityRefs": 24667,
+      "hostGitAudit": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/final153-host-git-audit-preparation/actual-d890-after153-audit.json",
+        "sha256": "676bc452250f212ea2cd56244f623fcc53f6ca6f3b768f98ac4d9fc0a0f1748c"
+      },
+      "independentReconciliationAudit": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/d890-final-reconciliation-independent-audit.json",
+        "sha256": "0c6828a925658f2c8539b405191f01a3221b12606c97b69d252a299539937a9d"
+      },
+      "sealedBeforeCorrection": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/r153-terminal-preimages/manifest.json",
+        "sha256": "b79a75aba021289c2dd2b5bc88aa6d4ac2d1c2e722608cf15743059f4510f4ed"
+      }
+    },
+    "nextGenerationRollover": {
+      "status": "PREPARED_ONLY_NOT_MOVED",
+      "plan": {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-integrity-preparation/post153-navigation-correction-preparation/final-candidate-rollover-plan.json",
+        "sha256": "35455183c7249614900572810cc83c0556d5c7eef433b53435d4f9f934caf1bf"
+      },
+      "actualMoves": 0
+    }
   },
   "rootPreviewReview": {
     "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/final-report-preparation/pre-final-gate-root-review.json",
     "sha256": "38ec3708613720d605a23bf57e0b99a8ced003646dd2c0908b40a963c0ca211a"
+  },
+  "postGateReportContract": {
+    "status": "COMMITTED_PRE_GATE_CHECKPOINT_THEN_CREATE_ONLY_LOCAL_ACTUAL_A_K_SUPPLEMENT",
+    "checkpointPaths": [
+      "docs/reports/ADMIN_CORE_HELD37_FINAL52_BOUNDED_CLOSURE_STOP_2026-10-04.json",
+      "docs/reports/ADMIN_CORE_HELD37_FINAL52_BOUNDED_CLOSURE_STOP_2026-10-04.md"
+    ],
+    "candidateHead": null,
+    "supplementDestinations": [
+      {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/final-head-actual-a-k-supplement.json",
+        "status": "DESTINATION_ONLY_NOT_CREATED",
+        "existsAtPreparation": false
+      },
+      {
+        "path": ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/host-resumed-2026-10-04/final-head-actual-a-k-supplement.md",
+        "status": "DESTINATION_ONLY_NOT_CREATED",
+        "existsAtPreparation": false
+      }
+    ],
+    "requirements": [
+      "The checkpoint is committed before final gates; the future supplement records the exact finalHEAD and actual byte hashes of both committed checkpoint files.",
+      "The supplement is created only after actual terminal outcomes and pins existing Quality/CI, accounting/integrity, cleanup, PR/Git and explicit Closure/Migration STOP evidence.",
+      "The supplement reports actual A–K and Owner & Adoption outcomes; failed, blocked or skipped is never promoted to PASS.",
+      "No tracked checkpoint edit or post-gate commit is implied. Any separately requested source change would require reassessing exactHEAD gate validity."
+    ],
+    "trackedPostGateEditPlanned": false,
+    "postGateCommitPlanned": false,
+    "futurePassClaimed": false
   }
 }
