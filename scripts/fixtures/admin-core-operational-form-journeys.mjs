@@ -42,8 +42,9 @@ export function buildCoreOperationalFormPlan({ manifest, requiredCases, fixtures
 
 export function selectCoreOperationalFormPlan(plan, selection) {
   if(selection===null||selection===undefined)return plan;
-  assert.equal(validateCoreJourneySelection({scope:"core-closure",cohort:"domain-forms",selection}),"domain-forms-final-six-followup");
-  const recipes=plan.recipes.filter(row=>row.consumer==="project-tracking-create-edit");assert.equal(recipes.length,4);assert.deepEqual(recipes.flatMap(row=>row.surfaces),families["project-tracking-create-edit"]);
+  assert.ok(["domain-forms-final-six-followup","domain-forms-update-followup"].includes(validateCoreJourneySelection({scope:"core-closure",cohort:"domain-forms",selection})));
+  const updateOnly=selection==="domain-forms-update-followup";
+  const recipes=plan.recipes.filter(row=>row.consumer==="project-tracking-create-edit"&&(!updateOnly||row.kind==="update"));assert.equal(recipes.length,updateOnly?1:4);assert.deepEqual(recipes.flatMap(row=>row.surfaces),updateOnly?families["project-tracking-create-edit"].filter(surface=>surface.startsWith("update-")):families["project-tracking-create-edit"]);
   return {...plan,recipes};
 }
 
@@ -268,10 +269,10 @@ export async function runCoreOperationalFormJourneys(ctx) {
       const nativeValues = values => kind === "stage" ? { ...values, start_date: values.start_date || null, planned_duration_value: 3, project_id: parent.projectId, is_visible: true }
         : kind === "item" ? { ...values, start_date: values.start_date || null, completion_date: values.completion_date || null, stage_id: parent.stage.id, is_visible: true }
           : { title: values.title, body: values.body, item_id: parent.item.id, occurred_at: values.occurred_on + "T12:00:00Z", publication_status: "draft" };
-      const createMedia=kind==="update"?await authorCoreTrackingMedia({page,origin,form:form(),phase:"create"}):null;
+      let createMedia=kind==="update"?await authorCoreTrackingMedia({page,origin,form:form(),phase:"create"}):null;
       const createDates = await trackingDates(recipe, kind + "-create", values);
       await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
-      await restoreDraft(recipe, kind + "-create", values,createMedia?()=>assertCoreTrackingMediaUI(form(),createMedia):null,createMedia?async()=>{await authorCoreTrackingMedia({page,origin,form:form(),phase:'create'});}:null);
+      await restoreDraft(recipe, kind + "-create", values,createMedia?()=>assertCoreTrackingMediaUI(form(),createMedia):null,createMedia?async()=>{createMedia=await authorCoreTrackingMedia({page,origin,form:form(),phase:'create'});}:null);
       const id = await permissionIntent(recipe, kind + "-create", async () => {
         await accepted(); const createdId = await openEdit(config.path, createdLabel); await equal(values); createDates.reloaded = true; if(createMedia){await assertCoreTrackingMediaUI(form(),createMedia);createMedia.reloaded=true;}
         const descriptor = audit(config.table, createdId, config.entity, "project_children.create", createdLabel, {});
@@ -280,11 +281,11 @@ export async function runCoreOperationalFormJourneys(ctx) {
       values = { ...values, [config.labelField]: editedLabel,
         ...(kind === "update" ? { body: `QA edited update body ${suffix}`, occurred_on: "2026-01-05" } : { description: `QA edited ${kind} description ${suffix}`, start_date: "" }) };
       await fill(kind === "update" ? { title: values.title, body: values.body } : { name: values.name, description: values.description });
-      const editMedia=kind==="update"?await authorCoreTrackingMedia({page,origin,form:form(),phase:"edit",prior:createMedia}):null;
+      let editMedia=kind==="update"?await authorCoreTrackingMedia({page,origin,form:form(),phase:"edit",prior:createMedia}):null;
       const editDates = await trackingDates(recipe, kind + "-edit", values);
       await dirtyCancel(values); await rejectField(config.labelField, "", values, config.error);
       const expected = nativeValues(values);
-      await restoreDraft(recipe, kind + "-edit", values,editMedia?()=>assertCoreTrackingMediaUI(form(),editMedia):null,editMedia?async()=>{await authorCoreTrackingMedia({page,origin,form:form(),phase:'edit',prior:createMedia});}:null);
+      await restoreDraft(recipe, kind + "-edit", values,editMedia?()=>assertCoreTrackingMediaUI(form(),editMedia):null,editMedia?async()=>{editMedia=await authorCoreTrackingMedia({page,origin,form:form(),phase:'edit',prior:createMedia});}:null);
       await permissionIntent(recipe, kind + "-edit", async () => {
         await accepted(); assert.equal(await openEdit(config.path, editedLabel), id); await equal(values); editDates.reloaded = true; if(editMedia){await assertCoreTrackingMediaUI(form(),editMedia);editMedia.reloaded=true;} await closeUnchanged();
         return { nativeWrites: [audit(config.table, id, config.entity, "project_children.update", editedLabel, expected,editMedia?{expectedTrackingMedia:editMedia.expectedMedia,auditMetadata:{media_count:editMedia.expectedMedia.length}}:{})] };
@@ -392,7 +393,7 @@ export function assertCoreTrackingMediaApplicability(input) {
   const {browser,fixtures,collectionManifest}=input;
   const saved=assertCoreTrackingDateReceipts(input),sourceBindings=coreTrackingMediaSourceBindings(),declarations=collectionManifest.surfaces.flatMap(row=>row.consumerAdoptionEvidence?.length?row.consumerAdoptionEvidence:[row]);
   const mounted=[];
-  for(const kind of ["profile","stage","item","update"]){
+  for(const kind of saved.recipeKinds){
     const journey=browser.evidence.find(row=>row.id==="core-operational-"+kind+"-form-roundtrip"),surfaces=kind==="profile"?["tracking-profile"]:[kind+"-create",kind+"-edit"];
     assert.deepEqual(journey.mediaApplicabilityEvidence.map(row=>row.surface),surfaces);
     for(const proof of journey.mediaApplicabilityEvidence){
@@ -405,7 +406,7 @@ export function assertCoreTrackingMediaApplicability(input) {
       mounted.push({...bound[0],kind,surface:proof.surface,sourceBindings});
     }
   }
-  const dispositions=[['stage','stages'],['item','items']].map(([kind,plural])=>{
+  const dispositions=[['stage','stages'],['item','items']].filter(([kind])=>saved.recipeKinds.includes(kind)).map(([kind,plural])=>{
     const consumer="project-tracking-"+plural,key="collection:"+consumer+":capability:media",manifest=declarations.filter(row=>row.id===consumer);assert.equal(manifest.length,1);assert.equal(manifest[0].applicability.decisions.media.state,"not_applicable");
     const cells=browser.requiredCases.filter(row=>row.key===key);assert.equal(cells.length,1);assert.equal(cells[0].declaration,"not_applicable");assert.equal(cells[0].historicalDeclaration,"adopted");assert.equal(cells[0].disposition,"NOT_APPLICABLE_PENDING_PROOF");assert.equal(cells[0].status,"open");assert.equal(cells[0].evidence,null);
     const nativeIds=mounted.filter(row=>row.kind===kind||(kind==="stage"&&row.kind==="profile")).map(row=>row.nativeId);
@@ -413,7 +414,7 @@ export function assertCoreTrackingMediaApplicability(input) {
   });
   const updates=declarations.filter(row=>row.id==="project-tracking-updates");assert.equal(updates.length,1);assert.equal(updates[0].applicability.decisions.media.state,"adopted");
   const accounting=browser.coverageAccounting;assert.ok(accounting);assert.equal(accounting.historicalRequiredCases,browser.requiredCases.length);assert.equal(accounting.currentApplicableCases,browser.requiredCases.filter(row=>row.declaration!=="not_applicable").length);const pending=browser.requiredCases.filter(row=>row.declaration==="not_applicable");assert.equal(accounting.retainedNotApplicableCases,pending.length);assert.deepEqual(accounting.dispositions.map(row=>row.key).sort(),pending.map(row=>row.key).sort());for(const disposition of dispositions)assert.equal(accounting.dispositions.filter(row=>row.key===disposition.key&&row.axis==="media"&&row.disposition==="NOT_APPLICABLE_PENDING_PROOF").length,1);
-  return {status:"pass",dispositions,mounted,nativeSaveCount:saved.qualified.length,positiveControl:{consumer:"project-tracking-updates",nativeIds:mounted.filter(row=>row.kind==="update").map(row=>row.nativeId),mediaApplicable:true},historicalRequiredCases:accounting.historicalRequiredCases,currentApplicableCases:accounting.currentApplicableCases,retainedNotApplicableCases:dispositions.length,automaticCoverage:[],globalClosed:false,boundary:"Two historical Media applicability dispositions only, requiring exact mounted child fields and the existing same-run native accepted-save join. No Stage/Item Media behavior or other capability is removed or credited."};
+  return {status:"pass",recipeKinds:saved.recipeKinds,completeTrackingFamily:saved.completeTrackingFamily,dispositions,mounted,nativeSaveCount:saved.qualified.length,positiveControl:{consumer:"project-tracking-updates",nativeIds:mounted.filter(row=>row.kind==="update").map(row=>row.nativeId),mediaApplicable:true},historicalRequiredCases:accounting.historicalRequiredCases,currentApplicableCases:accounting.currentApplicableCases,retainedNotApplicableCases:dispositions.length,automaticCoverage:[],globalClosed:false,boundary:"Two historical Media applicability dispositions only, requiring exact mounted child fields and the existing same-run native accepted-save join. No Stage/Item Media behavior or other capability is removed or credited."};
 }
 
 /** Fixed test field inventory, source-checked against the canonical TrackingForms owner. */
@@ -424,15 +425,17 @@ export function coreTrackingDateFields(kind) {
 
 /** Pure receipt join: actual seven accepted saves plus exact child observations; no new runtime or inferred axis credit. */
 export function assertCoreTrackingDateReceipts({browser,native,ownedRunId,sourceSha256,actorId,fixtures,formManifest,collectionManifest}) {
-  assert.equal(browser.status,"pass"); assert.equal(browser.driverCompleted,true); assert.equal(browser.inventoryOnly,false); assert.equal(browser.scope,"core-closure"); assert.equal(browser.cohort,"domain-forms"); assert.ok(browser.journeySelection==null||validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection})==="domain-forms-final-six-followup"); assert.deepEqual(browser.errors,[]);
+  assert.equal(browser.status,"pass"); assert.equal(browser.driverCompleted,true); assert.equal(browser.inventoryOnly,false); assert.equal(browser.scope,"core-closure"); assert.equal(browser.cohort,"domain-forms"); assert.ok(browser.journeySelection==null||["domain-forms-final-six-followup","domain-forms-update-followup"].includes(validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection:browser.journeySelection}))); assert.deepEqual(browser.errors,[]);
   assert.match(sourceSha256,/^[a-f0-9]{64}$/u); assert.equal(browser.sourceSha256,sourceSha256); assert.equal(native.status,"pass"); assert.equal(native.ownedRunId,ownedRunId); assert.ok(Number.isSafeInteger(actorId)&&actorId>0);
+  const recipeKinds=browser.journeySelection==="domain-forms-update-followup"?["update"]:["profile","stage","item","update"];
+  if(recipeKinds.length===1){const ids=["core-operational-update-form-roundtrip"];assert.equal(browser.wholeCohortExecuted,false);assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(r=>r.id),["existing-auth-login",...ids]);assert.ok(browser.evidence.every(r=>r.status==="pass"));}
   const consumer="project-tracking-create-edit", entries=formManifest.filter(row=>row.id===consumer); assert.equal(entries.length,1);
   assert.deepEqual(entries[0].surfaces,families[consumer]); assert.ok(entries[0].sourceFiles.includes("src/components/admin/projects/tracking/TrackingForms.tsx"));
   const declarations=collectionManifest.surfaces.flatMap(row=>row.consumerAdoptionEvidence?.length?row.consumerAdoptionEvidence:[row]);
   const allRecords=native.records; assert.ok(Array.isArray(allRecords)); assert.equal(new Set(allRecords.map(row=>row.id)).size,allRecords.length);
   const claim=(id)=>{const matches=allRecords.filter(row=>row.id===id);assert.equal(matches.length,1);return matches[0];};
   const qualified=[],used=[];
-  for(const kind of ["profile","stage","item","update"]){
+  for(const kind of recipeKinds){
     const expectedSurfaces=kind==="profile"?["tracking-profile"]:[kind+"-create",kind+"-edit"],journeyId="core-operational-"+kind+"-form-roundtrip";
     const matches=browser.evidence.filter(row=>row.id===journeyId);assert.equal(matches.length,1);const result=matches[0];assert.equal(result.status,"pass");assert.equal(result.consumer,consumer);assert.deepEqual(result.surfaces,expectedSurfaces);assert.equal(result.ids.length,1);const id=result.ids[0];assert.ok(Number.isSafeInteger(id)&&id>0);if(kind==="profile")assert.equal(id,fixtures.project.id);
     assert.deepEqual(result.dateEvidence.map(row=>row.surface),expectedSurfaces);assert.deepEqual(result.permissionEvidence.map(row=>row.surface),expectedSurfaces);
@@ -459,6 +462,6 @@ export function assertCoreTrackingDateReceipts({browser,native,ownedRunId,source
   }
   assert.equal(new Set(used).size,used.length);const nativeTracking=allRecords.filter(row=>row.kind==="form-save-native"&&row.formConsumer===consumer);assert.deepEqual(nativeTracking.map(row=>row.id),used,"No missing, duplicate, foreign or orphan Tracking save receipt.");
   const formCells=browser.requiredCases.filter(row=>row.key===`form:${consumer}:capability:date_picker`);assert.equal(formCells.length,1);
-  const aliases=["stage","item","update"].map(kind=>{const id="project-tracking-"+({stage:"stages",item:"items",update:"updates"}[kind]),matches=declarations.filter(row=>row.id===id);assert.equal(matches.length,1);assert.ok(matches[0].executableBindings.some(row=>row.sourceFile==="src/components/admin/projects/tracking/TrackingCollections.tsx"&&row.exportNames.includes("Tracking"+({stage:"Stages",item:"Items",update:"Updates"}[kind])+"Collection")));const cells=browser.requiredCases.filter(row=>row.key===`collection:${id}:capability:date_picker`);assert.equal(cells.length,1);return {candidateRequiredCase:cells[0].key,childFormConsumer:consumer,childSurfaces:[kind+"-create",kind+"-edit"],nativeIds:qualified.filter(row=>row.surface.startsWith(kind+"-")).map(row=>row.nativeId)};});
-  return {status:"pass",qualified,aliases,candidateRequiredCases:[formCells[0].key,...aliases.map(row=>row.candidateRequiredCase)],automaticCoverage:[],globalClosed:false,boundary:"Focused native date keyboard/change/clear and exact saved scalar or Tracking instant only; aliases bind their actual child Form, no full capability-axis or calendar-popup claim."};
+  const aliases=["stage","item","update"].filter(kind=>recipeKinds.includes(kind)).map(kind=>{const id="project-tracking-"+({stage:"stages",item:"items",update:"updates"}[kind]),matches=declarations.filter(row=>row.id===id);assert.equal(matches.length,1);assert.ok(matches[0].executableBindings.some(row=>row.sourceFile==="src/components/admin/projects/tracking/TrackingCollections.tsx"&&row.exportNames.includes("Tracking"+({stage:"Stages",item:"Items",update:"Updates"}[kind])+"Collection")));const cells=browser.requiredCases.filter(row=>row.key===`collection:${id}:capability:date_picker`);assert.equal(cells.length,1);return {candidateRequiredCase:cells[0].key,childFormConsumer:consumer,childSurfaces:[kind+"-create",kind+"-edit"],nativeIds:qualified.filter(row=>row.surface.startsWith(kind+"-")).map(row=>row.nativeId)};});
+  return {status:"pass",recipeKinds,completeTrackingFamily:recipeKinds.length===4,familyAxisQualified:false,qualified,aliases,candidateRequiredCases:[...(recipeKinds.length===4?[formCells[0].key]:[]),...aliases.map(row=>row.candidateRequiredCase)],automaticCoverage:[],globalClosed:false,boundary:"Focused native date keyboard/change/clear and exact saved scalar or Tracking instant only; aliases bind their actual child Form, no full capability-axis or calendar-popup claim."};
 }

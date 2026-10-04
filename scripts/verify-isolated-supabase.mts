@@ -672,8 +672,10 @@ async function verifyRetainedFinalQualityAdmissionControls() {
   Object.assign(rolePaths, { partial: b + "browser-r148-qualified-observations.json", composition: b + "final27-composite-qualification.json", compositeImpact: b + "source-impact-partial148-to-final-six.json", originalPlan: config.authority.final27Plan.path, verifyowner: "scripts/verify-admin-core-date-controls.mjs" });
   for (const name of ["public-source-manifest.json", "admin-adoption-browser.json", "partial-native-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json", "public-normal-build.json", "public-product-surface-build.json", "public-platform-contracts.json", "public-admin-adoption.json"]) rolePaths["partial-" + name] = base + "browser-r148/" + name;
   for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) for (const stream of ["stdout", "stderr"]) rolePaths["partial-public-" + name + "." + stream + ".log"] = base + "browser-r148/public-" + name + "." + stream + ".log";
+  Object.assign(rolePaths, { middle: b + "browser-r149-qualified-observations.json", compositeUpdateImpact: b + "source-impact-partial148-to-final-update.json", residualImpact: b + "source-impact-partial149-to-final-update.json" });
+  for (const [role, file] of Object.entries(rolePaths)) if (role.startsWith("partial-")) rolePaths["middle-" + role.slice("partial-".length)] = file.replace("browser-r148/", "browser-r149/");
   const marker = (role: string): Json => ({ fixtureRef: role });
-  const fixture = (mutate?: (edit: (role: string, keys: Array<string | number>, value: Json | undefined) => void) => void, composite = false) => {
+  const fixture = (mutate?: (edit: (role: string, keys: Array<string | number>, value: Json | undefined) => void) => void, composite: boolean | "three" = false) => {
     const models = new Map<string, Json | Buffer>();
     const put = (role: string, value: Json | Buffer) => models.set(role, value);
     put("package", Buffer.from('{}\n')); put("product", Buffer.from('export default function Page() { return null; }\n'));
@@ -748,6 +750,52 @@ async function verifyRetainedFinalQualityAdmissionControls() {
         qualifications: [{ role: "partial-original-failed", qualification: marker("partial"), run: "browser-r148", sourceHead: oldHead, sourceSha256: priorSource.sourceSha256, ownedRunId: "owned-partial", sourceManifest: marker("partial-public-source-manifest.json"), rawArtifacts: partialRaw.map(name => marker("partial-" + name)) },
           { role: "fresh-final-six", qualification: marker("final"), run: "browser-r146", sourceHead: h, sourceSha256: sourceSha, ownedRunId: owned, sourceManifest: marker("public-source-manifest.json"), gateReceipt: marker("public-and-admin-adoption-gates.json"), rawArtifacts: rawRoles.map(marker) }],
         sourceCompatibility: marker("compositeImpact"), completionAssignments: fields.map(field => ({ field, qualifications: field === "draftRestoration" || field === "writes" ? [marker("partial"), marker("final")] : field === "companyImages" ? [marker("partial")] : [marker("final")] })), automaticCoverage: [], globalClosed: false });
+      if (composite === "three") {
+        const middleHead = "c".repeat(40), middleOwned = "owned-middle", middleIds = failedIds.slice(0, 5), updateIds = failedIds.slice(5);
+        const middleManifest = manifest.map(row => row.file === rolePaths.verifyowner ? { ...row, sha256: sha256("intermediate-verification-owner") } : row);
+        const middleSource = { invocationHeadSha: middleHead, sourceSha256: sha256(JSON.stringify(middleManifest)), manifest: middleManifest };
+        for (const name of partialRaw) put("middle-" + name, name.endsWith(".log") ? Buffer.from(name.includes(".stdout.") ? "stdout" : "stderr") : { status: "controlled-failed-followup" });
+        put("middle-public-source-manifest.json", middleSource);
+        put("middle-admin-adoption-browser.json", { status: "fail", sourceSha256: middleSource.sourceSha256, scope: "core-closure", cohort: "domain-forms", journeySelection: "domain-forms-final-six-followup",
+          driverCompleted: true, wholeCohortExecuted: false, selectedJourneyIds: failedIds, executedJourneyIds: failedIds,
+          evidence: [{ id: "existing-auth-login", status: "pass" }, ...failedIds.map(id => ({ id, status: middleIds.includes(id) ? "pass" : "fail" }))] });
+        for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) put("middle-public-" + name + ".json", { name, code: name === "admin-adoption" ? 1 : 0, stdoutSha256: sha256("stdout"), stderrSha256: sha256("stderr") });
+        const fragment = { status: "partial-not-global-pass", recipeKinds: ["profile", "stage", "item"], completeTrackingFamily: false };
+        put("middle", { status: "QUALIFIED_SCOPED_DOMAIN_FORM_PARTIAL_OBSERVATIONS_ORIGINAL_FAILED", statusEnvelope: "qualified-sealed-partial-cohort-envelope", cohort: "domain-forms",
+          run: "browser-r149", sourceHead: middleHead, sourceSha256: middleSource.sourceSha256, ownedRunId: middleOwned, originalHookRun: "browser-r52", deferredFinalQuality: true, finalQuality: false,
+          partialOriginalHook: true, originalJourneyCount: 27, journeyCount: 5, selectedJourneyCount: 6, selectedJourneyIds: failedIds, excludedJourneyIds: updateIds, originalPrivateCompletionFields: fields,
+          completion: { pointers: ["/draftRestoration", "/trackingDates", "/trackingMediaApplicability", "/writes"], fields: { draftRestoration: { status: "scoped" }, writes: [],
+            trackingDates: { ...fragment, familyAxisQualified: false }, trackingMediaApplicability: { ...fragment, dispositions: [], dispositionCandidates: ["form", "collection"] } }, missingOriginalFields: ["companyImages", "trackingMedia"] },
+          observations: middleIds.map(id => observation(id, middleSource.sourceSha256, middleOwned)), inputArtifacts: partialRaw.map(name => marker("middle-" + name)), automaticCoverage: [], globalClosed: false });
+        current.journeyCount = 1; current.observations = updateIds.map(id => observation(id, sourceSha, owned));
+        const dateRows = ["update-create", "update-edit"].map((surface, index) => ({ journeyId: updateIds[0], surface, nativeId: "fresh-update-native-" + index, sourceSha256: sourceSha, ownedRunId: owned }));
+        const nativeIds = dateRows.map(row => row.nativeId), dateCase = "collection:project-tracking-updates:capability:date_picker";
+        put("admin-adoption-database-readback.json", { status: "pass", globalClosed: false, companyImages: null,
+          trackingDates: { status: "pass", recipeKinds: ["update"], completeTrackingFamily: false, familyAxisQualified: false, qualified: dateRows,
+            aliases: [{ candidateRequiredCase: dateCase, childSurfaces: ["update-create", "update-edit"], nativeIds }], candidateRequiredCases: [dateCase], automaticCoverage: [], globalClosed: false },
+          trackingMediaApplicability: { status: "pass", recipeKinds: ["update"], completeTrackingFamily: false, mounted: dateRows.map(row => ({ ...row, kind: "update" })), nativeSaveCount: 2,
+            dispositions: [], positiveControl: { consumer: "project-tracking-updates", nativeIds, mediaApplicable: true }, automaticCoverage: [], globalClosed: false },
+          trackingMedia: { status: "partial-not-global-pass", exactWrites: 2, nativeSaveReceipts: nativeIds, automaticCoverage: [], globalClosed: false } });
+        put("admin-adoption-browser.json", { status: "pass", sourceSha256: sourceSha, scope: "core-closure", cohort: "domain-forms", journeySelection: "domain-forms-update-followup",
+          driverCompleted: true, wholeCohortExecuted: false, selectedJourneyIds: updateIds, executedJourneyIds: updateIds,
+          evidence: [{ id: "existing-auth-login", status: "pass" }, ...updateIds.map(id => ({ id, status: "pass" }))] });
+        for (const row of operation.partitions.qualified) if (middleIds.includes(row.id as string)) Object.assign(row, { qualification: marker("middle"), run: "browser-r149", sourceHead: middleHead, sourceSha256: middleSource.sourceSha256, ownedRunId: middleOwned });
+        put("compositeUpdateImpact", structuredClone(models.get("compositeImpact") as Json));
+        put("residualImpact", { status: "ROOT_REVIEWED_EXACT_VERIFICATION_ONLY_SOURCE_IMPACT", retained: { sourceHead: middleHead, sourceSha256: middleSource.sourceSha256, sourceManifest: marker("middle-public-source-manifest.json") },
+          candidate: { sourceHead: h, sourceSha256: sourceSha, sourceManifest: marker("public-source-manifest.json") },
+          changes: [{ path: rolePaths.verifyowner, beforeSha256: middleManifest.at(-1)!.sha256, afterSha256: manifest.at(-1)!.sha256, role: "verification-only-residual-correction" }], retainedBehaviorRelabelled: false, retainedBehaviorReexecuted: false, automaticCoverage: [], globalClosed: false });
+        const composition = models.get("composition") as Record<string, Json>, leaves = composition.qualifications as Array<Record<string, Json>>;
+        leaves[1].role = "fresh-final-update";
+        leaves.splice(1, 0, { role: "partial-final-six-failed", qualification: marker("middle"), run: "browser-r149", sourceHead: middleHead, sourceSha256: middleSource.sourceSha256, ownedRunId: middleOwned,
+          sourceManifest: marker("middle-public-source-manifest.json"), rawArtifacts: partialRaw.map(name => marker("middle-" + name)) });
+        composition.sourceCompatibility = marker("compositeUpdateImpact"); composition.residualSourceCompatibility = marker("residualImpact");
+        composition.completionAssignments = fields.map(field => ({ field, qualifications: field === "draftRestoration" || field === "writes" ? [marker("partial"), marker("middle"), marker("final")]
+          : field === "companyImages" ? [marker("partial")] : field === "trackingMedia" ? [marker("final")] : [marker("middle"), marker("final")] }));
+        composition.completionRecipeAssignments = fields.filter(field => field.startsWith("tracking")).map(field => ({ field,
+          qualifications: [...(field === "trackingMedia" ? [] : [{ qualification: marker("middle"), recipeKinds: ["profile", "stage", "item"] }]), { qualification: marker("final"), recipeKinds: ["update"] }] }));
+        producerInputs.push(marker("middle"), marker("compositeUpdateImpact"), marker("residualImpact"));
+        (models.get("review") as { qualifiedOperations: Json[] }).qualifiedOperations.push(marker("middle"));
+      }
       producerInputs.push(marker("partial"), marker("composition"), marker("compositeImpact"), marker("originalPlan"));
       (models.get("review") as { qualifiedOperations: Json[] }).qualifiedOperations.push(marker("partial"));
     }
@@ -874,6 +922,90 @@ async function verifyRetainedFinalQualityAdmissionControls() {
   check("composite Quality rejects a missing individual build even when both raw-input lists agree", () => {
     const refs = Object.keys(rolePaths).filter(role => role.startsWith("partial-") && role !== "partial-public-normal-build.json").map(marker);
     assert.throws(() => invoke(fixture(edit => { edit("partial", ["inputArtifacts"], refs); edit("composition", ["qualifications", 0, "rawArtifacts"], refs); }, true)));
+  });
+  check("retained Quality accepts exact21 plus partial5 plus fresh Update1 without promoting either failed raw run", () => {
+    const f = fixture(undefined, "three"), result = invoke(f); result.verify();
+    assert.equal(result.receipt.qualifiedJourneyIds.length, 27); assert.equal(result.receipt.primaryQualificationJourneyIds?.length, 1);
+    assert.deepEqual(result.receipt.composition?.qualifications.map(row => row.role), ["partial-original-failed", "partial-final-six-failed", "fresh-final-update"]);
+    assert.ok(result.receipt.composition?.residualSourceCompatibility); assert.equal(result.receipt.composition?.sameRun, false);
+    for (const prefix of ["partial-", "middle-"]) {
+      assert.equal(JSON.parse(f.bytes.get(path.resolve(memoryRoot, rolePaths[prefix + "admin-adoption-browser.json"]))!.toString()).status, "fail");
+      assert.equal(JSON.parse(f.bytes.get(path.resolve(memoryRoot, rolePaths[prefix + "public-admin-adoption.json"]))!.toString()).code, 1);
+    }
+  });
+  const threeNegatives: Array<[string, string, Array<string | number>, Json | undefined]> = [
+    ["latest missing raw date completion", "admin-adoption-database-readback.json", ["trackingDates"], undefined],
+    ["latest falsely complete family", "admin-adoption-database-readback.json", ["trackingDates", "completeTrackingFamily"], true],
+    ["latest falsely grants date family axis", "admin-adoption-database-readback.json", ["trackingDates", "familyAxisQualified"], true],
+    ["latest wrong scoped recipes", "admin-adoption-database-readback.json", ["trackingDates", "recipeKinds"], ["profile", "stage", "item", "update"]],
+    ["latest wrong date source", "admin-adoption-database-readback.json", ["trackingDates", "qualified", 0, "sourceSha256"], "0".repeat(64)],
+    ["latest wrong date owned run", "admin-adoption-database-readback.json", ["trackingDates", "qualified", 0, "ownedRunId"], "owned-middle"],
+    ["latest missing edit date", "admin-adoption-database-readback.json", ["trackingDates", "qualified", 1, "surface"], "stage-edit"],
+    ["latest duplicate native dates", "admin-adoption-database-readback.json", ["trackingDates", "qualified", 1, "nativeId"], "fresh-update-native-0"],
+    ["latest falsely adds family candidate", "admin-adoption-database-readback.json", ["trackingDates", "candidateRequiredCases"], ["form:project-tracking-create-edit:capability:date_picker"]],
+    ["latest foreign date alias", "admin-adoption-database-readback.json", ["trackingDates", "aliases", 0, "childSurfaces"], ["item-create", "item-edit"]],
+    ["latest missing mounted applicability", "admin-adoption-database-readback.json", ["trackingMediaApplicability", "mounted"], []],
+    ["latest wrong applicability native join", "admin-adoption-database-readback.json", ["trackingMediaApplicability", "mounted", 0, "nativeId"], "foreign"],
+    ["latest grants unrelated applicability disposition", "admin-adoption-database-readback.json", ["trackingMediaApplicability", "dispositions"], [{ status: "PROVEN_NOT_APPLICABLE" }]],
+    ["latest wrong positive-control IDs", "admin-adoption-database-readback.json", ["trackingMediaApplicability", "positiveControl", "nativeIds"], ["foreign"]],
+    ["latest lacks positive Media applicability", "admin-adoption-database-readback.json", ["trackingMediaApplicability", "positiveControl", "mediaApplicable"], false],
+    ["latest incomplete Media writes", "admin-adoption-database-readback.json", ["trackingMedia", "exactWrites"], 1],
+    ["latest Media uses another native save", "admin-adoption-database-readback.json", ["trackingMedia", "nativeSaveReceipts"], ["foreign", "fresh-update-native-1"]],
+    ["latest promotes Media to global pass", "admin-adoption-database-readback.json", ["trackingMedia", "status"], "pass"],
+    ["latest claims automatic coverage", "admin-adoption-database-readback.json", ["trackingDates", "automaticCoverage"], ["axis"]],
+    ["latest claims Company execution", "admin-adoption-database-readback.json", ["companyImages"], { status: "pass" }],
+    ["wrong middle role", "composition", ["qualifications", 1, "role"], "fresh-final-six"],
+    ["missing middle qualification", "composition", ["qualifications", 1, "qualification"], marker("partial")],
+    ["invented middle full gate", "composition", ["qualifications", 1, "gateReceipt"], marker("public-and-admin-adoption-gates.json")],
+    ["middle relabelled full success", "middle", ["status"], "QUALIFIED_SCOPED_COHORT_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT"],
+    ["middle raw relabelled pass", "middle-admin-adoption-browser.json", ["status"], "pass"],
+    ["middle admin failure concealed", "middle-public-admin-adoption.json", ["code"], 0],
+    ["middle public build failed", "middle-public-product-surface-build.json", ["code"], 1],
+    ["middle wrong raw log digest", "middle-public-normal-build.json", ["stdoutSha256"], "0".repeat(64)],
+    ["middle invented build identity", "middle", ["buildIdSha256"], "a".repeat(64)],
+    ["middle wrong source", "middle", ["sourceSha256"], "0".repeat(64)],
+    ["middle wrong owned run", "middle", ["ownedRunId"], "wrong"],
+    ["middle wrong selected count", "middle", ["selectedJourneyCount"], 5],
+    ["middle missing selection", "middle", ["selectedJourneyIds"], []],
+    ["middle missing failed exclusion", "middle", ["excludedJourneyIds"], []],
+    ["middle missing executed case", "middle-admin-adoption-browser.json", ["executedJourneyIds"], []],
+    ["middle whole cohort claim", "middle-admin-adoption-browser.json", ["wholeCohortExecuted"], true],
+    ["middle driver incomplete", "middle-admin-adoption-browser.json", ["driverCompleted"], false],
+    ["middle wrong selector", "middle-admin-adoption-browser.json", ["journeySelection"], "domain-forms-update-followup"],
+    ["failed Update promoted in middle", "middle-admin-adoption-browser.json", ["evidence", 6, "status"], "pass"],
+    ["middle duplicated observation", "middle", ["observations", 1, "journeyId"], "final-0"],
+    ["middle observation source mismatch", "middle", ["observations", 0, "sourceSha256"], "0".repeat(64)],
+    ["middle111 row assigned latest", "operations", ["partitions", "qualified", 83, "qualification"], marker("final")],
+    ["middle falsely complete Tracking family", "middle", ["completion", "fields", "trackingDates", "completeTrackingFamily"], true],
+    ["middle falsely qualifies family axis", "middle", ["completion", "fields", "trackingDates", "familyAxisQualified"], true],
+    ["middle prematurely grants applicability dispositions", "middle", ["completion", "fields", "trackingMediaApplicability", "dispositions"], [{ status: "PROVEN_NOT_APPLICABLE" }]],
+    ["middle falsely granted Update dates", "middle", ["completion", "fields", "trackingDates", "recipeKinds"], ["profile", "stage", "item", "update"]],
+    ["middle falsely granted Tracking media", "middle", ["completion", "fields", "trackingMedia"], { status: "pass" }],
+    ["middle missing scoped date pointer", "middle", ["completion", "pointers"], ["/draftRestoration", "/trackingMediaApplicability", "/writes"]],
+    ["missing middle draft assignment", "composition", ["completionAssignments", 0, "qualifications"], [marker("partial"), marker("final")]],
+    ["media assigned failed middle", "composition", ["completionAssignments", 3, "qualifications"], [marker("middle"), marker("final")]],
+    ["missing recipe assignment", "composition", ["completionRecipeAssignments"], undefined],
+    ["Update recipe assigned middle", "composition", ["completionRecipeAssignments", 0, "qualifications", 0, "recipeKinds"], ["update"]],
+    ["middle applicability assigned latest only", "composition", ["completionRecipeAssignments", 2, "qualifications"], [{ qualification: marker("final"), recipeKinds: ["update"] }]],
+    ["missing residual source impact", "composition", ["residualSourceCompatibility"], undefined],
+    ["substituted residual source impact", "composition", ["residualSourceCompatibility"], marker("compositeUpdateImpact")],
+    ["residual wrong source binding", "residualImpact", ["retained", "sourceManifest"], marker("partial-public-source-manifest.json")],
+    ["residual omitted source change", "residualImpact", ["changes"], []],
+    ["residual changed before digest", "residualImpact", ["changes", 0, "beforeSha256"], "0".repeat(64)],
+    ["original148 source impact omitted", "compositeUpdateImpact", ["changes"], []],
+    ["latest wrong subset selector", "admin-adoption-browser.json", ["journeySelection"], "domain-forms-final-six-followup"],
+    ["latest repeated five cases", "final", ["journeyCount"], 6],
+    ["latest fabricated full gate", "public-and-admin-adoption-gates.json", ["gates", 3, "code"], 1],
+    ["latest missing Tracking media pointer", "final", ["completion", "pointers"], ["/draftRestoration", "/trackingDates", "/trackingMediaApplicability", "/writes"]],
+    ["three leaf bypasses latest docs-only guard", "impact", ["status"], "ROOT_REVIEWED_EXACT_REPORT_AND_POST149_TEST_CORRECTION_SOURCE_IMPACT"],
+  ];
+  for (const [name, role, keys, value] of threeNegatives) check("three-leaf Quality rejects " + name + " after all hashes are resealed", () => assert.throws(() => invoke(fixture(edit => edit(role, keys, value), "three"))));
+  check("three-leaf Quality rejects missing middle raw native even when both input lists agree", () => {
+    const refs = Object.keys(rolePaths).filter(role => role.startsWith("middle-") && role !== "middle-core-native-control-readback.json").map(marker);
+    assert.throws(() => invoke(fixture(edit => { edit("middle", ["inputArtifacts"], refs); edit("composition", ["qualifications", 1, "rawArtifacts"], refs); }, "three")));
+  });
+  check("three-leaf Quality retains live byte verification across both historical leaves", () => {
+    const f = fixture(undefined, "three"), result = invoke(f); f.bytes.set(path.resolve(memoryRoot, rolePaths["middle-public-admin-adoption.stdout.log"]), Buffer.from("changed middle raw log")); assert.throws(result.verify);
   });
   const run = statement("runOwnedPublicVerification") as ts.FunctionDeclaration; assert.ok(run.body);
   const beforeContext = run.body.statements.findIndex(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(row => row.name.getText(file) === "originalContext")); assert.ok(beforeContext > 0);

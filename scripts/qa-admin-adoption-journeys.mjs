@@ -14,7 +14,7 @@ import { CORE_DOMAIN_COMMAND_TAIL_SELECTION, CORE_TRACKING_PERMISSION_SELECTION,
 import { CORE_QUERY_LAYOUT_SELECTION, loadCoreQueryPresentationPlan, selectCoreQueryPresentationPlan, assertCoreQuerySelectionReceipt } from "./fixtures/admin-core-query-presentation-plan.mjs";
 import { isCoreTemplateCreateSelection, coreSelectedTemplateCreates, coreTemplateCreateJourneyId, assertCoreTemplateSelectionReceipt } from "./fixtures/admin-core-form-journeys.mjs";
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, validateCorePreviewPublicImpactSelection, buildCorePreviewPublicImpactPlan, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
-import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt, buildCoreDomainFinalSixPlan, assertCoreDomainFinalSixReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
+import { validateCoreJourneySelection, coreSelectedTopicRecipes, coreTopicJourneyId, assertCoreJourneySelectionReceipt, buildCoreDomainFinalSixPlan, assertCoreDomainFinalSixReceipt, buildCoreDomainFinalUpdatePlan, assertCoreDomainFinalUpdateReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { registerCorePageRoute } from "./fixtures/admin-core-form-permission-context.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -56,7 +56,7 @@ const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELEC
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
 let selectedJourneyIds = isCoreMediaSelection(journeySelection) ? coreSelectedMediaIds(journeySelection) : (journeySelection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||journeySelection==="media-recovery-missing-followup") ? coreSelectedMediaRecoveryIds(journeySelection) : (journeySelection === CORE_PRESENTATION_SCROLL_SELECTION || journeySelection === CORE_PRESENTATION_HERO_SELECTION) ? corePresentationSelectedIds(journeySelection) : isCoreTopicControlsSelection(journeySelection) ? coreSelectedTopicControlKinds(journeySelection).map(kind=>"core-topic-controls-"+kind) : isCoreTemplateControlSelection(journeySelection) ? coreTemplateControlKinds(journeySelection).map(kind=>"core-template-controls-"+kind) : journeySelection === CORE_PROJECT_EDITOR_SELECTION ? [...CORE_PROJECT_EDITOR_IDS] : isCoreNavigationFollowupSelection(journeySelection) ? coreNavigationSelectedIds(journeySelection) : journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION ? [...CORE_TEMPLATE_HERO_BULK_IDS] : journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION ? await loadCoreSpecializedFollowupIds() : isCorePageCompositionFollowupSelection(journeySelection) ? await loadCorePageCompositionFollowupIds(journeySelection) : journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : isCoreTemplateCreateSelection(journeySelection)
   ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, journeySelection).map(coreTemplateCreateJourneyId)
-  : journeySelection === "domain-forms-final-six-followup" ? [] : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
+  : ["domain-forms-final-six-followup","domain-forms-update-followup"].includes(journeySelection) ? [] : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
 let driverCompleted = false, activeCase = "bootstrap";
 let specializedSettingsResult = null;
@@ -193,6 +193,8 @@ if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection 
 }
 const domainFinalSixPlan = journeySelection === "domain-forms-final-six-followup" ? await buildCoreDomainFinalSixPlan({manifest:forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,requiredCases,fixtures}) : null;
 if(domainFinalSixPlan)selectedJourneyIds=domainFinalSixPlan.journeyIds;
+const domainFinalUpdatePlan = journeySelection === "domain-forms-update-followup" ? await buildCoreDomainFinalUpdatePlan({manifest:forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,requiredCases,fixtures}) : null;
+if(domainFinalUpdatePlan)selectedJourneyIds=domainFinalUpdatePlan.journeyIds;
 const allowedStorage = JSON.parse(process.env.QA_ADMIN_STORAGE_PUBLIC_PREFIXES || "[]");
 assert.ok(allowedStorage.every(value => new URL(value).hostname === "127.0.0.1"));
 const browser = await observe("browser-launch", () => chromium.launch({ headless: true }));
@@ -404,11 +406,11 @@ try {
     const { runCoreProjectCreateJourneys } = await import("./fixtures/admin-core-project-create-journeys.mjs");
     await runCoreProjectCreateJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, permissionReplay:coreFormPermission });
     }
-    if (journeySelection !== "domain-forms-final-six-followup") {
+    if (!["domain-forms-final-six-followup","domain-forms-update-followup"].includes(journeySelection)) {
     const { runCoreDomainFormJourneys } = await import("./fixtures/admin-core-domain-form-journeys.mjs");
     await runCoreDomainFormJourneys({ page, context, origin, fixtures, run, observe, saveButton, feedback, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, journeySelection, permissionReplay:coreFormPermission });
     }
-    if (journeySelection === null || journeySelection === "domain-forms-final-six-followup") {
+    if (journeySelection === null || ["domain-forms-final-six-followup","domain-forms-update-followup"].includes(journeySelection)) {
     const { runCoreOperationalFormJourneys } = await import("./fixtures/admin-core-operational-form-journeys.mjs");
     await runCoreOperationalFormJourneys({ page, context, origin, fixtures, run, observe, actionResponse, assertActionAcknowledged, databaseReadback, requiredCases, journeySelection, permissionReplay:coreFormPermission });
     }
@@ -824,6 +826,7 @@ try {
   else if (isCorePageCompositionFollowupSelection(journeySelection)) await assertCorePageCompositionFollowupReceipt(receipt(),requiredCases);
   else if (isCoreTemplateCreateSelection(journeySelection)) assertCoreTemplateSelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   else if (journeySelection === "domain-forms-final-six-followup") assertCoreDomainFinalSixReceipt(receipt(), domainFinalSixPlan, requiredCases);
+  else if (journeySelection === "domain-forms-update-followup") assertCoreDomainFinalUpdateReceipt(receipt(), domainFinalUpdatePlan, requiredCases);
   else if (journeySelection !== null) assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases);
   checkpoint("driver", "complete");
 } catch (error) {

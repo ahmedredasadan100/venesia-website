@@ -267,13 +267,15 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   const expectedIds = original.held.filter(row => row.run === "browser-r52").map(row => row.id);
   assert.equal(expectedIds.length, 27);
   let admittedIds = expectedIds;
-  let compositionEvidence: { authority: FinalQualityArtifactRef; qualifications: Array<{ role: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string }>; sourceCompatibility: FinalQualityArtifactRef; sourceBinding: ReturnType<typeof assertRetainedFinalQualityCompositeSource>; sameRun: false } | undefined;
+  let admittedSelection = "domain-forms-final-six-followup";
+  let compositionEvidence: { authority: FinalQualityArtifactRef; qualifications: Array<{ role: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string }>; sourceCompatibility: FinalQualityArtifactRef; sourceBinding: ReturnType<typeof assertRetainedFinalQualityCompositeSource>; residualSourceCompatibility?: FinalQualityArtifactRef; residualSourceBinding?: ReturnType<typeof assertRetainedFinalQualityCompositeSource>; sameRun: false } | undefined;
   if (final.composition) {
     const composition = fixed<{
       status: string; statusEnvelope: string; cohort: string; originalHookRun: string; originalPlan: FinalQualityArtifactRef; originalProgress: FinalQualityArtifactRef;
       originalJourneyIds: string[]; journeyCount: number; sameRun: boolean; deferredFinalQuality: boolean; finalQuality: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
       qualifications: Array<{ role: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string; sourceManifest: FinalQualityArtifactRef; gateReceipt?: FinalQualityArtifactRef; rawArtifacts: FinalQualityArtifactRef[] }>;
-      sourceCompatibility: FinalQualityArtifactRef; completionAssignments: Array<{ field: string; qualifications: FinalQualityArtifactRef[] }>;
+      sourceCompatibility: FinalQualityArtifactRef; residualSourceCompatibility?: FinalQualityArtifactRef; completionAssignments: Array<{ field: string; qualifications: FinalQualityArtifactRef[] }>;
+      completionRecipeAssignments?: Array<{ field: string; qualifications: Array<{ qualification: FinalQualityArtifactRef; recipeKinds: string[] }> }>;
     }>(final.composition, "final27-composite-qualification.json");
     assert.equal(composition.status, "QUALIFIED_SCOPED_DOMAIN_FORM_COMPOSITE_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT");
     assert.equal(composition.statusEnvelope, "qualified-sealed-composite-cohort-envelope"); assert.equal(composition.cohort, "domain-forms");
@@ -286,13 +288,17 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     const plan = read<{ cohortHooks: Array<{ run: string; cohort: string; expectedJourneyIds: string[]; privateCompletionFields: string[]; finalQuality: boolean }> }>(composition.originalPlan);
     const hooks = plan.cohortHooks.filter(row => row.run === "browser-r52"); assert.equal(hooks.length, 1); const hook = hooks[0];
     assert.equal(hook.cohort, "domain-forms"); assert.equal(hook.finalQuality, true); assert.deepEqual(hook.expectedJourneyIds, expectedIds);
-    assert.deepEqual(composition.qualifications.map(row => row.role), ["partial-original-failed", "fresh-final-six"]);
-    const [priorLeaf, latestLeaf] = composition.qualifications;
+    const threeLeaves = composition.qualifications.length === 3;
+    assert.deepEqual(composition.qualifications.map(row => row.role), threeLeaves
+      ? ["partial-original-failed", "partial-final-six-failed", "fresh-final-update"] : ["partial-original-failed", "fresh-final-six"]);
+    const priorLeaf = composition.qualifications[0], latestLeaf = composition.qualifications.at(-1)!, middleLeaf = threeLeaves ? composition.qualifications[1] : undefined;
+    if (!threeLeaves) { assert.ok(!Object.hasOwn(composition, "residualSourceCompatibility")); assert.ok(!Object.hasOwn(composition, "completionRecipeAssignments")); }
     assert.equal(priorLeaf.qualification.path, FINAL_QUALITY_ACCOUNTING + "browser-r148-qualified-observations.json");
     assert.ok(!Object.hasOwn(priorLeaf, "gateReceipt")); assert.deepEqual(latestLeaf.qualification, final.qualification);
     assert.deepEqual(latestLeaf.sourceManifest, final.sourceManifest); assert.deepEqual(latestLeaf.gateReceipt, final.gateReceipt);
     const prior = read<typeof q & { partialOriginalHook: boolean; originalJourneyCount: number; originalPrivateCompletionFields: string[];
       completion: { pointers: string[]; fields: Record<string, unknown>; missingOriginalFields: string[] } }>(priorLeaf.qualification);
+    let middle: (typeof prior & { selectedJourneyCount: number; selectedJourneyIds: string[]; excludedJourneyIds: string[] }) | undefined;
     assert.equal(prior.status, "QUALIFIED_SCOPED_DOMAIN_FORM_PARTIAL_OBSERVATIONS_ORIGINAL_FAILED");
     assert.equal(prior.statusEnvelope, "qualified-sealed-partial-cohort-envelope"); assert.equal(prior.cohort, "domain-forms");
     assert.equal(prior.run, "browser-r148"); assert.notEqual(q.run, prior.run); assert.equal(prior.originalHookRun, "browser-r52");
@@ -330,6 +336,62 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     assert.equal(priorIds.length, 21); assert.deepEqual(prior.observations.map(row => row.journeyId), priorIds);
     admittedIds = expectedIds.filter(id => !priorIds.includes(id)); assert.equal(admittedIds.length, 6);
     assert.deepEqual(originalRows.filter(row => row.status === "fail").map(row => row.id), admittedIds);
+    if (middleLeaf) {
+      assert.equal(middleLeaf.qualification.path, FINAL_QUALITY_ACCOUNTING + "browser-r149-qualified-observations.json");
+      assert.ok(!Object.hasOwn(middleLeaf, "gateReceipt"));
+      middle = read<typeof prior & { selectedJourneyCount: number; selectedJourneyIds: string[]; excludedJourneyIds: string[] }>(middleLeaf.qualification);
+      assert.equal(middle.status, "QUALIFIED_SCOPED_DOMAIN_FORM_PARTIAL_OBSERVATIONS_ORIGINAL_FAILED");
+      assert.equal(middle.statusEnvelope, "qualified-sealed-partial-cohort-envelope"); assert.equal(middle.cohort, "domain-forms");
+      assert.equal(middle.run, "browser-r149"); assert.notEqual(q.run, middle.run); assert.equal(middle.originalHookRun, "browser-r52");
+      assert.equal(middle.partialOriginalHook, true); assert.equal(middle.originalJourneyCount, 27); assert.equal(middle.journeyCount, 5);
+      assert.equal(middle.selectedJourneyCount, 6); assert.deepEqual(middle.selectedJourneyIds, admittedIds);
+      assert.equal(middle.deferredFinalQuality, true); assert.equal(middle.finalQuality, false); assert.deepEqual(middle.automaticCoverage, []); assert.equal(middle.globalClosed, false);
+      for (const key of ["buildIdSha256", "gateReceipt"]) assert.ok(!Object.hasOwn(middle, key));
+      assert.deepEqual(middle.originalPrivateCompletionFields, hook.privateCompletionFields);
+      assert.deepEqual(Object.keys(middle.completion.fields).sort(), ["draftRestoration", "trackingDates", "trackingMediaApplicability", "writes"]);
+      for (const field of ["trackingDates", "trackingMediaApplicability"]) {
+        const fragment = middle.completion.fields[field] as { status: string; recipeKinds: string[]; completeTrackingFamily: boolean };
+        assert.equal(fragment.status, "partial-not-global-pass"); assert.deepEqual(fragment.recipeKinds, ["profile", "stage", "item"]); assert.equal(fragment.completeTrackingFamily, false);
+      }
+      assert.equal((middle.completion.fields.trackingDates as { familyAxisQualified: boolean }).familyAxisQualified, false);
+      assert.deepEqual((middle.completion.fields.trackingMediaApplicability as { dispositions: unknown[] }).dispositions, []);
+      for (const key of ["run", "sourceHead", "sourceSha256", "ownedRunId"] as const) assert.equal(middleLeaf[key], middle[key]);
+      assert.deepEqual(middleLeaf.rawArtifacts, middle.inputArtifacts); assert.ok(middle.inputArtifacts.length > 0); for (const ref of middle.inputArtifacts) pin(ref);
+      const middleBase = ".tmp-qa/core-final-closure/" + middle.run + "/";
+      assert.equal(middleLeaf.sourceManifest.path, middleBase + "public-source-manifest.json");
+      const middleSource = read<FinalQualitySource>(middleLeaf.sourceManifest);
+      assert.equal(middleSource.invocationHeadSha, middle.sourceHead); assert.equal(middleSource.sourceSha256, middle.sourceSha256);
+      const middleInput = new Map(middle.inputArtifacts.map(ref => [artifactPath(ref), ref.sha256]));
+      assert.equal(middleInput.get(artifactPath(middleLeaf.sourceManifest)), middleLeaf.sourceManifest.sha256);
+      const middleRaw = <T,>(name: string) => { const path = middleBase + name, sha256 = middleInput.get(resolve(ROOT, path)); assert.ok(sha256, "Missing failed follow-up raw evidence: " + name); return read<T>({ path, sha256 }); };
+      for (const name of ["normal-build", "product-surface-build", "platform-contracts", "admin-adoption"]) {
+        const receipt = middleRaw<{ name: string; code: number; stdoutSha256: string; stderrSha256: string }>("public-" + name + ".json");
+        assert.equal(receipt.name, name); assert.equal(receipt.code, name === "admin-adoption" ? 1 : 0);
+        for (const stream of ["stdout", "stderr"] as const) {
+          const expectedHash = receipt[stream === "stdout" ? "stdoutSha256" : "stderrSha256"]; assert.match(expectedHash, /^[a-f0-9]{64}$/u);
+          assert.equal(middleInput.get(resolve(ROOT, middleBase + "public-" + name + "." + stream + ".log")), expectedHash, "Each failed follow-up gate must retain its exact raw log bytes.");
+        }
+      }
+      assert.ok(!middleInput.has(resolve(ROOT, middleBase + "public-and-admin-adoption-gates.json")), "The failed follow-up did not produce a successful full gate receipt.");
+      const middleBrowser = middleRaw<{ status: string; sourceSha256: string; scope: string; cohort: string; journeySelection: string; driverCompleted: boolean; wholeCohortExecuted: boolean; selectedJourneyIds: string[]; executedJourneyIds: string[]; evidence: Array<{ id: string; status: string }> }>("admin-adoption-browser.json");
+      assert.equal(middleBrowser.status, "fail"); assert.equal(middleBrowser.sourceSha256, middle.sourceSha256); assert.equal(middleBrowser.scope, "core-closure"); assert.equal(middleBrowser.cohort, "domain-forms");
+      assert.equal(middleBrowser.journeySelection, "domain-forms-final-six-followup"); assert.equal(middleBrowser.driverCompleted, true); assert.equal(middleBrowser.wholeCohortExecuted, false);
+      assert.deepEqual(middleBrowser.selectedJourneyIds, admittedIds); assert.deepEqual(middleBrowser.executedJourneyIds, admittedIds);
+      assert.deepEqual(middleBrowser.evidence.map(row => row.id), ["existing-auth-login", ...admittedIds]); assert.equal(middleBrowser.evidence[0].status, "pass");
+      const middleRows = middleBrowser.evidence.slice(1); assert.ok(middleRows.every(row => ["pass", "fail"].includes(row.status)));
+      const middleIds = middleRows.filter(row => row.status === "pass").map(row => row.id); assert.equal(middleIds.length, 5);
+      assert.deepEqual(middle.observations.map(row => row.journeyId), middleIds);
+      admittedIds = admittedIds.filter(id => !middleIds.includes(id)); assert.equal(admittedIds.length, 1);
+      assert.deepEqual(middleRows.filter(row => row.status === "fail").map(row => row.id), admittedIds); assert.deepEqual(middle.excludedJourneyIds, admittedIds);
+      admittedSelection = "domain-forms-update-followup";
+      for (const row of middle.observations) {
+        assert.equal(row.status, "QUALIFIED_SCOPED_BEHAVIORAL_OBSERVATION"); assert.equal(row.sourceSha256, middle.sourceSha256); assert.equal(row.ownedRunId, middle.ownedRunId);
+        const retained = qualified.filter(item => item.id === row.journeyId); assert.equal(retained.length, 1);
+        assert.deepEqual(retained[0], { id: row.journeyId, qualification: middleLeaf.qualification, run: middle.run, sourceHead: middle.sourceHead, sourceSha256: middle.sourceSha256, ownedRunId: middle.ownedRunId });
+      }
+      for (const name of ["partial-native-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json"])
+        assert.ok(middleInput.has(resolve(ROOT, middleBase + name)), "The partial follow-up must preserve native/draft/cleanup artifacts.");
+    }
     for (const row of prior.observations) {
       assert.equal(row.status, "QUALIFIED_SCOPED_BEHAVIORAL_OBSERVATION"); assert.equal(row.sourceSha256, prior.sourceSha256); assert.equal(row.ownedRunId, prior.ownedRunId);
       const retained = qualified.filter(item => item.id === row.journeyId); assert.equal(retained.length, 1);
@@ -338,17 +400,31 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     for (const name of ["partial-native-readback.json", "core-native-control-readback.json", "admin-core-draft-restoration.json", "cleanup.json", "public-process-cleanup.json", "host-access-closed.json"])
       assert.ok(priorInput.has(resolve(ROOT, priorBase + name)), "The partial qualification must preserve actual native/draft/cleanup artifacts.");
     const assignments = hook.privateCompletionFields.map(field => ({ field, qualifications: field === "draftRestoration" || field === "writes"
-      ? [priorLeaf.qualification, latestLeaf.qualification] : field === "companyImages" ? [priorLeaf.qualification] : [latestLeaf.qualification] }));
+      ? [priorLeaf.qualification, ...(middleLeaf ? [middleLeaf.qualification] : []), latestLeaf.qualification] : field === "companyImages" ? [priorLeaf.qualification]
+      : middleLeaf && ["trackingDates", "trackingMediaApplicability"].includes(field) ? [middleLeaf.qualification, latestLeaf.qualification] : [latestLeaf.qualification] }));
     assert.deepEqual(composition.completionAssignments, assignments);
     for (const assignment of assignments) for (const ref of assignment.qualifications) {
-      const value = ref === priorLeaf.qualification ? prior : q;
+      const value = ref === priorLeaf.qualification ? prior : ref === middleLeaf?.qualification ? middle! : q;
       assert.ok(value.completion.pointers.includes("/" + assignment.field), "Every original completion field must retain its actual owning leaf.");
     }
-    const compatibility = fixed<Parameters<typeof assertRetainedFinalQualityCompositeSource>[0]>(composition.sourceCompatibility, "source-impact-partial148-to-final-six.json");
+    if (middleLeaf) {
+      const recipes = hook.privateCompletionFields.filter(field => ["trackingDates", "trackingMedia", "trackingMediaApplicability"].includes(field)).map(field => ({ field,
+        qualifications: [...(field === "trackingMedia" ? [] : [{ qualification: middleLeaf.qualification, recipeKinds: ["profile", "stage", "item"] }]), { qualification: latestLeaf.qualification, recipeKinds: ["update"] }] }));
+      assert.deepEqual(composition.completionRecipeAssignments, recipes, "Tracking recipe coverage remains assigned to its exact successful leaf.");
+    }
+    const compatibility = fixed<Parameters<typeof assertRetainedFinalQualityCompositeSource>[0]>(composition.sourceCompatibility, threeLeaves ? "source-impact-partial148-to-final-update.json" : "source-impact-partial148-to-final-six.json");
     assert.deepEqual(compatibility.retained.sourceManifest, priorLeaf.sourceManifest); assert.deepEqual(compatibility.candidate.sourceManifest, final.sourceManifest);
     const latestSource = read<FinalQualitySource>(final.sourceManifest);
     const sourceBinding = assertRetainedFinalQualityCompositeSource(compatibility, priorSource, latestSource);
-    compositionEvidence = { authority: final.composition, qualifications: composition.qualifications.map(({ role, qualification, run, sourceHead, sourceSha256, ownedRunId }) => ({ role, qualification, run, sourceHead, sourceSha256, ownedRunId })), sourceCompatibility: composition.sourceCompatibility, sourceBinding, sameRun: false };
+    let residualSourceBinding: ReturnType<typeof assertRetainedFinalQualityCompositeSource> | undefined;
+    if (middleLeaf) {
+      assert.ok(composition.residualSourceCompatibility);
+      const residualImpact = fixed<Parameters<typeof assertRetainedFinalQualityCompositeSource>[0]>(composition.residualSourceCompatibility, "source-impact-partial149-to-final-update.json");
+      assert.deepEqual(residualImpact.retained.sourceManifest, middleLeaf.sourceManifest); assert.deepEqual(residualImpact.candidate.sourceManifest, final.sourceManifest);
+      residualSourceBinding = assertRetainedFinalQualityCompositeSource(residualImpact, read<FinalQualitySource>(middleLeaf.sourceManifest), latestSource);
+    }
+    compositionEvidence = { authority: final.composition, qualifications: composition.qualifications.map(({ role, qualification, run, sourceHead, sourceSha256, ownedRunId }) => ({ role, qualification, run, sourceHead, sourceSha256, ownedRunId })), sourceCompatibility: composition.sourceCompatibility, sourceBinding,
+      ...(residualSourceBinding ? { residualSourceCompatibility: composition.residualSourceCompatibility!, residualSourceBinding } : {}), sameRun: false };
   }
   assert.equal(q.journeyCount, admittedIds.length); assert.deepEqual(q.observations.map(row => row.journeyId), admittedIds);
   for (const row of q.observations) {
@@ -372,9 +448,35 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     const path = rawBase + "admin-adoption-browser.json", sha256 = input.get(resolve(ROOT, path)); assert.ok(sha256);
     const browser = read<{ status: string; sourceSha256: string; scope: string; cohort: string; journeySelection: string; driverCompleted: boolean; wholeCohortExecuted: boolean; selectedJourneyIds: string[]; executedJourneyIds: string[]; evidence: Array<{ id: string; status: string }> }>({ path, sha256 });
     assert.equal(browser.status, "pass"); assert.equal(browser.sourceSha256, q.sourceSha256); assert.equal(browser.scope, "core-closure"); assert.equal(browser.cohort, "domain-forms");
-    assert.equal(browser.journeySelection, "domain-forms-final-six-followup"); assert.equal(browser.driverCompleted, true); assert.equal(browser.wholeCohortExecuted, false);
+    assert.equal(browser.journeySelection, admittedSelection); assert.equal(browser.driverCompleted, true); assert.equal(browser.wholeCohortExecuted, false);
     assert.deepEqual(browser.selectedJourneyIds, admittedIds); assert.deepEqual(browser.executedJourneyIds, admittedIds);
     assert.deepEqual(browser.evidence.map(row => row.id), ["existing-auth-login", ...admittedIds]); assert.ok(browser.evidence.every(row => row.status === "pass"));
+    if (admittedSelection === "domain-forms-update-followup") {
+      const readbackPath = rawBase + "admin-adoption-database-readback.json", readbackSha256 = input.get(resolve(ROOT, readbackPath)); assert.ok(readbackSha256);
+      type DateRow = { journeyId: string; surface: string; nativeId: string; sourceSha256: string; ownedRunId: string };
+      const joined = read<{ status: string; globalClosed: boolean; companyImages: null;
+        trackingDates: { status: string; recipeKinds: string[]; completeTrackingFamily: boolean; familyAxisQualified: boolean; qualified: DateRow[];
+          aliases: Array<{ candidateRequiredCase: string; childSurfaces: string[]; nativeIds: string[] }>; candidateRequiredCases: string[]; automaticCoverage: unknown[]; globalClosed: boolean };
+        trackingMediaApplicability: { status: string; recipeKinds: string[]; completeTrackingFamily: boolean; mounted: Array<DateRow & { kind: string }>;
+          nativeSaveCount: number; dispositions: unknown[]; positiveControl: { consumer: string; nativeIds: string[]; mediaApplicable: boolean }; automaticCoverage: unknown[]; globalClosed: boolean };
+        trackingMedia: { status: string; exactWrites: number; nativeSaveReceipts: string[]; automaticCoverage: unknown[]; globalClosed: boolean };
+      }>({ path: readbackPath, sha256: readbackSha256 });
+      assert.equal(joined.status, "pass"); assert.equal(joined.globalClosed, false); assert.equal(joined.companyImages, null);
+      const dates = joined.trackingDates, applicability = joined.trackingMediaApplicability, media = joined.trackingMedia;
+      const surfaces = ["update-create", "update-edit"];
+      for (const fragment of [dates, applicability]) { assert.equal(fragment.status, "pass"); assert.deepEqual(fragment.recipeKinds, ["update"]); assert.equal(fragment.completeTrackingFamily, false); }
+      for (const fragment of [dates, applicability, media]) { assert.deepEqual(fragment.automaticCoverage, []); assert.equal(fragment.globalClosed, false); }
+      assert.equal(dates.familyAxisQualified, false); assert.deepEqual(dates.qualified.map(row => row.surface), surfaces);
+      const nativeIds = dates.qualified.map(row => row.nativeId); assert.equal(new Set(nativeIds).size, 2); assert.ok(nativeIds.every(id => typeof id === "string" && id.length > 0));
+      for (const row of dates.qualified) { assert.equal(row.journeyId, admittedIds[0]); assert.equal(row.sourceSha256, q.sourceSha256); assert.equal(row.ownedRunId, q.ownedRunId); }
+      assert.equal(dates.aliases.length, 1); assert.deepEqual(dates.aliases[0].childSurfaces, surfaces); assert.deepEqual(dates.aliases[0].nativeIds, nativeIds);
+      assert.deepEqual(dates.candidateRequiredCases, dates.aliases.map(row => row.candidateRequiredCase));
+      assert.deepEqual(applicability.mounted.map(({ journeyId, surface, nativeId, sourceSha256, ownedRunId, kind }) => ({ journeyId, surface, nativeId, sourceSha256, ownedRunId, kind })),
+        dates.qualified.map(({ journeyId, surface, nativeId, sourceSha256, ownedRunId }) => ({ journeyId, surface, nativeId, sourceSha256, ownedRunId, kind: "update" })));
+      assert.equal(applicability.nativeSaveCount, 2); assert.deepEqual(applicability.dispositions, []);
+      assert.deepEqual(applicability.positiveControl, { consumer: "project-tracking-updates", nativeIds, mediaApplicable: true });
+      assert.equal(media.status, "partial-not-global-pass"); assert.equal(media.exactWrites, 2); assert.deepEqual(media.nativeSaveReceipts, nativeIds);
+    }
   }
   const impact = fixed<Parameters<typeof assertRetainedFinalQualitySource>[0]>(admission.sourceCompatibility, "source-impact-current-to-final.json");
   assert.deepEqual(impact.retained.sourceManifest, final.sourceManifest); assert.deepEqual(impact.candidate.sourceManifest, admission.sourceManifest);
@@ -504,7 +606,7 @@ export type PublicGateRequest = {
   /** Bounded independent Core families; the final gate still runs the Public suite. */
   adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings" | "media-library" | "template-bulk" | "navigation-settings" | "auth-entry" | "media-recovery" | "query-presentation" | "template-controls" | "domain-bulk" | "topic-controls" | "project-controls" | "presentation-controls";
   /** Optional exact affected journeys within the existing domain-forms cohort. */
-  adoptionJourneySelection?: "media-library-final-three-followup" | "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "domain-forms-final-six-followup" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
+  adoptionJourneySelection?: "media-library-final-three-followup" | "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "domain-forms-final-six-followup" | "domain-forms-update-followup" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";
