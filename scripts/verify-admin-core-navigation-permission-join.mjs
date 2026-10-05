@@ -7,6 +7,7 @@ import ts from 'typescript';
 import {isCorePageCompositionFollowupSelection} from './fixtures/admin-core-page-composition-journeys.mjs';
 import {assertCoreFormDraftRestorationJoin} from './fixtures/admin-core-form-draft-restoration.mjs';
 import {CORE_DOWNLOAD_MEDIA_HREF} from './fixtures/admin-core-download-media-adoption.mjs';
+import {coreDescendantCheckpointPhases} from './fixtures/admin-core-descendant-presentation-plan.mjs';
 
 // Actual current Page/native join and owned Navigation completion under controlled ports.
 const root=path.resolve(import.meta.dirname,'..');process.chdir(root);
@@ -101,7 +102,7 @@ for(const[name,mutate]of Object.entries(discardNegatives))test('accepted-discard
 // A completed owned descendant prefix must never bypass the Page join or be counted twice.
 const descendantSource=fs.readFileSync('scripts/verify-admin-core-descendant-presentation-isolated.mts','utf8'),descendantStates=new WeakMap();
 const partitionJs=ts.transpileModule(extract(descendantSource,['phases','partitionCoreDescendantNativeCheckpoints']),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
-const partition=new Function('assert','assertOwnedLocalHandle','states',partitionJs+';return partitionCoreDescendantNativeCheckpoints;')(assert,own,descendantStates);
+const partition=new Function('assert','assertOwnedLocalHandle','states','coreDescendantCheckpointPhases',partitionJs+';return partitionCoreDescendantNativeCheckpoints;')(assert,own,descendantStates,coreDescendantCheckpointPhases);
 function assertCollectorOutput(text){
  const ast=ts.createSourceFile('readback.mts',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS),found=[];const visit=node=>{if(ts.isVariableDeclaration(node)&&ts.isIdentifier(node.name)&&node.name.text==='navigationSettings')found.push(node);ts.forEachChild(node,visit);};visit(ast);assert.equal(found.length,1);const expression=found[0].initializer;assert.ok(expression&&ts.isConditionalExpression(expression));assert.equal(expression.condition.getText(ast),'browser.cohort === "navigation-settings"');assert.ok(ts.isObjectLiteralExpression(expression.whenTrue));assert.deepEqual(expression.whenTrue.properties.map(row=>row.getText(ast).replace(/\s/gu,'')),['...assertCoreNavigationSettingsCompleted(handle)','permission:navigationPermission','navigationRowActions']);
 }
@@ -134,7 +135,7 @@ function attachFooterAndRows(f){
 }
 function partitionFixture(withRestoration=false){
  const f=withRestoration==='discard'?discardFixture():withRestoration?restorationFixture():fixture(),proofs=new Map(['before','after'].map(phase=>{const id=crypto.randomUUID();return[id,{id,key:'controlled-exact-descendant',phase,ownedRunId:f.handle.identity.runId,actorId:7}];}));
- const state={cleaned:true,plan:[{preferenceId:null}],proofs};descendantStates.set(f.handle,state);
+ const plan=[{preferenceId:null}],state={cleaned:true,plan,readPlan:plan,mode:'presentation',proofs};descendantStates.set(f.handle,state);
  const prefix=[...proofs.values()].map(row=>({kind:'descendant-presentation-state',status:'pass',...row}));f.native.ownedRunId=f.handle.identity.runId;
  const extra=attachFooterAndRows(f);return{...f,...extra,state,prefix,independentSource:{sourceSha256:f.browser.sourceSha256},mixed:{...f.native,records:[...prefix,...f.native.records]}};
 }

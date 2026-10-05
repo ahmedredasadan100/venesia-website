@@ -617,8 +617,8 @@ const RETAINED_QUALITY_RECONCILIATION_BASELINE = Object.freeze({
     "scripts/verify-isolated-supabase.mts": {
       "beforeSha256": "450b70ede339aef3f119c919c7227521a96a36805479cc976806e45d942f7f89",
       "beforeStatementsSha256": "387fa617424869ac456fafac892b1d63ee04dced344e1cde7f7ebbc73c5f6148",
-      "afterSha256": "0f20fab6c156b0382f5cbc447243f19fc7548dd3528c4bb427524920a75bb661",
-      "afterStatementsSha256": "688f4928e3faa6e2b821a1757a0df9d0f80995961697dc00d1e8b082086423f5",
+      "afterSha256": "989635d135134416c00cef56c45febe0f2bcbb1bf492fac86f150ce69bc8aeaf",
+      "afterStatementsSha256": "0e6faa39aa8baa060819660927ef634f1df26af35aef3aa50d604058fccbb270",
       "role": "reviewed-verification-ledger-reconciliation"
     },
     "src/lib/admin/interaction-system/adoption-manifest.ts": {
@@ -662,6 +662,13 @@ const RETAINED_QUALITY_RECONCILIATION_BASELINE = Object.freeze({
       "afterSha256": "45e137d968bd86476cd51017cf8ecef188a53a4e58ec8542fd07c93c2e346d83",
       "afterStatementsSha256": "f72bc3f7e25e83553541ae2d486d7d7dbe191e08157d978963c579bebeaa7807",
       "role": "exact-integration-authorization-native-navigation-correction"
+    },
+    "scripts/verify-admin-core-navigation-permission-join.mjs": {
+      "beforeSha256": "765824e551d06e0879fc6dc1d2830bcde30bed1b77854749b89bf8567816f64c",
+      "beforeStatementsSha256": "90a9cc6b698a791ead122e854549b7b283b315a068f3b78dee39263de7abfc57",
+      "afterSha256": "ca7c70c9088f1e95b824aae69fe3b1f07d4c0859dc34d5d7afa59d7a70c5d2c5",
+      "afterStatementsSha256": "6e08ca0bfee3d3c157137433542ca7e6650ea34ad95d524497489bde5a4b04ad",
+      "role": "reviewed-verification-ledger-reconciliation"
     }
   },
   "proofFunctionSha256": "7cbfeb8ddea148c59b628b2be6ac5d242a8beec4fadae427e7354c903ce7316a",

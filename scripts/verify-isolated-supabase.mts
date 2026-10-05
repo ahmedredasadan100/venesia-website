@@ -1911,7 +1911,29 @@ function verifyRetainedPublicControlEligibility(source: string) {
     const nextLifecycle = 'export function healthyLease() { return "reviewed exact retained eligibility"; }\n';
     const nextCliPulse = readSource(q), priorCliPulse = undo(nextCliPulse);
     assert.notEqual(nextCliPulse, priorCliPulse);
-    const nextNavigation = readSource(n), priorNavigation = undo(nextNavigation);
+    const currentNavigation = readSource(n);
+    // Recover only the controlled old lifecycle seed; the current round still reads actual navigation bytes.
+    const navigationReconciliationTransforms: Array<{ before: string; after: string }> = [
+      {
+        "before": "import {CORE_DOWNLOAD_MEDIA_HREF} from './fixtures/admin-core-download-media-adoption.mjs';",
+        "after": "import {CORE_DOWNLOAD_MEDIA_HREF} from './fixtures/admin-core-download-media-adoption.mjs';\nimport {coreDescendantCheckpointPhases} from './fixtures/admin-core-descendant-presentation-plan.mjs';"
+      },
+      {
+        "before": "const partition=new Function('assert','assertOwnedLocalHandle','states',partitionJs+';return partitionCoreDescendantNativeCheckpoints;')(assert,own,descendantStates);",
+        "after": "const partition=new Function('assert','assertOwnedLocalHandle','states','coreDescendantCheckpointPhases',partitionJs+';return partitionCoreDescendantNativeCheckpoints;')(assert,own,descendantStates,coreDescendantCheckpointPhases);"
+      },
+      {
+        "before": " const state={cleaned:true,plan:[{preferenceId:null}],proofs};descendantStates.set(f.handle,state);",
+        "after": " const plan=[{preferenceId:null}],state={cleaned:true,plan,readPlan:plan,mode:'presentation',proofs};descendantStates.set(f.handle,state);"
+      }
+    ];
+    let nextNavigation = currentNavigation.replace(/\r\n/gu, "\n");
+    for (const change of [...navigationReconciliationTransforms].reverse()) {
+      assert.equal(nextNavigation.split(change.after).length, 2);
+      nextNavigation = nextNavigation.replace(change.after, change.before);
+    }
+    assert.equal(sha256(nextNavigation), "765824e551d06e0879fc6dc1d2830bcde30bed1b77854749b89bf8567816f64c");
+    const priorNavigation = undo(nextNavigation);
     assert.notEqual(nextNavigation, priorNavigation);
     const nextInventory = readSource(i), priorInventory = undo(nextInventory.replace(/\r\n/gu, "\n"));
     const nextInfrastructure = readSource(f), priorInfrastructure = undo(nextInfrastructure.replace(/\r\n/gu, "\n"));

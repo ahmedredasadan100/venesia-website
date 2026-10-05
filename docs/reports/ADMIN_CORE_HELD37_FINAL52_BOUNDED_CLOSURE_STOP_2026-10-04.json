@@ -1,6 +1,6 @@
 {
   "status": "PRE_FINAL_GATE_959_RECONCILED_A_N_CHECKPOINT",
-  "createdAt": "2026-10-05T14:05:23.809Z",
+  "createdAt": "2026-10-05T14:47:42.842Z",
   "startingHead": "9cbdf71b0951ec61dc4acee6e171d279cde490d6",
   "candidateHead": null,
   "intendedTrackedReports": [
@@ -411,6 +411,139 @@
       "qualityInvoked": false,
       "closureInvoked": false,
       "globalClosed": false
+    },
+    "secondFinalCandidateD22": {
+      "sourceHead": "d22a84ad2e10cf1be83e116326c76ce55f642e77",
+      "status": "REPLACED_CANDIDATE_AFTER_CI_VERIFICATION_FIXTURE_FAILURE",
+      "candidateAdmitted": false,
+      "refs": {
+        "archive": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preservation-manifest.json",
+          "sha256": "96bfdb738ae232cf1e7bb6fa3d6d0b2deb32b704bf1feb899371a1136eeb39a0"
+        },
+        "sourceManifest": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/final-source-manifest.json",
+          "sha256": "2a9c5ac8b9e145c115626eab083a378f5b5b953591f351ecb33f49e3cbac5bfb"
+        },
+        "sourceImpact": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/source-impact-current-to-final.json",
+          "sha256": "65ff3bce680cede9942ef5b4b4f36495678834effadc6260d5d8420b1e15de17"
+        },
+        "sourceAssembly": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/final-source-impact-assembly-receipt.json",
+          "sha256": "57bae86bf905e104e479785b82dcdcadd3082d84b1e82366b7d97c37ef9dd94e"
+        },
+        "rootSourceRequest": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/3203d3762e557de44f7bf49c28ad125aac9796305e885d6c81fdeac29b8fa74c.txt",
+          "sha256": "3203d3762e557de44f7bf49c28ad125aac9796305e885d6c81fdeac29b8fa74c"
+        },
+        "committedCheckpoint": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/347a56e60e4a16afaa884d197b9bbb483d5011065bd96de7b2173c7128204bff.txt",
+          "sha256": "347a56e60e4a16afaa884d197b9bbb483d5011065bd96de7b2173c7128204bff"
+        },
+        "committedMarkdown": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/622c35d92f9a79ec4b2fc4c94ad3b6b71487195a8f70ae1ee21fa51fb06c3930.txt",
+          "sha256": "622c35d92f9a79ec4b2fc4c94ad3b6b71487195a8f70ae1ee21fa51fb06c3930"
+        },
+        "ci": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/7c7caf5e39748284a151543f64dd73dc0c54dd441ff3966fb692337c7c76e2c2.txt",
+          "sha256": "7c7caf5e39748284a151543f64dd73dc0c54dd441ff3966fb692337c7c76e2c2"
+        },
+        "ciResponse": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/0bf1aec26b14b371e62adaf5cc3cdc8356123f48af870ab135fcd6c20258ea43.txt",
+          "sha256": "0bf1aec26b14b371e62adaf5cc3cdc8356123f48af870ab135fcd6c20258ea43"
+        },
+        "ciSummary": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/857dc762a3e8f42ecc634e4ab57299ce07d5879c4ca731fe4360b1e27268df4c.txt",
+          "sha256": "857dc762a3e8f42ecc634e4ab57299ce07d5879c4ca731fe4360b1e27268df4c"
+        },
+        "failureLog": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/0419086d9bb7f72101115b0433440c47d4a4a28bd7d0c1c165cc13a9b2b9fdab.txt",
+          "sha256": "0419086d9bb7f72101115b0433440c47d4a4a28bd7d0c1c165cc13a9b2b9fdab"
+        },
+        "cause": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/711d61e93675ae1ff6d27c36e01c49805564654a98940498a8a934e29ee55f34.txt",
+          "sha256": "711d61e93675ae1ff6d27c36e01c49805564654a98940498a8a934e29ee55f34"
+        }
+      },
+      "ci": {
+        "runId": 37322362807,
+        "status": "completed",
+        "conclusion": "failure",
+        "successfulJobs": 7,
+        "failedJobs": 1,
+        "jobs": [
+          {
+            "databaseId": 111804380311,
+            "name": "Dashboard Truth · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T14:09:01Z",
+            "completedAt": "2026-10-05T14:09:43Z"
+          },
+          {
+            "databaseId": 111804380654,
+            "name": "Reports Analytics · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T14:09:01Z",
+            "completedAt": "2026-10-05T14:09:43Z"
+          },
+          {
+            "databaseId": 111804380743,
+            "name": "Taxonomy Consistency · PostgreSQL 17 · PostgREST",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T14:09:01Z",
+            "completedAt": "2026-10-05T14:09:53Z"
+          },
+          {
+            "databaseId": 111804380748,
+            "name": "Media Coordination · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T14:09:01Z",
+            "completedAt": "2026-10-05T14:10:09Z"
+          },
+          {
+            "databaseId": 111804380851,
+            "name": "Lint · Typecheck · Verify · Build",
+            "status": "completed",
+            "conclusion": "failure",
+            "startedAt": "2026-10-05T14:09:01Z",
+            "completedAt": "2026-10-05T14:15:27Z"
+          },
+          {
+            "databaseId": 111804380895,
+            "name": "Command Recovery and Public Read Integrity · Full Supabase",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T14:09:01Z",
+            "completedAt": "2026-10-05T14:13:04Z"
+          },
+          {
+            "databaseId": 111804380947,
+            "name": "Topics Bulk Publish · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T14:09:01Z",
+            "completedAt": "2026-10-05T14:09:57Z"
+          },
+          {
+            "databaseId": 111804380965,
+            "name": "Metrics and Publishing Integrity · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T14:09:12Z",
+            "completedAt": "2026-10-05T14:10:01Z"
+          }
+        ],
+        "originalFailurePreserved": true,
+        "retryDispatched": false
+      },
+      "qualityInvoked": false,
+      "closureInvoked": false,
+      "globalClosed": false
     }
   },
   "inputs": {
@@ -579,8 +712,8 @@
       "sha256": "efe3f5f08f9e49f2833e20ae56e3c26ad57e658acede75489c1d8e413e855eaf"
     },
     "finalSourceCompatibilityReview": {
-      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
-      "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-d22-ci-navigation-partition-v3/source-review.json",
+      "sha256": "315d5cd816570286553215f2f6ed76be752153eb6d4becc02a14cfd6b5e7dffe"
     },
     "reviewedDeltaEvidence": {
       "cause181": {
@@ -751,6 +884,26 @@
     "ciQueryPortChecks": {
       "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/actual-maintained-checks.json",
       "sha256": "64cef4077f151a3e9746488825f2a79a601f913f96a8002381aa1732b2d33f3b"
+    },
+    "secondCandidatePreservation": {
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preservation-manifest.json",
+      "sha256": "96bfdb738ae232cf1e7bb6fa3d6d0b2deb32b704bf1feb899371a1136eeb39a0"
+    },
+    "ciNavigationFixtureCorrection": {
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-ci-navigation-partition-proposal/root-applied-review.json",
+      "sha256": "b88fca37c271bb1c12dcbaec52bd228040fd0208a324be2a1110c5198e965a7c"
+    },
+    "ciNavigationFixtureChecks": {
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-ci-navigation-partition-proposal/actual-maintained-checks.json",
+      "sha256": "1418e33dad386dde8c96ae30bcbdeb28fdc8870aa37f214f6edf32a17e073348"
+    },
+    "previousFinalSourceCompatibilityReview": {
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
+      "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
+    },
+    "finite43SourceEmitterApplication": {
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-finalization-continuation/source-emitter-root-applied-review.json",
+      "sha256": "82303c83b9310c5801fafbf934590bd5e4984fc7da4a5473d47b2b5638a550f7"
     }
   },
   "sections": {
@@ -800,8 +953,8 @@
         "retentionOnFutureHead": "Requires existing source-impact authority; no current-head PASS inferred."
       },
       "futureFinalHead": null,
-      "sourceState": "PRE_FINAL_GATE_CORRECTED_SOURCE_REVIEWED_NEW_FINAL_HEAD_AND_CI_PENDING",
-      "prObservationScope": "The original9cb starting authority and failed a6cc first final candidate remain preserved separately. The corrected candidate HEAD, clean Git/PR proof and valid exact-head CI are still pending.",
+      "sourceState": "PRE_FINAL_GATE_CORRECTED_FINITE43_SOURCE_REVIEWED_NEW_FINAL_HEAD_AND_CI_PENDING",
+      "prObservationScope": "The original9cb starting authority and failed a6cc and d22 final candidates remain preserved separately. The next candidate HEAD, clean Git/PR proof and valid exact-head CI are still pending.",
       "firstFinalCandidate": {
         "sourceHead": "a6cc871a3baef48dec9cda379f37b3d6e05933d5",
         "status": "REPLACED_CANDIDATE_AFTER_CI_VERIFICATION_HARNESS_FAILURE",
@@ -926,6 +1079,139 @@
               "conclusion": "success",
               "startedAt": "2026-10-05T12:19:29Z",
               "completedAt": "2026-10-05T12:23:26Z"
+            }
+          ],
+          "originalFailurePreserved": true,
+          "retryDispatched": false
+        },
+        "qualityInvoked": false,
+        "closureInvoked": false,
+        "globalClosed": false
+      },
+      "secondFinalCandidate": {
+        "sourceHead": "d22a84ad2e10cf1be83e116326c76ce55f642e77",
+        "status": "REPLACED_CANDIDATE_AFTER_CI_VERIFICATION_FIXTURE_FAILURE",
+        "candidateAdmitted": false,
+        "refs": {
+          "archive": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preservation-manifest.json",
+            "sha256": "96bfdb738ae232cf1e7bb6fa3d6d0b2deb32b704bf1feb899371a1136eeb39a0"
+          },
+          "sourceManifest": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/final-source-manifest.json",
+            "sha256": "2a9c5ac8b9e145c115626eab083a378f5b5b953591f351ecb33f49e3cbac5bfb"
+          },
+          "sourceImpact": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/source-impact-current-to-final.json",
+            "sha256": "65ff3bce680cede9942ef5b4b4f36495678834effadc6260d5d8420b1e15de17"
+          },
+          "sourceAssembly": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/final-source-impact-assembly-receipt.json",
+            "sha256": "57bae86bf905e104e479785b82dcdcadd3082d84b1e82366b7d97c37ef9dd94e"
+          },
+          "rootSourceRequest": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/3203d3762e557de44f7bf49c28ad125aac9796305e885d6c81fdeac29b8fa74c.txt",
+            "sha256": "3203d3762e557de44f7bf49c28ad125aac9796305e885d6c81fdeac29b8fa74c"
+          },
+          "committedCheckpoint": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/347a56e60e4a16afaa884d197b9bbb483d5011065bd96de7b2173c7128204bff.txt",
+            "sha256": "347a56e60e4a16afaa884d197b9bbb483d5011065bd96de7b2173c7128204bff"
+          },
+          "committedMarkdown": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/622c35d92f9a79ec4b2fc4c94ad3b6b71487195a8f70ae1ee21fa51fb06c3930.txt",
+            "sha256": "622c35d92f9a79ec4b2fc4c94ad3b6b71487195a8f70ae1ee21fa51fb06c3930"
+          },
+          "ci": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/7c7caf5e39748284a151543f64dd73dc0c54dd441ff3966fb692337c7c76e2c2.txt",
+            "sha256": "7c7caf5e39748284a151543f64dd73dc0c54dd441ff3966fb692337c7c76e2c2"
+          },
+          "ciResponse": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/0bf1aec26b14b371e62adaf5cc3cdc8356123f48af870ab135fcd6c20258ea43.txt",
+            "sha256": "0bf1aec26b14b371e62adaf5cc3cdc8356123f48af870ab135fcd6c20258ea43"
+          },
+          "ciSummary": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/857dc762a3e8f42ecc634e4ab57299ce07d5879c4ca731fe4360b1e27268df4c.txt",
+            "sha256": "857dc762a3e8f42ecc634e4ab57299ce07d5879c4ca731fe4360b1e27268df4c"
+          },
+          "failureLog": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/0419086d9bb7f72101115b0433440c47d4a4a28bd7d0c1c165cc13a9b2b9fdab.txt",
+            "sha256": "0419086d9bb7f72101115b0433440c47d4a4a28bd7d0c1c165cc13a9b2b9fdab"
+          },
+          "cause": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/711d61e93675ae1ff6d27c36e01c49805564654a98940498a8a934e29ee55f34.txt",
+            "sha256": "711d61e93675ae1ff6d27c36e01c49805564654a98940498a8a934e29ee55f34"
+          }
+        },
+        "ci": {
+          "runId": 37322362807,
+          "status": "completed",
+          "conclusion": "failure",
+          "successfulJobs": 7,
+          "failedJobs": 1,
+          "jobs": [
+            {
+              "databaseId": 111804380311,
+              "name": "Dashboard Truth · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T14:09:01Z",
+              "completedAt": "2026-10-05T14:09:43Z"
+            },
+            {
+              "databaseId": 111804380654,
+              "name": "Reports Analytics · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T14:09:01Z",
+              "completedAt": "2026-10-05T14:09:43Z"
+            },
+            {
+              "databaseId": 111804380743,
+              "name": "Taxonomy Consistency · PostgreSQL 17 · PostgREST",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T14:09:01Z",
+              "completedAt": "2026-10-05T14:09:53Z"
+            },
+            {
+              "databaseId": 111804380748,
+              "name": "Media Coordination · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T14:09:01Z",
+              "completedAt": "2026-10-05T14:10:09Z"
+            },
+            {
+              "databaseId": 111804380851,
+              "name": "Lint · Typecheck · Verify · Build",
+              "status": "completed",
+              "conclusion": "failure",
+              "startedAt": "2026-10-05T14:09:01Z",
+              "completedAt": "2026-10-05T14:15:27Z"
+            },
+            {
+              "databaseId": 111804380895,
+              "name": "Command Recovery and Public Read Integrity · Full Supabase",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T14:09:01Z",
+              "completedAt": "2026-10-05T14:13:04Z"
+            },
+            {
+              "databaseId": 111804380947,
+              "name": "Topics Bulk Publish · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T14:09:01Z",
+              "completedAt": "2026-10-05T14:09:57Z"
+            },
+            {
+              "databaseId": 111804380965,
+              "name": "Metrics and Publishing Integrity · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T14:09:12Z",
+              "completedAt": "2026-10-05T14:10:01Z"
             }
           ],
           "originalFailurePreserved": true,
@@ -13713,22 +13999,47 @@
           "sha256": "425e8cdb72992b98ffad539048759240bc9cbf09bebbefbf555ee821dbd53601"
         },
         "portableSourceProofProposal": {
-          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
-          "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-d22-ci-navigation-partition-v3/source-review.json",
+          "sha256": "315d5cd816570286553215f2f6ed76be752153eb6d4becc02a14cfd6b5e7dffe"
         },
         "finalSourceProofPreparation": {
           "status": "REVIEWED_AND_APPLIED_BEFORE_CORRECTED_FINAL_HEAD",
           "authority": {
-            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
-            "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-d22-ci-navigation-partition-v3/source-review.json",
+            "sha256": "315d5cd816570286553215f2f6ed76be752153eb6d4becc02a14cfd6b5e7dffe"
           },
           "applied": {
-            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/root-applied-review.json",
-            "sha256": "7f2b321efc05dbafad1a1b55cb95ff456299f999f39913c1b71746776769ebaf"
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-d22-ci-navigation-partition-v3/root-applied-review.json",
+            "sha256": "472bbc8fe82a633c31a713164790435a0485f427bbccc7b6068928d3db904f92"
           },
           "checks": {
-            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-checks-review.json",
-            "sha256": "63fac5bc0edce649ef298f812d52be8b5c3c98dffde0c94a43f3615f9d91e5d7"
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-d22-ci-navigation-partition-v3/source-checks-review.json",
+            "sha256": "37df45ef62aa95f359a507243f1aef5464f928341b237e7bf5ca237810330f8f"
+          },
+          "finiteOwnerCount": 43,
+          "preparation": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-d22-ci-navigation-partition-v3/candidate-preparation-v2.json",
+            "sha256": "817ef7382d55fb3cdaf3c571b969a68dd8b3d6c730196f4f99530c1807d399fa"
+          },
+          "roundAuthority": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-d22-ci-navigation-partition-v3/round-source-authority-observed.json",
+            "sha256": "6c9da7cc92b153a4aa7e0ff3bfd9227639334eea849c9c84fb87c25dcbb5f70f"
+          },
+          "controls": {
+            "path": "scripts/verify-isolated-supabase.mts",
+            "sha256": "989635d135134416c00cef56c45febe0f2bcbb1bf492fac86f150ce69bc8aeaf"
+          },
+          "emitter": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/final-quality-entry-preparation/materialize-current-round-source-impact.mjs",
+            "sha256": "90519424587c4f5ea08b0277bba90de7babac6e209af9874e2a14e15a17d37a5"
+          },
+          "emitterApplied": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-finalization-continuation/source-emitter-root-applied-review.json",
+            "sha256": "82303c83b9310c5801fafbf934590bd5e4984fc7da4a5473d47b2b5638a550f7"
+          },
+          "emitterFiveExactCountChanges": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-finalization-continuation/source-emitter-finite43-transformations.json",
+            "sha256": "52bb7075b804376e9bf4f7076517910c9e2bf3de08af1c63e78efdcdaee8e012"
           },
           "exactFutureCandidateBindingPending": true
         },
@@ -13807,6 +14118,71 @@
           "strictRequireAllowlistUnchanged": true,
           "intentionallyMissingDatePortPreserved": true,
           "expectedTypeErrorAndNoSqlAssertionsUnchanged": true,
+          "productChanged": false,
+          "qualifiedBehaviorReexecuted": false,
+          "ciRerun": false
+        },
+        "previousFinalSourceProofPreparationAfterA6cc": {
+          "status": "REVIEWED_AND_APPLIED_BEFORE_CORRECTED_FINAL_HEAD",
+          "authority": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
+            "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
+          },
+          "applied": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/root-applied-review.json",
+            "sha256": "7f2b321efc05dbafad1a1b55cb95ff456299f999f39913c1b71746776769ebaf"
+          },
+          "checks": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-checks-review.json",
+            "sha256": "63fac5bc0edce649ef298f812d52be8b5c3c98dffde0c94a43f3615f9d91e5d7"
+          },
+          "exactFutureCandidateBindingPending": true
+        },
+        "ciNavigationFixtureCorrection": {
+          "classification": "VERIFICATION_CONTROLLED_STATE_AND_CANONICAL_PHASE_PORT_OMISSION",
+          "owner": {
+            "path": "scripts/verify-admin-core-navigation-permission-join.mjs",
+            "sha256": "ca7c70c9088f1e95b824aae69fe3b1f07d4c0859dc34d5d7afa59d7a70c5d2c5"
+          },
+          "priorSourceHead": "d22a84ad2e10cf1be83e116326c76ce55f642e77",
+          "cause": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/711d61e93675ae1ff6d27c36e01c49805564654a98940498a8a934e29ee55f34.txt",
+            "sha256": "711d61e93675ae1ff6d27c36e01c49805564654a98940498a8a934e29ee55f34"
+          },
+          "failedLog": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/0419086d9bb7f72101115b0433440c47d4a4a28bd7d0c1c165cc13a9b2b9fdab.txt",
+            "sha256": "0419086d9bb7f72101115b0433440c47d4a4a28bd7d0c1c165cc13a9b2b9fdab"
+          },
+          "applied": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-ci-navigation-partition-proposal/root-applied-review.json",
+            "sha256": "b88fca37c271bb1c12dcbaec52bd228040fd0208a324be2a1110c5198e965a7c"
+          },
+          "proposal": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-ci-navigation-partition-proposal/proposal.json",
+            "sha256": "08d6b7e44a647f41b96b626b9615e3b8cecfa92be728afdfdc4936f80f8d9270"
+          },
+          "independentPeer": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-ci-navigation-partition-proposal/independent-transport-peer-review.json",
+            "sha256": "af70053900c82377f20613cf1197b36147f6b09dc4cf3f64e59b15490a7f72c1"
+          },
+          "actualMaintainedChecks": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-ci-navigation-partition-proposal/actual-maintained-checks.json",
+            "sha256": "1418e33dad386dde8c96ae30bcbdeb28fdc8870aa37f214f6edf32a17e073348"
+          },
+          "checks": 140,
+          "stderrEmpty": true,
+          "priorMaintainedOutput": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-ci-navigation-partition-proposal/previous-maintained-output-preservation.json",
+            "sha256": "6dc7b7e207d196bd5b0592d10b17db8e3322764579a2df0382f5d38fe744a8ce"
+          },
+          "postMaintainedOutput": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/d22-ci-navigation-partition-proposal/actual-maintained-output.json",
+            "sha256": "eb6487421e07a3cd1858f689a8a38f229ff1302d3c813a316c70bafdb3f33fcb"
+          },
+          "exactThreeHunks": true,
+          "all86AssertionsUnchanged": true,
+          "unchangedFunctions": 12,
+          "nativeOwnerUnchanged": true,
           "productChanged": false,
           "qualifiedBehaviorReexecuted": false,
           "ciRerun": false
@@ -13955,7 +14331,7 @@
           },
           {
             "path": "scripts/lib/isolated-public-verification.mts",
-            "sha256": "3bdfb10470bf5ea9a9f9e2c36e96ac11c41bd0bbeceea25e824b9ec68bb133f1"
+            "sha256": "da97c2229d6797834f2b340a40a8bf165b3851dfc306b036455026f610b0364e"
           },
           {
             "path": "scripts/lib/isolated-supabase.mts",
@@ -13996,6 +14372,10 @@
           {
             "path": "scripts/verify-admin-core-journey-selection.mjs",
             "sha256": "62f626a8ce57f4a9f2b72221fe1ed75aa97d20b354b1dfb1b418aca010a6a90b"
+          },
+          {
+            "path": "scripts/verify-admin-core-navigation-permission-join.mjs",
+            "sha256": "ca7c70c9088f1e95b824aae69fe3b1f07d4c0859dc34d5d7afa59d7a70c5d2c5"
           },
           {
             "path": "scripts/verify-admin-core-navigation-settings.mts",
@@ -14039,7 +14419,7 @@
           },
           {
             "path": "scripts/verify-isolated-supabase.mts",
-            "sha256": "0f20fab6c156b0382f5cbc447243f19fc7548dd3528c4bb427524920a75bb661"
+            "sha256": "989635d135134416c00cef56c45febe0f2bcbb1bf492fac86f150ce69bc8aeaf"
           },
           {
             "path": "src/app/admin/pages-blocks/pages/[id]/PageLayoutManager.tsx",
@@ -14055,23 +14435,219 @@
           }
         ],
         "sourceReview": {
-          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
-          "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-d22-ci-navigation-partition-v3/source-review.json",
+          "sha256": "315d5cd816570286553215f2f6ed76be752153eb6d4becc02a14cfd6b5e7dffe"
         },
         "previousCandidateSourceImpact": {
-          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/source-impact-current-to-final.json",
-          "sha256": "3bd02d8b513ee000b20538e06b8695d3d92d969e2925ac93b4de830a8553983c"
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/source-impact-current-to-final.json",
+          "sha256": "65ff3bce680cede9942ef5b4b4f36495678834effadc6260d5d8420b1e15de17"
         },
-        "changesAfterA6cc": [
+        "previousCandidateSourceDelta": {
+          "status": "PRE_COMMIT_EXACT_WORKING_BYTES",
+          "paths": [
+            {
+              "path": "scripts/fixtures/admin-core-descendant-presentation-journeys.mjs",
+              "sha256": "c41d62075cfcad8d7d652800e3c6525d7a7b0eef3c46503335a8dd91c232b093"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-descendant-presentation-plan.mjs",
+              "sha256": "e05b6f88ad6cf38cc40bc03eaaa57e6a4d4ba4b78ae22bf3dd0eceb265bea68d"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-domain-bulk-journeys.mjs",
+              "sha256": "f919ff8410aa879b92849cb5c832ca2555e160e102b19bb8e325e12cafc98578"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+              "sha256": "89bf1d066100ee867a390e3411b246ad5d03d1fab11a16b6a531da4f0c956433"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-form-draft-restoration.mjs",
+              "sha256": "857e6c2bd215f4789a47da11db4e5ad38475b8f9778206072fb1152025596d57"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-form-journeys.mjs",
+              "sha256": "b25bc73a20a6a765ff2a95b91a212e0af3b3ef8e514760a3a5c323652b569eb7"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-navigation-settings-journeys.mjs",
+              "sha256": "2a6316d640e6b3642c64fac56beef96c53927692ea84448817f994e595328980"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-operational-form-journeys.mjs",
+              "sha256": "73f4f126f84f96b4a2b0fb77d277a753fb0df1248717974c11425eefd3729ad8"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-page-composition-journeys.mjs",
+              "sha256": "2c06c301c6bbbeaca3dae111b6a5d85405e8c01d0ba6b8596cee479894be3c29"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-presentation-controls-journeys.mjs",
+              "sha256": "ed9ba1f029b20ea577635d61489c8d8c979054a5b37d1258880da034aada8d0d"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-query-presentation-journeys.mjs",
+              "sha256": "b47f656656409497a5188e5ba2ffdd0daf79e9bbf72f471010c6cf809a229b38"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-query-presentation-plan.mjs",
+              "sha256": "0edabba8604f429fe2ce8ddf8738fc545c395ee559f851c086305e7153552001"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-readonly-journeys.mjs",
+              "sha256": "7797b0ae78157c69111621387b315997fc4aab4366c16b6f2474ad62a0105b19"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-rendered-adoption.mjs",
+              "sha256": "3e86bfa09be496103553f9269e58a3cfc4b4c2a2d94f49fbd790364be6ffabf0"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-settings-journeys.mjs",
+              "sha256": "e6ec34127ee7e65c4987dfb7bd967071c73038144ec87385f89cdf56db389234"
+            },
+            {
+              "path": "scripts/fixtures/admin-core-specialized-settings-journeys.mjs",
+              "sha256": "2f419f828020f7f5c40e9ed0711ab2e700b55c53ed309ada9cbac7e9046ad7ff"
+            },
+            {
+              "path": "scripts/fixtures/admin-interaction-fixtures.mts",
+              "sha256": "1205c438480e05ece83095908dda9516b23143499c00c4ec93e154eab900bb05"
+            },
+            {
+              "path": "scripts/lib/isolated-public-verification.mts",
+              "sha256": "3bdfb10470bf5ea9a9f9e2c36e96ac11c41bd0bbeceea25e824b9ec68bb133f1"
+            },
+            {
+              "path": "scripts/lib/isolated-supabase.mts",
+              "sha256": "ce2b0e36f7b8312a63174f39072722317a10b7f32210e79155e59da19566a465"
+            },
+            {
+              "path": "scripts/qa-admin-adoption-journeys.mjs",
+              "sha256": "39a92348756fbc06fbdf6d5eb4a84ab16171290e36f9c2e3197a4d897d9f4d31"
+            },
+            {
+              "path": "scripts/verify-admin-adoption-closure.mjs",
+              "sha256": "b36699cc456361055ce954a8231c08885f85a0f02df69fa01c09dbfd6c3928c4"
+            },
+            {
+              "path": "scripts/verify-admin-adoption-readback-isolated.mts",
+              "sha256": "eb22c05b727965c3d5838535326d5b0a62dc9806e1536081bf838328064da3d9"
+            },
+            {
+              "path": "scripts/verify-admin-core-descendant-presentation-isolated.mts",
+              "sha256": "042e873a901caf907131cbe113b723fa236b4b4b482d6ed1ca4a2db29f61888e"
+            },
+            {
+              "path": "scripts/verify-admin-core-descendant-presentation.mjs",
+              "sha256": "dfbf76bf361cd85bd522818324bdf2552ca90bfdfec2723c431be205d18c1293"
+            },
+            {
+              "path": "scripts/verify-admin-core-domain-bulk.mjs",
+              "sha256": "00bfb8bdf9ee9e59f9743e31ef621d5ac8adb4a9191a0563c13b35afcd121eb1"
+            },
+            {
+              "path": "scripts/verify-admin-core-domain-readback-isolated.mts",
+              "sha256": "6d18d21238f4728c24a515d2dd6e7f5aff5877aac336d387e44a013702f6f018"
+            },
+            {
+              "path": "scripts/verify-admin-core-domain-readback.mts",
+              "sha256": "15ab7b7296eaf04b84d61de768b05db82b347ce8f5e87048b88d90e697e82402"
+            },
+            {
+              "path": "scripts/verify-admin-core-journey-selection.mjs",
+              "sha256": "62f626a8ce57f4a9f2b72221fe1ed75aa97d20b354b1dfb1b418aca010a6a90b"
+            },
+            {
+              "path": "scripts/verify-admin-core-navigation-settings.mts",
+              "sha256": "bbb40fdc3d59cfd3d32c9660bf2fe67527cd0d7925dc85e3f07ea293f306b6e4"
+            },
+            {
+              "path": "scripts/verify-admin-core-page-seo.mts",
+              "sha256": "c76876d268386a3b7c8dff0d3ccda6ef0476b7a84f080cdc590744381a65e9c5"
+            },
+            {
+              "path": "scripts/verify-admin-core-presentation-controls-isolated.mts",
+              "sha256": "b016c1c9c26a30b086d6ae004af3992acbdb52badd7a481c30f6a3f85f8f37da"
+            },
+            {
+              "path": "scripts/verify-admin-core-presentation-controls.mts",
+              "sha256": "33147a94b4854535574bb3db8eff5781de280e9764d5a7de248fc47cafca224f"
+            },
+            {
+              "path": "scripts/verify-admin-core-query-presentation-isolated.mts",
+              "sha256": "956675ba5777701fe9f8075c2ce5a42f9fe7976ddf44785ec809aae9ecd738bc"
+            },
+            {
+              "path": "scripts/verify-admin-core-query-presentation.mts",
+              "sha256": "6d163acb1745cf3fbe32ec2697e4550f75cb583cb02fdfb2caf73e66aed03af9"
+            },
+            {
+              "path": "scripts/verify-admin-core-rendered-adoption.mjs",
+              "sha256": "95680a75de39fa750529679194e9d19921ee50e737f29ccd75d477a21242ef26"
+            },
+            {
+              "path": "scripts/verify-admin-core-specialized-settings-isolated.mts",
+              "sha256": "a5813d8cc763b1eaed530afb3d06094c99569c5237a6b810c61b829bc9ce7232"
+            },
+            {
+              "path": "scripts/verify-admin-core-specialized-settings.mts",
+              "sha256": "6cbe3f1b475737e3d935081f53a1bf02253c7b620c8630af0097baf718b3749a"
+            },
+            {
+              "path": "scripts/verify-admin-row-actions-capability.mts",
+              "sha256": "1d86fb0e7894028fdfb3ff265b8e6326488c9b9af20e0435219d7ab022bb5f29"
+            },
+            {
+              "path": "scripts/verify-isolated-supabase.mts",
+              "sha256": "0f20fab6c156b0382f5cbc447243f19fc7548dd3528c4bb427524920a75bb661"
+            },
+            {
+              "path": "src/app/admin/pages-blocks/pages/[id]/PageLayoutManager.tsx",
+              "sha256": "6429137fb71e9af9e40b27292a22f4ade07020135f49c6568d36dd2f09a2b4e5"
+            },
+            {
+              "path": "src/components/admin/integrations/IntegrationConnectionWizard.tsx",
+              "sha256": "45e137d968bd86476cd51017cf8ecef188a53a4e58ec8542fd07c93c2e346d83"
+            },
+            {
+              "path": "src/lib/admin/interaction-system/adoption-manifest.ts",
+              "sha256": "5de0324b48ab33bb2052b72a7592c9a2f5f2af8896b74363b74726aee295b279"
+            }
+          ],
+          "sourceReview": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
+            "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
+          },
+          "previousCandidateSourceImpact": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/source-impact-current-to-final.json",
+            "sha256": "3bd02d8b513ee000b20538e06b8695d3d92d969e2925ac93b4de830a8553983c"
+          },
+          "changesAfterA6cc": [
+            {
+              "path": "scripts/lib/isolated-public-verification.mts",
+              "sha256": "3bdfb10470bf5ea9a9f9e2c36e96ac11c41bd0bbeceea25e824b9ec68bb133f1"
+            },
+            {
+              "path": "scripts/verify-admin-core-query-presentation.mts",
+              "sha256": "6d163acb1745cf3fbe32ec2697e4550f75cb583cb02fdfb2caf73e66aed03af9"
+            }
+          ]
+        },
+        "changesAfterD22": [
           {
             "path": "scripts/lib/isolated-public-verification.mts",
-            "sha256": "3bdfb10470bf5ea9a9f9e2c36e96ac11c41bd0bbeceea25e824b9ec68bb133f1"
+            "sha256": "da97c2229d6797834f2b340a40a8bf165b3851dfc306b036455026f610b0364e"
           },
           {
-            "path": "scripts/verify-admin-core-query-presentation.mts",
-            "sha256": "6d163acb1745cf3fbe32ec2697e4550f75cb583cb02fdfb2caf73e66aed03af9"
+            "path": "scripts/verify-isolated-supabase.mts",
+            "sha256": "989635d135134416c00cef56c45febe0f2bcbb1bf492fac86f150ce69bc8aeaf"
           }
-        ]
+        ],
+        "addedExistingOwner": {
+          "path": "scripts/verify-admin-core-navigation-permission-join.mjs",
+          "sha256": "ca7c70c9088f1e95b824aae69fe3b1f07d4c0859dc34d5d7afa59d7a70c5d2c5"
+        },
+        "finiteOwnerCount": 43
       },
       "environment": {
         "historical": null,
@@ -14207,6 +14783,15 @@
         "evidence": {
           "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e.txt",
           "sha256": "53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e"
+        },
+        "qualityInvoked": false
+      },
+      "secondPriorCandidateCi": {
+        "sourceHead": "d22a84ad2e10cf1be83e116326c76ce55f642e77",
+        "status": "FAILED_SEVEN_SUCCESS_ONE_MAIN_FAILURE",
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/7c7caf5e39748284a151543f64dd73dc0c54dd441ff3966fb692337c7c76e2c2.txt",
+          "sha256": "7c7caf5e39748284a151543f64dd73dc0c54dd441ff3966fb692337c7c76e2c2"
         },
         "qualityInvoked": false
       }
@@ -16195,6 +16780,17 @@
         "failedJobs": 1,
         "correctedCandidateGitAndCi": "PENDING_NEW_COMMITTED_HEAD",
         "behaviorReexecuted": false
+      },
+      "secondReplacedCandidateCi": {
+        "sourceHead": "d22a84ad2e10cf1be83e116326c76ce55f642e77",
+        "ci": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/7c7caf5e39748284a151543f64dd73dc0c54dd441ff3966fb692337c7c76e2c2.txt",
+          "sha256": "7c7caf5e39748284a151543f64dd73dc0c54dd441ff3966fb692337c7c76e2c2"
+        },
+        "successfulJobs": 7,
+        "failedJobs": 1,
+        "correctedCandidateGitAndCi": "PENDING_NEW_COMMITTED_HEAD",
+        "behaviorReexecuted": false
       }
     },
     "N": {
@@ -16313,8 +16909,8 @@
     }
   },
   "finalizationBlockers": [
-    "Commit and push only the reviewed two-port Verification correction, its exact source-guard binding and these same two truthful pre-gate reports to Draft PR186.",
-    "After preserving failed a6cc CI, bind corrected exact final HEAD/source and valid affected or retained CI with the current authority.",
+    "Commit and push only the reviewed navigation controlled-fixture correction, its finite43 source guard/portable controls and these same two truthful pre-gate reports to Draft PR186.",
+    "After preserving both failed a6cc and d22 CI candidates, bind the next exact final HEAD/source and valid affected or retained CI with the current authority.",
     "Emit original111/959 and source/integrity/readiness through existing owners; preserve every failed terminal.",
     "Run exactHEAD69+4 FinalQuality; invoke FinalClosure only on actualPASS and all prerequisites.",
     "Prove cleanup/Git/PR and create local actual A–N supplement; STOP before Migration Readiness."
@@ -16323,14 +16919,14 @@
   "globalClosed": false,
   "supersedes": {
     "priorDraft": {
-      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/c2176e02bc2b5a52e8e98a394ec7d71e8466ad31ddf3dea8781a1da8a832885b.txt",
-      "sha256": "c2176e02bc2b5a52e8e98a394ec7d71e8466ad31ddf3dea8781a1da8a832885b"
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/347a56e60e4a16afaa884d197b9bbb483d5011065bd96de7b2173c7128204bff.txt",
+      "sha256": "347a56e60e4a16afaa884d197b9bbb483d5011065bd96de7b2173c7128204bff"
     },
     "priorMarkdown": {
-      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/f4cdeaa4f31cee3aaf6267cf39c133fa1380139a7157b1863dad676c15971278.txt",
-      "sha256": "f4cdeaa4f31cee3aaf6267cf39c133fa1380139a7157b1863dad676c15971278"
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/d22a84ad/preimages/622c35d92f9a79ec4b2fc4c94ad3b6b71487195a8f70ae1ee21fa51fb06c3930.txt",
+      "sha256": "622c35d92f9a79ec4b2fc4c94ad3b6b71487195a8f70ae1ee21fa51fb06c3930"
     },
-    "priorVersion": 5,
+    "priorVersion": 6,
     "priorBytesModified": false,
     "historyPreserved": true
   }
