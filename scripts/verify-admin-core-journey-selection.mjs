@@ -52,7 +52,39 @@ const owner=readFileSync(resolve(root,"scripts/lib/isolated-public-verification.
 await test("Existing owner validates before gate construction and forwards the exact selector",()=>{const ast=ts.createSourceFile('public-owner.mts',owner,ts.ScriptTarget.Latest,true),functions=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text==='runOwnedPublicVerification');assert.equal(functions.length,1);const scope=functions[0].getText(ast),validation=scope.indexOf('validateCoreJourneySelection({ scope: request.adoptionScope'),construction=scope.indexOf('const gates =');assert.ok(validation>=0&&construction>=0&&validation<construction);assert.match(owner,/if \(request\.adoptionJourneySelection !== undefined\) assert\.equal\(request\.selection, "admin-adoption"\)/u);assert.ok(owner.includes('["--core-journey-selection=" + request.adoptionJourneySelection]'));});
 await test("Collector joins selection before native reads and preserves native/draft owners",()=>{assert.ok(collector.indexOf('const selectedJourneys =')<collector.indexOf('const writes = await verifyCoreDomainWrites'));assert.ok(collector.includes('assertCoreJourneySelectionReceipt(browser, ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, canonicalRequiredCases, draftRestoration)'));assert.ok(collector.includes('assertCoreFormDraftRestorationJoin({artifact:draftArtifact'));});
 await test("Driver rejects duplicate selector and validates only actual executed IDs before final success",()=>{assert.ok(source.includes('assert.ok(selectionArgs.length <= 1'));assert.ok(source.includes('executedJourneyIds.push(id)'));assert.ok(source.includes('assertCoreJourneySelectionReceipt(receipt(), forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, requiredCases)'));assert.ok(source.includes('globalClosed: journeySelection === null && driverCompleted'));});
-await test("Collector independently invokes the current inventory-only owner with cleared credentials",()=>{assert.ok(collector.includes('"--inventory-only", "--core-closure"'));assert.ok(collector.includes('QA_ADMIN_USERNAME: "", QA_ADMIN_PASSWORD: "", QA_ADMIN_FIXTURES: "", QA_ADMIN_SOURCE_SHA256: ""'));assert.ok(collector.includes('assert.equal(canonical.inventoryOnly, true)'));assert.ok(collector.includes('canonicalRequiredCases = canonical.requiredCases'));assert.ok(collector.includes('assert.equal(existsSync(canonicalDirectory), false'));});
+// Inspect the actual collector call; quote and whitespace spelling are not execution criteria.
+function assertCanonicalInventoryInvocation(text) {
+ const ast=ts.createSourceFile('collector.mts',text,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS);assert.equal(ast.parseDiagnostics.length,0);
+ const declaration=name=>{const rows=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text===name);assert.equal(rows.length,1);return rows[0];};
+ const calls=(scope,name)=>{const rows=[];const visit=node=>{if(ts.isCallExpression(node)&&ts.isIdentifier(node.expression)&&node.expression.text===name)rows.push(node);ts.forEachChild(node,visit);};visit(scope);assert.equal(rows.length,1);return rows[0];};
+ const expression=node=>node.getText(ast).replace(/\s/gu,'');
+ const literal=node=>{assert.ok(node&&ts.isStringLiteral(node));return node.text;};
+ const property=(node,name)=>{assert.ok(node&&ts.isObjectLiteralExpression(node));const rows=node.properties.filter(row=>ts.isPropertyAssignment(row)&&row.name.getText(ast)===name);assert.equal(rows.length,1);return rows[0].initializer;};
+ const spawn=calls(declaration('runCoreCanonicalInventoryProducer'),'execFile');assert.equal(spawn.arguments.length,4);assert.equal(expression(spawn.arguments[0]),'process.execPath');
+ const args=spawn.arguments[1];assert.ok(ts.isArrayLiteralExpression(args));assert.equal(args.elements.length,3);
+ const script=args.elements[0];assert.ok(ts.isCallExpression(script));assert.equal(expression(script.expression),'resolve');assert.equal(script.arguments.length,2);assert.equal(expression(script.arguments[0]),'import.meta.dirname');assert.equal(literal(script.arguments[1]),'qa-admin-adoption-journeys.mjs');
+ assert.deepEqual(args.elements.slice(1).map(literal),['--inventory-only','--core-closure']);
+ const env=property(spawn.arguments[2],'env');assert.ok(ts.isObjectLiteralExpression(env));assert.equal(env.properties.length,6);
+ assert.ok(ts.isSpreadAssignment(env.properties[0]));assert.equal(expression(env.properties[0].expression),'process.env');
+ assert.deepEqual(env.properties.slice(1).map(row=>{assert.ok(ts.isPropertyAssignment(row));return row.name.getText(ast);}),['QA_ADMIN_OUTPUT','QA_ADMIN_USERNAME','QA_ADMIN_PASSWORD','QA_ADMIN_FIXTURES','QA_ADMIN_SOURCE_SHA256']);
+ assert.equal(expression(property(env,'QA_ADMIN_OUTPUT')),'canonicalDirectory');
+ for(const name of ['QA_ADMIN_USERNAME','QA_ADMIN_PASSWORD','QA_ADMIN_FIXTURES','QA_ADMIN_SOURCE_SHA256'])assert.equal(literal(property(env,name)),'');
+ const invoke=calls(declaration('verifyAdminAdoptionReadback'),'runCoreCanonicalInventoryProducer');assert.ok(ts.isAwaitExpression(invoke.parent));assert.ok(ts.isExpressionStatement(invoke.parent.parent));assert.deepEqual(invoke.arguments.map(expression),['handle','canonicalDirectory']);
+ return {ast,spawn,args,script,env,invoke};
+}
+await test("Collector independently invokes the current inventory-only owner with cleared credentials",()=>{assertCanonicalInventoryInvocation(collector);assert.ok(collector.includes('assert.equal(canonical.inventoryOnly, true)'));assert.ok(collector.includes('canonicalRequiredCases = canonical.requiredCases'));assert.ok(collector.includes('assert.equal(existsSync(canonicalDirectory), false'));});
+await test('Inventory invocation accepts equivalent quote and whitespace formatting',()=>{const {ast,args,env}=assertCanonicalInventoryInvocation(collector);const changes=[...args.elements.slice(1),...env.properties.slice(2).map(row=>row.initializer)].map(node=>({start:node.getStart(ast),end:node.end,value:JSON.stringify(node.text)}));let equivalent=collector;for(const change of changes.sort((a,b)=>b.start-a.start))equivalent=equivalent.slice(0,change.start)+change.value+equivalent.slice(change.end);const formatted=ts.createPrinter().printFile(ts.createSourceFile('collector.mts',equivalent,ts.ScriptTarget.Latest,true,ts.ScriptKind.TS));assertCanonicalInventoryInvocation(formatted);});
+for(const [name,select,replacement]of [
+ ['wrong executable',v=>v.spawn.arguments[0],'otherExecutable'],
+ ['wrong inventory owner',v=>v.script.arguments[1],JSON.stringify('other-owner.mjs')],
+ ['missing inventory flag',v=>v.args.elements[1],JSON.stringify('--other')],
+ ['missing core flag',v=>v.args.elements[2],JSON.stringify('--other')],
+ ['credential leak',v=>v.env.properties[2].initializer,JSON.stringify('not-cleared')],
+ ['late environment override',v=>v.env,'{...process.env,QA_ADMIN_OUTPUT:canonicalDirectory,QA_ADMIN_USERNAME:"",QA_ADMIN_PASSWORD:"",QA_ADMIN_FIXTURES:"",QA_ADMIN_SOURCE_SHA256:"",...process.env}'],
+ ['wrong output directory',v=>v.env.properties[1].initializer,'otherDirectory'],
+ ['missing await',v=>v.invoke.parent,'runCoreCanonicalInventoryProducer(handle,canonicalDirectory)'],
+ ['wrong collector argument',v=>v.invoke.arguments[0],'otherHandle']
+])await test('Inventory invocation rejects '+name,()=>{const value=assertCanonicalInventoryInvocation(collector),node=select(value);const changed=collector.slice(0,node.getStart(value.ast))+replacement+collector.slice(node.end);assert.notEqual(changed,collector);assert.throws(()=>assertCanonicalInventoryInvocation(changed));});
 async function verifyTemplateCreateSelection(manifest, requiredCases, source, owner, collector) {
  const selector=templateSelection.CORE_TEMPLATE_FORM_CREATES_SELECTION, selected=templateSelection.coreSelectedTemplateCreates(manifest), ids=selected.map(templateSelection.coreTemplateCreateJourneyId);
  const fixtures={pages:{templates:manifest.filter(row=>row.registryModuleKind).map((row,index)=>({kind:row.registryModuleKind,id:index+1,name:'Unused',slug:'unused-'+index,assigned:false}))}};

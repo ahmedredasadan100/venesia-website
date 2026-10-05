@@ -547,8 +547,8 @@ const RETAINED_QUALITY_RECONCILIATION_BASELINE = Object.freeze({
     "scripts/verify-admin-core-journey-selection.mjs": {
       "beforeSha256": "6610ac8931282a5566bf444d68efc300e8089efc7b0628008e6ed843c9b3338f",
       "beforeStatementsSha256": "7b0ecfc47b6fb2702f2188c88e6c8c8cceeeb39c618bf026866dfefdc7eac606",
-      "afterSha256": "62f626a8ce57f4a9f2b72221fe1ed75aa97d20b354b1dfb1b418aca010a6a90b",
-      "afterStatementsSha256": "03fae4aef73a45c2a50095df0f640be1d7b11f796d61c9e1d39f20f46a905269",
+      "afterSha256": "0d13f51f90836e55a36875ed4efba3a056f20d5766d2a6d99c368f8f768e9ba8",
+      "afterStatementsSha256": "654c15e85174c9e041703ceadd31f06663779da1e355958c88ea70d79e36ad85",
       "role": "reviewed-verification-ledger-reconciliation"
     },
     "scripts/verify-admin-core-navigation-settings.mts": {
@@ -589,8 +589,8 @@ const RETAINED_QUALITY_RECONCILIATION_BASELINE = Object.freeze({
     "scripts/verify-admin-core-rendered-adoption.mjs": {
       "beforeSha256": "be2c026d1572313f01d3cc40c69c2b79f8295aa286e9cb40aa5793bff4b7ed47",
       "beforeStatementsSha256": "a5ae1784944a021cf8edfcd0d72e9267fbda767ada379963834e1648627f316c",
-      "afterSha256": "95680a75de39fa750529679194e9d19921ee50e737f29ccd75d477a21242ef26",
-      "afterStatementsSha256": "65cecc52798c9ee12429ed7de614fb6d1315777f0a24e824b13e5be190d93ca9",
+      "afterSha256": "54c2852440798b3daf36c3e12ac1358f3b6a7adee8098a4a346ee6dd322396e0",
+      "afterStatementsSha256": "619a9fed0918a860bbba1221103530953e2b0de6af6b8ca04feb3aa694f88e69",
       "role": "reviewed-verification-ledger-reconciliation"
     },
     "scripts/verify-admin-core-specialized-settings-isolated.mts": {
