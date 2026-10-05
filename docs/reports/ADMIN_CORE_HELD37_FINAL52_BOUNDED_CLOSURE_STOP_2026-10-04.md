@@ -12,6 +12,8 @@ Second final candidate d22a84ad2e10cf1be83e116326c76ce55f642e77 reached CI with 
 
 Third final candidate 558af1446bf56b9c4cfc9c14fe98b1343f1c9dfa completed CI with7 successful jobs and1 failed Main job. The observed failure was a formatting-specific journey-selection source assertion, despite the existing inventory flags and empty credentials remaining present. A separate bounded downstream inspection identified a rendered test traversing an unrelated additive callback. Original CI/raw/log, source3/request and committedv7 checkpoints are physically preserved at .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/558af144/. Earlier a6cc/d22 histories remain unchanged; final gates and the next candidate CI are pending.
 
+Fourth final candidate 5e0fa1176a6d054186bd8b9b4da45b581c823f84 completed CI with7 successful jobs and1 failed Main job. The observed query-search verification failure was a missing scenario dependency in its extracted native slice. Original CI/raw/log, source3/request and committedv8 checkpoints are physically preserved at .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/5e0fa117/. All earlier candidate histories remain unchanged; final gates and the next candidate CI are pending.
+
 ## B. 959 before / after
 
 | Stage | Qualified | OPEN | pending N/A | proven non-pass N/A |
@@ -185,6 +187,8 @@ D22 CI correction changes only three controlled-test hunks: import the real cano
 
 The two corrections remain in existing Verification test owners: journey-selection now checks the actual inventory call structure and rejects altered flags/credentials, with842 actual maintained checks; rendered-adoption scopes its legacy reset criteria to the exact existing four-callback journey function, with160 checks parsed from its complete actual stdout. Its generic run receipt retains reportedSummary:null unchanged. Source review .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after558-ci-test-contracts/source-review.json SHA29ab42c1b72019608e95c7558ab1171489b694d6a1aec918c87f81b15ba1107f updates only four raw/AST hash values for these already-declared owners. Finite43,1941 source identities, controls989 and emitter905 remain unchanged. Prior348/type/lint evidence stays bound to its originalda97 public source; neither affected suite constitutes fresh CI or FinalQuality. No Product/runtime change or behavioral replay occurred.
 
+The existing query-search verification test now supplies the scenario port used by the current native slice. Its original assertions and slice remain unchanged, and the actual maintained suite passed215 checks. Source review .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after5e0-ci-query-search/source-review.json SHA92acaa37a7196842b6f1b094a6168d069bba71fdd00139051be851cb7497c823 binds the exact existing test as the44th finite Verification source rule; its preimage equals the original9cb source. All prior43 rules, controls989 and1941 source identities remain unchanged. The same source emitter changes only five expected-count literals43 to44, bound by .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/5e0-finalization-continuation/source-emitter-root-applied-review.json SHAb25927c3ffd6d7f035b2866ba28975bff31d6c288da8fd19463d35f4fd8ca1da. These affected checks are not fresh CI or FinalQuality. No Product/native change or behavioral replay occurred.
+
 ## J. Final Quality
 
 NOT INVOKED on the future final HEAD. Required:69 technical checks+4general gates, with no qualified Admin journey replay. Prior157ENVfailure remains failed.
@@ -194,6 +198,8 @@ The a6cc Main CI failure is a preserved CI result, not a FinalQuality execution.
 The d22 Main failure remains failed CI 7 PASS / 1 FAIL. Its 140 affected maintained controls are not a full final Quality PASS, and do not replace either candidate CI failure or the pending final gates.
 
 The558 Main failure remains failed CI7 PASS/1 FAIL. The new842/160 affected checks do not promote that failure, alter the950/0/9 behavioral preparation, or replace the pending exact-head final gates.
+
+The5e0 Main failure remains failed CI7 PASS/1 FAIL. Its215 affected checks do not promote that failure, alter the950/0/9 behavioral preparation, or replace pending exact-head final gates.
 
 ## K. Final Closure
 
@@ -212,6 +218,8 @@ The corrected candidate must receive a new committed HEAD and actual CI evidence
 The next candidate must receive a new committed HEAD and actual CI evidence. Both a6cc and d22 retain all seven successful job identities/timestamps and their Main failure. Their archived source outputs are historical physical authorities only. Final behavioral counts, all 29 attempt rows and the original111 remain unchanged.
 
 All three final-candidate CI failures and their seven successful job identities/timestamps remain preserved. The next candidate requires a new committed HEAD and actual CI. The29 targeted attempts, original111 and full prepared959 remain unchanged, with no post-gate report commit planned.
+
+All four final-candidate CI failures and their seven successful job identities/timestamps remain preserved. The next candidate requires a new committed HEAD and actual CI. The29 targeted attempts, original111 and full prepared959 remain unchanged, with no post-gate report commit planned.
 
 ## N. Migration Readiness boundary
 

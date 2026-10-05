@@ -669,6 +669,13 @@ const RETAINED_QUALITY_RECONCILIATION_BASELINE = Object.freeze({
       "afterSha256": "ca7c70c9088f1e95b824aae69fe3b1f07d4c0859dc34d5d7afa59d7a70c5d2c5",
       "afterStatementsSha256": "6e08ca0bfee3d3c157137433542ca7e6650ea34ad95d524497489bde5a4b04ad",
       "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-query-search-boundaries.mjs": {
+      "beforeSha256": "7b0e1189333a01bc48326b28193c163c230d9f3e63fedc2c07bc0dc891eb9947",
+      "beforeStatementsSha256": "5b8705c4b5887fdae26ad40932e35eae342c5bfc95a85e3ee3d793dc12cb30bc",
+      "afterSha256": "79df17e4719212100a9f1c5497af856b1b198a0994f463b33f300b2df058468a",
+      "afterStatementsSha256": "0f07b00e8d0b88a85fd746160c2e5b03b8144f50001661ac19cd6ced05c1c1d7",
+      "role": "reviewed-verification-ledger-reconciliation"
     }
   },
   "proofFunctionSha256": "7cbfeb8ddea148c59b628b2be6ac5d242a8beec4fadae427e7354c903ce7316a",
