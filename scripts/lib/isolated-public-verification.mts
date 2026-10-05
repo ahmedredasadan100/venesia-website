@@ -485,7 +485,7 @@ const RETAINED_QUALITY_RECONCILIATION_BASELINE = Object.freeze({
       "beforeSha256": "ea7f02cefea03676467e63eb1c2a8a8cd073568dd800aa9695bec580de214298",
       "beforeStatementsSha256": "83a1412c8ace3277ec70f9ea46f575c5dee7687afced5d3aaff2356918c839cd",
       "afterSha256": null,
-      "afterStatementsSha256": "84f173340a9b08124883c7ad9b12401f9d1bfd5ce403e2a7f7ba33c6fa011f65",
+      "afterStatementsSha256": "8e200ebb2b92735fbdccd7df7adeb79e0def1b39ba7b4d100aba72eb90913736",
       "role": "reviewed-verification-ledger-reconciliation"
     },
     "scripts/qa-admin-adoption-journeys.mjs": {
@@ -1158,6 +1158,27 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     // exact existing materializer output approved for this round, never a caller-supplied exemption.
     assert.deepEqual(ledger.predicateCorrections.slice(0, accepted.predicateCorrections.length), accepted.predicateCorrections);
     const pinPredicateEvidence = (ref: FinalQualityArtifactRef) => {
+      if (ref.path === "src/components/admin/integrations/IntegrationConnectionWizard.tsx") {
+        const navigation = RETAINED_QUALITY_RECONCILIATION_BASELINE.authorizationNavigation;
+        const navigationRule = RETAINED_QUALITY_RECONCILIATION_BASELINE.owners["src/components/admin/integrations/IntegrationConnectionWizard.tsx"];
+        if (ref.sha256 === navigationRule.beforeSha256) {
+          assert.equal(navigation.path, "src/components/admin/integrations/IntegrationConnectionWizard.tsx"); assert.equal(navigation.role, navigationRule.role);
+          assert.equal(impact.status, "ROOT_REVIEWED_EXACT_LEDGER959_RECONCILIATION_SOURCE_IMPACT");
+          // The canonical source guard above already proves this owner's exact two-tag inverse.
+          const reconciliation = impact.ledgerReconciliation; assert.ok(reconciliation);
+          const owners = reconciliation.owners.filter(row => row.path === navigation.path); assert.equal(owners.length, 1); const owner = owners[0];
+          assert.equal(owner.beforeSha256, navigationRule.beforeSha256); assert.equal(owner.afterSha256, navigationRule.afterSha256);
+          assert.equal(digest(owner.beforeSource), owner.beforeSha256); assert.equal(digest(owner.afterSource), owner.afterSha256);
+          assert.equal(approvedTracked.get(resolve(ROOT, navigation.path)), navigationRule.afterSha256);
+          const preimages = read<{ preimages: Array<{ logicalPath: string; path: string; sha256: string }> }>(RETAINED_FINAL_QUALITY_AUTHORITY.predicateCorrectionManifest.authority);
+          const rows = preimages.preimages.filter(row => row.logicalPath === ref.path && row.sha256 === ref.sha256); assert.equal(rows.length, 1);
+          const physicalPath = ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/root/offline-source-preimages/" + ref.sha256 + ".txt";
+          assert.equal(rows[0].path, physicalPath);
+          assert.equal(pin({ path: physicalPath, sha256: ref.sha256 }).toString("utf8"), owner.beforeSource);
+          assert.equal(pin({ path: navigation.path, sha256: navigationRule.afterSha256 }).toString("utf8"), owner.afterSource);
+          return;
+        }
+      }
       const role = RETAINED_FINAL_QUALITY_AUTHORITY.predicateCorrectionManifest;
       if (ref.path !== role.path || ref.sha256 !== role.historicalSha256) {
         assert.equal(approvedTracked.get(resolve(ROOT, ref.path)), ref.sha256); pin(ref); return;
