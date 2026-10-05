@@ -6,6 +6,8 @@ Behavioral reconciliation is prepared: **950 Qualified / 0 OPEN / 0 pending N/A 
 
 Start: 9cbdf71b0951ec61dc4acee6e171d279cde490d6, Draft PR186. The original8/8CI and111 reconciliation remain preserved at that historical HEAD. A new exact final candidate and CI/source binding are required after committing this checkpoint.
 
+First final candidate a6cc871a3baef48dec9cda379f37b3d6e05933d5 reached CI with7 successful jobs and1 failed Main job. The failure was a missing dependency port in an existing Verification negative test. Its original CI result, log, source manifest/impact/assembly, request and committed checkpoint bytes are preserved physically under .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/. No final Quality or Closure was invoked for that candidate. A corrected final HEAD and its valid CI remain pending.
+
 ## B. 959 before / after
 
 | Stage | Qualified | OPEN | pending N/A | proven non-pass N/A |
@@ -173,9 +175,13 @@ Environment185: Windows recorded Button or Lid sleep at10:39UTC and Power Button
 
 Source-guard candidate checks after184 recorded348 maintained controls,50 finite source checks(5positive/45rejected),0 types/lint and0 historical-file reads. These are candidate-check evidence; the actual applied source review and final exactHEAD manifest remain separate authorities.
 
+First-candidate CI correction: the existing query-presentation negative-test harness now receives its two real journey/rendered-adoption dependency ports. The deliberately missing date port, strict require allowlist, expected TypeError and no-SQL assertions are unchanged. The actual affected maintained suite passed888 checks; its nonempty warning stderr is preserved. No Product change or qualified behavioral replay was made. Original CI7PASS/1FAIL remains failed. Applied:.tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/root-applied-review.json, SHAf16f8fab45d3ee10eb9006dbe777f56c0daba1ba6af7d68f17ff2e3f93691789; checks:.tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/actual-maintained-checks.json, SHA64cef4077f151a3e9746488825f2a79a601f913f96a8002381aa1732b2d33f3b. The new source review .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json (SHA36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8) binds the corrected query-test bytes and current public guard; previous348/type/lint evidence remains bound to its original source, and the latest finite source controls are separately pinned by that review.
+
 ## J. Final Quality
 
 NOT INVOKED on the future final HEAD. Required:69 technical checks+4general gates, with no qualified Admin journey replay. Prior157ENVfailure remains failed.
+
+The a6cc Main CI failure is a preserved CI result, not a FinalQuality execution. Neither that failure nor the888 affected checks is a full final Quality PASS.
 
 ## K. Final Closure
 
@@ -188,6 +194,8 @@ Original111 identities remain unchanged:110Q+1non-passN/A. Separate959 preparati
 ## M. Cleanup / Git / PR
 
 Every sealed targeted terminal records zero remaining owned resources. Final current-host/queue audit, local=remote=PRHEAD proof and clean tracked state are still required. Commit/push only reviewed real deltas and these two reports; keepPR186Draft, auto-mergeoff.
+
+The corrected candidate must receive a new committed HEAD and actual CI evidence. The seven successful a6cc jobs retain their original identities and timestamps; no manual retry or blanket requalification is claimed. Previous a6cc source outputs are historical physical archive references, not current-candidate source authorities.
 
 ## N. Migration Readiness boundary
 

@@ -1,6 +1,6 @@
 {
   "status": "PRE_FINAL_GATE_959_RECONCILED_A_N_CHECKPOINT",
-  "createdAt": "2026-10-05T12:14:20.219Z",
+  "createdAt": "2026-10-05T14:05:23.809Z",
   "startingHead": "9cbdf71b0951ec61dc4acee6e171d279cde490d6",
   "candidateHead": null,
   "intendedTrackedReports": [
@@ -278,6 +278,139 @@
       "qualityPassed": false,
       "closureInvoked": false,
       "globalClosed": false
+    },
+    "firstFinalCandidateA6cc": {
+      "sourceHead": "a6cc871a3baef48dec9cda379f37b3d6e05933d5",
+      "status": "REPLACED_CANDIDATE_AFTER_CI_VERIFICATION_HARNESS_FAILURE",
+      "candidateAdmitted": false,
+      "refs": {
+        "archive": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preservation-manifest.json",
+          "sha256": "be9ad2c4e2ff064b51fc2aa941bb60bc173f19cc3384dea486226b46653ca680"
+        },
+        "sourceManifest": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/final-source-manifest.json",
+          "sha256": "72390ac87deb9588e9a2c4005daccd2359112dc107bc26fcf159c4a0cbc866f0"
+        },
+        "sourceImpact": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/source-impact-current-to-final.json",
+          "sha256": "3bd02d8b513ee000b20538e06b8695d3d92d969e2925ac93b4de830a8553983c"
+        },
+        "sourceAssembly": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/final-source-impact-assembly-receipt.json",
+          "sha256": "f64e12454adc0d4510699b8dcec697837deaecd85e1622e9d37bbae65bae972f"
+        },
+        "rootSourceRequest": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/0420211c1ee3af5d57fe22c4360fba0777f08fb62ab69de0b2bc0f380e3e6b66.txt",
+          "sha256": "0420211c1ee3af5d57fe22c4360fba0777f08fb62ab69de0b2bc0f380e3e6b66"
+        },
+        "committedCheckpoint": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/c2176e02bc2b5a52e8e98a394ec7d71e8466ad31ddf3dea8781a1da8a832885b.txt",
+          "sha256": "c2176e02bc2b5a52e8e98a394ec7d71e8466ad31ddf3dea8781a1da8a832885b"
+        },
+        "committedMarkdown": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/f4cdeaa4f31cee3aaf6267cf39c133fa1380139a7157b1863dad676c15971278.txt",
+          "sha256": "f4cdeaa4f31cee3aaf6267cf39c133fa1380139a7157b1863dad676c15971278"
+        },
+        "ci": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e.txt",
+          "sha256": "53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e"
+        },
+        "ciResponse": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/840a1ae7c6df5f8e4bf3012b3565e705f241beb3d15fd31c72267b61b1524af1.txt",
+          "sha256": "840a1ae7c6df5f8e4bf3012b3565e705f241beb3d15fd31c72267b61b1524af1"
+        },
+        "ciSummary": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/d637e74f7b3ec20744fcde73e35e26a90460769e1797ceb605a25d1f4b2fcfdf.txt",
+          "sha256": "d637e74f7b3ec20744fcde73e35e26a90460769e1797ceb605a25d1f4b2fcfdf"
+        },
+        "failureLog": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/ec582d125e19b9204dbba0e4f13080fe90986a5a476118fce9d64c16260bb65e.txt",
+          "sha256": "ec582d125e19b9204dbba0e4f13080fe90986a5a476118fce9d64c16260bb65e"
+        },
+        "cause": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/8259302e44907a621e71e84fb4ede1ce0780e5344f29cfc1ca4f8191b803636e.txt",
+          "sha256": "8259302e44907a621e71e84fb4ede1ce0780e5344f29cfc1ca4f8191b803636e"
+        }
+      },
+      "ci": {
+        "runId": 37308730180,
+        "status": "completed",
+        "conclusion": "failure",
+        "successfulJobs": 7,
+        "failedJobs": 1,
+        "jobs": [
+          {
+            "databaseId": 111758628069,
+            "name": "Topics Bulk Publish · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T12:19:28Z",
+            "completedAt": "2026-10-05T12:20:21Z"
+          },
+          {
+            "databaseId": 111758628119,
+            "name": "Lint · Typecheck · Verify · Build",
+            "status": "completed",
+            "conclusion": "failure",
+            "startedAt": "2026-10-05T12:19:28Z",
+            "completedAt": "2026-10-05T12:23:22Z"
+          },
+          {
+            "databaseId": 111758628195,
+            "name": "Dashboard Truth · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T12:20:04Z",
+            "completedAt": "2026-10-05T12:20:43Z"
+          },
+          {
+            "databaseId": 111758628230,
+            "name": "Metrics and Publishing Integrity · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T12:19:28Z",
+            "completedAt": "2026-10-05T12:20:20Z"
+          },
+          {
+            "databaseId": 111758628231,
+            "name": "Media Coordination · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T12:19:28Z",
+            "completedAt": "2026-10-05T12:20:31Z"
+          },
+          {
+            "databaseId": 111758628267,
+            "name": "Taxonomy Consistency · PostgreSQL 17 · PostgREST",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T12:19:28Z",
+            "completedAt": "2026-10-05T12:20:29Z"
+          },
+          {
+            "databaseId": 111758628317,
+            "name": "Reports Analytics · PostgreSQL 17",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T12:19:28Z",
+            "completedAt": "2026-10-05T12:20:08Z"
+          },
+          {
+            "databaseId": 111758628544,
+            "name": "Command Recovery and Public Read Integrity · Full Supabase",
+            "status": "completed",
+            "conclusion": "success",
+            "startedAt": "2026-10-05T12:19:29Z",
+            "completedAt": "2026-10-05T12:23:26Z"
+          }
+        ],
+        "originalFailurePreserved": true,
+        "retryDispatched": false
+      },
+      "qualityInvoked": false,
+      "closureInvoked": false,
+      "globalClosed": false
     }
   },
   "inputs": {
@@ -446,8 +579,8 @@
       "sha256": "efe3f5f08f9e49f2833e20ae56e3c26ad57e658acede75489c1d8e413e855eaf"
     },
     "finalSourceCompatibilityReview": {
-      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/source-review.json",
-      "sha256": "5e54e16b873cda7d311ab0d0953ce6f2a0be530caa1e3e9e339875073b37ed25"
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
+      "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
     },
     "reviewedDeltaEvidence": {
       "cause181": {
@@ -606,6 +739,18 @@
     "reviewedConstructor185": {
       "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/r185-constructor-preservation-proposal/root-applied-review.json",
       "sha256": "ae31b79772c1ecaf778b577a014567a02b2092707fc67c71fe2800553f0504f3"
+    },
+    "firstCandidatePreservation": {
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preservation-manifest.json",
+      "sha256": "be9ad2c4e2ff064b51fc2aa941bb60bc173f19cc3384dea486226b46653ca680"
+    },
+    "ciQueryPortCorrection": {
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/root-applied-review.json",
+      "sha256": "f16f8fab45d3ee10eb9006dbe777f56c0daba1ba6af7d68f17ff2e3f93691789"
+    },
+    "ciQueryPortChecks": {
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/actual-maintained-checks.json",
+      "sha256": "64cef4077f151a3e9746488825f2a79a601f913f96a8002381aa1732b2d33f3b"
     }
   },
   "sections": {
@@ -655,8 +800,141 @@
         "retentionOnFutureHead": "Requires existing source-impact authority; no current-head PASS inferred."
       },
       "futureFinalHead": null,
-      "sourceState": "PRE_FINAL_GATE_SOURCE_REVIEWED_BEHAVIOR_SETTLED_FINAL_HEAD_PENDING",
-      "prObservationScope": "The recorded OPEN draft PR and eight successful CI jobs belong to the preserved9cb starting authority. Final candidate HEAD,Git/PR and valid CI remain pending."
+      "sourceState": "PRE_FINAL_GATE_CORRECTED_SOURCE_REVIEWED_NEW_FINAL_HEAD_AND_CI_PENDING",
+      "prObservationScope": "The original9cb starting authority and failed a6cc first final candidate remain preserved separately. The corrected candidate HEAD, clean Git/PR proof and valid exact-head CI are still pending.",
+      "firstFinalCandidate": {
+        "sourceHead": "a6cc871a3baef48dec9cda379f37b3d6e05933d5",
+        "status": "REPLACED_CANDIDATE_AFTER_CI_VERIFICATION_HARNESS_FAILURE",
+        "candidateAdmitted": false,
+        "refs": {
+          "archive": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preservation-manifest.json",
+            "sha256": "be9ad2c4e2ff064b51fc2aa941bb60bc173f19cc3384dea486226b46653ca680"
+          },
+          "sourceManifest": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/final-source-manifest.json",
+            "sha256": "72390ac87deb9588e9a2c4005daccd2359112dc107bc26fcf159c4a0cbc866f0"
+          },
+          "sourceImpact": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/source-impact-current-to-final.json",
+            "sha256": "3bd02d8b513ee000b20538e06b8695d3d92d969e2925ac93b4de830a8553983c"
+          },
+          "sourceAssembly": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/final-source-impact-assembly-receipt.json",
+            "sha256": "f64e12454adc0d4510699b8dcec697837deaecd85e1622e9d37bbae65bae972f"
+          },
+          "rootSourceRequest": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/0420211c1ee3af5d57fe22c4360fba0777f08fb62ab69de0b2bc0f380e3e6b66.txt",
+            "sha256": "0420211c1ee3af5d57fe22c4360fba0777f08fb62ab69de0b2bc0f380e3e6b66"
+          },
+          "committedCheckpoint": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/c2176e02bc2b5a52e8e98a394ec7d71e8466ad31ddf3dea8781a1da8a832885b.txt",
+            "sha256": "c2176e02bc2b5a52e8e98a394ec7d71e8466ad31ddf3dea8781a1da8a832885b"
+          },
+          "committedMarkdown": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/f4cdeaa4f31cee3aaf6267cf39c133fa1380139a7157b1863dad676c15971278.txt",
+            "sha256": "f4cdeaa4f31cee3aaf6267cf39c133fa1380139a7157b1863dad676c15971278"
+          },
+          "ci": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e.txt",
+            "sha256": "53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e"
+          },
+          "ciResponse": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/840a1ae7c6df5f8e4bf3012b3565e705f241beb3d15fd31c72267b61b1524af1.txt",
+            "sha256": "840a1ae7c6df5f8e4bf3012b3565e705f241beb3d15fd31c72267b61b1524af1"
+          },
+          "ciSummary": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/d637e74f7b3ec20744fcde73e35e26a90460769e1797ceb605a25d1f4b2fcfdf.txt",
+            "sha256": "d637e74f7b3ec20744fcde73e35e26a90460769e1797ceb605a25d1f4b2fcfdf"
+          },
+          "failureLog": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/ec582d125e19b9204dbba0e4f13080fe90986a5a476118fce9d64c16260bb65e.txt",
+            "sha256": "ec582d125e19b9204dbba0e4f13080fe90986a5a476118fce9d64c16260bb65e"
+          },
+          "cause": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/8259302e44907a621e71e84fb4ede1ce0780e5344f29cfc1ca4f8191b803636e.txt",
+            "sha256": "8259302e44907a621e71e84fb4ede1ce0780e5344f29cfc1ca4f8191b803636e"
+          }
+        },
+        "ci": {
+          "runId": 37308730180,
+          "status": "completed",
+          "conclusion": "failure",
+          "successfulJobs": 7,
+          "failedJobs": 1,
+          "jobs": [
+            {
+              "databaseId": 111758628069,
+              "name": "Topics Bulk Publish · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T12:19:28Z",
+              "completedAt": "2026-10-05T12:20:21Z"
+            },
+            {
+              "databaseId": 111758628119,
+              "name": "Lint · Typecheck · Verify · Build",
+              "status": "completed",
+              "conclusion": "failure",
+              "startedAt": "2026-10-05T12:19:28Z",
+              "completedAt": "2026-10-05T12:23:22Z"
+            },
+            {
+              "databaseId": 111758628195,
+              "name": "Dashboard Truth · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T12:20:04Z",
+              "completedAt": "2026-10-05T12:20:43Z"
+            },
+            {
+              "databaseId": 111758628230,
+              "name": "Metrics and Publishing Integrity · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T12:19:28Z",
+              "completedAt": "2026-10-05T12:20:20Z"
+            },
+            {
+              "databaseId": 111758628231,
+              "name": "Media Coordination · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T12:19:28Z",
+              "completedAt": "2026-10-05T12:20:31Z"
+            },
+            {
+              "databaseId": 111758628267,
+              "name": "Taxonomy Consistency · PostgreSQL 17 · PostgREST",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T12:19:28Z",
+              "completedAt": "2026-10-05T12:20:29Z"
+            },
+            {
+              "databaseId": 111758628317,
+              "name": "Reports Analytics · PostgreSQL 17",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T12:19:28Z",
+              "completedAt": "2026-10-05T12:20:08Z"
+            },
+            {
+              "databaseId": 111758628544,
+              "name": "Command Recovery and Public Read Integrity · Full Supabase",
+              "status": "completed",
+              "conclusion": "success",
+              "startedAt": "2026-10-05T12:19:29Z",
+              "completedAt": "2026-10-05T12:23:26Z"
+            }
+          ],
+          "originalFailurePreserved": true,
+          "retryDispatched": false
+        },
+        "qualityInvoked": false,
+        "closureInvoked": false,
+        "globalClosed": false
+      }
     },
     "B": {
       "title": "959 ledger before / after",
@@ -13435,22 +13713,22 @@
           "sha256": "425e8cdb72992b98ffad539048759240bc9cbf09bebbefbf555ee821dbd53601"
         },
         "portableSourceProofProposal": {
-          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/source-review.json",
-          "sha256": "5e54e16b873cda7d311ab0d0953ce6f2a0be530caa1e3e9e339875073b37ed25"
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
+          "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
         },
         "finalSourceProofPreparation": {
-          "status": "REVIEWED_AND_APPLIED_BEFORE_FINAL_HEAD",
+          "status": "REVIEWED_AND_APPLIED_BEFORE_CORRECTED_FINAL_HEAD",
           "authority": {
-            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/source-review.json",
-            "sha256": "5e54e16b873cda7d311ab0d0953ce6f2a0be530caa1e3e9e339875073b37ed25"
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
+            "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
           },
           "applied": {
-            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/root-applied-review.json",
-            "sha256": "d3496c1e62940593f4c8a553f585235fe185af929aecd5f52cd908bc4d010565"
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/root-applied-review.json",
+            "sha256": "7f2b321efc05dbafad1a1b55cb95ff456299f999f39913c1b71746776769ebaf"
           },
           "checks": {
-            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/source-checks-review.json",
-            "sha256": "20deedf3976637bfa7f4f1af7df555bb22d1cc033b13fb92ed112fe7f7ca9bb5"
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-checks-review.json",
+            "sha256": "63fac5bc0edce649ef298f812d52be8b5c3c98dffde0c94a43f3615f9d91e5d7"
           },
           "exactFutureCandidateBindingPending": true
         },
@@ -13476,6 +13754,62 @@
             "finalSource": false
           },
           "actualFinalSource": false
+        },
+        "previousFinalSourceProofPreparation": {
+          "status": "REVIEWED_AND_APPLIED_BEFORE_FINAL_HEAD",
+          "authority": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/source-review.json",
+            "sha256": "5e54e16b873cda7d311ab0d0953ce6f2a0be530caa1e3e9e339875073b37ed25"
+          },
+          "applied": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/root-applied-review.json",
+            "sha256": "d3496c1e62940593f4c8a553f585235fe185af929aecd5f52cd908bc4d010565"
+          },
+          "checks": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/source-checks-review.json",
+            "sha256": "20deedf3976637bfa7f4f1af7df555bb22d1cc033b13fb92ed112fe7f7ca9bb5"
+          },
+          "exactFutureCandidateBindingPending": true
+        },
+        "ciQueryNegativeTestCorrection": {
+          "classification": "VERIFICATION_TEST_HARNESS_DEPENDENCY_PORT_OMISSION",
+          "owner": {
+            "path": "scripts/verify-admin-core-query-presentation.mts",
+            "sha256": "6d163acb1745cf3fbe32ec2697e4550f75cb583cb02fdfb2caf73e66aed03af9"
+          },
+          "priorSourceHead": "a6cc871a3baef48dec9cda379f37b3d6e05933d5",
+          "cause": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/8259302e44907a621e71e84fb4ede1ce0780e5344f29cfc1ca4f8191b803636e.txt",
+            "sha256": "8259302e44907a621e71e84fb4ede1ce0780e5344f29cfc1ca4f8191b803636e"
+          },
+          "failedLog": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/ec582d125e19b9204dbba0e4f13080fe90986a5a476118fce9d64c16260bb65e.txt",
+            "sha256": "ec582d125e19b9204dbba0e4f13080fe90986a5a476118fce9d64c16260bb65e"
+          },
+          "applied": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/root-applied-review.json",
+            "sha256": "f16f8fab45d3ee10eb9006dbe777f56c0daba1ba6af7d68f17ff2e3f93691789"
+          },
+          "proposal": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/proposal.json",
+            "sha256": "717dbfcf25860b1b5087668e183c59e382cffa75654943d13ce9615a98d1d966"
+          },
+          "independentPeer": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/independent-peer-review.json",
+            "sha256": "25e5f711b87cd1dfc628fed694e61adf235aa587ecb9d77b7d12767d6d13775f"
+          },
+          "actualMaintainedChecks": {
+            "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/a6cc-ci-query-regression-port-proposal/actual-maintained-checks.json",
+            "sha256": "64cef4077f151a3e9746488825f2a79a601f913f96a8002381aa1732b2d33f3b"
+          },
+          "checks": 888,
+          "stderrEmpty": false,
+          "strictRequireAllowlistUnchanged": true,
+          "intentionallyMissingDatePortPreserved": true,
+          "expectedTypeErrorAndNoSqlAssertionsUnchanged": true,
+          "productChanged": false,
+          "qualifiedBehaviorReexecuted": false,
+          "ciRerun": false
         }
       },
       "accounting": {
@@ -13621,7 +13955,7 @@
           },
           {
             "path": "scripts/lib/isolated-public-verification.mts",
-            "sha256": "ac0d83e0cd27d54c82aef306410bc1a2adf5fc2f85bbdb80f64e81b97524ea8e"
+            "sha256": "3bdfb10470bf5ea9a9f9e2c36e96ac11c41bd0bbeceea25e824b9ec68bb133f1"
           },
           {
             "path": "scripts/lib/isolated-supabase.mts",
@@ -13685,7 +14019,7 @@
           },
           {
             "path": "scripts/verify-admin-core-query-presentation.mts",
-            "sha256": "9fdc869389b1c68017c9bcc44a7c527923932fb33a14d40b6bb0508faed05018"
+            "sha256": "6d163acb1745cf3fbe32ec2697e4550f75cb583cb02fdfb2caf73e66aed03af9"
           },
           {
             "path": "scripts/verify-admin-core-rendered-adoption.mjs",
@@ -13721,9 +14055,23 @@
           }
         ],
         "sourceReview": {
-          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after184/source-review.json",
-          "sha256": "5e54e16b873cda7d311ab0d0953ce6f2a0be530caa1e3e9e339875073b37ed25"
-        }
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after-a6cc-ci-query-port/source-review.json",
+          "sha256": "36e397b1cea318e8f3fb2a70e0b735f533a7310d0172d0cd60f2f0b3474810e8"
+        },
+        "previousCandidateSourceImpact": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/source-impact-current-to-final.json",
+          "sha256": "3bd02d8b513ee000b20538e06b8695d3d92d969e2925ac93b4de830a8553983c"
+        },
+        "changesAfterA6cc": [
+          {
+            "path": "scripts/lib/isolated-public-verification.mts",
+            "sha256": "3bdfb10470bf5ea9a9f9e2c36e96ac11c41bd0bbeceea25e824b9ec68bb133f1"
+          },
+          {
+            "path": "scripts/verify-admin-core-query-presentation.mts",
+            "sha256": "6d163acb1745cf3fbe32ec2697e4550f75cb583cb02fdfb2caf73e66aed03af9"
+          }
+        ]
       },
       "environment": {
         "historical": null,
@@ -13852,7 +14200,16 @@
       "pass": false,
       "previous157FailedRetained": true,
       "required": "Actual existing69-prefix+4-Public technical gate on the final candidate, using retained original27 and no unrelated Admin replay.",
-      "finalReceipt": null
+      "finalReceipt": null,
+      "priorCandidateCi": {
+        "sourceHead": "a6cc871a3baef48dec9cda379f37b3d6e05933d5",
+        "status": "FAILED_SEVEN_SUCCESS_ONE_MAIN_FAILURE",
+        "evidence": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e.txt",
+          "sha256": "53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e"
+        },
+        "qualityInvoked": false
+      }
     },
     "K": {
       "title": "Final Closure and globalClosed",
@@ -15827,6 +16184,17 @@
           "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/fresh-through-browser-r186-semantic-preparation.json",
           "sha256": "b0c1a422c4c861f4e8e97b5c921f52c19f7e4278516a1f072bf2192af9a6fb53"
         }
+      },
+      "replacedCandidateCi": {
+        "sourceHead": "a6cc871a3baef48dec9cda379f37b3d6e05933d5",
+        "ci": {
+          "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e.txt",
+          "sha256": "53d0e60047239ade8eee894cc342b676ce1dffd7c4611fceeb8a7dc14630c52e"
+        },
+        "successfulJobs": 7,
+        "failedJobs": 1,
+        "correctedCandidateGitAndCi": "PENDING_NEW_COMMITTED_HEAD",
+        "behaviorReexecuted": false
       }
     },
     "N": {
@@ -15945,8 +16313,8 @@
     }
   },
   "finalizationBlockers": [
-    "Commit and push the reviewed source and same two truthful pre-gate reports to Draft PR186.",
-    "Bind exact final HEAD/source and valid affected or retained CI with the current authority.",
+    "Commit and push only the reviewed two-port Verification correction, its exact source-guard binding and these same two truthful pre-gate reports to Draft PR186.",
+    "After preserving failed a6cc CI, bind corrected exact final HEAD/source and valid affected or retained CI with the current authority.",
     "Emit original111/959 and source/integrity/readiness through existing owners; preserve every failed terminal.",
     "Run exactHEAD69+4 FinalQuality; invoke FinalClosure only on actualPASS and all prerequisites.",
     "Prove cleanup/Git/PR and create local actual A–N supplement; STOP before Migration Readiness."
@@ -15955,14 +16323,14 @@
   "globalClosed": false,
   "supersedes": {
     "priorDraft": {
-      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/report-preparation/checkpoint-draft-v4.json",
-      "sha256": "a5dd4a1017ee62dee213a00fec5a146248a596651c09d129838aa89bc3fba993"
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/c2176e02bc2b5a52e8e98a394ec7d71e8466ad31ddf3dea8781a1da8a832885b.txt",
+      "sha256": "c2176e02bc2b5a52e8e98a394ec7d71e8466ad31ddf3dea8781a1da8a832885b"
     },
     "priorMarkdown": {
-      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/report-preparation/checkpoint-draft-v4.md",
-      "sha256": "f211def89ade1e5740c6f713747fc15b3b1edd1c103d7ea008fd287c87b19ae5"
+      "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/a6cc871a/preimages/f4cdeaa4f31cee3aaf6267cf39c133fa1380139a7157b1863dad676c15971278.txt",
+      "sha256": "f4cdeaa4f31cee3aaf6267cf39c133fa1380139a7157b1863dad676c15971278"
     },
-    "priorVersion": 4,
+    "priorVersion": 5,
     "priorBytesModified": false,
     "historyPreserved": true
   }
