@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { observeCoreScrollbarAdoption, observeCoreModalFocusAdoption, observeCoreModalPendingDismissal, observeCoreModalCleanReturn } from "./admin-core-rendered-adoption.mjs";
-import { observeCoreAcceptedFormFeedback, runCoreFormPermissionIntent, validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
+import { observeCoreAcceptedFormFeedback, runCoreFormPermissionIntent, validateCoreJourneySelection, observeCoreControlDraft, observeCoreBooleanControl, observeCoreListboxControl, acceptCoreControlSave } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -417,4 +417,19 @@ export async function runCoreTemplateFormJourneys(ctx) {
     });
   }
   return { planned: plan.editors.length + plan.creates.length, completed: outcomes.length, outcomes, boundary: "Selected template-domain lifecycle; no template-command or complete capability-axis promotion." };
+}
+
+/** Only the six currently exposed create selectors and Hero's create status. */
+export async function runCoreTemplateCreateControlFollowup(ctx) {
+  assert.equal(validateCoreJourneySelection({scope:'core-closure',cohort:'recovery-templates',selection:ctx.journeySelection}),'template-create-controls-followup');
+  const{page,origin,run}=ctx,results=[];
+  for(const kind of['content','hero','cta','cards','feed','featured'])await run('core-control-template-create-'+kind,[],async()=>{
+    const path='/admin/pages-blocks/blocks/'+kind,name='QA selected '+kind+' '+Date.now().toString(36),slug=name.toLowerCase().replaceAll(' ','-');await page.goto(origin+path,{waitUntil:'domcontentloaded'});await page.getByRole('button',{name:kind==='hero'?'إضافة هيرو':'إضافة بلوك',exact:true}).click();const form=page.locator(kind==='hero'?'#create-hero-template-form':'#create-'+kind+'-block-form');await expect(form).toBeVisible();await form.locator('[name="name"]').fill(name);await form.locator('[name="slug"]').fill(slug);
+    const field=kind==='feed'?'feed_type':'variant',source=form.locator('select[name="'+field+'"]'),before=await source.inputValue(),options=await source.locator('option').evaluateAll(nodes=>nodes.filter(node=>!node.disabled&&node.value).map(node=>node.value));
+    const alternative=options.find(value=>value!==before&&!['project-detail','projects-hub'].includes(value));assert.ok(alternative,'An exposed alternative must exist; hidden/default values are not an interaction.');
+    const authored=[];for(const[fieldName,jsonPath]of recipes[kind].fields.filter(([key])=>kind==='feed'?key==='widget_title':kind==='cards'?['item_0_title','item_0_body'].includes(key):false)){const value='QA selected '+fieldName;await form.locator('[name="'+fieldName+'"]').fill(value);authored.push({name:fieldName,path:jsonPath,value});}
+    const draft=await observeCoreControlDraft(ctx,async()=>({listbox:await observeCoreListboxControl({page,form,name:field,value:alternative}),...(kind==='hero'?{boolean:await observeCoreBooleanControl({form,name:'status',target:true})}:{})}));let id;
+    const native=await acceptCoreControlSave(ctx,{form,ownedRunId:draft.noWrite.ownedRunId,mapping:{caseId:'core-control-template-create-'+kind,formConsumer:'block-template-create-modals',surface:kind+':create'},descriptor:()=>{const value=buildCoreTemplateCreateReadback(kind,id,name,slug,authored);value.expected={...value.expected,...(kind==='featured'?{}:{[field]:alternative}),status:kind==='hero'?'published':'unpublished'};if(kind==='featured')value.expectedJson.push({column:'config',path:['presentation','variant'],value:alternative});return value;},reopen:async()=>{await expect(page).toHaveURL(url=>new RegExp('^'+path+'/[0-9]+$','u').test(url.pathname));id=Number(new URL(page.url()).pathname.split('/').at(-1));await page.reload({waitUntil:'domcontentloaded'});const editor=page.locator('form').filter({has:page.locator('input[name="id"][value="'+id+'"]')});await expect(editor.locator('[name="name"]')).toHaveValue(name);if(kind==='featured')await editor.locator('[data-admin-tab-id="presentation"]').click();await expect(editor.locator('[name="'+(kind==='featured'?'presentation_variant':field)+'"]')).toHaveValue(alternative);if(kind==='hero')await expect(editor.locator('input[type="checkbox"][name="status"]')).toBeChecked();}});
+    const result={...native,controls:draft.value,noWrite:draft.noWrite,kind};results.push(result);return result;
+  });return{selection:ctx.journeySelection,results,automaticCoverage:[],globalClosed:false};
 }

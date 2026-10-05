@@ -1,15 +1,18 @@
+import {createHash} from 'node:crypto';
+import {assertCoreQueryBusyReceipt} from './fixtures/admin-core-query-presentation-journeys.mjs';
+import {assertCoreRenderedAdoptionJoin} from './fixtures/admin-core-rendered-adoption.mjs';
 import assert from 'node:assert/strict';
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from './lib/isolated-supabase.mts';
 import { readCoreFixedQaActor } from './verify-admin-core-domain-readback-isolated.mts';
 import { parseAdminEntityListRequestQuery, type AdminEntityListQueryContract } from '../src/lib/admin/entity-list/data-engine/contracts.ts';
-import { selectCoreQueryPresentationPlan, loadCoreQueryPresentationPlan, coreQueryScenario, CORE_ACTIVITY_DATE_SCENARIOS, assertCoreActivityDateReceipts, CORE_QUERY_SEARCH_SCENARIOS, CORE_QUERY_STALE_SCENARIOS, assertCoreQueryStaleReceipts, coreQueryViewScenarios, assertCoreQueryViewReceipts, coreQuerySearchColumns, assertCoreQuerySearchReceipts, coreQueryExtraFilterCases, assertCoreQueryExtraFilterReceipts, coreQueryPreferenceScenario, assertCoreQueryColumnSortReceipts } from './fixtures/admin-core-query-presentation-plan.mjs';
+import { CORE_QUERY_BUSY_SELECTION, CORE_QUERY_BUSY_SCENARIOS, assertCoreQueryBusySequence, selectCoreQueryPresentationPlan, loadCoreQueryPresentationPlan, coreQueryScenario, CORE_ACTIVITY_DATE_SCENARIOS, assertCoreActivityDateReceipts, CORE_QUERY_SEARCH_SCENARIOS, CORE_QUERY_STALE_SCENARIOS, assertCoreQueryStaleReceipts, coreQueryViewScenarios, assertCoreQueryViewReceipts, coreQuerySearchColumns, assertCoreQuerySearchReceipts, coreQueryExtraFilterCases, assertCoreQueryExtraFilterReceipts, coreQueryPreferenceScenario, assertCoreQueryColumnSortReceipts } from './fixtures/admin-core-query-presentation-plan.mjs';
 
 type Row=Record<string,unknown>;
 export type CoreQueryFixture={ search:string; ids:number[]; projectId?:number; stageId?:number; itemId?:number; filterOptions?:{category:{id:number;name:string};series?:{id:number;name:string}} };
 export type CoreQueryFixtures={ queryClosure:{ contexts:Record<string,CoreQueryFixture> } };
 type Plan=Array<{viewLink:{href:string;label:string;pageSourceSha256:string}|null;key:string;entity:string;consumerId:string;table:string;labelColumn:string;sortField:string;viewKey:string;type:string|null;level:string|null;kind:string|null;rowCount:number;filter:{key:string;value:string}|null;contract:AdminEntityListQueryContract<Record<string,unknown>,string>;publicPathFor(row:Record<string,unknown>):string|null;routeFor(fixture:CoreQueryFixture):string}>;
-type NativeProof={id:string;routeKey:string;scenario:string;actorId:number;ownedRunId:string;fixtureFingerprint:string;preference:unknown;query:string;completeIds:number[];dateFilterProjection:unknown;searchProjection:unknown;extraFilterProjection:unknown;viewProjection:unknown;projectPublicationRows?:Row[]|null};
-const state=new WeakMap<OwnedLocalHandle,{fixtures:CoreQueryFixtures;plan:Plan;fingerprints:Map<string,string>;proofs:Map<string,NativeProof>}>();
+type NativeProof={id:string;routeKey:string;scenario:string;actorId:number;ownedRunId:string;fixtureFingerprint:string;preference:unknown;query:string;completeIds:number[];dateFilterProjection:unknown;searchProjection:unknown;extraFilterProjection:unknown;viewProjection:unknown;projectPublicationRows?:Row[]|null;busyReadOnlyFingerprint?:string;kind?:string;status?:string;route?:string;expectedIds?:number[];rows?:Row[]};
+const state=new WeakMap<OwnedLocalHandle,{fixtures:CoreQueryFixtures;plan:Plan;mode:'full'|'busy';fingerprints:Map<string,string>;proofs:Map<string,NativeProof>;busyResponses:Map<string,Row>}>();
 function positive(value:unknown){assert.ok(typeof value==='number'&&Number.isSafeInteger(value)&&value>0);return value;}
 function identifier(value:string){assert.match(value,/^[a-z][a-z0-9_]*$/);return '"'+value+'"';}
 export function validateCoreQueryRequest(input:unknown){
@@ -27,12 +30,13 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
  if(!current){
   const plan=await loadCoreQueryPresentationPlan() as Plan;assert.deepEqual(Object.keys(fixtures.queryClosure.contexts).sort(),plan.map(spec=>spec.key).sort());
   for(const spec of plan){const f=fixtures.queryClosure.contexts[spec.key];assert.match(f.search,/^qa-b1-[a-z0-9-]+$/);assert.equal(f.ids.length,spec.rowCount);assert.equal(new Set(f.ids.map(positive)).size,f.ids.length);if(spec.kind)positive(f.projectId);if(spec.kind==='items')positive(f.stageId);if(spec.kind==='updates')positive(f.itemId);}
-  current={fixtures,plan,fingerprints:new Map(),proofs:new Map()};state.set(handle,current);
+  current={fixtures,plan,mode:CORE_QUERY_BUSY_SCENARIOS.includes(request.scenario)?'busy':'full',fingerprints:new Map(),proofs:new Map(),busyResponses:new Map()};state.set(handle,current);
  }
  assert.equal(current.fixtures,fixtures,'Fixed fixture binding cannot change during the owned lifecycle.');
  assert.equal(current.proofs.has(request.id),false,'A native checkpoint ID cannot be replayed.');
  const spec=current.plan.find(row=>row.key===request.routeKey);assert.ok(spec,'Unknown registered route context.');
- const fixture=fixtures.queryClosure.contexts[spec.key],params=coreQueryScenario(spec,fixture,request.scenario);
+ const busy=CORE_QUERY_BUSY_SCENARIOS.includes(request.scenario);assert.equal(current.mode,busy?'busy':'full','A Busy-only handle cannot mix or borrow full matrix checkpoints.');if(busy)assertCoreQueryBusySequence(current.plan,[...current.proofs.values()],request);
+ const fixture=fixtures.queryClosure.contexts[spec.key],scenario=busy?(request.scenario==='busy-before'||request.scenario==='busy-restored'?'first':'stale-held'):request.scenario,params=coreQueryScenario(spec,fixture,scenario);
  const query=parseAdminEntityListRequestQuery(spec.contract as AdminEntityListQueryContract<Record<string,unknown>,string>,params);
  const nativeSortField=request.scenario==='preferences-default'?query.sort.field:spec.sortField;
  if(request.scenario==='preferences-default'){assert.equal(spec.entity,'project_tracking_updates');assert.ok(spec.contract.sortFields.includes(nativeSortField));assert.deepEqual(query.sort,spec.contract.defaultSort);}
@@ -59,7 +63,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    const value=query.filters[key];if(value){assert.equal(typeof value,'string');filteredValues.push(value+time);filtered.push('created_at '+operator+' $'+filteredValues.length+'::timestamptz');}
   }
  }
- const searchScenario=CORE_QUERY_SEARCH_SCENARIOS.includes(request.scenario)||CORE_QUERY_STALE_SCENARIOS.includes(request.scenario);
+ const searchScenario=CORE_QUERY_SEARCH_SCENARIOS.includes(scenario)||CORE_QUERY_STALE_SCENARIOS.includes(scenario);
  if(searchScenario){
   // Keep the independently registered fixture fingerprint query unchanged.
   // Search clear/short uses the complete canonical route scope, not the namespace subset.
@@ -120,6 +124,7 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
     for(const row of timestamps){const instant=Date.parse(row.createdAt);assert.ok(Number.isFinite(instant));if(lower)assert.ok(instant>=Date.parse(lower));if(upper)assert.ok(instant<=Date.parse(upper));}
     dateFilterProjection={dateFrom,dateTo,lower,upper,timestamps};
    }
+   let busyReadOnlyFingerprint:string|undefined;if(busy){const domain=(await connection.query("select md5(coalesce(jsonb_agg(to_jsonb(t) order by id)::text,'[]')) fingerprint from public."+table+' t')).rows[0],audit=(await connection.query("select md5(coalesce(jsonb_agg(to_jsonb(a) order by id)::text,'[]')) fingerprint from public.admin_audit_logs a")).rows[0];assert.match(String(domain.fingerprint),/^[a-f0-9]{32}$/u);assert.match(String(audit.fingerprint),/^[a-f0-9]{32}$/u);busyReadOnlyFingerprint=createHash('sha256').update(JSON.stringify({table:spec.table,domain:domain.fingerprint,audit:audit.fingerprint})).digest('hex');const prior=[...current.proofs.values()].find(row=>row.routeKey===spec.key);if(prior)assert.equal(busyReadOnlyFingerprint,prior.busyReadOnlyFingerprint,'Busy read and Information observation must preserve the complete registered domain and audit.');}
    const totalPages=Math.max(1,Math.ceil(rows.length/query.pageSize)),page=Math.min(query.page,totalPages),start=(page-1)*query.pageSize;
    const preferences=(await connection.query('select preferences from public.admin_user_preferences where admin_user_id=$1 and view_key=$2',[actorId,spec.viewKey])).rows;
    assert.ok(preferences.length<=1);
@@ -127,10 +132,11 @@ export async function readCoreQueryPresentationCheckpoint(handle:OwnedLocalHandl
    if(projectPublicationRows)for(const row of projectPublicationRows)assert.ok(['published','unpublished'].includes(row.publicationStatus),'Native Project publication state must be canonical.');
    await connection.query('commit');current.fingerprints.set(spec.key,fingerprint);
    current.proofs.set(request.id,{id:request.id,routeKey:spec.key,scenario:request.scenario,actorId,ownedRunId:handle.identity.runId,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,query:params.toString(),completeIds:ids,dateFilterProjection,searchProjection,extraFilterProjection,viewProjection,projectPublicationRows});
-   return {status:"pass" as const,ownedRunId:handle.identity.runId,id:request.id,kind:request.kind,routeKey:spec.key,scenario:request.scenario,entity:spec.entity,consumerId:spec.consumerId,actorId,route:spec.routeFor(fixture),query:params.toString(),
+   const result={status:"pass" as const,ownedRunId:handle.identity.runId,id:request.id,kind:request.kind,routeKey:spec.key,scenario:request.scenario,entity:spec.entity,consumerId:spec.consumerId,actorId,route:spec.routeFor(fixture),query:params.toString(),
     expectedIds:ids.slice(start,start+query.pageSize),completeIds:ids,rows:rows.slice(start,start+query.pageSize).map(row=>({id:Number(row.id),label:String(row.label),publicPath:spec.publicPathFor(row),...(spec.entity==='projects'?{publicationStatus:String(row.publication_status)}:{}),...(spec.entity==='topics'?{information:{viewCount:Number(row.views_count??0)}}:{})})),
     pagination:{page,pageSize:query.pageSize,totalRows:rows.length,totalPages},dateFilterProjection,searchProjection,extraFilterProjection,viewProjection,fixtureFingerprint:fingerprint,preference:preferences[0]?.preferences??null,
-    proofBoundary:'Native table order, complete isolated search set and same-run QA preference projection; no domain audit or unrelated capability proof is inferred.'};
+    proofBoundary:busy?'Actual held registered read; complete registered domain and audit plus fixed QA preferences unchanged. No mutation or whole-axis credit.':'Native table order, complete isolated search set and same-run QA preference projection; no domain audit or unrelated capability proof is inferred.'};
+   if(busy){assert.ok(busyReadOnlyFingerprint);const fields={busyReadOnlyFingerprint,kind:result.kind,status:result.status,route:result.route,expectedIds:result.expectedIds,rows:result.rows};Object.assign(current.proofs.get(request.id)!,fields);const response={...result,busyReadOnlyFingerprint};current.busyResponses.set(request.id,structuredClone(response));return response;}return result;
   }catch(error){await connection.query('rollback');throw error;}
  });
 }
@@ -191,4 +197,23 @@ export function verifyCoreQueryPresentationCompletion(handle:OwnedLocalHandle,in
  assert.equal(actors.size,1,'All route contexts must use the same exact native QA account.');assert.equal(new Set(used).size,used.length);
  assert.deepEqual([...used].sort(),[...current.proofs.keys()].sort(),'No native query checkpoint may be orphaned or substituted.');
  return {status:'pass' as const,ownedRunId:handle.identity.runId,contexts:summaries.length,nativeCheckpoints:used.length,actorId:[...actors][0],summaries,automaticCoverage:[],globalClosed:false,boundary:'All planned query/presentation journeys and native scenarios joined; explicit per-route partial capability limits remain.'};
+}
+
+/** Same handle, opt-in Busy-only completion; full matrix remains a separate branch. */
+export function verifyCoreQueryBusyCompletion(handle:OwnedLocalHandle,input:unknown,nativeInput:unknown,formManifest:unknown){
+ assertOwnedLocalHandle(handle);assert.ok(input&&typeof input==='object');const browser=input as Row,current=state.get(handle);assert.ok(current&&current.mode==='busy');
+ assert.ok(nativeInput&&typeof nativeInput==='object');const native=nativeInput as Row;assert.equal(native.status,'pass');assert.equal(native.ownedRunId,handle.identity.runId);assert.ok(Array.isArray(native.records));assert.deepEqual([...current.busyResponses.keys()],[...current.proofs.keys()]);assert.deepEqual(native.records,[...current.busyResponses.values()],'The raw native artifact must equal every full same-handle Busy response in actual order.');
+ assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'query-presentation');assert.equal(browser.journeySelection,CORE_QUERY_BUSY_SELECTION);assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.errors,[]);assert.match(String(browser.sourceSha256),/^[a-f0-9]{64}$/u);
+ const result=browser.queryPresentation as Row;assert.ok(result&&result.status==='pass'&&Array.isArray(result.outcomes));assert.equal(result.wholeCohortExecuted,false);assert.deepEqual(result.automaticCoverage,[]);assert.equal(result.globalClosed,false);const outcomes=result.outcomes as Row[],evidence=browser.evidence as Row[];assert.ok(Array.isArray(evidence));
+ const ids=current.plan.map(spec=>'core-query-busy-'+spec.key);assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(result.selectedJourneyIds,ids);assert.deepEqual(outcomes.map(row=>row.routeKey),current.plan.map(spec=>spec.key));assert.deepEqual(evidence.map(row=>row.id),['existing-auth-login',...ids]);assert.ok(evidence.every(row=>row.status==='pass'&&Array.isArray(row.coverage)&&row.coverage.length===0));
+ const login=evidence[0];assert.equal(login.authenticated,true);assert.equal(login.sessionArtifactWritten,false);assert.match(String(login.dashboardState),/^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
+ const used:string[]=[],actors=new Set<number>(),summaries:Row[]=[];
+ for(const [index,spec]of current.plan.entries()){
+  const outcome=outcomes[index];for(const[key,value]of Object.entries(outcome))assert.deepEqual(evidence[index+1][key],value);assert.equal(outcome.ownedRunId,handle.identity.runId);assert.ok(Array.isArray(outcome.nativeCheckpointIds));const nativeIds=outcome.nativeCheckpointIds as string[];
+  const proofs=nativeIds.map(id=>{const proof=current.proofs.get(id);assert.ok(proof,'Busy outcome cannot invent a native checkpoint.');assert.equal(proof.ownedRunId,handle.identity.runId);actors.add(proof.actorId);return proof;});
+  const summary=assertCoreQueryBusyReceipt(outcome,proofs,spec,current.fixtures.queryClosure.contexts[spec.key],browser.sourceSha256);used.push(...nativeIds);summaries.push(summary);
+ }
+ assert.equal(actors.size,1);assert.equal(new Set(used).size,used.length);assert.deepEqual(used,[...current.proofs.keys()],'All native Busy requests must be consumed once in exact execution order.');assert.equal(used.length,current.plan.length*CORE_QUERY_BUSY_SCENARIOS.length);
+ const topics=current.plan.find(spec=>spec.key==='topics');assert.ok(topics);const renderedAdoption=assertCoreRenderedAdoptionJoin({browser,sourceSha256:browser.sourceSha256,formManifest,expected:[{journeyId:'core-query-busy-topics',observationId:'atomic-topics-information-scroll',axis:'scrollbar',bindings:[{boundary:'form',consumer:'list-bulk-row-one-shot-actions',surface:'row-command'}],routePathname:topics.routeFor(current.fixtures.queryClosure.contexts.topics)}]});
+ return {status:'pass' as const,ownedRunId:handle.identity.runId,selection:CORE_QUERY_BUSY_SELECTION,contexts:summaries.length,nativeCheckpoints:used.length,actorId:[...actors][0],summaries,renderedAdoption,automaticCoverage:[],globalClosed:false,boundary:'Only actual held registered reads and Topics shared Information scrollbar; native complete registered domain plus audit remained unchanged. No full query matrix or lifecycle credit.'};
 }

@@ -90,13 +90,26 @@ type FinalQualityArtifactRef = { path: string; sha256: string };
 type FinalQualitySource = { invocationHeadSha: string; sourceSha256: string; manifest: Array<{ file: string; sha256: string }> };
 type FinalQualityOperation = { id: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string };
 type FinalQualityNamedCell = { key: string; disposition: string; evidence: FinalQualityArtifactRef[] };
-const FINAL_QUALITY_ACCOUNTING = ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/";
+const FINAL_QUALITY_ACCOUNTING = ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/";
 const FINAL_QUALITY_READINESS = FINAL_QUALITY_ACCOUNTING + "final-quality-readiness.json";
 const RETAINED_FINAL_QUALITY_AUTHORITY = Object.freeze({
+  retainedQualificationRoot: ".tmp-qa/core-final-closure/held37-final52-closure-2026-10-03/accounting/",
   final27Plan: { path: ".tmp-qa/core-final-closure/remaining-41-52-retry88-stage/qualification-adoption/selection-boundary-follow-on/qualification-plan.json",
     sha256: "69c927001ed4fa447a8a752eb2017ef0c5b0d1d8ddbe051987c7aad5b75a95bc" },
   operationIdentitySha256: "15721c1324f7123bcdbb6d72669ff81cf34229ff748e0e04ffbd39709f42d517",
   caseIdentitySha256: "f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",
+  predicateCorrectionManifest: Object.freeze({
+    path: "src/lib/admin/interaction-system/adoption-manifest.ts",
+    historicalSha256: "fd5f69d19908c685a9d60a9f2f4ee1577074fa3b4381bdf9ea026d256091b36e",
+    currentSha256: "5de0324b48ab33bb2052b72a7592c9a2f5f2af8896b74363b74726aee295b279",
+    physicalPath: ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/root/offline-source-preimages/fd5f69d19908c685a9d60a9f2f4ee1577074fa3b4381bdf9ea026d256091b36e.txt",
+    authority: { path: ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/root/offline-source-preimages.json",
+      sha256: "393da014a1175e3bb70f9d625a374ce86c006fc5abf671a7a00dbdd99f92be71" },
+  }),
+  predicateCorrectionProof: Object.freeze({
+    path: ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/root/specialized-atomic-integrated-proof.json",
+    sha256: "7a9e4254a2886c918be56360dd88dd00cda01448c027ff0377828b2a013483cd",
+  }),
   priorAccounting: Object.freeze({
     path: ".tmp-qa/core-final-closure/cumulative-accounting-stage/current77-retained84-partial79-85-86-application-stage/accounting-metadata-follow-on/current-accounting-successor.json",
     sha256: "34f9f296582055191d68b8415f44324587b68a77d29169317f159c84d3f573ab",
@@ -299,14 +312,425 @@ const RETAINED_QUALITY_LIFECYCLE_BASELINE = Object.freeze({
 });
 
 /** Exact retained source, with only the finite reviewed report delta admitted. */
+type RetainedQualityReconciliationCorrection = {
+ previousSource: FinalQualitySource;
+ previousImpactSource: string;
+ owners: Array<{path:string;beforeSha256:string;afterSha256:string;beforeSource:string;afterSource:string}>;
+ reviewStatus: 'ROOT_REVIEWED_EXACT_LEDGER959_RECONCILIATION';
+};
+
+const RETAINED_QUALITY_RECONCILIATION_BASELINE = Object.freeze({
+  "reportPaths": [
+    "docs/reports/ADMIN_CORE_HELD37_FINAL52_BOUNDED_CLOSURE_STOP_2026-10-04.json",
+    "docs/reports/ADMIN_CORE_HELD37_FINAL52_BOUNDED_CLOSURE_STOP_2026-10-04.md"
+  ],
+  "historicalQualificationGuards": [
+    {
+      "path": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+      "export": "assertCoreControlPartial158Completion",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/browser-r158-partial-control-observations.json",
+        "sha256": "6047cbebc9a1af0db9b9f3e6714dc63f1c36c8a790414c429c86a5eeb6086686"
+      },
+      "historicalOwner": {
+        "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/inventories/control-target-preparation/post158/qualification-owner-c75855482da1a0253bdb7a9e78e25a1c9e04be8ee76a71117d10a59a8764a23e.txt",
+        "sha256": "c75855482da1a0253bdb7a9e78e25a1c9e04be8ee76a71117d10a59a8764a23e"
+      },
+      "declarationSha256": "6a104b610573a683348c0f57ba2baf321c7696037dcf35ff2e803a3e2f21f471"
+    },
+    {
+      "path": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+      "export": "assertCoreControlPartial159Completion",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/browser-r159-partial-control-observations.json",
+        "sha256": "696d31160a11b3bb8238b6e2f1abb48aa7ad6ba944f10b0bc9041608cf1fa784"
+      },
+      "historicalOwner": {
+        "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/inventories/control-target-preparation/post159/partial159-owner-candidate.txt",
+        "sha256": "bd2cf598420d3cb8928a86b421ca7d9ee8e1f872c2e38d2572d2abc09f768887"
+      },
+      "declarationSha256": "4d935d2cbd166341195ca6c148e11928690adb2bc52c96fd7390441bb5898837"
+    },
+    {
+      "path": "scripts/fixtures/admin-core-domain-form-journeys.mjs",
+      "export": "assertCoreControlPartial161Completion",
+      "qualification": {
+        "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/browser-r161-partial-control-observations.json",
+        "sha256": "c290ba993d27343626d123d21a9135f26611b57f63502312182e774025a92644"
+      },
+      "historicalOwner": {
+        "path": ".tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/inventories/control-target-preparation/post161/qualification-owner-cc3d50b7942a7b1f9901576eaf9e685b90997f8158642e655b8f17984d2ca0bf.txt",
+        "sha256": "cc3d50b7942a7b1f9901576eaf9e685b90997f8158642e655b8f17984d2ca0bf"
+      },
+      "declarationSha256": "be1655568bc2694628db997a8f957428016d68a8ca0484b74812f9f2800d1585"
+    }
+  ],
+  "sourceHead": "9cbdf71b0951ec61dc4acee6e171d279cde490d6",
+  "sourceSha256": "9649d351b8af4d9e0110ba2b5024d8d0917afd4cdb79b17c8b87ed232c970211",
+  "previousImpactSha256": "7496d93c3bf66554dc3907ce7d6955aa7124f285743691f440bd092de8fc3e7c",
+  "owners": {
+    "scripts/fixtures/admin-core-descendant-presentation-journeys.mjs": {
+      "beforeSha256": "6c11e075e94109db21750f76a305489321ad43de5edcd638063616d97ca92b06",
+      "beforeStatementsSha256": "3383764fd1286b2c37a1316079cc4677f823c35a50e56baf7063cc602958882c",
+      "afterSha256": "c41d62075cfcad8d7d652800e3c6525d7a7b0eef3c46503335a8dd91c232b093",
+      "afterStatementsSha256": "50f23c623b1e81404d39ef74c263929a789a4abfbdf7733bf7f241624a0321ed",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-descendant-presentation-plan.mjs": {
+      "beforeSha256": "015e180f6e802c7063a4257b9c923d8a0d76983cc7ce8a6abe2fedf3821ec3d5",
+      "beforeStatementsSha256": "80b2445306bce008b0a321fede78fbf58ebd7e4982ca0e8369cd8f65376caa29",
+      "afterSha256": "e05b6f88ad6cf38cc40bc03eaaa57e6a4d4ba4b78ae22bf3dd0eceb265bea68d",
+      "afterStatementsSha256": "446932cb4785a29768f99d8819a718a4a86d2ca9f9e020274e476efa604737ee",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-domain-bulk-journeys.mjs": {
+      "beforeSha256": "0ebda7811a473cdaf305859ddea8790e11a65d9eaae4f62c90cd3c655043f818",
+      "beforeStatementsSha256": "9c1e64e0846b58726d08b764724abe4f32791f3bfe0059e5898a5ad85c4268b1",
+      "afterSha256": "f919ff8410aa879b92849cb5c832ca2555e160e102b19bb8e325e12cafc98578",
+      "afterStatementsSha256": "587eb2aff31283d7f89d51e79ab7efb766f7254c346bbdf7285cc798dc5bb417",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-domain-form-journeys.mjs": {
+      "beforeSha256": "2787eaeb8da121e06bd7d4040e1176455ab5c1747f0428362190aab020ee4624",
+      "beforeStatementsSha256": "450ea2bccbe2789272f034f27de1d123a28b24425c0062243a2c9c68f2e8fe84",
+      "afterSha256": "89bf1d066100ee867a390e3411b246ad5d03d1fab11a16b6a531da4f0c956433",
+      "afterStatementsSha256": "95147002b2a92b385bc07978401a2b3ff71629bd0bb3087fb8e17480bbb4d03e",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-form-journeys.mjs": {
+      "beforeSha256": "f22e0a80149bbf622a6c27d895f4568c021d8aa2881b6f63f5fa94d47b0d111a",
+      "beforeStatementsSha256": "2952b3682b998f55c9db7d87f5db24724bf99f6243c0d34994651bfb6ae0e4a0",
+      "afterSha256": "b25bc73a20a6a765ff2a95b91a212e0af3b3ef8e514760a3a5c323652b569eb7",
+      "afterStatementsSha256": "c4c2ae54e2c3eb6e6920b267223f046b05193fa00d363e906fe5e2d8f67b28d7",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-navigation-settings-journeys.mjs": {
+      "beforeSha256": "0de5ff4e5c76a0d64661a502d611e9763e98ea23774504e35efc4d268a78e80b",
+      "beforeStatementsSha256": "44806a29bb563df370a779b80f5d5a9831e07c4400cc4d8c65ca9bc40e0fa2d0",
+      "afterSha256": "2a6316d640e6b3642c64fac56beef96c53927692ea84448817f994e595328980",
+      "afterStatementsSha256": "5377b486c9e304a4289b895d6641ffff84c5d630f099ec12a5e3e5bec77a9e4a",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-operational-form-journeys.mjs": {
+      "beforeSha256": "9ee6b60ef8923181835d84e3ae56faec474bf751faca9c96dec0916f0a66c444",
+      "beforeStatementsSha256": "992f817e09c9298eac23a383da6e9229f9088739bb8e2de1d79e7bc669f027c9",
+      "afterSha256": "73f4f126f84f96b4a2b0fb77d277a753fb0df1248717974c11425eefd3729ad8",
+      "afterStatementsSha256": "7995aa96208187d65da6979fb879ff7e56f20debded78700b216f88386efcc38",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-page-composition-journeys.mjs": {
+      "beforeSha256": "bd18bf5fcdae9c7dc73cb5e4ffafca7ad7796fd72c9f46857dd51d4e4e89519f",
+      "beforeStatementsSha256": "2fa634dd526fe122b8139cf8e75016398f6cf068369b44a6ce32fcd22fa27643",
+      "afterSha256": "2c06c301c6bbbeaca3dae111b6a5d85405e8c01d0ba6b8596cee479894be3c29",
+      "afterStatementsSha256": "b82435ed1490e3e5e16a8c4b91fc794c9e6660913f450155545f416a28f2d864",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-presentation-controls-journeys.mjs": {
+      "beforeSha256": "ca7adccfb96af78b67967acae19e85f2c9d6ad7e62bd92765184c18e80a1db07",
+      "beforeStatementsSha256": "23d876cae1dafe7f5d681e96b31914abf098b00c04e03f50d7c2fd731707327d",
+      "afterSha256": "ed9ba1f029b20ea577635d61489c8d8c979054a5b37d1258880da034aada8d0d",
+      "afterStatementsSha256": "5d32b51ead0d3fa5f4ba950915cf1c183fa189b91c6dc9a94034c5ff530522e7",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-query-presentation-journeys.mjs": {
+      "beforeSha256": "07d9a46f12c16fa350b57c83e04753fb100e30246d44516039cd9b057f3c5ec9",
+      "beforeStatementsSha256": "af0760f98bf53b5594aceb46767a39ff63629789f125821dffc03dc51f275ebf",
+      "afterSha256": "b47f656656409497a5188e5ba2ffdd0daf79e9bbf72f471010c6cf809a229b38",
+      "afterStatementsSha256": "3d4b168b97976e8f95e95fd462950dd24a0e7a4e15ea6db8cf5d12b92545811b",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-query-presentation-plan.mjs": {
+      "beforeSha256": "fc10ddf4f35cffa3bbe75e841e0ca23192beb8dea1e511d4f4d9054919c7c4d5",
+      "beforeStatementsSha256": "8698d412caaa6ba2e2ed6182b819f4e338ac1137ebc69dee6a9159b0474020f0",
+      "afterSha256": "0edabba8604f429fe2ce8ddf8738fc545c395ee559f851c086305e7153552001",
+      "afterStatementsSha256": "9f07951cda286b7ac17e67237904917e4f52c4443eb825b6b027f518a3e9e7f9",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-readonly-journeys.mjs": {
+      "beforeSha256": "3277a78c0d23b13080d993cd9a16fe226dd6e16e798b03959633d264af4800a2",
+      "beforeStatementsSha256": "24c6f71312fe2e03e28635920efa62797149849dc159dac174baa4c613d1abdb",
+      "afterSha256": "7797b0ae78157c69111621387b315997fc4aab4366c16b6f2474ad62a0105b19",
+      "afterStatementsSha256": "a6ae2fae125f621822e708b04157fcb27f8b7053b9bf12019b5dd014fc1a42c1",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-rendered-adoption.mjs": {
+      "beforeSha256": "c0f3dc1f3f476ec9d1769d1b05a2c4be54c9ae437cf0ba8738bd83a0dcc8f967",
+      "beforeStatementsSha256": "5c0ed792c6489a7ac0ae009a1466ae9d478d2aca7b65f6c677381f65dcc6dddf",
+      "afterSha256": "3e86bfa09be496103553f9269e58a3cfc4b4c2a2d94f49fbd790364be6ffabf0",
+      "afterStatementsSha256": "139e6677117239862fdd8d022c244fb4bd4dc9602a2cf1c6478f22661c7ce24e",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-settings-journeys.mjs": {
+      "beforeSha256": "cec59b24d23faee38eb81d1af200d4a333f22e765163808cd87eb1a014aaf94f",
+      "beforeStatementsSha256": "220c2a4f935bcdbb85c9d380aaefc9f931fde9a37b6196f9a112d12832176487",
+      "afterSha256": "e6ec34127ee7e65c4987dfb7bd967071c73038144ec87385f89cdf56db389234",
+      "afterStatementsSha256": "13dc99feb6b5acbe6f82aa0f8b8bb39eb8ddcfdc63811d619837b48c563fee10",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-core-specialized-settings-journeys.mjs": {
+      "beforeSha256": "eeffbd9dbb3b1337cdc66e401cb99dcdc81ac4f6c9a9a195f0cfde5b74f57745",
+      "beforeStatementsSha256": "b4f911451ca58b5facb37b34e2cb1f4577c82a97a4295305cb24945e6bd20a7e",
+      "afterSha256": "2f419f828020f7f5c40e9ed0711ab2e700b55c53ed309ada9cbac7e9046ad7ff",
+      "afterStatementsSha256": "40d770d50cb1947fd70955b53b8b9c13fd7b9f1b20d7c108bfb7bb95d512afea",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/fixtures/admin-interaction-fixtures.mts": {
+      "beforeSha256": "3fb0bd53fef9dcefaf558fd084d4bb55a23a136a28535a60401c7e0c54468e05",
+      "beforeStatementsSha256": "d93ec02f51d08273db18bee88d0816b5604eab927bd99ebd91e53c8cbfdce3d1",
+      "afterSha256": "1205c438480e05ece83095908dda9516b23143499c00c4ec93e154eab900bb05",
+      "afterStatementsSha256": "ac6303d92b04cdcb5302043b1d599fadaa54efd9ffc9e4d293396d99fb581a82",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/lib/isolated-public-verification.mts": {
+      "beforeSha256": "ea7f02cefea03676467e63eb1c2a8a8cd073568dd800aa9695bec580de214298",
+      "beforeStatementsSha256": "83a1412c8ace3277ec70f9ea46f575c5dee7687afced5d3aaff2356918c839cd",
+      "afterSha256": null,
+      "afterStatementsSha256": "84f173340a9b08124883c7ad9b12401f9d1bfd5ce403e2a7f7ba33c6fa011f65",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/qa-admin-adoption-journeys.mjs": {
+      "beforeSha256": "b711f1b339dbead879384496683a2bee780a4c52de86f5021074f75ac23a176c",
+      "beforeStatementsSha256": "8e7ea6f363796b6450d810b4093d4ff38ac9890efb7d69d8784278ab5d390179",
+      "afterSha256": "39a92348756fbc06fbdf6d5eb4a84ab16171290e36f9c2e3197a4d897d9f4d31",
+      "afterStatementsSha256": "424a27f1f67dfbdeec648818f948e2e81da6b53ffd0e982912907fce24659d77",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-adoption-closure.mjs": {
+      "beforeSha256": "281daaed74d4565aacc5346545e4bf622e34296b1797b219f33cf9bae4fac247",
+      "beforeStatementsSha256": "a306fe3862580a64bd9162a85b16aabe5246b055a63c5c7e4154e4c6aaafebd3",
+      "afterSha256": "b36699cc456361055ce954a8231c08885f85a0f02df69fa01c09dbfd6c3928c4",
+      "afterStatementsSha256": "29a61edf80730198a1da70ecf39097da1ec6db57eed35c2804e456d72e55cf16",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-adoption-readback-isolated.mts": {
+      "beforeSha256": "ad0359c818e4d021c5083f9542b732c29b2112b77c58697924f3c129faa84db5",
+      "beforeStatementsSha256": "7d910e3ca0375b46e8d8a7e5f44fc477c6cbb034034b0256595c71cc5271a0f2",
+      "afterSha256": "eb22c05b727965c3d5838535326d5b0a62dc9806e1536081bf838328064da3d9",
+      "afterStatementsSha256": "57878829fd7e01382aa710f36eae38e1ef75aa8d4f90b453c9013eb299831778",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-descendant-presentation-isolated.mts": {
+      "beforeSha256": "8d8f0daea38dc24d888da839252e47906f4a1ad1abfe627611f305649ce9eec4",
+      "beforeStatementsSha256": "3652fedbbb2a99475db9cf47accbecd1be792d1781b15cebc2b292651b3437c3",
+      "afterSha256": "042e873a901caf907131cbe113b723fa236b4b4b482d6ed1ca4a2db29f61888e",
+      "afterStatementsSha256": "c9fcee391086e0ec668d6710e891e82e3fa0ad86adf25f39089ae0f81e229f5c",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-descendant-presentation.mjs": {
+      "beforeSha256": "446742dd011eab84dfdfdbf32e3eaf31a5745594c29e673574b3703e8e77d37c",
+      "beforeStatementsSha256": "4976c6403cbfee4def57a8080bda5571a72c4e22b8cf46429de06d60a0e031a3",
+      "afterSha256": "dfbf76bf361cd85bd522818324bdf2552ca90bfdfec2723c431be205d18c1293",
+      "afterStatementsSha256": "121563eb51864a308c2bd9c65a8bff21ce511c2b8fd0a527fc593b87a0616eda",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-domain-bulk.mjs": {
+      "beforeSha256": "28fa9dff975bd788db3113e89686632c0422dc3bc76b9cf6c4c3b6b27e598657",
+      "beforeStatementsSha256": "b7021ab762ff7db73ee930d1b582626f5a8bba5539e7203ed96d9689cc1f8c2e",
+      "afterSha256": "00bfb8bdf9ee9e59f9743e31ef621d5ac8adb4a9191a0563c13b35afcd121eb1",
+      "afterStatementsSha256": "587b5261016101537a2f338838314ff131499a53ad3ed18b256e9d5a92d2d5eb",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-domain-readback-isolated.mts": {
+      "beforeSha256": "1193d779667cf6915dd651df054e88d1baa6d4dbfd03cbc4a90e10a8a0ab0025",
+      "beforeStatementsSha256": "b4e4006e4cf8d2a708eadb5334f2966af1aa1d88d3b99fd1b1cdcc1552ede07f",
+      "afterSha256": "6d18d21238f4728c24a515d2dd6e7f5aff5877aac336d387e44a013702f6f018",
+      "afterStatementsSha256": "f4dfe02e4f5c0c80aa7ecff59d263bc2210a1fbb2e3b6d853be8c8187718c82d",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-domain-readback.mts": {
+      "beforeSha256": "e38505065f6cd8ad3b7e939adf8ec60d1113dc94e4b5714897ad5d04bbb0cff4",
+      "beforeStatementsSha256": "d121a73a6315610d1ebaacb2c47b41663765cd9c10ac5a7ce1afa4e1fe8f174f",
+      "afterSha256": "15ab7b7296eaf04b84d61de768b05db82b347ce8f5e87048b88d90e697e82402",
+      "afterStatementsSha256": "006fbacd804007b8f51eee70e26407eef45192d369ee4544ea49daa084a6423d",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-journey-selection.mjs": {
+      "beforeSha256": "6610ac8931282a5566bf444d68efc300e8089efc7b0628008e6ed843c9b3338f",
+      "beforeStatementsSha256": "7b0ecfc47b6fb2702f2188c88e6c8c8cceeeb39c618bf026866dfefdc7eac606",
+      "afterSha256": "62f626a8ce57f4a9f2b72221fe1ed75aa97d20b354b1dfb1b418aca010a6a90b",
+      "afterStatementsSha256": "03fae4aef73a45c2a50095df0f640be1d7b11f796d61c9e1d39f20f46a905269",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-navigation-settings.mts": {
+      "beforeSha256": "bb0ea353b5da08212c8cc0960ee68aab1cf4c27ba290c7d304fd5a3165420b4d",
+      "beforeStatementsSha256": "33ba8e27ecda16bf0b0acfc77151d1f9fc0d34496672cb780efc7def621ecb72",
+      "afterSha256": "bbb40fdc3d59cfd3d32c9660bf2fe67527cd0d7925dc85e3f07ea293f306b6e4",
+      "afterStatementsSha256": "9a56be194a6c532f786ac7ee5e64cf52ae04fbca88ae0ca50dfc8dd232183d4c",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-page-seo.mts": {
+      "beforeSha256": "6c034c9e84d6440d3ebfb817c26b2e4c9bfb7bd5fb9eb46362e42d89d04741a6",
+      "beforeStatementsSha256": "0dbc9e982107a087176fc836934428ba825ab9cda94a7fc002f1e3995c5a8a33",
+      "afterSha256": "c76876d268386a3b7c8dff0d3ccda6ef0476b7a84f080cdc590744381a65e9c5",
+      "afterStatementsSha256": "d5c7d70d99b19756ba2d0395a8ea75891f9c635fe6f9a194e212da3afc95a617",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-presentation-controls-isolated.mts": {
+      "beforeSha256": "06c55fd052e0a161ae44bcd3a2242f632c810d48ce089fee75bf99d6bdb769f5",
+      "beforeStatementsSha256": "a9e03947f8a697d32ee480cd95002965f7dfc99c5177ba0f61b2f56ab29a7a1f",
+      "afterSha256": "b016c1c9c26a30b086d6ae004af3992acbdb52badd7a481c30f6a3f85f8f37da",
+      "afterStatementsSha256": "219d6cf1bc5959537b9760786a0a19b232a58e28280680434794080eb0d1c042",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-query-presentation-isolated.mts": {
+      "beforeSha256": "f2e5b678d5484ee10fec71f944a14974481290c5eb22d76f6aa9bc0a01d7ed32",
+      "beforeStatementsSha256": "35051a775a8877c43ffcd700e494fc175e42bf2c489c4ff9dd0f058fe5b5fc90",
+      "afterSha256": "956675ba5777701fe9f8075c2ce5a42f9fe7976ddf44785ec809aae9ecd738bc",
+      "afterStatementsSha256": "2cbdfea185f102385220d16896aa336a7e0dffedbedbcd9782e6f86e94a5d182",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-query-presentation.mts": {
+      "beforeSha256": "2850d28b21f36ae315ea963a7462a82a00c43d4e508ddbf4376fefb411eb90e2",
+      "beforeStatementsSha256": "770faec6a45d90df08c60b27ef48eb11bc989ac7185aa673a04da0fab63ddbaa",
+      "afterSha256": "9fdc869389b1c68017c9bcc44a7c527923932fb33a14d40b6bb0508faed05018",
+      "afterStatementsSha256": "8cd4a006b37d093f3418028f0a5861863767704b9f5b0ca87638aee122187292",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-rendered-adoption.mjs": {
+      "beforeSha256": "be2c026d1572313f01d3cc40c69c2b79f8295aa286e9cb40aa5793bff4b7ed47",
+      "beforeStatementsSha256": "a5ae1784944a021cf8edfcd0d72e9267fbda767ada379963834e1648627f316c",
+      "afterSha256": "95680a75de39fa750529679194e9d19921ee50e737f29ccd75d477a21242ef26",
+      "afterStatementsSha256": "65cecc52798c9ee12429ed7de614fb6d1315777f0a24e824b13e5be190d93ca9",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-specialized-settings-isolated.mts": {
+      "beforeSha256": "36b1e47303c712d54687915081e5143609209d39d92067f692ab68ca59d98525",
+      "beforeStatementsSha256": "45ad7e7889936e94b857b36676e1ef5746403a16af9e76aeafa84fed2265d66f",
+      "afterSha256": "a5813d8cc763b1eaed530afb3d06094c99569c5237a6b810c61b829bc9ce7232",
+      "afterStatementsSha256": "162ee3a2e3015c6c067c5632feb189bc5d0b0b3de3adefbaad1bba362eed58cf",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-specialized-settings.mts": {
+      "beforeSha256": "ec8d760a26e2bb067f86b365bf5bcff6d37b4c52457cf62a92a5c74bad404068",
+      "beforeStatementsSha256": "156e1e18a9060627fe570d671d8d09399d620e2c882e7f765a8d4dfaca7c219d",
+      "afterSha256": "6cbe3f1b475737e3d935081f53a1bf02253c7b620c8630af0097baf718b3749a",
+      "afterStatementsSha256": "6804e6fe1a0800d898000c4819cca2fba114fe64449cd109b2c3207ac6c00bcd",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-row-actions-capability.mts": {
+      "beforeSha256": "9ba5398df86b2195946302269d3623ee3ad7ad75e76e9a1ccc80381b8046bd90",
+      "beforeStatementsSha256": "a1ae87b4cd3a00955bcd43297b24ba213112410cc219774b208eb716fbcec7fa",
+      "afterSha256": "1d86fb0e7894028fdfb3ff265b8e6326488c9b9af20e0435219d7ab022bb5f29",
+      "afterStatementsSha256": "4c10412fd10d32dbd41908779ce873dc9d3f2b7e534d480057c49b6e58e2edd4",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-isolated-supabase.mts": {
+      "beforeSha256": "450b70ede339aef3f119c919c7227521a96a36805479cc976806e45d942f7f89",
+      "beforeStatementsSha256": "387fa617424869ac456fafac892b1d63ee04dced344e1cde7f7ebbc73c5f6148",
+      "afterSha256": "0f20fab6c156b0382f5cbc447243f19fc7548dd3528c4bb427524920a75bb661",
+      "afterStatementsSha256": "688f4928e3faa6e2b821a1757a0df9d0f80995961697dc00d1e8b082086423f5",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "src/lib/admin/interaction-system/adoption-manifest.ts": {
+      "beforeSha256": "fd5f69d19908c685a9d60a9f2f4ee1577074fa3b4381bdf9ea026d256091b36e",
+      "beforeStatementsSha256": "28ea6ca2ebb7df602aa85a3208a3aaf8c8c0de8dd936c88d7c23e5567811c91e",
+      "afterSha256": "5de0324b48ab33bb2052b72a7592c9a2f5f2af8896b74363b74726aee295b279",
+      "afterStatementsSha256": "53fceb196e000d16d331297b5c04077ce90f5133c1061ca729ea51488861577f",
+      "role": "exact-current-absent-listbox-nonpass-declaration"
+    },
+    "scripts/fixtures/admin-core-form-draft-restoration.mjs": {
+      "beforeSha256": "7adc5725f6ed33c68d2adf34bd474a1564b94d8c89ad61f65e535a2a6ec22cce",
+      "beforeStatementsSha256": "5518d30740b11388e91359c5c698d679e631b4545c15db1444ec7c9b0b8ded14",
+      "afterSha256": "857e6c2bd215f4789a47da11db4e5ad38475b8f9778206072fb1152025596d57",
+      "afterStatementsSha256": "045a760244051c3b4ed00b8a0f40345dfe3568ab3a20906021db8d7527f054aa",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/verify-admin-core-presentation-controls.mts": {
+      "beforeSha256": "482004cfda70136c4ef09b4f4f45060e603e7ecf32f4379626f919c725458ff0",
+      "beforeStatementsSha256": "da4708b6f983b95fa25820579029fc8b5e7564189c1bc8f28c65cb0d89e69fd6",
+      "afterSha256": "33147a94b4854535574bb3db8eff5781de280e9764d5a7de248fc47cafca224f",
+      "afterStatementsSha256": "b24196a9243e27117177c22c4be38949ba5f4d5a82116da2765fd20301aad400",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "scripts/lib/isolated-supabase.mts": {
+      "beforeSha256": "366b42ea77b888caae2c0e387c61e1c994a2bdc1d67cefe16fe81ea85b7b5fff",
+      "beforeStatementsSha256": "a3b1dbacb9baa81f511761208ac775fb879f944f0fe50fb247d7f9d2027909d2",
+      "afterSha256": "ce2b0e36f7b8312a63174f39072722317a10b7f32210e79155e59da19566a465",
+      "afterStatementsSha256": "6a1d2ea9b39f1cd3b1ce5ac3f033cc9182f26e7e9bce1b0b26724e75eaaa826f",
+      "role": "reviewed-verification-ledger-reconciliation"
+    },
+    "src/app/admin/pages-blocks/pages/[id]/PageLayoutManager.tsx": {
+      "beforeSha256": "dc44167f9bee627b493cc5425773374986e36933e3bffacdb0833e6bdb23dc64",
+      "beforeStatementsSha256": "12e57cc34b9e905a966f700ad24a7115bf878253cce4a7f2a4d0fed394b6cea5",
+      "afterSha256": "6429137fb71e9af9e40b27292a22f4ade07020135f49c6568d36dd2f09a2b4e5",
+      "afterStatementsSha256": "c4b193c941a12cc48cc86267c48c3da87b8aa169e5555a2f79f9153046591192",
+      "role": "exact-page-layout-event-value-capture-correction"
+    },
+    "src/components/admin/integrations/IntegrationConnectionWizard.tsx": {
+      "beforeSha256": "8158c02350428bdd7ad2f16f423a1ee39f85655b7e509b199e30d46743cf68e9",
+      "beforeStatementsSha256": "6002e9f0fad7098b08d4b07a436928d18b342889657385d18e3d189ee0b5068a",
+      "afterSha256": "45e137d968bd86476cd51017cf8ecef188a53a4e58ec8542fd07c93c2e346d83",
+      "afterStatementsSha256": "f72bc3f7e25e83553541ae2d486d7d7dbe191e08157d978963c579bebeaa7807",
+      "role": "exact-integration-authorization-native-navigation-correction"
+    }
+  },
+  "proofFunctionSha256": "7cbfeb8ddea148c59b628b2be6ac5d242a8beec4fadae427e7354c903ce7316a",
+  "correctionTypeSha256": "c8eec6e73592cbe4e0381f87112385f2a9ac5d8768115ddfc442268863e55277",
+  "entryAdditions": [
+    "  ledgerReconciliation?: RetainedQualityReconciliationCorrection;\n",
+    "  if (impact.status === \"ROOT_REVIEWED_EXACT_LEDGER959_RECONCILIATION_SOURCE_IMPACT\") return assertRetainedFinalQualityReconciliationSource(impact, retained, candidate);\n"
+  ],
+  "absentListboxInsertion": "listbox: {\r\n                state: \"not_applicable\",\r\n                rationale:\r\n                  \"The Updates page mounts TrackingUpdateFormModal without a Listbox; collection bulk and selection are not required and enableSelection is false. Stage/Item selectors are separate mounted routes.\",\r\n              },\r\n              ",
+  "authorizationNavigation": {
+    "path": "src/components/admin/integrations/IntegrationConnectionWizard.tsx",
+    "role": "exact-integration-authorization-native-navigation-correction",
+    "beforeElement": "<Link\r\n              href={`/api/admin/integrations/${item.key}/authorize`}\r\n              className=\"inline-flex min-h-11 items-center rounded-xl border border-[#D8B87A]/35 bg-[#D8B87A]/[.08] px-5 text-xs font-semibold text-[#E8CF9A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]\"\r\n            >\r\n              {item.connectionId ? \"إعادة التفويض\" : \"بدء التفويض\"}\r\n            </Link>",
+    "afterElement": "<a\r\n              href={`/api/admin/integrations/${item.key}/authorize`}\r\n              className=\"inline-flex min-h-11 items-center rounded-xl border border-[#D8B87A]/35 bg-[#D8B87A]/[.08] px-5 text-xs font-semibold text-[#E8CF9A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B87A]\"\r\n            >\r\n              {item.connectionId ? \"إعادة التفويض\" : \"بدء التفويض\"}\r\n            </a>"
+  }
+});
+
+export function assertRetainedFinalQualityReconciliationSource(impact:Parameters<typeof assertRetainedFinalQualitySource>[0],retained:FinalQualitySource,candidate:FinalQualitySource): { originalSourceHead: string; originalSourceSha256: string; currentSourceHead: string; currentSourceSha256: string; reportChanges: Array<{path:string;beforeSha256:string|null;afterSha256:string;role:string}> } {
+ const correction=impact.ledgerReconciliation;assert.ok(correction);const authority=RETAINED_QUALITY_RECONCILIATION_BASELINE;
+ assert.equal(impact.status,'ROOT_REVIEWED_EXACT_LEDGER959_RECONCILIATION_SOURCE_IMPACT');assert.equal(correction.reviewStatus,'ROOT_REVIEWED_EXACT_LEDGER959_RECONCILIATION');
+ assert.equal(impact.retainedBehaviorRelabelled,false);assert.equal(impact.retainedBehaviorReexecuted,false);assert.deepEqual(impact.automaticCoverage,[]);assert.equal(impact.globalClosed,false);
+ assert.equal(digest(correction.previousImpactSource),authority.previousImpactSha256);const previousImpact=JSON.parse(correction.previousImpactSource) as Parameters<typeof assertRetainedFinalQualitySource>[0];assert.equal(previousImpact.status,'ROOT_REVIEWED_EXACT_QUALITY_LIFECYCLE_SOURCE_IMPACT');assert.equal(Object.hasOwn(previousImpact,'ledgerReconciliation'),false);
+ const previous=correction.previousSource;assert.equal(previous.invocationHeadSha,authority.sourceHead);assert.equal(previous.sourceSha256,authority.sourceSha256);assert.deepEqual(previousImpact.retained,impact.retained);
+ const retainedBinding=assertRetainedFinalQualitySource(previousImpact,retained,previous);
+ assert.match(candidate.invocationHeadSha,/^[a-f0-9]{40}$/u);assert.equal(candidate.sourceSha256,digest(JSON.stringify(candidate.manifest)));assert.equal(impact.candidate.sourceHead,candidate.invocationHeadSha);assert.equal(impact.candidate.sourceSha256,candidate.sourceSha256);
+ assert.equal(new Set(candidate.manifest.map(row=>row.file)).size,candidate.manifest.length);for(const row of candidate.manifest){assert.ok(sourceIncluded(row.file));assert.match(row.sha256,/^[a-f0-9]{64}$/u);}
+ const prior=new Map(previous.manifest.map(row=>[row.file,row.sha256])),next=new Map(candidate.manifest.map(row=>[row.file,row.sha256]));assert.deepEqual([...next.keys()].sort(),[...prior.keys()].sort(),'This round cannot add/delete source files, including environment/config/migrations.');
+ assert.deepEqual(correction.owners.map(row=>row.path).sort(),Object.keys(authority.owners).sort());
+ const statement=(node:ts.Node,tree:ts.SourceFile)=>node.getText(tree).replace(/\r\n/gu,'\n'),parse=(path:string,text:string)=>{const tree=ts.createSourceFile(path,text,ts.ScriptTarget.Latest,true,path.endsWith('.tsx')?ts.ScriptKind.TSX:ts.ScriptKind.TS);assert.equal((tree as ts.SourceFile&{parseDiagnostics:readonly ts.Diagnostic[]}).parseDiagnostics.length,0);return tree;};
+ const name=(node:ts.Statement)=>ts.isFunctionDeclaration(node)||ts.isTypeAliasDeclaration(node)?node.name?.text:ts.isVariableStatement(node)&&node.declarationList.declarations.length===1&&ts.isIdentifier(node.declarationList.declarations[0].name)?node.declarationList.declarations[0].name.text:undefined;
+ const isReport=(path:string)=>authority.reportPaths.includes(path);
+ const roles=new Map<string,string>();
+ for(const row of correction.owners){
+  const rule=authority.owners[row.path as keyof typeof authority.owners];assert.ok(rule);assert.equal(row.beforeSha256,rule.beforeSha256);assert.equal(prior.get(row.path),row.beforeSha256);assert.equal(next.get(row.path),row.afterSha256);assert.equal(digest(row.beforeSource),row.beforeSha256);assert.equal(digest(row.afterSource),row.afterSha256);assert.notEqual(row.beforeSha256,row.afterSha256);
+  const before=parse(row.path,row.beforeSource),after=parse(row.path,row.afterSource);assert.equal(digest(before.statements.map(node=>statement(node,before)).join('\n')),rule.beforeStatementsSha256);
+  if(row.path!=='scripts/lib/isolated-public-verification.mts'){
+   assert.equal(row.afterSha256,rule.afterSha256);assert.equal(digest(after.statements.map(node=>statement(node,after)).join('\n')),rule.afterStatementsSha256);
+  }else{
+   // The self-authority has no self-referential full-file hash: every added body and every other statement is still exact.
+   const addedNames=['RetainedQualityReconciliationCorrection','RETAINED_QUALITY_RECONCILIATION_BASELINE','assertRetainedFinalQualityReconciliationSource'];const additions=after.statements.filter(node=>addedNames.includes(name(node)??''));assert.deepEqual(additions.map(name).sort(),[...addedNames].sort());
+   const proof=additions.find(node=>name(node)==='assertRetainedFinalQualityReconciliationSource')!;assert.equal(digest(statement(proof,after)),authority.proofFunctionSha256);
+   const type=additions.find(node=>name(node)==='RetainedQualityReconciliationCorrection')!;assert.equal(digest(statement(type,after)),authority.correctionTypeSha256);
+   const constant=additions.find(node=>name(node)==='RETAINED_QUALITY_RECONCILIATION_BASELINE')! as ts.VariableStatement;const init=constant.declarationList.declarations[0].initializer;assert.ok(init&&ts.isCallExpression(init)&&init.expression.getText(after)==='Object.freeze'&&init.arguments.length===1);assert.deepEqual(JSON.parse(init.arguments[0].getText(after)),authority);
+   const remaining=after.statements.filter(node=>!addedNames.includes(name(node)??'')).map(node=>{let text=statement(node,after);if(name(node)==='assertRetainedFinalQualitySource'){for(const addition of authority.entryAdditions){assert.equal(text.split(addition).length,2);text=text.replace(addition,'');}}return text;});assert.equal(digest(remaining.join('\n')),rule.afterStatementsSha256);
+  }
+  roles.set(row.path,rule.role);
+ }
+ for(const expected of authority.historicalQualificationGuards){const row=correction.owners.find(value=>value.path===expected.path);assert.ok(row);const tree=parse(row.path,row.afterSource),found=tree.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text===expected.export);assert.equal(found.length,1);assert.equal(digest(found[0].getText(tree)),expected.declarationSha256,'The actual accepted partial qualification declaration remains byte-identical.');}
+ // The exact source deltas are the recorded absence declaration and the reviewed two-handler PageLayoutManager correction; both whole files and their distinct roles are pinned above.
+ const declaration=correction.owners.find(row=>row.path==='src/lib/admin/interaction-system/adoption-manifest.ts');assert.ok(declaration);const exact=authority.absentListboxInsertion;assert.equal(declaration.beforeSource.includes(exact),false);assert.equal(declaration.afterSource.split(exact).length,2);assert.equal(declaration.afterSource.replace(exact,''),declaration.beforeSource);
+
+ const navigation=authority.authorizationNavigation;assert.equal(navigation.path,'src/components/admin/integrations/IntegrationConnectionWizard.tsx');assert.equal(navigation.role,'exact-integration-authorization-native-navigation-correction');const wizard=correction.owners.find(row=>row.path===navigation.path);assert.ok(wizard);assert.equal(roles.get(wizard.path),navigation.role);
+ assert.equal(navigation.afterElement.replace(/^<a/u,'<Link').replace(/<\/a>$/u,'</Link>'),navigation.beforeElement);assert.equal(wizard.beforeSource.split(navigation.beforeElement).length,2);assert.equal(wizard.afterSource.split(navigation.afterElement).length,2);assert.equal(wizard.afterSource.replace(navigation.afterElement,navigation.beforeElement),wizard.beforeSource,'Only the reviewed authorization opening and closing tags may change.');
+ for(const [source,element,tag] of [[wizard.beforeSource,navigation.beforeElement,'Link'],[wizard.afterSource,navigation.afterElement,'a']]){const tree=parse(wizard.path,source),elements:ts.JsxElement[]=[];const visit=(node:ts.Node)=>{if(ts.isJsxElement(node)&&node.getText(tree)===element)elements.push(node);ts.forEachChild(node,visit);};visit(tree);assert.equal(elements.length,1);assert.equal(elements[0].openingElement.tagName.getText(tree),tag);assert.equal(elements[0].closingElement.tagName.getText(tree),tag);}
+ const actualRoundChanges=[...prior.keys()].filter(path=>prior.get(path)!==next.get(path));assert.deepEqual(actualRoundChanges.filter(path=>!isReport(path)).sort(),[...roles.keys()].sort());
+ const previousRoles=new Map(previousImpact.changes.map(row=>[row.path,row.role])),original=new Map(retained.manifest.map(row=>[row.file,row.sha256]));const changes=[...new Set([...original.keys(),...next.keys()])].sort().flatMap(path=>{if(original.get(path)===next.get(path))return[];assert.ok(next.has(path));const role=isReport(path)?'non-executable-closure-report':roles.get(path)??previousRoles.get(path);assert.ok(role);return[{path,beforeSha256:original.get(path)??null,afterSha256:next.get(path)!,role}];});assert.deepEqual(impact.changes,changes);
+ return{originalSourceHead:retainedBinding.originalSourceHead,originalSourceSha256:retainedBinding.originalSourceSha256,currentSourceHead:candidate.invocationHeadSha,currentSourceSha256:candidate.sourceSha256,reportChanges:changes};
+}
+
 export function assertRetainedFinalQualitySource(impact: {
   status: string; retained: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
   candidate: { sourceHead: string; sourceSha256: string; sourceManifest: FinalQualityArtifactRef };
   changes: Array<{ path: string; beforeSha256: string | null; afterSha256: string; role: string }>;
   retainedBehaviorRelabelled: boolean; retainedBehaviorReexecuted: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
   qualityLifecycleCorrection?: RetainedQualityLifecycleCorrection;
+  ledgerReconciliation?: RetainedQualityReconciliationCorrection;
 }, retained: FinalQualitySource, candidate: FinalQualitySource) {
   if (impact.status === "ROOT_REVIEWED_EXACT_QUALITY_LIFECYCLE_SOURCE_IMPACT") return assertRetainedFinalQualityLifecycleSource(impact, retained, candidate);
+  if (impact.status === "ROOT_REVIEWED_EXACT_LEDGER959_RECONCILIATION_SOURCE_IMPACT") return assertRetainedFinalQualityReconciliationSource(impact, retained, candidate);
   assert.equal(impact.status, "ROOT_REVIEWED_EXACT_REPORT_ONLY_SOURCE_IMPACT");
   assert.equal(impact.retainedBehaviorRelabelled, false); assert.equal(impact.retainedBehaviorReexecuted, false);
   assert.deepEqual(impact.automaticCoverage, []); assert.equal(impact.globalClosed, false);
@@ -391,6 +815,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     return JSON.parse(pin(ref).toString("utf8")) as T;
   };
   const fixed = <T,>(ref: FinalQualityArtifactRef, name: string) => { assert.equal(ref.path, FINAL_QUALITY_ACCOUNTING + name); return read<T>(ref); };
+  const retainedFixed = <T,>(ref: FinalQualityArtifactRef, name: string) => { assert.equal(ref.path, RETAINED_FINAL_QUALITY_AUTHORITY.retainedQualificationRoot + name); return read<T>(ref); };
   const admissionRef = { path: FINAL_QUALITY_READINESS, sha256: admissionSha256 };
   const admission = read<{
     status: string; sourceHead: string; sourceManifest: FinalQualityArtifactRef; accounting: FinalQualityArtifactRef;
@@ -460,7 +885,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   }>(final.qualification);
   assert.equal(q.status, "QUALIFIED_SCOPED_COHORT_OBSERVATIONS_NO_AUTOMATIC_AXIS_CREDIT"); assert.equal(q.statusEnvelope, "qualified-sealed-cohort-envelope");
   assert.equal(q.cohort, "domain-forms"); assert.match(q.run, /^browser-r[1-9][0-9]*$/u); assert.notEqual(q.run, "browser-r52");
-  assert.ok([FINAL_QUALITY_ACCOUNTING, ".tmp-qa/core-final-closure/cumulative-accounting-stage/"].some(base => final.qualification.path === base + q.run + "-qualified-observations.json"));
+  assert.ok([RETAINED_FINAL_QUALITY_AUTHORITY.retainedQualificationRoot, ".tmp-qa/core-final-closure/cumulative-accounting-stage/"].some(base => final.qualification.path === base + q.run + "-qualified-observations.json"));
   assert.equal(q.originalHookRun, "browser-r52"); assert.equal(q.deferredFinalQuality, true); assert.equal(q.finalQuality, false);
   assert.deepEqual(q.automaticCoverage, []); assert.equal(q.globalClosed, false);
   const expectedIds = original.held.filter(row => row.run === "browser-r52").map(row => row.id);
@@ -469,7 +894,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   let admittedSelection = "domain-forms-final-six-followup";
   let compositionEvidence: { authority: FinalQualityArtifactRef; qualifications: Array<{ role: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string }>; sourceCompatibility: FinalQualityArtifactRef; sourceBinding: ReturnType<typeof assertRetainedFinalQualityCompositeSource>; residualSourceCompatibility?: FinalQualityArtifactRef; residualSourceBinding?: ReturnType<typeof assertRetainedFinalQualityCompositeSource>; sameRun: false } | undefined;
   if (final.composition) {
-    const composition = fixed<{
+    const composition = retainedFixed<{
       status: string; statusEnvelope: string; cohort: string; originalHookRun: string; originalPlan: FinalQualityArtifactRef; originalProgress: FinalQualityArtifactRef;
       originalJourneyIds: string[]; journeyCount: number; sameRun: boolean; deferredFinalQuality: boolean; finalQuality: boolean; automaticCoverage: unknown[]; globalClosed: boolean;
       qualifications: Array<{ role: string; qualification: FinalQualityArtifactRef; run: string; sourceHead: string; sourceSha256: string; ownedRunId: string; sourceManifest: FinalQualityArtifactRef; gateReceipt?: FinalQualityArtifactRef; rawArtifacts: FinalQualityArtifactRef[] }>;
@@ -492,7 +917,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
       ? ["partial-original-failed", "partial-final-six-failed", "fresh-final-update"] : ["partial-original-failed", "fresh-final-six"]);
     const priorLeaf = composition.qualifications[0], latestLeaf = composition.qualifications.at(-1)!, middleLeaf = threeLeaves ? composition.qualifications[1] : undefined;
     if (!threeLeaves) { assert.ok(!Object.hasOwn(composition, "residualSourceCompatibility")); assert.ok(!Object.hasOwn(composition, "completionRecipeAssignments")); }
-    assert.equal(priorLeaf.qualification.path, FINAL_QUALITY_ACCOUNTING + "browser-r148-qualified-observations.json");
+    assert.equal(priorLeaf.qualification.path, RETAINED_FINAL_QUALITY_AUTHORITY.retainedQualificationRoot + "browser-r148-qualified-observations.json");
     assert.ok(!Object.hasOwn(priorLeaf, "gateReceipt")); assert.deepEqual(latestLeaf.qualification, final.qualification);
     assert.deepEqual(latestLeaf.sourceManifest, final.sourceManifest); assert.deepEqual(latestLeaf.gateReceipt, final.gateReceipt);
     const prior = read<typeof q & { partialOriginalHook: boolean; originalJourneyCount: number; originalPrivateCompletionFields: string[];
@@ -536,7 +961,7 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
     admittedIds = expectedIds.filter(id => !priorIds.includes(id)); assert.equal(admittedIds.length, 6);
     assert.deepEqual(originalRows.filter(row => row.status === "fail").map(row => row.id), admittedIds);
     if (middleLeaf) {
-      assert.equal(middleLeaf.qualification.path, FINAL_QUALITY_ACCOUNTING + "browser-r149-qualified-observations.json");
+      assert.equal(middleLeaf.qualification.path, RETAINED_FINAL_QUALITY_AUTHORITY.retainedQualificationRoot + "browser-r149-qualified-observations.json");
       assert.ok(!Object.hasOwn(middleLeaf, "gateReceipt"));
       middle = read<typeof prior & { selectedJourneyCount: number; selectedJourneyIds: string[]; excludedJourneyIds: string[] }>(middleLeaf.qualification);
       assert.equal(middle.status, "QUALIFIED_SCOPED_DOMAIN_FORM_PARTIAL_OBSERVATIONS_ORIGINAL_FAILED");
@@ -611,14 +1036,14 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
         qualifications: [...(field === "trackingMedia" ? [] : [{ qualification: middleLeaf.qualification, recipeKinds: ["profile", "stage", "item"] }]), { qualification: latestLeaf.qualification, recipeKinds: ["update"] }] }));
       assert.deepEqual(composition.completionRecipeAssignments, recipes, "Tracking recipe coverage remains assigned to its exact successful leaf.");
     }
-    const compatibility = fixed<Parameters<typeof assertRetainedFinalQualityCompositeSource>[0]>(composition.sourceCompatibility, threeLeaves ? "source-impact-partial148-to-final-update.json" : "source-impact-partial148-to-final-six.json");
+    const compatibility = retainedFixed<Parameters<typeof assertRetainedFinalQualityCompositeSource>[0]>(composition.sourceCompatibility, threeLeaves ? "source-impact-partial148-to-final-update.json" : "source-impact-partial148-to-final-six.json");
     assert.deepEqual(compatibility.retained.sourceManifest, priorLeaf.sourceManifest); assert.deepEqual(compatibility.candidate.sourceManifest, final.sourceManifest);
     const latestSource = read<FinalQualitySource>(final.sourceManifest);
     const sourceBinding = assertRetainedFinalQualityCompositeSource(compatibility, priorSource, latestSource);
     let residualSourceBinding: ReturnType<typeof assertRetainedFinalQualityCompositeSource> | undefined;
     if (middleLeaf) {
       assert.ok(composition.residualSourceCompatibility);
-      const residualImpact = fixed<Parameters<typeof assertRetainedFinalQualityCompositeSource>[0]>(composition.residualSourceCompatibility, "source-impact-partial149-to-final-update.json");
+      const residualImpact = retainedFixed<Parameters<typeof assertRetainedFinalQualityCompositeSource>[0]>(composition.residualSourceCompatibility, "source-impact-partial149-to-final-update.json");
       assert.deepEqual(residualImpact.retained.sourceManifest, middleLeaf.sourceManifest); assert.deepEqual(residualImpact.candidate.sourceManifest, final.sourceManifest);
       residualSourceBinding = assertRetainedFinalQualityCompositeSource(residualImpact, read<FinalQualitySource>(middleLeaf.sourceManifest), latestSource);
     }
@@ -680,13 +1105,24 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   const impact = fixed<Parameters<typeof assertRetainedFinalQualitySource>[0]>(admission.sourceCompatibility, "source-impact-current-to-final.json");
   assert.deepEqual(impact.retained.sourceManifest, final.sourceManifest); assert.deepEqual(impact.candidate.sourceManifest, admission.sourceManifest);
   const sourceBinding = assertRetainedFinalQualitySource(impact, retainedSource, candidate);
+  type Predicate = { id: string; [key: string]: unknown };
+  type CorrectionEvidence = {
+    sourceManifest: FinalQualityArtifactRef; formManifest: FinalQualityArtifactRef; collectionManifest: FinalQualityArtifactRef;
+    review?: FinalQualityArtifactRef; analysis?: FinalQualityArtifactRef;
+    sourceGraph?: { owner: FinalQualityArtifactRef; entry: string; sources: FinalQualityArtifactRef[] };
+    graphOwner?: FinalQualityArtifactRef; entry?: string; currentSources?: FinalQualityArtifactRef[]; child?: FinalQualityArtifactRef;
+    dirtyNavigationBinding?: boolean; specializedConfirmationPreserved?: boolean;
+  };
+  type PredicateCorrection = { moduleId: string; key: string; predicateId: string; kind: string; previousPredicate: Predicate;
+    countsAsPass: boolean; qualifiedNamedCell: boolean; wholeCellNotApplicable: boolean; evidence: CorrectionEvidence };
+  type PredicateDisposition = Omit<PredicateCorrection, "moduleId" | "key" | "kind"> & { status: string };
   const ledger = fixed<{
     sourceHead: string; globalClosed: boolean; automaticCoverage: unknown[];
     closureEligibility: { eligible: boolean; namedCells: FinalQualityNamedCell[]; namedCellCounts: Record<string, number>; remainingPredicates: number; incompleteDomainInventories: number; openPreviewStates: number;
       domainInventories: Array<{ boundary: string; id: string; surfaces: string[]; asRecordedComplete: boolean; complete: boolean }> ;
       previewStates: Array<{ consumer: string; publication: string; session: string; status: string; evidence: FinalQualityArtifactRef[] }> };
     accounting: { historical: number; applicable: number; pendingNotApplicable: number; provenNotApplicable: number; pending: Array<{ key: string }>; proven: Array<{ key: string }> };
-    modules: Record<string, Array<{ key: string; status: string; completeNamedContract: boolean; qualifiedPredicates: Array<{ id: string }>; openPredicates: Array<{ id: string }>; dispositionEvidence?: { previousOpenPredicates?: Array<{ id: string }> } }>>;
+    modules: Record<string, Array<{ key: string; status: string; completeNamedContract: boolean; qualifiedPredicates: Predicate[]; openPredicates: Predicate[]; dispositionEvidence?: { status?: string; previousOpenPredicates?: Predicate[] }; predicateDispositions?: PredicateDisposition[] }>>;
     U03: { cells: Array<{ key: string; status: string; qualifiedNamedCell: boolean; remainingConditions: unknown[] }> };
     predicateCorrections: unknown[];
     U01: { lifecycle: { denominator: number; qualified: number; remaining: number }; scopedFormRuntime: { denominator: number; qualified: number; open: number } };
@@ -704,21 +1140,99 @@ export function loadRetainedFinalQualityAdmission(admissionSha256: string, expec
   assert.deepEqual(ledger.accounting.pending.map(row => row.key).sort(), eligibility.namedCells.filter(row => row.disposition === "NOT_APPLICABLE_PENDING_PROOF").map(row => row.key).sort());
   assert.deepEqual(ledger.accounting.proven.map(row => row.key).sort(), eligibility.namedCells.filter(row => row.disposition === "PROVEN_NOT_APPLICABLE").map(row => row.key).sort());
   const accepted = read<typeof ledger>(RETAINED_FINAL_QUALITY_AUTHORITY.priorAccounting);
-  assert.deepEqual(ledger.predicateCorrections, accepted.predicateCorrections);
+    // The accepted correction prefix is immutable. Additional non-pass corrections must be the
+    // exact existing materializer output approved for this round, never a caller-supplied exemption.
+    assert.deepEqual(ledger.predicateCorrections.slice(0, accepted.predicateCorrections.length), accepted.predicateCorrections);
+    const pinPredicateEvidence = (ref: FinalQualityArtifactRef) => {
+      const role = RETAINED_FINAL_QUALITY_AUTHORITY.predicateCorrectionManifest;
+      if (ref.path !== role.path || ref.sha256 !== role.historicalSha256) {
+        assert.equal(approvedTracked.get(resolve(ROOT, ref.path)), ref.sha256); pin(ref); return;
+      }
+      // A historical non-pass disposition retains its original source bytes. The only
+      // current declaration change is the separately reviewed Updates Listbox absence.
+      assert.equal(approvedTracked.get(resolve(ROOT, role.path)), role.currentSha256);
+      const preimages = read<{ preimages: Array<{ logicalPath: string; path: string; sha256: string }> }>(role.authority);
+      const rows = preimages.preimages.filter(row => row.logicalPath === ref.path && row.sha256 === ref.sha256);
+      assert.equal(rows.length, 1); assert.equal(rows[0].path, role.physicalPath);
+      const historical = pin({ path: rows[0].path, sha256: ref.sha256 }).toString("utf8").replace(/\r\n/gu, "\n");
+      const current = pin({ path: role.path, sha256: role.currentSha256 }).toString("utf8").replace(/\r\n/gu, "\n");
+      const needle = "              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,\n              date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,";
+      const replacement = "              ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,\n              listbox: {\n                state: \"not_applicable\",\n                rationale:\n                  \"The Updates page mounts TrackingUpdateFormModal without a Listbox; collection bulk and selection are not required and enableSelection is false. Stage/Item selectors are separate mounted routes.\",\n              },\n              date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,";
+      assert.equal(historical.split(needle).length, 2);
+      assert.equal(historical.replace(needle, replacement), current, "Every historical predicate source statement is conserved outside the exact approved declaration insertion.");
+    };
+    const addedCorrections = ledger.predicateCorrections.slice(accepted.predicateCorrections.length) as PredicateCorrection[];
+    let approvedCorrections: PredicateCorrection[] = [];
+    if (addedCorrections.length) {
+      const proof = read<{ status: string; deltas: PredicateCorrection[]; globalClosed: boolean }>(RETAINED_FINAL_QUALITY_AUTHORITY.predicateCorrectionProof);
+      assert.equal(proof.status, "PURE_COMPOSED_EXISTING_OWNER_SPECIALIZED_ATOMIC_PASS"); assert.equal(proof.globalClosed, false);
+      approvedCorrections = proof.deltas.filter(row => row.kind === "PREDICATE_CONTRACT_DISPOSITION");
+      assert.equal(approvedCorrections.length, 8);
+      assert.deepEqual(addedCorrections, approvedCorrections, "Only the exact eight approved non-pass corrections may be appended.");
+      for (const correction of addedCorrections) {
+        assert.equal(correction.moduleId, "U04"); assert.equal(correction.countsAsPass, false);
+        assert.equal(correction.qualifiedNamedCell, false); assert.equal(correction.wholeCellNotApplicable, false);
+        const evidence = correction.evidence, graph = evidence.sourceGraph;
+        const sources = graph?.sources ?? evidence.currentSources; assert.ok(sources?.length);
+        const entry = graph?.entry ?? evidence.entry; assert.equal(typeof entry, "string");
+        assert.equal(new Set(sources.map(row => row.path)).size, sources.length);
+        assert.ok(sources.some(row => row.path === entry));
+        for (const ref of sources) pinPredicateEvidence(ref);
+        for (const ref of [evidence.formManifest, evidence.collectionManifest, graph?.owner ?? evidence.graphOwner]) { assert.ok(ref); pinPredicateEvidence(ref); }
+        const originalSource = read<FinalQualitySource>(evidence.sourceManifest);
+        assert.equal(originalSource.sourceSha256, digest(JSON.stringify(originalSource.manifest)));
+        for (const ref of sources) assert.equal(originalSource.manifest.find(row => row.file === ref.path)?.sha256, ref.sha256);
+        if (graph) {
+          assert.ok(evidence.review && evidence.analysis); pin(evidence.review); pin(evidence.analysis);
+          assert.ok(!sources.some(row => ["src/components/admin/ui/AdminFormRuntime.tsx", "src/components/admin/ui/AdminConfirmDialog.tsx"].includes(row.path)));
+        } else {
+          assert.equal(evidence.dirtyNavigationBinding, false); assert.equal(evidence.specializedConfirmationPreserved, true);
+          assert.ok(evidence.child && sources.some(row => row.path === evidence.child!.path && row.sha256 === evidence.child!.sha256));
+          assert.ok(sources.some(row => row.path === "src/components/admin/ui/AdminConfirmDialog.tsx"));
+        }
+      }
+    }
+    const correctionIdentity = (row: PredicateCorrection) => [row.moduleId, row.key, row.predicateId].join("|");
+    assert.equal(new Set(addedCorrections.map(correctionIdentity)).size, addedCorrections.length);
+    const matchedCorrections: string[] = [];
   for (const moduleId of ["U02", "U04", "U05"]) {
     const priorCells = accepted.modules[moduleId], cells = ledger.modules[moduleId];
     assert.equal(new Set(cells.map(cell => cell.key)).size, cells.length);
     assert.deepEqual(cells.map(cell => cell.key).sort(), priorCells.map(cell => cell.key).sort(), "Every existing module cell must remain present.");
     for (const cell of cells) {
       const prior = priorCells.find(row => row.key === cell.key)!;
-      const predicateIds = (value: typeof cell) => [...new Set([...value.qualifiedPredicates, ...value.openPredicates,
-        ...(value.status === "PROVEN_NOT_APPLICABLE" ? value.dispositionEvidence?.previousOpenPredicates ?? [] : [])].map(row => row.id))].sort();
+      const predicateIds = (value: typeof cell) => {
+        const rows = [...value.qualifiedPredicates, ...value.openPredicates,
+          ...(value.dispositionEvidence?.previousOpenPredicates ?? [])];
+        const ids = rows.map(row => row.id); assert.equal(new Set(ids).size, ids.length, "A predicate must occur exactly once across qualified, open and non-pass history.");
+        return ids.sort();
+      };
       assert.deepEqual(predicateIds(cell), predicateIds(prior), "Existing finite predicates cannot disappear behind a zero-open total.");
+      const dispositions = cell.predicateDispositions ?? [];
+      const priorDispositions = prior.predicateDispositions ?? [];
+      assert.deepEqual(dispositions.slice(0, priorDispositions.length), priorDispositions);
+      for (const disposition of dispositions.slice(priorDispositions.length)) {
+        const correction = addedCorrections.filter(row => row.moduleId === moduleId && row.key === cell.key && row.predicateId === disposition.predicateId);
+        assert.equal(correction.length, 1, "Every new non-pass disposition needs exactly one approved correction.");
+        const row = correction[0], originals = prior.openPredicates.filter(predicate => predicate.id === row.predicateId);
+        assert.equal(originals.length, 1); assert.deepEqual(row.previousPredicate, originals[0]);
+        assert.deepEqual(disposition.previousPredicate, row.previousPredicate); assert.deepEqual(disposition.evidence, row.evidence);
+        assert.deepEqual(cell.dispositionEvidence?.previousOpenPredicates?.find(predicate => predicate.id === row.predicateId), row.previousPredicate);
+        assert.equal(cell.dispositionEvidence?.status, "PREDICATE_CONTRACT_CORRECTIONS_ONLY");
+        assert.equal(disposition.status, row.evidence.sourceGraph ? "PROVEN_NO_DIRTY_FORM_AFFORDANCE" : "PROVEN_NO_DIRTY_NAVIGATION_AFFORDANCE");
+        assert.equal(disposition.countsAsPass, false); assert.equal(disposition.qualifiedNamedCell, false); assert.equal(disposition.wholeCellNotApplicable, false);
+        assert.ok(!["PROVEN_NOT_APPLICABLE", "NOT_APPLICABLE_PENDING_PROOF"].includes(cell.status), "A predicate correction cannot dispose the entire cell.");
+        matchedCorrections.push(correctionIdentity(row));
+      }
+      if (cell.status !== "PROVEN_NOT_APPLICABLE") {
+        assert.deepEqual((cell.dispositionEvidence?.previousOpenPredicates ?? []).map(row => row.id).sort(), dispositions.map(row => row.predicateId).sort(), "Non-pass identity history must be fully accounted for.");
+      } else assert.equal(dispositions.length, 0, "Whole-cell N/A evidence and per-predicate corrections are separate contracts.");
       for (const predicate of prior.qualifiedPredicates) assert.deepEqual(cell.qualifiedPredicates.find(row => row.id === predicate.id), predicate, "Prior qualified proof is immutable.");
       if (!["PROVEN_NOT_APPLICABLE", "NOT_APPLICABLE_PENDING_PROOF"].includes(cell.status))
         assert.equal(cell.completeNamedContract, cell.openPredicates.length === 0);
     }
   }
+  assert.deepEqual(matchedCorrections.sort(), addedCorrections.map(correctionIdentity).sort(), "Every approved appended correction must retain exactly one non-pass cell disposition.");
   assert.equal(new Set(ledger.U03.cells.map(cell => cell.key)).size, ledger.U03.cells.length);
   assert.deepEqual(ledger.U03.cells.map(cell => cell.key).sort(), accepted.U03.cells.map(cell => cell.key).sort());
   assert.equal(ledger.U01.lifecycle.denominator, accepted.U01.lifecycle.denominator);
@@ -888,7 +1402,7 @@ export type PublicGateRequest = {
   /** Bounded independent Core families; the final gate still runs the Public suite. */
   adoptionCohort?: "preview-recovery-templates" | "domain-forms" | "domain-commands" | "page-composition" | "template-libraries" | "readonly-hubs" | "recovery-templates" | "specialized-settings" | "media-library" | "template-bulk" | "navigation-settings" | "auth-entry" | "media-recovery" | "query-presentation" | "template-controls" | "domain-bulk" | "topic-controls" | "project-controls" | "presentation-controls";
   /** Optional exact affected journeys within the existing domain-forms cohort. */
-  adoptionJourneySelection?: "media-library-final-three-followup" | "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "domain-forms-final-six-followup" | "domain-forms-update-followup" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
+  adoptionJourneySelection?: "domain-form-controls-followup" | "domain-form-controls-remaining-followup" | "domain-form-controls-final-two-followup" | "domain-form-controls-user-followup" | "template-create-controls-followup" | "presentation-content-controls-followup" | "page-composition-closure-followup" | "page-composition-controls-followup" | "navigation-closure-followup" | "navigation-controls-followup" | "query-pending-followup" | "atomic-confirmation-followup" | "specialized-closure-followup" | "specialized-controls-followup" | "sitemap-closure-followup" | "media-library-final-three-followup" | "media-library-held-followup" | "media-recovery-followup" | "media-recovery-missing-followup" | "topic-video-followup" | "topic-controls-followup" | "specialized-settings-followup" | "page-composition-seo-followup" | "page-composition-content-seo-followup" | "page-composition-followup" | "readonly-hubs-followup" | "template-cards-presentation" | "query-layout-followup" | "text-topic-forms" | "domain-forms-final-six-followup" | "domain-forms-update-followup" | "preview-public-impact" | "template-form-creates" | "template-form-creates-followup" | "domain-command-tail" | "tracking-permissions" | "readonly-query-proof";
   /** Fixed local QA measurement, with an immutable reviewed source snapshot. */
   adminMeasurement?: {
     study?: "heavy-editor-performance";
@@ -1169,7 +1683,7 @@ async function stopChild(child: ChildProcess, environment: NodeJS.ProcessEnv) {
   });
 }
 
-export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal) {
+export async function runOwnedPublicVerification(context: PrivatePublicVerificationContext, request: PublicGateRequest, signal: AbortSignal, drainControlPulse: () => Promise<void>) {
   await context.assertOwned();
   const readiness = prepared.get(context); assert.ok(readiness, "Public fixture readiness must precede gates.");
   assert.ok(request.selection === undefined || request.selection === "build-contracts" || request.selection === "admin-interactions" || request.selection === "admin-adoption", "Unknown fixed Public gate selection.");
@@ -1382,7 +1896,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
     }
     const executionGates = [...qualityScripts.map((script, index) => ({ name: `quality-${index + 1}-${script.replace(/[^a-zA-Z0-9_-]/gu, "-")}`, qualityScript: script, limitMs: 1_800_000 })), ...gates];
     for (const gate of executionGates) {
-      verifySource(); await retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
+      await drainControlPulse(); verifySource(); await retainedAdmission?.verify(); await context.assertOwned(); signal.throwIfAborted();
       let env: NodeJS.ProcessEnv = "qualityScript" in gate ? qualityEnvironment : context.cleanEnvironment();
       let gateApp: ChildProcess | undefined;
       if (gate.name === "normal-build") env = childEnvironment;
@@ -1463,7 +1977,7 @@ export async function runOwnedPublicVerification(context: PrivatePublicVerificat
       context.record("public-gate-pass", { gate: gate.name });
       if (gateApp) await stopChild(gateApp, context.cleanEnvironment());
     }
-    verifySource(); await retainedAdmission?.verify();
+    await drainControlPulse(); verifySource(); await retainedAdmission?.verify();
     assert.equal(await gitHead(context), headSha, "Repository HEAD changed during the source snapshot gates.");
     if (!frozenManifest) assert.deepEqual(await gitSourceInventory(context, request), files, "Git source membership changed during the source snapshot gates.");
     if (measurement) adminPhases.get(originalContext)!.add(measurement.phase);

@@ -2791,6 +2791,11 @@ export const ADMIN_COLLECTION_SURFACE_ADOPTION =
           applicability: adminConsumerCapabilityAudit(
             {
               ...ADMIN_SWITCH_MODAL_MEDIA_LISTBOX_CONSUMER_CAPABILITIES,
+              listbox: {
+                state: "not_applicable",
+                rationale:
+                  "The Updates page mounts TrackingUpdateFormModal without a Listbox; collection bulk and selection are not required and enableSelection is false. Stage/Item selectors are separate mounted routes.",
+              },
               date_picker: ADMIN_DATE_PICKER_OWNER_ADOPTION_DECISION,
             },
             {

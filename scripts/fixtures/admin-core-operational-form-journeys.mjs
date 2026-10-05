@@ -1,7 +1,7 @@
 import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,observeCoreModalCleanReturn,observeCoreModalPendingDismissal} from "./admin-core-rendered-adoption.mjs";
 import assert from "node:assert/strict";
 import {authorCoreTrackingMedia,assertCoreTrackingMediaUI} from "./admin-core-tracking-media-adoption.mjs";
-import { runCoreFormPermissionIntent, validateCoreJourneySelection } from "./admin-core-domain-form-journeys.mjs";
+import { runCoreFormPermissionIntent, validateCoreJourneySelection, observeCoreControlDraft, observeCoreBooleanControl, acceptCoreControlSave } from "./admin-core-domain-form-journeys.mjs";
 import { randomUUID, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createJiti } from "jiti";
@@ -464,4 +464,27 @@ export function assertCoreTrackingDateReceipts({browser,native,ownedRunId,source
   const formCells=browser.requiredCases.filter(row=>row.key===`form:${consumer}:capability:date_picker`);assert.equal(formCells.length,1);
   const aliases=["stage","item","update"].filter(kind=>recipeKinds.includes(kind)).map(kind=>{const id="project-tracking-"+({stage:"stages",item:"items",update:"updates"}[kind]),matches=declarations.filter(row=>row.id===id);assert.equal(matches.length,1);assert.ok(matches[0].executableBindings.some(row=>row.sourceFile==="src/components/admin/projects/tracking/TrackingCollections.tsx"&&row.exportNames.includes("Tracking"+({stage:"Stages",item:"Items",update:"Updates"}[kind])+"Collection")));const cells=browser.requiredCases.filter(row=>row.key===`collection:${id}:capability:date_picker`);assert.equal(cells.length,1);return {candidateRequiredCase:cells[0].key,childFormConsumer:consumer,childSurfaces:[kind+"-create",kind+"-edit"],nativeIds:qualified.filter(row=>row.surface.startsWith(kind+"-")).map(row=>row.nativeId)};});
   return {status:"pass",recipeKinds,completeTrackingFamily:recipeKinds.length===4,familyAxisQualified:false,qualified,aliases,candidateRequiredCases:[...(recipeKinds.length===4?[formCells[0].key]:[]),...aliases.map(row=>row.candidateRequiredCase)],automaticCoverage:[],globalClosed:false,boundary:"Focused native date keyboard/change/clear and exact saved scalar or Tracking instant only; aliases bind their actual child Form, no full capability-axis or calendar-popup claim."};
+}
+
+/** Exact existing owned rows; only the missing mounted Boolean edit is submitted. */
+export async function runCoreOperationalControlFollowup(ctx) {
+  assert.ok(['domain-form-controls-followup','domain-form-controls-remaining-followup','domain-form-controls-final-two-followup','domain-form-controls-user-followup'].includes(ctx.journeySelection));const{page,origin,fixtures,run}=ctx,owned=fixtures.commandClosure,results=[];assert.ok(owned?.tracking?.update&&owned.adminUser);
+  const parent=owned.tracking;
+  const recipes=[
+    {kind:'stage',fixture:parent.stage,path:`/admin/projects/${parent.projectId}/tracking`,field:'is_visible',target:false,consumer:'project-tracking-create-edit',surface:'stage-edit',table:'project_tracking_stages',entity:'project_tracking_stage',expected:{project_id:parent.projectId}},
+    {kind:'item',fixture:parent.item,path:`/admin/projects/${parent.projectId}/tracking/stages/${parent.stage.id}`,field:'is_visible',target:false,consumer:'project-tracking-create-edit',surface:'item-edit',table:'project_tracking_items',entity:'project_tracking_item',expected:{stage_id:parent.stage.id}},
+    {kind:'update',fixture:parent.update,path:`/admin/projects/${parent.projectId}/tracking/items/${parent.item.id}`,field:'publication_status',target:true,consumer:'project-tracking-create-edit',surface:'update-edit',table:'project_tracking_updates',entity:'project_tracking_update',expected:{item_id:parent.item.id}},
+    {kind:'user',fixture:owned.adminUser,path:'/admin/users-roles',field:'is_active',target:false,consumer:'users-create-edit',surface:'user-edit',table:'admin_users',entity:'admin_user',expected:{username:owned.adminUser.label,role:'admin',session_version:2}},
+  ];
+  for(const recipe of recipes.filter(row=>ctx.journeySelection==='domain-form-controls-followup'||row.kind==='user'))await run('core-control-'+recipe.kind+'-boolean',[],async()=>{
+    const open=async()=>{await page.goto(origin+recipe.path+'?q='+encodeURIComponent(recipe.fixture.label),{waitUntil:'domcontentloaded'});const row=page.getByRole('row').filter({has:page.getByText(recipe.fixture.label,{exact:true})});await expect(row).toHaveCount(1);const id=Number(await row.locator('[data-admin-row-action="more"]').getAttribute('data-admin-entity-id'));assert.equal(id,recipe.fixture.id);await row.locator('[data-admin-row-action="edit"] button').click();};await open();const form=page.locator('form[data-admin-form-runtime]');await expect(form).toHaveCount(1);
+    if(recipe.kind==='user'){assert.ok(Number.isSafeInteger(ctx.actorId)&&ctx.actorId>0);assert.notEqual(recipe.fixture.id,ctx.actorId,'The actor cannot be the ordinary User target.');}
+    const statusDialog=()=>page.getByRole('dialog',{name:'تعطيل المستخدم ضمن حفظ التعديلات؟',exact:true}),userSave=form.locator('[data-admin-users-edit-save]');
+    const draft=await observeCoreControlDraft(ctx,async()=>{const proof=await observeCoreBooleanControl({form,name:recipe.field,target:recipe.target});if(recipe.kind==='user'){await userSave.click();await expect(statusDialog()).toBeVisible();await statusDialog().locator('[data-admin-confirm-cancel]').click();await expect(statusDialog()).toHaveCount(0);await expect(userSave).toBeFocused();await expect(form.locator('input[type="checkbox"][name="is_active"]')).not.toBeChecked();proof.confirmationCancelledWithExactFocus=true;}return proof;});
+    let submit=null;if(recipe.kind==='user'){await userSave.click();await expect(statusDialog()).toBeVisible();submit=statusDialog().getByRole('button',{name:'حفظ وتعطيل المستخدم',exact:true});await expect(submit).toBeEnabled();}
+    const expected={...recipe.expected,[recipe.field]:recipe.kind==='update'?'published':recipe.target};
+    const native=await acceptCoreControlSave(ctx,{form,submit,ownedRunId:draft.noWrite.ownedRunId,mapping:{caseId:'core-control-'+recipe.kind+'-boolean',formConsumer:recipe.consumer,surface:recipe.surface},descriptor:{table:recipe.table,id:recipe.fixture.id,expected,auditEntityType:recipe.entity,auditEntityLabel:recipe.fixture.label,auditActions:[recipe.kind==='user'?'admin_user.deactivated':'project_children.update'],...(recipe.kind==='user'?{auditMetadata:{username:recipe.fixture.label},exactAuditCount:1}:{})},reopen:async()=>{await expect(form).toHaveCount(0);await open();await expect(form.locator('input[type="checkbox"][name="'+recipe.field+'"]')).toBeChecked({checked:recipe.target});await form.getByRole('button',{name:'إلغاء',exact:true}).click();}});
+    if(recipe.kind==='user'){assert.notEqual(recipe.fixture.id,native.expectedActorId,'The current actor is never the ordinary User control target.');draft.value.confirmationAcceptedAfterCancel=true;}
+    const result={...native,controls:[draft.value],noWrite:draft.noWrite};results.push(result);return result;
+  });return{selection:ctx.journeySelection,results,automaticCoverage:[],globalClosed:false};
 }

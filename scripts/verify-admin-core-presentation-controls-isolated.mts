@@ -15,7 +15,7 @@ const assignments=async(handle:OwnedLocalHandle)=>(await handle.query("select * 
 const assets=async(handle:OwnedLocalHandle)=>(await handle.query("select * from public.media_assets order by id")).rows;
 /** Register the two existing unused recipes and one separate, unused local Content variant for read-only scrollbar observation. */
 export async function prepareCorePresentationControlsFixtures(handle:OwnedLocalHandle,credentials:{username:string},selection:string|null=null){
- assertOwnedLocalHandle(handle);assert.equal(states.has(handle),false);corePresentationSelectedKinds(selection);
+ assertOwnedLocalHandle(handle);assert.equal(states.has(handle),false);if(selection==='presentation-content-controls-followup')return prepareCoreContentControlFixture(handle,credentials);corePresentationSelectedKinds(selection);
  const actor=(await handle.query("select id from public.admin_users where username=$1 and is_active",[credentials.username])).rows;assert.equal(actor.length,1);
  const contentScroll=await prepareContentScrollFixture(handle);
  const original=await tables(handle),links=await assignments(handle),templates:Fixtures["templates"]=[];
@@ -64,4 +64,33 @@ export async function assertCoreContentScrollCompleted(handle:OwnedLocalHandle,b
  assert.equal(browser.journeySelection??null,s.fixtures.selection);assert.deepEqual(await tables(handle),s.expected,"All retained and selected template rows keep their exact final state.");const target=s.fixtures.contentScroll,original=s.originals.content.find(row=>Number(row.id)===target.id);assert.ok(original);const rows=(await handle.query("select * from public.content_block_templates where id=$1",[target.id])).rows;assert.equal(rows.length,1);assert.deepEqual(rows[0],original,"The separate Content variant is read-only and must retain every physical column.");
  assert.deepEqual(await assignments(handle),s.assignments);assert.deepEqual(await assets(handle),s.assets);
  return assertContentScrollReceipt({browser,nativeRecords,fixture:target,ownedRunId:handle.identity.runId});
+}
+
+type ContentControlState={actorId:number;fixture:{id:number;name:string;slug:string;variant:string;editPath:string};originals:Record<Kind,Row[]>;assignments:Row[];assets:Row[];auditHead:number;catalog:Fixtures['assets']};
+const contentControlStates=new WeakMap<OwnedLocalHandle,ContentControlState>();
+async function prepareCoreContentControlFixture(handle:OwnedLocalHandle,credentials:{username:string}){
+ assertOwnedLocalHandle(handle);assert.equal(contentControlStates.has(handle),false);
+ const actor=(await handle.query("select id from public.admin_users where username=$1 and is_active",[credentials.username])).rows;assert.equal(actor.length,1);
+ const slug='home-story',variant='about-intro';
+ const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false});
+ const {getContentModuleEditorKey}=await jiti.import<typeof import('../src/lib/page-blocks/module-edit-registry.ts')>('../src/lib/page-blocks/module-edit-registry.ts');assert.equal(getContentModuleEditorKey(slug,variant),'home-story');
+ const original=await tables(handle),matches=original.content.filter(row=>row.slug===slug);assert.equal(matches.length,1,'Bind the unique canonical Home Story row from the fresh owned migration corpus.');const row=matches[0],id=Number(row.id),name=String(row.name);assert.ok(Number.isSafeInteger(id)&&id>0);assert.equal(row.variant,variant);assert.ok(name.length>0);assert.equal(getContentModuleEditorKey(String(row.slug),String(row.variant)),'home-story');
+ const links=await assignments(handle);
+ const catalog=(await handle.query("select id,object_key,public_url,display_name from public.admin_media_assets_catalog where object_key=any($1::text[]) and provider='filesystem' and bucket='public' and status='active' and reconciliation_state='synced'",[PRESENTATION_CONTROL_ASSETS])).rows;
+ const selected=PRESENTATION_CONTROL_ASSETS.map(key=>{const matches=catalog.filter(row=>row.object_key===key);assert.equal(matches.length,1);assert.equal(matches[0].public_url,'/'+key);return{id:String(matches[0].id),objectKey:key,publicUrl:String(matches[0].public_url),displayName:String(matches[0].display_name)};});
+ const fixture={id,name,slug,variant,editPath:'/admin/pages-blocks/blocks/content/'+id};contentControlStates.set(handle,{actorId:Number(actor[0].id),fixture,originals:original,assignments:links,assets:await assets(handle),auditHead:Number((await handle.query('select coalesce(max(id),0)::bigint id from public.admin_audit_logs')).rows[0].id),catalog:selected});
+ return{selection:'presentation-content-controls-followup',templates:[],contentControls:fixture,assets:selected};
+}
+/** Native outside-row, assignment and Catalog invariants for the new fixed control selection. */
+export async function assertCoreContentControlsCompleted(handle:OwnedLocalHandle,browser:Record<string,unknown>){
+ assertOwnedLocalHandle(handle);const s=contentControlStates.get(handle);assert.ok(s);assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.journeySelection,'presentation-content-controls-followup');
+ const rows=await tables(handle),current=rows.content.find(row=>Number(row.id)===s.fixture.id),original=s.originals.content.find(row=>Number(row.id)===s.fixture.id);assert.ok(current&&original);assert.equal(s.fixture.slug,'home-story');assert.equal(s.fixture.variant,'about-intro');assert.equal(current.slug,s.fixture.slug);assert.equal(current.variant,s.fixture.variant);
+ const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),{getContentModuleEditorKey}=await jiti.import<typeof import('../src/lib/page-blocks/module-edit-registry.ts')>('../src/lib/page-blocks/module-edit-registry.ts');assert.equal(getContentModuleEditorKey(String(current.slug),String(current.variant)),'home-story');
+ assert.deepEqual(rows.hero,s.originals.hero);assert.deepEqual(rows.content.filter(row=>Number(row.id)!==s.fixture.id),s.originals.content.filter(row=>Number(row.id)!==s.fixture.id));
+ const stable=(row:Row)=>Object.fromEntries(Object.entries(row).filter(([key])=>!['config','updated_at'].includes(key)));assert.deepEqual(stable(current),stable(original));
+ const {linkDefaultFromContainer}=await jiti.import<typeof import('../src/lib/admin/links/link-defaults.ts')>('../src/lib/admin/links/link-defaults.ts'),{serializeAdminLink}=await jiti.import<typeof import('../src/lib/admin/links/serialize.ts')>('../src/lib/admin/links/serialize.ts');assert.deepEqual(serializeAdminLink(linkDefaultFromContainer((current.config as Row).button as Row)),serializeAdminLink(linkDefaultFromContainer((original.config as Row).button as Row)),'The existing CTA link identity survives both cancellation and save; open-target is a separate field.');
+ const config=current.config as {images:{main:string};button:{target:string}};assert.equal(config.images.main,s.catalog[1].publicUrl);assert.equal(config.button.target,'_blank');assert.deepEqual(await assignments(handle),s.assignments);assert.deepEqual(await assets(handle),s.assets);
+ const audit=(await handle.query('select id,actor_admin_user_id,action,entity_type,entity_id,entity_label,metadata from public.admin_audit_logs where id>$1 and entity_type=$2 and entity_id=$3 order by id',[s.auditHead,'content_block_template',s.fixture.id])).rows;
+ assert.equal(audit.length,1);assert.equal(audit[0].action,'content_block_template.update');assert.equal(Number(audit[0].actor_admin_user_id),s.actorId);assert.equal(audit[0].entity_label,s.fixture.name);assert.equal((audit[0].metadata as Row).slug,s.fixture.slug);assert.equal((audit[0].metadata as Row).variant,s.fixture.variant);
+ return{status:'pass',selection:'presentation-content-controls-followup',ownedRunId:handle.identity.runId,actorId:s.actorId,fixture:s.fixture,exactWrites:1,allOtherTemplatesUnchanged:true,publicAssignmentsUnchanged:true,catalogUnchanged:true,automaticCoverage:[],globalClosed:false};
 }

@@ -245,9 +245,12 @@ export default function PageLayoutManager({
                       <span>المعرّف</span>
                       <input
                         value={region.key}
-                        onChange={(event) => setRegions((current) => current.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, key: event.currentTarget.value } : item,
-                        ))}
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          setRegions((current) => current.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, key: value } : item,
+                          ));
+                        }}
                         dir="ltr"
                         required
                         className="min-h-10 w-full rounded-xl border border-white/12 bg-black/30 px-3 text-sm text-white"
@@ -257,9 +260,12 @@ export default function PageLayoutManager({
                       <span>الاسم الإداري</span>
                       <input
                         value={region.adminLabel}
-                        onChange={(event) => setRegions((current) => current.map((item, itemIndex) =>
-                          itemIndex === index ? { ...item, adminLabel: event.currentTarget.value } : item,
-                        ))}
+                        onChange={(event) => {
+                          const value = event.currentTarget.value;
+                          setRegions((current) => current.map((item, itemIndex) =>
+                            itemIndex === index ? { ...item, adminLabel: value } : item,
+                          ));
+                        }}
                         required
                         className="min-h-10 w-full rounded-xl border border-white/12 bg-black/30 px-3 text-sm text-white"
                       />

@@ -157,4 +157,72 @@ await controlledAssignmentNative();cases.push('Actual native copy projection use
 await assert.rejects(controlledAssignmentNative(true));cases.push('Actual native copy read rejects second copy and rolls back its scope');
 test('Current SQL clone contract preserves authored fields and applies the unpublished successor',()=>{const sql=readFileSync(resolve(root,'sql/migrations/20260805180000_global_truth_atomic_operations_closure.sql'),'utf8');for(const marker of ["v_clone := v_source || jsonb_build_object(","'-copy-' || v_new_template_id::text","'{status}', '\"draft\"'::jsonb","'{is_visible}', 'false'::jsonb","jsonb_populate_record(null::public.%I, $1)","v_sort_order + 1, v_now"])assert.ok(sql.includes(marker),marker);const successor=readFileSync(resolve(root,"sql/migrations/20260807120000_system_publication_summary_cards_closure.sql"),"utf8");assert.ok(successor.includes('"unpublished"'));assert.ok(successor.includes("mutate_page_composition(bigint,text,jsonb,bigint,text)"));assert.ok(successor.includes("v_next := replace(v_definition, $old$"));});
 
+function closureFixture(){
+ const value=assignmentFixture(),initial=structuredClone(value.states[0]);initial.assignments=initial.assignments.filter(row=>row.kind==='hero');const template=value.context.fixtures.pages.templates.find(row=>row.kind==='content')!;const next=(state:typeof initial)=>({...structuredClone(state),id:randomUUID()}),audit=(state:typeof initial,operation:string)=>state.audit.push({id:state.audit.length+1,action:'page_composition.'+operation,entity_type:'page_composition',entity_id:41,actor_admin_user_id:51,operation,persistence_owner:'mutate_page_composition',atomic:true});const cancelled=next(initial),assigned=next(cancelled);assigned.assignments.push({kind:'content',id:70,page_id:41,template_id:template.id,slot:'main',sort_order:10,is_visible:false,updated_at:'2026-09-27T00:00:01Z'});audit(assigned,'save_assignment');const shown=next(assigned);shown.assignments[1].is_visible=true;shown.assignments[1].updated_at='2026-09-27T00:00:02Z';audit(shown,'bulk');const hidden=next(shown);hidden.assignments[1].is_visible=false;hidden.assignments[1].updated_at='2026-09-27T00:00:03Z';audit(hidden,'bulk');const layoutCancelled=next(hidden),saved=next(layoutCancelled),intent={templateId:template.id,slot:'main',sortOrder:10,layoutKey:'qa-core-layout-test',layoutName:'QA Layout'};saved.layouts.push({id:2,key:intent.layoutKey,admin_label:intent.layoutName});saved.regions.push({layout_id:2,key:'main',admin_label:'QA Main',sort_order:10});audit(saved,'save_layout');const states=[initial,cancelled,assigned,shown,hidden,layoutCancelled,saved],proof=assignmentHelpers.assertCorePageCompositionClosureStates(states,intent),namedCellBindings=[{boundary:'form',consumer:'page-composition-and-seo'},...['page-block-assignments','page-composition-shell'].map(consumer=>({boundary:'collection',consumer}))].flatMap(row=>['switch','busy_state'].map(axis=>({...row,axis,key:row.boundary+':'+row.consumer+':capability:'+axis}))),outcome={id:'core-page-composition-boolean-pending',status:'pass',coverage:[],pageId:41,...intent,...proof,nativeIds:states.map(row=>row.id),pending:['row','bulk'].map(mode=>({mode,requests:1,disabledDuringPending:true,busyVisible:true,duplicateBlocked:true,acknowledged:true})),assignVisible:false,assignAfterSave:false,pageLayoutUnchanged:true,namedCellBindings,automaticCoverage:[],globalClosed:false};return{states,intent,sourceSha256:value.context.sourceSha256,ownedRunId:value.context.ownedRunId,actorId:51,fixtures:value.context.fixtures,browser:{sourceSha256:value.context.sourceSha256,status:'pass',driverCompleted:true,cohort:'page-composition',journeySelection:'page-composition-closure-followup',wholeCohortExecuted:false,errors:[],evidence:[outcome],requiredCases:namedCellBindings.map(row=>({...row,scenario:'complete_applicable_capability_behavior'}))},native:{status:'pass',ownedRunId:value.context.ownedRunId,records:states}};
+}
+test('Closure Boolean and Instant Mutation guards join seven actual states and four unique native intents',()=>{const value=closureFixture();const joined=assignmentHelpers.assertCorePageCompositionClosureJoin(value);assert.equal(joined.joined.length,6);assert.equal(joined.auditIds.length,4);});
+for(const mode of ['source','owner','actor','selector','whole','failed','missing','duplicate','order','cancel-write','assign-visible','template','other-assignment','row-not-shown','bulk-not-hidden','layout-cancel-write','page-assigned','layout-wrong-key','layout-regions','audit-missing','audit-actor','audit-atomic','pending-request','pending-busy','pending-duplicate','pending-ack','axis-missing','promote'])test('Closure exact joined intent rejects '+mode,()=>{const value=closureFixture(),row=value.browser.evidence[0],states=value.states;if(mode==='source')value.sourceSha256='f'.repeat(64);else if(mode==='owner')value.ownedRunId='foreign';else if(mode==='actor')value.actorId=99;else if(mode==='selector')value.browser.journeySelection='page-composition-followup';else if(mode==='whole')value.browser.wholeCohortExecuted=true;else if(mode==='failed')value.browser.status='fail';else if(mode==='missing')value.native.records.pop();else if(mode==='duplicate')row.nativeIds[1]=row.nativeIds[0];else if(mode==='order')value.native.records.reverse();else if(mode==='cancel-write')states[1].page.row_hash='changed';else if(mode==='assign-visible')states[2].assignments[1].is_visible=true;else if(mode==='template')states[2].assignments[1].template_id=999;else if(mode==='other-assignment')states[2].assignments[0].slot='main';else if(mode==='row-not-shown')states[3].assignments[1].is_visible=false;else if(mode==='bulk-not-hidden')states[4].assignments[1].is_visible=true;else if(mode==='layout-cancel-write')states[5].page.row_hash='changed';else if(mode==='page-assigned')states[6].page.layout_id=2;else if(mode==='layout-wrong-key')states[6].layouts[1].key='wrong';else if(mode==='layout-regions')states[6].regions.pop();else if(mode==='audit-missing')states[6].audit.pop();else if(mode==='audit-actor')states[6].audit.at(-1)!.actor_admin_user_id=99;else if(mode==='audit-atomic')states[6].audit.at(-1)!.atomic=false;else if(mode==='pending-request')row.pending[0].requests=2;else if(mode==='pending-busy')row.pending[0].busyVisible=false;else if(mode==='pending-duplicate')row.pending[0].duplicateBlocked=false;else if(mode==='pending-ack')row.pending[0].acknowledged=false;else if(mode==='axis-missing')value.browser.requiredCases.pop();else row.globalClosed=true;assert.throws(()=>assignmentHelpers.assertCorePageCompositionClosureJoin(value));});
+
+
+// Exercise the actual client handlers after React's event dispatch lifetime, without a Browser or database.
+function verifyPageLayoutRegionEventLifetime() {
+ type Region = Readonly<{ draftId: string; key: string; adminLabel: string; sortOrder: number }>;
+ type Update = (current: readonly Region[]) => readonly Region[];
+ type Change = (event: { currentTarget: { value: string } | null }) => void;
+ const source=readFileSync(resolve(root,'src/app/admin/pages-blocks/pages/[id]/PageLayoutManager.tsx'),'utf8');
+ const file=ts.createSourceFile('PageLayoutManager.tsx',source,ts.ScriptTarget.Latest,true,ts.ScriptKind.TSX);
+ const handlers=new Map<string,ts.Expression>();
+ function visit(node:ts.Node) {
+  if(ts.isJsxSelfClosingElement(node)&&node.tagName.getText(file)==='input') {
+   const attributes=node.attributes.properties;
+   const attribute=(name:string)=>attributes.find((value):value is ts.JsxAttribute=>ts.isJsxAttribute(value)&&value.name.getText(file)===name);
+   const value=attribute('value')?.initializer;
+   const field=value&&ts.isJsxExpression(value)?value.expression?.getText(file):undefined;
+   if(field==='region.key'||field==='region.adminLabel') {
+    const change=attribute('onChange')?.initializer;
+    assert.ok(change&&ts.isJsxExpression(change)&&change.expression);
+    assert.ok(!handlers.has(field),'one actual handler per region field');
+    handlers.set(field,change.expression);
+   }
+  }
+  ts.forEachChild(node,visit);
+ }
+ visit(file);
+ assert.deepEqual([...handlers.keys()],['region.key','region.adminLabel']);
+ function handler(field:'key'|'adminLabel',setRegions:(update:Update)=>void,index:number):Change {
+  const expression=handlers.get('region.'+field);assert.ok(expression);
+  const compiled=ts.transpileModule('const change = '+expression.getText(file)+';',{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.CommonJS}}).outputText;
+  return new Function('setRegions','index',compiled+';return change;')(setRegions,index) as Change;
+ }
+ const state=()=>Object.freeze([
+  Object.freeze({draftId:'region-1',key:'main',adminLabel:'Main',sortOrder:10}),
+  Object.freeze({draftId:'region-2',key:'sidebar',adminLabel:'Sidebar',sortOrder:20}),
+  Object.freeze({draftId:'region-3',key:'footer',adminLabel:'Footer',sortOrder:30}),
+ ]);
+ for(const field of ['key','adminLabel'] as const)for(const value of ['QA Main','','المنطقة الثانية'])test('Layout actual '+field+' handler survives deferred event clearing: '+JSON.stringify(value),()=>{
+  const queued:Update[]=[],current=state(),element={value},event:{currentTarget:{value:string}|null}={currentTarget:element};
+  handler(field,update=>queued.push(update),1)(event);
+  assert.equal(queued.length,1);element.value='later DOM value';event.currentTarget=null;
+  // A preceding update may have changed a different row before this callback is reduced.
+  const newer=Object.freeze([Object.freeze({...current[0],adminLabel:'Concurrent label'}),current[1],current[2]]);
+  const before=structuredClone(newer),actual=queued[0](newer);
+  assert.deepEqual(actual,[newer[0],{...newer[1],[field]:value},newer[2]]);
+  assert.notEqual(actual,newer);assert.equal(actual[0],newer[0]);assert.equal(actual[2],newer[2]);assert.notEqual(actual[1],newer[1]);
+  assert.deepEqual(newer,before);assert.deepEqual(queued[0](newer),actual);
+ });
+ for(const field of ['key','adminLabel'] as const)test('Layout actual '+field+' handler preserves synchronous update and last-row index',()=>{
+  const current=state(),event:{currentTarget:{value:string}|null}={currentTarget:{value:'Last region'}};let actual:readonly Region[]=current;
+  handler(field,update=>{actual=update(current);},2)(event);event.currentTarget=null;
+  assert.deepEqual(actual,[current[0],current[1],{...current[2],[field]:'Last region'}]);
+  assert.equal(actual[0],current[0]);assert.equal(actual[1],current[1]);
+ });
+ test('Layout actual queued key and label handlers compose on the latest region state',()=>{
+  const queued:Update[]=[],current=state();
+  for(const [field,value] of [['key','content'],['adminLabel','Content area']] as const){const event:{currentTarget:{value:string}|null}={currentTarget:{value}};handler(field,update=>queued.push(update),0)(event);event.currentTarget=null;}
+  assert.equal(queued.length,2);const actual=queued.reduce((value,update)=>update(value),current as readonly Region[]);
+  assert.deepEqual(actual,[{...current[0],key:'content',adminLabel:'Content area'},current[1],current[2]]);
+ });
+}
+verifyPageLayoutRegionEventLifetime();
+
 console.log(JSON.stringify({status:"pass",controls:cases.length,cases,runtimeExecuted:false,globalClosed:false}));

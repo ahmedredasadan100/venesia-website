@@ -6,23 +6,27 @@ import ts from 'typescript';
 
 /** Fixed measured Pages/Tracking follow-up; full query recipes remain the default. */
 export const CORE_QUERY_LAYOUT_SELECTION='query-layout-followup';
+export const CORE_QUERY_BUSY_SELECTION='query-pending-followup';
+export const CORE_QUERY_BUSY_SCENARIOS=['busy-before','busy-held','busy-released','busy-restored'];
+export function assertCoreQueryBusySequence(plan,proofs,request){assert.ok(Array.isArray(plan)&&plan.length>0);assert.equal(new Set(plan.map(row=>row.key)).size,plan.length);assert.ok(Array.isArray(proofs));assert.ok(proofs.length<plan.length*CORE_QUERY_BUSY_SCENARIOS.length);const expected=plan.flatMap(spec=>CORE_QUERY_BUSY_SCENARIOS.map(scenario=>({routeKey:spec.key,scenario})));assert.deepEqual(proofs.map(row=>({routeKey:row.routeKey,scenario:row.scenario})),expected.slice(0,proofs.length));assert.deepEqual({routeKey:request.routeKey,scenario:request.scenario},expected[proofs.length]);return true;}
 export function selectCoreQueryPresentationPlan(plan,selection){
  if(selection===null||selection===undefined)return plan;
+ if(selection===CORE_QUERY_BUSY_SELECTION){assert.ok(Array.isArray(plan)&&plan.length>0);assert.equal(new Set(plan.map(row=>row.key)).size,plan.length);return plan;}
  assert.equal(selection,CORE_QUERY_LAYOUT_SELECTION);assert.ok(Array.isArray(plan));assert.equal(new Set(plan.map(row=>row.key)).size,plan.length);
  const keys=['pages','project_tracking_stages','project_tracking_items','project_tracking_updates'];
  const selected=plan.filter(row=>keys.includes(row.key));assert.deepEqual(selected.map(row=>row.key),keys,'Only exact canonical affected contexts, in original recipe order.');return selected;
 }
 /** Full independent historical inventory stays intact; this selection grants no capability credit. */
 export function assertCoreQuerySelectionReceipt(browser,plan,canonicalRequiredCases){
- assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'query-presentation');assert.equal(browser.journeySelection,CORE_QUERY_LAYOUT_SELECTION);assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.deepEqual(browser.errors,[]);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
+ assert.equal(browser.scope,'core-closure');assert.equal(browser.cohort,'query-presentation');assert.ok([CORE_QUERY_LAYOUT_SELECTION,CORE_QUERY_BUSY_SELECTION].includes(browser.journeySelection));assert.equal(browser.status,'pass');assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.deepEqual(browser.errors,[]);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);
  const identity=rows=>{assert.ok(Array.isArray(rows)&&rows.length>0);assert.ok(rows.every(row=>typeof row.key==='string'&&row.key.length>0));assert.equal(new Set(rows.map(row=>row.key)).size,rows.length);return rows.map(row=>{const value={...row};delete value.status;delete value.evidence;return value;}).sort((a,b)=>a.key.localeCompare(b.key));};
  assert.deepEqual(identity(browser.requiredCases),identity(canonicalRequiredCases));assert.ok(browser.requiredCases.every(row=>row.status==='open'&&row.evidence===null));
- const selected=selectCoreQueryPresentationPlan(plan,CORE_QUERY_LAYOUT_SELECTION),ids=selected.map(row=>'core-query-presentation-'+row.key);
+ const selected=selectCoreQueryPresentationPlan(plan,browser.journeySelection),prefix=browser.journeySelection===CORE_QUERY_BUSY_SELECTION?'core-query-busy-':'core-query-presentation-',ids=selected.map(row=>prefix+row.key);
  assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map(row=>row.id),['existing-auth-login',...ids]);assert.ok(browser.evidence.every(row=>row.status==='pass'&&Array.isArray(row.coverage)&&row.coverage.length===0));
  const login=browser.evidence[0];assert.equal(login.authenticated,true);assert.equal(login.sessionArtifactWritten,false);assert.match(login.dashboardState,/^Dashboard (?:جاهزة|جزئية|غير متاحة)$/u);
  assert.equal(browser.queryPresentation.status,'pass');assert.deepEqual(browser.queryPresentation.outcomes.map(row=>row.routeKey),selected.map(row=>row.key));
- for(const outcome of browser.queryPresentation.outcomes){const rows=browser.evidence.filter(row=>row.id==='core-query-presentation-'+outcome.routeKey);assert.equal(rows.length,1);for(const[key,value]of Object.entries(outcome))assert.deepEqual(rows[0][key],value);}
- return{selection:CORE_QUERY_LAYOUT_SELECTION,selectedJourneyIds:ids,executedJourneyIds:[...ids],wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
+ for(const outcome of browser.queryPresentation.outcomes){const rows=browser.evidence.filter(row=>row.id===prefix+outcome.routeKey);assert.equal(rows.length,1);for(const[key,value]of Object.entries(outcome))assert.deepEqual(rows[0][key],value);}
+ return{selection:browser.journeySelection,selectedJourneyIds:ids,executedJourneyIds:[...ids],wholeCohortExecuted:false,automaticCoverage:[],globalClosed:false};
 }
 
 

@@ -1,4 +1,4 @@
-import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption} from "./admin-core-rendered-adoption.mjs";
+import {observeCoreScrollbarAdoption,observeCoreModalFocusAdoption,resolveCoreScrollbarTerminalTarget} from "./admin-core-rendered-adoption.mjs";
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -232,3 +232,39 @@ export async function runCoreDomainBulkJourneys(ctx){
   boundary:'Only named current bulk commands on disposable rows; no global Empty Trash, permission outage, persistence fault, mixed protected-page batch, or complete capability-axis claim.'};
 }
 
+
+
+/** A fresh observation of the shared floating Information panel, not a trapped Modal. */
+export async function observeCoreAtomicInformationScroll({page,origin,requiredCases,formManifest,consumer,nativeEntityId,information,trigger,id}){
+ assert.equal(consumer,'topics');positive(nativeEntityId);assert.equal(id,'atomic-topics-information-scroll');
+ await expect(information).toHaveCount(1);await expect(information).toHaveAttribute('data-admin-entity-id',String(nativeEntityId));await expect(information).toHaveAttribute('role','dialog');await expect(trigger).toHaveCount(1);await expect(trigger.locator('xpath=ancestor::*[@data-admin-row-action="more"][1]')).toHaveAttribute('data-admin-entity-id',String(nativeEntityId));
+ const receipt=await observeCoreScrollbarAdoption({page,origin,requiredCases,formManifest,bindings:[{boundary:'form',consumer:'list-bulk-row-one-shot-actions',surface:'row-command'}],id,container:information,target:({container,axis})=>resolveCoreScrollbarTerminalTarget({container,axis,candidates:[information.getByRole('button',{name:'رجوع',exact:true}),information.locator('[data-admin-row-actions-information-content]').locator('p,dd').last()]}),axis:'y',containment:'overscroll-contain'});
+ await page.keyboard.press('Escape');await expect(information).toHaveCount(0);await expect(trigger).toBeFocused();
+ return {renderedAdoption:[receipt],nativeEntityId,closed:true,exactTriggerFocusReturned:true,acceptedCommand:false,automaticCoverage:[],globalClosed:false};
+}
+
+export function assertCoreAtomicCancellationNative(before,after){
+ for(const row of [before,after]){assert.equal(row.kind,'form-permission-fingerprint');assert.equal(row.status,'pass');assert.equal(row.adminAuditIncluded,true);assert.ok(row.publicTableCount>0);assert.match(row.id,/^[a-f0-9-]{36}$/u);assert.match(row.correlationId,/^[a-f0-9-]{36}$/u);assert.ok(typeof row.ownedRunId==='string'&&row.ownedRunId.length>0);for(const key of ['publicTableInventorySha256','publicDataSha256'])assert.match(row[key],/^[a-f0-9]{64}$/u);}
+ assert.equal(before.phase,'before');assert.equal(after.phase,'after');assert.notEqual(before.id,after.id);assert.equal(after.correlationId,before.correlationId);
+ for(const key of ['ownedRunId','publicTableCount','publicTableInventorySha256','publicDataSha256'])assert.equal(after[key],before[key]);
+ return {before:before.id,after:after.id};
+}
+
+/** Observe only the existing Topics delete confirmation and cancel without delivery. */
+export async function runCoreAtomicConfirmationJourney(ctx){
+ const {page,origin,fixtures,run,observe,nativeCheckpoint,requiredCases}=ctx;assert.equal(new URL(origin).hostname,'127.0.0.1');
+ const {plan}=await loadCoreDomainBulkPlan(fixtures),recipe=plan.find(row=>row.entity==='topics');assert.ok(recipe);const action='move_to_trash',step=coreDomainBulkStep(recipe,action,recipe.steps.indexOf(action));assert.equal(step.confirmation,true);
+ const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),{ADMIN_BULK_ACTION_LABELS:labels}=await jiti.import('../../src/lib/admin/entity-list/bulk-action-labels.ts'),{ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST:formManifest}=await jiti.import('../../src/lib/admin/form-system/adoption-manifest.ts');
+ return run('core-atomic-confirmation-cancel',[],async()=>{
+  const correlationId=randomUUID(),checkpoint=async phase=>{const request={id:randomUUID(),kind:'form-permission-fingerprint',correlationId,phase},value=await nativeCheckpoint(request);for(const key of Object.keys(request))assert.equal(value[key],request[key]);return value;};
+  await observe('atomic-owned-topics',()=>page.goto(origin+recipe.route+'?q='+encodeURIComponent(recipe.query),{waitUntil:'domcontentloaded'}));for(const target of recipe.targets)await assertCoreBulkTarget(page,target);
+  const before=await checkpoint('before'),target=recipe.targets[0],selection=page.getByRole('checkbox',{name:'تحديد '+target.label,exact:true}),bar=page.locator('[data-admin-bulk-action-bar]'),dialog=page.locator('[data-admin-confirm-dialog]');let posts=0;const count=r=>{if(r.method()==='POST'&&r.headers()['next-action']&&new URL(r.url()).origin===origin)posts++;};page.on('request',count);
+  try{
+   await selection.check();await expect(bar).toHaveCount(1);assert.deepEqual(await bar.locator('input[name="ids"]').evaluateAll(nodes=>nodes.map(n=>Number(n.value))),[target.id]);await bar.getByRole('combobox').first().click();await page.getByRole('option',{name:labels.deleteSelected,exact:true}).click();await expect(bar.locator('input[name="bulk_action"]')).toHaveValue(action);
+   const trigger=bar.getByRole('button',{name:'تنفيذ',exact:true});await trigger.click();await expect(dialog).toHaveCount(1);
+   const rendered=await observeCoreModalFocusAdoption({page,origin,requiredCases,formManifest,bindings:[{boundary:'form',consumer:'list-bulk-row-one-shot-actions',surface:'bulk-command'}],id:'atomic-existing-bulk-confirmation-focus',dialog,state:'dirty-confirmation',escape:'not-exercised'});
+   await dialog.locator('[data-admin-confirm-cancel]').click();await expect(dialog).toHaveCount(0);await expect(trigger).toBeFocused();await expect(selection).toBeChecked();assert.equal(posts,0);await bar.getByRole('button',{name:'إلغاء التحديد',exact:true}).click();await expect(bar).toHaveCount(0);
+   const after=await checkpoint('after'),native=assertCoreAtomicCancellationNative(before,after);return {consumer:'list-bulk-row-one-shot-actions',targetId:target.id,route:recipe.route,renderedAdoption:[rendered],nativeIds:[native.before,native.after],cancelled:true,accepted:false,writes:0,automaticCoverage:[],globalClosed:false};
+  }finally{page.off('request',count);}
+ });
+}

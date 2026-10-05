@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHmac, createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { createJiti } from "jiti";
@@ -51,6 +51,7 @@ export function validateCoreSpecializedSettingsRequest(value: unknown) {
 
 /** Fixed server checkpoints return booleans/counts only; Browser cannot supply SQL, IDs or secret values. */
 export async function readCoreSpecializedSettingsCheckpoint(handle: OwnedLocalHandle, input: unknown) {
+  if(input&&typeof input==="object"&&(input as Record<string,unknown>).entity==="closure-wizard")return readCoreClosureWizardCheckpoint(handle,input);
   assertOwnedLocalHandle(handle); const request = validateCoreSpecializedSettingsRequest(input), state = stateByHandle.get(handle);
   assert.ok(state, "Specialized settings must be explicitly prepared by this owned lifecycle.");
   const receipt = { id: request.id, kind: request.kind, entity: request.entity, phase: request.phase, ...(request.provider ? { provider: request.provider } : {}), status: "pass" };
@@ -148,3 +149,50 @@ export function assertCoreSpecializedSettingsCompleted(handle: OwnedLocalHandle,
   for (const provider of state.providers.values()) assert.equal(provider.phase, sequence.length);
   return { status: "pass", globalClosed: false, securityCheckpoints: 8, providerCheckpoints: providers.length * sequence.length, maintenanceRestored: !followup, ...(followup ? {maintenanceExecuted:false,journeySelection:selection} : {}), secretsExported: false };
 }
+
+
+type ClosureWizardState = { mainId:number;connectionId:string;secretId:string;appSecretId:string;groupId:string;assetIds:string[];readModelId:string;phase:number;auditStart:number;baseline?:Record<string,unknown>;configurationHash?:string;assetsHash?:string };
+const closureWizardByHandle = new WeakMap<OwnedLocalHandle,ClosureWizardState>();
+const closureWizardPhases = ["baseline","selection-draft","disconnect-cancelled","disconnected","reloaded"] as const;
+export function validateCoreClosureWizardRequest(input:unknown) {
+ assert.ok(input&&typeof input==="object"&&!Array.isArray(input));const r=input as Record<string,unknown>;
+ assert.deepEqual(Object.keys(r).sort(),["entity","id","kind","phase"]);assert.equal(r.kind,"specialized-settings-state");assert.equal(r.entity,"closure-wizard");assert.match(String(r.id),/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/iu);assert.ok((closureWizardPhases as readonly string[]).includes(String(r.phase)));return r as {id:string;kind:string;entity:string;phase:string};
+}
+/** Fixed same-run setup only. Synthetic provider state is uncredited; no OAuth, provider Test or external readiness claim. */
+export async function prepareCoreSpecializedClosureFixtures(handle:OwnedLocalHandle,credentials:{username:string;password:string}) {
+ assertOwnedLocalHandle(handle);assert.equal(closureWizardByHandle.has(handle),false);assert.equal(stateByHandle.has(handle),false);
+ const actors=(await handle.query("select id from public.admin_users where username=$1 and is_active",[credentials.username])).rows;assert.equal(actors.length,1);const mainId=Number(actors[0].id);
+ for(const table of["integration_connections","integration_app_configuration_groups"])assert.equal(Number((await handle.query("select count(*) n from public."+table)).rows[0].n),0,"Only a fresh disposable Integration scope may receive this owned fixture");
+ const run=handle.identity.runId,secretId=String((await handle.query("select public.create_integration_vault_secret($1,$2,$3) id",[secret(credentials.password,"closure:connection"),"qa-closure-connection-"+run,"Uncredited disposable QA connection fixture"])).rows[0].id);
+ const appSecretId=String((await handle.query("select public.create_integration_vault_secret($1,$2,$3) id",[secret(credentials.password,"closure:app"),"qa-closure-app-"+run,"Uncredited disposable QA App fixture"])).rows[0].id);
+ // The canonical QA application runs NODE_ENV=production in its disposable local container/app; this value is a local row namespace, never a Production connection.
+ const groupId=String((await handle.query("insert into public.integration_app_configuration_groups(provider_key,environment_key,version,updated_by_admin_user_id) values('meta','production',1,$1) returning id",[mainId])).rows[0].id);
+ await handle.query("insert into public.integration_app_configuration_entries(group_id,provider_key,configuration_key,is_secret,vault_secret_id,safe_value) values($1,'meta','meta_app_id',false,null,'qa-closure-app'),($1,'meta','meta_app_secret',true,$2,null)",[groupId,appSecretId]);
+ await handle.query("insert into public.integration_app_configuration_validations(group_id,provider_key,integration_key,status,last_tested_at,safe_error_code,version) values($1,'meta','meta_business','ready_to_connect',clock_timestamp(),'qa_owned_uncredited_precondition',1)",[groupId]);
+ const connectionId=String((await handle.query("insert into public.integration_connections(integration_key,environment_key,status,credential_strategy,external_subject_id,created_by_admin_user_id,updated_by_admin_user_id) values('meta_business','production','pending_selection','meta_user',$1,$2,$2) returning id",["qa-closure-subject-"+run,mainId])).rows[0].id);
+ await handle.query("insert into public.integration_credentials(connection_id,credential_strategy,access_secret_id) values($1,'meta_user',$2)",[connectionId,secretId]);
+ const assets=[] as Array<{id:string;type:string;externalId:string;displayName:string}>;
+ for(const type of["business","ad_account"]){const externalId="qa-"+type+"-"+run,displayName="QA "+type;const id=String((await handle.query("insert into public.integration_connection_assets(connection_id,asset_type,external_id,display_name,metadata) values($1,$2,$3,$4,$5::jsonb) returning id",[connectionId,type,externalId,displayName,JSON.stringify({qaOwned:true,ownedRunId:run,behaviorCredit:false})])).rows[0].id);assets.push({id,type,externalId,displayName});}
+ const readModelId=String((await handle.query("insert into public.analytics_provider_read_models(connection_id,provider_key,period_key,compare_key,status,message,source_updated_at) values($1,'meta_marketing','last_30_days','none','unavailable','Uncredited owned fixture: no external data fetched',clock_timestamp()) returning id",[connectionId])).rows[0].id);
+ closureWizardByHandle.set(handle,{mainId,connectionId,secretId,appSecretId,groupId,assetIds:assets.map(a=>a.id),readModelId,phase:0,auditStart:0});
+ return{selection:"specialized-closure-followup",connectionId,assets,provider:"meta_business",uncreditedSyntheticPreconditions:true,externalOAuthExecuted:false,externalProviderTestExecuted:false,externalReadinessProven:false,secretsExported:false,ownedRunId:run};
+}
+async function readCoreClosureWizardCheckpoint(handle:OwnedLocalHandle,input:unknown) {
+ assertOwnedLocalHandle(handle);const request=validateCoreClosureWizardRequest(input),state=closureWizardByHandle.get(handle);assert.ok(state,"The fixed owned closure fixture must be prepared");assert.equal(request.phase,closureWizardPhases[state.phase]);
+ const connection=(await handle.query("select * from public.integration_connections where id=$1",[state.connectionId])).rows;assert.equal(connection.length,1);
+ const credentials=(await handle.query("select connection_id,credential_strategy,access_secret_id,refresh_secret_id from public.integration_credentials where connection_id=$1",[state.connectionId])).rows;
+ const assets=(await handle.query("select * from public.integration_connection_assets where connection_id=$1 order by id",[state.connectionId])).rows;assert.equal(assets.length,2);assert.deepEqual(assets.map(a=>String(a.id)).sort(),state.assetIds.toSorted());assert.ok(assets.every(a=>a.selected===false));
+ const readModels=(await handle.query("select * from public.analytics_provider_read_models where connection_id=$1 order by id",[state.connectionId])).rows;
+ const app=(await handle.query("select to_jsonb(g) g,(select jsonb_agg(to_jsonb(e) order by configuration_key) from public.integration_app_configuration_entries e where e.group_id=g.id) entries,(select jsonb_agg(to_jsonb(v) order by integration_key) from public.integration_app_configuration_validations v where v.group_id=g.id) validations from public.integration_app_configuration_groups g where g.id=$1",[state.groupId])).rows;
+ assert.equal(app.length,1);const hash=(v:unknown)=>createHash("sha256").update(JSON.stringify(v)).digest("hex"),configHash=hash(app),assetsHash=hash(assets);
+ if(state.phase===0)state.auditStart=await auditStart(handle);
+ const audit=(await handle.query("select id,actor_admin_user_id,action,entity_type,metadata from public.admin_audit_logs where id>$1 order by id",[state.auditStart])).rows;
+ const vault=(await handle.query("select exists(select 1 from vault.secrets where id=$1::uuid) connection_present,exists(select 1 from vault.secrets where id=$2::uuid) app_present",[state.secretId,state.appSecretId])).rows[0];assert.equal(vault.app_present,true);
+ const baseline={connection,credentials,assets,readModels,app,vault,audit};
+ if(state.phase===0){assert.equal(connection[0].status,"pending_selection");assert.equal(Number(connection[0].version),1);assert.equal(connection[0].revoked_at,null);assert.equal(credentials.length,1);assert.equal(readModels.length,1);assert.equal(readModels[0].id,state.readModelId);assert.equal(vault.connection_present,true);assert.equal(audit.length,0);state.baseline=baseline;state.configurationHash=configHash;state.assetsHash=assetsHash;}
+ if(state.phase<3)assert.equal(isDeepStrictEqual(baseline,state.baseline),true,"Selection/cancellation must preserve the full owned native state, credentials and audit");
+ else{assert.equal(connection[0].status,"revoked");assert.ok(connection[0].revoked_at);assert.equal(Number(connection[0].version),2);assert.equal(Number(connection[0].updated_by_admin_user_id),state.mainId);assert.equal(credentials.length,0);assert.equal(readModels.length,0);assert.equal(vault.connection_present,false);assert.equal(configHash,state.configurationHash);assert.equal(assetsHash,state.assetsHash);assert.equal(audit.length,1,"CORE_CLOSURE_WIZARD_AUDIT_COUNT "+JSON.stringify({phase:request.phase,expectedCount:1,actualCount:audit.length,rows:audit.slice(0,8).map(row=>({action:["integration.disconnected","auth.login.success","auth.login.failed","auth.logout"].includes(String(row.action))?String(row.action):"other",entityType:["integration_connection","admin_user","integration_app_configuration"].includes(String(row.entity_type))?String(row.entity_type):"other",actorMatchesOwned:Number(row.actor_admin_user_id)===state.mainId,metadataFields:["integration","connectionId","providerRevoked","providerRevocationDisposition","rememberMe"].filter(key=>row.metadata&&typeof row.metadata==="object"&&!Array.isArray(row.metadata)&&Object.hasOwn(row.metadata,key))})),truncated:audit.length>8}));assert.equal(Number(audit[0].actor_admin_user_id),state.mainId);assert.equal(audit[0].action,"integration.disconnected");assert.equal(audit[0].entity_type,"integration_connection");assert.deepEqual(audit[0].metadata,{integration:"meta_business",connectionId:state.connectionId,providerRevoked:false,providerRevocationDisposition:"external_manual_action"});}
+ state.phase++;
+ return{...request,status:"pass",ownedRunId:handle.identity.runId,actorId:state.mainId,connectionId:state.connectionId,ownedStateSha256:hash(baseline),configurationSha256:configHash,assetsSha256:assetsHash,actorBoundAuditCount:audit.length,connectionRevoked:state.phase>3,connectionCredentialsPresent:vault.connection_present,appConfigurationPreserved:true,readModelCount:readModels.length,syntheticPreconditionsUncredited:true,externalReadinessProven:false,secretsExported:false};
+}
+export function assertCoreSpecializedClosureCompleted(handle:OwnedLocalHandle,selection:"specialized-closure-followup"|"specialized-controls-followup"="specialized-closure-followup") {assertOwnedLocalHandle(handle);assert.ok(selection==="specialized-closure-followup"||selection==="specialized-controls-followup");const state=closureWizardByHandle.get(handle);assert.ok(state);assert.equal(state.phase,closureWizardPhases.length);assert.equal(stateByHandle.has(handle),false,"Qualified Security/Vault/Maintenance accepted lifecycles must not replay");return{status:"pass",journeySelection:selection,wizardCheckpoints:state.phase,externalReadinessProven:false,syntheticPreconditionsUncredited:true,secretsExported:false,automaticCoverage:[],globalClosed:false};}

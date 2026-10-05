@@ -254,10 +254,15 @@ export async function seedOwnedCorePreviewFixtures(handle: OwnedLocalHandle) {
   return records;
 }
 /** Explicit specialized-settings opt-in after the existing primary account is prepared. */
-export async function seedOwnedCoreSpecializedSettingsFixtures(handle: OwnedLocalHandle) {
+export async function seedOwnedCoreSpecializedSettingsFixtures(handle: OwnedLocalHandle, selection: string | null = null) {
   assertOwnedLocalHandle(handle);
   const credentials = credentialsByHandle.get(handle);
   assert.ok(credentials, "Prepare the canonical owned Admin account before specialized fixtures.");
+  if(selection === "specialized-closure-followup" || selection === "specialized-controls-followup") {
+    const {prepareCoreSpecializedClosureFixtures}=await import("../verify-admin-core-specialized-settings-isolated.mts");
+    const fixture=await prepareCoreSpecializedClosureFixtures(handle,credentials);
+    return selection === "specialized-controls-followup" ? {...fixture,selection} : fixture;
+  }
   const { prepareCoreSpecializedSettingsFixtures } = await import("../verify-admin-core-specialized-settings-isolated.mts");
   return prepareCoreSpecializedSettingsFixtures(handle, credentials);
 }
@@ -367,8 +372,8 @@ export async function seedOwnedCoreTemplateLibraryPresentationFixtures(handle: O
 }
 
 /** Existing owned account gates descendant fixture opt-in before navigation captures its baseline. */
-export async function seedOwnedCoreDescendantPresentationFixtures(handle: OwnedLocalHandle, fixtures: Record<string, unknown>, scope: "navigation" | "composition") {
+export async function seedOwnedCoreDescendantPresentationFixtures(handle: OwnedLocalHandle, fixtures: Record<string, unknown>, scope: "navigation" | "composition", mode: "presentation" | "closure" = "presentation", journeySelection: "navigation-controls-followup" | null = null) {
  assertOwnedLocalHandle(handle); assert.ok(credentialsByHandle.has(handle),"Prepare the canonical QA account first.");
  const {prepareCoreDescendantPresentationFixtures}=await import("../verify-admin-core-descendant-presentation-isolated.mts");
- return prepareCoreDescendantPresentationFixtures(handle,fixtures,scope);
+ return prepareCoreDescendantPresentationFixtures(handle,fixtures,scope,mode,journeySelection);
 }

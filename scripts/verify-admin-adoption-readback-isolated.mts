@@ -28,7 +28,7 @@ import { verifyCoreTemplatePresentationCompletion } from './verify-admin-core-te
 import { CORE_PREVIEW_PUBLIC_IMPACT_SELECTION, assertCorePreviewPublicImpactReceipt } from "./fixtures/admin-core-preview-journeys.mjs";
 import { assertCoreJourneySelectionReceipt, buildCoreDomainFinalSixPlan, assertCoreDomainFinalSixReceipt, buildCoreDomainFinalUpdatePlan, assertCoreDomainFinalUpdateReceipt } from "./fixtures/admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
-import { execFileSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import { resolve } from "node:path";
 import { assertCorePresentationControlsCompleted, assertCoreContentScrollCompleted } from "./verify-admin-core-presentation-controls-isolated.mts";
 import { PRESENTATION_CONTROL_PHASES, partitionContentScrollNativeRecords, assertPresentationAcceptedDiscardReceipts, partitionPresentationDiscardNativeRecords, buildCorePresentationControlsPlan } from "./fixtures/admin-core-presentation-controls-contract.mjs";
@@ -221,6 +221,19 @@ export function assertCoreHistoricalCoverageAccounting(browser: Record<string, u
   return canonical.coverageAccounting;
 }
 
+/** Only the inventory child runs in this scope; all SQL resumes after its pulse drains. */
+const coreCanonicalInventoryJobs=new WeakSet<OwnedLocalHandle>();
+async function runCoreCanonicalInventoryProducer(handle:OwnedLocalHandle,canonicalDirectory:string){
+ assertOwnedLocalHandle(handle);assert.equal(coreCanonicalInventoryJobs.has(handle),false,'Canonical inventory cannot overlap on an owned handle.');coreCanonicalInventoryJobs.add(handle);
+ const abort=new AbortController();let active=false,busy=false,backendPid:number|undefined,heartbeatFailure:unknown,childFailure:unknown,pending:Promise<void>=Promise.resolve(),timer:ReturnType<typeof setInterval>|undefined;
+ const pulse=async()=>{assert.equal(busy,false,'Canonical inventory control pulses must be serialized.');busy=true;try{assertOwnedLocalHandle(handle);const row=(await handle.query('select current_database() as database,current_user as role,pg_backend_pid() as backend_pid')).rows[0];assertOwnedLocalHandle(handle);const pid=Number(row?.backend_pid);assert.equal(row?.database,'postgres');assert.equal(row?.role,'postgres');assert.ok(Number.isSafeInteger(pid)&&pid>0);if(backendPid!==undefined)assert.equal(pid,backendPid,'Canonical inventory cannot replace its original healthy backend.');backendPid=pid;}finally{busy=false;}};
+ try{
+  await pulse();active=true;timer=setInterval(()=>{if(!active||busy||heartbeatFailure!==undefined)return;pending=pulse().catch(error=>{heartbeatFailure=error;abort.abort();});},20_000);
+  await new Promise<void>(done=>{const child=execFile(process.execPath,[resolve(import.meta.dirname,'qa-admin-adoption-journeys.mjs'),'--inventory-only','--core-closure'],{cwd:resolve(import.meta.dirname,'..'),encoding:'utf8',timeout:180_000,maxBuffer:4_000_000,windowsHide:true,signal:abort.signal,env:{...process.env,QA_ADMIN_OUTPUT:canonicalDirectory,QA_ADMIN_USERNAME:'',QA_ADMIN_PASSWORD:'',QA_ADMIN_FIXTURES:'',QA_ADMIN_SOURCE_SHA256:''}},error=>{childFailure=error??undefined;});child.once('close',()=>done());});
+ }finally{active=false;if(timer!==undefined)clearInterval(timer);await pending;coreCanonicalInventoryJobs.delete(handle);}
+ if(heartbeatFailure!==undefined)throw heartbeatFailure;if(childFailure!==undefined)throw childFailure;assertOwnedLocalHandle(handle);
+}
+
 /** Complete selected authenticated journeys through the existing owned SQL handle. */
 export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, artifactDir: string) {
   assertOwnedLocalHandle(handle);
@@ -239,10 +252,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
     { // Reuse the existing local inventory producer for every Core ledger, selected or full.
       const canonicalDirectory = join(artifactDir, "selected-journey-canonical-inventory");
       assert.equal(existsSync(canonicalDirectory), false, "Independent inventory receipt must be freshly generated for this join.");
-      execFileSync(process.execPath, [resolve(import.meta.dirname, "qa-admin-adoption-journeys.mjs"), "--inventory-only", "--core-closure"], {
-        cwd: resolve(import.meta.dirname, ".."), encoding: "utf8", timeout: 180_000, maxBuffer: 4_000_000, windowsHide: true,
-        env: { ...process.env, QA_ADMIN_OUTPUT: canonicalDirectory, QA_ADMIN_USERNAME: "", QA_ADMIN_PASSWORD: "", QA_ADMIN_FIXTURES: "", QA_ADMIN_SOURCE_SHA256: "" },
-      });
+      await runCoreCanonicalInventoryProducer(handle,canonicalDirectory);
       const canonical = JSON.parse(readFileSync(join(canonicalDirectory, "admin-adoption-browser.json"), "utf8"));
       assert.equal(canonical.inventoryOnly, true); assert.equal(canonical.driverCompleted, false); assert.equal(canonical.status, "pass");
       assert.equal(canonical.globalClosed, false); assert.deepEqual(canonical.evidence, []); assert.deepEqual(canonical.errors, []);
@@ -250,6 +260,7 @@ export async function verifyAdminAdoptionReadback(handle: OwnedLocalHandle, arti
       assertCoreHistoricalCoverageAccounting(browser,canonical);
       canonicalRequiredCases = canonical.requiredCases;
     }
+    if (["domain-form-controls-followup","domain-form-controls-remaining-followup","domain-form-controls-final-two-followup","domain-form-controls-user-followup","template-create-controls-followup","presentation-content-controls-followup","page-composition-closure-followup","page-composition-controls-followup","navigation-closure-followup","navigation-controls-followup","query-pending-followup","atomic-confirmation-followup","specialized-closure-followup","specialized-controls-followup","sitemap-closure-followup"].includes(browser.journeySelection??"")) return verifyCoreRemainingClosureReadback(handle,artifactDir,canonicalRequiredCases);
     const isPreviewImpact = browser.journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION;
     let previewImpactContext = null;
     if (isPreviewImpact) {
@@ -616,4 +627,62 @@ export async function verifyCoreSelectedWrites(handle: OwnedLocalHandle, browser
     result.push({ table: expectation.table, id: expectation.id, actual: rows[0], audit: attributed, expectedActorId });
   }
   return result;
+}
+/** Fixed minimal closure selections join through the same native owner; legacy cohorts retain their full criteria. */
+async function verifyCoreRemainingClosureReadback(handle:OwnedLocalHandle,artifactDir:string,canonicalRequiredCases:unknown) {
+ const browser=JSON.parse(readFileSync(join(artifactDir,"admin-adoption-browser.json"),"utf8"));
+ const fixtures=JSON.parse(readFileSync(join(artifactDir,"admin-adoption-fixtures.json"),"utf8"));
+ const source=JSON.parse(readFileSync(join(artifactDir,"public-source-manifest.json"),"utf8"));
+ const native=JSON.parse(readFileSync(join(artifactDir,"core-native-control-readback.json"),"utf8"));
+ const selection=browser.journeySelection,sourceSha256=source.sourceSha256,ownedRunId=handle.identity.runId;
+ assert.match(sourceSha256,/^[a-f0-9]{64}$/u);assert.equal(browser.sourceSha256,sourceSha256);assert.equal(browser.scope,"core-closure");assert.equal(browser.status,"pass");assert.equal(browser.driverCompleted,true);assert.equal(browser.inventoryOnly,false);assert.equal(browser.wholeCohortExecuted,false);assert.equal(browser.globalClosed,false);assert.deepEqual(browser.errors,[]);assert.equal(native.status,"pass");assert.equal(native.ownedRunId,ownedRunId);assert.ok(Array.isArray(native.records));
+ assert.equal(new Set(native.records.map((r:{id:string})=>r.id)).size,native.records.length);
+ assert.ok(native.records.every((r:{kind:string;status:string})=>r.status===(r.kind==="form-save-native"?"partial-not-global-pass":"pass")));assert.ok(browser.requiredCases.every((r:{status:string;evidence:unknown})=>r.status==="open"&&r.evidence===null));
+ assert.deepEqual(browser.readOnlyReadback,[]);assert.deepEqual(browser.menuIntegrityReadback,[]);
+ const {validateCoreJourneySelection,coreControlFollowupJourneyIds,assertCoreControlFollowupCompletion}=await import("./fixtures/admin-core-domain-form-journeys.mjs");
+ assert.equal(validateCoreJourneySelection({scope:browser.scope,cohort:browser.cohort,selection}),selection);
+ const controlSelection=["domain-form-controls-followup","domain-form-controls-remaining-followup","domain-form-controls-final-two-followup","domain-form-controls-user-followup","template-create-controls-followup","presentation-content-controls-followup"].includes(selection);
+ const ids=controlSelection?coreControlFollowupJourneyIds(selection):selection==="query-pending-followup"?(await loadCoreQueryPresentationPlan()).map((r:{key:string})=>"core-query-busy-"+r.key):selection==="navigation-controls-followup"?["core-descendant-footer-empty-grid","core-navigation-busy-menus","core-navigation-busy-items"]:selection==="navigation-closure-followup"?["core-descendant-filter-selection-menus","core-descendant-filter-selection-items","core-descendant-footer-empty-grid","core-navigation-busy-menus","core-navigation-busy-items"]:selection==="page-composition-controls-followup"?["core-page-composition-boolean-pending"]:selection==="page-composition-closure-followup"?["core-descendant-filter-selection-assignments","core-page-composition-boolean-pending"]:selection==="atomic-confirmation-followup"?["core-atomic-confirmation-cancel"]:selection==="specialized-controls-followup"?["core-wizard-assets-disconnect-only"]:selection==="specialized-closure-followup"?["core-maintenance-rejected-feedback-only","core-wizard-assets-disconnect-only"]:["core-sitemap-bounded-command-table-scroll"];
+ assert.deepEqual(browser.selectedJourneyIds,ids);assert.deepEqual(browser.executedJourneyIds,ids);assert.deepEqual(browser.evidence.map((r:{id:string})=>r.id),["existing-auth-login",...ids]);assert.ok(browser.evidence.every((r:{status:string;coverage:unknown[]})=>r.status==="pass"&&r.coverage.length===0));assert.equal(browser.evidence[0].authenticated,true);
+ const actorId=await readCoreFixedQaActor(handle);let completion:unknown,writes:unknown=null;
+ if(controlSelection){
+  completion=assertCoreControlFollowupCompletion({browser,native,sourceSha256,ownedRunId,actorId,canonicalRequiredCases});
+  if(selection==="presentation-content-controls-followup"){const{assertCoreContentControlsCompleted}=await import("./verify-admin-core-presentation-controls-isolated.mts");completion={controls:completion,native:await assertCoreContentControlsCompleted(handle,browser)};}
+  writes=await verifyCoreDomainWrites(handle,browser);
+ }else if(selection==="query-pending-followup"){
+  const{verifyCoreQueryBusyCompletion}=await import("./verify-admin-core-query-presentation-isolated.mts");const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import("../src/lib/admin/form-system/adoption-manifest.ts")>("../src/lib/admin/form-system/adoption-manifest.ts");completion=verifyCoreQueryBusyCompletion(handle,browser,native,ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST);assert.deepEqual(browser.databaseReadback,[]);
+ }else if(selection==="page-composition-controls-followup"){
+  const{assertCorePageCompositionClosureJoin}=await import("./fixtures/admin-core-page-composition-journeys.mjs");completion={composition:assertCorePageCompositionClosureJoin({browser,native,fixtures,sourceSha256,ownedRunId,actorId})};assert.deepEqual(browser.databaseReadback,[]);
+ }else if(selection==="navigation-closure-followup"||selection==="navigation-controls-followup"||selection==="page-composition-closure-followup"){
+  const {verifyCoreDescendantClosureCompletion}=await import("./verify-admin-core-descendant-presentation-isolated.mts");
+  const descendant=await verifyCoreDescendantClosureCompletion(handle,browser,native),remaining=partitionCoreDescendantNativeCheckpoints(handle,native);
+  if(selection==="page-composition-closure-followup"){const{assertCorePageCompositionClosureJoin}=await import("./fixtures/admin-core-page-composition-journeys.mjs");completion={descendant,composition:assertCorePageCompositionClosureJoin({browser,native:remaining,fixtures,sourceSha256,ownedRunId,actorId})};}
+  else{assert.deepEqual(remaining.records,[]);completion=descendant;}assert.deepEqual(browser.databaseReadback,[]);
+ }else if(selection==="specialized-closure-followup"||selection==="specialized-controls-followup"){
+  const {assertCoreSpecializedClosureReceipt}=await import("./fixtures/admin-core-specialized-settings-journeys.mjs");
+  const {assertCoreSpecializedClosureCompleted}=await import("./verify-admin-core-specialized-settings-isolated.mts");
+  const wizardOnly=selection==="specialized-controls-followup",receipt=assertCoreSpecializedClosureReceipt(browser,canonicalRequiredCases),maintenance=wizardOnly?null:browser.evidence[1],wizard=browser.evidence.at(-1);
+  const records=wizardOnly?wizard.checkpoints:[maintenance.nativeBefore,maintenance.nativeAfter,...wizard.checkpoints];assert.deepEqual(native.records,records);
+  for(const row of records)assert.equal(row.ownedRunId,ownedRunId);for(const row of wizard.checkpoints){assert.equal(row.actorId,actorId);assert.equal(row.connectionId,fixtures.specializedSettings.connectionId);}
+  const {assertCoreAtomicCancellationNative}=await import("./fixtures/admin-core-domain-bulk-journeys.mjs");if(!wizardOnly)assertCoreAtomicCancellationNative(records[0],records[1]);
+  completion={receipt,native:assertCoreSpecializedClosureCompleted(handle,selection)};assert.deepEqual(browser.databaseReadback,[]);
+ }else{
+  assert.ok(selection==="atomic-confirmation-followup"||selection==="sitemap-closure-followup");assert.deepEqual(browser.databaseReadback,[]);assert.equal(native.records.length,2);
+  const {assertCoreAtomicCancellationNative,loadCoreDomainBulkPlan}=await import("./fixtures/admin-core-domain-bulk-journeys.mjs");
+  const noWrite=assertCoreAtomicCancellationNative(native.records[0],native.records[1]);assert.equal(native.records[0].ownedRunId,ownedRunId);
+  const {assertCoreRenderedAdoptionJoin}=await import("./fixtures/admin-core-rendered-adoption.mjs");
+  const row=browser.evidence[1];let rendered:unknown;
+  if(selection==="atomic-confirmation-followup"){
+   assert.deepEqual(row.nativeIds,[noWrite.before,noWrite.after]);assert.equal(row.cancelled,true);assert.equal(row.accepted,false);assert.equal(row.writes,0);assert.equal(row.consumer,"list-bulk-row-one-shot-actions");assert.deepEqual(row.automaticCoverage,[]);assert.equal(row.globalClosed,false);
+   const{plan}=await loadCoreDomainBulkPlan(fixtures),recipe=plan.find((r:{entity:string})=>r.entity==="topics");assert.ok(recipe);assert.equal(row.targetId,recipe.targets[0].id);assert.equal(row.route,recipe.route);
+   const {ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST}=await createJiti(import.meta.url,{fsCache:false,moduleCache:false}).import<typeof import("../src/lib/admin/form-system/adoption-manifest.ts")>("../src/lib/admin/form-system/adoption-manifest.ts");
+   rendered=assertCoreRenderedAdoptionJoin({browser,sourceSha256,formManifest:ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,expected:[{journeyId:row.id,observationId:"atomic-existing-bulk-confirmation-focus",axis:"modal",routePathname:recipe.route,bindings:[{boundary:"form",consumer:"list-bulk-row-one-shot-actions",surface:"bulk-command"}]}]});
+  }else{
+   const{assertCoreSitemapClosureReceipt}=await import("./fixtures/admin-core-readonly-journeys.mjs");assertCoreSitemapClosureReceipt(browser,canonicalRequiredCases);assert.deepEqual(native.records,[row.nativeBefore,row.nativeAfter]);assert.deepEqual(row.nativeCheckpointIds,[noWrite.before,noWrite.after]);
+   rendered=assertCoreRenderedAdoptionJoin({browser,sourceSha256,expected:[{journeyId:row.id,observationId:"sitemap-effective-source-scroll",axis:"scrollbar",routePathname:"/admin/seo/sitemap",bindings:[{boundary:"collection",consumer:"sitemap-monitor",surface:"/admin/seo/sitemap"}]}]});
+  }
+  completion={noWrite,rendered};
+ }
+ const result={status:"pass",journeySelection:selection,sourceSha256,ownedRunId,actorId,selectedJourneys:ids,nativeRecords:native.records.length,completion,writes,retainedJourneysReplayed:false,automaticCoverage:[],globalClosed:false,boundary:"Exact minimal missing controls only; original 111 and previously qualified journeys retained without replay."};
+ writeFileSync(join(artifactDir,"admin-adoption-database-readback.json"),JSON.stringify(result,null,2)+"\n");return result;
 }

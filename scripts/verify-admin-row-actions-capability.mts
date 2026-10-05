@@ -823,6 +823,29 @@ function capabilityExecutableBindingSignature(
     .join("|");
 }
 
+/** Updates has no mounted selector; the shared list's disabled bulk branch is not consumer adoption. */
+function trackingUpdateListboxBoundaryIsAbsent(consumer: ConsumerCapabilityAuditRecord, sourceOverrides?: SourceOverrides) {
+  if (consumer.id !== "project-tracking-updates" || consumer.boundary !== "collection") return false;
+  const file = "src/components/admin/projects/tracking/TrackingCollections.tsx";
+  const source = sourceOverrides?.get(file) ?? read(file);
+  const tree = parseTypeScriptSource(file, source);
+  if ((tree as ts.SourceFile & { parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics.length !== 0) return false;
+  const owners = tree.statements.filter((node): node is ts.FunctionDeclaration => ts.isFunctionDeclaration(node) && node.name?.text === "TrackingUpdatesCollection");
+  if (owners.length !== 1) return false;
+  const lists: Array<ts.JsxOpeningElement | ts.JsxSelfClosingElement> = [];
+  function visit(node: ts.Node) {
+    if ((ts.isJsxOpeningElement(node) || ts.isJsxSelfClosingElement(node)) && node.tagName.getText(tree) === "AdminEntityList") lists.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(owners[0]);
+  if (lists.length !== 1) return false;
+  const attributes = lists[0].attributes.properties;
+  if (attributes.some(node => ts.isJsxSpreadAttribute(node))) return false;
+  if (attributes.some(node => ts.isJsxAttribute(node) && ["bulkOptions", "onBulkExecute", "bulkAdditionalControls"].includes(node.name.getText(tree)))) return false;
+  const selection = attributes.filter((node): node is ts.JsxAttribute => ts.isJsxAttribute(node) && node.name.getText(tree) === "enableSelection");
+  return selection.length === 1 && Boolean(selection[0].initializer && ts.isJsxExpression(selection[0].initializer) && selection[0].initializer.expression?.kind === ts.SyntaxKind.FalseKeyword);
+}
+
 function collectConsumerCapabilityAuditFailures(
   consumer: ConsumerCapabilityAuditRecord,
   phase: "applicability" | "source_proof",
@@ -893,6 +916,10 @@ function collectConsumerCapabilityAuditFailures(
   }
 
   if (phase === "applicability") return [...new Set(failures)];
+
+  if (consumer.id === "project-tracking-updates" && decisions.listbox.state === "not_applicable" && !trackingUpdateListboxBoundaryIsAbsent(consumer, sourceOverrides)) {
+    failures.push("listbox:invalid_not_applicable_bulk_boundary");
+  }
 
   const fullGraph = consumerExecutableGraph(consumer, sourceOverrides);
   const ownershipGraph = consumerOwnershipGraph(consumer, sourceOverrides);
@@ -2539,6 +2566,33 @@ for(const id of ["project-tracking-stages","project-tracking-items"]){
  const failures=collectConsumerCapabilityAuditFailures(consumer,"source_proof",new Map([[file,text.replace(original,mutated)]]));
  check("actual "+id+" rejects Media introduced into its own child Form",failures.includes("media:hidden_adoption"));
 }
+
+// The Updates declaration cannot turn a dormant shared bulk selector into mounted behavior.
+const trackingUpdateListboxConsumer = consumerCapabilityAuditRecords.find(row => row.id === "project-tracking-updates" && row.boundary === "collection")!;
+assert.ok(trackingUpdateListboxConsumer);
+check("Updates Listbox absence is explicit while Stage and Item remain adopted", resolveConsumerCapabilityAudit(trackingUpdateListboxConsumer).listbox.state === "not_applicable" && ["project-tracking-stages", "project-tracking-items"].every(id => resolveConsumerCapabilityAudit(consumerCapabilityAuditRecords.find(row => row.id === id && row.boundary === "collection")!).listbox.state === "adopted"));
+check("Updates exact false bulk boundary passes current source proof", trackingUpdateListboxBoundaryIsAbsent(trackingUpdateListboxConsumer) && !collectConsumerCapabilityAuditFailures(trackingUpdateListboxConsumer, "source_proof").some(failure => failure.startsWith("listbox:")));
+const trackingUpdateCollectionFile = "src/components/admin/projects/tracking/TrackingCollections.tsx";
+const trackingUpdateCollectionSource = read(trackingUpdateCollectionFile);
+const trackingUpdateCollectionTree = parseTypeScriptSource(trackingUpdateCollectionFile, trackingUpdateCollectionSource);
+const trackingUpdateCollectionNode = trackingUpdateCollectionTree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "TrackingUpdatesCollection")!;
+assert.ok(trackingUpdateCollectionNode);
+const trackingUpdateCollectionBody = trackingUpdateCollectionNode.getText(trackingUpdateCollectionTree);
+assert.equal(trackingUpdateCollectionBody.split("enableSelection={false}").length, 2);
+for (const [label, replacement] of [["enabled", "enableSelection={true}"], ["omitted", ""], ["spread", "enableSelection={false} {...foreignProps}"], ["bulk handler", "enableSelection={false} onBulkExecute={foreignExecute}"], ["bulk options", "enableSelection={false} bulkOptions={foreignOptions}"]] as const) {
+  const mutated = trackingUpdateCollectionSource.replace(trackingUpdateCollectionBody, trackingUpdateCollectionBody.replace("enableSelection={false}", replacement));
+  assert.notEqual(mutated, trackingUpdateCollectionSource);
+  check("Updates Listbox absence rejects " + label + " bulk boundary", collectConsumerCapabilityAuditFailures(trackingUpdateListboxConsumer, "source_proof", new Map([[trackingUpdateCollectionFile, mutated]])).includes("listbox:invalid_not_applicable_bulk_boundary"));
+}
+const trackingUpdateFormFile = "src/components/admin/projects/tracking/TrackingForms.tsx";
+const trackingUpdateFormSource = read(trackingUpdateFormFile);
+const trackingUpdateFormTree = parseTypeScriptSource(trackingUpdateFormFile, trackingUpdateFormSource);
+const trackingUpdateFormNode = trackingUpdateFormTree.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "TrackingUpdateFormModal")!;
+assert.ok(trackingUpdateFormNode);
+const trackingUpdateFormBody = trackingUpdateFormNode.getText(trackingUpdateFormTree);
+const trackingUpdateFormMutation = trackingUpdateFormBody.replace("<ModalActions pending={pending}", '<AdminFormListboxSelect name="injected_update_selector" options={[]} /><ModalActions pending={pending}');
+assert.notEqual(trackingUpdateFormMutation, trackingUpdateFormBody);
+check("Updates Listbox absence rejects a newly mounted child selector", collectConsumerCapabilityAuditFailures(trackingUpdateListboxConsumer, "source_proof", new Map([[trackingUpdateFormFile, trackingUpdateFormSource.replace(trackingUpdateFormBody, trackingUpdateFormMutation)]])).includes("listbox:hidden_adoption"));
 
 const transitiveFixtureRoot = "src/fixtures/governance/consumer.tsx";
 const transitiveFixtureOverrides = new Map<string, string>([

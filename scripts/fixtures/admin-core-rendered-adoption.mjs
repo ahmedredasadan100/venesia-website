@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {expect} from 'playwright/test';
 
 const hash=/^[a-f0-9]{64}$/u,identifier=/^[a-z0-9][a-z0-9:_-]{0,179}$/u;
@@ -156,8 +156,12 @@ export async function observeCoreModalCleanReturn(input){
 }
 
 /** Exact completed-journey join only; this never promotes an entire capability axis. */
-export function assertCoreRenderedAdoptionJoin({browser,sourceSha256,expected,formManifest=undefined}){
- assert.match(sourceSha256,hash);assert.equal(browser.sourceSha256,sourceSha256);assert.equal(browser.inventoryOnly,false);assert.equal(browser.driverCompleted,true);assert.ok(Array.isArray(expected)&&expected.length>0&&expected.length<=1000);assert.ok(Array.isArray(browser.requiredCases)&&Array.isArray(browser.evidence)&&Array.isArray(browser.errors));
+export function assertCoreRenderedAdoptionJoin(input){
+ assert.equal(input.browser.driverCompleted,true);
+ return assertCoreRenderedObservationJoin(input);
+}
+function assertCoreRenderedObservationJoin({browser,sourceSha256,expected,formManifest=undefined}){
+ assert.match(sourceSha256,hash);assert.equal(browser.sourceSha256,sourceSha256);assert.equal(browser.inventoryOnly,false);assert.ok(Array.isArray(expected)&&expected.length>0&&expected.length<=1000);assert.ok(Array.isArray(browser.requiredCases)&&Array.isArray(browser.evidence)&&Array.isArray(browser.errors));
  const login=browser.evidence.filter(row=>row.id==='existing-auth-login');assert.equal(login.length,1);assert.equal(login[0].status,'pass');assert.equal(login[0].authenticated,true);assert.equal(browser.errors.some(row=>row.id==='existing-auth-login'),false);
  const identities=new Set(),receipts=new Set(),qualified=[];
  for(const plan of expected){
@@ -179,4 +183,28 @@ export function assertCoreRenderedAdoptionJoin({browser,sourceSha256,expected,fo
   qualified.push({journeyId:plan.journeyId,observationId:plan.observationId,receiptId:value.receiptId,bindings:value.bindings,observations:value.observations});
  }
  return{status:'partial-not-global-pass',browserStatus:browser.status,sourceSha256,qualified,automaticCoverage:[],globalClosed:false,requiresNativeCohortQualification:true,scope:'Exact rendered fragments joined to successful authenticated same-source journeys. Final complete-axis qualification and any related native persistence joins remain separate.'};
+}
+
+/** Retained partial qualification is explicit; the original failed envelope is never projected to pass. */
+export function assertCoreRenderedQualifiedJourneyJoin({browser,sourceSha256,expected,formManifest=undefined,qualifiedJourney}){
+ const proof=qualifiedJourney;assert.ok(proof&&typeof proof==='object');
+ const decode=(artifact,reference)=>{assert.ok(artifact&&typeof artifact.text==='string');assert.ok(reference&&typeof reference.path==='string'&&reference.path.length>0);assert.match(reference.sha256,hash);assert.deepEqual(artifact.reference,reference);assert.equal(createHash('sha256').update(artifact.text).digest('hex'),reference.sha256,'Pinned qualification input bytes must match.');return JSON.parse(artifact.text);};
+ const qualification=decode(proof.qualification,proof.acceptedQualification);
+ assert.match(qualification.status,/^SCOPED_[A-Z_]+_QUALIFIED_ORIGINAL_(?:FAILED|DRIVER_STOPPED)$/u);
+ assert.match(qualification.run,/^browser-r[1-9][0-9]*$/u);assert.match(qualification.sourceHead,/^[a-f0-9]{40}$/u);assert.equal(qualification.sourceSha256,sourceSha256);assert.match(qualification.ownedRunId,/^[a-f0-9]{32}$/u);
+ assert.equal(qualification.globalClosed,false);assert.deepEqual(qualification.automaticCoverage,[]);assert.equal(qualification.reexecute,false);assert.equal(qualification.originalStatus,'failed');assert.equal(qualification.sourceRelabel??qualification.relabelSource,false);assert.equal(qualification.originalDriverCompleted,false);assert.equal(browser.status,'fail');assert.equal(browser.driverCompleted,false);
+ const seal=decode(proof.inputSeal,qualification.inputSeal);assert.equal(seal.sourceHead,qualification.sourceHead);assert.equal(seal.sourceSha256,sourceSha256);assert.equal(seal.globalClosed,false);
+ assert.ok(Array.isArray(seal.evidence));const sealed=new Map();for(const reference of seal.evidence){assert.ok(reference&&typeof reference.path==='string');assert.match(reference.sha256,hash);assert.equal(sealed.has(reference.path),false);sealed.set(reference.path,reference);}
+ assert.ok(Array.isArray(proof.artifacts));const artifacts=new Map();for(const artifact of proof.artifacts){const path=artifact.reference?.path;assert.equal(artifacts.has(path),false);assert.ok(sealed.has(path),'Every supplied artifact must belong to the original input seal.');artifacts.set(path,decode(artifact,sealed.get(path)));}
+ const prefix='.tmp-qa/core-final-closure/'+qualification.run+'/';
+ const bound=name=>{const path=prefix+name;assert.ok(artifacts.has(path),'Required sealed artifact missing: '+name);return artifacts.get(path);};
+ assert.deepEqual(bound('admin-adoption-browser.json'),browser);assert.equal(bound('result.json').runId,qualification.ownedRunId);
+ const source=bound('public-source-manifest.json');assert.equal(source.sourceSha256,sourceSha256);assert.equal(source.invocationHeadSha,qualification.sourceHead);
+ const cleanup=bound('cleanup.json');assert.equal(cleanup.status,'complete');assert.equal(cleanup.remainingOwnedResources,0);assert.equal(cleanup.originalResourcesUnchanged,true);assert.equal(cleanup.privateEnvRemoved,true);
+ const processes=bound('public-process-cleanup.json');for(const key of ['ownedProcessesStopped','loopbackPortReleased','buildWorkspaceRemoved'])assert.equal(processes[key],true);assert.equal(processes.otherResourcesTouched,false);
+ assert.ok(Array.isArray(qualification.joinedNativeIds)&&qualification.joinedNativeIds.length>0);assert.equal(new Set(qualification.joinedNativeIds).size,qualification.joinedNativeIds.length);
+ for(const id of qualification.joinedNativeIds){assert.match(id,/^[a-f0-9-]{36}$/u);const request=bound('core-native-request-'+id+'.json'),response=bound('core-native-response-'+id+'.json');assert.equal(request.id,id);assert.equal(response.id,id);if(response.kind==='form-save-native'){assert.equal(response.status,'partial-not-global-pass');assert.equal(response.browserStatus,'in-progress-form-native-checkpoint');assert.equal(response.globalClosed,false);assert.ok(Array.isArray(response.writes)&&response.writes.length>0);}else assert.equal(response.status,'pass');if(response.ownedRunId!==undefined)assert.equal(response.ownedRunId,qualification.ownedRunId);if(request.kind==='form-save-native'){assert.ok(Array.isArray(request.descriptors)&&request.descriptors.length>0);assert.ok(Number.isFinite(Date.parse(request.startedAt)));for(const key of ['id','kind','caseId','formConsumer','surface']){assert.equal(typeof request[key],'string');assert.equal(response[key],request[key]);}}else for(const[key,value]of Object.entries(request))assert.deepEqual(response[key],value);}
+ assert.ok(Array.isArray(expected)&&expected.length>0);const journeyId=expected[0].journeyId;assert.ok(expected.every(row=>row.journeyId===journeyId),'One exact qualified journey is required per partial join.');
+ const admitted=qualification.observations.filter(row=>row.journeyId===journeyId);assert.equal(admitted.length,1);assert.match(admitted[0].browserPointer,/^\/evidence\/(?:0|[1-9][0-9]*)$/u);const index=Number(admitted[0].browserPointer.split('/').at(-1));assert.equal(browser.evidence[index]?.id,journeyId);
+ const result=assertCoreRenderedObservationJoin({browser,sourceSha256,expected,formManifest});return{...result,qualification:proof.acceptedQualification,run:qualification.run,ownedRunId:qualification.ownedRunId,originalDriverCompleted:browser.driverCompleted,originalStatus:browser.status};
 }

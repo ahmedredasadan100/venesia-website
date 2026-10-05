@@ -20,6 +20,12 @@ await test('Current claims and real JSX options derive four exact recipes, inclu
  assert.equal(plan.length,4);assert.equal(plan.reduce((count,row)=>count+row.steps.length,0),18);assert.deepEqual(plan.find(row=>row.entity==='categories').active,[]);
  assert.deepEqual(plan.find(row=>row.entity==='topics').active,['publish','unpublish','move_to_trash','move_category','feature','unfeature']);
 });
+{
+ const before={id:randomUUID(),kind:'form-permission-fingerprint',status:'pass',correlationId:randomUUID(),phase:'before',ownedRunId:'owned',adminAuditIncluded:true,publicTableCount:2,publicTableInventorySha256:'a'.repeat(64),publicDataSha256:'b'.repeat(64)},after={...before,id:randomUUID(),phase:'after'};
+ await test('Cancellation binds unchanged owned public and audit fingerprints',()=>helper.assertCoreAtomicCancellationNative(before,after));
+ for(const mutate of [r=>r.id=before.id,r=>r.correlationId=randomUUID(),r=>r.phase='before',r=>r.ownedRunId='other',r=>r.adminAuditIncluded=false,r=>r.publicDataSha256='c'.repeat(64),r=>r.publicTableCount=3,r=>r.publicTableInventorySha256='d'.repeat(64),r=>r.status='fail',r=>r.kind='other'])await test('Exact cancellation rejects '+mutate.toString(),()=>{const changed=structuredClone(after);mutate(changed);assert.throws(()=>helper.assertCoreAtomicCancellationNative(before,changed));});
+ if(process.argv.includes('--atomic-closure-only')){console.log(JSON.stringify({status:'pass',checks:checks.length,cases:checks,browserExecuted:false,databaseExecuted:false}));process.exit(0);}
+}
 const identity=randomUUID();
 await test('Actual fixed Action bodies retain one command identity without exporting request text',()=>{assert.equal(helper.readCoreBulkCommandIdentity(JSON.stringify([identity])),identity);assert.equal(helper.readCoreBulkCommandIdentity('name="1_command_id"\r\n\r\n'+identity+'\r\n--end'),identity);});
 for(const body of ['',null,'bad-id',JSON.stringify([identity,randomUUID()])])await test('Absent/ambiguous command identity fails closed '+String(body).slice(0,12),()=>assert.throws(()=>helper.readCoreBulkCommandIdentity(body)));

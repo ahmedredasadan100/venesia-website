@@ -1,3 +1,4 @@
+import {coreControlFollowupJourneyIds} from './fixtures/admin-core-domain-form-journeys.mjs';
 import {isCoreMediaSelection,coreSelectedMediaIds,assertCoreMediaSelectionReceipt} from "./fixtures/admin-core-media-journeys.mjs";
 import {CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION,coreSelectedMediaRecoveryIds,assertCoreMediaRecoverySelectionReceipt} from './fixtures/admin-core-media-recovery-journeys.mjs';
 import {CORE_PRESENTATION_HERO_SELECTION,CORE_PRESENTATION_SCROLL_SELECTION,corePresentationSelectedIds,assertCorePresentationSelectionReceipt} from "./fixtures/admin-core-presentation-controls-contract.mjs";
@@ -54,7 +55,16 @@ const requestedSelection = selectionArgs[0]?.slice("--core-journey-selection=".l
 const journeySelection = requestedSelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION
   ? validateCorePreviewPublicImpactSelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection })
   : validateCoreJourneySelection({ scope: coreClosure ? "core-closure" : "audit2-selected", cohort: coreCohort, selection: requestedSelection });
-let selectedJourneyIds = isCoreMediaSelection(journeySelection) ? coreSelectedMediaIds(journeySelection) : (journeySelection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||journeySelection==="media-recovery-missing-followup") ? coreSelectedMediaRecoveryIds(journeySelection) : (journeySelection === CORE_PRESENTATION_SCROLL_SELECTION || journeySelection === CORE_PRESENTATION_HERO_SELECTION) ? corePresentationSelectedIds(journeySelection) : isCoreTopicControlsSelection(journeySelection) ? coreSelectedTopicControlKinds(journeySelection).map(kind=>"core-topic-controls-"+kind) : isCoreTemplateControlSelection(journeySelection) ? coreTemplateControlKinds(journeySelection).map(kind=>"core-template-controls-"+kind) : journeySelection === CORE_PROJECT_EDITOR_SELECTION ? [...CORE_PROJECT_EDITOR_IDS] : isCoreNavigationFollowupSelection(journeySelection) ? coreNavigationSelectedIds(journeySelection) : journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION ? [...CORE_TEMPLATE_HERO_BULK_IDS] : journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION ? await loadCoreSpecializedFollowupIds() : isCorePageCompositionFollowupSelection(journeySelection) ? await loadCorePageCompositionFollowupIds(journeySelection) : journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : isCoreTemplateCreateSelection(journeySelection)
+const closureTargetSelection = ['domain-form-controls-followup','domain-form-controls-remaining-followup','domain-form-controls-final-two-followup','domain-form-controls-user-followup','template-create-controls-followup','presentation-content-controls-followup','page-composition-closure-followup','page-composition-controls-followup','navigation-closure-followup','navigation-controls-followup','query-pending-followup','atomic-confirmation-followup','specialized-closure-followup','specialized-controls-followup','sitemap-closure-followup'].includes(journeySelection);
+const closureTargetIds = !closureTargetSelection ? null : ['domain-form-controls-followup','domain-form-controls-remaining-followup','domain-form-controls-final-two-followup','domain-form-controls-user-followup','template-create-controls-followup','presentation-content-controls-followup'].includes(journeySelection) ? coreControlFollowupJourneyIds(journeySelection)
+  : journeySelection==='query-pending-followup' ? (await loadCoreQueryPresentationPlan()).map(row=>'core-query-busy-'+row.key)
+  : journeySelection==='navigation-controls-followup' ? ['core-descendant-footer-empty-grid','core-navigation-busy-menus','core-navigation-busy-items']
+  : journeySelection==='navigation-closure-followup' ? ['core-descendant-filter-selection-menus','core-descendant-filter-selection-items','core-descendant-footer-empty-grid','core-navigation-busy-menus','core-navigation-busy-items']
+  : journeySelection==='page-composition-controls-followup' ? ['core-page-composition-boolean-pending']
+  : journeySelection==='page-composition-closure-followup' ? ['core-descendant-filter-selection-assignments','core-page-composition-boolean-pending']
+  : journeySelection==='atomic-confirmation-followup' ? ['core-atomic-confirmation-cancel']
+  : journeySelection==='specialized-controls-followup' ? ['core-wizard-assets-disconnect-only'] : journeySelection==='specialized-closure-followup' ? ['core-maintenance-rejected-feedback-only','core-wizard-assets-disconnect-only'] : ['core-sitemap-bounded-command-table-scroll'];
+let selectedJourneyIds = closureTargetSelection ? closureTargetIds : isCoreMediaSelection(journeySelection) ? coreSelectedMediaIds(journeySelection) : (journeySelection===CORE_MEDIA_RECOVERY_FOLLOWUP_SELECTION||journeySelection==="media-recovery-missing-followup") ? coreSelectedMediaRecoveryIds(journeySelection) : (journeySelection === CORE_PRESENTATION_SCROLL_SELECTION || journeySelection === CORE_PRESENTATION_HERO_SELECTION) ? corePresentationSelectedIds(journeySelection) : isCoreTopicControlsSelection(journeySelection) ? coreSelectedTopicControlKinds(journeySelection).map(kind=>"core-topic-controls-"+kind) : isCoreTemplateControlSelection(journeySelection) ? coreTemplateControlKinds(journeySelection).map(kind=>"core-template-controls-"+kind) : journeySelection === CORE_PROJECT_EDITOR_SELECTION ? [...CORE_PROJECT_EDITOR_IDS] : isCoreNavigationFollowupSelection(journeySelection) ? coreNavigationSelectedIds(journeySelection) : journeySelection === CORE_TEMPLATE_HERO_BULK_SELECTION ? [...CORE_TEMPLATE_HERO_BULK_IDS] : journeySelection === CORE_SPECIALIZED_FOLLOWUP_SELECTION ? await loadCoreSpecializedFollowupIds() : isCorePageCompositionFollowupSelection(journeySelection) ? await loadCorePageCompositionFollowupIds(journeySelection) : journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION ? selectCoreReadonlyHubJourneyIds(journeySelection) : journeySelection === CORE_TEMPLATE_CARDS_SELECTION || journeySelection === CORE_QUERY_LAYOUT_SELECTION || journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION || (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) ? [] : isCoreTemplateCreateSelection(journeySelection)
   ? coreSelectedTemplateCreates(forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST, journeySelection).map(coreTemplateCreateJourneyId)
   : ["domain-forms-final-six-followup","domain-forms-update-followup"].includes(journeySelection) ? [] : coreSelectedTopicRecipes(journeySelection, forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST).map(coreTopicJourneyId);
 const executedJourneyIds = [];
@@ -105,14 +115,15 @@ function retainedTrackingMediaCases() {
  const readonly=["activity-log","topics-without-image-report"].map(consumer=>({key:"collection:"+consumer+":capability:feedback",consumer,boundary:"collection",axis:"feedback",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
  const confirmation=["media-hub-template-library","media-sidebar-template-library"].map(consumer=>({key:"collection:"+consumer+":capability:confirmation",consumer,boundary:"collection",axis:"confirmation",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
  const readonlyConfirmation=["activity-log","topics-without-image-report"].map(consumer=>({key:"collection:"+consumer+":capability:confirmation",consumer,boundary:"collection",axis:"confirmation",scenario:"complete_applicable_capability_behavior",declaration:"not_applicable",historicalDeclaration:"adopted",disposition:"NOT_APPLICABLE_PENDING_PROOF"}));
- return [...tracking,...readonly,...confirmation,...readonlyConfirmation];
+ const updateListbox=[{key:'collection:project-tracking-updates:capability:listbox',consumer:'project-tracking-updates',boundary:'collection',axis:'listbox',scenario:'complete_applicable_capability_behavior',declaration:'not_applicable',historicalDeclaration:'adopted',disposition:'NOT_APPLICABLE_PENDING_PROOF'}];
+ return [...tracking,...readonly,...confirmation,...readonlyConfirmation,...updateListbox];
 }
 function assertHistoricalCoreCaseIdentity(cases) {
  assert.equal(cases.length,959,"The bounded closure ledger must retain every historical case.");
  assert.equal(new Set(cases.map(row=>row.key)).size,cases.length,"Duplicate historical case identity.");
  assert.equal(createHash("sha256").update(JSON.stringify(cases.map(row=>row.key).sort())).digest("hex"),"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71","Historical required-case identity changed; an applicability correction cannot remove or replace any cell.");
  const retained=retainedTrackingMediaCases();
- assert.deepEqual(cases.filter(row=>row.declaration==="not_applicable").map(row=>row.key).sort(),retained.map(row=>row.key).sort(),"Only the exact reviewed Tracking Media, readonly Feedback, readonly Confirmation and Media summary Confirmation corrections may be retained as not applicable.");
+ assert.deepEqual(cases.filter(row=>row.declaration==="not_applicable").map(row=>row.key).sort(),retained.map(row=>row.key).sort(),"Only the exact reviewed Tracking Media, Tracking Updates Listbox, readonly Feedback, readonly Confirmation and Media summary Confirmation corrections may be retained as not applicable.");
  for(const row of retained){const actual=cases.find(cell=>cell.key===row.key);for(const[key,value]of Object.entries(row))assert.equal(actual[key],value);}
  return {historicalRequiredCases:cases.length,currentApplicableCases:cases.filter(row=>row.declaration!=="not_applicable").length,retainedNotApplicableCases:retained.length,historicalIdentitySha256:"f8a774a6e85c6ab9ec0bce374a5e18f286e8b840ed5b46349714ee00dae44d71",dispositions:retained,automaticCoverage:[],globalClosed:false};
 }
@@ -364,7 +375,35 @@ try {
   checkpoint("login", "complete");
 
   if (coreClosure) {
-   if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) {
+   if (closureTargetSelection) {
+    const {createCoreNativeCheckpoint}=await import('./fixtures/admin-core-form-permission-context.mjs');
+    const nativeCheckpoint=createCoreNativeCheckpoint({origin,output});
+    const ctx={page,context,origin,fixtures,run,observe,requiredCases,journeySelection,actionResponse,assertActionAcknowledged,databaseReadback,readOnlyReadback,nativeCheckpoint,compositionCheckpoint:nativeCheckpoint,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256,formManifest:forms.ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST,actorId:fixtures.closureActorId};
+    if(['domain-form-controls-followup','domain-form-controls-remaining-followup','domain-form-controls-final-two-followup','domain-form-controls-user-followup'].includes(journeySelection)){
+      const {runCoreDomainControlFollowup}=await import('./fixtures/admin-core-domain-form-journeys.mjs');
+      const {runCoreOperationalControlFollowup}=await import('./fixtures/admin-core-operational-form-journeys.mjs');
+      const {runCoreSettingsControlFollowup}=await import('./fixtures/admin-core-settings-journeys.mjs');
+      await runCoreDomainControlFollowup(ctx);await runCoreOperationalControlFollowup(ctx);await runCoreSettingsControlFollowup(ctx);
+    }else if(journeySelection==='template-create-controls-followup'){
+      const {runCoreTemplateCreateControlFollowup}=await import('./fixtures/admin-core-form-journeys.mjs');await runCoreTemplateCreateControlFollowup(ctx);
+    }else if(journeySelection==='presentation-content-controls-followup'){
+      const {runCoreContentControlFollowup}=await import('./fixtures/admin-core-presentation-controls-journeys.mjs');await runCoreContentControlFollowup(ctx);
+    }else if(journeySelection==='page-composition-closure-followup'||journeySelection==='page-composition-controls-followup'){
+      const {runCorePageCompositionClosureJourneys}=await import('./fixtures/admin-core-page-composition-journeys.mjs');await runCorePageCompositionClosureJourneys(ctx);
+    }else if(journeySelection==='navigation-closure-followup'||journeySelection==='navigation-controls-followup'){
+      const {runCoreDescendantClosureJourneys}=await import('./fixtures/admin-core-descendant-presentation-journeys.mjs');await runCoreDescendantClosureJourneys(ctx,'navigation');
+      const {runCoreNavigationBusyJourneys}=await import('./fixtures/admin-core-navigation-settings-journeys.mjs');navigationSettingsResult=await runCoreNavigationBusyJourneys(ctx);
+    }else if(journeySelection==='query-pending-followup'){
+      const {runCoreQueryBusyJourneys}=await import('./fixtures/admin-core-query-presentation-journeys.mjs');queryPresentationResult=await runCoreQueryBusyJourneys(ctx);
+    }else if(journeySelection==='atomic-confirmation-followup'){
+      const {runCoreAtomicConfirmationJourney}=await import('./fixtures/admin-core-domain-bulk-journeys.mjs');await runCoreAtomicConfirmationJourney(ctx);
+    }else if(journeySelection==='specialized-closure-followup'||journeySelection==='specialized-controls-followup'){
+      const {runCoreSpecializedClosureJourneys}=await import('./fixtures/admin-core-specialized-settings-journeys.mjs');specializedSettingsResult=await runCoreSpecializedClosureJourneys(ctx);
+    }else{
+      assert.equal(journeySelection,'sitemap-closure-followup');const {runCoreSitemapClosureJourney}=await import('./fixtures/admin-core-readonly-journeys.mjs');await runCoreSitemapClosureJourney(ctx);
+    }
+    coreLogin.username='';coreLogin.password='';
+   } else if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) {
     const { runCorePreviewJourneys } = await import("./fixtures/admin-core-preview-journeys.mjs");
     publicPreviewImpactResult = await runCorePreviewJourneys({ browser, context, page, origin, fixtures, run, observe, popupProof, ownedNetworkOnly, revokeSession, previewMatrix, journeySelection });
     coreLogin.username = ""; coreLogin.password = "";
@@ -809,7 +848,12 @@ try {
   }
   assert.deepEqual(externalRequests, [], "The browser attempted an unowned network destination.");
   driverCompleted = true;
-  if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) assertCorePreviewPublicImpactReceipt(receipt(), {fixtures,previewMatrix,canonicalRequiredCases:requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256});
+  if (closureTargetSelection) {
+    const current=receipt();assert.equal(current.status,'pass');assert.equal(current.driverCompleted,true);assert.equal(current.wholeCohortExecuted,false);assert.equal(current.globalClosed,false);assert.deepEqual(current.errors,[]);
+    assert.deepEqual(current.selectedJourneyIds,closureTargetIds);assert.deepEqual(current.executedJourneyIds,closureTargetIds);assert.deepEqual(current.evidence.map(row=>row.id),['existing-auth-login',...closureTargetIds]);assert.ok(current.evidence.every(row=>row.status==='pass'&&row.coverage.length===0));assert.ok(current.requiredCases.every(row=>row.status==='open'&&row.evidence===null));
+    if(journeySelection==='specialized-closure-followup'||journeySelection==='specialized-controls-followup'){const {assertCoreSpecializedClosureReceipt}=await import('./fixtures/admin-core-specialized-settings-journeys.mjs');assertCoreSpecializedClosureReceipt(current,requiredCases);}
+    if(journeySelection==='sitemap-closure-followup'){const {assertCoreSitemapClosureReceipt}=await import('./fixtures/admin-core-readonly-journeys.mjs');assertCoreSitemapClosureReceipt(current,requiredCases);}
+  } else if (journeySelection === CORE_PREVIEW_PUBLIC_IMPACT_SELECTION) assertCorePreviewPublicImpactReceipt(receipt(), {fixtures,previewMatrix,canonicalRequiredCases:requiredCases,sourceSha256:process.env.QA_ADMIN_SOURCE_SHA256});
   else if (journeySelection === CORE_DOMAIN_COMMAND_TAIL_SELECTION || journeySelection === CORE_TRACKING_PERMISSION_SELECTION || journeySelection === CORE_READONLY_QUERY_SELECTION) assertCoreDomainCommandTailReceipt(receipt(), domainCommandTailPlan, requiredCases);
   else if (journeySelection === CORE_READONLY_HUB_FOLLOWUP_SELECTION) assertCoreReadonlyHubFollowupReceipt(receipt(),requiredCases);
   else if (journeySelection === CORE_TEMPLATE_CARDS_SELECTION) assertCoreTemplateCardsSelectionReceipt(receipt(),templateCardsSelectionPlan,requiredCases);

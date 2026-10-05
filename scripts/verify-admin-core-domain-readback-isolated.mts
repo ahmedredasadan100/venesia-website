@@ -27,7 +27,7 @@ const contracts: Record<string, Contract> = {
   menus: { key: 'id', fields: ['name', 'slug', 'is_active'], audit: ['menu'] },
   site_settings: { key: 'key', fields: [], json: ['value'], audit: ['site_settings'] },
   ...Object.fromEntries(Object.entries(templates).map(([table, kind]) => [table, {
-    key: 'id' as const, fields: ['name', 'slug', 'status', 'description'], json: ['config'], audit: ['content_block_template'], aggregate: 'ids', blockType: kind,
+    key: 'id' as const, fields: ['name', 'slug', 'status', 'description', ...(kind === 'feed' ? ['feed_type'] : kind === 'featured' ? [] : ['variant'])], json: ['config'], audit: ['content_block_template'], aggregate: 'ids', blockType: kind,
   }])),
 };
 const entities: Record<string, { table: string; fields: readonly string[] }> = {

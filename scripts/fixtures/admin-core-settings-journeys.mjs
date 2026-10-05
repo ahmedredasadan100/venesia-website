@@ -1,6 +1,6 @@
 import { exerciseCoreImageField, CORE_DIRECT_IMAGE_VALUES } from "./admin-core-direct-image-adoption.mjs";
 import assert from "node:assert/strict";
-import { runCoreFormPermissionIntent } from "./admin-core-domain-form-journeys.mjs";
+import { runCoreFormPermissionIntent, observeCoreControlDraft, observeCoreBooleanControl, observeCoreListboxControl, acceptCoreControlSave } from "./admin-core-domain-form-journeys.mjs";
 import { createJiti } from "jiti";
 import { expect } from "playwright/test";
 
@@ -106,4 +106,48 @@ await acknowledge(current);await expect(page).toHaveURL(url=>/^\/admin\/pages-bl
     return {consumer:"menu-quick-create",permissionEvidence:permissionFor("menu-quick-create"),id,dirtyCloseCancelled:true,serverValidation:true,preservedInput:true,retrySaved:true,reloaded:true,nativeReadbackRequired:true};
   });
   return {permissionEvidence,permissionCandidateKeys:permissionEvidence.map(row=>row.candidateRequiredCase),automaticCoverage:[]};
+}
+
+/** Only previously unobserved settings controls; no rejection/draft/permission replay. */
+export async function runCoreSettingsControlFollowup(ctx) {
+  assert.ok(['domain-form-controls-followup','domain-form-controls-remaining-followup','domain-form-controls-final-two-followup','domain-form-controls-user-followup'].includes(ctx.journeySelection));const{page,origin,run}=ctx,results=[];if(ctx.journeySelection==='domain-form-controls-user-followup')return{selection:ctx.journeySelection,results,automaticCoverage:[],globalClosed:false};
+  const saved=async form=>{await expect(page.locator('[data-admin-feedback-entry][data-admin-feedback-variant="success"], [data-admin-feedback-entry][data-admin-feedback-variant="warning"]').first()).toBeVisible({timeout:60000});await expect(form.locator('button[type="submit"]')).toBeEnabled();};
+  const setting=(id,values)=>({table:'site_settings',id,expected:{},expectedJson:Object.entries(values).map(([key,value])=>({column:'value',path:[key],value})),auditEntityType:'site_settings',auditEntityLabel:id,auditActions:['site_settings.update']});
+  if(ctx.journeySelection!=='domain-form-controls-final-two-followup')await run('core-control-global-seo-listboxes',[],async()=>{
+    await page.goto(origin+'/admin/seo/meta-manager',{waitUntil:'domcontentloaded'});const form=page.locator('form[data-admin-form-entity="global-seo-settings"]');await expect(form).toHaveCount(1);
+    const draft=await observeCoreControlDraft(ctx,async()=>{const rows=[];for(const name of['default_robots_index','default_robots_follow']){const before=await form.locator('select[name="'+name+'"]').inputValue(),value=before==='false'?'true':'false';rows.push(await observeCoreListboxControl({page,form,name,value}));}return rows;});
+    const values=Object.fromEntries(draft.value.map(row=>[row.field==='default_robots_index'?'defaultRobotsIndex':'defaultRobotsFollow',row.after==='true']));
+    const native=await acceptCoreControlSave(ctx,{form,ownedRunId:draft.noWrite.ownedRunId,mapping:{caseId:'core-control-global-seo-listboxes',formConsumer:'global-seo-settings',surface:'global-meta'},descriptor:setting('seo.global',values),reopen:async()=>{await saved(form);await page.reload({waitUntil:'domcontentloaded'});for(const row of draft.value)await expect(form.locator('select[name="'+row.field+'"]')).toHaveValue(row.after);}});
+    const result={...native,controls:draft.value,noWrite:draft.noWrite};results.push(result);return result;
+  });
+  await run('core-control-media-policy-booleans',[],async()=>{
+    await page.goto(origin+'/admin/settings/media',{waitUntil:'domcontentloaded'});const form=page.locator('form[data-admin-form-entity="media-settings"]');await expect(form).toHaveCount(1);
+    const draft=await observeCoreControlDraft(ctx,()=>observeCoreMediaPolicyControlDraft(form));
+    const values=await form.evaluate(node=>{const data=new FormData(node);return{allowedKinds:data.getAll('allowedKinds').map(String),allowedImageExtensions:data.getAll('allowedImageExtensions').map(String),allowedDocumentExtensions:data.getAll('allowedDocumentExtensions').map(String),mimeVerification:data.get('mimeVerification')==='on'};});
+    assert.ok(values.allowedKinds.length&&values.allowedImageExtensions.length&&values.allowedDocumentExtensions.length);for(const name of['allowedKinds','allowedImageExtensions','allowedDocumentExtensions'])assert.deepEqual(values[name],draft.value.originalPolicy[name]);
+    const native=await acceptCoreControlSave(ctx,{form,ownedRunId:draft.noWrite.ownedRunId,mapping:{caseId:'core-control-media-policy-booleans',formConsumer:'media-library-settings',surface:'media-policy-settings'},descriptor:setting('media.settings',values),reopen:async()=>{await saved(form);await page.reload({waitUntil:'domcontentloaded'});await assertCoreMediaPolicyReload(form,values);}});
+    const result={...native,controls:draft.value.controls,originalPolicy:draft.value.originalPolicy,dependentRestorations:draft.value.dependentRestorations,noWrite:draft.noWrite,reconciliationInvoked:false};results.push(result);return result;
+  });
+  if(ctx.journeySelection!=='domain-form-controls-final-two-followup')await run('core-control-menu-active',[],async()=>{
+    const suffix=Date.now().toString(36),name='QA inactive Menu '+suffix,slug='qa-inactive-menu-'+suffix;await page.goto(origin+'/admin/pages-blocks/menus',{waitUntil:'domcontentloaded'});await page.getByRole('button',{name:'إضافة منيو',exact:true}).click();const form=page.locator('#create-menu-form');await form.locator('[name="name"]').fill(name);await form.locator('[name="slug"]').fill(slug);
+    const draft=await observeCoreControlDraft(ctx,()=>observeCoreBooleanControl({form,name:'is_active',target:false}));let id;
+    const native=await acceptCoreControlSave(ctx,{form,ownedRunId:draft.noWrite.ownedRunId,mapping:{caseId:'core-control-menu-active',formConsumer:'menu-quick-create',surface:'menu-create'},descriptor:()=>({table:'menus',id,expected:{name,slug,is_active:false},auditEntityType:'menu',auditEntityLabel:name,auditActions:['menu.create']}),reopen:async()=>{await expect(page).toHaveURL(url=>/^\/admin\/pages-blocks\/menus\/[0-9]+$/u.test(url.pathname));id=Number(new URL(page.url()).pathname.split('/').at(-1));await page.reload({waitUntil:'domcontentloaded'});await expect(page.locator('[name="name"]').first()).toHaveValue(name);await expect(page.locator('input[type="checkbox"][name="is_active"]')).not.toBeChecked();}});
+    const result={...native,controls:[draft.value],noWrite:draft.noWrite};results.push(result);return result;
+  });return{selection:ctx.journeySelection,results,automaticCoverage:[],globalClosed:false};
+}
+
+/** Existing kind switches clear dependent extension state; restore that observed state through real controls. */
+export async function observeCoreMediaPolicyControlDraft(form){
+ const groups=['allowedKinds','allowedImageExtensions','allowedDocumentExtensions'],originalPolicy={},controls=[],dependentRestorations=[];
+ for(const name of groups){originalPolicy[name]=await form.locator('input[type="checkbox"][name="'+name+'"]:checked').evaluateAll(nodes=>nodes.map(node=>node.value));assert.ok(originalPolicy[name].length>0);}
+ for(const name of groups){const values=await form.locator('input[type="checkbox"][name="'+name+'"]').evaluateAll(nodes=>nodes.map(node=>node.value));assert.ok(values.length>0);assert.equal(new Set(values).size,values.length);for(const value of values){const first=await observeCoreBooleanControl({form,name,value});const restored=await observeCoreBooleanControl({form,name,value,target:first.before});controls.push({first,restored});}}
+ for(const name of groups){const values=await form.locator('input[type="checkbox"][name="'+name+'"]').evaluateAll(nodes=>nodes.map(node=>({value:node.value,checked:node.checked})));for(const row of values){const wanted=originalPolicy[name].includes(row.value);if(row.checked!==wanted)dependentRestorations.push(await observeCoreBooleanControl({form,name,value:row.value,target:wanted}));}assert.deepEqual(await form.locator('input[type="checkbox"][name="'+name+'"]:checked').evaluateAll(nodes=>nodes.map(node=>node.value)),originalPolicy[name]);}
+ controls.push({first:await observeCoreBooleanControl({form,name:'mimeVerification'})});return{controls,originalPolicy,dependentRestorations};
+}
+
+/** Await the streamed Form, then assert every saved policy value without an eager empty-locator read. */
+export async function assertCoreMediaPolicyReload(form,values) {
+ await expect(form).toBeVisible();
+ for(const name of['allowedKinds','allowedImageExtensions','allowedDocumentExtensions'])await expect.poll(()=>form.locator('input[type="checkbox"][name="'+name+'"]:checked').evaluateAll(nodes=>nodes.map(node=>node.value))).toEqual(values[name]);
+ await expect(form.locator('input[type="checkbox"][name="mimeVerification"]')).toBeChecked({checked:values.mimeVerification});
 }

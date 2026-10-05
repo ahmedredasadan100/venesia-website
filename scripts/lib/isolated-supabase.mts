@@ -1462,7 +1462,10 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               } finally { heartbeatBusy = false; }
             })();
           }, 20_000);
-          publicJob = runOwnedPublicVerification(publicContext, request, publicJobAbort.signal);
+          publicJob = runOwnedPublicVerification(publicContext, request, publicJobAbort.signal, async () => {
+            await pulse;
+            if (heartbeatFailure) throw heartbeatFailure;
+          });
           try { const result = await publicJob; if (heartbeatFailure) throw heartbeatFailure; return result; }
           catch(error) {throw heartbeatFailure ?? error;}
           finally { heartbeatActive = false; clearInterval(timer); await pulse;
