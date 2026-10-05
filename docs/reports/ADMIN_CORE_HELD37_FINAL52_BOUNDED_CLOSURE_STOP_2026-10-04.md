@@ -14,6 +14,8 @@ Third final candidate 558af1446bf56b9c4cfc9c14fe98b1343f1c9dfa completed CI with
 
 Fourth final candidate 5e0fa1176a6d054186bd8b9b4da45b581c823f84 completed CI with7 successful jobs and1 failed Main job. The observed query-search verification failure was a missing scenario dependency in its extracted native slice. Original CI/raw/log, source3/request and committedv8 checkpoints are physically preserved at .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/5e0fa117/. All earlier candidate histories remain unchanged; final gates and the next candidate CI are pending.
 
+Fifth final candidate 3847374411b6f3f0a10671ffcc04c0f23ee7b072 completed CI with 7 successful jobs and 1 failed Main job. Its 50 completed Core maintained commands and 50 PASS receipts remain their actual CI prefix evidence. Main then rejected an unresolved dynamic import from the existing Closure verifier into an ignored evidence owner. Source review identified the same execution-boundary issue in its second ignored-owner import. Original CI/raw/log, source3/request and committed v9 checkpoints are physically preserved at .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/accounting/previous-final-source-candidates/38473744/. Earlier histories remain unchanged; Final Quality, Final Closure and the next candidate CI are pending.
+
 ## B. 959 before / after
 
 | Stage | Qualified | OPEN | pending N/A | proven non-pass N/A |
@@ -189,6 +191,8 @@ The two corrections remain in existing Verification test owners: journey-selecti
 
 The existing query-search verification test now supplies the scenario port used by the current native slice. Its original assertions and slice remain unchanged, and the actual maintained suite passed215 checks. Source review .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after5e0-ci-query-search/source-review.json SHA92acaa37a7196842b6f1b094a6168d069bba71fdd00139051be851cb7497c823 binds the exact existing test as the44th finite Verification source rule; its preimage equals the original9cb source. All prior43 rules, controls989 and1941 source identities remain unchanged. The same source emitter changes only five expected-count literals43 to44, bound by .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/5e0-finalization-continuation/source-emitter-root-applied-review.json SHAb25927c3ffd6d7f035b2866ba28975bff31d6c288da8fd19463d35f4fd8ca1da. These affected checks are not fresh CI or FinalQuality. No Product/native change or behavioral replay occurred.
 
+The existing Closure verifier now extracts the unique closed, hash-checked canonical eligibility and cleanup declarations from their actual existing owners instead of executing their whole ignored modules. The canonical eligibility, cleanup and CI criteria remain unchanged; there is no graph exception, copied replacement algorithm, new owner or responsibility transfer. Actual affected checks passed: 84 default Closure controls, the complete offline database-reconciliation command chain, syntax and lint. Source review .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/predicates/source-compatibility-round-preparation/refreshed-after384-ci-closure-adapter/source-review.json SHA 355f71c4335011e6806eeebeec61b55e38b6e3590abe6bcbdaad545dcbcca96c binds only two afterpins in the existing Closure rule among 44 owners, with 1941 source identities, controls989 and source emitter708 unchanged. Fresh finite source controls passed 5 positive and 45 rejection cases; prior portable348 remains explicitly bound to public8514 and was not rerun or relabelled. The existing CI emitter changed only its OWNER_SHA literal, bound by .tmp-qa/core-final-closure/ledger959-reconciliation-2026-10-04/cells/384-finalization-continuation/ci-emitter-root-applied-review.json SHA 00bd35ecf5fb132b751a168a828d1a301d6ec0e94653408739b8644a8e8510de. No Product/native change or qualified behavior replay occurred.
+
 ## J. Final Quality
 
 NOT INVOKED on the future final HEAD. Required:69 technical checks+4general gates, with no qualified Admin journey replay. Prior157ENVfailure remains failed.
@@ -200,6 +204,8 @@ The d22 Main failure remains failed CI 7 PASS / 1 FAIL. Its 140 affected maintai
 The558 Main failure remains failed CI7 PASS/1 FAIL. The new842/160 affected checks do not promote that failure, alter the950/0/9 behavioral preparation, or replace the pending exact-head final gates.
 
 The5e0 Main failure remains failed CI7 PASS/1 FAIL. Its215 affected checks do not promote that failure, alter the950/0/9 behavioral preparation, or replace pending exact-head final gates.
+
+The384 Main failure remains failed CI: 7 PASS / 1 FAIL. Its earlier50 Core successes and these actual affected checks do not promote the failed CI, alter the950/0/9 behavioral preparation, or replace pending exact-head Final Quality and Final Closure.
 
 ## K. Final Closure
 
@@ -220,6 +226,8 @@ The next candidate must receive a new committed HEAD and actual CI evidence. Bot
 All three final-candidate CI failures and their seven successful job identities/timestamps remain preserved. The next candidate requires a new committed HEAD and actual CI. The29 targeted attempts, original111 and full prepared959 remain unchanged, with no post-gate report commit planned.
 
 All four final-candidate CI failures and their seven successful job identities/timestamps remain preserved. The next candidate requires a new committed HEAD and actual CI. The29 targeted attempts, original111 and full prepared959 remain unchanged, with no post-gate report commit planned.
+
+All five final-candidate CI failures and their seven successful job identities/timestamps remain preserved. The next candidate requires a new committed HEAD and actual CI. The29 targeted attempts, original111 and full prepared959 remain unchanged, with no post-gate report commit planned.
 
 ## N. Migration Readiness boundary
 

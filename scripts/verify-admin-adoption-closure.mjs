@@ -3,6 +3,7 @@ import { readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import vm from "node:vm";
 import ts from "typescript";
+import { createHash } from "node:crypto";
 
 // ADDITIVE FRAGMENT ONLY in scripts/verify-admin-adoption-closure.mjs.
 // The existing default controls and live single-run Browser receipt are untouched.
@@ -61,22 +62,39 @@ export function assertCoreFinalCiEvidence({review,baseline,candidate,baselineSou
  return{candidateHead:head,jobs:output,retainedJobs:retained.length,compatibleRetention:review.compatibleRetention};
 }
 
+/** Execute only the two reviewed, closed declarations from hash-bound evidence. */
+export function loadCoreFinalEvidenceDeclaration({ref,name,bytes}) {
+ const roles={
+  deriveClosure959Eligibility:{path:".tmp-qa/core-final-closure/cumulative-accounting-stage/current77-retained84-partial79-85-86-application-stage/accounting-metadata-follow-on/materialize.mjs",sha256:"1c6845dbe16d087df7edcc2094928ed1dbba967501bc7f65437a1e8a56a1b2e9",ports:{}},
+  assertOwnedCleanup:{path:".tmp-qa/core-final-closure/continuation-82-79-80-stage/run-batch-82-79-80.mjs",sha256:"5563dc7caab2596a90f0d7203e2e2c1e36f8a23d539481839bb51c9be2d0be6d",ports:{assert,Number}},
+ };
+ assert.ok(Object.hasOwn(roles,name),'Unknown final evidence declaration');const role=roles[name];assert.equal(ref.path,role.path);assert.match(ref.sha256,/^[a-f0-9]{64}$/u);
+ const raw=bytes(ref.path),sha=value=>createHash('sha256').update(value).digest('hex');assert.equal(sha(raw),ref.sha256,'Evidence owner hash mismatch');
+ const source=raw.toString('utf8'),ast=ts.createSourceFile(ref.path,source,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS);assert.equal(ast.parseDiagnostics.length,0,'Evidence owner must parse');
+ const declarations=ast.statements.filter(node=>ts.isFunctionDeclaration(node)&&node.name?.text===name);assert.equal(declarations.length,1,'Expected exactly one canonical evidence declaration');
+ const declaration=declarations[0];assert.deepEqual(declaration.modifiers?.map(modifier=>modifier.kind),[ts.SyntaxKind.ExportKeyword]);const text=declaration.getText(ast);
+ // These exact declaration pins also fix their reviewed dependency sets: none, or assert/Number.
+ assert.equal(sha(text.replace(/\r\n/g,'\n')),role.sha256,'Canonical evidence declaration or dependencies changed');
+ const callable=text.slice(declaration.modifiers[0].end-declaration.getStart(ast)).trimStart();
+ return new Function(...Object.keys(role.ports),'"use strict";return ('+callable+');')(...Object.values(role.ports));
+}
+
 /** Actual post-Quality gate: delegate admission and result semantics to existing owners. */
 export async function verifyCoreFinalEvidenceClosure(reviewRef){
- const fs=await import('node:fs'),path=await import('node:path'),crypto=await import('node:crypto'),{execFileSync}=await import('node:child_process'),{pathToFileURL}=await import('node:url'),{createJiti}=await import('jiti');
+ const fs=await import('node:fs'),path=await import('node:path'),crypto=await import('node:crypto'),{execFileSync}=await import('node:child_process'),{createJiti}=await import('jiti');
  const root=path.resolve('.'),base='.tmp-qa/core-final-closure/',b=base+'held37-final52-closure-2026-10-03/',a=base+'ledger959-reconciliation-2026-10-04/accounting/',output=a+'final-closure-gate.json',owner='scripts/lib/isolated-public-verification.mts',caller=b+'run-admitted.mjs',hash=x=>crypto.createHash('sha256').update(x).digest('hex'),consumed=new Map();
  const bytes=p=>{const absolute=path.resolve(p);assert.ok(absolute.startsWith(root+path.sep));assert.equal(fs.realpathSync(absolute),absolute);assert.ok(fs.lstatSync(absolute).isFile());const raw=fs.readFileSync(absolute),sha256=hash(raw),key=absolute.toLowerCase();if(consumed.has(key))assert.equal(consumed.get(key).sha256,sha256,'Evidence changed during final gate');else consumed.set(key,{path:path.relative(root,absolute).replaceAll('\\','/'),sha256});return raw;};
  const check=ref=>{assert.match(ref.sha256,/^[a-f0-9]{64}$/u);assert.equal(hash(bytes(ref.path)),ref.sha256,ref.path);},json=p=>JSON.parse(bytes(p)),read=ref=>(check(ref),json(ref.path));
  assert.equal(reviewRef.path,a+'final-closure-root-review.json');const review=read(reviewRef);assert.equal(review.status,'ROOT_REVIEWED_EXACT_HEAD_FINAL_CLOSURE_INVOCATION');assert.equal(execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8',windowsHide:true}).trim(),review.sourceHead);assert.equal(execFileSync('git',['status','--porcelain=v1'],{encoding:'utf8',windowsHide:true}).trim(),'');assert.equal(fs.existsSync(output),false);
  assert.equal(review.readiness.path,a+'final-quality-readiness.json');const readiness=read(review.readiness);assert.equal(readiness.sourceHead,review.sourceHead);const source=read(readiness.sourceManifest);assert.equal(source.invocationHeadSha,review.sourceHead);assert.equal(review.qualityOwner.path,owner);check(review.qualityOwner);assert.equal(source.manifest.find(r=>r.file===owner)?.sha256,review.qualityOwner.sha256);
  const jiti=createJiti(import.meta.url,{fsCache:false,moduleCache:false}),qualityOwner=await jiti.import(path.resolve(owner)),retainedAdmission=qualityOwner.loadRetainedFinalQualityAdmission(review.readiness.sha256,source);retainedAdmission.verify();
- const ledger=read(readiness.accounting),operations=read(readiness.operations),originalOperations=read({path:b+'accounting/final-111-reconciliation.json',sha256:'7d57838d7da26d66f6c8013de16c5aa1a5f8f943a1e5cac056839d66603c2112'});assert.equal(readiness.accountingOwner.export,'materializeFinalAccountingReviewed');check(readiness.accountingOwner);const accountingOwner=await import(pathToFileURL(path.resolve(readiness.accountingOwner.path)).href);assert.equal(typeof accountingOwner.deriveClosure959Eligibility,'function');
+ const ledger=read(readiness.accounting),operations=read(readiness.operations),originalOperations=read({path:b+'accounting/final-111-reconciliation.json',sha256:'7d57838d7da26d66f6c8013de16c5aa1a5f8f943a1e5cac056839d66603c2112'});assert.equal(readiness.accountingOwner.export,'materializeFinalAccountingReviewed');check(readiness.accountingOwner);const accountingOwner={deriveClosure959Eligibility:loadCoreFinalEvidenceDeclaration({ref:readiness.accountingOwner,name:'deriveClosure959Eligibility',bytes})};assert.equal(typeof accountingOwner.deriveClosure959Eligibility,'function');
  // Canonical N/A identity comes from the existing collector declaration, never a copied nine-key list.
  const collectorPath='scripts/qa-admin-adoption-journeys.mjs',collectorText=bytes(collectorPath).toString('utf8');assert.equal(hash(collectorText),source.manifest.find(r=>r.file===collectorPath)?.sha256);const collectorAst=ts.createSourceFile(collectorPath,collectorText,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),notApplicable=collectorAst.statements.filter(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='retainedTrackingMediaCases');assert.equal(notApplicable.length,1);const canonicalNotApplicable=Array.from(vm.runInNewContext(notApplicable[0].getText(collectorAst)+';retainedTrackingMediaCases()'),r=>r.key);
  const qualityReview=read(review.qualityReview);assert.match(qualityReview.run,/^browser-r\d+$/u);const run=qualityReview.run,prefix=base+run+'/';assert.equal(qualityReview.canonicalResultOwner.path,caller);assert.equal(qualityReview.canonicalResultOwner.export,'assertRetainedQualityResult');check(qualityReview.canonicalResultOwner);assert.equal(qualityReview.finalQualityPassed,true);const execution=read(qualityReview.execution);assert.equal(execution.status,'passed');assert.equal(execution.exitCode,0);assert.equal(execution.queueReleased,true);assert.equal(execution.sourceHead,review.sourceHead);assert.deepEqual(execution.scope.cases,[]);assert.equal(execution.scope.qualifiedReplayed,false);
  const admission=read(qualityReview.admission);assert.deepEqual(admission.retainedAdminBehaviorAdmission,review.readiness);const summary=read(qualityReview.summary),report=json(prefix+'browser-result.json'),cleanup=json(prefix+'cleanup.json'),executedSource=json(prefix+'public-source-manifest.json');assert.equal(executedSource.invocationHeadSha,source.invocationHeadSha);assert.equal(executedSource.sourceSha256,source.sourceSha256);assert.deepEqual(executedSource.manifest,source.manifest);
  // Invoke the actual existing successful-Quality result validator with its real filesystem/owner ports.
- const callerText=bytes(caller).toString('utf8'),callerAst=ts.createSourceFile(caller,callerText,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),validators=callerAst.statements.filter(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='assertRetainedQualityResult');assert.equal(validators.length,1);const cleanupOwner=await import(pathToFileURL(path.resolve(base+'continuation-82-79-80-stage/run-batch-82-79-80.mjs')).href);const ports={assert,assertOwnedCleanup:cleanupOwner.assertOwnedCleanup,run,cohort:'domain-forms',sourceHead:review.sourceHead,admission,existsSync:fs.existsSync,json,receipt:execution,sha:hash,qualityOwner,retainedAdmission,check};const actualResult=new Function(...Object.keys(ports),validators[0].getText(callerAst)+';return assertRetainedQualityResult;')(...Object.values(ports));actualResult(summary,report,cleanup,executedSource,prefix);assert.equal(report.status,'passed');for(const ref of qualityReview.rawReferences)check(ref);
+ const callerText=bytes(caller).toString('utf8'),callerAst=ts.createSourceFile(caller,callerText,ts.ScriptTarget.Latest,true,ts.ScriptKind.JS),validators=callerAst.statements.filter(n=>ts.isFunctionDeclaration(n)&&n.name?.text==='assertRetainedQualityResult');assert.equal(validators.length,1);const cleanupPath=base+'continuation-82-79-80-stage/run-batch-82-79-80.mjs',cleanupRefs=execution.inputs.filter(ref=>ref.path===cleanupPath);assert.equal(cleanupRefs.length,1,'The successful Quality execution must bind its cleanup owner exactly once');const cleanupImports=callerAst.statements.filter(node=>ts.isImportDeclaration(node)&&ts.isStringLiteral(node.moduleSpecifier)&&node.moduleSpecifier.text==='../continuation-82-79-80-stage/run-batch-82-79-80.mjs');assert.equal(cleanupImports.length,1);const cleanupBindings=cleanupImports[0].importClause?.namedBindings;assert.ok(cleanupBindings&&ts.isNamedImports(cleanupBindings));assert.equal(cleanupBindings.elements.filter(element=>element.name.text==='assertOwnedCleanup'&&(element.propertyName?.text??element.name.text)==='assertOwnedCleanup').length,1);const cleanupOwner={assertOwnedCleanup:loadCoreFinalEvidenceDeclaration({ref:cleanupRefs[0],name:'assertOwnedCleanup',bytes})};const ports={assert,assertOwnedCleanup:cleanupOwner.assertOwnedCleanup,run,cohort:'domain-forms',sourceHead:review.sourceHead,admission,existsSync:fs.existsSync,json,receipt:execution,sha:hash,qualityOwner,retainedAdmission,check};const actualResult=new Function(...Object.keys(ports),validators[0].getText(callerAst)+';return assertRetainedQualityResult;')(...Object.values(ports));actualResult(summary,report,cleanup,executedSource,prefix);assert.equal(report.status,'passed');for(const ref of qualityReview.rawReferences)check(ref);
  const ciRef={path:b+'host-resumed-2026-10-04/ci-9cbdf71b-final-review.json',sha256:'c1614df2390925cb64d13578e356b66dfa1827656a8a568d30f6b814fc0ea3b4'};assert.deepEqual(review.requiredCiBaseline,ciRef);const ciReview=read(review.ciReview),ciBaseline=read(ciRef);if(Object.hasOwn(ciReview,'compatibleRetention')){assert.equal(ciReview.compatibleRetention.path,a+'final-ci-compatible-input-review.json');assert.deepEqual(review.ciInputCompatibility,ciReview.compatibleRetention);}const ciEvidence=assertCoreFinalCiEvidence({review:ciReview,baseline:ciBaseline,candidate:source,baselineSourceRef:{path:b+'accounting/final-source-manifest.json',sha256:'175a022b83509a099f3f78bb7199687ec48911306ea07deb165a3d2a7d66a903'},read,check});
  const boundary=assertCoreFinalEvidenceClosureBoundary({sourceHead:review.sourceHead,sourceSha256:source.sourceSha256,ledger,operations,originalOperations,retainedReceipt:retainedAdmission.receipt,canonicalNotApplicable,qualityReview,ciReview},accountingOwner.deriveClosure959Eligibility);
  const queue=JSON.parse(fs.readFileSync(base+'execution-queue.json','utf8'));assert.equal(queue.active,null);retainedAdmission.verify();for(const ref of consumed.values())check(ref);assert.equal(execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8',windowsHide:true}).trim(),review.sourceHead);assert.equal(execFileSync('git',['status','--porcelain=v1'],{encoding:'utf8',windowsHide:true}).trim(),'');
@@ -90,6 +108,46 @@ export async function verifyCoreFinalEvidenceClosure(reviewRef){
 if (process.argv[2] === '--final-evidence') {
  assert.equal(process.argv.length,5); console.log(JSON.stringify(await verifyCoreFinalEvidenceClosure({path:process.argv[3],sha256:process.argv[4]}))); process.exit(0);
 }
+
+// Portable snapshots are test inputs only; production always extracts the hash-bound owner.
+const evidenceDeclarationFixtures=[
+ {
+  "name": "deriveClosure959Eligibility",
+  "path": ".tmp-qa/core-final-closure/cumulative-accounting-stage/current77-retained84-partial79-85-86-application-stage/accounting-metadata-follow-on/materialize.mjs",
+  "text": "export function deriveClosure959Eligibility({counts,remainingPredicates,remainingInventories,feedbackConditions,next,current}){\n return counts.openApplicable===0&&counts.pendingNotApplicable===0&&remainingPredicates===0&&remainingInventories.length===0&&feedbackConditions===0&&next.U01.lifecycle.remaining===0&&next.U01.scopedFormRuntime.open===0&&current.closureEligibility.openPreviewStates===0;\n}"
+ },
+ {
+  "name": "assertOwnedCleanup",
+  "path": ".tmp-qa/core-final-closure/continuation-82-79-80-stage/run-batch-82-79-80.mjs",
+  "text": "export function assertOwnedCleanup(cleanup){\n assert.equal(cleanup.status,'complete');assert.equal(cleanup.code,null);assert.equal(cleanup.remainingOwnedResources,0);assert.ok(Number.isSafeInteger(cleanup.ownedResourcesRemoved)&&cleanup.ownedResourcesRemoved>0);assert.equal(cleanup.originalResourcesUnchanged,true);assert.equal(cleanup.privateEnvRemoved,true);assert.deepEqual([...cleanup.hostPortsReleased].sort((a,b)=>a-b),[57601,57602,57603,57604]);assert.equal(cleanup.engineStopped,false);\n}"
+ }
+];
+const declarationAdapterChecks=[];
+const evidenceDeclarationLoad=(fixture,source=fixture.text,ref={path:fixture.path,sha256:createHash('sha256').update(source).digest('hex')},name=fixture.name)=>loadCoreFinalEvidenceDeclaration({ref,name,bytes:file=>{assert.equal(file,fixture.path);return Buffer.from(source);}});
+for(const fixture of evidenceDeclarationFixtures){
+ for(const ending of ['LF','CRLF']){const text=ending==='CRLF'?fixture.text.replace(/\n/g,'\r\n'):fixture.text,actual=evidenceDeclarationLoad(fixture,text);assert.equal(typeof actual,'function');assert.equal(actual.name,fixture.name);declarationAdapterChecks.push(fixture.name+'-'+ending);}
+ const cases=[
+  ['whole-hash-drift',fixture.text+'\n',{path:fixture.path,sha256:createHash('sha256').update(fixture.text).digest('hex')}],
+  ['missing-declaration','export const missing=true;'],
+  ['duplicate-declaration',fixture.text+'\n'+fixture.text],
+  ['unexported-declaration',fixture.text.replace('export ','')],
+  ['changed-free-dependency',fixture.text.replace('){','){ unexpectedDependency();')],
+  ['changed-predicate',fixture.text.replace(fixture.name==='deriveClosure959Eligibility'?'===0':"'complete'",fixture.name==='deriveClosure959Eligibility'?'===1':"'failed'")],
+  ['malformed-owner',fixture.text+'\nconst = ;'],
+ ];
+ for(const [label,text,ref] of cases){assert.throws(()=>evidenceDeclarationLoad(fixture,text,ref));declarationAdapterChecks.push(fixture.name+'-'+label);}
+ assert.throws(()=>evidenceDeclarationLoad(fixture,fixture.text,{path:fixture.path+'-other',sha256:createHash('sha256').update(fixture.text).digest('hex')}));declarationAdapterChecks.push(fixture.name+'-wrong-owner-path');
+ assert.throws(()=>evidenceDeclarationLoad(fixture,fixture.text,undefined,'unreviewedDeclaration'));declarationAdapterChecks.push(fixture.name+'-unknown-role');
+ // Importing either whole module would execute this unrelated statement; extraction must not.
+ assert.equal(typeof evidenceDeclarationLoad(fixture,"throw Error('whole-module-executed');\n"+fixture.text),'function');declarationAdapterChecks.push(fixture.name+'-no-whole-module-execution');
+}
+const actualEligibility=evidenceDeclarationLoad(evidenceDeclarationFixtures[0]);
+const eligibleFixture={counts:{openApplicable:0,pendingNotApplicable:0},remainingPredicates:0,remainingInventories:[],feedbackConditions:0,next:{U01:{lifecycle:{remaining:0},scopedFormRuntime:{open:0}}},current:{closureEligibility:{openPreviewStates:0}}};
+assert.equal(actualEligibility(eligibleFixture),true);declarationAdapterChecks.push('actual-eight-conjunct-positive');
+for(const key of ['counts.openApplicable','counts.pendingNotApplicable','remainingPredicates','remainingInventories','feedbackConditions','next.U01.lifecycle.remaining','next.U01.scopedFormRuntime.open','current.closureEligibility.openPreviewStates']){const value=structuredClone(eligibleFixture),parts=key.split('.'),last=parts.pop();let parent=value;for(const part of parts)parent=parent[part];parent[last]=key==='remainingInventories'?[{}]:1;assert.equal(actualEligibility(value),false);declarationAdapterChecks.push('actual-conjunct-'+key);}
+const actualCleanup=evidenceDeclarationLoad(evidenceDeclarationFixtures[1]),completeCleanup={status:'complete',code:null,remainingOwnedResources:0,ownedResourcesRemoved:1,originalResourcesUnchanged:true,privateEnvRemoved:true,hostPortsReleased:[57601,57602,57603,57604],engineStopped:false};
+actualCleanup(completeCleanup);declarationAdapterChecks.push('actual-cleanup-positive');
+for(const [key,value] of Object.entries({status:'failed',code:'error',remainingOwnedResources:1,ownedResourcesRemoved:0,originalResourcesUnchanged:false,privateEnvRemoved:false,hostPortsReleased:[57601],engineStopped:true})){assert.throws(()=>actualCleanup({...completeCleanup,[key]:value}));declarationAdapterChecks.push('actual-cleanup-'+key);}
 
 // Execute the actual collector's receipt against adversarial coverage states.
 // These controls do not infer closure from the spelling of its predicate.
@@ -204,5 +262,5 @@ for(const kind of ["owned-local","unexpected-external","configured-logout-denied
  assert.equal(sandbox.externalRequests.length,["unexpected-external","map-outside-project-denied"].includes(kind)?1:0);networkChecks.push(kind);
 }
 const output=resolve(".tmp-qa/core-final-closure/closure-receipt-controls.json");mkdirSync(resolve(output,".."),{recursive:true});
-writeFileSync(output,JSON.stringify({status:"pass",checks:checks.map(([name])=>name),logoutChecks,networkChecks,identityChecks,previewValidationChecks,classification:"STALE_TEST collector predicate omitted Preview completion and driver/error settlement",behaviorEvidenceClaimed:false},null,2));
-console.log(JSON.stringify({status:"pass",negativeAndPositiveControls:checks.length+logoutChecks.length+networkChecks.length+identityChecks.length+previewValidationChecks.length+3}));
+writeFileSync(output,JSON.stringify({status:"pass",checks:checks.map(([name])=>name),declarationAdapterChecks,logoutChecks,networkChecks,identityChecks,previewValidationChecks,classification:"STALE_TEST collector predicate omitted Preview completion and driver/error settlement",behaviorEvidenceClaimed:false},null,2));
+console.log(JSON.stringify({status:"pass",negativeAndPositiveControls:declarationAdapterChecks.length+checks.length+logoutChecks.length+networkChecks.length+identityChecks.length+previewValidationChecks.length+3}));
