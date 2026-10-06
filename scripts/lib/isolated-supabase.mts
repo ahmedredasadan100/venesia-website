@@ -273,7 +273,7 @@ export type OwnedLocalHandle = {
   pushApplicationMigrations(request: { mode: "dry-run" | "apply"; stage: ApplicationMigrationStage }): Promise<ApplicationMigrationCliResult>;
   runEntitySeoBackfill(request: { mode: "dry-run" | "apply" | "verify"; entities?: readonly ("topics" | "projects" | "pages")[] }): Promise<EntitySeoBackfillReport>;
   preparePublicVerification(): Promise<PublicFixtureReadiness>;
-  prepareAdminInteractions(request?: { study: "heavy-editor-performance" }): Promise<Record<string, unknown>>;
+  prepareAdminInteractions(request?: { study: "heavy-editor-performance" | "media-upload-limit" }): Promise<Record<string, unknown>>;
   runPublicVerification(request: PublicGateRequest): ReturnType<typeof runOwnedPublicVerification>;
   record(stage: string, metadata: Record<string, SafeValue>): void;
 };
@@ -1404,15 +1404,16 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           assertOwnedLocalHandle(handle);
           return prepareOwnedPublicVerification(publicContext, handle);
         },
-        prepareAdminInteractions: async (request?: { study: "heavy-editor-performance" }) => {
+        prepareAdminInteractions: async (request?: { study: "heavy-editor-performance" | "media-upload-limit" }) => {
           assertOwnedLocalHandle(handle);
-          requireThat(!request || request.study === "heavy-editor-performance", "ADMIN_FIXTURE_STUDY_INVALID", "admin-measurement");
+          requireThat(!request || request.study === "heavy-editor-performance" || request.study === "media-upload-limit", "ADMIN_FIXTURE_STUDY_INVALID", "admin-measurement");
           requireThat(!publicJob, "ADMIN_FIXTURE_DURING_JOB", "admin-measurement");
           const credentials=await prepareOwnedAdminMeasurementAccount(handle);
           if (!privateValues.includes(credentials.secret)) {
             privateValues.push(credentials.secret, credentials.password);
             registerOwnedAdminMeasurement(publicContext, credentials);
           }
+          if (request?.study === "media-upload-limit") return { status: "ready", scope: "media-upload-limit", accountOnly: true };
           // The repair seam loads only these reviewed local fixture modules.
           // It never accepts executable paths, SQL, callbacks or credentials.
           const fixturePaths=[resolve(ROOT,"scripts/fixtures/admin-interaction-fixtures.mts"),resolve(ROOT,"scripts/fixtures/admin-page-interaction-fixtures.mts")];
@@ -1446,7 +1447,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
               try {
                 // This timer has no application transaction or concurrent SQL
                 // operation: only this serialized ownership/heartbeat pulse.
-                await applicationLease.renewIfDue(request.selection === "admin-interactions" || request.selection === "admin-adoption"
+                await applicationLease.renewIfDue(request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit"
                   || (request.finalQualityGate === true && request.selection === undefined
                     && typeof request.retainedAdminBehaviorAdmissionSha256 === "string"
                     && /^[a-f0-9]{64}$/u.test(request.retainedAdminBehaviorAdmissionSha256)
@@ -1469,7 +1470,7 @@ export async function runIsolatedSupabase(options: IsolatedSupabaseOptions): Pro
           try { const result = await publicJob; if (heartbeatFailure) throw heartbeatFailure; return result; }
           catch(error) {throw heartbeatFailure ?? error;}
           finally { heartbeatActive = false; clearInterval(timer); await pulse;
-            if (request.selection === "admin-interactions" || request.selection === "admin-adoption") publicJob = undefined; }
+            if (request.selection === "admin-interactions" || request.selection === "admin-adoption" || request.selection === "media-upload-limit") publicJob = undefined; }
         }, record: safeRecord });
       activeHandles.add(handle);
       const boundHandle = handle;

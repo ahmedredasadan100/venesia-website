@@ -13,6 +13,7 @@ import { buildCoreMediaPlan, matchesCoreMediaResponse, assertCoreMediaReceipt, a
 const checks = [], digest = input => createHash("sha256").update(input).digest("hex");
 const check = async (name, task) => { await task(); checks.push({ name, status: "pass" }); };
 const jiti = createJiti(import.meta.url, { fsCache: false, moduleCache: false });
+const { CMS_IMAGE_UPLOAD_CEILING_BYTES } = await jiti.import("../src/lib/admin/media-intelligence/cms-upload-policy.ts");
 const { ADMIN_FORM_SYSTEM_ADOPTION_MANIFEST: forms } = await jiti.import("../src/lib/admin/form-system/adoption-manifest.ts");
 const { ADMIN_COLLECTION_SURFACE_ADOPTION } = await jiti.import("../src/lib/admin/interaction-system/adoption-manifest.ts");
 const fixture = { namespace: "qa-core-media-0123456789abcdef", namespaceUnique: true, maximumAssets: 13, article: { id: 91, slug: "qa-core-media-article", title: "QA Media", editPath: "/admin/content/topics/91" } };
@@ -128,7 +129,7 @@ try {
       if (sql.startsWith("select id,title,slug,status,image,md5")) return { rows: [{ id: 91, title: "QA", slug: "qa-core-media-article", status: "unpublished", image: "", row_hash: "stable" }] };
       if (sql.includes("from storage.buckets where")) return { rows: [
         { id: "cms-documents", public: true, file_size_limit: 12582912, allowed_mime_types: ["application/pdf"] },
-        { id: "cms-images", public: kind !== "bucket-private", file_size_limit: kind === "bucket-limit" ? 1 : 5242880,
+        { id: "cms-images", public: kind !== "bucket-private", file_size_limit: kind === "bucket-limit" ? 1 : CMS_IMAGE_UPLOAD_CEILING_BYTES,
           allowed_mime_types: kind === "bucket-mime" ? ["image/png"] : ["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"] }] };
       if (sql.includes("from public.media_assets where object_key like any")) return { rows: kind === "too-many-assets" ? Array.from({ length: 14 }, () => asset) : [asset] };
       if (sql.includes("from storage.objects where")) return { rows: kind.startsWith("missing") ? [] : kind === "too-many-objects" ? Array.from({ length: 14 }, () => ({})) : [{ id: "object", bucket_id: "cms-images", name: asset.object_key }] };
@@ -141,6 +142,7 @@ try {
     const exports = {};
     vm.runInThisContext("(function(exports,require){" + compiled + "\n})")(exports, name => {
       if (name === "node:assert/strict") return assert;
+      if (name === "../src/lib/admin/media-intelligence/cms-upload-policy.ts") return { CMS_IMAGE_UPLOAD_CEILING_BYTES };
       if (name === "node:crypto") return { createHash, randomUUID };
       if (name === "./lib/isolated-supabase.mts") return { assertOwnedLocalHandle: value => assert.equal(value, handle) };
       if (name === "./verify-admin-core-form-permission-isolated.mts") return { readCoreFormPermissionFingerprint: async () => ({ publicDataSha256: "b".repeat(64), publicTableInventorySha256: "c".repeat(64) }) };
