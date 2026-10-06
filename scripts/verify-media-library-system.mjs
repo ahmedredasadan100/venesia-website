@@ -1,3 +1,4 @@
+import { verifyMediaUploadLimitContract } from './fixtures/media-upload-limit-contract.mjs';
 import { strict as assert } from "node:assert";
 import { existsSync, readFileSync } from "node:fs";
 import * as nodePath from "node:path";
@@ -976,6 +977,7 @@ const mediaSettingsContractModule = loadTypeScriptModule(
   {
     "../../../../lib/admin/media-intelligence/cms-upload-policy": {
       CMS_MAX_IMAGE_BYTES: 5 * 1024 * 1024,
+      CMS_IMAGE_UPLOAD_CEILING_BYTES: 50 * 1024 * 1024,
       CMS_MAX_PDF_BYTES: 12 * 1024 * 1024,
     },
   },
@@ -1057,7 +1059,7 @@ const invalidMediaSettingsResult = await mediaSettingsActionModule.updateMediaSe
 assert.equal(invalidMediaSettingsResult.status, "error");
 assert.equal(invalidMediaSettingsResult.code, "validation_error");
 assert.equal(invalidMediaSettingsResult.focusTarget, "maxImageMb");
-assert.equal(invalidMediaSettingsResult.fieldErrors.maxImageMb[0].includes("بين 1 و5"), true);
+assert.equal(invalidMediaSettingsResult.fieldErrors.maxImageMb[0].includes(`بين 1 و${mediaSettingsContractModule.MEDIA_SETTINGS_LIMITS.maximumImageMegabytes}`), true);
 assert.equal(mediaSettingsMutations.length, mutationCountBeforeInvalid);
 mediaSettingsSaveFailure = new FixtureMediaSettingsSaveError(
   "settings_write_forbidden",
@@ -1099,6 +1101,7 @@ const mediaSettingsPolicyModule = loadTypeScriptModule("src/lib/admin/media-cata
   "../media-intelligence/cms-upload-policy": {
     CMS_IMAGE_EXTENSIONS: [".jpg", ".jpeg", ".png", ".webp", ".gif", ".avif"],
     CMS_MAX_IMAGE_BYTES: 5 * 1024 * 1024,
+      CMS_IMAGE_UPLOAD_CEILING_BYTES: 50 * 1024 * 1024,
     CMS_MAX_PDF_BYTES: 12 * 1024 * 1024,
     CMS_PDF_EXTENSIONS: [".pdf"],
   },
@@ -1234,6 +1237,8 @@ check(
   synchronization.includes("options.assetMap ?? await getAllCatalogAssetIdentityMap()") &&
     source("src/lib/admin/media-catalog/reconciliation.ts").includes("await getAllCatalogAssetIdentityMap()"),
 );
+
+await verifyMediaUploadLimitContract();
 
 const passed = checks.filter((item) => item.ok).length;
 console.log(`\nMedia Library system: ${passed}/${checks.length} checks passed.`);

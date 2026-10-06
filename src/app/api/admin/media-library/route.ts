@@ -8,6 +8,7 @@ import {
   buildMediaLibraryReadModel,
   createCatalogFolder,
   getCatalogAssetById,
+  getCatalogAssetByIdentity,
   getMediaCatalogRuntimeState,
   listMediaCatalogSnapshot,
   MediaCatalogUploadRegistrationUnprovenError,
@@ -26,6 +27,9 @@ import {
 } from "../../../../lib/admin/media-catalog/settings";
 import {
   deletePublicMediaAsset,
+  createSignedCmsUpload,
+  readSignedCmsUploadReceipt,
+  readSignedCmsUpload,
   getPublicMediaStorageError,
   listPublicMediaInventory,
   normalizeMediaFolder,
@@ -37,6 +41,9 @@ import {
   resolveCmsUploadKind,
   validateCmsUploadFile,
 } from "../../../../lib/admin/media-intelligence/cms-upload-policy";
+import type { MediaUploadResult } from "../../../../lib/admin/media-storage-adapter";
+import type { Json } from "../../../../lib/database.types";
+import type { AdminUserRecord } from "../../../../lib/admin/auth/admin-users";
 import { resolveMediaStorageProvider } from "../../../../lib/admin/media-storage-adapter";
 
 export const maxDuration = 60;
@@ -101,6 +108,10 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
+    if (searchParams.size === 1 && searchParams.get("policy") === "upload") {
+      const settings = await loadMediaSettings();
+      return mediaJson({ uploadPolicy: mediaSettingsToUploadPolicy(settings) });
+    }
     const unknownQueryKey = [...searchParams.keys()].find(
       (key) => !MEDIA_LIBRARY_QUERY_KEYS.has(key),
     );
@@ -179,6 +190,55 @@ export async function GET(request: Request) {
   }
 }
 
+async function completeCatalogUpload(
+  saved: MediaUploadResult,
+  file: File,
+  actor: AdminUserRecord,
+  managedUploadProofMetadata: Json,
+) {
+  let asset = null;
+  try {
+    asset = await registerCatalogUpload(saved, file, actor.id, managedUploadProofMetadata);
+    if (!asset) throw new Error("media_catalog_upload_registration_required");
+  } catch (error) {
+    if (
+      saved.provider === "supabase" &&
+      !(error instanceof MediaCatalogUploadRegistrationUnprovenError)
+    ) {
+      try {
+        await deletePublicMediaAsset(saved.path);
+      } catch (compensationError) {
+        console.error("Media upload compensation failed", {
+          provider: saved.provider,
+          bucket: saved.bucket,
+          objectKey: saved.objectKey,
+          registrationError: error instanceof Error ? error.message : "unknown",
+          compensationError:
+            compensationError instanceof Error ? compensationError.message : "unknown",
+        });
+        throw new MediaUploadCompensationError();
+      }
+    }
+    throw error;
+  }
+
+  await recordCmsAdminAudit(
+    {
+      action: buildCmsAuditAction("media_asset", "create"),
+      entityType: "media_asset",
+      entityLabel: saved.filename,
+      metadata: {
+        provider: saved.provider ?? "filesystem",
+        bucket: saved.bucket ?? null,
+        objectKey: saved.objectKey ?? saved.storagePath ?? null,
+        sizeBytes: file.size,
+      },
+    },
+    actor,
+  );
+  return mediaJson({ ...saved, asset }, { status: 201 });
+}
+
 export async function POST(request: Request) {
   const authError = await requireAdminApi();
   if (authError) return authError;
@@ -187,7 +247,32 @@ export async function POST(request: Request) {
     const actor = await requireAdminSession();
     const contentType = request.headers.get("content-type") ?? "";
     if (contentType.includes("application/json")) {
-      const body = (await request.json()) as { operation?: unknown; folder?: unknown; displayName?: unknown; dryRun?: unknown };
+      const body = (await request.json()) as { operation?: unknown; folder?: unknown; displayName?: unknown; dryRun?: unknown;
+        file?: { name?: unknown; type?: unknown; size?: unknown }; kind?: unknown; receipt?: unknown };
+      if (body.operation === "prepare_upload") {
+        const file = body.file;
+        if (!file || typeof file.name !== "string" || typeof file.type !== "string" || typeof file.size !== "number") {
+          return mediaJson({ error: "بيانات الملف غير صالحة." }, { status: 400 });
+        }
+        const descriptor = { name: file.name, type: file.type, size: file.size };
+        const kind = resolveCmsUploadKind(descriptor.name, descriptor.type, body.kind === "pdf" ? "pdf" : "image");
+        const folder = normalizeMediaFolder(String(body.folder || (kind === "pdf" ? "files" : "images")));
+        const managedUploadProofMetadata = await prepareCatalogUploadRegistration(actor.id);
+        const upload = await createSignedCmsUpload(folder, descriptor, kind, actor.id, actor.session_version, managedUploadProofMetadata);
+        return mediaJson(upload);
+      }
+      if (body.operation === "complete_upload") {
+        const receipt = readSignedCmsUploadReceipt(body.receipt, actor.id, actor.session_version);
+        const existing = await getCatalogAssetByIdentity({ provider: "supabase", bucket: receipt.bucket, objectKey: receipt.objectKey });
+        if (existing) {
+          if (existing.uploadedBy !== actor.id || existing.status !== "active" || existing.missingObject) {
+            return mediaJson({ error: "طلب الرفع لم يعد صالحًا." }, { status: 409 });
+          }
+          return mediaJson({ asset: existing });
+        }
+        const { saved, file, managedUploadProofMetadata } = await readSignedCmsUpload(receipt);
+        return await completeCatalogUpload(saved, file, actor, managedUploadProofMetadata);
+      }
       if (body.operation === "create_folder") {
         const folder = normalizeMediaFolder(String(body.folder ?? ""));
         const displayName = typeof body.displayName === "string" ? body.displayName.trim().slice(0, 120) : "";
@@ -263,47 +348,7 @@ export async function POST(request: Request) {
         ? await savePublicDocumentUpload(folder, file)
         : await savePublicMediaUpload(folder, file);
 
-    let asset = null;
-    try {
-      asset = await registerCatalogUpload(saved, file, actor.id, managedUploadProofMetadata);
-      if (!asset) throw new Error("media_catalog_upload_registration_required");
-    } catch (error) {
-      if (
-        saved.provider === "supabase" &&
-        !(error instanceof MediaCatalogUploadRegistrationUnprovenError)
-      ) {
-        try {
-          await deletePublicMediaAsset(saved.path);
-        } catch (compensationError) {
-          console.error("Media upload compensation failed", {
-            provider: saved.provider,
-            bucket: saved.bucket,
-            objectKey: saved.objectKey,
-            registrationError: error instanceof Error ? error.message : "unknown",
-            compensationError:
-              compensationError instanceof Error ? compensationError.message : "unknown",
-          });
-          throw new MediaUploadCompensationError();
-        }
-      }
-      throw error;
-    }
-
-    await recordCmsAdminAudit(
-      {
-        action: buildCmsAuditAction("media_asset", "create"),
-        entityType: "media_asset",
-        entityLabel: saved.filename,
-        metadata: {
-          provider: saved.provider ?? "filesystem",
-          bucket: saved.bucket ?? null,
-          objectKey: saved.objectKey ?? saved.storagePath ?? null,
-          sizeBytes: file.size,
-        },
-      },
-      actor,
-    );
-    return mediaJson({ ...saved, asset }, { status: 201 });
+    return await completeCatalogUpload(saved, file, actor, managedUploadProofMetadata);
   } catch (error) {
     const publicError = safeError(error, "تعذر تنفيذ عملية الرفع أو إنشاء المجلد.");
     return mediaJson({ error: publicError.message, code: publicError.code }, { status: publicError.status });

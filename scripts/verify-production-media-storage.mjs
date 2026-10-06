@@ -166,9 +166,14 @@ const storageModule = loadTypeScriptModule("src/lib/storage/upload-cms-asset.ts"
   crypto: nativeRequire("node:crypto"),
   path: nativeRequire("node:path"),
   "../admin/media-intelligence/cms-upload-policy": uploadPolicy,
+  "../admin/media-catalog/settings": {
+    loadMediaSettings: async () => ({}),
+    mediaSettingsToUploadPolicy: () => ({}),
+  },
   "../admin/media-storage-adapter": storageContract,
   "../admin/media-library-paths": mediaPaths,
   "../supabase-admin": { getSupabaseStorageAdmin: () => fakeSupabase },
+  "../admin/auth/session": { getAdminAuthConfig: () => ({ configured: true, secret: "fixture-only-upload-receipt-secret" }) },
 });
 const adapter = storageModule.createSupabaseCmsMediaStorageAdapter(fakeSupabase);
 

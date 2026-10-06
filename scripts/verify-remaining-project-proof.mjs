@@ -52,6 +52,12 @@ function portsFor(rpc, from) {
   const synchronization = () => ({ status: state.mediaWarning ? "saved_with_media_sync_warning" : "synced", failureReason: state.mediaWarning ? "injected media warning" : null });
   const ports = {
     "next/cache": { revalidatePath: cache, revalidateTag() {}, updateTag() {} },
+    // This project-action fixture isolates Media transport; upload policy reads
+    // belong to verify-media-library-system and must not occur in this journey.
+    "/media-catalog/settings": {
+      loadMediaSettings: async () => { throw new Error("Unexpected upload policy read in project-action fixture"); },
+      mediaSettingsToUploadPolicy: () => { throw new Error("Unexpected upload validation in project-action fixture"); },
+    },
     "/auth/require-admin-session": { requireAdminSession: async () => ({ id: 1 }) },
     "/audit-log": { recordCmsAdminAudit: async () => { state.audits++; } },
     "/supabase-admin": { getSupabaseAdmin: () => ({ rpc: async (name, args) => {

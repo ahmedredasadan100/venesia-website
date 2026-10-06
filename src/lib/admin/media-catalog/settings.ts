@@ -4,6 +4,7 @@ import { logError } from "../../logging";
 import { getSupabaseAdmin } from "../../supabase-admin";
 import {
   CMS_IMAGE_EXTENSIONS,
+  CMS_IMAGE_UPLOAD_CEILING_BYTES,
   CMS_MAX_IMAGE_BYTES,
   CMS_MAX_PDF_BYTES,
   CMS_PDF_EXTENSIONS,
@@ -63,7 +64,7 @@ export function parseMediaSettings(value: unknown): MediaSettings {
     ? input.allowedKinds.filter((kind): kind is "image" | "document" => kind === "image" || kind === "document")
     : DEFAULT_MEDIA_SETTINGS.allowedKinds;
   return {
-    maxImageBytes: boundedInteger(input.maxImageBytes, CMS_MAX_IMAGE_BYTES, CMS_MAX_IMAGE_BYTES),
+    maxImageBytes: boundedInteger(input.maxImageBytes, CMS_MAX_IMAGE_BYTES, CMS_IMAGE_UPLOAD_CEILING_BYTES),
     maxDocumentBytes: boundedInteger(input.maxDocumentBytes, CMS_MAX_PDF_BYTES, CMS_MAX_PDF_BYTES),
     allowedKinds: requestedKinds.length ? [...new Set(requestedKinds)] : DEFAULT_MEDIA_SETTINGS.allowedKinds,
     allowedImageExtensions: allowedSubset(

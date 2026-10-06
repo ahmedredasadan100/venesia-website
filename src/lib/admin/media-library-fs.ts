@@ -2,6 +2,7 @@ import "server-only";
 
 import fs from "fs";
 import path from "path";
+import { loadMediaSettings, mediaSettingsToUploadPolicy } from "./media-catalog/settings";
 
 import {
   CMS_IMAGE_EXTENSION_SET,
@@ -180,7 +181,7 @@ export async function savePublicMediaUploadToFs(
   file: File,
   options?: MediaUploadOptions,
 ) {
-  const validation = validateCmsUploadFile(file, "image");
+  const validation = validateCmsUploadFile(file, "image", mediaSettingsToUploadPolicy(await loadMediaSettings()));
   if (!validation.ok) throw new Error(validation.message);
 
   const { normalized, target } = resolvePublicFolder(folder);
@@ -207,7 +208,7 @@ export async function savePublicDocumentUploadToFs(
   file: File,
   options?: MediaUploadOptions,
 ) {
-  const validation = validateCmsUploadFile(file, "pdf");
+  const validation = validateCmsUploadFile(file, "pdf", mediaSettingsToUploadPolicy(await loadMediaSettings()));
   if (!validation.ok) throw new Error(validation.message);
 
   const { normalized, target } = resolvePublicFolder(folder);

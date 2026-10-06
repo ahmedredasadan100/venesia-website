@@ -1,5 +1,7 @@
 import "server-only";
 
+export { createSignedCmsUpload, readSignedCmsUploadReceipt, readSignedCmsUpload } from "../storage/upload-cms-asset";
+
 import { createSupabaseCmsMediaStorageAdapter } from "../storage/upload-cms-asset";
 import {
   resolveMediaStorageProvider,

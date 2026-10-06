@@ -26,6 +26,7 @@ import {
   CMS_IMAGE_ACCEPT,
   CMS_PDF_ACCEPT,
   validateCmsUploadFile,
+  type CmsUploadValidationPolicy,
 } from "../../../lib/admin/media-intelligence/cms-upload-policy";
 import { formatAdminDateTime } from "../../../lib/content-dates";
 import {
@@ -413,13 +414,30 @@ export default function MediaLibraryCore({
 
   async function uploadOne(file: File, targetFolder = folder) {
     const requestedKind = file.name.toLowerCase().endsWith(".pdf") ? "pdf" : "image";
-    const validation = validateCmsUploadFile(file, requestedKind);
+    // Read the runtime policy for every upload, including an already-open picker.
+    const policyResponse = await fetch("/api/admin/media-library?policy=upload", { cache: "no-store" });
+    const policyPayload = (await policyResponse.json()) as { uploadPolicy?: CmsUploadValidationPolicy; error?: string };
+    if (!policyResponse.ok || !policyPayload.uploadPolicy) {
+      throw new Error(policyPayload.error || "تعذر قراءة إعدادات رفع الملفات. حاول مجددًا.");
+    }
+    const validation = validateCmsUploadFile(file, requestedKind, policyPayload.uploadPolicy);
     if (!validation.ok) throw new Error(`${file.name}: ${validation.message}`);
+    const prepared = await fetch("/api/admin/media-library", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operation: "prepare_upload", file: { name: file.name, type: file.type, size: file.size },
+        folder: targetFolder ?? (requestedKind === "pdf" ? "files" : "images"), kind: requestedKind }),
+    });
+    const upload = (await prepared.json()) as { signedUrl?: string; receipt?: string; error?: string };
+    if (!prepared.ok || !upload.signedUrl || !upload.receipt) throw new Error(upload.error || `تعذر تجهيز رفع ${file.name}.`);
     const body = new FormData();
-    body.set("file", file);
-    body.set("folder", targetFolder ?? (requestedKind === "pdf" ? "files" : "images"));
-    body.set("kind", requestedKind);
-    const response = await fetch("/api/admin/media-library", { method: "POST", body });
+    body.set("cacheControl", "3600");
+    body.set("", file);
+    const transferred = await fetch(upload.signedUrl, { method: "PUT", body });
+    if (!transferred.ok) throw new Error(`تعذر نقل ${file.name} إلى التخزين. تحقق من الاتصال وحد التخزين ثم حاول مجددًا.`);
+    const response = await fetch("/api/admin/media-library", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operation: "complete_upload", receipt: upload.receipt }),
+    });
     const payload = (await response.json()) as { asset?: MediaCatalogAsset; error?: string };
     if (!response.ok || !payload.asset) throw new Error(payload.error || `تعذر رفع ${file.name}.`);
     return payload.asset;

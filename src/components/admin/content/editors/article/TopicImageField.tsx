@@ -32,7 +32,7 @@ export default function TopicImageField({ defaultImage = "", defaultAlt = "", fo
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] leading-5 text-white/42">
         <span>JPG، PNG، WEBP، GIF، AVIF</span>
-        <span>الحد الأقصى 5MB · 1600 × 900</span>
+        <span>1600 × 900 · حجم الرفع حسب إعدادات مكتبة الوسائط</span>
       </div>
 
       <label className="block">

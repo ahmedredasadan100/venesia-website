@@ -5,6 +5,8 @@ export const CMS_IMAGE_EXTENSION_SET = new Set<string>(CMS_IMAGE_EXTENSIONS);
 export const CMS_PDF_EXTENSION_SET = new Set<string>(CMS_PDF_EXTENSIONS);
 
 export const CMS_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
+// Configurable ceiling aligned with local Storage; the default remains 5MiB.
+export const CMS_IMAGE_UPLOAD_CEILING_BYTES = 50 * 1024 * 1024;
 export const CMS_MAX_PDF_BYTES = 12 * 1024 * 1024;
 
 export const CMS_IMAGE_ACCEPT = CMS_IMAGE_EXTENSIONS.join(",");

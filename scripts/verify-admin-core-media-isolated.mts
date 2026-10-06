@@ -1,3 +1,4 @@
+import { CMS_IMAGE_UPLOAD_CEILING_BYTES } from "../src/lib/admin/media-intelligence/cms-upload-policy.ts";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { assertOwnedLocalHandle, type OwnedLocalHandle } from "./lib/isolated-supabase.mts";
@@ -125,7 +126,7 @@ export async function readCoreMediaCheckpoint(handle: OwnedLocalHandle, input: u
       assert.ok(buckets.every(row => row.public === true));
       assert.equal(Number(buckets[0].file_size_limit), 12 * 1024 * 1024);
       assert.deepEqual(buckets[0].allowed_mime_types, ["application/pdf"]);
-      assert.equal(Number(buckets[1].file_size_limit), 5 * 1024 * 1024);
+      assert.equal(Number(buckets[1].file_size_limit), CMS_IMAGE_UPLOAD_CEILING_BYTES);
       assert.deepEqual([...(buckets[1].allowed_mime_types as string[])].sort(), ["image/avif", "image/gif", "image/jpeg", "image/png", "image/webp"]);
       const assets = rowsOf(await connection.query("select id,provider,bucket,object_key,public_url,original_filename,display_name,media_kind,mime_type,byte_size,width,height,checksum,folder_path,status,uploaded_by,default_alt_text,default_title,default_caption,reconciliation_state,missing_object from public.media_assets where object_key like any($1::text[]) or id=any($2::uuid[]) order by id limit 14", [patterns, [...registered.ids]]));
       assert.ok(assets.length <= MAX_ASSETS, "Thirteen total assets, including tombstones, is a hard bound.");

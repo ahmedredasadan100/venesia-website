@@ -248,6 +248,36 @@ async function buildContractsProof(argv: string[]) {
   return { status: "complete", selection: "build-contracts", artifactDir: output };
 }
 
+async function mediaUploadLimitProof(argv: string[]) {
+  const { parsed, output, sourceHash, files } = proofInputs(argv);
+  createProofRecorder(output, sourceHash, files);
+  const result = await runIsolatedSupabase({ ...parsed, artifactDir: resolve(output, "run"),
+    async handoff(handle) {
+      await runApplicationHandoff(handle, [], { mode: "measurement-provision" });
+      const bucket = (await handle.query("select file_size_limit from storage.buckets where id='cms-images'")).rows[0];
+      assert.equal(Number(bucket.file_size_limit), 50 * 1024 * 1024);
+      await handle.preparePublicVerification();
+      await handle.prepareAdminInteractions({ study: "media-upload-limit" });
+      await handle.runPublicVerification({ selection: "media-upload-limit", additionalSourceFiles: files });
+      const settings = (await handle.query("select value from public.site_settings where key='media.settings'")).rows[0];
+      assert.equal((settings.value as { maxImageBytes: number }).maxImageBytes, 7 * 1024 * 1024);
+      const assets = (await handle.query("select object_key,byte_size,uploaded_by from public.media_assets where original_filename like 'configured-limit-%' and provider='supabase'")).rows;
+      assert.equal(assets.length, 2);
+      assert.ok(assets.every(row => Number(row.byte_size) > 5 * 1024 * 1024 && Number(row.byte_size) < 7 * 1024 * 1024 && Number(row.uploaded_by) > 0));
+      const objects = (await handle.query("select name from storage.objects where bucket_id='cms-images'")).rows;
+      assert.equal(objects.length, 2, "Rejected changed-policy object must be removed.");
+      const audit = (await handle.query("select action,entity_label from public.admin_audit_logs where entity_type='media_asset' and action='media_asset.create'")).rows;
+      assert.equal(audit.length, 2);
+      writeFileSync(resolve(output, "media-upload-database-proof.json"), JSON.stringify({ status: "pass", assets, audit, bucketLimit: Number(bucket.file_size_limit), savedImageLimit: 7 * 1024 * 1024 }, null, 2));
+    },
+  });
+  const cleanup = JSON.parse(readFileSync(resolve(output, "run/cleanup.json"), "utf8"));
+  assert.equal(cleanup.status, "complete");
+  assert.equal(cleanup.remainingOwnedResources, 0);
+  assert.equal(cleanup.originalResourcesUnchanged, true);
+  return result;
+}
+
 function options(argv: string[]): QaOptions {
   const values = new Map<string, string>();
   const flags = new Set<string>();
@@ -283,13 +313,15 @@ function options(argv: string[]): QaOptions {
 
 try {
   const args = process.argv.slice(2);
-  const proofModes = args.filter(arg => arg === "--final-public-proof" || arg === "--build-contracts-proof");
+  const proofModes = args.filter(arg => arg === "--final-public-proof" || arg === "--build-contracts-proof" || arg === "--media-upload-limit-proof");
   assert.ok(proofModes.length <= 1, "Choose one fixed proof mode exactly once.");
   assert.ok(!args.includes("--retained-proof") || args.includes("--final-public-proof"));
   const result = args.includes("--final-public-proof")
     ? await finalPublicProof(args.filter(arg => arg !== "--final-public-proof"))
     : args.includes("--build-contracts-proof")
       ? await buildContractsProof(args.filter(arg => arg !== "--build-contracts-proof"))
+    : args.includes("--media-upload-limit-proof")
+      ? await mediaUploadLimitProof(args.filter(arg => arg !== "--media-upload-limit-proof"))
     : await runIsolatedSupabase(options(args));
   process.stdout.write(`${JSON.stringify(result)}\n`);
 } catch (error) {
